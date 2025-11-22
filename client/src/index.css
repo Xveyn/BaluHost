@@ -1,0 +1,48 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
+    background-color: #020617;
+    background-image:
+      radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), rgba(2, 6, 23, 0) 55%),
+      radial-gradient(circle at 80% 10%, rgba(124, 58, 237, 0.2), rgba(2, 6, 23, 0) 52%),
+      radial-gradient(circle at 65% 75%, rgba(59, 130, 246, 0.12), rgba(2, 6, 23, 0) 65%);
+  }
+}
+
+@layer components {
+  .btn {
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0;
+  }
+  
+  .btn-primary {
+    @apply bg-gradient-to-r from-sky-500 via-indigo-500 to-violet-500 text-white shadow-[0_18px_45px_rgba(56,189,248,0.35)] hover:shadow-[0_22px_55px_rgba(76,29,149,0.45)] hover:-translate-y-0.5 focus-visible:ring-sky-400/60;
+  }
+  
+  .btn-secondary {
+    @apply border border-slate-700 bg-slate-900/70 text-slate-200 shadow-[0_10px_35px_rgba(15,23,42,0.35)] hover:border-slate-500/80 hover:text-white;
+  }
+  
+  .card {
+    @apply relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-6 shadow-[0_20px_60px_rgba(2,6,23,0.55)] backdrop-blur-xl;
+  }
+  
+  .input {
+    @apply w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40;
+  }
+  
+  .brand-text {
+    @apply text-sky-400 font-semibold;
+  }
+
+  .glass-accent {
+    @apply relative overflow-hidden rounded-2xl border border-slate-800/50 bg-slate-900/40 p-5 shadow-[0_18px_40px_rgba(2,6,23,0.45)] backdrop-blur-xl;
+  }
+
+  .glow-ring {
+    @apply relative flex items-center justify-center rounded-full border border-slate-800 bg-slate-950/60 shadow-[0_15px_45px_rgba(2,6,23,0.6)];
+  }
+}

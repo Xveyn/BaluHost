@@ -1,0 +1,41 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+*.egg-info/
+.Python
+.env
+.venv/
+
+# FastAPI backend artifacts
+backend/dev-storage/
+backend/dev-tmp/
+backend/tmp/
+backend/.mypy_cache/
+backend/.pytest_cache/
+backend/.ruff_cache/
+
+# Node/React
+client/node_modules/
+client/dist/
+client/.vite/
+
+# Logs and misc
+*.log
+.DS_Store
+Thumbs.db
+
+# IDE/Editor
+.vscode/
+.idea/
+*.code-workspace
+
+# Testing
+coverage/
+htmlcov/
+
+# Local data
+storage/
+server/storage/

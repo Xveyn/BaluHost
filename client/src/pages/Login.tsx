@@ -1,0 +1,127 @@
+import { useState, type FormEvent } from 'react';
+import logoMark from '../assets/baluhost-logo.svg';
+import { buildApiUrl } from '../lib/api';
+
+interface LoginProps {
+  onLogin: (user: any, token: string) => void;
+}
+
+export default function Login({ onLogin }: LoginProps) {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+        const response = await fetch(buildApiUrl('/api/auth/login'), {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ username, password }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Login failed');
+      }
+
+      const token: string | undefined = data.access_token ?? data.token;
+
+      if (!token) {
+        throw new Error('Login response did not include an access token');
+      }
+
+      onLogin(data.user, token);
+    } catch (err: any) {
+      setError(err.message || 'Login failed');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 text-slate-100">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-[-120px] h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.32),_rgba(2,6,23,0)_62%)] blur-3xl" />
+        <div className="absolute right-[-120px] top-[18%] h-[460px] w-[460px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.28),_rgba(2,6,23,0)_60%)] blur-[140px]" />
+        <div className="absolute left-[45%] bottom-[-180px] h-[340px] w-[340px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.18),_rgba(2,6,23,0)_65%)] blur-[120px]" />
+      </div>
+
+      <div className="relative z-10 w-full max-w-md px-6 sm:px-0">
+        <div className="card border border-slate-800/50 bg-slate-900/60 p-10">
+          <div className="flex flex-col items-center text-center">
+            <div className="glow-ring h-16 w-16">
+              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950/80 p-[2px] shadow-[0_18px_45px_rgba(37,99,235,0.45)]">
+                <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+              </div>
+            </div>
+            <h1 className="mt-6 text-3xl font-semibold tracking-wide text-white">BalùHost</h1>
+            <p className="mt-2 text-sm text-slate-400">Secure Personal Cloud Gateway</p>
+          </div>
+
+          <form onSubmit={handleSubmit} className="mt-10 space-y-5">
+            {error && (
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+                {error}
+              </div>
+            )}
+
+            <div className="space-y-2">
+              <label htmlFor="username" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                Username
+              </label>
+              <input
+                type="text"
+                id="username"
+                className="input"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
+                placeholder="admin"
+                required
+              />
+            </div>
+
+            <div className="space-y-2">
+              <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-400">
+                <label htmlFor="password">Password</label>
+                <span className="text-slate-500 normal-case tracking-normal">Keep your vault secure</span>
+              </div>
+              <input
+                type="password"
+                id="password"
+                className="input"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                required
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary w-full mt-6"
+              disabled={loading}
+            >
+              {loading ? 'Authorising...' : 'Access System'}
+            </button>
+          </form>
+
+          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-900/60 p-4 text-center text-xs text-slate-500">
+            Default credentials - <span className="text-slate-300">admin</span> / <span className="text-slate-300">changeme</span>
+          </div>
+
+          <div className="mt-6 text-center text-[11px] uppercase tracking-[0.35em] text-slate-500">
+            Firmware v4.2.0 - System Status <span className="text-emerald-400">Optimal</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}

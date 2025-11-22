@@ -1,0 +1,19 @@
+Baluhost TODOs
+===============
+
+Critical blockers
+- Login stores `data.token`, but the FastAPI backend returns `access_token`; adjust the frontend (or API response) so tokens persist and authenticated calls stop failing with 401.
+- File APIs use FastAPI field names (`modified_at`, `old_path`, `new_name`, `source_path`, `target_path`) while the React client still sends/reads the Express variants (`mtime`, `oldPath`, `newName`, ...); align both sides so rename, date display, and future move operations work again.
+- Decide on a single backend (FastAPI vs Express) or add an API layer that normalizes responses; start_dev.py launches FastAPI, but the README and client typings still target the Express implementation.
+- When the token is missing or expires, surface a UX hint (e.g. redirect to /login) instead of letting fetch calls silently send `Bearer undefined`.
+
+Important improvements
+- Wire the "Add User" button (and edit/delete actions) to the `/api/users` endpoints, including optimistic updates and admin-only guards.
+- Extend the system monitor page to consume `/api/system/storage` and `/api/system/processes` so disk usage and process lists are visible.
+- Move hard-coded API URLs into environment-dependent configuration (e.g. Vite env vars) to simplify deployments.
+- Update documentation so the listed endpoints and request payloads match the running backend, and describe how to switch between mock and production modes.
+
+Backlog / nice to have
+- Replace the in-memory user store with a real database (as already noted in backend README) and persist file metadata/quotas.
+- Add upload progress UI, drag and drop support, file previews, sharing links, recycle bin, and version history per the long-term feature list.
+- Provide a Docker Compose setup for one-command local installs.
