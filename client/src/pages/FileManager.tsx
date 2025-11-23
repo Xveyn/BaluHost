@@ -9,6 +9,19 @@ interface StorageInfo {
   availableBytes: number;
 }
 
+interface StorageMountpoint {
+  id: string;
+  name: string;
+  type: string;
+  path: string;
+  size_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  raid_level?: string;
+  status: string;
+  is_default: boolean;
+}
+
 interface FileItem {
   name: string;
   path: string;
@@ -207,6 +220,8 @@ export default function FileManager() {
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
   const [uploadIds, setUploadIds] = useState<string[] | null>(null);
+  const [mountpoints, setMountpoints] = useState<StorageMountpoint[]>([]);
+  const [selectedMountpoint, setSelectedMountpoint] = useState<StorageMountpoint | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -224,33 +239,22 @@ export default function FileManager() {
   };
 
   useEffect(() => {
-    loadFiles(currentPath);
-    loadStorageInfo();
-  }, [currentPath]);
+    loadMountpoints();
+  }, []);
 
-  const loadStorageInfo = async (useCache = true) => {
-    // Try to load from cache first
-    if (useCache) {
-      const cachedInfo = sessionStorage.getItem('storage_info_cache');
-      if (cachedInfo) {
-        try {
-          const cached = JSON.parse(cachedInfo);
-          const age = Date.now() - (cached.timestamp || 0);
-          if (age < 30000) { // 30 seconds cache
-            setStorageInfo(cached.data);
-            return; // Don't fetch if cache is fresh
-          }
-        } catch (err) {
-          console.error('Failed to parse storage cache:', err);
-        }
-      }
+  useEffect(() => {
+    if (selectedMountpoint) {
+      loadFiles(currentPath);
+      loadStorageInfo();
     }
+  }, [currentPath, selectedMountpoint]);
 
+  const loadMountpoints = async () => {
     const token = getToken(false);
     if (!token) return;
 
     try {
-      const response = await fetch(buildApiUrl('/api/files/storage/available'), {
+      const response = await fetch(buildApiUrl('/api/files/mountpoints'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -258,28 +262,60 @@ export default function FileManager() {
 
       if (response.ok) {
         const data = await response.json();
-        const info = {
-          totalBytes: data.quota_bytes || 0,
-          usedBytes: data.used_bytes || 0,
-          availableBytes: data.available_bytes || 0
-        };
-        setStorageInfo(info);
+        setMountpoints(data.mountpoints || []);
         
-        // Cache the results
-        sessionStorage.setItem('storage_info_cache', JSON.stringify({ 
-          data: info, 
-          timestamp: Date.now() 
-        }));
+        // Set default mountpoint
+        const defaultMp = data.mountpoints.find((mp: StorageMountpoint) => mp.is_default) 
+                         || data.mountpoints[0];
+        if (defaultMp) {
+          setSelectedMountpoint(defaultMp);
+          setCurrentPath(''); // Start at root of selected mountpoint
+        }
+      } else {
+        toast.error('Failed to load storage devices');
       }
     } catch (err) {
-      console.error('Failed to load storage info:', err);
+      console.error('Failed to load mountpoints:', err);
+      toast.error('Failed to load storage devices');
     }
   };
 
+  const loadStorageInfo = async () => {
+    if (!selectedMountpoint) return;
+    
+    // Use mountpoint storage info directly
+    const info = {
+      totalBytes: selectedMountpoint.size_bytes,
+      usedBytes: selectedMountpoint.used_bytes,
+      availableBytes: selectedMountpoint.available_bytes
+    };
+    setStorageInfo(info);
+  };
+
+  // Helper function to construct full path with mountpoint
+  const getFullPath = (relativePath: string = currentPath): string => {
+    if (!selectedMountpoint) return relativePath;
+    
+    // Dev storage uses flat paths, RAID arrays need mountpoint prefix
+    if (selectedMountpoint.type === 'dev-storage') {
+      return relativePath;
+    }
+    
+    // For RAID arrays, prepend mountpoint path
+    // Remove leading slash from relativePath if present to avoid double slashes
+    const cleanRelativePath = relativePath.startsWith('/') ? relativePath.slice(1) : relativePath;
+    return cleanRelativePath ? `${selectedMountpoint.path}/${cleanRelativePath}` : selectedMountpoint.path;
+  };
+
   const loadFiles = async (path: string, useCache = true) => {
+    if (!selectedMountpoint) return;
+    
+    // Construct full path with mountpoint
+    const fullPath = getFullPath(path);
+    
     // Try to load from cache first
     if (useCache) {
-      const cacheKey = `files_cache_${path}`;
+      const cacheKey = `files_cache_${fullPath}`;
       const cachedData = sessionStorage.getItem(cacheKey);
       if (cachedData) {
         try {
@@ -300,7 +336,7 @@ export default function FileManager() {
     }
 
     try {
-      const response = await fetch(buildApiUrl(`/api/files/list?path=${encodeURIComponent(path)}`), {
+      const response = await fetch(buildApiUrl(`/api/files/list?path=${encodeURIComponent(fullPath)}`), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -318,7 +354,7 @@ export default function FileManager() {
         setFiles(mappedFiles);
         
         // Cache the results
-        const cacheKey = `files_cache_${path}`;
+        const cacheKey = `files_cache_${fullPath}`;
         sessionStorage.setItem(cacheKey, JSON.stringify({ files: mappedFiles, timestamp: Date.now() }));
       }
     } catch (err) {
@@ -349,7 +385,8 @@ export default function FileManager() {
     Array.from(fileList).forEach(file => {
       formData.append('files', file);
     });
-    formData.append('path', currentPath);
+    // Use full path with mountpoint
+    formData.append('path', getFullPath());
 
     try {
       const response = await fetch(buildApiUrl('/api/files/upload'), {
@@ -375,7 +412,7 @@ export default function FileManager() {
         sessionStorage.removeItem(`files_cache_${currentPath}`);
         sessionStorage.removeItem('storage_info_cache');
         loadFiles(currentPath, false);
-        loadStorageInfo(false);
+        loadStorageInfo();
       } else {
         const error = await response.json();
         toast.error(`Upload failed: ${getErrorMessage(error)}`);
@@ -458,7 +495,7 @@ export default function FileManager() {
           'Content-Type': 'application/json'
         },
         body: JSON.stringify({
-          path: currentPath,
+          path: getFullPath(),
           name: newFolderName
         })
       });
@@ -507,7 +544,7 @@ export default function FileManager() {
         sessionStorage.removeItem(`files_cache_${currentPath}`);
         sessionStorage.removeItem('storage_info_cache');
         loadFiles(currentPath, false);
-        loadStorageInfo(false);
+        loadStorageInfo();
       } else {
         const error = await response.json();
         toast.error(`Delete failed: ${getErrorMessage(error)}`);
@@ -647,6 +684,16 @@ export default function FileManager() {
   };
 
   const navigateToFolder = (folderPath: string) => {
+    // Remove mountpoint prefix if present to get relative path
+    if (selectedMountpoint && selectedMountpoint.type !== 'dev-storage') {
+      const mountpointPrefix = selectedMountpoint.path;
+      if (folderPath.startsWith(mountpointPrefix)) {
+        // Remove mountpoint prefix and leading slash
+        const relativePath = folderPath.slice(mountpointPrefix.length).replace(/^\//, '');
+        setCurrentPath(relativePath);
+        return;
+      }
+    }
     setCurrentPath(folderPath);
   };
 
@@ -704,6 +751,42 @@ export default function FileManager() {
         </div>
       </div>
 
+      {/* Storage Drive Selector */}
+      <div className="card border-slate-800/60 bg-slate-900/55">
+        <div className="flex flex-wrap items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Storage Devices:</span>
+          {mountpoints.map((mp) => (
+            <button
+              key={mp.id}
+              onClick={() => {
+                setSelectedMountpoint(mp);
+                setCurrentPath(''); // Reset to root when switching drives
+              }}
+              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
+                selectedMountpoint?.id === mp.id
+                  ? 'border-sky-500/50 bg-sky-500/10 text-sky-200'
+                  : 'border-slate-700/70 bg-slate-950/70 text-slate-300 hover:border-sky-500/40 hover:text-white'
+              }`}
+            >
+              <span className="text-base">
+                {mp.type === 'raid' ? '💾' : mp.type === 'dev-storage' ? '🔧' : '💿'}
+              </span>
+              <div className="flex flex-col items-start">
+                <span className="font-semibold">{mp.name}</span>
+                <span className="text-xs text-slate-400">
+                  {formatFileSize(mp.used_bytes)} / {formatFileSize(mp.size_bytes)}
+                  {mp.raid_level && ` • ${mp.raid_level.toUpperCase()}`}
+                  {mp.status !== 'optimal' && (
+                    <span className="ml-1 text-amber-400">⚠ {mp.status}</span>
+                  )}
+                </span>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Breadcrumb Navigation */}
       <div className="card border-slate-800/60 bg-slate-900/55">
         <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
           <button

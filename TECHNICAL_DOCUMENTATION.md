@@ -60,7 +60,7 @@ GET  /api/auth/me          - Current user
 
 **Service:** `app/services/files.py`  
 **API Route:** `app/api/routes/files.py`  
-**Schemas:** `app/schemas/files.py`
+**Schemas:** `app/schemas/files.py`, `app/schemas/storage.py`
 
 #### Implemented Features:
 - **CRUD Operations**
@@ -71,10 +71,18 @@ GET  /api/auth/me          - Current user
   - Move
   - Delete (Files & Folders)
 
+- **Storage Mountpoints / Drive Selector** ⭐ NEW
+  - Multi-drive support with visual selector
+  - Shows RAID arrays as selectable "drives"
+  - Per-mountpoint capacity and usage
+  - Path structure: `root\RAID1 Setup - md0\folder\file.txt`
+  - See [Storage Mountpoints Documentation](docs/STORAGE_MOUNTPOINTS.md)
+
 - **Quota System**
   - Configurable via `NAS_QUOTA_BYTES` (Default: 5 GB per disk, 2x5GB RAID1)
   - Quota check before each upload
   - Real-time display in Storage Info
+  - Per-mountpoint capacity tracking
 
 - **File Ownership & Permissions**
   - Each file/folder has an owner (User ID)
@@ -86,9 +94,11 @@ GET  /api/auth/me          - Current user
   - Isolated storage under `backend/dev-storage/`
   - 2x5GB RAID1 setup (effectively 5 GB, configurable)
   - Automatic seed data on startup
+  - Mock RAID arrays for testing
 
 #### API Endpoints:
 ```
+GET    /api/files/mountpoints       - List storage devices/arrays
 GET    /api/files/list              - File list
 POST   /api/files/upload            - Upload file
 GET    /api/files/download          - Download file
@@ -834,7 +844,10 @@ Baluhost/
 │   │   │   ├── UserManagement.tsx
 │   │   │   ├── RaidManagement.tsx
 │   │   │   ├── SystemMonitor.tsx
-│   │   │   └── Logging.tsx
+│   │   │   ├── Logging.tsx
+│   │   │   └── SettingsPage.tsx   # User settings & preferences
+│   │   ├── contexts/
+│   │   │   └── ThemeContext.tsx    # Theme management (prepared for future use)
 │   │   ├── App.tsx
 │   │   └── main.tsx
 │   ├── public/
@@ -968,6 +981,53 @@ Complete API reference: See `README.md` in root directory.
 - Vite HMR (Hot Module Replacement)
 - React DevTools
 - Tailwind CSS IntelliSense
+
+---
+
+## 🎨 Frontend Features
+
+### Settings Page (`SettingsPage.tsx`)
+
+Comprehensive user settings interface with multiple tabs:
+
+#### Profile Tab
+- Display user information (username, role, member since)
+- Avatar upload and management
+- Email address update
+- Account information overview (ID, role, creation date)
+
+#### Security Tab
+- Password change functionality
+- Active session management
+- Security settings overview
+
+#### Appearance Tab
+- Theme preview system (6 color schemes: Light, Dark, Ocean, Forest, Sunset, Midnight)
+- Theme selection interface with color previews
+- **Note:** Theme switching prepared but currently uses fixed dark theme
+- LocalStorage persistence for theme preferences
+
+#### Storage Tab
+- Storage quota visualization with progress bars
+- Used vs. available space display
+- Percentage-based quota tracking
+- Auto-updates from backend `/api/system/quota` endpoint
+
+#### Activity Tab
+- Recent audit log entries
+- Action history with timestamps
+- Success/failure status indicators
+- Detailed activity information from `/api/logging/audit` endpoint
+
+**Components:**
+- `AppearanceSettings.tsx` - Theme selection component with color previews
+- `ThemeContext.tsx` - Theme state management (prepared for future theme switching)
+
+**API Integration:**
+- `GET /api/auth/me` - User profile data
+- `PUT /api/users/{id}` - Update user information
+- `GET /api/system/quota` - Storage quota information
+- `GET /api/logging/audit` - Activity logs
 
 ---
 

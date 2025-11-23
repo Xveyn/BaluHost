@@ -24,6 +24,88 @@ from app.models.file_metadata import FileMetadata
 router = APIRouter()
 
 
+@router.get("/mountpoints")
+async def get_mountpoints(
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get list of available storage mountpoints (RAID arrays, disks, etc.)."""
+    from app.schemas.storage import MountpointsResponse, StorageMountpoint
+    from app.services import raid as raid_service
+    from app.core.config import settings
+    
+    raid_status = raid_service.get_status()
+    
+    mountpoints = []
+    
+    if settings.is_dev_mode:
+        # Dev Mode: Show dev-storage as default + all RAID arrays
+        # Dev storage mountpoint
+        used_bytes = file_service.calculate_used_bytes()
+        quota_bytes = settings.nas_quota_bytes or 0
+        available_bytes = file_service.calculate_available_bytes() or 0
+        
+        mountpoints.append(StorageMountpoint(
+            id="dev-storage",
+            name="Dev Storage",
+            type="dev-storage",
+            path="",
+            size_bytes=quota_bytes,
+            used_bytes=used_bytes,
+            available_bytes=available_bytes,
+            status="optimal",
+            is_default=True
+        ))
+        
+        # Add mock RAID arrays
+        for array in raid_status.arrays:
+            mountpoints.append(StorageMountpoint(
+                id=array.name,
+                name=f"{array.level.upper()} Setup - {array.name}",
+                type="raid",
+                path=f"/{array.name}",
+                size_bytes=array.size_bytes,
+                used_bytes=0,  # Mock: not tracking usage per array in dev mode
+                available_bytes=array.size_bytes,
+                raid_level=array.level,
+                status=array.status,
+                is_default=False
+            ))
+    else:
+        # Production Mode: Show actual RAID arrays
+        for array in raid_status.arrays:
+            # Try to get actual storage usage for this array
+            try:
+                # This would need to be implemented to check actual mount point usage
+                size_bytes = array.size_bytes
+                used_bytes = 0  # TODO: Implement actual usage tracking
+                available_bytes = size_bytes - used_bytes
+            except Exception:
+                size_bytes = array.size_bytes
+                used_bytes = 0
+                available_bytes = size_bytes
+            
+            mountpoints.append(StorageMountpoint(
+                id=array.name,
+                name=f"{array.level.upper()} Array - {array.name}",
+                type="raid",
+                path=f"/{array.name}",
+                size_bytes=size_bytes,
+                used_bytes=used_bytes,
+                available_bytes=available_bytes,
+                raid_level=array.level,
+                status=array.status,
+                is_default=(array.name == "md0")  # md0 is typically the default
+            ))
+    
+    default_id = next((m.id for m in mountpoints if m.is_default), mountpoints[0].id if mountpoints else "dev-storage")
+    
+    return MountpointsResponse(
+        mountpoints=mountpoints,
+        default_mountpoint=default_id
+    )
+
+
 @router.get("/list", response_model=FileListResponse)
 async def list_files(
     path: str = "",

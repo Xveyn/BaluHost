@@ -147,23 +147,16 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
   return (
     <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
-      <div className="pointer-events-none absolute inset-0">
-        <div className="absolute -left-24 -top-32 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.32),_rgba(2,6,23,0)_60%)] blur-3xl" />
-        <div className="absolute -right-32 top-1/4 h-[420px] w-[420px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.25),_rgba(2,6,23,0)_62%)] blur-[120px]" />
-        <div className="absolute left-1/3 bottom-[-180px] h-[380px] w-[380px] rounded-full bg-[radial-gradient(circle_at_center,_rgba(59,130,246,0.2),_rgba(2,6,23,0)_70%)] blur-[110px]" />
-      </div>
-
       <div className="relative z-10 flex min-h-screen">
-        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-slate-800/60 bg-slate-900/40 backdrop-blur-xl">
+        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-900 backdrop-blur-xl">
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
-              <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/60 p-[3px] shadow-[0_18px_45px_rgba(56,189,248,0.25)]">
-                <div className="absolute inset-0 -z-10 rounded-full bg-gradient-to-br from-sky-500/50 via-indigo-500/40 to-violet-600/30 blur-sm" />
+              <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
                 <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
               </div>
               <div>
                 <p className="text-lg font-semibold tracking-wide">BalùHost</p>
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-500">NAS OS v4</p>
+                <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">NAS OS v4</p>
               </div>
             </div>
           </div>
@@ -177,22 +170,22 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                   to={item.path}
                   className={`group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
                     active
-                      ? 'border-sky-500/40 bg-gradient-to-r from-sky-500/15 via-indigo-500/10 to-transparent text-white shadow-[0_14px_44px_rgba(56,189,248,0.2)]'
-                      : 'border-transparent text-slate-400 hover:border-slate-700/60 hover:bg-slate-900/40 hover:text-white'
+                      ? 'border-sky-500 bg-slate-900-hover text-sky-400'
+                      : 'border-transparent text-slate-300'
                   }`}
                 >
                   <span
                     className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
                       active
-                        ? 'border-sky-500/40 bg-slate-900/70 text-sky-200'
-                        : 'border-slate-800 bg-slate-950/40 text-slate-400 group-hover:border-sky-500/30 group-hover:text-sky-200'
+                        ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
+                        : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
                     }`}
                   >
                     {item.icon}
                   </span>
                   <div className="flex flex-col">
                     <span>{item.label}</span>
-                    <span className="text-xs text-slate-500">{item.description}</span>
+                    <span className="text-xs text-slate-100-tertiary">{item.description}</span>
                   </div>
                 </Link>
               );
@@ -200,15 +193,15 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           </nav>
 
           <div className="px-6 pb-10">
-            <div className="glass-accent">
-              <p className="text-xs uppercase tracking-[0.3em] text-emerald-300/80">System Healthy</p>
+            <div className="glass-accent border-slate-800 bg-slate-900/55">
+              <p className="text-xs uppercase tracking-[0.3em] text-sky-400">System Healthy</p>
               <div className="mt-4 flex items-center justify-between">
                 <div>
-                  <p className="text-2xl font-semibold text-emerald-300">99%</p>
-                  <p className="text-xs text-slate-400">Storage 70% free</p>
+                  <p className="text-2xl font-semibold text-sky-400">99%</p>
+                  <p className="text-xs text-slate-100-tertiary">Storage 70% free</p>
                 </div>
                 <div className="glow-ring h-16 w-16">
-                  <div className="h-[52px] w-[52px] rounded-full bg-[conic-gradient(at_center,_rgba(16,185,129,0.9)_0%,_rgba(16,185,129,0.9)_240deg,_rgba(15,23,42,0.9)_240deg,_rgba(15,23,42,0.9)_360deg)]" />
+                  <div className="h-[52px] w-[52px] rounded-full bg-gradient-to-r from-sky-500 via-theme-accent to-theme-bg" />
                 </div>
               </div>
             </div>
@@ -216,29 +209,29 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         </aside>
 
         <div className="flex flex-1 flex-col lg:pl-72">
-          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800/60 bg-slate-900/30 px-6 py-6 shadow-[0_12px_40px_rgba(2,6,23,0.45)] backdrop-blur-xl sm:px-8 lg:px-10">
+          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800 bg-slate-950-secondary/90 px-6 py-6 shadow-2xl backdrop-blur-xl sm:px-8 lg:px-10">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="hidden md:flex flex-col items-start">
-                <span className="text-sm font-medium text-slate-200">{user.username}</span>
-                <span className="text-xs text-slate-500">
-                  {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-emerald-400">Online</span>
+                <span className="text-sm font-medium text-slate-100">{user.username}</span>
+                <span className="text-xs text-slate-100-tertiary">
+                  {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-sky-400">Online</span>
                 </span>
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-200">
+                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <button
                   onClick={onLogout}
-                  className="rounded-xl border border-slate-700/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-slate-500 hover:text-white"
+                  className="rounded-xl border border-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100"
                 >
                   Logout
                 </button>
               </div>
             </div>
 
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-2 text-sm text-slate-400 lg:hidden">
+            <div className="mt-4 flex gap-2 overflow-x-auto pb-2 text-sm text-slate-100-secondary lg:hidden">
               {navItems.map((item) => {
                 const active = renderLink(item.path);
                 return (
@@ -247,8 +240,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     to={item.path}
                     className={`whitespace-nowrap rounded-full border px-3 py-1.5 transition ${
                       active
-                        ? 'border-sky-500/40 bg-sky-500/20 text-slate-100'
-                        : 'border-slate-800 bg-slate-900/60 hover:border-sky-500/30 hover:text-slate-100'
+                        ? 'border-sky-500 bg-sky-500/20 text-slate-100'
+                        : 'border-slate-800 bg-slate-950-secondary text-slate-100-secondary hover:border-sky-500/30 hover:text-slate-100'
                     }`}
                   >
                     {item.label}

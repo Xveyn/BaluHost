@@ -61,7 +61,8 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - Responsive design with Tailwind CSS
 - Real-time updates
 - Intuitive navigation
-- Dark-themed interface
+- Dark-themed interface with glassmorphism effects
+- Settings page with user profile, security, storage, and activity logs
 - Fast loading with Vite HMR
 
 ### 🛠️ Developer-Friendly

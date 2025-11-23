@@ -4,12 +4,7 @@
 
 @layer base {
   body {
-    @apply min-h-screen bg-slate-950 text-slate-100 antialiased;
-    background-color: #020617;
-    background-image:
-      radial-gradient(circle at 20% 20%, rgba(56, 189, 248, 0.18), rgba(2, 6, 23, 0) 55%),
-      radial-gradient(circle at 80% 10%, rgba(124, 58, 237, 0.2), rgba(2, 6, 23, 0) 52%),
-      radial-gradient(circle at 65% 75%, rgba(59, 130, 246, 0.12), rgba(2, 6, 23, 0) 65%);
+    @apply min-h-screen antialiased;
   }
 }
 
