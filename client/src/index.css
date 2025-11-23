@@ -46,3 +46,60 @@
     @apply relative flex items-center justify-center rounded-full border border-slate-800 bg-slate-950/60 shadow-[0_15px_45px_rgba(2,6,23,0.6)];
   }
 }
+
+/* Date Picker Dark Mode Styling */
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  filter: invert(0.8) brightness(0.9);
+  cursor: pointer;
+  opacity: 0.7;
+  transition: opacity 0.2s;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator:hover,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator:hover {
+  opacity: 1;
+}
+
+/* Firefox Date Picker */
+input[type="date"]::-moz-focus-inner,
+input[type="datetime-local"]::-moz-focus-inner {
+  border: 0;
+}
+
+/* Better calendar popup styling */
+::-webkit-datetime-edit-fields-wrapper {
+  padding: 0;
+}
+
+::-webkit-datetime-edit-text {
+  color: rgb(156, 163, 175);
+  padding: 0 0.25em;
+}
+
+::-webkit-datetime-edit-month-field,
+::-webkit-datetime-edit-day-field,
+::-webkit-datetime-edit-year-field,
+::-webkit-datetime-edit-hour-field,
+::-webkit-datetime-edit-minute-field,
+::-webkit-datetime-edit-ampm-field {
+  color: rgb(229, 231, 235);
+  padding: 0.25em 0.125em;
+  border-radius: 0.25rem;
+}
+
+::-webkit-datetime-edit-month-field:focus,
+::-webkit-datetime-edit-day-field:focus,
+::-webkit-datetime-edit-year-field:focus,
+::-webkit-datetime-edit-hour-field:focus,
+::-webkit-datetime-edit-minute-field:focus,
+::-webkit-datetime-edit-ampm-field:focus {
+  background-color: rgba(59, 130, 246, 0.2);
+  color: rgb(255, 255, 255);
+  outline: none;
+}

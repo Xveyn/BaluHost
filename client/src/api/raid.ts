@@ -42,6 +42,37 @@ export interface RaidOptionsPayload {
   trigger_scrub?: boolean;
 }
 
+export interface AvailableDisk {
+  name: string;
+  size_bytes: number;
+  model?: string | null;
+  is_partitioned: boolean;
+  partitions: string[];
+  in_raid: boolean;
+}
+
+export interface AvailableDisksResponse {
+  disks: AvailableDisk[];
+}
+
+export interface FormatDiskPayload {
+  disk: string;
+  filesystem?: string;
+  label?: string;
+}
+
+export interface CreateArrayPayload {
+  name: string;
+  level: string;
+  devices: string[];
+  spare_devices?: string[];
+}
+
+export interface DeleteArrayPayload {
+  array: string;
+  force?: boolean;
+}
+
 const getToken = (): string => {
   const token = localStorage.getItem('token');
   if (!token) {
@@ -121,6 +152,62 @@ export const updateRaidOptions = async (payload: RaidOptionsPayload): Promise<Ra
   const token = getToken();
 
   const response = await fetch(buildApiUrl('/api/system/raid/options'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return parseResponse<RaidActionResponse>(response);
+};
+
+export const getAvailableDisks = async (): Promise<AvailableDisksResponse> => {
+  const token = getToken();
+  const response = await fetch(buildApiUrl('/api/system/raid/available-disks'), {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  return parseResponse<AvailableDisksResponse>(response);
+};
+
+export const formatDisk = async (payload: FormatDiskPayload): Promise<RaidActionResponse> => {
+  const token = getToken();
+
+  const response = await fetch(buildApiUrl('/api/system/raid/format-disk'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return parseResponse<RaidActionResponse>(response);
+};
+
+export const createArray = async (payload: CreateArrayPayload): Promise<RaidActionResponse> => {
+  const token = getToken();
+
+  const response = await fetch(buildApiUrl('/api/system/raid/create-array'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  return parseResponse<RaidActionResponse>(response);
+};
+
+export const deleteArray = async (payload: DeleteArrayPayload): Promise<RaidActionResponse> => {
+  const token = getToken();
+
+  const response = await fetch(buildApiUrl('/api/system/raid/delete-array'), {
     method: 'POST',
     headers: {
       Authorization: `Bearer ${token}`,

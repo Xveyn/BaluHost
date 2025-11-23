@@ -1,7 +1,11 @@
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from typing import Optional
+
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile, status
 from fastapi.responses import FileResponse
+from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.database import get_db
 from app.schemas.files import (
     FileListResponse,
     FileOperationResponse,
@@ -13,6 +17,9 @@ from app.schemas.files import (
 from app.schemas.user import UserPublic
 from app.services import files as file_service
 from app.services.permissions import PermissionDeniedError
+from app.services.audit_logger_db import get_audit_logger_db
+from app.services.shares import ShareService
+from app.models.file_metadata import FileMetadata
 
 router = APIRouter()
 
@@ -21,25 +28,127 @@ router = APIRouter()
 async def list_files(
     path: str = "",
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileListResponse:
+    audit_logger = get_audit_logger_db()
     try:
-        entries = list(file_service.list_directory(path, user=user))
+        entries = list(file_service.list_directory(path, user=user, db=db))
     except PermissionDeniedError as exc:
+        # Log unauthorized directory access
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="list_directory",
+            resource=path,
+            required_permission="read",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     return FileListResponse(files=entries)
 
 
+@router.get("/download/{file_id}")
+async def download_file_by_id(
+    file_id: int,
+    request: Request,
+    x_share_token: Optional[str] = Header(None),
+    x_share_password: Optional[str] = Header(None),
+    user: Optional[UserPublic] = Depends(deps.get_current_user_optional),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """
+    Download a file by ID. Supports both authenticated and public share link access.
+    """
+    audit_logger = get_audit_logger_db()
+    
+    # Get file metadata
+    file_metadata = db.get(FileMetadata, file_id)
+    if not file_metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    
+    # Check if accessing via share link
+    if x_share_token:
+        # Public share link access
+        share_link = ShareService.get_share_link_by_token(db, x_share_token)
+        
+        if not share_link:
+            raise HTTPException(status_code=404, detail="Share link not found")
+        
+        if not share_link.is_accessible():
+            raise HTTPException(status_code=410, detail="Share link has expired or reached download limit")
+        
+        if share_link.file_id != file_id:
+            raise HTTPException(status_code=403, detail="Share link does not match file")
+        
+        # Verify password if required
+        if not ShareService.verify_share_link_password(share_link, x_share_password):
+            raise HTTPException(status_code=403, detail="Invalid password")
+        
+        if not share_link.allow_download:
+            raise HTTPException(status_code=403, detail="Download not allowed for this share")
+        
+        # Increment download count
+        ShareService.increment_download_count(db, share_link)
+        
+        # Log public share download (use owner's ID for tracking)
+        audit_logger.log_file_action(
+            action="file_download_via_share",
+            user_id=share_link.owner_id,
+            username=f"shared_link:{x_share_token[:8]}",
+            file_path=file_metadata.path,
+            success=True,
+            ip_address=request.client.host if request.client else None,
+            db=db
+        )
+    else:
+        # Authenticated user access
+        if not user:
+            raise HTTPException(status_code=401, detail="Authentication required")
+        
+        try:
+            file_service.ensure_can_view(file_metadata.path, user, db=db)
+        except PermissionDeniedError as exc:
+            audit_logger.log_authorization_failure(
+                user=user.username,
+                action="download_file",
+                resource=file_metadata.path,
+                required_permission="read",
+                db=db
+            )
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+        except file_service.FileAccessError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from exc
+    
+    # Get absolute file path
+    file_path = file_service.get_absolute_path(file_metadata.path)
+    
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found on disk")
+    
+    return FileResponse(path=file_path, filename=file_metadata.name)
+
+
 @router.get("/download/{resource_path:path}")
 async def download_file(
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileResponse:
+    """Legacy download endpoint using file path."""
+    audit_logger = get_audit_logger_db()
     try:
-        file_service.ensure_can_view(resource_path, user)
+        file_service.ensure_can_view(resource_path, user, db=db)
         file_path = file_service.get_absolute_path(resource_path)
     except PermissionDeniedError as exc:
+        # Log unauthorized file download attempt
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="download_file",
+            resource=resource_path,
+            required_permission="read",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -55,11 +164,32 @@ async def upload_files(
     files: list[UploadFile] = File(...),
     path: str = Form(""),
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileUploadResponse:
+    from app.services.upload_progress import get_upload_progress_manager
+    
+    # Create upload sessions for progress tracking
+    progress_manager = get_upload_progress_manager()
+    upload_ids = []
+    
+    for upload_file in files:
+        # Get file size from the upload
+        upload_file.file.seek(0, 2)  # Seek to end
+        file_size = upload_file.file.tell()
+        upload_file.file.seek(0)  # Reset to start
+        
+        upload_id = progress_manager.create_upload_session(
+            filename=upload_file.filename or "upload.bin",
+            total_bytes=file_size
+        )
+        upload_ids.append(upload_id)
+    
     # folder_paths is optional and sent as individual form fields
     # FastAPI will collect them automatically if present
     try:
-        saved = await file_service.save_uploads(path, files, user=user, folder_paths=None)
+        saved = await file_service.save_uploads(
+            path, files, user=user, folder_paths=None, db=db, upload_ids=upload_ids
+        )
     except file_service.QuotaExceededError as exc:
         raise HTTPException(status_code=status.HTTP_507_INSUFFICIENT_STORAGE, detail=str(exc)) from exc
     except PermissionDeniedError as exc:
@@ -67,7 +197,7 @@ async def upload_files(
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
-    return FileUploadResponse(message="Files uploaded", uploaded=saved)
+    return FileUploadResponse(message="Files uploaded", uploaded=saved, upload_ids=upload_ids)
 
 
 @router.get("/storage/available")
@@ -89,10 +219,20 @@ async def get_available_storage(
 async def delete_path(
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    audit_logger = get_audit_logger_db()
     try:
-        file_service.delete_path(resource_path, user=user)
+        file_service.delete_path(resource_path, user=user, db=db)
     except PermissionDeniedError as exc:
+        # Log unauthorized delete attempt
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="delete_file",
+            resource=resource_path,
+            required_permission="delete",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -103,12 +243,13 @@ async def delete_path(
 async def create_folder(
     payload: FolderCreateRequest,
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileOperationResponse:
     if not payload.name:
         raise HTTPException(status_code=400, detail="Folder name required")
 
     try:
-        file_service.create_folder(payload.path or "", payload.name, owner=user)
+        file_service.create_folder(payload.path or "", payload.name, owner=user, db=db)
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
@@ -121,10 +262,20 @@ async def create_folder(
 async def rename_path(
     payload: RenameRequest,
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    audit_logger = get_audit_logger_db()
     try:
-        file_service.rename_path(payload.old_path, payload.new_name, user=user)
+        file_service.rename_path(payload.old_path, payload.new_name, user=user, db=db)
     except PermissionDeniedError as exc:
+        # Log unauthorized rename attempt
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="rename_file",
+            resource=payload.old_path,
+            required_permission="write",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
@@ -135,10 +286,20 @@ async def rename_path(
 async def move_path(
     payload: MoveRequest,
     user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    audit_logger = get_audit_logger_db()
     try:
-        file_service.move_path(payload.source_path, payload.target_path, user=user)
+        file_service.move_path(payload.source_path, payload.target_path, user=user, db=db)
     except PermissionDeniedError as exc:
+        # Log unauthorized move attempt
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="move_file",
+            resource=payload.source_path,
+            required_permission="write",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc

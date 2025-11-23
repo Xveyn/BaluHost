@@ -55,6 +55,27 @@ const navIcon = {
       <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M16 12h4" />
       <circle cx="12" cy="12" r="2.5" stroke="currentColor" />
     </svg>
+  ),
+  docs: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M7 8h10M7 12h10M7 16h6" />
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M5 4h14a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1Z" />
+      <path stroke="currentColor" strokeLinecap="round" d="M9 4v16" />
+    </svg>
+  ),
+  shares: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <circle cx="18" cy="5" r="3" stroke="currentColor" />
+      <circle cx="6" cy="12" r="3" stroke="currentColor" />
+      <circle cx="18" cy="19" r="3" stroke="currentColor" />
+      <path stroke="currentColor" strokeLinecap="round" d="M8.7 10.7L15.3 6.3M8.7 13.3L15.3 17.7" />
+    </svg>
+  ),
+  settings: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <circle cx="12" cy="12" r="3" stroke="currentColor" />
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 1v6m0 6v10M1 12h6m6 0h10m-4.8 4.8l-7.2-7.2M5.6 5.6l7.2 7.2m4.4 0l-7.2-7.2m-4.4 4.4l7.2 7.2" />
+    </svg>
   )
 } as const;
 
@@ -86,6 +107,24 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       description: 'Activity Logs',
       icon: navIcon.logging
     },
+    {
+      path: '/shares',
+      label: 'Sharing',
+      description: 'Share Files',
+      icon: navIcon.shares
+    },
+    {
+      path: '/settings',
+      label: 'Settings',
+      description: 'Account',
+      icon: navIcon.settings
+    },
+    {
+      path: '/docs',
+      label: 'API Docs',
+      description: 'REST API',
+      icon: navIcon.docs
+    },
     ...(user.role === 'admin'
       ? [
           {
@@ -115,7 +154,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       </div>
 
       <div className="relative z-10 flex min-h-screen">
-        <aside className="hidden lg:flex w-72 flex-col border-r border-slate-800/60 bg-slate-900/40 backdrop-blur-xl">
+        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-slate-800/60 bg-slate-900/40 backdrop-blur-xl">
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950/60 p-[3px] shadow-[0_18px_45px_rgba(56,189,248,0.25)]">
@@ -129,7 +168,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             </div>
           </div>
 
-          <nav className="flex-1 space-y-2 px-4">
+          <nav className="flex-1 space-y-2 px-4 overflow-y-auto">
             {navItems.map((item) => {
               const active = renderLink(item.path);
               return (
@@ -176,8 +215,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           </div>
         </aside>
 
-        <div className="flex flex-1 flex-col">
-          <header className="border-b border-slate-800/60 bg-slate-900/30 px-6 py-6 shadow-[0_12px_40px_rgba(2,6,23,0.45)] backdrop-blur-xl sm:px-8 lg:px-10">
+        <div className="flex flex-1 flex-col lg:pl-72">
+          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800/60 bg-slate-900/30 px-6 py-6 shadow-[0_12px_40px_rgba(2,6,23,0.45)] backdrop-blur-xl sm:px-8 lg:px-10">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="hidden md:flex flex-col items-start">
                 <span className="text-sm font-medium text-slate-200">{user.username}</span>
@@ -219,7 +258,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-8 lg:px-10">
+          <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-8 lg:px-10 mt-[140px] md:mt-[120px]">
             <div className="mx-auto w-full max-w-7xl space-y-8">
               {children}
             </div>

@@ -7,6 +7,10 @@ import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
 import RaidManagement from './pages/RaidManagement';
 import Logging from './pages/Logging';
+import ApiDocs from './pages/ApiDocs';
+import SharesPage from './pages/SharesPage';
+import SettingsPage from './pages/SettingsPage';
+import PublicSharePage from './pages/PublicSharePage';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -24,32 +28,49 @@ function App() {
 
   useEffect(() => {
     const token = localStorage.getItem('token');
+    console.log('App init - token exists:', !!token);
+    
     if (token) {
+      console.log('Verifying token with /api/auth/me');
       fetch(buildApiUrl('/api/auth/me'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       })
-        .then(res => res.json())
+        .then(res => {
+          console.log('Auth me response status:', res.status);
+          if (!res.ok) {
+            throw new Error('Token invalid');
+          }
+          return res.json();
+        })
         .then(data => {
-          if (data.user) {
-            setUser(data.user);
+          console.log('User data received:', data);
+          if (data.user || data.username) {
+            setUser(data.user || data);
+          } else {
+            throw new Error('Invalid user data');
           }
         })
-        .catch(() => {
+        .catch((err) => {
+          console.error('Token verification failed:', err);
           localStorage.removeItem('token');
+          setUser(null);
         })
         .finally(() => {
           setLoading(false);
         });
     } else {
+      console.log('No token found, showing login');
       setLoading(false);
     }
   }, []);
 
   const handleLogin = (userData: User, token: string) => {
-    setUser(userData);
+    console.log('Login successful - User:', userData);
+    console.log('Login successful - Token preview:', token.substring(0, 30) + '...');
     localStorage.setItem('token', token);
+    setUser(userData);
   };
 
   const handleLogout = () => {
@@ -167,6 +188,46 @@ function App() {
               <Navigate to="/login" />
             )
           }
+        />
+        <Route
+          path="/shares"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SharesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/settings"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SettingsPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/docs"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <ApiDocs />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/share/:token"
+          element={<PublicSharePage />}
         />
       </Routes>
     </Router>

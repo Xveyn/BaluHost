@@ -6,11 +6,13 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_db
 from app.core.config import settings
 from app.schemas.user import UserPublic
-from app.services.audit_logger import get_audit_logger
+from app.schemas.audit_log import AuditLogResponse
+from app.services.audit_logger_db import get_audit_logger_db
 from app.services.disk_monitor import get_disk_io_history
 
 logger = logging.getLogger(__name__)
@@ -159,10 +161,11 @@ async def get_file_access_logs(
     days: int = Query(default=1, ge=1, le=30),
     action: Optional[str] = Query(default=None),
     user: Optional[str] = Query(default=None),
-    current_user: UserPublic = Depends(get_current_user)
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get file access logs.
+    Get file access logs from database.
     
     Args:
         limit: Maximum number of logs to return (default: 100)
@@ -170,100 +173,48 @@ async def get_file_access_logs(
         action: Filter by action type (optional)
         user: Filter by username (optional)
         current_user: Current authenticated user
+        db: Database session
     
     Returns:
         File access log entries
     """
-    if settings.is_dev_mode:
-        # Return mock data in dev mode
-        logger.info("Returning mock file access logs (dev mode)")
-        logs = _generate_mock_file_access_logs(days=days, limit=limit)
-        
-        # Apply filters
-        if action:
-            logs = [log for log in logs if log.get("action") == action]
-        if user:
-            logs = [log for log in logs if log.get("user") == user]
-        
-        return {
-            "dev_mode": True,
-            "total": len(logs),
-            "logs": logs[:limit]
-        }
-    
-    # Get real audit logs
-    audit = get_audit_logger()
+    # Get audit logs from database
+    audit = get_audit_logger_db()
     logs = audit.get_logs(
         limit=limit,
         event_type="FILE_ACCESS",
-        days=days
+        action=action,
+        user=user,
+        days=days,
+        db=db
     )
     
-    # Apply additional filters
-    if action:
-        logs = [log for log in logs if log.get("action") == action]
-    if user:
-        logs = [log for log in logs if log.get("user") == user]
-    
     return {
-        "dev_mode": False,
         "total": len(logs),
-        "logs": logs[:limit]
+        "logs": logs
     }
 
 
 @router.get("/stats")
 async def get_logging_stats(
     days: int = Query(default=7, ge=1, le=30),
-    current_user: UserPublic = Depends(get_current_user)
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
 ) -> Dict[str, Any]:
     """
-    Get logging statistics and summary.
+    Get logging statistics and summary from database.
     
     Args:
         days: Number of days to analyze (default: 7)
         current_user: Current authenticated user
+        db: Database session
     
     Returns:
         Statistics about disk I/O and file access
     """
-    if settings.is_dev_mode:
-        # Return mock stats in dev mode
-        import random
-        
-        return {
-            "dev_mode": True,
-            "period_days": days,
-            "disk_io": {
-                "avg_read_mbps": round(random.uniform(5, 25), 2),
-                "avg_write_mbps": round(random.uniform(3, 15), 2),
-                "peak_read_mbps": round(random.uniform(50, 150), 2),
-                "peak_write_mbps": round(random.uniform(30, 100), 2),
-                "total_read_gb": round(random.uniform(100, 1000), 2),
-                "total_write_gb": round(random.uniform(50, 500), 2)
-            },
-            "file_access": {
-                "total_operations": random.randint(1000, 10000),
-                "by_action": {
-                    "read": random.randint(300, 3000),
-                    "write": random.randint(200, 2000),
-                    "upload": random.randint(50, 500),
-                    "download": random.randint(100, 1000),
-                    "delete": random.randint(10, 100),
-                    "create": random.randint(50, 500)
-                },
-                "by_user": {
-                    "admin": random.randint(200, 2000),
-                    "user1": random.randint(100, 1000),
-                    "user2": random.randint(50, 500)
-                },
-                "success_rate": round(random.uniform(0.92, 0.99), 3)
-            }
-        }
-    
-    # Real stats calculation would go here
-    audit = get_audit_logger()
-    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days)
+    # Get audit logs from database
+    audit = get_audit_logger_db()
+    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
     
     # Calculate statistics
     total_ops = len(logs)
@@ -284,7 +235,6 @@ async def get_logging_stats(
     success_rate = success_count / total_ops if total_ops > 0 else 1.0
     
     return {
-        "dev_mode": False,
         "period_days": days,
         "file_access": {
             "total_operations": total_ops,
@@ -293,3 +243,47 @@ async def get_logging_stats(
             "success_rate": round(success_rate, 3)
         }
     }
+
+
+@router.get("/audit")
+async def get_audit_logs(
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=50, ge=1, le=100),
+    event_type: Optional[str] = Query(default=None),
+    user: Optional[str] = Query(default=None),
+    action: Optional[str] = Query(default=None),
+    success: Optional[bool] = Query(default=None),
+    days: int = Query(default=7, ge=1, le=365),
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db)
+) -> AuditLogResponse:
+    """
+    Get paginated audit logs with filtering.
+    
+    Args:
+        page: Page number (1-indexed)
+        page_size: Number of logs per page
+        event_type: Filter by event type
+        user: Filter by username
+        action: Filter by action
+        success: Filter by success status
+        days: Number of days to look back
+        current_user: Current authenticated user
+        db: Database session
+    
+    Returns:
+        Paginated audit log entries
+    """
+    audit = get_audit_logger_db()
+    result = audit.get_logs_paginated(
+        page=page,
+        page_size=page_size,
+        event_type=event_type,
+        user=user,
+        action=action,
+        success=success,
+        days=days,
+        db=db
+    )
+    
+    return AuditLogResponse(**result)

@@ -16,12 +16,20 @@ class UserUpdate(BaseModel):
     email: EmailStr | None = None
     password: str | None = None
     role: str | None = None
+    is_active: bool | None = None
 
 
 class UserPublic(UserBase):
     id: str
     role: str
+    is_active: bool
+    created_at: str
+    updated_at: str | None = None
 
 
 class UsersResponse(BaseModel):
     users: list[UserPublic]
+    total: int
+    active: int
+    inactive: int
+    admins: int

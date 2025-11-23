@@ -19,6 +19,9 @@ _SMART_CACHE_TTL_SECONDS = 120  # Wie lange SMART Daten gültig bleiben
 _SMART_CACHE_TIMESTAMP: datetime | None = None
 _SMART_CACHE_DATA: SmartStatusResponse | None = None
 
+# Dev-Mode: Toggle zwischen Mock und Real SMART Daten
+_DEV_USE_MOCK_DATA = True  # Default: Mock-Daten im Dev-Mode
+
 def _smart_cache_valid() -> bool:
     if _SMART_CACHE_TIMESTAMP is None:
         return False
@@ -38,6 +41,138 @@ def invalidate_smart_cache() -> None:
     global _SMART_CACHE_TIMESTAMP, _SMART_CACHE_DATA
     _SMART_CACHE_TIMESTAMP = None
     _SMART_CACHE_DATA = None
+
+
+def get_dev_mode_state() -> str:
+    """Gibt den aktuellen Dev-Mode Status zurück: 'mock' oder 'real'."""
+    return "mock" if _DEV_USE_MOCK_DATA else "real"
+
+
+def toggle_dev_mode() -> str:
+    """Wechselt zwischen Mock und Real SMART-Daten im Dev-Mode.
+    
+    Returns:
+        str: Neuer Modus ('mock' oder 'real')
+    """
+    global _DEV_USE_MOCK_DATA
+    _DEV_USE_MOCK_DATA = not _DEV_USE_MOCK_DATA
+    invalidate_smart_cache()  # Cache invalidieren beim Toggle
+    new_mode = get_dev_mode_state()
+    logger.info(f"Dev-Mode SMART data toggled to: {new_mode}")
+    return new_mode
+
+
+def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
+    """Fügt used_bytes, used_percent und mount_point zu SMART-Geräten hinzu.
+    
+    Nutzt psutil um Partitionen und deren Nutzung zu ermitteln und gleicht sie
+    mit den physischen SMART-Geräten ab.
+    """
+    try:
+        import psutil
+    except ImportError:
+        logger.warning("psutil nicht verfügbar - keine Filesystem-Nutzungsdaten")
+        return
+    
+    try:
+        partitions = psutil.disk_partitions(all=False)
+        
+        # Erstelle Mapping: device_name -> usage_info
+        partition_usage: dict[str, tuple[int, int, str]] = {}  # {device: (used, total, mountpoint)}
+        
+        for partition in partitions:
+            try:
+                usage = psutil.disk_usage(partition.mountpoint)
+                device_key = partition.device.lower()
+                
+                # Windows: Normalisiere Laufwerksbuchstaben (C:\ -> c)
+                if platform.system().lower() == 'windows':
+                    if ':' in device_key:
+                        device_key = device_key.split(':')[0].strip()
+                
+                # Aggregiere Nutzung pro physischem Gerät
+                if device_key in partition_usage:
+                    old_used, old_total, old_mount = partition_usage[device_key]
+                    partition_usage[device_key] = (
+                        old_used + usage.used,
+                        old_total + usage.total,
+                        f"{old_mount}, {partition.mountpoint}"
+                    )
+                else:
+                    partition_usage[device_key] = (usage.used, usage.total, partition.mountpoint)
+                    
+            except (PermissionError, OSError) as e:
+                logger.debug(f"Konnte Partition {partition.mountpoint} nicht lesen: {e}")
+                continue
+        
+        # Windows-spezifisch: Versuche Disk-Nummer zu Laufwerksbuchstaben-Mapping
+        windows_disk_map: dict[str, str] = {}  # {"/dev/sda": "c", ...}
+        if platform.system().lower() == 'windows' and partition_usage:
+            import subprocess
+            try:
+                # Get-PhysicalDisk und Get-Partition Mapping
+                ps_cmd = """
+                Get-PhysicalDisk | ForEach-Object {
+                    $disk = $_
+                    Get-Partition -DiskNumber $disk.DeviceId -ErrorAction SilentlyContinue | 
+                    Where-Object {$_.DriveLetter} | ForEach-Object {
+                        Write-Output "$($disk.DeviceId),$($_.DriveLetter)"
+                    }
+                }
+                """
+                result = subprocess.run(
+                    ['powershell', '-Command', ps_cmd],
+                    capture_output=True,
+                    text=True,
+                    check=False,
+                    timeout=10
+                )
+                
+                if result.returncode == 0:
+                    for line in result.stdout.strip().split('\n'):
+                        if ',' in line:
+                            disk_num, drive_letter = line.strip().split(',')
+                            # /dev/sda = Disk 0, /dev/sdb = Disk 1, etc.
+                            device_name = f"/dev/sd{chr(ord('a') + int(disk_num))}"
+                            windows_disk_map[device_name] = drive_letter.lower()
+                            
+            except Exception as e:
+                logger.debug(f"Windows disk mapping failed: {e}")
+        
+        # Anreichere SMART-Geräte mit Nutzungsdaten
+        for device in devices:
+            # Versuche verschiedene Matching-Strategien
+            matched = False
+            
+            # 1. Windows: Nutze Disk-Mapping
+            if device.name in windows_disk_map:
+                drive_letter = windows_disk_map[device.name]
+                if drive_letter in partition_usage:
+                    used, total, mount = partition_usage[drive_letter]
+                    device.used_bytes = used
+                    device.used_percent = (used / total * 100) if total > 0 else 0
+                    device.mount_point = mount
+                    matched = True
+                    logger.debug(f"Matched {device.name} -> {drive_letter}: {used / (1024**3):.2f} GB used")
+            
+            # 2. Linux: Direkte Device-Namen (/dev/sda -> sda)
+            if not matched:
+                device_key = device.name.replace('/dev/', '').lower()
+                for partition_dev, (used, total, mount) in partition_usage.items():
+                    if device_key in partition_dev or partition_dev in device_key:
+                        device.used_bytes = used
+                        device.used_percent = (used / total * 100) if total > 0 else 0
+                        device.mount_point = mount
+                        matched = True
+                        logger.debug(f"Matched {device.name} -> {partition_dev}: {used / (1024**3):.2f} GB used")
+                        break
+            
+            # 3. Fallback: Wenn keine Nutzungsdaten gefunden, lasse None
+            if not matched:
+                logger.debug(f"No filesystem usage found for {device.name}")
+                
+    except Exception as e:
+        logger.error(f"Failed to enrich SMART data with filesystem usage: {e}")
 
 
 def _get_smartctl_path() -> str | None:
@@ -195,23 +330,250 @@ def _read_real_smart_data() -> SmartStatusResponse:
                     devices.append(dev_obj)
             except Exception as e:
                 logger.debug("SMART device future failed: %s", e)
+    
+    # Anreichere Geräte mit Filesystem-Nutzungsdaten
+    _enrich_with_filesystem_usage(devices)
+    
     return SmartStatusResponse(checked_at=now, devices=devices)
 
 
 def _mock_status() -> SmartStatusResponse:
+    from app.core.config import settings
+    from app.services import files as file_service
+    
     now = datetime.now(tz=timezone.utc)
-    # Mock-Daten basierend auf echten System-Festplatten
+    
+    # Berechne tatsächlich genutzte Bytes aus dev-storage
+    try:
+        actual_used_bytes = file_service.calculate_used_bytes()
+    except Exception:
+        actual_used_bytes = 0
+    
+    # Bei RAID1: Daten werden gespiegelt, also beide Disks zeigen gleiche Nutzung
+    # Effektive Nutzung = actual_used_bytes (nicht verdoppelt)
+    disk_capacity_5gb = 5 * 1024 * 1024 * 1024  # 5 GB
+    disk_capacity_10gb = 10 * 1024 * 1024 * 1024  # 10 GB
+    disk_capacity_20gb = 20 * 1024 * 1024 * 1024  # 20 GB
+    
+    disk_used = min(actual_used_bytes, disk_capacity_5gb)  # Cap bei Kapazität
+    disk_used_percent = (disk_used / disk_capacity_5gb * 100) if disk_capacity_5gb > 0 else 0
+    
+    # Mock-Daten für Dev-Mode: Mehrere Festplatten-Konfigurationen
+    # - RAID1 Pool 1: 2x5GB (md0) - Aktiver Storage
+    # - RAID1 Pool 2: 2x10GB (md1) - Backup Storage
+    # - RAID5 Pool: 3x20GB (md2) - Archiv Storage
     devices = [
+        # === RAID1 Pool 1 (md0) - 2x5GB ===
         SmartDevice(
             name="/dev/sda",
-            model="Samsung SSD 840 EVO 250GB",
-            serial="S1DBNSAF732716P",
-            temperature=33,
+            model="BaluHost Dev Disk 5GB (Mirror A)",
+            serial="BALU-DEV-5GB-A",
+            temperature=28,
             status="PASSED",
-            capacity_bytes=250059350016,  # 232 GB
-            used_bytes=172161261568,  # 160.3 GB genutzt (69%)
-            used_percent=69.0,
-            mount_point="C:",
+            capacity_bytes=disk_capacity_5gb,
+            used_bytes=disk_used,
+            used_percent=disk_used_percent,
+            mount_point=None,
+            attributes=[
+                SmartAttribute(
+                    id=5,
+                    name="Reallocated_Sector_Ct",
+                    value=100,
+                    worst=100,
+                    threshold=36,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=194,
+                    name="Temperature_Celsius",
+                    value=72,
+                    worst=55,
+                    threshold=0,
+                    raw="28",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=197,
+                    name="Current_Pending_Sector",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=198,
+                    name="Uncorrectable_Error_Cnt",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+            ],
+        ),
+        SmartDevice(
+            name="/dev/sdb",
+            model="BaluHost Dev Disk 5GB (Mirror B)",
+            serial="BALU-DEV-5GB-B",
+            temperature=29,
+            status="PASSED",
+            capacity_bytes=disk_capacity_5gb,
+            used_bytes=disk_used,
+            used_percent=disk_used_percent,
+            mount_point=None,
+            attributes=[
+                SmartAttribute(
+                    id=5,
+                    name="Reallocated_Sector_Ct",
+                    value=100,
+                    worst=100,
+                    threshold=36,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=194,
+                    name="Temperature_Celsius",
+                    value=71,
+                    worst=56,
+                    threshold=0,
+                    raw="29",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=197,
+                    name="Current_Pending_Sector",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=198,
+                    name="Uncorrectable_Error_Cnt",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+            ],
+        ),
+        
+        # === RAID1 Pool 2 (md1) - 2x10GB ===
+        SmartDevice(
+            name="/dev/sdc",
+            model="BaluHost Dev Disk 10GB (Backup A)",
+            serial="BALU-DEV-10GB-A",
+            temperature=30,
+            status="PASSED",
+            capacity_bytes=disk_capacity_10gb,
+            used_bytes=int(disk_capacity_10gb * 0.45),  # 45% genutzt
+            used_percent=45.0,
+            mount_point=None,
+            attributes=[
+                SmartAttribute(
+                    id=5,
+                    name="Reallocated_Sector_Ct",
+                    value=100,
+                    worst=100,
+                    threshold=36,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=194,
+                    name="Temperature_Celsius",
+                    value=70,
+                    worst=54,
+                    threshold=0,
+                    raw="30",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=197,
+                    name="Current_Pending_Sector",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=198,
+                    name="Uncorrectable_Error_Cnt",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+            ],
+        ),
+        SmartDevice(
+            name="/dev/sdd",
+            model="BaluHost Dev Disk 10GB (Backup B)",
+            serial="BALU-DEV-10GB-B",
+            temperature=31,
+            status="PASSED",
+            capacity_bytes=disk_capacity_10gb,
+            used_bytes=int(disk_capacity_10gb * 0.45),  # 45% genutzt
+            used_percent=45.0,
+            mount_point=None,
+            attributes=[
+                SmartAttribute(
+                    id=5,
+                    name="Reallocated_Sector_Ct",
+                    value=100,
+                    worst=100,
+                    threshold=36,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=194,
+                    name="Temperature_Celsius",
+                    value=69,
+                    worst=53,
+                    threshold=0,
+                    raw="31",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=197,
+                    name="Current_Pending_Sector",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+                SmartAttribute(
+                    id=198,
+                    name="Uncorrectable_Error_Cnt",
+                    value=100,
+                    worst=100,
+                    threshold=0,
+                    raw="0",
+                    status="OK",
+                ),
+            ],
+        ),
+        
+        # === RAID5 Pool (md2) - 3x20GB ===
+        SmartDevice(
+            name="/dev/sde",
+            model="BaluHost Dev Disk 20GB (Archive A)",
+            serial="BALU-DEV-20GB-A",
+            temperature=32,
+            status="PASSED",
+            capacity_bytes=disk_capacity_20gb,
+            used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
+            used_percent=28.0,
+            mount_point=None,
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -226,7 +588,7 @@ def _mock_status() -> SmartStatusResponse:
                     id=194,
                     name="Temperature_Celsius",
                     value=68,
-                    worst=45,
+                    worst=52,
                     threshold=0,
                     raw="32",
                     status="OK",
@@ -252,15 +614,15 @@ def _mock_status() -> SmartStatusResponse:
             ],
         ),
         SmartDevice(
-            name="/dev/sdb",
-            model="WD Red Plus 4TB (WD40EFPX)",
-            serial="WD-WCC7K5HZTQ48",
-            temperature=31,
+            name="/dev/sdf",
+            model="BaluHost Dev Disk 20GB (Archive B)",
+            serial="BALU-DEV-20GB-B",
+            temperature=33,
             status="PASSED",
-            capacity_bytes=4000787030016,  # 4 TB
-            used_bytes=2400000000000,  # ~2.4 TB genutzt
-            used_percent=60.0,
-            mount_point="/mnt/disk2",
+            capacity_bytes=disk_capacity_20gb,
+            used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
+            used_percent=28.0,
+            mount_point=None,
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -274,10 +636,10 @@ def _mock_status() -> SmartStatusResponse:
                 SmartAttribute(
                     id=194,
                     name="Temperature_Celsius",
-                    value=69,
-                    worst=44,
+                    value=67,
+                    worst=51,
                     threshold=0,
-                    raw="31",
+                    raw="33",
                     status="OK",
                 ),
                 SmartAttribute(
@@ -301,15 +663,15 @@ def _mock_status() -> SmartStatusResponse:
             ],
         ),
         SmartDevice(
-            name="/dev/sdc",
-            model="WD Red Plus 4TB (WD40EFPX)",
-            serial="WD-WCC7K5HZTR15",
-            temperature=33,
+            name="/dev/sdg",
+            model="BaluHost Dev Disk 20GB (Archive C)",
+            serial="BALU-DEV-20GB-C",
+            temperature=34,
             status="PASSED",
-            capacity_bytes=4000787030016,  # 4 TB
-            used_bytes=800000000000,  # ~800 GB genutzt
-            used_percent=20.0,
-            mount_point="/mnt/disk3",
+            capacity_bytes=disk_capacity_20gb,
+            used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
+            used_percent=28.0,
+            mount_point=None,
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -323,10 +685,10 @@ def _mock_status() -> SmartStatusResponse:
                 SmartAttribute(
                     id=194,
                     name="Temperature_Celsius",
-                    value=67,
-                    worst=46,
+                    value=66,
+                    worst=50,
                     threshold=0,
-                    raw="33",
+                    raw="34",
                     status="OK",
                 ),
                 SmartAttribute(
@@ -356,12 +718,38 @@ def _mock_status() -> SmartStatusResponse:
 def get_smart_status() -> SmartStatusResponse:
     """Return SMART diagnostics information.
 
-    Attempts to read real SMART data using pySMART. Falls back to mock data
-    if reading fails or no devices are found. This works on Windows, Linux, and macOS.
+    In Dev-Mode: Respektiert _DEV_USE_MOCK_DATA Toggle.
+    In Production: Versucht immer echte SMART-Daten zu lesen, Fallback zu Mock bei Fehlern.
     """
     cached = get_cached_smart_status()
     if cached:
         return cached
+    
+    # Dev-Mode: Respektiere Toggle
+    if settings.is_dev_mode:
+        if _DEV_USE_MOCK_DATA:
+            logger.debug("Dev-Mode: Using mock SMART data (toggled)")
+            mock = _mock_status()
+            _set_smart_cache(mock)
+            return mock
+        else:
+            logger.debug("Dev-Mode: Using real SMART data (toggled)")
+            try:
+                data = _read_real_smart_data()
+                if not data.devices:
+                    logger.warning("No real SMART devices found, using mock as fallback")
+                    mock = _mock_status()
+                    _set_smart_cache(mock)
+                    return mock
+                _set_smart_cache(data)
+                return data
+            except Exception as e:
+                logger.warning("Failed to read real SMART data in dev-mode: %s", e)
+                mock = _mock_status()
+                _set_smart_cache(mock)
+                return mock
+    
+    # Production: Versuche echte Daten, Fallback zu Mock
     try:
         data = _read_real_smart_data()
         if not data.devices:
@@ -387,3 +775,17 @@ def get_smart_device_models() -> dict[str, str]:
     for dev in status.devices:
         mapping[dev.name.lower()] = dev.model
     return mapping
+
+
+def get_smart_device_order() -> list[str]:
+    """Get ordered list of device names as returned by smartctl --scan.
+    
+    This is useful for mapping psutil disk indices to SMART device names.
+    On Windows, the order corresponds to PhysicalDrive0, PhysicalDrive1, etc.
+    
+    Returns:
+        list[str]: Ordered list of device names (e.g., ['/dev/sda', '/dev/sdb', ...])
+    """
+    status = get_smart_status()
+    # Die Reihenfolge der Devices im SmartStatusResponse entspricht der Scan-Reihenfolge
+    return [dev.name for dev in status.devices]

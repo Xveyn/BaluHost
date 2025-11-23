@@ -66,10 +66,12 @@ function setCachedRaid(raid: RaidStatusResponse): void {
 
 export default function Dashboard() {
   const { system: systemInfo, storage: storageInfo, loading, error, lastUpdated, history } = useSystemTelemetry();
-  const { smartData, loading: smartLoading, error: smartError } = useSmartData();
+  const { smartData, loading: smartLoading, error: smartError, refetch: refetchSmartData } = useSmartData();
   const cachedRaid = getCachedRaid();
   const [raidData, setRaidData] = useState<RaidStatusResponse | null>(cachedRaid);
   const [raidLoading, setRaidLoading] = useState(!cachedRaid);
+  const [smartMode, setSmartMode] = useState<string>('mock');
+  const [smartModeLoading, setSmartModeLoading] = useState(false);
 
   useEffect(() => {
     const loadRaidData = async () => {
@@ -89,6 +91,35 @@ export default function Dashboard() {
 
     return () => clearInterval(interval);
   }, []);
+
+  useEffect(() => {
+    const loadSmartMode = async () => {
+      try {
+        const { getSmartMode } = await import('../api/smart');
+        const response = await getSmartMode();
+        setSmartMode(response.mode);
+      } catch (err) {
+        // Dev-Mode Toggle nicht verfügbar (Production oder Fehler)
+        console.debug('SMART mode toggle not available:', err);
+      }
+    };
+
+    loadSmartMode();
+  }, []);
+
+  const handleToggleSmartMode = async () => {
+    setSmartModeLoading(true);
+    try {
+      const { toggleSmartMode } = await import('../api/smart');
+      const response = await toggleSmartMode();
+      setSmartMode(response.mode);
+      refetchSmartData();
+    } catch (err) {
+      console.error('Failed to toggle SMART mode:', err);
+    } finally {
+      setSmartModeLoading(false);
+    }
+  };
 
   const systemStats = useMemo<SystemStats>(() => {
     const cpuUsage = Math.max(0, Math.min(systemInfo?.cpu.usage ?? 0, 100));
@@ -175,12 +206,43 @@ export default function Dashboard() {
     return { label: `${rounded}${suffix}`, tone: 'decrease' };
   };
 
+  const cpuFrequency = useMemo(() => {
+    return systemInfo?.cpu?.frequency_mhz 
+      ? `${(systemInfo.cpu.frequency_mhz / 1000).toFixed(2)} GHz`
+      : null;
+  }, [systemInfo]);
+
+  const cpuModel = useMemo(() => {
+    return systemInfo?.cpu?.model || null;
+  }, [systemInfo]);
+
+  const memorySpeedType = useMemo(() => {
+    const speed = systemInfo?.memory?.speed_mts;
+    const type = systemInfo?.memory?.type;
+    
+    if (speed && type) {
+      return `${type} @ ${speed} MT/s`;
+    } else if (type) {
+      return type;
+    } else if (speed) {
+      return `${speed} MT/s`;
+    }
+    return null;
+  }, [systemInfo]);
+
   const quickStats = [
     {
       id: 'cpu',
       title: 'CPU Usage',
       value: `${systemStats.cpuUsage.toFixed(1)}%`,
-      meta: `${systemStats.cpuCores || 0} cores active`,
+      meta: cpuModel 
+        ? cpuModel
+        : (cpuFrequency 
+          ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}`
+          : `${systemStats.cpuCores || 0} cores active`),
+      submeta: cpuModel && cpuFrequency 
+        ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}`
+        : undefined,
       delta: formatDelta(cpuDelta),
       accent: 'from-violet-500 to-fuchsia-500',
       progress: systemStats.cpuUsage,
@@ -194,7 +256,8 @@ export default function Dashboard() {
       id: 'memory',
       title: 'Memory',
       value: formatBytes(systemStats.memoryUsed),
-      meta: `of ${formatBytes(systemStats.memoryTotal)}`,
+      meta: memorySpeedType || `of ${formatBytes(systemStats.memoryTotal)}`,
+      submeta: memorySpeedType ? `of ${formatBytes(systemStats.memoryTotal)}` : undefined,
       delta: formatDelta(memoryDelta),
       accent: 'from-sky-500 to-indigo-500',
       progress: memoryPercent,
@@ -301,9 +364,16 @@ export default function Dashboard() {
                     {stat.icon}
                   </div>
                 </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                  <span>{stat.meta}</span>
-                  <span className={deltaToneClass}>{stat.delta.label}</span>
+                <div className="mt-4 flex flex-col gap-1">
+                  <div className="flex items-center justify-between text-xs text-slate-400">
+                    <span className="truncate">{stat.meta}</span>
+                    <span className={deltaToneClass}>{stat.delta.label}</span>
+                  </div>
+                  {stat.submeta && (
+                    <div className="text-xs text-slate-500">
+                      {stat.submeta}
+                    </div>
+                  )}
                 </div>
                 <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
                   <div
@@ -324,6 +394,16 @@ export default function Dashboard() {
                   <h2 className="mt-2 text-xl font-semibold text-white">SMART Status</h2>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
+                  {smartMode && (
+                    <button
+                      onClick={handleToggleSmartMode}
+                      disabled={smartModeLoading}
+                      className="rounded-full border border-slate-700/70 bg-slate-800/50 px-3 py-1 text-slate-300 transition hover:border-sky-500/50 hover:bg-slate-700/50 hover:text-white disabled:opacity-50"
+                      title={`Aktuell: ${smartMode === 'mock' ? 'Mock-Daten' : 'Echte SMART-Daten'}`}
+                    >
+                      {smartModeLoading ? '...' : (smartMode === 'mock' ? '🔄 Mock' : '🔄 Real')}
+                    </button>
+                  )}
                   {smartLoading ? (
                     <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-400">Loading...</span>
                   ) : smartError ? (

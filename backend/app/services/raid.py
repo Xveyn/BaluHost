@@ -11,6 +11,11 @@ from typing import Dict, List, Optional, Protocol
 
 from app.core.config import settings
 from app.schemas.system import (
+    AvailableDisk,
+    AvailableDisksResponse,
+    CreateArrayRequest,
+    DeleteArrayRequest,
+    FormatDiskRequest,
     RaidActionResponse,
     RaidArray,
     RaidDevice,
@@ -39,6 +44,18 @@ class RaidBackend(Protocol):
     def configure(self, payload: RaidOptionsRequest) -> RaidActionResponse:
         ...
 
+    def get_available_disks(self) -> AvailableDisksResponse:
+        ...
+
+    def format_disk(self, payload: FormatDiskRequest) -> RaidActionResponse:
+        ...
+
+    def create_array(self, payload: CreateArrayRequest) -> RaidActionResponse:
+        ...
+
+    def delete_array(self, payload: DeleteArrayRequest) -> RaidActionResponse:
+        ...
+
 
 @dataclass
 class _RaidState:
@@ -51,8 +68,8 @@ class _RaidState:
         quota = settings.nas_quota_bytes
         if quota is not None and quota > 0:
             return quota
-        # Fallback to the dev-mode default (10 GiB) when no quota has been configured.
-        return 10 * 1024 ** 3
+        # Fallback to the dev-mode default (5 GiB per disk, 2x5GB RAID1) when no quota has been configured.
+        return 5 * 1024 ** 3
 
     def ensure_default(self) -> None:
         if self.arrays:
@@ -275,6 +292,8 @@ def _derive_array_status(state_text: Optional[str], progress: Optional[float], d
 class DevRaidBackend:
     def __init__(self) -> None:
         self._state = _RaidState()
+        # Dynamische Mock-Disks-Liste (zusätzlich zu den Standard 7)
+        self._mock_disks: List[tuple[str, str, str, int]] = []  # (disk_name, partition_name, model, size_gb)
 
     def get_status(self) -> RaidStatusResponse:
         self._state.ensure_default()
@@ -314,6 +333,193 @@ class DevRaidBackend:
             raise ValueError(str(exc)) from exc
 
         return RaidActionResponse(message="RAID configuration updated (dev mode)")
+
+    def get_available_disks(self) -> AvailableDisksResponse:
+        """Return simulated available disks for dev mode (7 base disks + dynamically added)."""
+        self._state.ensure_default()
+        
+        # Sammle alle bereits verwendeten Geräte
+        used_devices = set()
+        for array in self._state.arrays.values():
+            for device in array.devices:
+                used_devices.add(device.name)
+        
+        disks = []
+        
+        # Mock Disks: Konsistent mit SMART-Service (_mock_status)
+        # RAID1 Pool 1: 2x5GB (sda, sdb)
+        # RAID1 Pool 2: 2x10GB (sdc, sdd)
+        # RAID5 Pool: 3x20GB (sde, sdf, sdg)
+        base_mock_disks = [
+            ("sda", "sda1", "BaluHost Dev Disk 5GB (Mirror A)", 5),
+            ("sdb", "sdb1", "BaluHost Dev Disk 5GB (Mirror B)", 5),
+            ("sdc", "sdc1", "BaluHost Dev Disk 10GB (Backup A)", 10),
+            ("sdd", "sdd1", "BaluHost Dev Disk 10GB (Backup B)", 10),
+            ("sde", "sde1", "BaluHost Dev Disk 20GB (Archive A)", 20),
+            ("sdf", "sdf1", "BaluHost Dev Disk 20GB (Archive B)", 20),
+            ("sdg", "sdg1", "BaluHost Dev Disk 20GB (Archive C)", 20),
+        ]
+        
+        # Kombiniere base disks mit dynamisch hinzugefügten
+        all_mock_disks = base_mock_disks + self._mock_disks
+        
+        for disk_name, partition_name, model, size_gb in all_mock_disks:
+            in_raid = partition_name in used_devices
+            raid_suffix = " (in RAID)" if in_raid else ""
+            
+            disks.append(
+                AvailableDisk(
+                    name=disk_name,
+                    size_bytes=size_gb * 1024 ** 3,
+                    model=model + raid_suffix,
+                    is_partitioned=True,
+                    partitions=[partition_name],
+                    in_raid=in_raid,
+                )
+            )
+        
+        return AvailableDisksResponse(disks=disks)
+    
+    def add_mock_disk(self, letter: str, size_gb: int, name: str, purpose: str) -> RaidActionResponse:
+        """Dev-Mode: Add a simulated mock disk dynamically."""
+        disk_name = f"sd{letter}"
+        partition_name = f"sd{letter}1"
+        
+        # Prüfe ob Disk bereits existiert
+        existing_disks = self.get_available_disks()
+        if any(d.name == disk_name for d in existing_disks.disks):
+            raise ValueError(f"Disk /dev/{disk_name} already exists")
+        
+        # Validierung
+        if size_gb < 1 or size_gb > 1000:
+            raise ValueError("Disk size must be between 1 and 1000 GB")
+        
+        if not name or len(name.strip()) == 0:
+            raise ValueError("Disk name cannot be empty")
+        
+        # Füge Mock-Disk hinzu
+        purpose_suffix = f" ({purpose.capitalize()})" if purpose else ""
+        full_model = f"{name} {size_gb}GB{purpose_suffix}"
+        self._mock_disks.append((disk_name, partition_name, full_model, size_gb))
+        
+        logger.info(f"[DEV MODE] Added mock disk: /dev/{disk_name} ({size_gb}GB) - {full_model}")
+        return RaidActionResponse(
+            message=f"Mock disk /dev/{disk_name} ({size_gb}GB) successfully added"
+        )
+
+    def format_disk(self, payload: FormatDiskRequest) -> RaidActionResponse:
+        """Simulate disk formatting in dev mode."""
+        if not payload.disk:
+            raise ValueError("Disk name is required")
+        logger.info("[DEV MODE] Formatting disk %s with %s filesystem", payload.disk, payload.filesystem)
+        label_msg = f" with label '{payload.label}'" if payload.label else ""
+        return RaidActionResponse(
+            message=f"[DEV MODE] Disk {payload.disk} formatted as {payload.filesystem}{label_msg}"
+        )
+
+    def create_array(self, payload: CreateArrayRequest) -> RaidActionResponse:
+        """Simulate RAID array creation in dev mode."""
+        if not payload.name or not payload.devices:
+            raise ValueError("Array name and devices are required")
+        
+        # RAID-Level spezifische Validierung
+        level = payload.level.lower()
+        min_devices = 2
+        if level in ("raid0", "raid1"):
+            min_devices = 2
+        elif level == "raid5":
+            min_devices = 3
+        elif level == "raid6":
+            min_devices = 4
+        elif level == "raid10":
+            min_devices = 4
+        
+        if len(payload.devices) < min_devices:
+            raise ValueError(f"{payload.level.upper()} requires at least {min_devices} devices")
+        
+        # Prüfe ob Array bereits existiert
+        if payload.name in self._state.arrays:
+            raise ValueError(f"Array '{payload.name}' already exists")
+        
+        # Sammle alle bereits verwendeten Geräte
+        used_devices = set()
+        for array in self._state.arrays.values():
+            for device in array.devices:
+                used_devices.add(device.name)
+        
+        # Prüfe ob Geräte bereits in Verwendung sind
+        for dev in payload.devices:
+            if dev in used_devices:
+                raise ValueError(f"Device '{dev}' is already part of another RAID array")
+        
+        if payload.spare_devices:
+            for dev in payload.spare_devices:
+                if dev in used_devices or dev in payload.devices:
+                    raise ValueError(f"Spare device '{dev}' is already in use")
+        
+        # Berechne Array-Größe basierend auf RAID-Level
+        device_count = len(payload.devices)
+        
+        # Bestimme Disk-Größen basierend auf Gerät (konsistent mit get_available_disks)
+        # sda, sdb = 5GB; sdc, sdd = 10GB; sde, sdf, sdg = 20GB
+        disk_sizes = {
+            "sda1": 5 * 1024 ** 3, "sdb1": 5 * 1024 ** 3,
+            "sdc1": 10 * 1024 ** 3, "sdd1": 10 * 1024 ** 3,
+            "sde1": 20 * 1024 ** 3, "sdf1": 20 * 1024 ** 3, "sdg1": 20 * 1024 ** 3,
+        }
+        
+        # Verwende kleinste Disk-Größe im Array für Berechnung
+        device_sizes = [disk_sizes.get(dev, 5 * 1024 ** 3) for dev in payload.devices]
+        min_disk_size = min(device_sizes) if device_sizes else 5 * 1024 ** 3
+        
+        if level == "raid0":
+            # RAID 0: Alle Disks addieren
+            array_size = sum(device_sizes)
+        elif level == "raid1":
+            # RAID 1: Kleinste Disk
+            array_size = min_disk_size
+        elif level == "raid5":
+            # RAID 5: (n-1) * kleinste disk_size
+            array_size = min_disk_size * (device_count - 1)
+        elif level == "raid6":
+            # RAID 6: (n-2) * kleinste disk_size
+            array_size = min_disk_size * (device_count - 2)
+        elif level == "raid10":
+            # RAID 10: n/2 * kleinste disk_size
+            array_size = min_disk_size * (device_count // 2)
+        else:
+            array_size = min_disk_size
+        
+        # Erstelle neues Array
+        devices = [RaidDevice(name=dev, state="active") for dev in payload.devices]
+        if payload.spare_devices:
+            devices.extend([RaidDevice(name=dev, state="spare") for dev in payload.spare_devices])
+        
+        self._state.arrays[payload.name] = RaidArray(
+            name=payload.name,
+            level=payload.level,
+            size_bytes=array_size,
+            status="optimal",
+            devices=devices,
+            resync_progress=None,
+            bitmap="internal",
+            sync_action="idle",
+        )
+        
+        logger.info("[DEV MODE] Created RAID array %s with level %s and %d devices", 
+                   payload.name, payload.level, device_count)
+        return RaidActionResponse(
+            message=f"[DEV MODE] Array {payload.name} ({payload.level}) created with {len(payload.devices)} devices"
+        )
+
+    def delete_array(self, payload: DeleteArrayRequest) -> RaidActionResponse:
+        """Simulate RAID array deletion in dev mode."""
+        if payload.array not in self._state.arrays:
+            raise ValueError(f"Array '{payload.array}' does not exist")
+        
+        del self._state.arrays[payload.array]
+        logger.info("[DEV MODE] Deleted RAID array %s", payload.array)
+        return RaidActionResponse(message=f"[DEV MODE] Array {payload.array} deleted")
 
 
 class MdadmRaidBackend:
@@ -628,6 +834,161 @@ class MdadmRaidBackend:
         except FileNotFoundError as exc:
             raise RuntimeError(f"Required command not found: {command[0]}") from exc
 
+    def get_available_disks(self) -> AvailableDisksResponse:
+        """Get list of available disks using lsblk."""
+        if not self._lsblk_available:
+            raise RuntimeError("lsblk is not available on this system")
+        
+        result = self._run(["lsblk", "-J", "-b", "-o", "NAME,SIZE,MODEL,TYPE,FSTYPE"])
+        import json
+        data = json.loads(result.stdout)
+        
+        disks = []
+        raid_devices = set()
+        
+        # Sammle alle Devices die im RAID sind
+        status = self.get_status()
+        for array in status.arrays:
+            for device in array.devices:
+                raid_devices.add(device.name)
+        
+        # Parse lsblk output
+        for device in data.get("blockdevices", []):
+            if device.get("type") != "disk":
+                continue
+            
+            name = device.get("name", "")
+            size_bytes = int(device.get("size", 0))
+            model = device.get("model") or None
+            partitions = []
+            is_partitioned = False
+            
+            # Check for partitions
+            if "children" in device:
+                is_partitioned = True
+                partitions = [child.get("name", "") for child in device["children"]]
+            
+            # Check if any partition is in RAID
+            in_raid = any(part in raid_devices for part in partitions) or name in raid_devices
+            
+            disks.append(
+                AvailableDisk(
+                    name=name,
+                    size_bytes=size_bytes,
+                    model=model,
+                    is_partitioned=is_partitioned,
+                    partitions=partitions,
+                    in_raid=in_raid,
+                )
+            )
+        
+        return AvailableDisksResponse(disks=disks)
+
+    def format_disk(self, payload: FormatDiskRequest) -> RaidActionResponse:
+        """Format a disk with the specified filesystem."""
+        if not payload.disk:
+            raise ValueError("Disk name is required")
+        
+        device_path = self._normalize_device(payload.disk)
+        
+        # Validate filesystem type
+        valid_filesystems = ["ext4", "ext3", "xfs", "btrfs"]
+        if payload.filesystem not in valid_filesystems:
+            raise ValueError(f"Unsupported filesystem: {payload.filesystem}. Valid options: {', '.join(valid_filesystems)}")
+        
+        # Format the disk
+        mkfs_cmd = f"mkfs.{payload.filesystem}"
+        if not shutil.which(mkfs_cmd):
+            raise RuntimeError(f"Command '{mkfs_cmd}' not found on this system")
+        
+        cmd = [mkfs_cmd]
+        if payload.label:
+            if payload.filesystem in ["ext4", "ext3"]:
+                cmd.extend(["-L", payload.label])
+            elif payload.filesystem == "xfs":
+                cmd.extend(["-L", payload.label])
+            elif payload.filesystem == "btrfs":
+                cmd.extend(["-L", payload.label])
+        
+        cmd.append(device_path)
+        
+        logger.info("Formatting %s with %s filesystem", device_path, payload.filesystem)
+        self._run(cmd, timeout=300)
+        
+        label_msg = f" with label '{payload.label}'" if payload.label else ""
+        return RaidActionResponse(message=f"Disk {payload.disk} formatted as {payload.filesystem}{label_msg}")
+
+    def create_array(self, payload: CreateArrayRequest) -> RaidActionResponse:
+        """Create a new RAID array using mdadm."""
+        if not payload.name or not payload.devices:
+            raise ValueError("Array name and devices are required")
+        
+        # Validate RAID level
+        valid_levels = ["raid0", "raid1", "raid5", "raid6", "raid10"]
+        if payload.level not in valid_levels:
+            raise ValueError(f"Unsupported RAID level: {payload.level}. Valid options: {', '.join(valid_levels)}")
+        
+        # Minimum device requirements
+        min_devices = {"raid0": 2, "raid1": 2, "raid5": 3, "raid6": 4, "raid10": 4}
+        if len(payload.devices) < min_devices.get(payload.level, 2):
+            raise ValueError(f"RAID level {payload.level} requires at least {min_devices[payload.level]} devices")
+        
+        array_path = f"/dev/{payload.name}"
+        if Path(array_path).exists():
+            raise ValueError(f"Array '{payload.name}' already exists")
+        
+        # Build mdadm command
+        cmd = [
+            "mdadm",
+            "--create",
+            array_path,
+            "--level=" + payload.level.replace("raid", ""),
+            f"--raid-devices={len(payload.devices)}",
+        ]
+        
+        if payload.spare_devices:
+            cmd.append(f"--spare-devices={len(payload.spare_devices)}")
+        
+        # Add device paths
+        for device in payload.devices:
+            cmd.append(self._normalize_device(device))
+        
+        for spare in payload.spare_devices:
+            cmd.append(self._normalize_device(spare))
+        
+        # Assume clean (skip initial resync)
+        cmd.append("--assume-clean")
+        
+        logger.info("Creating RAID array %s with command: %s", payload.name, " ".join(cmd))
+        self._run(cmd, timeout=300)
+        
+        return RaidActionResponse(
+            message=f"Array {payload.name} ({payload.level}) created with {len(payload.devices)} devices"
+        )
+
+    def delete_array(self, payload: DeleteArrayRequest) -> RaidActionResponse:
+        """Delete a RAID array using mdadm."""
+        array_path = self._normalize_array(payload.array)
+        
+        # Stop the array
+        logger.info("Stopping RAID array %s", array_path)
+        self._run(["mdadm", "--stop", array_path])
+        
+        # Zero superblock on devices if force is enabled
+        if payload.force:
+            status = self.get_status()
+            array = next((a for a in status.arrays if a.name == payload.array or f"/dev/{a.name}" == payload.array), None)
+            if array:
+                for device in array.devices:
+                    device_path = f"/dev/{device.name}"
+                    try:
+                        logger.info("Zeroing superblock on %s", device_path)
+                        self._run(["mdadm", "--zero-superblock", device_path], check=False)
+                    except RuntimeError:
+                        logger.warning("Failed to zero superblock on %s", device_path)
+        
+        return RaidActionResponse(message=f"Array {payload.array} deleted")
+
 
 def _select_backend() -> RaidBackend:
     if settings.is_dev_mode or platform.system().lower() != "linux":
@@ -662,3 +1023,26 @@ def finalize_rebuild(payload: RaidSimulationRequest) -> RaidActionResponse:
 
 def configure_array(payload: RaidOptionsRequest) -> RaidActionResponse:
     return _backend.configure(payload)
+
+
+def get_available_disks() -> AvailableDisksResponse:
+    return _backend.get_available_disks()
+
+
+def format_disk(payload: FormatDiskRequest) -> RaidActionResponse:
+    return _backend.format_disk(payload)
+
+
+def create_array(payload: CreateArrayRequest) -> RaidActionResponse:
+    return _backend.create_array(payload)
+
+
+def delete_array(payload: DeleteArrayRequest) -> RaidActionResponse:
+    return _backend.delete_array(payload)
+
+
+def add_mock_disk(letter: str, size_gb: int, name: str, purpose: str) -> RaidActionResponse:
+    """Dev-Mode only: Add a mock disk dynamically."""
+    if not isinstance(_backend, DevRaidBackend):
+        raise RuntimeError("Mock disk management is only available in dev mode")
+    return _backend.add_mock_disk(letter, size_gb, name, purpose)

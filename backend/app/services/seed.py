@@ -17,11 +17,7 @@ def seed_dev_data() -> None:
     if not settings.is_dev_mode:
         return
 
-    if _DEMO_MARKER.exists():
-        logger.debug("Dev seed already applied; skipping")
-        return
-
-    # Seed demo users (besides admin)
+    # Seed demo users (besides admin) - Always re-seed users since they're in-memory
     demo_users = [
         UserCreate(username="alex", email="alex@example.com", password="demo123", role="user"),
         UserCreate(username="maria", email="maria@example.com", password="demo123", role="user"),
@@ -31,6 +27,11 @@ def seed_dev_data() -> None:
         if not user_service.get_user_by_username(user.username):
             user_service.create_user(user)
             logger.info("Seeded demo user '%s'", user.username)
+
+    # Check if files need to be seeded (only once)
+    if _DEMO_MARKER.exists():
+        logger.debug("Dev seed files already applied; skipping file creation")
+        return
 
     # Seed demo folders/files once
     storage_root = Path(settings.nas_storage_path)
@@ -42,15 +43,15 @@ def seed_dev_data() -> None:
     seed_files: Iterable[tuple[Path, str]] = (
         (
             docs_dir / "welcome.txt",
-            "Willkommen bei Baluhost Dev Mode!\n\nDiese Dateien dienen nur zum Testen der Oberfläche.\n",
+            "Welcome to Baluhost Dev Mode!\n\nThese files are for testing the interface only.\n",
         ),
         (
             media_dir / "readme.md",
-            "# Demo Medien\n\nHier könnten Fotos oder Videos liegen.\n",
+            "# Demo Media\n\nPhotos or videos could be placed here.\n",
         ),
         (
             storage_root / "Notes.txt",
-            "Notizen zum NAS Dev Mode. Quota: 10 GB.\n",
+            "Notizen zum NAS Dev Mode. Setup: 2x5GB RAID1 (effektiv 5GB Speicher).\n",
         ),
     )
 

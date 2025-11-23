@@ -2,7 +2,11 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api import deps
 from app.schemas.system import (
+    AvailableDisksResponse,
+    CreateArrayRequest,
+    DeleteArrayRequest,
     DiskIOResponse,
+    FormatDiskRequest,
     ProcessListResponse,
     QuotaStatus,
     RaidActionResponse,
@@ -14,6 +18,7 @@ from app.schemas.system import (
     SystemInfo,
     TelemetryHistoryResponse,
 )
+from pydantic import BaseModel
 from app.schemas.user import UserPublic
 from app.services import disk_monitor
 from app.services import raid as raid_service
@@ -69,6 +74,32 @@ async def get_smart_status(_: UserPublic = Depends(deps.get_current_user)) -> Sm
     return smart_service.get_smart_status()
 
 
+@router.get("/smart/mode")
+async def get_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
+    """Get current SMART data mode in Dev-Mode (mock or real)."""
+    from app.core.config import settings
+    if not settings.is_dev_mode:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMART mode toggle is only available in dev mode"
+        )
+    mode = smart_service.get_dev_mode_state()
+    return {"mode": mode}
+
+
+@router.post("/smart/toggle-mode")
+async def toggle_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
+    """Toggle between mock and real SMART data in Dev-Mode."""
+    from app.core.config import settings
+    if not settings.is_dev_mode:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="SMART mode toggle is only available in dev mode"
+        )
+    new_mode = smart_service.toggle_dev_mode()
+    return {"mode": new_mode, "message": f"SMART mode switched to {new_mode}"}
+
+
 @router.get("/raid/status", response_model=RaidStatusResponse)
 async def get_raid_status(_: UserPublic = Depends(deps.get_current_user)) -> RaidStatusResponse:
     return raid_service.get_status()
@@ -112,34 +143,46 @@ async def get_disk_io_history(_: UserPublic = Depends(deps.get_current_user)) ->
     """Get real-time disk I/O history for all physical disks."""
     history = disk_monitor.get_disk_io_history()
     from app.schemas.system import DiskIOHistory, DiskIOSample
-    from app.services.smart import get_smart_device_models
+    from app.services.smart import get_smart_device_models, get_smart_device_order
+    import re
+    import platform
 
     model_map = get_smart_device_models()
-
-    def _normalize(name: str) -> str:
-        return name.lower().replace('\\\\.\\physicaldrive', 'physicaldrive').replace('\\.\\physicaldrive', 'physicaldrive').replace('/dev/', '')
-
-    normalized_map = { _normalize(k): v for k, v in model_map.items() }
+    
+    # Erstelle reverse mapping: psutil disk name -> SMART model
+    psutil_to_model: dict[str, str] = {}
+    
+    is_windows = platform.system().lower() == 'windows'
+    
+    if is_windows:
+        # Auf Windows: Verwende die Scan-Reihenfolge von smartctl
+        # smartctl --scan gibt Geräte in der Reihenfolge zurück, die PhysicalDrive0, 1, 2, ... entspricht
+        device_order = get_smart_device_order()
+        
+        for index, smart_name in enumerate(device_order):
+            model = model_map.get(smart_name)
+            if model:
+                psutil_name = f'PhysicalDrive{index}'
+                psutil_to_model[psutil_name] = model
+                psutil_to_model[psutil_name.lower()] = model
+    else:
+        # Linux: Direktes Mapping (sda, nvme0n1, etc.)
+        for smart_name, model in model_map.items():
+            clean_name = smart_name.replace('/dev/', '').lower()
+            psutil_to_model[clean_name] = model
 
     disks = []
     for disk_name, samples in history.items():
-        norm = _normalize(disk_name)
-        model = normalized_map.get(norm)
-        # Fallback heuristics (Index / Teilstring)
-        if model is None:
-            import re
-            m = re.search(r'(physicaldrive)?(\d+)$', norm)
-            if m:
-                model = normalized_map.get(m.group(2))
-        if model is None and len(norm) == 3 and norm.startswith('sd'):
-            letter_index = str(ord(norm[2]) - ord('a'))
-            model = normalized_map.get(letter_index)
-        if model is None:
-            for k, v in normalized_map.items():
-                if k in norm or norm in k:
-                    model = v
-                    break
-        disks.append(DiskIOHistory(diskName=disk_name, model=model, samples=[DiskIOSample(**sample) for sample in samples]))
+        disk_lower = disk_name.lower()
+        
+        # Versuche direktes Mapping
+        model = psutil_to_model.get(disk_name) or psutil_to_model.get(disk_lower)
+        
+        disks.append(DiskIOHistory(
+            diskName=disk_name, 
+            model=model, 
+            samples=[DiskIOSample(**sample) for sample in samples]
+        ))
 
     return DiskIOResponse(disks=disks, interval=1.0)
 
@@ -151,6 +194,87 @@ async def configure_raid_options(
 ) -> RaidActionResponse:
     try:
         return raid_service.configure_array(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.get("/raid/available-disks", response_model=AvailableDisksResponse)
+async def get_available_disks(_: UserPublic = Depends(deps.get_current_admin)) -> AvailableDisksResponse:
+    """Get list of available disks for RAID or formatting."""
+    try:
+        return raid_service.get_available_disks()
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/format-disk", response_model=RaidActionResponse)
+async def format_disk(
+    payload: FormatDiskRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Format a disk with the specified filesystem."""
+    try:
+        return raid_service.format_disk(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/create-array", response_model=RaidActionResponse)
+async def create_array(
+    payload: CreateArrayRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Create a new RAID array."""
+    try:
+        return raid_service.create_array(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/delete-array", response_model=RaidActionResponse)
+async def delete_array(
+    payload: DeleteArrayRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Delete a RAID array."""
+    try:
+        return raid_service.delete_array(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+# Dev-Mode: Mock Disk Management
+class AddMockDiskRequest(BaseModel):
+    letter: str
+    size_gb: int
+    name: str
+    purpose: str
+
+
+@router.post("/raid/dev/add-mock-disk", response_model=RaidActionResponse)
+async def add_mock_disk(
+    payload: AddMockDiskRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Dev-Mode only: Add a simulated mock disk to the available disks pool."""
+    from app.core.config import settings
+    
+    if not settings.is_dev_mode:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN, 
+            detail="Mock disk management is only available in dev mode"
+        )
+    
+    try:
+        return raid_service.add_mock_disk(payload.letter, payload.size_gb, payload.name, payload.purpose)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:

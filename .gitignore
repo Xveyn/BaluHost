@@ -17,6 +17,9 @@ backend/.mypy_cache/
 backend/.pytest_cache/
 backend/.ruff_cache/
 
+# Dev HTTPS Certificates
+dev-certs/
+
 # Node/React
 client/node_modules/
 client/dist/

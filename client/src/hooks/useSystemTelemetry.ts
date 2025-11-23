@@ -4,12 +4,16 @@ import { buildApiUrl } from '../lib/api';
 interface CpuInfo {
   usage: number;
   cores: number;
+  frequency_mhz?: number | null;
+  model?: string | null;
 }
 
 interface MemoryInfo {
   total: number;
   used: number;
   free: number;
+  speed_mts?: number | null;
+  type?: string | null;
 }
 
 interface DiskInfo {

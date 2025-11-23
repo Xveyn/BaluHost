@@ -134,6 +134,73 @@ class AuditLogger:
             error_message=error_message
         )
     
+    def log_security_event(
+        self,
+        action: str,
+        user: Optional[str] = None,
+        resource: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = False,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log security-related event (unauthorized access, permission denied, etc.)."""
+        self.log_event(
+            event_type="SECURITY",
+            user=user or "anonymous",
+            action=action,
+            resource=resource,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+    
+    def log_authentication_attempt(
+        self,
+        username: str,
+        success: bool,
+        ip_address: Optional[str] = None,
+        user_agent: Optional[str] = None,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log authentication attempt (login)."""
+        details = {}
+        if ip_address:
+            details["ip_address"] = ip_address
+        if user_agent:
+            details["user_agent"] = user_agent
+        
+        self.log_security_event(
+            action="login_attempt",
+            user=username,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+    
+    def log_authorization_failure(
+        self,
+        user: Optional[str],
+        action: str,
+        resource: Optional[str] = None,
+        required_permission: Optional[str] = None,
+        ip_address: Optional[str] = None
+    ) -> None:
+        """Log authorization failure (permission denied)."""
+        details = {}
+        if required_permission:
+            details["required_permission"] = required_permission
+        if ip_address:
+            details["ip_address"] = ip_address
+        
+        self.log_security_event(
+            action=action,
+            user=user or "anonymous",
+            resource=resource,
+            details=details,
+            success=False,
+            error_message="Permission denied"
+        )
+    
     def is_enabled(self) -> bool:
         """Check if audit logging is enabled."""
         return self._enabled

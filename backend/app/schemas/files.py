@@ -23,6 +23,7 @@ class FileOperationResponse(BaseModel):
 
 class FileUploadResponse(FileOperationResponse):
     uploaded: int
+    upload_ids: list[str] | None = None
 
 
 class FolderCreateRequest(BaseModel):

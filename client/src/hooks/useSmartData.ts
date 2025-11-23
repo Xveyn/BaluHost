@@ -38,29 +38,23 @@ export function useSmartData(pollingInterval = 60000) {
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
+  const fetchData = async () => {
+    try {
+      const data = await fetchSmartStatus();
+      setSmartData(data);
+      setCachedData(data);
+      setError(null);
+      setLastUpdated(new Date());
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Fehler beim Laden der SMART-Daten');
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
     let timeoutId: number | undefined;
-
-    const fetchData = async () => {
-      try {
-        const data = await fetchSmartStatus();
-        if (mounted) {
-          setSmartData(data);
-          setCachedData(data);
-          setError(null);
-          setLastUpdated(new Date());
-        }
-      } catch (err) {
-        if (mounted) {
-          setError(err instanceof Error ? err.message : 'Fehler beim Laden der SMART-Daten');
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
 
     const poll = () => {
       // Only fetch immediately if no cache
@@ -80,5 +74,10 @@ export function useSmartData(pollingInterval = 60000) {
     };
   }, [pollingInterval]);
 
-  return { smartData, loading, error, lastUpdated };
+  const refetch = () => {
+    setLoading(true);
+    fetchData();
+  };
+
+  return { smartData, loading, error, lastUpdated, refetch };
 }

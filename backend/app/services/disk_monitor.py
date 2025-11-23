@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import psutil
 
 from app.core.config import settings
-from app.services.audit_logger import get_audit_logger
+from app.services.audit_logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 
@@ -134,7 +134,7 @@ def _sample_disk_io() -> None:
         
     except Exception as exc:
         logger.error(f"Error sampling disk I/O: {exc}")
-        audit = get_audit_logger()
+        audit = get_audit_logger_db()
         audit.log_disk_monitor(
             action="sampling_error",
             success=False,
@@ -169,7 +169,7 @@ def _is_physical_disk(disk_name: str) -> bool:
 
 def _log_disk_activity() -> None:
     """Log a summary of disk activity."""
-    audit = get_audit_logger()
+    audit = get_audit_logger_db()
     
     with _lock:
         if not _disk_io_history:
@@ -220,7 +220,7 @@ def _log_disk_activity() -> None:
 
 async def _monitor_loop() -> None:
     """Main monitoring loop for disk I/O."""
-    audit = get_audit_logger()
+    audit = get_audit_logger_db()
     
     logger.info("Starting disk I/O monitor...")
     audit.log_disk_monitor(action="monitor_started")
@@ -256,7 +256,7 @@ async def _monitor_loop() -> None:
 def start_monitoring() -> None:
     """Start the disk I/O monitoring background task."""
     global _monitor_task
-    audit = get_audit_logger()
+    audit = get_audit_logger_db()
     
     if _monitor_task is not None:
         logger.warning("Disk I/O monitor already running")
@@ -278,7 +278,7 @@ def start_monitoring() -> None:
 def stop_monitoring() -> None:
     """Stop the disk I/O monitoring background task."""
     global _monitor_task
-    audit = get_audit_logger()
+    audit = get_audit_logger_db()
     
     if _monitor_task is None:
         return

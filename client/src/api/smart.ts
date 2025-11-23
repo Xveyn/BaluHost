@@ -53,3 +53,44 @@ export async function fetchSmartStatus(): Promise<SmartStatusResponse> {
 
   return await response.json();
 }
+
+export interface SmartModeResponse {
+  mode: string;
+  message?: string;
+}
+
+export async function getSmartMode(): Promise<SmartModeResponse> {
+  const token = getToken();
+  const response = await fetch(buildApiUrl('/api/system/smart/mode'), {
+    method: 'GET',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'SMART-Modus konnte nicht abgerufen werden');
+  }
+
+  return await response.json();
+}
+
+export async function toggleSmartMode(): Promise<SmartModeResponse> {
+  const token = getToken();
+  const response = await fetch(buildApiUrl('/api/system/smart/toggle-mode'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    }
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'SMART-Modus konnte nicht geändert werden');
+  }
+
+  return await response.json();
+}

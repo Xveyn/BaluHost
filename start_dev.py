@@ -21,6 +21,7 @@ from typing import Dict, List, Tuple
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
 CLIENT_DIR = ROOT_DIR / "client"
+CERTS_DIR = ROOT_DIR / "dev-certs"
 
 BACKEND_VENV = BACKEND_DIR / (".venv\\Scripts\\python.exe" if os.name == "nt" else ".venv/bin/python")
 
@@ -47,6 +48,47 @@ def resolve_npm_binary() -> str:
     raise FileNotFoundError(
         "npm executable not found. Please install Node.js and ensure npm is on PATH."
     )
+
+
+def generate_self_signed_cert() -> tuple[Path | None, Path | None]:
+    """Generate self-signed certificate for dev HTTPS using backend Python."""
+    CERTS_DIR.mkdir(exist_ok=True)
+    cert_file = CERTS_DIR / "cert.pem"
+    key_file = CERTS_DIR / "key.pem"
+    
+    # Skip if certificates already exist and are recent (less than 30 days old)
+    if cert_file.exists() and key_file.exists():
+        cert_age = time.time() - cert_file.stat().st_mtime
+        if cert_age < 30 * 24 * 3600:  # 30 days
+            print("[info] Using existing dev certificates")
+            return cert_file, key_file
+    
+    print("[info] Generating self-signed certificate for dev HTTPS...")
+    backend_python = resolve_backend_python()
+    
+    # Use backend Python to generate certificate (has cryptography installed)
+    gen_script = BACKEND_DIR / "scripts" / "generate_cert.py"
+    try:
+        result = subprocess.run(
+            [backend_python, str(gen_script), str(cert_file), str(key_file)],
+            check=True,
+            capture_output=True,
+            text=True
+        )
+        if "OK" in result.stdout:
+            print("[info] Self-signed certificate generated successfully")
+            return cert_file, key_file
+        else:
+            print(f"[warning] Certificate generation failed: {result.stdout}")
+            return None, None
+    except subprocess.CalledProcessError as e:
+        print(f"[warning] Certificate generation failed: {e.stderr}")
+        print("[warning] Falling back to HTTP mode")
+        return None, None
+    except Exception as e:
+        print(f"[warning] Unexpected error: {e}")
+        print("[warning] Falling back to HTTP mode")
+        return None, None
 
 
 def start_process(name: str, cmd: List[str], cwd: Path) -> subprocess.Popen:
@@ -79,21 +121,37 @@ def main() -> int:
     try:
         # Ensure development-specific environment toggles are present during local runs
         os.environ.setdefault("NAS_MODE", "dev")
-        os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
+        os.environ.setdefault("NAS_QUOTA_BYTES", str(5 * 1024 * 1024 * 1024))  # 5 GB effektiv (RAID1: 2x5GB)
 
         npm_binary = resolve_npm_binary()
+        
+        # Generate self-signed certificates for HTTPS
+        cert_file, key_file = generate_self_signed_cert()
+        use_https = cert_file is not None and key_file is not None
+        
+        backend_cmd = [
+            backend_python,
+            "-m",
+            "uvicorn",
+            "app.main:app",
+            "--reload",
+            "--port",
+            "8000",
+        ]
+        
+        if use_https:
+            backend_cmd.extend([
+                "--ssl-keyfile", str(key_file),
+                "--ssl-certfile", str(cert_file),
+            ])
+            print("[info] Backend running with HTTPS on https://localhost:8000")
+            print("[info] You may need to accept the self-signed certificate in your browser")
+        else:
+            print("[info] Backend running with HTTP on http://localhost:8000")
 
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
-                "cmd": [
-                    backend_python,
-                    "-m",
-                    "uvicorn",
-                    "app.main:app",
-                    "--reload",
-                    "--port",
-                    "3001",
-                ],
+                "cmd": backend_cmd,
                 "cwd": BACKEND_DIR,
             },
             "frontend": {

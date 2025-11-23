@@ -14,12 +14,17 @@ from fastapi.middleware.cors import CORSMiddleware
 from app import __version__
 from app.api.routes import api_router
 from app.core.config import settings
+from app.core.database import init_db
 from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
+    # Initialize database tables
+    init_db()
+    logger.info("Database initialized")
+    
     ensure_admin_user(settings)
     logger.info("Admin user ensured with username '%s'", settings.admin_username)
     seed.seed_dev_data()

@@ -1,16 +1,23 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import {
+  deleteArray,
   finalizeRaidRebuild,
+  formatDisk,
+  getAvailableDisks,
   getRaidStatus,
   markDeviceFailed,
   startRaidRebuild,
+  type AvailableDisk,
+  type FormatDiskPayload,
   type RaidArray,
   type RaidDevice,
   type RaidOptionsPayload,
   type RaidSpeedLimits,
   updateRaidOptions,
 } from '../api/raid';
+import RaidSetupWizard from '../components/RaidSetupWizard';
+import MockDiskWizard from '../components/MockDiskWizard';
 
 const REFRESH_INTERVAL_MS = 8000;
 
@@ -61,6 +68,14 @@ export default function RaidManagement() {
   const [busy, setBusy] = useState<boolean>(false);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
   const [speedLimits, setSpeedLimits] = useState<RaidSpeedLimits | null>(null);
+  
+  // Disk Management States
+  const [availableDisks, setAvailableDisks] = useState<AvailableDisk[]>([]);
+  const [showFormatDialog, setShowFormatDialog] = useState<boolean>(false);
+  const [showCreateArrayDialog, setShowCreateArrayDialog] = useState<boolean>(false);
+  const [showMockDiskWizard, setShowMockDiskWizard] = useState<boolean>(false);
+  const [selectedDisk, setSelectedDisk] = useState<AvailableDisk | null>(null);
+  const [isDevMode, setIsDevMode] = useState<boolean>(false);
 
   const loadStatus = async (notifySuccess = false) => {
     try {
@@ -70,10 +85,10 @@ export default function RaidManagement() {
       setError(null);
       setLastUpdated(new Date());
       if (notifySuccess) {
-        toast.success('RAID-Status aktualisiert');
+        toast.success('RAID status updated');
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'RAID-Status konnte nicht geladen werden.';
+      const message = err instanceof Error ? err.message : 'Failed to load RAID status.';
       setError(message);
       toast.error(message);
     } finally {
@@ -81,8 +96,26 @@ export default function RaidManagement() {
     }
   };
 
+  const loadAvailableDisks = async () => {
+    try {
+      const response = await getAvailableDisks();
+      setAvailableDisks(response.disks ?? []);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Failed to load disks.';
+      toast.error(message);
+    }
+  };
+
   useEffect(() => {
     void loadStatus();
+    void loadAvailableDisks();
+    
+    // Check if Dev-Mode is active
+    fetch('/api/system/info')
+      .then(res => res.json())
+      .then(data => setIsDevMode(data.dev_mode === true))
+      .catch(() => setIsDevMode(false));
+    
     const intervalId = window.setInterval(() => {
       void loadStatus();
     }, REFRESH_INTERVAL_MS);
@@ -99,7 +132,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Simulation fehlgeschlagen.';
+      const message = err instanceof Error ? err.message : 'Simulation failed.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -113,7 +146,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Rebuild konnte nicht gestartet werden.';
+      const message = err instanceof Error ? err.message : 'Failed to start rebuild.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -127,7 +160,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Finalize fehlgeschlagen.';
+      const message = err instanceof Error ? err.message : 'Finalize failed.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -144,7 +177,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Bitmap konnte nicht aktualisiert werden.';
+      const message = err instanceof Error ? err.message : 'Failed to update bitmap.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -161,7 +194,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Überprüfung konnte nicht gestartet werden.';
+      const message = err instanceof Error ? err.message : 'Failed to start scrub.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -179,7 +212,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Write-mostly konnte nicht angepasst werden.';
+      const message = err instanceof Error ? err.message : 'Failed to update write-mostly.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -196,7 +229,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Gerät konnte nicht entfernt werden.';
+      const message = err instanceof Error ? err.message : 'Failed to remove device.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -210,7 +243,7 @@ export default function RaidManagement() {
     event.currentTarget.reset();
     const rawDevice = typeof device === 'string' ? device.trim() : '';
     if (!rawDevice) {
-      toast.error('Bitte Gerätenamen angeben.');
+      toast.error('Please specify device name.');
       return;
     }
 
@@ -220,7 +253,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Spare-Gerät konnte nicht hinzugefügt werden.';
+      const message = err instanceof Error ? err.message : 'Failed to add spare device.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -242,7 +275,7 @@ export default function RaidManagement() {
     }
 
     if (payload.set_speed_limit_min === undefined && payload.set_speed_limit_max === undefined) {
-      toast.error('Bitte mindestens einen Geschwindigkeitswert setzen.');
+      toast.error('Please set at least one speed value.');
       return;
     }
 
@@ -252,7 +285,57 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Geschwindigkeitslimit konnte nicht gesetzt werden.';
+      const message = err instanceof Error ? err.message : 'Failed to set speed limit.';
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleFormatDisk = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!selectedDisk) return;
+
+    const data = new FormData(event.currentTarget);
+    const filesystem = data.get('filesystem') as string;
+    const label = data.get('label') as string;
+
+    const payload: FormatDiskPayload = {
+      disk: selectedDisk.name,
+      filesystem: filesystem || 'ext4',
+    };
+    if (label && label.trim()) {
+      payload.label = label.trim();
+    }
+
+    setBusy(true);
+    try {
+      const response = await formatDisk(payload);
+      toast.success(response.message);
+      setShowFormatDialog(false);
+      setSelectedDisk(null);
+      await loadAvailableDisks();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Format failed.';
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleDeleteArray = async (arrayName: string) => {
+    if (!window.confirm(`Really delete array "${arrayName}"? This action cannot be undone.`)) {
+      return;
+    }
+
+    setBusy(true);
+    try {
+      const response = await deleteArray({ array: arrayName, force: true });
+      toast.success(response.message);
+      await loadStatus();
+      await loadAvailableDisks();
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Array deletion failed.';
       toast.error(message);
     } finally {
       setBusy(false);
@@ -265,13 +348,13 @@ export default function RaidManagement() {
         <div>
           <h1 className="text-3xl font-semibold text-white">RAID Control</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Überwache Array-Integrität, simuliere Ausfälle und steuere Rebuilds.
+            Monitor array integrity, simulate failures, and control rebuilds.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-xs uppercase tracking-[0.24em] text-slate-500">
-              Aktualisiert {lastUpdated.toLocaleTimeString()}
+              Updated {lastUpdated.toLocaleTimeString()}
             </span>
           )}
           <button
@@ -283,7 +366,7 @@ export default function RaidManagement() {
                 : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
             }`}
           >
-            Jetzt aktualisieren
+            Refresh Now
           </button>
         </div>
       </div>
@@ -296,11 +379,11 @@ export default function RaidManagement() {
 
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-          <p className="text-sm text-slate-500">Lade RAID-Status...</p>
+          <p className="text-sm text-slate-500">Loading RAID status...</p>
         </div>
       ) : arrays.length === 0 ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center text-sm text-slate-400">
-          Es wurden keine RAID-Arrays erkannt. Stelle sicher, dass das System mdadm nutzt und die Arrays aktiv sind.
+          No RAID arrays detected. Ensure the system uses mdadm and arrays are active.
         </div>
       ) : (
         <div className="space-y-6">
@@ -308,13 +391,13 @@ export default function RaidManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 px-6 py-5">
               <div className="flex flex-wrap items-center justify-between gap-4">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Synchronisationslimits</p>
+                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Sync Limits</p>
                   <p className="mt-2 text-sm text-slate-300">
-                    Mindestgeschwindigkeit: {speedLimits.minimum ?? 'Systemdefault'} kB/s · Maximal: {speedLimits.maximum ?? 'Systemdefault'} kB/s
+                    Minimum Speed: {speedLimits.minimum ?? 'System Default'} kB/s · Maximum: {speedLimits.maximum ?? 'System Default'} kB/s
                   </p>
                 </div>
                 <p className="text-xs text-slate-500">
-                  Werte gelten global für alle mdadm-Arrays.
+                  Values apply globally to all mdadm arrays.
                 </p>
               </div>
             </div>
@@ -329,6 +412,11 @@ export default function RaidManagement() {
                 <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/60 px-6 py-5">
                   <div className="space-y-1">
                     <div className="flex items-center gap-3">
+                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow-lg shadow-sky-500/30">
+                        <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                        </svg>
+                      </div>
                       <h2 className="text-xl font-semibold text-white">{array.name}</h2>
                       <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(lowerStatus)}`}>
                         {upcase(lowerStatus)}
@@ -346,7 +434,7 @@ export default function RaidManagement() {
                       )}
                     </div>
                     <p className="text-sm text-slate-400">
-                      Kapazität {formatBytes(array.size_bytes)} · {array.devices.length} Laufwerke
+                      Capacity {formatBytes(array.size_bytes)} · {array.devices.length} Drives
                     </p>
                     <div className="flex flex-wrap gap-2 text-xs text-slate-500">
                       <span>Write-mostly Devices: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
@@ -356,7 +444,7 @@ export default function RaidManagement() {
                   <div className="flex items-center gap-3">
                     {array.resync_progress !== null && array.resync_progress !== undefined && (
                       <div className="flex flex-col items-end text-sm text-slate-300">
-                        <span>Synchronisierung</span>
+                        <span>Synchronization</span>
                         <span className="text-slate-200">{array.resync_progress.toFixed(1)}%</span>
                       </div>
                     )}
@@ -369,7 +457,7 @@ export default function RaidManagement() {
                           : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
                       }`}
                     >
-                      {array.bitmap ? 'Bitmap deaktivieren' : 'Bitmap aktivieren'}
+                      {array.bitmap ? 'Disable Bitmap' : 'Enable Bitmap'}
                     </button>
                     <button
                       onClick={() => handleTriggerScrub(array)}
@@ -380,7 +468,7 @@ export default function RaidManagement() {
                           : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100 hover:border-indigo-500/60'
                       }`}
                     >
-                      Integritätsprüfung starten
+                      Start Integrity Check
                     </button>
                     <button
                       onClick={() => handleSimulateFailure(array)}
@@ -391,7 +479,7 @@ export default function RaidManagement() {
                           : 'border-amber-500/40 bg-amber-500/15 text-amber-100 hover:border-amber-500/60'
                       }`}
                     >
-                      Array degradieren
+                      Degrade Array
                     </button>
                     {showFinalize && (
                       <button
@@ -403,9 +491,20 @@ export default function RaidManagement() {
                             : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                         }`}
                       >
-                        Rebuild abschließen
+                        Complete Rebuild
                       </button>
                     )}
+                    <button
+                      onClick={() => handleDeleteArray(array.name)}
+                      disabled={busy}
+                      className={`rounded-xl border px-4 py-2 text-sm transition ${
+                        busy
+                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                          : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
+                      }`}
+                    >
+                      Delete Array
+                    </button>
                   </div>
                 </div>
 
@@ -418,7 +517,7 @@ export default function RaidManagement() {
                       />
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      Aktueller Fortschritt der Wiederherstellung.
+                      Current rebuild progress.
                     </p>
                   </div>
                 )}
@@ -428,9 +527,9 @@ export default function RaidManagement() {
                     <table className="min-w-full divide-y divide-slate-800/60">
                       <thead>
                         <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
-                          <th className="px-5 py-3">Gerät</th>
+                          <th className="px-5 py-3">Device</th>
                           <th className="px-5 py-3">Status</th>
-                          <th className="px-5 py-3">Aktionen</th>
+                          <th className="px-5 py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
@@ -460,7 +559,7 @@ export default function RaidManagement() {
                                         : 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-500/60'
                                     }`}
                                   >
-                                    Gerät degradieren
+                                    Degrade Device
                                   </button>
                                   <button
                                     onClick={() => handleStartRebuild(array, device)}
@@ -471,7 +570,7 @@ export default function RaidManagement() {
                                         : 'border-sky-500/50 bg-sky-500/10 text-sky-100 hover:border-sky-500/60'
                                     }`}
                                   >
-                                    Rebuild starten
+                                    Start Rebuild
                                   </button>
                                   <button
                                     onClick={() => handleWriteMostly(array, device)}
@@ -482,7 +581,7 @@ export default function RaidManagement() {
                                         : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-slate-600'
                                     }`}
                                   >
-                                    {lowerState === 'write-mostly' ? 'Write-mostly entfernen' : 'Write-mostly setzen'}
+                                    {lowerState === 'write-mostly' ? 'Remove Write-mostly' : 'Set Write-mostly'}
                                   </button>
                                   {lowerState === 'spare' && (
                                     <button
@@ -494,7 +593,7 @@ export default function RaidManagement() {
                                           : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                                       }`}
                                     >
-                                      Spare entfernen
+                                      Remove Spare
                                     </button>
                                   )}
                                 </div>
@@ -510,11 +609,11 @@ export default function RaidManagement() {
                 <div className="border-t border-slate-800/60 px-6 py-5">
                   <div className="grid gap-5 md:grid-cols-2">
                     <form onSubmit={(event) => handleAddSpare(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-4 text-sm text-slate-300">
-                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Spare hinzufügen</p>
+                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Add Spare</p>
                       <div className="mt-3 flex items-center gap-3">
                         <input
                           name="spare-device"
-                          placeholder="z.B. sdc1"
+                          placeholder="e.g. sdc1"
                           className="flex-1 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                         <button
@@ -526,13 +625,13 @@ export default function RaidManagement() {
                               : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                           }`}
                         >
-                          Hinzufügen
+                          Add
                         </button>
                       </div>
                     </form>
 
                     <form onSubmit={(event) => handleUpdateSpeed(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-4 text-sm text-slate-300">
-                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Sync Limits setzen (kB/s)</p>
+                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Set Sync Limits (kB/s)</p>
                       <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <input
                           name="speed-min"
@@ -558,7 +657,7 @@ export default function RaidManagement() {
                             : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
                         }`}
                       >
-                        Anwenden
+                        Apply
                       </button>
                     </form>
                   </div>
@@ -567,6 +666,223 @@ export default function RaidManagement() {
             );
           })}
         </div>
+      )}
+
+      {/* Disk Management Section */}
+      <div className="card border-slate-800/60 bg-slate-900/55">
+        <div className="border-b border-slate-800/60 px-6 py-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xl font-semibold text-white">Disk Management</h2>
+              <p className="mt-1 text-sm text-slate-400">Format available disks and create new arrays</p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={() => void loadAvailableDisks()}
+                disabled={busy}
+                className={`rounded-xl border px-4 py-2 text-sm transition ${
+                  busy
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                    : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
+                }`}
+              >
+                Refresh
+              </button>
+              {isDevMode && (
+                <button
+                  onClick={() => setShowMockDiskWizard(true)}
+                  disabled={busy}
+                  className={`rounded-xl border px-4 py-2 text-sm transition ${
+                    busy
+                      ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                      : 'border-violet-500/40 bg-violet-500/15 text-violet-100 hover:border-violet-500/60'
+                  }`}
+                  title="Dev-Mode: Add Mock Disk"
+                >
+                  🧪 Add Mock Disk
+                </button>
+              )}
+              <button
+                onClick={() => setShowCreateArrayDialog(true)}
+                disabled={busy || availableDisks.filter(d => !d.in_raid).length < 2}
+                className={`rounded-xl border px-4 py-2 text-sm transition ${
+                  busy || availableDisks.filter(d => !d.in_raid).length < 2
+                    ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                    : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
+                }`}
+                title={availableDisks.filter(d => !d.in_raid).length < 2 ? 'At least 2 free disks required' : ''}
+              >
+                Create New Array
+              </button>
+            </div>
+          </div>
+        </div>
+
+        <div className="px-6 py-5">
+          <div className="overflow-x-auto">
+            <table className="min-w-full divide-y divide-slate-800/60">
+              <thead>
+                <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+                  <th className="px-5 py-3">Name</th>
+                  <th className="px-5 py-3">Size</th>
+                  <th className="px-5 py-3">Model</th>
+                  <th className="px-5 py-3">Status</th>
+                  <th className="px-5 py-3">Actions</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800/60">
+                {availableDisks.length === 0 ? (
+                  <tr>
+                    <td colSpan={5} className="px-5 py-8 text-center text-sm text-slate-400">
+                      No disks available
+                    </td>
+                  </tr>
+                ) : (
+                  availableDisks.map((disk) => (
+                    <tr key={disk.name} className="group transition hover:bg-slate-900/65">
+                      <td className="px-5 py-4 text-sm font-medium text-slate-200">/dev/{disk.name}</td>
+                      <td className="px-5 py-4 text-sm text-slate-300">{formatBytes(disk.size_bytes)}</td>
+                      <td className="px-5 py-4 text-sm text-slate-300">{disk.model || 'N/A'}</td>
+                      <td className="px-5 py-4">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {disk.in_raid ? (
+                            (() => {
+                              // Finde das Array, in dem diese Disk ist
+                              const diskArray = arrays.find(arr => 
+                                arr.devices.some(dev => dev.name === `${disk.name}1` || dev.name === disk.name)
+                              );
+                              return diskArray ? (
+                                <div className="flex items-center gap-2 rounded-full border border-sky-400/30 bg-sky-500/10 px-3 py-1">
+                                  <svg className="h-3.5 w-3.5 text-sky-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                                    <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
+                                  </svg>
+                                  <span className="text-xs font-medium text-sky-100">{diskArray.name}</span>
+                                  <span className="text-[0.65rem] uppercase tracking-wider text-sky-300/70">{diskArray.level}</span>
+                                </div>
+                              ) : (
+                                <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-100">
+                                  In RAID
+                                </span>
+                              );
+                            })()
+                          ) : (
+                            <span className="rounded-full border border-slate-700/50 bg-slate-800/40 px-2 py-0.5 text-xs text-slate-400">
+                              Free
+                            </span>
+                          )}
+                          {disk.is_partitioned && (
+                            <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-100">
+                              Partitioned
+                            </span>
+                          )}
+                        </div>
+                      </td>
+                      <td className="px-5 py-4">
+                        <button
+                          onClick={() => {
+                            setSelectedDisk(disk);
+                            setShowFormatDialog(true);
+                          }}
+                          disabled={busy || disk.in_raid}
+                          className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                            busy || disk.in_raid
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                              : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
+                          }`}
+                        >
+                          Format
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+      {/* Format Dialog */}
+      {showFormatDialog && selectedDisk && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowFormatDialog(false)}>
+          <div className="w-full max-w-md rounded-2xl border border-slate-800/60 bg-slate-900/95 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+            <h3 className="text-xl font-semibold text-white">Format Disk</h3>
+            <p className="mt-2 text-sm text-slate-400">
+              Format disk <span className="font-medium text-slate-200">/dev/{selectedDisk.name}</span>
+            </p>
+            <form onSubmit={handleFormatDisk} className="mt-4 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300">Filesystem</label>
+                <select
+                  name="filesystem"
+                  defaultValue="ext4"
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                >
+                  <option value="ext4">ext4</option>
+                  <option value="ext3">ext3</option>
+                  <option value="xfs">xfs</option>
+                  <option value="btrfs">btrfs</option>
+                </select>
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-slate-300">Label (optional)</label>
+                <input
+                  name="label"
+                  type="text"
+                  placeholder="e.g. MyDisk"
+                  className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                />
+              </div>
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowFormatDialog(false);
+                    setSelectedDisk(null);
+                  }}
+                  className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={busy}
+                  className={`rounded-lg border px-4 py-2 text-sm transition ${
+                    busy
+                      ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                      : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
+                  }`}
+                >
+                  Format
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* RAID Setup Wizard */}
+      {showCreateArrayDialog && (
+        <RaidSetupWizard
+          availableDisks={availableDisks}
+          onClose={() => setShowCreateArrayDialog(false)}
+          onSuccess={async () => {
+            await loadStatus();
+            await loadAvailableDisks();
+          }}
+        />
+      )}
+
+      {/* Mock Disk Wizard (Dev-Mode only) */}
+      {showMockDiskWizard && isDevMode && (
+        <MockDiskWizard
+          onClose={() => setShowMockDiskWizard(false)}
+          onSuccess={async () => {
+            await loadStatus();
+            await loadAvailableDisks();
+            setShowMockDiskWizard(false);
+          }}
+        />
       )}
     </div>
   );

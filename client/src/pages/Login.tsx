@@ -1,6 +1,5 @@
 import { useState, type FormEvent } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
-import { buildApiUrl } from '../lib/api';
 
 interface LoginProps {
   onLogin: (user: any, token: string) => void;
@@ -18,7 +17,7 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-        const response = await fetch(buildApiUrl('/api/auth/login'), {
+        const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -26,10 +25,25 @@ export default function Login({ onLogin }: LoginProps) {
         body: JSON.stringify({ username, password }),
       });
 
-      const data = await response.json();
+      // Handle empty or non-JSON responses
+      const contentType = response.headers.get('content-type');
+      let data: any = {};
+      
+      if (contentType && contentType.includes('application/json')) {
+        try {
+          data = await response.json();
+        } catch (jsonError) {
+          console.error('Failed to parse JSON response:', jsonError);
+          throw new Error('Server returned invalid response');
+        }
+      } else {
+        const text = await response.text();
+        console.error('Non-JSON response:', text);
+        throw new Error(`Server error: ${response.status}`);
+      }
 
       if (!response.ok) {
-        throw new Error(data.error || 'Login failed');
+        throw new Error(data.detail || data.error || `Login failed (${response.status})`);
       }
 
       const token: string | undefined = data.access_token ?? data.token;
@@ -40,6 +54,7 @@ export default function Login({ onLogin }: LoginProps) {
 
       onLogin(data.user, token);
     } catch (err: any) {
+      console.error('Login error:', err);
       setError(err.message || 'Login failed');
     } finally {
       setLoading(false);

@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import logging
 import platform
+import re
+import subprocess
 import time
-from typing import List
+from typing import List, Tuple
 
 import psutil
 
@@ -24,13 +26,137 @@ from app.services import telemetry as telemetry_service
 logger = logging.getLogger(__name__)
 
 
+def _get_cpu_model() -> str | None:
+    """Ermittelt das CPU-Modell plattformunabhängig."""
+    try:
+        system = platform.system()
+        model = None
+        
+        if system == "Windows":
+            # Windows: PowerShell für Marketing-Namen
+            result = subprocess.run(
+                ["powershell", "-Command", 
+                 "Get-CimInstance -ClassName Win32_Processor | Select-Object -ExpandProperty Name"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                model = result.stdout.strip()
+        
+        elif system == "Linux":
+            # Linux: /proc/cpuinfo
+            with open("/proc/cpuinfo", "r") as f:
+                for line in f:
+                    if line.startswith("model name"):
+                        model = line.split(":", 1)[1].strip()
+                        break
+        
+        elif system == "Darwin":
+            # macOS: sysctl
+            result = subprocess.run(
+                ["sysctl", "-n", "machdep.cpu.brand_string"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                model = result.stdout.strip()
+        
+        # Fallback auf platform.processor()
+        if not model:
+            model = platform.processor()
+        
+        # Bereinige den CPU-Namen
+        if model and model.strip():
+            model = model.strip()
+            # Entferne überflüssige Suffixe wie "12-Core Processor", "CPU", etc.
+            model = re.sub(r'\s+\d+-Core\s+Processor\s*$', '', model, flags=re.IGNORECASE)
+            model = re.sub(r'\s+Processor\s*$', '', model, flags=re.IGNORECASE)
+            model = re.sub(r'\s+CPU\s*$', '', model, flags=re.IGNORECASE)
+            # Entferne mehrfache Leerzeichen
+            model = re.sub(r'\s+', ' ', model).strip()
+            return model if model else None
+            
+    except Exception as e:
+        logger.debug(f"Fehler beim Ermitteln des CPU-Modells: {e}")
+    
+    return None
+
+
+def _get_memory_info() -> Tuple[int | None, str | None]:
+    """Ermittelt RAM-Geschwindigkeit (MT/s) und Typ (DDR4/DDR5)."""
+    try:
+        if platform.system() == "Windows":
+            # Windows: PowerShell verwenden
+            result = subprocess.run(
+                ["powershell", "-Command", 
+                 "Get-CimInstance -ClassName Win32_PhysicalMemory | Select-Object -First 1 Speed, SMBIOSMemoryType"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0 and result.stdout:
+                lines = result.stdout.strip().split('\n')
+                if len(lines) >= 3:  # Header + Separator + Data
+                    data_line = lines[2].strip()
+                    parts = data_line.split()
+                    if len(parts) >= 2:
+                        speed_mts = int(parts[0])
+                        memory_type_code = int(parts[1])
+                        
+                        # SMBIOSMemoryType Codes: 26=DDR4, 34=DDR5, 24=DDR3
+                        memory_type_map = {
+                            20: "DDR",
+                            21: "DDR2",
+                            24: "DDR3",
+                            26: "DDR4",
+                            34: "DDR5"
+                        }
+                        memory_type = memory_type_map.get(memory_type_code, f"Type {memory_type_code}")
+                        
+                        return speed_mts, memory_type
+        
+        elif platform.system() == "Linux":
+            # Linux: dmidecode verwenden (benötigt root)
+            result = subprocess.run(
+                ["sudo", "dmidecode", "-t", "memory"],
+                capture_output=True,
+                text=True,
+                timeout=5
+            )
+            
+            if result.returncode == 0:
+                speed_mts = None
+                memory_type = None
+                
+                for line in result.stdout.split('\n'):
+                    if "Speed:" in line and "MT/s" in line:
+                        match = re.search(r'(\d+)\s*MT/s', line)
+                        if match:
+                            speed_mts = int(match.group(1))
+                    elif "Type:" in line:
+                        match = re.search(r'Type:\s*(DDR\d*)', line)
+                        if match:
+                            memory_type = match.group(1)
+                
+                if speed_mts or memory_type:
+                    return speed_mts, memory_type
+    
+    except Exception as e:
+        logger.debug(f"Fehler beim Ermitteln der RAM-Informationen: {e}")
+    
+    return None, None
+
+
 def get_system_info() -> SystemInfo:
     telemetry_cpu_usage = telemetry_service.get_latest_cpu_usage()
     telemetry_memory_sample = telemetry_service.get_latest_memory_sample()
 
     if settings.is_dev_mode:
         # Storage: Calculate from actual dev-storage directory
-        total_storage = settings.nas_quota_bytes or 10 * 1024 ** 3
+        total_storage = settings.nas_quota_bytes or 5 * 1024 ** 3
         used_storage = min(file_service.calculate_used_bytes(), total_storage)
         free_storage = max(total_storage - used_storage, 0)
 
@@ -57,20 +183,34 @@ def get_system_info() -> SystemInfo:
         if telemetry_cpu_usage == 0.0:
             cpu_usage = 18.5
         cpu_cores = psutil.cpu_count(logical=True) or 4
+        
+        # CPU Frequency
+        try:
+            cpu_freq = psutil.cpu_freq()
+            cpu_frequency = cpu_freq.current if cpu_freq else None
+        except Exception:
+            cpu_frequency = None
 
         # Uptime: Use server uptime (since backend started)
         uptime_seconds = telemetry_service.get_server_uptime()
 
+        # Hardware-Informationen abrufen
+        cpu_model = _get_cpu_model()
+        ram_speed, ram_type = _get_memory_info()
+
         return SystemInfo(
-            cpu=CPUStats(usage=cpu_usage, cores=cpu_cores),
-            memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free),
+            cpu=CPUStats(usage=cpu_usage, cores=cpu_cores, frequency_mhz=cpu_frequency, model=cpu_model),
+            memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
             disk=DiskStats(total=total_storage, used=used_storage, free=free_storage),
             uptime=uptime_seconds,
+            dev_mode=True,
         )
 
     try:
         cpu_usage = psutil.cpu_percent(interval=0.1)
         cpu_count = psutil.cpu_count(logical=True) or 1
+        cpu_freq = psutil.cpu_freq()
+        cpu_frequency = cpu_freq.current if cpu_freq else None
 
         virtual_mem = psutil.virtual_memory()
         disk_usage = psutil.disk_usage(settings.nas_storage_path)
@@ -78,6 +218,7 @@ def get_system_info() -> SystemInfo:
     except Exception:  # pragma: no cover - fallback on unsupported systems
         cpu_usage = 12.5
         cpu_count = 4
+        cpu_frequency = None
         virtual_mem = psutil._common.svmem(  # type: ignore[attr-defined]
             total=8 * 1024 ** 3,
             available=6 * 1024 ** 3,
@@ -112,17 +253,22 @@ def get_system_info() -> SystemInfo:
     # Use server uptime (since backend started)
     server_uptime = telemetry_service.get_server_uptime()
 
+    # Hardware-Informationen abrufen
+    cpu_model = _get_cpu_model()
+    ram_speed, ram_type = _get_memory_info()
+
     return SystemInfo(
-        cpu=CPUStats(usage=effective_cpu_usage, cores=cpu_count),
-        memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free),
+        cpu=CPUStats(usage=effective_cpu_usage, cores=cpu_count, frequency_mhz=cpu_frequency, model=cpu_model),
+        memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
         disk=DiskStats(total=disk_usage.total, used=disk_usage.used, free=disk_usage.free),
         uptime=server_uptime,
+        dev_mode=False,
     )
 
 
 def get_storage_info() -> StorageInfo:
     if settings.is_dev_mode:
-        total_storage = settings.nas_quota_bytes or 10 * 1024 ** 3
+        total_storage = settings.nas_quota_bytes or 5 * 1024 ** 3
         used_storage = min(file_service.calculate_used_bytes(), total_storage)
         free_storage = max(total_storage - used_storage, 0)
         percent = (used_storage / total_storage * 100) if total_storage else 0.0

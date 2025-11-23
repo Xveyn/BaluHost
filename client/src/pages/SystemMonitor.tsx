@@ -28,6 +28,8 @@ export default function SystemMonitor() {
   const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [viewMode, setViewMode] = useState<'throughput' | 'iops'>('throughput');
+  const [smartMode, setSmartMode] = useState<string | null>(null);
+  const [smartModeLoading, setSmartModeLoading] = useState(false);
 
   const loadDiskIO = useCallback(async () => {
     const token = localStorage.getItem('token');
@@ -63,6 +65,36 @@ export default function SystemMonitor() {
     const interval = setInterval(loadDiskIO, 2000); // Update every 2 seconds
     return () => clearInterval(interval);
   }, [loadDiskIO]);
+
+  useEffect(() => {
+    const loadSmartMode = async () => {
+      try {
+        const { getSmartMode } = await import('../api/smart');
+        const response = await getSmartMode();
+        setSmartMode(response.mode);
+      } catch (err) {
+        // Dev-Mode Toggle nicht verfügbar (Production oder Fehler)
+        console.debug('SMART mode toggle not available:', err);
+      }
+    };
+
+    loadSmartMode();
+  }, []);
+
+  const handleToggleSmartMode = async () => {
+    setSmartModeLoading(true);
+    try {
+      const { toggleSmartMode } = await import('../api/smart');
+      const response = await toggleSmartMode();
+      setSmartMode(response.mode);
+      // Nach Toggle Disk-Modelle könnten sich ändern, neu laden
+      await loadDiskIO();
+    } catch (err) {
+      console.error('Failed to toggle SMART mode:', err);
+    } finally {
+      setSmartModeLoading(false);
+    }
+  };
 
   const formatTimestamp = (timestamp: number): string => {
     const date = new Date(timestamp);
@@ -143,9 +175,21 @@ export default function SystemMonitor() {
             Echtzeit-Aktivität und Antwortzeiten der physischen Festplatten
           </p>
         </div>
-        <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-4 py-2 text-xs text-slate-400 shadow-inner">
-          <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-          Live-Datenstream
+        <div className="flex items-center gap-2">
+          {smartMode && (
+            <button
+              onClick={handleToggleSmartMode}
+              disabled={smartModeLoading}
+              className="rounded-full border border-slate-700/70 bg-slate-800/50 px-3 py-1 text-xs text-slate-300 transition hover:border-sky-500/50 hover:bg-slate-700/50 hover:text-white disabled:opacity-50"
+              title={`SMART-Modus: ${smartMode === 'mock' ? 'Mock-Daten' : 'Echte Hardware-Daten'}`}
+            >
+              {smartModeLoading ? '...' : (smartMode === 'mock' ? '🔄 Mock' : '🔄 Real')}
+            </button>
+          )}
+          <div className="rounded-full border border-slate-800 bg-slate-900/70 px-4 py-2 text-xs text-slate-400 shadow-inner">
+            <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 inline-block mr-2" />
+            Live-Datenstream
+          </div>
         </div>
       </div>
 

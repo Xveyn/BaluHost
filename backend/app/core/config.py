@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     host: str = "0.0.0.0"
     port: int = 3001
 
-    cors_origins: List[AnyHttpUrl] | List[str] = ["http://localhost:5173"]
+    cors_origins: List[AnyHttpUrl] | List[str] = ["http://localhost:5173", "https://localhost:5173"]
 
     # Auth configuration
     token_secret: str = "change-me-in-prod"
@@ -32,13 +32,14 @@ class Settings(BaseSettings):
     # Storage paths
     nas_storage_path: str = "./storage"
     nas_temp_path: str = "./tmp"
-    nas_quota_bytes: int | None = 10 * 1024 * 1024 * 1024  # 10 GB default in dev
+    nas_quota_bytes: int | None = 5 * 1024 * 1024 * 1024  # 5 GB per disk in dev (2x5GB RAID1)
 
     telemetry_interval_seconds: float = 2.0
     telemetry_history_size: int = 90
 
-    # Database placeholder
-    database_url: str = "sqlite+aiosqlite:///./baluhost.db"
+    # Database configuration
+    database_url: str | None = None  # Optional: custom database URL
+    database_type: str = "sqlite"  # sqlite or postgresql (future)
 
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),
@@ -58,7 +59,7 @@ class Settings(BaseSettings):
             if self.nas_temp_path == "./tmp":
                 self.nas_temp_path = "./dev-tmp"
         else:
-            if self.nas_quota_bytes == 10 * 1024 * 1024 * 1024:
+            if self.nas_quota_bytes == 5 * 1024 * 1024 * 1024:
                 self.nas_quota_bytes = None
         return self
 

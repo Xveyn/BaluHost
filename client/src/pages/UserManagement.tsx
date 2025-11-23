@@ -1,22 +1,79 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
+import { 
+  Search, 
+  ArrowUpDown, 
+  Trash2,
+  Edit,
+  Plus,
+  CheckCircle,
+  XCircle,
+  Download,
+  Users,
+  Shield,
+  X
+} from 'lucide-react';
 
 interface User {
   id: string;
   username: string;
   email: string;
   role: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string | null;
+}
+
+interface UserStats {
+  total: number;
+  active: number;
+  inactive: number;
+  admins: number;
+}
+
+interface UserFormData {
+  username: string;
+  email: string;
+  password: string;
+  role: string;
+  is_active: boolean;
 }
 
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
+  const [stats, setStats] = useState<UserStats>({ total: 0, active: 0, inactive: 0, admins: 0 });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  
+  // Filter & Search
+  const [searchTerm, setSearchTerm] = useState('');
+  const [roleFilter, setRoleFilter] = useState<string>('');
+  const [statusFilter, setStatusFilter] = useState<string>('');
+  const [sortBy, setSortBy] = useState('created_at');
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  
+  // Selection & Bulk Actions
+  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  
+  // Modal States
+  const [showUserModal, setShowUserModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  
+  // Form Data
+  const [formData, setFormData] = useState<UserFormData>({
+    username: '',
+    email: '',
+    password: '',
+    role: 'user',
+    is_active: true
+  });
 
   useEffect(() => {
     loadUsers();
-  }, []);
+  }, [searchTerm, roleFilter, statusFilter, sortBy, sortOrder]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -24,22 +81,32 @@ export default function UserManagement() {
     const token = localStorage.getItem('token');
     
     if (!token) {
-      setError('No authentication token found');
-      toast.error('Please sign in again');
+      const errorMsg = 'No authentication token found. Please log in.';
+      setError(errorMsg);
+      toast.error(errorMsg);
       setLoading(false);
       return;
     }
 
     try {
-      const response = await fetch(buildApiUrl('/api/users'), {
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('search', searchTerm);
+      if (roleFilter) params.append('role', roleFilter);
+      if (statusFilter) params.append('is_active', statusFilter);
+      params.append('sort_by', sortBy);
+      params.append('sort_order', sortOrder);
+
+      const url = buildApiUrl(`/api/users/?${params.toString()}`);
+      const response = await fetch(url, {
         headers: {
-          'Authorization': `Bearer ${token}`
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
         }
       });
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        const errorMsg = errorData.detail || errorData.error || 'Failed to load users';
+        const errorMsg = errorData.detail || errorData.error || `HTTP ${response.status}: Failed to load users`;
         setError(errorMsg);
         toast.error(errorMsg);
         setLoading(false);
@@ -47,8 +114,15 @@ export default function UserManagement() {
       }
 
       const data = await response.json();
+      
       if (data.users) {
         setUsers(data.users);
+        setStats({
+          total: data.total,
+          active: data.active,
+          inactive: data.inactive,
+          admins: data.admins
+        });
       }
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : 'Failed to load users';
@@ -60,8 +134,252 @@ export default function UserManagement() {
     }
   };
 
+  const handleCreateUser = async () => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildApiUrl('/api/users/'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(formData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        toast.error(errorData.detail || 'Failed to create user');
+        return;
+      }
+
+      toast.success('User created successfully');
+      setShowUserModal(false);
+      resetForm();
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to create user');
+      console.error(err);
+    }
+  };
+
+  const handleUpdateUser = async () => {
+    if (!editingUser) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const updateData: any = {};
+      if (formData.username !== editingUser.username) updateData.username = formData.username;
+      if (formData.email !== editingUser.email) updateData.email = formData.email;
+      if (formData.role !== editingUser.role) updateData.role = formData.role;
+      if (formData.is_active !== editingUser.is_active) updateData.is_active = formData.is_active;
+      if (formData.password) updateData.password = formData.password;
+
+      const response = await fetch(buildApiUrl(`/api/users/${editingUser.id}`), {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(updateData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        toast.error(errorData.detail || 'Failed to update user');
+        return;
+      }
+
+      toast.success('User updated successfully');
+      setShowUserModal(false);
+      setEditingUser(null);
+      resetForm();
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to update user');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteUser = async (userId: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/users/${userId}`), {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        toast.error(errorData.detail || 'Failed to delete user');
+        return;
+      }
+
+      toast.success('User deleted successfully');
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to delete user');
+      console.error(err);
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedUsers.size === 0) return;
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildApiUrl('/api/users/bulk-delete'), {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(Array.from(selectedUsers))
+      });
+
+      if (!response.ok) {
+        toast.error('Failed to delete users');
+        return;
+      }
+
+      const result = await response.json();
+      toast.success(`Deleted ${result.deleted} user(s)`);
+      setSelectedUsers(new Set());
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to delete users');
+      console.error(err);
+    }
+  };
+
+  const handleToggleActive = async (userId: string) => {
+    const token = localStorage.getItem('token');
+    if (!token) return;
+
+    try {
+      const response = await fetch(buildApiUrl(`/api/users/${userId}/toggle-active`), {
+        method: 'PATCH',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        }
+      });
+
+      if (!response.ok) {
+        toast.error('Failed to toggle user status');
+        return;
+      }
+
+      toast.success('User status updated');
+      loadUsers();
+    } catch (err) {
+      toast.error('Failed to toggle user status');
+      console.error(err);
+    }
+  };
+
+  const handleExportCSV = () => {
+    const headers = ['Username', 'Email', 'Role', 'Status', 'Created At'];
+    const rows = users.map(u => [
+      u.username,
+      u.email,
+      u.role,
+      u.is_active ? 'Active' : 'Inactive',
+      new Date(u.created_at).toLocaleDateString()
+    ]);
+
+    const csv = [
+      headers.join(','),
+      ...rows.map(row => row.join(','))
+    ].join('\n');
+
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    window.URL.revokeObjectURL(url);
+    toast.success('Users exported to CSV');
+  };
+
+  const openCreateModal = () => {
+    resetForm();
+    setEditingUser(null);
+    setShowUserModal(true);
+  };
+
+  const openEditModal = (user: User) => {
+    setFormData({
+      username: user.username,
+      email: user.email,
+      password: '',
+      role: user.role,
+      is_active: user.is_active
+    });
+    setEditingUser(user);
+    setShowUserModal(true);
+  };
+
+  const openDeleteConfirm = (userId: string) => {
+    setUserToDelete(userId);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (userToDelete) {
+      handleDeleteUser(userToDelete);
+      setShowDeleteConfirm(false);
+      setUserToDelete(null);
+    }
+  };
+
+  const resetForm = () => {
+    setFormData({
+      username: '',
+      email: '',
+      password: '',
+      role: 'user',
+      is_active: true
+    });
+  };
+
+  const toggleUserSelection = (userId: string) => {
+    const newSelection = new Set(selectedUsers);
+    if (newSelection.has(userId)) {
+      newSelection.delete(userId);
+    } else {
+      newSelection.add(userId);
+    }
+    setSelectedUsers(newSelection);
+  };
+
+  const toggleAllUsers = () => {
+    if (selectedUsers.size === users.length) {
+      setSelectedUsers(new Set());
+    } else {
+      setSelectedUsers(new Set(users.map(u => u.id)));
+    }
+  };
+
+  const handleSort = (field: string) => {
+    if (sortBy === field) {
+      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
+    } else {
+      setSortBy(field);
+      setSortOrder('asc');
+    }
+  };
+
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-semibold text-white">
@@ -69,9 +387,120 @@ export default function UserManagement() {
           </h1>
           <p className="mt-1 text-sm text-slate-400">Control access policies and collaboration roles</p>
         </div>
-        <button className="btn btn-primary">
-          + Add User
-        </button>
+        <div className="flex gap-2">
+          <button 
+            onClick={handleExportCSV}
+            className="btn btn-secondary flex items-center gap-2"
+          >
+            <Download className="h-4 w-4" />
+            Export CSV
+          </button>
+          <button 
+            onClick={openCreateModal}
+            className="btn btn-primary flex items-center gap-2"
+          >
+            <Plus className="h-4 w-4" />
+            Add User
+          </button>
+        </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-400">Total Users</p>
+              <p className="mt-1 text-2xl font-semibold text-white">{stats.total}</p>
+            </div>
+            <Users className="h-8 w-8 text-sky-500" />
+          </div>
+        </div>
+        
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-400">Active Users</p>
+              <p className="mt-1 text-2xl font-semibold text-green-400">{stats.active}</p>
+            </div>
+            <CheckCircle className="h-8 w-8 text-green-500" />
+          </div>
+        </div>
+        
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-400">Inactive Users</p>
+              <p className="mt-1 text-2xl font-semibold text-slate-400">{stats.inactive}</p>
+            </div>
+            <XCircle className="h-8 w-8 text-slate-500" />
+          </div>
+        </div>
+        
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-slate-400">Administrators</p>
+              <p className="mt-1 text-2xl font-semibold text-sky-400">{stats.admins}</p>
+            </div>
+            <Shield className="h-8 w-8 text-sky-500" />
+          </div>
+        </div>
+      </div>
+
+      {/* Filters and Search */}
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+        <div className="flex flex-wrap gap-4">
+          <div className="flex-1 min-w-[200px]">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="text"
+                placeholder="Search users..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full rounded-lg border border-slate-700 bg-slate-900/70 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              />
+            </div>
+          </div>
+          
+          <div className="flex gap-2">
+            <select
+              value={roleFilter}
+              onChange={(e) => setRoleFilter(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            >
+              <option value="">All Roles</option>
+              <option value="admin">Admin</option>
+              <option value="user">User</option>
+            </select>
+            
+            <select
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
+              className="rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+            >
+              <option value="">All Status</option>
+              <option value="true">Active</option>
+              <option value="false">Inactive</option>
+            </select>
+          </div>
+        </div>
+
+        {selectedUsers.size > 0 && (
+          <div className="mt-4 flex items-center justify-between rounded-lg border border-rose-900/60 bg-rose-950/30 p-3">
+            <span className="text-sm text-rose-200">
+              {selectedUsers.size} user(s) selected
+            </span>
+            <button
+              onClick={handleBulkDelete}
+              className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+            >
+              <Trash2 className="h-4 w-4" />
+              Delete Selected
+            </button>
+          </div>
+        )}
       </div>
 
       {error && (
@@ -82,6 +511,7 @@ export default function UserManagement() {
         </div>
       )}
 
+      {/* Users Table */}
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
           <p className="text-sm text-slate-500">Loading users...</p>
@@ -92,22 +522,64 @@ export default function UserManagement() {
             <table className="min-w-full divide-y divide-slate-800/60">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-[0.25em] text-slate-500">
-                  <th className="px-6 py-4">Username</th>
+                  <th className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      checked={selectedUsers.size === users.length && users.length > 0}
+                      onChange={toggleAllUsers}
+                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                    />
+                  </th>
+                  <th className="px-6 py-4">
+                    <button 
+                      onClick={() => handleSort('username')}
+                      className="flex items-center gap-1 hover:text-slate-300"
+                    >
+                      Username
+                      {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
                   <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">Role</th>
+                  <th className="px-6 py-4">
+                    <button 
+                      onClick={() => handleSort('role')}
+                      className="flex items-center gap-1 hover:text-slate-300"
+                    >
+                      Role
+                      {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
+                  <th className="px-6 py-4">Status</th>
+                  <th className="px-6 py-4">
+                    <button 
+                      onClick={() => handleSort('created_at')}
+                      className="flex items-center gap-1 hover:text-slate-300"
+                    >
+                      Created
+                      {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
+                    </button>
+                  </th>
                   <th className="px-6 py-4">Actions</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {users.length === 0 ? (
                   <tr>
-                    <td colSpan={4} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
                       No users found
                     </td>
                   </tr>
                 ) : (
                   users.map((user) => (
                     <tr key={user.id} className="group transition hover:bg-slate-900/70">
+                      <td className="px-6 py-4">
+                        <input
+                          type="checkbox"
+                          checked={selectedUsers.has(user.id)}
+                          onChange={() => toggleUserSelection(user.id)}
+                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                        />
+                      </td>
                       <td className="px-6 py-4 text-sm text-slate-200">
                         <div className="flex items-center gap-3">
                           <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-sm font-semibold text-slate-300">
@@ -128,13 +600,46 @@ export default function UserManagement() {
                           {user.role}
                         </span>
                       </td>
+                      <td className="px-6 py-4">
+                        <button
+                          onClick={() => handleToggleActive(user.id)}
+                          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+                            user.is_active
+                              ? 'border border-green-500/40 bg-green-500/15 text-green-200 hover:bg-green-500/25'
+                              : 'border border-slate-700/70 bg-slate-900/70 text-slate-400 hover:bg-slate-800/70'
+                          }`}
+                        >
+                          {user.is_active ? (
+                            <>
+                              <CheckCircle className="h-3 w-3" />
+                              Active
+                            </>
+                          ) : (
+                            <>
+                              <XCircle className="h-3 w-3" />
+                              Inactive
+                            </>
+                          )}
+                        </button>
+                      </td>
+                      <td className="px-6 py-4 text-sm text-slate-400">
+                        {new Date(user.created_at).toLocaleDateString()}
+                      </td>
                       <td className="px-6 py-4 text-sm">
-                        <div className="flex items-center gap-4">
-                          <button className="text-sky-300 transition hover:text-sky-200">
-                            Edit
+                        <div className="flex items-center gap-2">
+                          <button 
+                            onClick={() => openEditModal(user)}
+                            className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
+                            title="Edit user"
+                          >
+                            <Edit className="h-4 w-4" />
                           </button>
-                          <button className="text-rose-300 transition hover:text-rose-200">
-                            Delete
+                          <button 
+                            onClick={() => openDeleteConfirm(user.id)}
+                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                            title="Delete user"
+                          >
+                            <Trash2 className="h-4 w-4" />
                           </button>
                         </div>
                       </td>
@@ -143,6 +648,152 @@ export default function UserManagement() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* User Create/Edit Modal */}
+      {showUserModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-xl font-semibold text-white">
+                {editingUser ? 'Edit User' : 'Create User'}
+              </h2>
+              <button
+                onClick={() => {
+                  setShowUserModal(false);
+                  setEditingUser(null);
+                  resetForm();
+                }}
+                className="text-slate-400 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Username
+                </label>
+                <input
+                  type="text"
+                  value={formData.username}
+                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  placeholder="Enter username"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Email
+                </label>
+                <input
+                  type="email"
+                  value={formData.email}
+                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  placeholder="Enter email"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Password {editingUser && '(leave empty to keep current)'}
+                </label>
+                <input
+                  type="password"
+                  value={formData.password}
+                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  placeholder="Enter password"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Role
+                </label>
+                <select
+                  value={formData.role}
+                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                >
+                  <option value="user">User</option>
+                  <option value="admin">Admin</option>
+                </select>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="is_active"
+                  checked={formData.is_active}
+                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
+                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                />
+                <label htmlFor="is_active" className="text-sm text-slate-300">
+                  Active User
+                </label>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => {
+                  setShowUserModal(false);
+                  setEditingUser(null);
+                  resetForm();
+                }}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={editingUser ? handleUpdateUser : handleCreateUser}
+                className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20"
+              >
+                {editingUser ? 'Update' : 'Create'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
+            <div className="mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-rose-500/20 p-3">
+                <Trash2 className="h-6 w-6 text-rose-500" />
+              </div>
+              <h2 className="text-xl font-semibold text-white">Delete User</h2>
+            </div>
+
+            <p className="mb-6 text-sm text-slate-400">
+              Are you sure you want to delete this user? This action cannot be undone.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setUserToDelete(null);
+                }}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDelete}
+                className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20"
+              >
+                Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

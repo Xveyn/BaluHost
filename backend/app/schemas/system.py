@@ -6,12 +6,16 @@ from pydantic import BaseModel
 class CPUStats(BaseModel):
     usage: float
     cores: int
+    frequency_mhz: float | None = None  # Aktuelle CPU-Frequenz in MHz
+    model: str | None = None  # CPU-Modellname
 
 
 class MemoryStats(BaseModel):
     total: int
     used: int
     free: int
+    speed_mts: int | None = None  # RAM-Geschwindigkeit in MT/s (Megatransfers/second)
+    type: str | None = None  # RAM-Typ (z.B. "DDR4", "DDR5")
 
 
 class DiskStats(BaseModel):
@@ -33,6 +37,7 @@ class SystemInfo(BaseModel):
     memory: MemoryStats
     disk: DiskStats
     uptime: float
+    dev_mode: bool = False
 
 
 class StorageInfo(BaseModel):
@@ -186,3 +191,35 @@ class RaidOptionsRequest(BaseModel):
     set_speed_limit_min: int | None = None
     set_speed_limit_max: int | None = None
     trigger_scrub: bool | None = None
+
+
+class AvailableDisk(BaseModel):
+    """Represents a disk that can be used for RAID or formatting."""
+    name: str
+    size_bytes: int
+    model: str | None = None
+    is_partitioned: bool = False
+    partitions: list[str] = []
+    in_raid: bool = False
+
+
+class AvailableDisksResponse(BaseModel):
+    disks: list[AvailableDisk]
+
+
+class FormatDiskRequest(BaseModel):
+    disk: str
+    filesystem: str = "ext4"  # ext4, xfs, btrfs, etc.
+    label: str | None = None
+
+
+class CreateArrayRequest(BaseModel):
+    name: str
+    level: str  # raid0, raid1, raid5, raid6, raid10
+    devices: list[str]
+    spare_devices: list[str] = []
+
+
+class DeleteArrayRequest(BaseModel):
+    array: str
+    force: bool = False

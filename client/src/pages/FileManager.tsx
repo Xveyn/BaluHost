@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
+import { UploadProgressModal } from '../components/UploadProgressModal';
 
 interface StorageInfo {
   totalBytes: number;
@@ -205,6 +206,7 @@ export default function FileManager() {
   const [dragActive, setDragActive] = useState(false);
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [uploadIds, setUploadIds] = useState<string[] | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
 
@@ -359,7 +361,16 @@ export default function FileManager() {
       });
 
       if (response.ok) {
-        toast.success('Files uploaded successfully!');
+        const result = await response.json();
+        const ids = result.upload_ids || [];
+        
+        // Show progress modal if upload IDs are available
+        if (ids.length > 0) {
+          setUploadIds(ids);
+        } else {
+          toast.success('Files uploaded successfully!');
+        }
+        
         // Invalidate cache and reload
         sessionStorage.removeItem(`files_cache_${currentPath}`);
         sessionStorage.removeItem('storage_info_cache');
@@ -939,6 +950,17 @@ export default function FileManager() {
       {/* File Viewer Modal */}
       {viewingFile && (
         <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
+      )}
+
+      {/* Upload Progress Modal */}
+      {uploadIds && uploadIds.length > 0 && (
+        <UploadProgressModal
+          uploadIds={uploadIds}
+          onClose={() => {
+            setUploadIds(null);
+            toast.success('Files uploaded successfully!');
+          }}
+        />
       )}
     </div>
   );
