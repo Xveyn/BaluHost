@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     token_secret: str = "change-me-in-prod"
     token_algorithm: str = "HS256"
     token_expire_minutes: int = 60 * 12
+    privileged_roles: list[str] = ["admin"]
 
     # Admin seed
     admin_username: str = "admin"
@@ -33,8 +34,8 @@ class Settings(BaseSettings):
     nas_temp_path: str = "./tmp"
     nas_quota_bytes: int | None = 10 * 1024 * 1024 * 1024  # 10 GB default in dev
 
-    telemetry_interval_seconds: float = 3.0
-    telemetry_history_size: int = 60
+    telemetry_interval_seconds: float = 2.0
+    telemetry_history_size: int = 90
 
     # Database placeholder
     database_url: str = "sqlite+aiosqlite:///./baluhost.db"
@@ -69,6 +70,15 @@ class Settings(BaseSettings):
         if isinstance(value, list):
             return value
         return ["http://localhost:5173"]
+
+    @field_validator("privileged_roles", mode="before")
+    @classmethod
+    def parse_privileged_roles(cls, value: list[str] | str) -> list[str]:
+        if isinstance(value, str):
+            return [role.strip() for role in value.split(",") if role.strip()]
+        if isinstance(value, list):
+            return value
+        return ["admin"]
 
 
 @lru_cache(maxsize=1)

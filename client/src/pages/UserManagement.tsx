@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
 
 interface User {
@@ -11,6 +12,7 @@ interface User {
 export default function UserManagement() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadUsers();
@@ -18,7 +20,15 @@ export default function UserManagement() {
 
   const loadUsers = async () => {
     setLoading(true);
+    setError(null);
     const token = localStorage.getItem('token');
+    
+    if (!token) {
+      setError('No authentication token found');
+      toast.error('Please sign in again');
+      setLoading(false);
+      return;
+    }
 
     try {
       const response = await fetch(buildApiUrl('/api/users'), {
@@ -27,12 +37,24 @@ export default function UserManagement() {
         }
       });
 
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
+        const errorMsg = errorData.detail || errorData.error || 'Failed to load users';
+        setError(errorMsg);
+        toast.error(errorMsg);
+        setLoading(false);
+        return;
+      }
+
       const data = await response.json();
       if (data.users) {
         setUsers(data.users);
       }
     } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load users';
       console.error('Failed to load users:', err);
+      setError(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -51,6 +73,14 @@ export default function UserManagement() {
           + Add User
         </button>
       </div>
+
+      {error && (
+        <div className="card border-red-900/60 bg-red-950/30 p-4">
+          <p className="text-sm text-red-400">
+            <strong>Error:</strong> {error}
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">

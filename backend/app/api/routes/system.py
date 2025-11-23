@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.api import deps
 from app.schemas.system import (
+    DiskIOResponse,
     ProcessListResponse,
     QuotaStatus,
     RaidActionResponse,
@@ -14,6 +15,7 @@ from app.schemas.system import (
     TelemetryHistoryResponse,
 )
 from app.schemas.user import UserPublic
+from app.services import disk_monitor
 from app.services import raid as raid_service
 from app.services import smart as smart_service
 from app.services import system as system_service
@@ -30,6 +32,16 @@ async def get_system_info(_: UserPublic = Depends(deps.get_current_user)) -> Sys
 @router.get("/storage", response_model=StorageInfo)
 async def get_storage_info(_: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
     return system_service.get_storage_info()
+
+
+@router.get("/storage/aggregated", response_model=StorageInfo)
+async def get_aggregated_storage_info(_: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
+    """Gibt aggregierte Speicherinformationen über alle Festplatten zurück.
+    
+    Berücksichtigt SMART-Daten aller Festplatten und RAID-Arrays.
+    Bei RAID wird die effektive Kapazität berechnet.
+    """
+    return system_service.get_aggregated_storage_info()
 
 
 @router.get("/quota", response_model=QuotaStatus)
@@ -93,6 +105,43 @@ async def finalize_raid_rebuild(
         return raid_service.finalize_rebuild(payload)
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+
+@router.get("/disk-io/history", response_model=DiskIOResponse)
+async def get_disk_io_history(_: UserPublic = Depends(deps.get_current_user)) -> DiskIOResponse:
+    """Get real-time disk I/O history for all physical disks."""
+    history = disk_monitor.get_disk_io_history()
+    from app.schemas.system import DiskIOHistory, DiskIOSample
+    from app.services.smart import get_smart_device_models
+
+    model_map = get_smart_device_models()
+
+    def _normalize(name: str) -> str:
+        return name.lower().replace('\\\\.\\physicaldrive', 'physicaldrive').replace('\\.\\physicaldrive', 'physicaldrive').replace('/dev/', '')
+
+    normalized_map = { _normalize(k): v for k, v in model_map.items() }
+
+    disks = []
+    for disk_name, samples in history.items():
+        norm = _normalize(disk_name)
+        model = normalized_map.get(norm)
+        # Fallback heuristics (Index / Teilstring)
+        if model is None:
+            import re
+            m = re.search(r'(physicaldrive)?(\d+)$', norm)
+            if m:
+                model = normalized_map.get(m.group(2))
+        if model is None and len(norm) == 3 and norm.startswith('sd'):
+            letter_index = str(ord(norm[2]) - ord('a'))
+            model = normalized_map.get(letter_index)
+        if model is None:
+            for k, v in normalized_map.items():
+                if k in norm or norm in k:
+                    model = v
+                    break
+        disks.append(DiskIOHistory(diskName=disk_name, model=model, samples=[DiskIOSample(**sample) for sample in samples]))
+
+    return DiskIOResponse(disks=disks, interval=1.0)
 
 
 @router.post("/raid/options", response_model=RaidActionResponse)

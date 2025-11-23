@@ -1,216 +1,398 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 import { buildApiUrl } from '../lib/api';
 
-interface SystemInfo {
-  cpu: {
-    usage: number;
-    cores: number;
-  };
-  memory: {
-    total: number;
-    used: number;
-    free: number;
-  };
-  disk: {
-    total: number;
-    used: number;
-    free: number;
-  };
-  uptime: number;
+interface DiskIOSample {
+  timestamp: number;
+  readMbps: number;
+  writeMbps: number;
+  readIops: number;
+  writeIops: number;
+  avgResponseMs?: number;
+  activeTimePercent?: number;
+}
+
+interface DiskIOHistory {
+  diskName: string;
+  samples: DiskIOSample[];
+  model?: string | null;
+}
+
+interface DiskIOResponse {
+  disks: DiskIOHistory[];
+  interval: number;
 }
 
 export default function SystemMonitor() {
-  const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [diskData, setDiskData] = useState<DiskIOResponse | null>(null);
+  const [selectedDisk, setSelectedDisk] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [viewMode, setViewMode] = useState<'throughput' | 'iops'>('throughput');
 
-  useEffect(() => {
-    loadSystemInfo();
-    const interval = setInterval(loadSystemInfo, 5000);
-    return () => clearInterval(interval);
-  }, []);
-
-  const loadSystemInfo = async () => {
-    setLoading(true);
+  const loadDiskIO = useCallback(async () => {
     const token = localStorage.getItem('token');
 
     try {
-      const response = await fetch(buildApiUrl('/api/system/info'), {
+      const response = await fetch(buildApiUrl('/api/system/disk-io/history'), {
         headers: {
           'Authorization': `Bearer ${token}`
         }
       });
 
-      const data = await response.json();
-      setSystemInfo(data);
+      if (!response.ok) {
+        throw new Error('Failed to fetch disk I/O data');
+      }
+
+      const data: DiskIOResponse = await response.json();
+      setDiskData(data);
+
+      // Auto-select first disk if none selected
+      if (!selectedDisk && data.disks.length > 0) {
+        setSelectedDisk(data.disks[0].diskName);
+      }
     } catch (err) {
-      console.error('Failed to load system info:', err);
+      console.error('Failed to load disk I/O:', err);
     } finally {
       setLoading(false);
     }
+  }, [selectedDisk]);
+
+  useEffect(() => {
+    setLoading(true);
+    loadDiskIO();
+    const interval = setInterval(loadDiskIO, 2000); // Update every 2 seconds
+    return () => clearInterval(interval);
+  }, [loadDiskIO]);
+
+  const formatTimestamp = (timestamp: number): string => {
+    const date = new Date(timestamp);
+    return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
   };
 
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
+  const getSelectedDiskData = () => {
+    if (!diskData || !selectedDisk) return null;
+    return diskData.disks.find(d => d.diskName === selectedDisk);
   };
 
-  const formatUptime = (seconds: number): string => {
-    const days = Math.floor(seconds / 86400);
-    const hours = Math.floor((seconds % 86400) / 3600);
-    const minutes = Math.floor((seconds % 3600) / 60);
-    return `${days}d ${hours}h ${minutes}m`;
+  const getCurrentStats = () => {
+    const disk = getSelectedDiskData();
+    if (!disk || disk.samples.length === 0) {
+      return { read: 0, write: 0, readIops: 0, writeIops: 0 };
+    }
+    
+    const latest = disk.samples[disk.samples.length - 1];
+    return {
+      read: latest.readMbps,
+      write: latest.writeMbps,
+      readIops: latest.readIops,
+      writeIops: latest.writeIops
+    };
   };
 
-  if (loading && !systemInfo) {
+  const getChartData = () => {
+    const disk = getSelectedDiskData();
+    if (!disk) return [];
+
+    // Show last 60 samples (60 seconds)
+    const samples = disk.samples.slice(-60);
+    
+    return samples.map(sample => ({
+      time: formatTimestamp(sample.timestamp),
+      timestamp: sample.timestamp,
+      read: viewMode === 'throughput' ? sample.readMbps : sample.readIops,
+      write: viewMode === 'throughput' ? sample.writeMbps : sample.writeIops,
+    }));
+  };
+
+  // Loading component with animated dots
+  const LoadingMonitor = () => {
+    const [dots, setDots] = useState('');
+    useEffect(() => {
+      const sequence = ['.', '..', '...', '.', '..'];
+      let idx = 0;
+      const timer = setInterval(() => {
+        setDots(sequence[idx]);
+        idx = (idx + 1) % sequence.length;
+      }, 450);
+      return () => clearInterval(timer);
+    }, []);
     return (
       <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-        <p className="text-sm text-slate-500">Loading system telemetry...</p>
+        <p className="text-sm text-slate-500">Initialisiere Disk Monitor{dots}</p>
       </div>
+    );
+  };
+
+  if (loading && !diskData) {
+    return (
+      <LoadingMonitor />
     );
   }
 
-  const cpuUsage = Math.min(systemInfo?.cpu.usage ?? 0, 100);
-  const memoryPercent = systemInfo?.memory.total
-    ? (systemInfo.memory.used / systemInfo.memory.total) * 100
-    : 0;
-  const diskPercent = systemInfo?.disk.total
-    ? (systemInfo.disk.used / systemInfo.disk.total) * 100
-    : 0;
+  const currentStats = getCurrentStats();
+  const chartData = getChartData();
+
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">System Monitor</h1>
-          <p className="mt-1 text-sm text-slate-400">Real-time performance timeline and availability metrics</p>
+          <h1 className="text-3xl font-semibold text-white">Disk Monitor</h1>
+          <p className="mt-1 text-sm text-slate-400">
+            Echtzeit-Aktivität und Antwortzeiten der physischen Festplatten
+          </p>
         </div>
         <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/70 px-4 py-2 text-xs text-slate-400 shadow-inner">
           <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-          Live telemetry stream
+          Live-Datenstream
         </div>
       </div>
 
-      {systemInfo && (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
-            {[{
-              id: 'cpu',
-              title: 'CPU Load',
-              value: `${cpuUsage.toFixed(1)}%`,
-              meta: `${systemInfo.cpu.cores} cores`,
-              accent: 'from-sky-500 to-indigo-500',
-              progress: cpuUsage
-            }, {
-              id: 'memory',
-              title: 'Memory Pressure',
-              value: formatBytes(systemInfo.memory.used),
-              meta: `of ${formatBytes(systemInfo.memory.total)}`,
-              accent: 'from-violet-500 to-fuchsia-500',
-              progress: memoryPercent
-            }, {
-              id: 'disk',
-              title: 'Disk Usage',
-              value: systemInfo.disk.total ? formatBytes(systemInfo.disk.used) : 'Mock mode',
-              meta: systemInfo.disk.total ? `of ${formatBytes(systemInfo.disk.total)}` : 'Linux metrics recommended',
-              accent: 'from-cyan-500 to-sky-600',
-              progress: diskPercent || 12
-            }, {
-              id: 'uptime',
-              title: 'System Uptime',
-              value: formatUptime(systemInfo.uptime),
-              meta: 'Since last restart',
-              accent: 'from-emerald-500 to-teal-500',
-              progress: 100
-            }].map((card) => (
-              <div key={card.id} className="card border-slate-800/60 bg-slate-900/55">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{card.title}</p>
-                    <p className="mt-3 text-3xl font-semibold text-white">{card.value}</p>
-                  </div>
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${card.accent} text-white shadow-[0_12px_38px_rgba(59,130,246,0.35)]`}>
-                    ●
-                  </div>
-                </div>
-                <div className="mt-4 flex items-center justify-between text-xs text-slate-400">
-                  <span>{card.meta}</span>
-                  <span className="text-slate-500">{card.id === 'uptime' ? 'Live' : 'Stable'}</span>
-                </div>
-                <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
-                  <div
-                    className={`h-full rounded-full bg-gradient-to-r ${card.accent}`}
-                    style={{ width: `${Math.min(Math.max(card.progress, 0), 100)}%` }}
-                  />
-                </div>
-              </div>
-            ))}
-          </div>
+      {/* Disk Selector */}
+      {diskData && diskData.disks.length > 0 && (
+        <div className="flex flex-wrap gap-3">
+          {diskData.disks.map(disk => (
+            <button
+              key={disk.diskName}
+              onClick={() => setSelectedDisk(disk.diskName)}
+              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
+                selectedDisk === disk.diskName
+                  ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                  : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:bg-slate-800'
+              }`}
+            >
+              {disk.model ? `${disk.model} (${disk.diskName})` : disk.diskName}
+            </button>
+          ))}
+        </div>
+      )}
 
-          <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
-            <div className="card border-slate-800/60 bg-slate-900/55">
-              <div className="flex flex-wrap items-center justify-between gap-3">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.32em] text-slate-500">Memory Allocation</p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">Usage breakdown</h2>
-                </div>
-                <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs text-sky-200">Live</span>
-              </div>
-              <div className="mt-6 grid gap-4 text-sm text-slate-400 md:grid-cols-2">
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Used</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{formatBytes(systemInfo.memory.used)}</p>
-                  <p className="text-xs text-slate-500">Applications + services</p>
-                </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Free</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{formatBytes(systemInfo.memory.free)}</p>
-                  <p className="text-xs text-slate-500">Cache available</p>
-                </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Total</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{formatBytes(systemInfo.memory.total)}</p>
-                  <p className="text-xs text-slate-500">Physical memory</p>
-                </div>
-                <div className="rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-4">
-                  <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Usage</p>
-                  <p className="mt-2 text-lg font-semibold text-white">{memoryPercent.toFixed(1)}%</p>
-                  <p className="text-xs text-slate-500">Utilisation</p>
-                </div>
-              </div>
-            </div>
-
-            <div className="space-y-6">
-              <div className="card border-slate-800/60 bg-slate-900/55">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Uptime milestones</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">Key checkpoints</h3>
-                <ul className="mt-5 space-y-3 text-sm text-slate-400">
-                  <li className="flex items-center justify-between">
-                    <span>Last startup</span>
-                    <span className="text-slate-200">{formatUptime(systemInfo.uptime)} ago</span>
-                  </li>
-                  <li className="flex items-center justify-between">
-                    <span>Last backup</span>
-                    <span className="text-emerald-300">Completed - 2h ago</span>
-                  </li>
-                  <li className="flex items-center justify-between">
-                    <span>Next maintenance</span>
-                    <span className="text-slate-200">Scheduled - 26 Oct</span>
-                  </li>
-                </ul>
-              </div>
-
-              <div className="card border-slate-800/60 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Storage advisory</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">Linux metrics recommended</h3>
-                <p className="mt-3 text-sm text-slate-400">
-                  Detailed disk telemetry is available when BalùHost runs on a Linux host. Switch to production hardware to unlock IO tracing, SMART monitoring, and RAID scrubbing insights.
+      {/* Current Stats Cards */}
+      {selectedDisk && (
+        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-6">
+          <div className="card border-slate-800/60 bg-gradient-to-br from-blue-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Lesen
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {currentStats.read.toFixed(2)} MB/s
                 </p>
               </div>
+              <div className="rounded-full bg-blue-500/20 p-3">
+                {/* Icon ohne Upload/Download Anmutung: Lesekopf Symbol */}
+                <svg className="h-6 w-6 text-blue-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <rect x="5" y="4" width="14" height="16" rx="2" />
+                  <path d="M9 8h6M9 12h4" strokeLinecap="round" />
+                </svg>
+              </div>
             </div>
           </div>
+
+          <div className="card border-slate-800/60 bg-gradient-to-br from-green-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Schreiben
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {currentStats.write.toFixed(2)} MB/s
+                </p>
+              </div>
+              <div className="rounded-full bg-green-500/20 p-3">
+                {/* Schreibsymbol: Stift auf Platte */}
+                <svg className="h-6 w-6 text-green-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <rect x="5" y="4" width="14" height="16" rx="2" />
+                  <path d="M9 12l6-6" strokeLinecap="round" />
+                  <path d="M9 16h6" strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="card border-slate-800/60 bg-gradient-to-br from-purple-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Lese-IOPS
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {currentStats.readIops.toFixed(0)}
+                </p>
+              </div>
+              <div className="rounded-full bg-purple-500/20 p-3">
+                <svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="card border-slate-800/60 bg-gradient-to-br from-orange-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Schreib-IOPS
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {currentStats.writeIops.toFixed(0)}
+                </p>
+              </div>
+              <div className="rounded-full bg-orange-500/20 p-3">
+                <svg className="h-6 w-6 text-orange-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="card border-slate-800/60 bg-gradient-to-br from-cyan-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Antwortzeit
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {(() => {
+                    const disk = getSelectedDiskData();
+                    if (!disk || disk.samples.length === 0) return '0 ms';
+                    const latest = disk.samples[disk.samples.length - 1];
+                    return `${(latest.avgResponseMs ?? 0).toFixed(2)} ms`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-full bg-cyan-500/20 p-3">
+                <svg className="h-6 w-6 text-cyan-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <circle cx="12" cy="12" r="9" />
+                  <path d="M12 12l5-4" strokeLinecap="round" strokeLinejoin="round" />
+                  <path d="M12 7v5" strokeLinecap="round" />
+                </svg>
+              </div>
+            </div>
+          </div>
+
+          <div className="card border-slate-800/60 bg-gradient-to-br from-teal-500/10 to-transparent p-5">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
+                  Aktive Zeit
+                </p>
+                <p className="mt-2 text-2xl font-semibold text-white">
+                  {(() => {
+                    const disk = getSelectedDiskData();
+                    if (!disk || disk.samples.length === 0) return '0%';
+                    const latest = disk.samples[disk.samples.length - 1];
+                    return `${(latest.activeTimePercent ?? 0).toFixed(1)}%`;
+                  })()}
+                </p>
+              </div>
+              <div className="rounded-full bg-teal-500/20 p-3">
+                <svg className="h-6 w-6 text-teal-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+                  <path d="M4 4h16v4H4zM4 10h10v4H4zM4 16h7v4H4z" />
+                </svg>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chart */}
+      {selectedDisk && (
+        <div className="card border-slate-800/60 bg-slate-900/55 p-6">
+          <div className="mb-4 flex items-center justify-between">
+            <h2 className="text-lg font-semibold text-white">
+              {getSelectedDiskData()?.model ? `${getSelectedDiskData()?.model} (${selectedDisk})` : selectedDisk} - Verlauf (letzte 60 Sekunden)
+            </h2>
+            <div className="flex gap-2">
+              <button
+                onClick={() => setViewMode('throughput')}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                  viewMode === 'throughput'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                Durchsatz (MB/s)
+              </button>
+              <button
+                onClick={() => setViewMode('iops')}
+                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                  viewMode === 'iops'
+                    ? 'bg-blue-500/20 text-blue-400'
+                    : 'text-slate-400 hover:bg-slate-800'
+                }`}
+              >
+                IOPS
+              </button>
+            </div>
+          </div>
+
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={chartData}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+              <XAxis 
+                dataKey="time" 
+                stroke="#94a3b8"
+                tick={{ fill: '#94a3b8', fontSize: 12 }}
+                tickLine={{ stroke: '#334155' }}
+              />
+              <YAxis 
+                stroke="#94a3b8"
+                tick={{ fill: '#94a3b8', fontSize: 12 }}
+                tickLine={{ stroke: '#334155' }}
+                label={{ 
+                  value: viewMode === 'throughput' ? 'MB/s' : 'IOPS', 
+                  angle: -90, 
+                  position: 'insideLeft',
+                  style: { fill: '#94a3b8', fontSize: 12 }
+                }}
+              />
+              <Tooltip 
+                contentStyle={{ 
+                  backgroundColor: '#1e293b', 
+                  border: '1px solid #334155',
+                  borderRadius: '8px',
+                  color: '#f1f5f9'
+                }}
+                labelStyle={{ color: '#94a3b8' }}
+              />
+              <Legend 
+                wrapperStyle={{ color: '#94a3b8' }}
+                iconType="line"
+              />
+              <Line 
+                type="monotone" 
+                dataKey="read" 
+                stroke="#3b82f6" 
+                strokeWidth={2}
+                name={viewMode === 'throughput' ? 'Lesen (MB/s)' : 'Lese-IOPS'}
+                dot={false}
+                animationDuration={300}
+              />
+              <Line 
+                type="monotone" 
+                dataKey="write" 
+                stroke="#10b981" 
+                strokeWidth={2}
+                name={viewMode === 'throughput' ? 'Schreiben (MB/s)' : 'Schreib-IOPS'}
+                dot={false}
+                animationDuration={300}
+              />
+            </LineChart>
+          </ResponsiveContainer>
+        </div>
+      )}
+
+      {/* No Data Message */}
+      {(!diskData || diskData.disks.length === 0) && (
+        <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
+          <svg className="mx-auto h-12 w-12 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
+          </svg>
+          <p className="mt-4 text-sm text-slate-400">Keine Festplatten-Daten verfügbar</p>
+          <p className="mt-1 text-xs text-slate-500">Warte auf erste Messung...</p>
         </div>
       )}
     </div>

@@ -10,6 +10,7 @@ class FileItem(BaseModel):
     size: int
     type: Literal["file", "directory"]
     modified_at: datetime
+    owner_id: str | None = None
 
 
 class FileListResponse(BaseModel):

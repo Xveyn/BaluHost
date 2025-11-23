@@ -20,7 +20,11 @@ from app.schemas.system import (
 logger = logging.getLogger(__name__)
 
 _SAMPLE_INTERVAL_SECONDS = float(getattr(settings, "telemetry_interval_seconds", 3.0))
+_FAST_START_SAMPLES = 3  # Anzahl schneller Initial-Samples
+_FAST_START_INTERVAL = 0.5  # Abstand zwischen Fast-Start Samples
 _MAX_SAMPLES = int(getattr(settings, "telemetry_history_size", 60))
+
+_SERVER_START_TIME: Optional[float] = None
 
 _cpu_history: List[CpuTelemetrySample] = []
 _memory_history: List[MemoryTelemetrySample] = []
@@ -144,13 +148,17 @@ async def _monitor_loop(interval_seconds: float) -> None:
 
 
 async def start_telemetry_monitor(interval_seconds: float | None = None) -> None:
-    global _monitor_task
+    global _monitor_task, _SERVER_START_TIME
 
     if _monitor_task is not None and not _monitor_task.done():
         return
 
+    _SERVER_START_TIME = time.time()
     effective_interval = interval_seconds or _SAMPLE_INTERVAL_SECONDS
-    _sample_once()
+    # Fast-Start Burst Sampling für schnellere UI-Füllung
+    for _ in range(_FAST_START_SAMPLES):
+        _sample_once()
+        await asyncio.sleep(_FAST_START_INTERVAL)
 
     loop = asyncio.get_running_loop()
     _monitor_task = loop.create_task(_monitor_loop(effective_interval))
@@ -190,3 +198,10 @@ def get_latest_cpu_usage() -> Optional[float]:
 def get_latest_memory_sample() -> Optional[MemoryTelemetrySample]:
     with _lock:
         return _latest_memory_sample.model_copy(deep=True) if _latest_memory_sample else None
+
+
+def get_server_uptime() -> float:
+    """Returns server uptime in seconds since telemetry monitor started."""
+    if _SERVER_START_TIME is None:
+        return 0.0
+    return time.time() - _SERVER_START_TIME

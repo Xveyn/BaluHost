@@ -34,6 +34,7 @@ export interface FileInfo {
   size: number;
   type: 'file' | 'directory';
   mtime: Date;
+   ownerId?: string;
   permissions?: string;
 }
 

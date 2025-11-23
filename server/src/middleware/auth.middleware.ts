@@ -1,6 +1,7 @@
 import { Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
 import { AuthRequest, JWTPayload } from '../types/index.js';
+import { mockUsers } from '../utils/mockData.js';
 
 export const authMiddleware = (req: AuthRequest, res: Response, next: NextFunction): void => {
   try {
@@ -12,12 +13,13 @@ export const authMiddleware = (req: AuthRequest, res: Response, next: NextFuncti
     }
 
     const decoded = jwt.verify(token, process.env.JWT_SECRET || 'secret') as JWTPayload;
-    
+    const storedUser = mockUsers.find((candidate) => candidate.id === decoded.userId);
+
     req.user = {
       id: decoded.userId,
       username: decoded.username,
-      email: '',
-      role: decoded.role as 'admin' | 'user'
+      email: storedUser?.email ?? '',
+      role: (storedUser?.role ?? decoded.role) as 'admin' | 'user'
     };
     
     next();

@@ -6,6 +6,7 @@ import FileManager from './pages/FileManager';
 import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
 import RaidManagement from './pages/RaidManagement';
+import Logging from './pages/Logging';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -56,7 +57,17 @@ function App() {
     localStorage.removeItem('token');
   };
 
-  if (loading) {
+  const LoadingScreen = () => {
+    const [dots, setDots] = useState('');
+    useEffect(() => {
+      const sequence = ['.', '..', '...', '.', '..'];
+      let idx = 0;
+      const timer = setInterval(() => {
+        setDots(sequence[idx]);
+        idx = (idx + 1) % sequence.length;
+      }, 450);
+      return () => clearInterval(timer);
+    }, []);
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 text-slate-100">
         <div className="pointer-events-none absolute inset-0">
@@ -67,12 +78,14 @@ function App() {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-indigo-500 to-violet-600 text-xl font-semibold">
             BH
           </div>
-          <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BalùHost</p>
-          <p className="text-lg font-medium text-white">Synchronising control plane...</p>
+            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BalùHost</p>
+            <p className="text-lg font-medium text-white">Loading system insights{dots}</p>
         </div>
       </div>
     );
-  }
+  };
+
+  if (loading) return <LoadingScreen />;
 
   return (
     <Router>
@@ -137,6 +150,18 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <SystemMonitor />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/logging"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <Logging />
               </Layout>
             ) : (
               <Navigate to="/login" />

@@ -44,6 +44,40 @@ class StorageInfo(BaseModel):
     mount_point: str
 
 
+class DiskIOSample(BaseModel):
+    """Single disk I/O measurement sample."""
+    timestamp: int  # Unix timestamp in milliseconds
+    readMbps: float  # Read speed in MB/s
+    writeMbps: float  # Write speed in MB/s
+    readIops: float  # Read operations per second
+    writeIops: float  # Write operations per second
+    avgResponseMs: float | None = None  # Durchschnittliche Antwortzeit (ms)
+    activeTimePercent: float | None = None  # Anteil der Zeit mit aktiver I/O innerhalb des Intervalls
+
+
+class DiskIOHistory(BaseModel):
+    """Disk I/O history for a single disk."""
+    diskName: str
+    model: str | None = None  # Geräte/Modellname falls verfügbar
+    samples: list[DiskIOSample]
+
+
+class DiskIOResponse(BaseModel):
+    """Complete disk I/O monitoring response."""
+    disks: list[DiskIOHistory]
+    interval: float  # Sampling interval in seconds
+
+
+class AggregatedStorageInfo(BaseModel):
+    """Aggregierte Speicherinformationen über alle Festplatten hinweg."""
+    total_capacity: int  # Gesamtkapazität aller Festplatten (bei RAID: effektive Kapazität)
+    total_used: int  # Gesamtnutzung über alle Festplatten
+    total_available: int  # Verfügbarer Speicher
+    use_percent: float  # Prozentsatz der Nutzung
+    device_count: int  # Anzahl der erkannten Festplatten
+    raid_effective: bool  # True wenn RAID-effektive Kapazität berechnet wurde
+
+
 class CpuTelemetrySample(BaseModel):
     timestamp: int
     usage: float
@@ -88,6 +122,10 @@ class SmartDevice(BaseModel):
     serial: str
     temperature: int | None
     status: str
+    capacity_bytes: int | None = None
+    used_bytes: int | None = None  # Genutzte Bytes auf dieser Festplatte
+    used_percent: float | None = None  # Prozentsatz der Nutzung
+    mount_point: str | None = None  # Mount-Punkt, falls gemountet
     attributes: list[SmartAttribute]
 
 

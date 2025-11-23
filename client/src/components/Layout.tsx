@@ -32,6 +32,14 @@ const navIcon = {
       <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M4 12h3l2 7 3-14 2 7h6" />
     </svg>
   ),
+  logging: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" />
+      <path stroke="currentColor" strokeLinecap="round" d="M7 9h10" />
+      <path stroke="currentColor" strokeLinecap="round" d="M7 13h10" />
+      <path stroke="currentColor" strokeLinecap="round" d="M7 17h6" />
+    </svg>
+  ),
   users: (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
       <circle cx="12" cy="7.5" r="3.5" stroke="currentColor" />
@@ -68,9 +76,15 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     },
     {
       path: '/system',
-      label: 'System Monitor',
-      description: 'Performance',
+      label: 'Disk Monitor',
+      description: 'Activity',
       icon: navIcon.system
+    },
+    {
+      path: '/logging',
+      label: 'Logging',
+      description: 'Activity Logs',
+      icon: navIcon.logging
     },
     ...(user.role === 'admin'
       ? [
@@ -165,26 +179,14 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         <div className="flex flex-1 flex-col">
           <header className="border-b border-slate-800/60 bg-slate-900/30 px-6 py-6 shadow-[0_12px_40px_rgba(2,6,23,0.45)] backdrop-blur-xl sm:px-8 lg:px-10">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="flex-1">
-                <div className="flex items-center gap-3 rounded-2xl border border-slate-800 bg-slate-950/60 px-4 py-2.5 shadow-inner">
-                  <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.5} className="h-5 w-5 text-slate-500">
-                    <circle cx="11" cy="11" r="6" stroke="currentColor" />
-                    <path d="m20 20-3.5-3.5" stroke="currentColor" strokeLinecap="round" />
-                  </svg>
-                  <input
-                    placeholder="Search files, settings..."
-                    className="flex-1 border-none bg-transparent text-sm text-slate-200 placeholder-slate-500 focus:outline-none"
-                  />
-                </div>
+              <div className="hidden md:flex flex-col items-start">
+                <span className="text-sm font-medium text-slate-200">{user.username}</span>
+                <span className="text-xs text-slate-500">
+                  {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-emerald-400">Online</span>
+                </span>
               </div>
 
               <div className="flex items-center gap-4">
-                <div className="hidden md:flex flex-col items-end text-right">
-                  <span className="text-sm font-medium text-slate-200">{user.username}</span>
-                  <span className="text-xs text-slate-500">
-                    {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-emerald-400">Online</span>
-                  </span>
-                </div>
                 <div className="flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-200">
                   {user.username.charAt(0).toUpperCase()}
                 </div>

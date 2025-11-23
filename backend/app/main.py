@@ -15,7 +15,7 @@ from app import __version__
 from app.api.routes import api_router
 from app.core.config import settings
 from app.services.users import ensure_admin_user
-from app.services import jobs, seed, telemetry
+from app.services import disk_monitor, jobs, seed, telemetry
 
 logger = logging.getLogger(__name__)
 @asynccontextmanager
@@ -25,11 +25,13 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     seed.seed_dev_data()
     await jobs.start_health_monitor()
     await telemetry.start_telemetry_monitor()
+    disk_monitor.start_monitoring()
     try:
         yield
     finally:
         await jobs.stop_health_monitor()
         await telemetry.stop_telemetry_monitor()
+        disk_monitor.stop_monitoring()
 
 
 def create_app() -> FastAPI:
