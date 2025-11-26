@@ -15,14 +15,14 @@
 | 🔴 High | Backend | Files API Integration Tests | ✅ Done | test_files_api_integration.py |
 | 🔴 High | Backend | Audit Logs → Database (statt JSON-Files) | ✅ Done | Database Migration |
 | 🔴 High | Backend | Upload-Progress Events (WebSocket/SSE) | ✅ Done | Real-time Updates |
-| 🔴 High | Backend | Backup/Restore Funktionalität | ⏳ Pending | Data Protection |
+| 🔴 High | Backend | Backup/Restore Funktionalität | ✅ Done | Data Protection |
 | 🔴 High | Backend | Share-Links System (Public Links mit Passwort & Ablaufdatum) | ✅ Done | File Sharing |
-| 🔴 High | Backend | Benutzerfreigaben Backend (Dateien mit anderen Benutzern teilen) | ✅ Done | Collaboration |
+| 🔴 High | Backend | Benutzerfreigaben Backend (Dateien mit anderen Benutzern teilen, granular Rechte-UI, Multi-User-Permissions) | ✅ Done | Collaboration, granular permissions |
 | 🔴 High | Backend | RAID-Management auf echte mdadm-Befehle erweitern | ⏳ Pending | Production Mode |
 | 🔴 High | Frontend | Exercise manual test plan in dev mode | ⏳ Pending | Testing |
 | 🔴 High | Frontend | Upload-Progress-UI mit Fortschrittsanzeige | ✅ Done | UX Enhancement |
 | 🔴 High | Frontend | Datei-Vorschau Modal (PDF, Bilder, Videos, Audio, Text) | ✅ Done | Completed |
-| 🔴 High | Frontend | Shares-Seite: Public Links & Benutzerfreigaben verwalten | ✅ Done | File Sharing UI |
+| 🔴 High | Frontend | Shares-Seite & FileManager: Public Links, Benutzerfreigaben, granular Rechte-UI, Multi-User-Permissions | ✅ Done | File Sharing UI, granular permissions (alle Regeln pro Datei werden immer vollständig übertragen und im Backend ersetzt) |
 | 🔴 High | Frontend | Shares-Seite: Edit-Dialoge für Links & Shares | ✅ Done | Phase 1 Complete |
 | 🔴 High | Frontend | Public Share Landing Page (/share/:token) | ✅ Done | Phase 1 Complete |
 | 🔴 High | Frontend | Shares: Filter & Suche Funktionalität | ✅ Done | Phase 1 Complete |

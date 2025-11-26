@@ -58,6 +58,12 @@ GET  /api/auth/me          - Current user
 
 ### 2. File Management
 
+#### Granulare Dateiberechtigungen
+- Für jede Datei können beliebig viele Berechtigungsregeln (pro Nutzer) gesetzt werden.
+- Beim Speichern werden immer alle Regeln für die Datei übertragen und im Backend vollständig ersetzt (keine inkrementelle Änderung).
+- Die UI lädt beim Öffnen alle existierenden Regeln aus dem Backend und zeigt sie an.
+- Änderungen, Hinzufügen und Entfernen von Regeln werden direkt übernommen.
+
 **Service:** `app/services/files.py`  
 **API Route:** `app/api/routes/files.py`  
 **Schemas:** `app/schemas/files.py`, `app/schemas/storage.py`
