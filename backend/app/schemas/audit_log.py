@@ -29,8 +29,7 @@ class AuditLogPublic(AuditLogBase):
     ip_address: Optional[str] = None
     user_agent: Optional[str] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class AuditLogQuery(BaseModel):

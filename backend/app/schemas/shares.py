@@ -52,8 +52,7 @@ class ShareLinkResponse(BaseModel):
     file_path: Optional[str] = None
     file_size: Optional[int] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ShareLinkAccessRequest(BaseModel):
@@ -110,8 +109,7 @@ class FileShareResponse(BaseModel):
     file_path: Optional[str] = None
     file_size: Optional[int] = None
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class SharedWithMeResponse(BaseModel):
@@ -132,8 +130,7 @@ class SharedWithMeResponse(BaseModel):
     expires_at: Optional[datetime]
     is_expired: bool
     
-    class Config:
-        from_attributes = True
+    model_config = {"from_attributes": True}
 
 
 class ShareStatistics(BaseModel):

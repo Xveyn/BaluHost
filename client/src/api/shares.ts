@@ -2,7 +2,7 @@
  * API client for file sharing functionality
  */
 
-import { apiClient } from '../lib/api';
+import { apiClient, memoizedApiRequest } from '../lib/api';
 
 export interface ShareLink {
   id: number;
@@ -148,10 +148,8 @@ export const createShareLink = async (data: CreateShareLinkRequest): Promise<Sha
 };
 
 export const listShareLinks = async (includeExpired = false): Promise<ShareLink[]> => {
-  const response = await apiClient.get('/shares/links', {
-    params: { include_expired: includeExpired }
-  });
-  return response.data;
+  // Memoized: Share-Links werden für 60s gecached
+  return memoizedApiRequest<ShareLink[]>('/shares/links', { include_expired: includeExpired });
 };
 
 export const getShareLink = async (linkId: number): Promise<ShareLink> => {
@@ -198,8 +196,8 @@ export const createFileShare = async (data: CreateFileShareRequest): Promise<Fil
 };
 
 export const listFileShares = async (): Promise<FileShare[]> => {
-  const response = await apiClient.get('/shares/user-shares');
-  return response.data;
+  // Memoized: FileShares werden für 60s gecached
+  return memoizedApiRequest<FileShare[]>('/shares/user-shares');
 };
 
 export const listFileSharesForFile = async (fileId: number): Promise<FileShare[]> => {

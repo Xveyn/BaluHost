@@ -5,6 +5,13 @@
 @layer base {
   body {
     @apply min-h-screen antialiased;
+    background: linear-gradient(135deg, 
+      #0f172a 0%, 
+      #1e1b4b 25%, 
+      #1e293b 50%, 
+      #0c0a1f 75%, 
+      #020617 100%);
+    background-attachment: fixed;
   }
 }
 

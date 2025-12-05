@@ -3,17 +3,19 @@ import { X } from 'lucide-react';
 import { createFileShare, type CreateFileShareRequest } from '../api/shares';
 import { apiClient } from '../lib/api';
 
+
 interface CreateFileShareModalProps {
   fileId?: number;
+  users: any[];
   onClose: () => void;
   onSuccess: () => void;
 }
 
-export default function CreateFileShareModal({ fileId, onClose, onSuccess }: CreateFileShareModalProps) {
-  const [files, setFiles] = useState<any[]>([]);
-  const [users, setUsers] = useState<any[]>([]);
+const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileShareModalProps) => {
   const [loading, setLoading] = useState(false);
-  const [loadingData, setLoadingData] = useState(true);
+  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [explorerPath, setExplorerPath] = useState<string>('/');
+  const [explorerFiles, setExplorerFiles] = useState<any[]>([]);
   const [formData, setFormData] = useState<CreateFileShareRequest>({
     file_id: fileId || 0,
     shared_with_user_id: 0,
@@ -24,23 +26,22 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
     expires_at: null
   });
 
+  // Load files for explorer
   useEffect(() => {
-    loadData();
-  }, []);
+    if (!fileId) {
+      fetchFiles(explorerPath);
+    }
+  }, [explorerPath, fileId]);
 
-  const loadData = async () => {
+  const fetchFiles = async (path: string) => {
+    setExplorerLoading(true);
     try {
-      const usersResponse = await apiClient.get('/users');
-      setUsers(usersResponse.data);
-      
-      if (!fileId) {
-        const filesResponse = await apiClient.get('/files/list', { params: { path: '/' } });
-        setFiles(filesResponse.data.files || []);
-      }
-    } catch (error) {
-      console.error('Failed to load data:', error);
+      const response = await apiClient.get('/files/list', { params: { path } });
+      setExplorerFiles(response.data.files || []);
+    } catch (err) {
+      setExplorerFiles([]);
     } finally {
-      setLoadingData(false);
+      setExplorerLoading(false);
     }
   };
 
@@ -60,44 +61,78 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
     } finally {
       setLoading(false);
     }
-  };
+  }
 
   return (
-    <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
+      <div className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-gray-800 shadow-2xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Share with User</h2>
+          <h2 className="text-xl font-bold text-white">Share with User</h2>
           <button
             onClick={onClose}
-            className="text-gray-500 hover:text-gray-700"
+            className="text-gray-400 hover:text-gray-200"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
-        {loadingData ? (
-          <div className="text-center py-8">Loading...</div>
-        ) : (
-          <form onSubmit={handleSubmit} className="space-y-4">
-            {/* File Selection */}
-            {!fileId && (
-              <div>
-                <label className="block text-sm font-medium mb-1">File</label>
-                <select
-                  value={formData.file_id}
-                  onChange={(e) => setFormData({ ...formData, file_id: Number(e.target.value) })}
-                  className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
-                  required
+        <form onSubmit={handleSubmit} className="space-y-4">
+          {/* File Explorer Selection */}
+          {!fileId && (
+            <div>
+              <label className="block text-sm font-medium mb-1 text-white">Select File to Share</label>
+              <div className="flex items-center gap-2 mb-2">
+                <span className="text-xs text-gray-400">{explorerPath}</span>
+                <button
+                  type="button"
+                  className="text-xs text-blue-400 hover:underline"
+                  disabled={explorerPath === '/'}
+                  onClick={() => {
+                    const parts = explorerPath.split('/').filter(Boolean);
+                    const newPath = '/' + parts.slice(0, -1).join('/') + (parts.length > 1 ? '/' : '');
+                    setExplorerPath(newPath);
+                  }}
                 >
-                  <option value={0}>Select a file...</option>
-                  {files.filter(f => !f.is_directory).map((file) => (
-                    <option key={file.id} value={file.id}>
-                      {file.name}
-                    </option>
-                  ))}
-                </select>
+                  ↑ Up
+                </button>
               </div>
-            )}
+              <select
+                className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:ring-2 focus:ring-blue-500 mb-2"
+                value={formData.file_id}
+                onChange={e => {
+                  const selectedId = Number(e.target.value);
+                  const selected = explorerFiles.find(f => f.id === selectedId);
+                  if (selected && selected.is_directory) {
+                    // Navigate into folder, reset file selection
+                    let newPath = explorerPath;
+                    if (!newPath.endsWith('/')) newPath += '/';
+                    newPath += selected.name + '/';
+                    setExplorerPath(newPath.replace(/\\/g, '/'));
+                    setFormData({ ...formData, file_id: 0 });
+                  } else {
+                    setFormData({ ...formData, file_id: selectedId });
+                  }
+                }}
+                required
+              >
+                <option value={0}>Select a file...</option>
+                {explorerFiles.map((file: any) => (
+                  file.is_directory ? (
+                    <option key={file.id} value={file.id} disabled className="text-gray-500 bg-gray-900">
+                      📁 {file.name}
+                    </option>
+                  ) : (
+                    <option key={file.id} value={file.id} className="text-white bg-gray-800">
+                      📄 {file.name}
+                    </option>
+                  )
+                ))}
+              </select>
+              {formData.file_id === 0 && (
+                <div className="text-xs text-red-400 mb-2">Please select a file to share.</div>
+              )}
+            </div>
+          )}
 
             {/* User Selection */}
             <div>
@@ -105,13 +140,14 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
               <select
                 value={formData.shared_with_user_id}
                 onChange={(e) => setFormData({ ...formData, shared_with_user_id: Number(e.target.value) })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:ring-2 focus:ring-blue-500"
                 required
+                disabled={users.length === 0}
               >
-                <option value={0}>Select a user...</option>
-                {users.map((user) => (
-                  <option key={user.id} value={user.id}>
-                    {user.username} ({user.email || 'no email'})
+                <option value={0} disabled>Select a user...</option>
+                {(users ?? []).map((user) => (
+                  <option key={user.id || user._id || user.email} value={user.id || user._id || ''}>
+                    {user.username || user.name || user.email || 'Unknown User'}
                   </option>
                 ))}
               </select>
@@ -119,14 +155,15 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
 
             {/* Permissions */}
             <div>
-              <label className="block text-sm font-medium mb-2">Permissions</label>
-              <div className="space-y-2 pl-4">
+              <label className="block text-sm font-medium mb-2 text-white">Permissions</label>
+              <div className={`space-y-2 pl-4 ${formData.shared_with_user_id === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
                 <label className="flex items-center">
                   <input
                     type="checkbox"
                     checked={formData.can_read}
                     onChange={(e) => setFormData({ ...formData, can_read: e.target.checked })}
                     className="mr-2"
+                    disabled={formData.shared_with_user_id === 0}
                   />
                   <span className="text-sm">Can Read (view and download)</span>
                 </label>
@@ -136,6 +173,7 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
                     checked={formData.can_write}
                     onChange={(e) => setFormData({ ...formData, can_write: e.target.checked })}
                     className="mr-2"
+                    disabled={formData.shared_with_user_id === 0}
                   />
                   <span className="text-sm">Can Write (edit file)</span>
                 </label>
@@ -145,6 +183,7 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
                     checked={formData.can_delete}
                     onChange={(e) => setFormData({ ...formData, can_delete: e.target.checked })}
                     className="mr-2"
+                    disabled={formData.shared_with_user_id === 0}
                   />
                   <span className="text-sm">Can Delete</span>
                 </label>
@@ -154,6 +193,7 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
                     checked={formData.can_share}
                     onChange={(e) => setFormData({ ...formData, can_share: e.target.checked })}
                     className="mr-2"
+                    disabled={formData.shared_with_user_id === 0}
                   />
                   <span className="text-sm">Can Share (re-share with others)</span>
                 </label>
@@ -163,7 +203,7 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
             {/* Expiration Date */}
             <div>
               <label className="block text-sm font-medium mb-1">
-                Expiration Date (Optional)
+                <span className="text-white">Expiration Date (Optional)</span>
               </label>
               <input
                 type="datetime-local"
@@ -172,7 +212,7 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
                   ...formData, 
                   expires_at: e.target.value || null 
                 })}
-                className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                className="w-full px-3 py-2 border border-gray-700 bg-gray-800 text-white rounded-lg focus:ring-2 focus:ring-blue-500"
               />
             </div>
 
@@ -181,21 +221,22 @@ export default function CreateFileShareModal({ fileId, onClose, onSuccess }: Cre
               <button
                 type="button"
                 onClick={onClose}
-                className="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200"
+                className="px-4 py-2 text-gray-300 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={loading || formData.file_id === 0 || formData.shared_with_user_id === 0}
-                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+                className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 border border-blue-700"
               >
                 {loading ? 'Sharing...' : 'Share File'}
               </button>
             </div>
           </form>
-        )}
       </div>
     </div>
   );
 }
+
+export default CreateFileShareModal;

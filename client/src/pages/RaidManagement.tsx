@@ -804,8 +804,8 @@ export default function RaidManagement() {
 
       {/* Format Dialog */}
       {showFormatDialog && selectedDisk && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={() => setShowFormatDialog(false)}>
-          <div className="w-full max-w-md rounded-2xl border border-slate-800/60 bg-slate-900/95 p-6 shadow-2xl" onClick={(e) => e.stopPropagation()}>
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl" onClick={() => setShowFormatDialog(false)}>
+          <div className="card w-full max-w-md border-rose-500/40 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(220,38,38,0.3)]" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-semibold text-white">Format Disk</h3>
             <p className="mt-2 text-sm text-slate-400">
               Format disk <span className="font-medium text-slate-200">/dev/{selectedDisk.name}</span>

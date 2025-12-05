@@ -90,7 +90,7 @@ function App() {
       return () => clearInterval(timer);
     }, []);
     return (
-      <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-slate-950 text-slate-100">
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
         <div className="pointer-events-none absolute inset-0">
           <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.25),_rgba(2,6,23,0)_60%)] blur-3xl" />
           <div className="absolute right-[-120px] top-1/3 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.22),_rgba(2,6,23,0)_60%)] blur-[130px]" />
@@ -134,7 +134,7 @@ function App() {
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
-                <FileManager />
+                <FileManager user={user} />
               </Layout>
             ) : (
               <Navigate to="/login" />

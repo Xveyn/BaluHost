@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
-import { buildApiUrl } from '../lib/api';
+import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api';
 import { UploadProgressModal } from '../components/UploadProgressModal';
 
 interface StorageInfo {
@@ -29,6 +29,7 @@ interface FileItem {
   type: 'file' | 'directory';
   modifiedAt: string;
   ownerId?: number;
+  ownerName?: string;
 }
 
 interface ApiFileItem {
@@ -204,8 +205,107 @@ function FileViewer({ file, onClose }: FileViewerProps) {
   );
 }
 
-export default function FileManager() {
-  const [files, setFiles] = useState<FileItem[]>([]);
+interface FileManagerProps {
+  user: {
+    id: string;
+    role: string;
+  };
+}
+
+export default function FileManager({ user }: FileManagerProps) {
+                    // User-Liste State ganz oben definieren
+                    const [allUsers, setAllUsers] = useState<Array<{ id: string; username: string }>>([]);
+                  // User-Liste immer beim Mount laden
+                  useEffect(() => {
+                    const token = getToken(false);
+                    if (!token) return;
+                    fetch(buildApiUrl('/api/users/'), {
+                      headers: { 'Authorization': `Bearer ${token}` }
+                    })
+                      .then(res => res.ok ? res.json() : null)
+                      .then(data => {
+                        if (data && Array.isArray(data.users)) {
+                          setAllUsers(data.users.map((u: any) => ({ id: String(u.id), username: u.username })));
+                          console.log('User-Liste:', data.users);
+                        } else {
+                          console.log('User-API liefert keine User:', data);
+                        }
+                      })
+                      .catch((err) => { console.log('User-API Fehler:', err); });
+                  }, []);
+                  // User-Liste State ganz oben definieren
+                  // (Deklaration bleibt nur einmal bestehen, doppelte Zeile entfernt)
+                  // Logging erst nach useState-Definition
+                  useEffect(() => {
+                    console.log('Aktuelle User-Liste:', allUsers);
+                  }, [allUsers]);
+      // State für Rechte-Modal
+      const [showEditPermissionsModal, setShowEditPermissionsModal] = useState(false);
+      const [fileToEditPermissions, setFileToEditPermissions] = useState<FileItem | null>(null);
+      // Neue State für Berechtigungsregeln
+      const [editRules, setEditRules] = useState<Array<{ userId: string; canView: boolean; canEdit: boolean; canDelete: boolean }>>([]);
+      // Nur eine Deklaration von allUsers/setAllUsers!
+      // (Deklaration bleibt nur einmal bestehen, doppelte Zeile entfernt)
+
+      // Hilfsfunktion: Ist aktueller User Owner/Admin?
+      function isCurrentUserOwnerOrAdmin(ownerId: number | undefined) {
+        if (!user) return false;
+        return user.role === 'admin' || String(ownerId) === String(user.id);
+      }
+
+      // Modal: Rechte bearbeiten
+      async function handleEditPermissionsSave() {
+        if (!fileToEditPermissions) return;
+        try {
+          // Sende alle Regeln in einem Request
+          await setFilePermissions({
+            path: fileToEditPermissions.path,
+            owner_id: fileToEditPermissions.ownerId ?? 0,
+            rules: editRules.map(rule => ({
+              user_id: Number(rule.userId),
+              can_view: rule.canView,
+              can_edit: rule.canEdit,
+              can_delete: rule.canDelete,
+            }))
+          });
+          toast.success('Berechtigungen gespeichert!');
+        } catch (err) {
+          toast.error('Fehler beim Speichern der Berechtigungen');
+        }
+        setShowEditPermissionsModal(false);
+        setFileToEditPermissions(null);
+      }
+    // User-Cache für Ownernamen
+    const [userCache, setUserCache] = useState<Record<string, string>>({});
+    const [files, setFiles] = useState<FileItem[]>([]);
+
+    useEffect(() => {
+      const ownerIds = files
+        .map(f => f.ownerId)
+        .filter(id => typeof id === 'string' || typeof id === 'number')
+        .map(id => String(id));
+      const uniqueIds = Array.from(new Set(ownerIds.filter(id => id !== 'null' && id !== 'undefined')));
+      if (uniqueIds.length === 0) return;
+      const token = getToken(false);
+      if (!token) return;
+        fetch(buildApiUrl('/api/users/'), {
+          headers: { 'Authorization': `Bearer ${token}` }
+        })
+          .then(res => res.ok ? res.json() : null)
+          .then(data => {
+            if (data && Array.isArray(data.users)) {
+              const cache: Record<string, string> = {};
+              for (const user of data.users) {
+                cache[String(user.id)] = user.username;
+              }
+              setUserCache(cache);
+              console.log('User-Liste:', data.users);
+            } else {
+              console.log('User-API liefert keine User:', data);
+            }
+          })
+          .catch((err) => { console.log('User-API Fehler:', err); });
+    }, [files]);
   const [currentPath, setCurrentPath] = useState('');
   const [loading, setLoading] = useState(false);
   const [uploading, setUploading] = useState(false);
@@ -238,16 +338,43 @@ export default function FileManager() {
     return error.error ?? error.detail ?? 'Unknown error';
   };
 
-  useEffect(() => {
-    loadMountpoints();
-  }, []);
+    useEffect(() => {
+      loadMountpoints();
+    }, []);
 
-  useEffect(() => {
-    if (selectedMountpoint) {
-      loadFiles(currentPath);
-      loadStorageInfo();
-    }
-  }, [currentPath, selectedMountpoint]);
+    useEffect(() => {
+      if (selectedMountpoint) {
+        loadFiles(currentPath);
+        loadStorageInfo();
+      }
+    }, [currentPath, selectedMountpoint]);
+
+    // Ownernamen nachladen, wenn Files geladen werden
+    useEffect(() => {
+      const fetchOwnerNames = async (ownerIds: (string | number)[]) => {
+        const uniqueIds = Array.from(new Set(ownerIds.filter(id => id !== undefined && id !== null && String(id) !== 'null')));
+        if (uniqueIds.length === 0) return;
+        const token = getToken(false);
+        if (!token) return;
+        try {
+          const response = await fetch(buildApiUrl('/api/users/'), {
+            headers: { 'Authorization': `Bearer ${token}` }
+          });
+          if (response.ok) {
+            const data = await response.json();
+            const cache: Record<string, string> = {};
+            for (const user of data.users) {
+              cache[user.id] = user.username;
+            }
+            setUserCache(cache);
+          }
+        } catch (err) {
+          // ignore
+        }
+      };
+      const ownerIds = files.map(f => f.ownerId).filter(id => id !== undefined && id !== null && String(id) !== 'null');
+      fetchOwnerNames(ownerIds);
+    }, [files]);
 
   const loadMountpoints = async () => {
     const token = getToken(false);
@@ -350,6 +477,8 @@ export default function FileManager() {
           size: file.size,
           type: file.type,
           modifiedAt: file.modified_at ?? file.mtime ?? new Date().toISOString(),
+          ownerId: (file as any).ownerId ?? (file as any).owner_id,
+          ownerName: (file as any).ownerName ?? (file as any).owner_name,
         }));
         setFiles(mappedFiles);
         
@@ -844,6 +973,7 @@ export default function FileManager() {
                   <th className="px-6 py-4">Type</th>
                   <th className="px-6 py-4">Size</th>
                   <th className="px-6 py-4">Modified</th>
+                  <th className="px-6 py-4">Owner</th>
                   <th className="px-6 py-4">Actions</th>
                 </tr>
               </thead>
@@ -886,6 +1016,15 @@ export default function FileManager() {
                       <td className="px-6 py-4 text-sm text-slate-500">
                         {new Date(file.modifiedAt).toLocaleString()}
                       </td>
+                      <td className="px-6 py-4 text-sm text-sky-400 font-mono">
+                        {file.ownerName && file.ownerName !== 'null'
+                          ? file.ownerName
+                          : (file.ownerId !== undefined && file.ownerId !== null && userCache[file.ownerId]
+                              ? userCache[file.ownerId]
+                              : (file.ownerId !== undefined && file.ownerId !== null
+                                  ? `UID ${file.ownerId}`
+                                  : '—'))}
+                      </td>
                       <td className="px-6 py-4 text-sm">
                         <div className="flex flex-wrap items-center gap-2">
                           {file.type === 'file' && (
@@ -916,7 +1055,148 @@ export default function FileManager() {
                           >
                             🗑 Delete
                           </button>
+                          {/* Owner/Admin: Edit Permissions */}
+                          {(isCurrentUserOwnerOrAdmin(file.ownerId)) && (
+                            <button
+                              onClick={async () => {
+                                setFileToEditPermissions(file);
+                                setShowEditPermissionsModal(true);
+                                // Lade existierende Regeln (Demo: nur Owner)
+                                try {
+                                  const perms = await getFilePermissions(file.path);
+                                  if (Array.isArray(perms.rules) && perms.rules.length > 0) {
+                                    setEditRules(perms.rules.map(rule => ({
+                                      userId: String(rule.user_id),
+                                      canView: rule.can_view,
+                                      canEdit: rule.can_edit,
+                                      canDelete: rule.can_delete,
+                                    })));
+                                  } else {
+                                    setEditRules([
+                                      {
+                                        userId: String(perms.owner_id ?? ''),
+                                        canView: true,
+                                        canEdit: true,
+                                        canDelete: true,
+                                      }
+                                    ]);
+                                  }
+                                } catch {
+                                  setEditRules([
+                                    {
+                                      userId: String(file.ownerId ?? ''),
+                                      canView: true,
+                                      canEdit: true,
+                                      canDelete: true,
+                                    }
+                                  ]);
+                                }
+                              }}
+                              className="rounded-xl border border-indigo-500/30 bg-indigo-500/10 px-3 py-1.5 text-xs font-medium text-indigo-200 transition hover:border-indigo-400/40 hover:bg-indigo-500/20"
+                            >
+                              ⚙ Rechte bearbeiten
+                            </button>
+                          )}
                         </div>
+                            {/* Edit Permissions Modal */}
+                            {showEditPermissionsModal && fileToEditPermissions && (
+                              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
+                                <div className="card w-full max-w-xl border-indigo-500/30 bg-slate-900/80">
+                                  <h3 className="text-xl font-semibold text-white">Rechte bearbeiten</h3>
+                                  <p className="mt-2 text-sm text-slate-400">Lege für jeden Nutzer eine Berechtigungsregel fest.</p>
+                                  <div className="mt-5 space-y-4">
+                                    {editRules.length > 0 && editRules.map((rule, idx) => (
+                                      <div key={idx} className="flex items-center gap-4 border-b border-slate-800/40 pb-4 mb-4">
+                                        <select
+                                          value={rule.userId}
+                                          onChange={e => {
+                                            const newRules = [...editRules];
+                                            newRules[idx].userId = e.target.value;
+                                            setEditRules(newRules);
+                                          }}
+                                          className="input w-48"
+                                        >
+                                          <option value="">Nutzer wählen...</option>
+                                          {allUsers.map(u => (
+                                            <option key={u.id} value={u.id}>{u.username}</option>
+                                          ))}
+                                        </select>
+                                        <label className="flex items-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={rule.canView}
+                                            onChange={e => {
+                                              const newRules = [...editRules];
+                                              newRules[idx].canView = e.target.checked;
+                                              setEditRules(newRules);
+                                            }}
+                                            className="mr-2"
+                                          />
+                                          <span className="text-sm">Sehen</span>
+                                        </label>
+                                        <label className="flex items-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={rule.canEdit}
+                                            onChange={e => {
+                                              const newRules = [...editRules];
+                                              newRules[idx].canEdit = e.target.checked;
+                                              setEditRules(newRules);
+                                            }}
+                                            className="mr-2"
+                                          />
+                                          <span className="text-sm">Bearbeiten</span>
+                                        </label>
+                                        <label className="flex items-center">
+                                          <input
+                                            type="checkbox"
+                                            checked={rule.canDelete}
+                                            onChange={e => {
+                                              const newRules = [...editRules];
+                                              newRules[idx].canDelete = e.target.checked;
+                                              setEditRules(newRules);
+                                            }}
+                                            className="mr-2"
+                                          />
+                                          <span className="text-sm">Löschen</span>
+                                        </label>
+                                        <button
+                                          onClick={() => {
+                                            setEditRules(editRules.filter((_, i) => i !== idx));
+                                          }}
+                                          className="ml-2 px-2 py-1 text-xs rounded bg-rose-900/40 text-rose-300 hover:bg-rose-900/60"
+                                        >
+                                          Entfernen
+                                        </button>
+                                      </div>
+                                    ))}
+                                    <button
+                                      onClick={() => setEditRules([...editRules, { userId: '', canView: true, canEdit: false, canDelete: false }])}
+                                      className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-4 py-2 text-sm font-medium text-indigo-200 transition hover:border-indigo-400/60 hover:bg-indigo-500/20"
+                                    >
+                                      + Regel hinzufügen
+                                    </button>
+                                  </div>
+                                  <div className="mt-6 flex justify-end gap-3">
+                                    <button
+                                      onClick={() => {
+                                        setShowEditPermissionsModal(false);
+                                        setFileToEditPermissions(null);
+                                      }}
+                                      className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+                                    >
+                                      Abbrechen
+                                    </button>
+                                    <button
+                                      onClick={handleEditPermissionsSave}
+                                      className="btn btn-primary"
+                                    >
+                                      Speichern
+                                    </button>
+                                  </div>
+                                </div>
+                              </div>
+                            )}
                       </td>
                     </tr>
                   ))
@@ -929,8 +1209,8 @@ export default function FileManager() {
 
       {/* New Folder Dialog */}
       {showNewFolderDialog && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
-          <div className="card w-full max-w-md border-slate-800/60 bg-slate-900/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl">
+          <div className="card w-full max-w-md border-slate-800/60 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)]">
             <h3 className="text-xl font-semibold text-white">Create New Folder</h3>
             <p className="mt-2 text-sm text-slate-400">Organise your storage pool with a dedicated directory.</p>
             <input
@@ -965,8 +1245,8 @@ export default function FileManager() {
 
       {/* Delete Confirmation Dialog */}
       {showDeleteDialog && fileToDelete && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
-          <div className="card w-full max-w-md border-rose-500/30 bg-slate-900/75">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl">
+          <div className="card w-full max-w-md border-rose-500/40 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(220,38,38,0.3)]">
             <h3 className="text-xl font-semibold text-white">Confirm Delete</h3>
             <p className="mt-3 text-sm text-slate-400">
               Are you sure you want to remove <span className="font-semibold text-slate-100">{fileToDelete.name}</span>?
@@ -995,8 +1275,8 @@ export default function FileManager() {
 
       {/* Rename Dialog */}
       {showRenameDialog && fileToRename && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
-          <div className="card w-full max-w-md border-slate-800/60 bg-slate-900/70">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl">
+          <div className="card w-full max-w-md border-slate-800/60 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)]">
             <h3 className="text-xl font-semibold text-white">Rename {fileToRename.type === 'directory' ? 'Folder' : 'File'}</h3>
             <p className="mt-3 text-sm text-slate-400">Update the display name without affecting the contents.</p>
             <input

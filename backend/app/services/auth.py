@@ -10,6 +10,9 @@ from app.core.config import settings
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.services import users as user_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class InvalidTokenError(Exception):
@@ -46,7 +49,11 @@ def decode_token(token: str) -> TokenPayload:
             settings.token_secret,
             algorithms=[settings.token_algorithm],
         )
+        # Log successful decode at debug level (non-sensitive fields only)
+        logger.debug("[AUTH] Token decoded: sub=%s, role=%s", decoded.get("sub"), decoded.get("role"))
     except jwt.PyJWTError as exc:  # pragma: no cover - small wrapper
+        # Log the exception to help debugging token validation issues
+        logger.exception("[AUTH] Failed to decode token: %s", exc)
         raise InvalidTokenError("Failed to decode token") from exc
 
     exp = decoded.get("exp")

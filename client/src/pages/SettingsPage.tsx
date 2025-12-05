@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Mail, Image, Palette, HardDrive, Clock, Activity, Download } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database } from 'lucide-react';
 import { apiClient } from '../lib/api';
-import AppearanceSettings from '../components/AppearanceSettings';
+import BackupSettings from '../components/BackupSettings';
 
 interface UserProfile {
   id: number;
@@ -38,7 +38,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'appearance' | 'storage' | 'activity'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -246,19 +246,17 @@ export default function SettingsPage() {
   // Early returns for loading and error states
   if (loading || !profile) {
     return (
-      <div className="p-6 bg-slate-950 min-h-screen">
-        <div className="text-center py-8 text-slate-100-secondary">
-          {loading ? 'Loading...' : 'Failed to load profile'}
-        </div>
+      <div className="text-center py-8 text-slate-400">
+        {loading ? 'Loading...' : 'Failed to load profile'}
       </div>
     );
   }
 
   return (
-    <div className="p-6 bg-slate-950 text-slate-100 min-h-screen">
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Settings</h1>
-        <p className="text-slate-100-secondary">Manage your account settings and preferences</p>
+    <div className="space-y-6">
+      <div>
+        <h1 className="text-3xl font-semibold text-white">Settings</h1>
+        <p className="mt-1 text-sm text-slate-400">Manage your account settings and preferences</p>
       </div>
 
       {/* Tabs */}
@@ -266,9 +264,9 @@ export default function SettingsPage() {
         {[
           { id: 'profile', label: 'Profile', icon: User },
           { id: 'security', label: 'Security', icon: Lock },
-          { id: 'appearance', label: 'Appearance', icon: Palette },
           { id: 'storage', label: 'Storage', icon: HardDrive },
-          { id: 'activity', label: 'Activity', icon: Activity }
+          { id: 'activity', label: 'Activity', icon: Activity },
+          ...(profile?.role === 'admin' ? [{ id: 'backup', label: 'Backup', icon: Database }] : [])
         ].map(tab => (
           <button
             key={tab.id}
@@ -285,12 +283,12 @@ export default function SettingsPage() {
         ))}
       </div>
 
-      <div className="max-w-4xl space-y-6">
+      <div className="w-full space-y-6">
         {/* Profile Tab */}
         {activeTab === 'profile' && (
           <>
             {/* Profile Card */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <div className="flex items-center space-x-4 mb-6">
                 <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold bg-gradient-to-br from-sky-500 to-violet-500">
                   {profile.avatar_url ? (
@@ -314,7 +312,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Avatar Upload */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Image className="w-5 h-5 mr-2 text-sky-400" />
                 Profile Picture
@@ -350,7 +348,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Email Update */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Mail className="w-5 h-5 mr-2 text-sky-400" />
                 Email Address
@@ -377,7 +375,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Account Info */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <User className="w-5 h-5 mr-2 text-sky-400" />
                 Account Information
@@ -404,7 +402,7 @@ export default function SettingsPage() {
         {activeTab === 'security' && (
           <>
             {/* Password Change */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Lock className="w-5 h-5 mr-2 text-sky-400" />
                 Change Password
@@ -453,7 +451,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Active Sessions */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Clock className="w-5 h-5 mr-2 text-sky-400" />
                 Active Sessions
@@ -490,7 +488,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Data Export */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Download className="w-5 h-5 mr-2 text-sky-400" />
                 Data Export
@@ -508,16 +506,16 @@ export default function SettingsPage() {
           </>
         )}
 
-        {/* Appearance Tab */}
-        {activeTab === 'appearance' && (
-          <AppearanceSettings />
+        {/* Backup Tab (Admin only) */}
+        {activeTab === 'backup' && profile?.role === 'admin' && (
+          <BackupSettings />
         )}
 
         {/* Storage Tab */}
         {activeTab === 'storage' && (
           <>
             {/* Storage Quota */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <HardDrive className="w-5 h-5 mr-2 text-sky-400" />
                 Storage Usage
@@ -563,7 +561,7 @@ export default function SettingsPage() {
             </div>
 
             {/* Storage Info */}
-            <div className="rounded-lg shadow bg-slate-900/55 p-6">
+            <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4">Storage Tips</h3>
               <ul className="space-y-2 text-slate-100-secondary">
                 <li className="flex items-start">
@@ -585,7 +583,7 @@ export default function SettingsPage() {
 
         {/* Activity Tab */}
         {activeTab === 'activity' && (
-          <div className="rounded-lg shadow bg-slate-900/55 p-6">
+          <div className="card border-slate-800/60 bg-slate-900/55">
             <h3 className="text-lg font-semibold mb-4 flex items-center">
               <Activity className="w-5 h-5 mr-2 text-sky-400" />
               Recent Activity
@@ -603,9 +601,48 @@ export default function SettingsPage() {
                       <div>
                         <p className="font-medium">{log.action.replace(/_/g, ' ')}</p>
                         {Object.keys(log.details).length > 0 && (
-                          <p className="text-sm text-slate-100-secondary">
-                            {JSON.stringify(log.details).substring(0, 100)}
-                          </p>
+                          Array.isArray(log.details.disks) || typeof log.details.disks === 'object' ? (
+                            <div className="mt-3">
+                              <div className="overflow-x-auto rounded-xl border border-slate-800/60 bg-slate-950/40">
+                                <table className="min-w-full text-xs">
+                                  <thead>
+                                    <tr className="border-b border-slate-800/60">
+                                      <th className="px-4 py-3 text-left text-sky-400 font-semibold">Drive</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_read_mbps</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_write_mbps</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">max_read_mbps</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">max_write_mbps</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_read_iops</th>
+                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_write_iops</th>
+                                    </tr>
+                                  </thead>
+                                  <tbody>
+                                    {Object.entries(log.details.disks).map(([drive, stats]: [string, any]) => (
+                                      <tr
+                                        key={drive}
+                                        className="border-b border-slate-800/40 last:border-0 transition-colors hover:bg-slate-800/30"
+                                      >
+                                        <td className="px-4 py-3 font-mono text-emerald-400 font-semibold">{drive}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.avg_read_mbps}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.avg_write_mbps}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.max_read_mbps}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.max_write_mbps}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.avg_read_iops}</td>
+                                        <td className="px-4 py-3 text-slate-300">{stats.avg_write_iops}</td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
+                              </div>
+                              {log.details.interval_seconds && (
+                                <div className="text-xs text-slate-500 mt-2">Interval: {log.details.interval_seconds}s</div>
+                              )}
+                            </div>
+                          ) : (
+                            <pre className="text-xs bg-slate-950/60 border border-slate-800/60 rounded-lg p-3 mt-2 overflow-x-auto text-emerald-400">
+                              {JSON.stringify(log.details, null, 2)}
+                            </pre>
+                          )
                         )}
                       </div>
                       <span

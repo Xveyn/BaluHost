@@ -74,7 +74,8 @@ const navIcon = {
   settings: (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
       <circle cx="12" cy="12" r="3" stroke="currentColor" />
-      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 1v6m0 6v10M1 12h6m6 0h10m-4.8 4.8l-7.2-7.2M5.6 5.6l7.2 7.2m4.4 0l-7.2-7.2m-4.4 4.4l7.2 7.2" />
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 8.5v-2a1.5 1.5 0 0 1 1.5-1.5h0a1.5 1.5 0 0 1 1.5 1.5v2m-3 7v2a1.5 1.5 0 0 0 1.5 1.5h0a1.5 1.5 0 0 0 1.5-1.5v-2m-7-3.5h-2a1.5 1.5 0 0 1-1.5-1.5v0a1.5 1.5 0 0 1 1.5-1.5h2m7 3h2a1.5 1.5 0 0 0 1.5-1.5v0a1.5 1.5 0 0 0-1.5-1.5h-2" />
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M16.2 7.8l1.4-1.4a1.5 1.5 0 0 1 2.1 0v0a1.5 1.5 0 0 1 0 2.1l-1.4 1.4m-10.6 0L6.3 8.5a1.5 1.5 0 0 1 0-2.1v0a1.5 1.5 0 0 1 2.1 0l1.4 1.4m0 8.4l-1.4 1.4a1.5 1.5 0 0 1-2.1 0v0a1.5 1.5 0 0 1 0-2.1l1.4-1.4m8.4 0l1.4 1.4a1.5 1.5 0 0 0 2.1 0v0a1.5 1.5 0 0 0 0-2.1l-1.4-1.4" />
     </svg>
   )
 } as const;
@@ -146,9 +147,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const renderLink = (path: string) => location.pathname === path;
 
   return (
-    <div className="relative min-h-screen overflow-hidden bg-slate-950 text-slate-100">
+    <div className="relative min-h-screen overflow-hidden text-slate-100">
       <div className="relative z-10 flex min-h-screen">
-        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-slate-800 bg-slate-900 backdrop-blur-xl">
+        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]">
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
@@ -209,7 +210,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         </aside>
 
         <div className="flex flex-1 flex-col lg:pl-72">
-          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800 bg-slate-950-secondary/90 px-6 py-6 shadow-2xl backdrop-blur-xl sm:px-8 lg:px-10">
+          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800/50 bg-slate-900/20 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-8 lg:px-10">
             <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
               <div className="hidden md:flex flex-col items-start">
                 <span className="text-sm font-medium text-slate-100">{user.username}</span>

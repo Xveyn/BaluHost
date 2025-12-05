@@ -1,3 +1,21 @@
+from pydantic import BaseModel
+from typing import List
+
+class FilePermissionRule(BaseModel):
+    user_id: int
+    can_view: bool = True
+    can_edit: bool = True
+    can_delete: bool = True
+
+class FilePermissions(BaseModel):
+    path: str
+    owner_id: int
+    rules: List[FilePermissionRule]
+
+class FilePermissionsRequest(BaseModel):
+    path: str
+    owner_id: int
+    rules: List[FilePermissionRule]
 from datetime import datetime
 from typing import Literal
 

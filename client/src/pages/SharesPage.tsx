@@ -18,6 +18,8 @@ import EditShareLinkModal from '../components/EditShareLinkModal';
 import EditFileShareModal from '../components/EditFileShareModal';
 
 export default function SharesPage() {
+    // User list for modal
+    const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'links' | 'shares' | 'shared-with-me'>('links');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [fileShares, setFileShares] = useState<FileShare[]>([]);
@@ -39,7 +41,26 @@ export default function SharesPage() {
 
   useEffect(() => {
     loadData();
+    fetchUsers();
   }, [activeTab]);
+
+  const fetchUsers = async () => {
+    try {
+      const token = localStorage.getItem('token');
+      if (!token) return;
+      const response = await fetch('/api/users/', {
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      const data = await response.json();
+      if (Array.isArray(data.users)) {
+        setUsers(data.users);
+      } else {
+        setUsers([]);
+      }
+    } catch (err) {
+      setUsers([]);
+    }
+  };
 
   const loadData = async () => {
     setLoading(true);
@@ -648,6 +669,7 @@ export default function SharesPage() {
       )}
       {showCreateShareModal && (
         <CreateFileShareModal
+          users={users}
           onClose={() => setShowCreateShareModal(false)}
           onSuccess={() => {
             setShowCreateShareModal(false);

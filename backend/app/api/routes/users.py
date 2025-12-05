@@ -18,7 +18,7 @@ async def list_users(
     is_active: bool | None = Query(None, description="Filter by active status"),
     sort_by: str = Query("created_at", description="Sort by field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    _: UserPublic = Depends(deps.get_current_admin),
+    _: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ) -> UsersResponse:
     # Build query

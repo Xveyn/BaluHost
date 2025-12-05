@@ -13,6 +13,8 @@ from app.schemas.files import (
     FolderCreateRequest,
     MoveRequest,
     RenameRequest,
+    FilePermissions,
+    FilePermissionsRequest,
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
@@ -21,7 +23,88 @@ from app.services.audit_logger_db import get_audit_logger_db
 from app.services.shares import ShareService
 from app.models.file_metadata import FileMetadata
 
+
 router = APIRouter()
+# ...existing code...
+
+# --- Permissions Endpoints ---
+@router.get("/permissions", response_model=FilePermissions)
+async def get_permissions(
+    path: str,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FilePermissions:
+    from app.services import file_metadata_db
+    from app.models.file_share import FileShare
+    metadata = file_metadata_db.get_metadata(path, db=db)
+    if not metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    # Alle Berechtigungsregeln für diese Datei auslesen
+    shares = db.query(FileShare).filter(FileShare.file_id == metadata.id).all()
+    rules = [
+        {
+            "user_id": share.shared_with_user_id,
+            "can_view": share.can_read,
+            "can_edit": share.can_write,
+            "can_delete": share.can_delete
+        }
+        for share in shares
+    ]
+    from app.schemas.files import FilePermissions, FilePermissionRule
+    return FilePermissions(
+        path=metadata.path,
+        owner_id=metadata.owner_id,
+        rules=[FilePermissionRule(**rule) for rule in rules]
+    )
+
+@router.put("/permissions", response_model=FilePermissions)
+async def set_permissions(
+    payload: FilePermissionsRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FilePermissions:
+    from app.services import file_metadata_db
+    from app.models.file_share import FileShare
+    # Nur Owner/Admin darf setzen
+    metadata = file_metadata_db.get_metadata(payload.path, db=db)
+    if not metadata:
+        raise HTTPException(status_code=404, detail="File not found")
+    from app.services.permissions import ensure_owner_or_privileged
+    ensure_owner_or_privileged(user, str(metadata.owner_id))
+    # Owner setzen
+    file_metadata_db.set_owner_id(payload.path, payload.owner_id, db=db)
+    # Bestehende Regeln löschen
+    db.query(FileShare).filter(FileShare.file_id == metadata.id).delete()
+    # Neue Regeln speichern
+    for rule in payload.rules:
+        share = FileShare(
+            file_id=metadata.id,
+            owner_id=payload.owner_id,
+            shared_with_user_id=rule.user_id,
+            can_read=rule.can_view,
+            can_write=rule.can_edit,
+            can_delete=rule.can_delete,
+            can_share=False
+        )
+        db.add(share)
+    db.commit()
+    # Rückgabe: aktuelle Regeln
+    shares = db.query(FileShare).filter(FileShare.file_id == metadata.id).all()
+    rules = [
+        {
+            "user_id": share.shared_with_user_id,
+            "can_view": share.can_read,
+            "can_edit": share.can_write,
+            "can_delete": share.can_delete
+        }
+        for share in shares
+    ]
+    from app.schemas.files import FilePermissions, FilePermissionRule
+    return FilePermissions(
+        path=payload.path,
+        owner_id=payload.owner_id,
+        rules=[FilePermissionRule(**rule) for rule in rules]
+    )
 
 
 @router.get("/mountpoints")

@@ -138,6 +138,25 @@ export default function UserManagement() {
     const token = localStorage.getItem('token');
     if (!token) return;
 
+    // Pflichtfelder validieren
+    if (!formData.username || !formData.email || !formData.password) {
+      toast.error('Bitte alle Pflichtfelder ausfüllen!');
+      return;
+    }
+    // Email Format grob prüfen
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email)) {
+      toast.error('Bitte eine gültige E-Mail-Adresse eingeben!');
+      return;
+    }
+
+    // Request-Body zusammenbauen
+    const payload = {
+      username: formData.username,
+      email: formData.email,
+      password: formData.password,
+      role: formData.role || 'user'
+    };
+
     try {
       const response = await fetch(buildApiUrl('/api/users/'), {
         method: 'POST',
@@ -145,7 +164,7 @@ export default function UserManagement() {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json'
         },
-        body: JSON.stringify(formData)
+        body: JSON.stringify(payload)
       });
 
       if (!response.ok) {
