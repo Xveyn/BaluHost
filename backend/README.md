@@ -4,13 +4,19 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 
 ## Features
 - **JWT Authentication** - Sichere Token-basierte Auth
-- **SQLite/PostgreSQL Database** - Persistente Datenspeicherung
+- **SQLite/PostgreSQL Database** - Persistente Datenspeicherung mit Alembic Migrations
 - **User Management** - CRUD Operations mit Rollen (Admin/User)
 - **File Metadata** - Database-backed Ownership & Permissions
+- **File Sharing** - Public Links mit Passwortschutz und Ablaufdatum
+- **Backup & Restore** - Vollständige und inkrementelle Backups mit Verschlüsselung
+- **Sync System** - Desktop Sync Client mit Konfliktauflösung
+- **Mobile Support** - Geräteregistrierung und Kamera-Backup
 - **System Monitoring** - CPU, RAM, Disk, Network via psutil
 - **RAID Management** - Simulation im Dev-Mode, Production-Ready
 - **Audit Logging** - Comprehensive Security & File Operation Logs
 - **Quota System** - Storage Limits & Monitoring
+- **Custom API Docs** - Styled Swagger UI matching frontend design
+- **Network Discovery** - mDNS/Bonjour for automatic server discovery
 - **Dev Mode** - Windows-kompatible Sandbox (2x5GB RAID1 = 5 GB effective)
 
 ## Quickstart
@@ -52,10 +58,17 @@ python -m uvicorn app.main:app --reload --port 3001
 # Kombinierter Start (Frontend + Backend): im Projektstamm
 python start_dev.py
 
-# API Dokumentation öffnen
-# http://localhost:3001/docs (Swagger UI)
+# API Dokumentation öffnen (Custom Styled)
+# http://localhost:3001/docs (Swagger UI - BaluHost Design)
 # http://localhost:3001/redoc (ReDoc)
 ```
+
+### Custom API Documentation
+Das Backend verwendet ein angepasstes Swagger UI Design:
+- **Dark Theme** - Passend zum Frontend Design
+- **Glassmorphism Effects** - Moderne UI-Effekte
+- **Color-coded Methods** - Farbcodierte HTTP-Methoden (GET, POST, PUT, DELETE)
+- **Enhanced Readability** - Verbesserte Lesbarkeit durch Custom Styling
 
 ### Development Tools
 ```bash
@@ -84,8 +97,15 @@ app/
       auth.py            # Login, Register, Token Management
       users.py           # User CRUD (Admin)
       files.py           # File Operations & Upload
+      upload_progress.py # Upload Progress Tracking
+      shares.py          # File Sharing
+      backup.py          # Backup & Restore
+      sync.py            # Sync System
+      sync_advanced.py   # Advanced Sync Features
+      mobile.py          # Mobile Device Management
       system.py          # System Metrics, RAID, SMART
       logging.py         # Audit Logs API
+    docs.py              # Custom Swagger UI Styling
     deps.py              # Dependencies (Auth, DB Session)
   core/
     config.py            # Settings & Logging Setup
@@ -94,10 +114,20 @@ app/
     base.py              # Base Model
     user.py              # User Model
     file_metadata.py     # FileMetadata Model
+    share.py             # Share Model
+    backup.py            # Backup Model
+    sync_folder.py       # SyncFolder Model
+    mobile_device.py     # MobileDevice Model
   services/              # Business Logic Layer
     auth.py              # JWT Token & Authentication
     users.py             # User CRUD Operations
     files.py             # File Operations (Upload, Delete, etc.)
+    shares.py            # File Sharing Logic
+    backup.py            # Backup/Restore Operations
+    sync.py              # Sync Logic
+    sync_background.py   # Background Sync Scheduler
+    mobile.py            # Mobile Device Management
+    network_discovery.py # mDNS/Bonjour Service
     file_metadata_db.py  # File Metadata DB Operations
     permissions.py       # Permission Checks
     audit_logger.py      # Security & File Audit Logging
@@ -105,6 +135,22 @@ app/
     disk_monitor.py      # Disk I/O Monitoring
     raid.py              # RAID Management
     smart.py             # SMART Disk Health
+    network_discovery.py # mDNS/Bonjour Service
+
+## API Endpoints
+
+### Core Endpoints
+- **Auth**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
+- **Files**: `/api/files/list`, `/api/files/upload`, `/api/files/download`, `/api/files/permissions`
+- **Shares**: `/api/shares` - File sharing with public links
+- **Backups**: `/api/backups` - Backup creation and restoration
+- **Sync**: `/api/sync/folders`, `/api/sync/conflicts` - Desktop sync
+- **Mobile**: `/api/mobile/devices`, `/api/mobile/camera/settings` - Mobile device management
+- **Users**: `/api/users` - User management (Admin only)
+- **System**: `/api/system/info`, `/api/system/raid/status`, `/api/system/smart/status`
+- **Logging**: `/api/logging/audit`, `/api/logging/disk-io`
+
+**Vollständige API-Referenz**: `http://localhost:3001/docs`
   schemas/               # Pydantic Models (Request/Response)
     auth.py              # Login, Register, Token
     user.py              # UserPublic, UserCreate, UserUpdate

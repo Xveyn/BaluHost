@@ -35,13 +35,23 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - File ownership and access control
 - Comprehensive audit logging
 
+### 🏠 Home Network Integration (iCloud/OneDrive Alternative)
+- **Windows Service** - Auto-start on boot, runs in background
+- **Network Drive** - Mount as `Z:` drive via WebDAV on all devices
+- **Auto-Discovery** - mDNS/Bonjour finds servers automatically
+- **Desktop Sync Client** - Real-time folder synchronization
+- **Web Interface** - Access from any browser in your network
+- **Multi-Platform** - Windows, Mac, Linux, iOS, Android support
+
 ### 📁 File Management
 - Drag & drop file upload
 - Multi-file/folder upload support
 - **File preview** - Images, videos, audio, PDFs, text files
+- **File sharing** - Public links with expiration & password protection
 - Create, rename, move, delete operations
 - Storage quota enforcement
 - File ownership tracking
+- Granular file permissions (per-user access control)
 
 ### 💾 RAID Management
 - Real-time RAID array status monitoring
@@ -57,6 +67,19 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - SMART disk health status
 - Storage capacity tracking
 
+### 💾 Backup & Restore
+- Create full or incremental backups
+- Schedule automatic backups
+- Restore from backup with integrity verification
+- Backup compression and encryption support
+
+### 🔄 Sync System
+- Desktop sync client for real-time synchronization
+- Selective folder sync with conflict resolution
+- Multi-device support
+- Mobile camera backup (iOS/Android)
+- Network discovery via mDNS/Bonjour
+
 ### 🎨 Modern UI/UX
 - Responsive design with Tailwind CSS
 - Real-time updates
@@ -68,14 +91,15 @@ BaluHost is a full-stack NAS management application built with modern web techno
 ### 🛠️ Developer-Friendly
 - **Dev Mode** - Full simulation environment (Windows-compatible!)
 - No database required for prototyping
-- Hot reload for both frontend and backend
+- Hot reload for both frontend and npmbackend
 - Comprehensive test suite (pytest)
 - Auto-generated API docs (Swagger/ReDoc)
 
 ## Architecture
 
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
-- **Backend (active):** FastAPI (Python 3.11+), Pydantic, `uvicorn`, background jobs for telemetry
+- **Backend (active):** FastAPI (Python 3.11+), Pydantic, SQLAlchemy, `uvicorn`, background jobs for telemetry
+- **Database:** SQLite (dev) / PostgreSQL (production) with Alembic migrations
 - **Legacy Backend:** Express/TypeScript (located in `server/`, no longer actively developed)
 - **Start Script:** `python start_dev.py` boots FastAPI (Port 3001) and Vite Dev Server (Port 5173)
 
@@ -89,10 +113,34 @@ BaluHost is a full-stack NAS management application built with modern web techno
    - `GET /api/files/list?path=`
    - `POST /api/files/upload`
    - `GET /api/files/download?path=`
-   - `POST /api/files/create-folder`
-   - `POST /api/files/rename`
-   - `POST /api/files/move`
-   - `DELETE /api/files/delete`
+   - `POST /api/files/folder`
+   - `PUT /api/files/rename`
+   - `PUT /api/files/move`
+   - `DELETE /api/files/{path}`
+   - `GET /api/files/permissions`
+   - `PUT /api/files/permissions`
+   - `GET /api/files/mountpoints`
+- **Shares**
+   - `GET /api/shares`
+   - `POST /api/shares`
+   - `GET /api/shares/{share_id}`
+   - `DELETE /api/shares/{share_id}`
+   - `GET /api/shares/public/{token}`
+- **Backups**
+   - `POST /api/backups`
+   - `GET /api/backups`
+   - `GET /api/backups/{backup_id}`
+   - `POST /api/backups/{backup_id}/restore`
+- **Sync**
+   - `GET /api/sync/folders`
+   - `POST /api/sync/folders`
+   - `GET /api/sync/conflicts`
+   - `POST /api/sync/conflicts/{conflict_id}/resolve`
+- **Mobile**
+   - `POST /api/mobile/token/generate`
+   - `POST /api/mobile/register`
+   - `GET /api/mobile/devices`
+   - `GET /api/mobile/camera/settings/{device_id}`
 - **Users (Admin)**
    - `GET /api/users`
    - `POST /api/users`
@@ -108,6 +156,11 @@ BaluHost is a full-stack NAS management application built with modern web techno
    - `GET /api/system/raid/status`
    - `POST /api/system/raid/degrade|rebuild|finalize` (Dev-Mode Simulation, Admin)
    - `POST /api/system/raid/options` (Production/Dev configuration via mdadm or Simulator)
+- **Logging**
+   - `GET /api/logging/audit`
+   - `GET /api/logging/disk-io`
+   - `GET /api/logging/file-access`
+   - `GET /api/logging/stats`
 
 ## Setup
 
@@ -144,6 +197,46 @@ python start_dev.py
 ```
 
 This script sets `NAS_MODE=dev`, starts FastAPI on Port 3001 and the Vite server on Port 5173, and maintains a 2x5GB RAID1 sandbox under `backend/dev-storage`.
+
+### 4. Production Deployment (Home Network)
+
+For using BaluHost as your personal cloud in your home network (like iCloud/OneDrive):
+
+```powershell
+# Install as Windows Service (requires Administrator)
+.\scripts\install_windows_service.ps1
+```
+
+This will:
+- ✅ Install BaluHost as a Windows Service with auto-start
+- ✅ Configure firewall rules for local network access
+- ✅ Set up WebDAV server for network drive mapping
+- ✅ Display your local IP for connecting other devices
+
+**📖 Full Home Network Setup Guide**: [docs/HEIMNETZ_SETUP.md](docs/HEIMNETZ_SETUP.md)
+
+**Access your private cloud:**
+- 🌐 Web Interface: `https://YOUR-PC-IP:5173` (frontend) / `https://YOUR-PC-IP:8000` (backend)
+- 💾 Network Drive: `\\YOUR-PC-IP@8080\webdav`
+- 📱 Desktop Sync Client: `client-desktop/sync_client_gui_v2.py`
+
+### 5. HTTPS Setup (mkcert for Trusted Certificates)
+
+BaluHost uses **mkcert** for locally-trusted HTTPS certificates (no browser warnings):
+
+**✅ Already installed** - Certificates in `dev-certs/` are valid until March 2028
+
+**For mobile devices** (one-time setup):
+```powershell
+# Export CA certificate for your phone/tablet
+.\scripts\export-ca-for-mobile.ps1
+```
+
+Then install the CA certificate on your mobile device:
+- **Android**: Settings → Security → Install certificate
+- **iOS**: Open file → Install Profile → Trust Certificate
+
+**📖 Full Mobile Setup Guide**: [docs/MKCERT_MOBILE_SETUP.md](docs/MKCERT_MOBILE_SETUP.md)
 
 ### Legacy Express Backend (optional)
 
@@ -278,8 +371,8 @@ baluhost/
 
 ### Auto-Generated API Documentation
 
-FastAPI provides interactive API documentation:
-- **Swagger UI:** http://localhost:3001/docs
+FastAPI provides interactive API documentation with custom BaluHost styling:
+- **Swagger UI:** http://localhost:3001/docs (Custom styled to match frontend)
 - **ReDoc:** http://localhost:3001/redoc
 
 ### Documentation Structure
@@ -374,10 +467,11 @@ See [TODO.md](TODO.md) for the complete roadmap.
 
 ## 📊 Project Stats
 
-- **Lines of Code:** ~15,000+
+- **Lines of Code:** ~20,000+
 - **Test Coverage:** 80%+ (backend)
-- **API Endpoints:** 25+
-- **React Components:** 20+
+- **API Endpoints:** 60+
+- **React Components:** 30+
+- **Database Tables:** 8+
 
 ## 🙏 Acknowledgments
 

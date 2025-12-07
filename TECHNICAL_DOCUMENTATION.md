@@ -130,7 +130,155 @@ DELETE /api/files/delete            - Delete
 
 ---
 
-### 3. User Management
+### 3. File Sharing System
+
+**Service:** `app/services/shares.py`  
+**API Route:** `app/api/routes/shares.py`  
+**Schemas:** `app/schemas/shares.py`
+
+#### Implemented Features:
+- **Public Share Links**
+  - Generate unique shareable links for files/folders
+  - Optional password protection
+  - Configurable expiration dates
+  - Access count tracking
+
+- **Share Management**
+  - Create, read, update, delete shares
+  - List all shares for a user
+  - Revoke access at any time
+  - Share activity logging
+
+- **Access Control**
+  - Password validation for protected shares
+  - Expiration check on every access
+  - Owner-only management
+  - Admin override capabilities
+
+#### API Endpoints:
+```
+GET  /api/shares                  - List user's shares
+POST /api/shares                  - Create new share
+GET  /api/shares/{share_id}       - Get share details
+DELETE /api/shares/{share_id}     - Delete share
+GET  /api/shares/public/{token}   - Access shared resource
+```
+
+---
+
+### 4. Backup & Restore System
+
+**Service:** `app/services/backup.py`  
+**API Route:** `app/api/routes/backup.py`  
+**Schemas:** `app/schemas/backup.py`
+
+#### Implemented Features:
+- **Backup Creation**
+  - Full and incremental backups
+  - Compression support (gzip, bzip2)
+  - Encryption with password protection
+  - Metadata preservation
+
+- **Backup Management**
+  - List all backups with metadata
+  - Size and date tracking
+  - Automatic cleanup of old backups
+  - Verification of backup integrity
+
+- **Restore Operations**
+  - Restore from backup with verification
+  - Selective file restoration
+  - Conflict resolution options
+  - Progress tracking
+
+#### API Endpoints:
+```
+POST /api/backups                      - Create backup
+GET  /api/backups                      - List backups
+GET  /api/backups/{backup_id}          - Get backup details
+POST /api/backups/{backup_id}/restore  - Restore backup
+DELETE /api/backups/{backup_id}        - Delete backup
+```
+
+---
+
+### 5. Sync System
+
+**Service:** `app/services/sync.py`, `app/services/sync_background.py`  
+**API Routes:** `app/api/routes/sync.py`, `app/api/routes/sync_advanced.py`  
+**Schemas:** `app/schemas/sync.py`
+
+#### Implemented Features:
+- **Desktop Sync Client**
+  - Real-time folder synchronization
+  - Selective folder sync
+  - Conflict detection and resolution
+  - Bidirectional sync support
+
+- **Background Processing**
+  - Scheduled sync jobs
+  - Automatic conflict detection
+  - File change monitoring
+  - Bandwidth throttling
+
+- **Conflict Resolution**
+  - Manual and automatic resolution
+  - Version history preservation
+  - Conflict notification system
+  - Merge strategies
+
+#### API Endpoints:
+```
+GET  /api/sync/folders                        - List sync folders
+POST /api/sync/folders                        - Create sync folder
+GET  /api/sync/conflicts                      - List conflicts
+POST /api/sync/conflicts/{id}/resolve         - Resolve conflict
+GET  /api/sync/status                         - Sync status
+POST /api/sync/force                          - Force sync
+```
+
+---
+
+### 6. Mobile Support
+
+**Service:** `app/services/mobile.py`  
+**API Route:** `app/api/routes/mobile.py`  
+**Schemas:** `app/schemas/mobile.py`
+
+#### Implemented Features:
+- **Device Registration**
+  - Secure token-based registration
+  - Device management and tracking
+  - Multiple device support per user
+  - Device naming and identification
+
+- **Camera Backup**
+  - Automatic photo/video backup
+  - Configurable backup settings
+  - WiFi-only or cellular options
+  - Battery-aware scheduling
+
+- **Sync Configuration**
+  - Per-device sync folder configuration
+  - Selective folder sync on mobile
+  - Background sync support
+  - Conflict resolution on mobile
+
+#### API Endpoints:
+```
+POST /api/mobile/token/generate               - Generate registration token
+POST /api/mobile/register                     - Register mobile device
+GET  /api/mobile/devices                      - List devices
+GET  /api/mobile/devices/{device_id}          - Get device details
+PATCH /api/mobile/devices/{device_id}         - Update device
+DELETE /api/mobile/devices/{device_id}        - Delete device
+GET  /api/mobile/camera/settings/{device_id}  - Get camera backup settings
+PUT  /api/mobile/camera/settings/{device_id}  - Update camera settings
+```
+
+---
+
+### 7. User Management
 
 **Service:** `app/services/users.py`  
 **API Route:** `app/api/routes/users.py`  
@@ -160,7 +308,7 @@ DELETE /api/users/{id}      - Delete user (Admin)
 
 ---
 
-### 4. System Monitoring & Telemetry
+### 8. System Monitoring & Telemetry
 
 **Services:** `app/services/system.py`, `app/services/telemetry.py`, `app/services/disk_monitor.py`  
 **API Route:** `app/api/routes/system.py`  
@@ -168,19 +316,19 @@ DELETE /api/users/{id}      - Delete user (Admin)
 
 #### Implemented Features:
 
-##### 4.1 System Info
+##### 8.1 System Info
 - CPU usage (psutil)
 - RAM usage (Total, Used, Free)
 - Network statistics (Sent/Received)
 - Uptime & operating system info
 
-##### 4.2 Telemetry History
+##### 8.2 Telemetry History
 - **Background Task** collects metrics every N seconds
 - Configurable: `TELEMETRY_INTERVAL_SECONDS` (Default: 3s)
 - History size: `TELEMETRY_HISTORY_SIZE` (Default: 60 Samples)
 - Metrics: CPU%, RAM%, Network TX/RX
 
-##### 4.3 Disk I/O Monitor
+##### 8.3 Disk I/O Monitor
 - **Real-time monitoring** of all physical disks
 - Sampling: 1 second
 - History: 120 samples (2 minutes)
@@ -192,12 +340,12 @@ DELETE /api/users/{id}      - Delete user (Admin)
   - Linux: `sda`, `sdb`, `nvme0n1`, ...
 - **Audit Logging:** Automatic summary every 60 seconds
 
-##### 4.4 Storage Info
+##### 8.4 Storage Info
 - Total storage & usage
 - Available storage
 - Quota information
 
-##### 4.5 Process List
+##### 8.5 Process List
 - Top N processes by CPU/RAM
 - PID, Name, CPU%, Memory%
 
@@ -213,7 +361,7 @@ GET /api/system/disk-io/history     - Disk I/O history
 
 ---
 
-### 5. RAID Management
+### 9. RAID Management
 
 **Service:** `app/services/raid.py`  
 **API Route:** `app/api/routes/system.py`
@@ -343,7 +491,7 @@ POST /api/system/raid/delete-array      - Delete array (Admin)
 
 ---
 
-### 6. SMART Monitoring
+### 10. SMART Monitoring
 
 **Service:** `app/services/smart.py`  
 **API Route:** `app/api/routes/system.py`
@@ -384,7 +532,7 @@ GET /api/system/smart/status     - SMART status of all disks
 
 ---
 
-### 7. Audit Logging
+### 11. Audit Logging
 
 **Service:** `app/services/audit_logger.py`  
 **API Route:** `app/api/routes/logging.py`
@@ -425,7 +573,7 @@ GET /api/logging/audit/filter       - Filtered logs
 
 ---
 
-### 8. Background Jobs
+### 12. Background Jobs
 
 **Service:** `app/services/jobs.py`
 
@@ -446,7 +594,108 @@ GET /api/logging/audit/filter       - Filtered logs
 
 ---
 
-### 9. Dev-Mode Simulation
+### 13. Database Integration
+
+**ORM:** SQLAlchemy 2.0+  
+**Migration Tool:** Alembic  
+**Models:** `app/models/`
+
+#### Implemented Features:
+- **Database Models**
+  - User model with authentication data
+  - FileMetadata model for file ownership
+  - Share model for file sharing
+  - Backup model for backup management
+  - SyncFolder model for sync configuration
+  - MobileDevice model for mobile registration
+  - AuditLog model for security logging
+
+- **Database Operations**
+  - CRUD operations via SQLAlchemy
+  - Relationship management (foreign keys)
+  - Transaction support
+  - Database session management
+
+- **Migrations**
+  - Alembic for schema versioning
+  - Automatic migration generation
+  - Rollback support
+  - Database upgrade/downgrade
+
+- **Database Support**
+  - SQLite for development
+  - PostgreSQL for production
+  - Configurable via DATABASE_URL
+
+#### Database Schema:
+```sql
+CREATE TABLE users (
+    id INTEGER PRIMARY KEY,
+    username VARCHAR(50) UNIQUE NOT NULL,
+    email VARCHAR(100) NOT NULL,
+    hashed_password VARCHAR(255) NOT NULL,
+    role VARCHAR(20) NOT NULL,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE file_metadata (
+    id INTEGER PRIMARY KEY,
+    path VARCHAR(1000) UNIQUE NOT NULL,
+    name VARCHAR(255) NOT NULL,
+    owner_id INTEGER NOT NULL,
+    size_bytes INTEGER NOT NULL,
+    is_directory BOOLEAN NOT NULL,
+    mime_type VARCHAR(100),
+    parent_path VARCHAR(1000),
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+
+CREATE TABLE shares (
+    id INTEGER PRIMARY KEY,
+    token VARCHAR(64) UNIQUE NOT NULL,
+    file_path VARCHAR(1000) NOT NULL,
+    owner_id INTEGER NOT NULL,
+    password_hash VARCHAR(255),
+    expires_at TIMESTAMP,
+    access_count INTEGER DEFAULT 0,
+    created_at TIMESTAMP,
+    FOREIGN KEY (owner_id) REFERENCES users(id)
+);
+
+-- Additional tables: backups, sync_folders, mobile_devices, audit_logs
+```
+
+---
+
+### 14. Custom API Documentation
+
+**Module:** `app/api/docs.py`
+
+#### Implemented Features:
+- **Custom Swagger UI**
+  - BaluHost branded styling
+  - Matches frontend design (dark theme, glassmorphism)
+  - Custom colors and fonts
+  - Enhanced readability
+
+- **Styling Features**
+  - Dark background with gradient
+  - Custom topbar with BaluHost branding
+  - Color-coded HTTP methods (GET, POST, PUT, DELETE)
+  - Glassmorphism effects on cards
+  - Smooth transitions and hover effects
+
+- **Documentation Access**
+  - Swagger UI: `/docs`
+  - ReDoc: `/redoc`
+  - Auto-generated from FastAPI schemas
+
+---
+
+### 15. Dev-Mode Simulation
 
 **Configuration:** `app/core/config.py`  
 **Services:** All services with Dev-Mode support
@@ -817,6 +1066,12 @@ Baluhost/
 │   │   │   ├── audit_logger.py
 │   │   │   ├── permissions.py
 │   │   │   ├── file_metadata.py
+│   │   │   ├── shares.py           # File sharing
+│   │   │   ├── backup.py           # Backup/restore
+│   │   │   ├── sync.py             # Sync system
+│   │   │   ├── sync_background.py  # Background sync
+│   │   │   ├── mobile.py           # Mobile support
+│   │   │   ├── network_discovery.py # mDNS/Bonjour
 │   │   │   ├── jobs.py
 │   │   │   └── seed.py
 │   │   └── main.py               # FastAPI App
@@ -968,11 +1223,17 @@ npm run test:e2e    # E2E tests (Placeholder)
 
 ## 📝 API Documentation
 
-Complete API reference: See `README.md` in root directory.
+Complete API reference: See `docs/API_REFERENCE.md`.
 
-**FastAPI Docs (automatically generated):**
-- Swagger UI: http://localhost:3001/docs
+**FastAPI Docs (automatically generated with custom styling):**
+- Swagger UI: http://localhost:3001/docs (Custom BaluHost design)
 - ReDoc: http://localhost:3001/redoc
+
+**Custom Swagger Features:**
+- Dark theme matching frontend design
+- Glassmorphism effects
+- Color-coded endpoints by HTTP method
+- Enhanced readability and navigation
 
 ---
 
@@ -1063,6 +1324,6 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** November 2025  
-**Version:** 1.0.0  
+**Last Updated:** December 2025  
+**Version:** 1.2.0  
 **Maintainer:** Xveyn
