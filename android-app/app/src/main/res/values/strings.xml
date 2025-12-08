@@ -1,0 +1,51 @@
+<resources>
+    <string name="app_name">BaluHost</string>
+    
+    <!-- Common -->
+    <string name="error_generic">An error occurred. Please try again.</string>
+    <string name="error_network">Network error. Please check your connection.</string>
+    <string name="loading">Loading…</string>
+    <string name="retry">Retry</string>
+    <string name="cancel">Cancel</string>
+    <string name="save">Save</string>
+    <string name="delete">Delete</string>
+    
+    <!-- Registration -->
+    <string name="scan_qr_title">Scan QR Code</string>
+    <string name="scan_qr_description">Point your camera at the QR code displayed on your desktop</string>
+    <string name="camera_permission_required">Camera permission is required to scan QR codes</string>
+    <string name="registration_success">Device registered successfully</string>
+    <string name="registration_failed">Registration failed: %s</string>
+    
+    <!-- VPN -->
+    <string name="vpn_connected">VPN Connected</string>
+    <string name="vpn_disconnected">VPN Disconnected</string>
+    <string name="vpn_connecting">Connecting…</string>
+    <string name="vpn_connect">Connect</string>
+    <string name="vpn_disconnect">Disconnect</string>
+    <string name="vpn_permission_required">VPN permission is required for secure remote access</string>
+    
+    <!-- Files -->
+    <string name="files_title">Files</string>
+    <string name="upload_file">Upload File</string>
+    <string name="download_file">Download</string>
+    <string name="delete_file">Delete File</string>
+    <string name="delete_confirm">Are you sure you want to delete %s?</string>
+    <string name="upload_progress">Uploading %d%%</string>
+    <string name="download_progress">Downloading %d%%</string>
+    
+    <!-- Settings -->
+    <string name="settings_title">Settings</string>
+    <string name="camera_backup">Camera Backup</string>
+    <string name="camera_backup_enabled">Automatic backup enabled</string>
+    <string name="wifi_only">WiFi only</string>
+    <string name="logout">Logout</string>
+    
+    <!-- Notifications -->
+    <string name="vpn_notification_channel">VPN Service</string>
+    <string name="vpn_notification_title">BaluHost VPN</string>
+    <string name="vpn_notification_text">Connection active</string>
+    <string name="backup_notification_channel">Camera Backup</string>
+    <string name="backup_notification_title">Camera Backup</string>
+    <string name="backup_notification_progress">Backing up photos…</string>
+</resources>
