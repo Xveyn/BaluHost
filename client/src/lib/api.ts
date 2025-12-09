@@ -22,6 +22,7 @@ export interface MobileRegistrationToken {
   expires_at: string;
   qr_code: string;
   vpn_config?: string;
+  device_token_validity_days: number;
 }
 
 export interface MobileDevice {
@@ -34,13 +35,22 @@ export interface MobileDevice {
   app_version: string | null;
   is_active: boolean;
   last_sync: string | null;
+  expires_at: string | null;
   created_at: string;
   updated_at: string | null;
 }
 
-export async function generateMobileToken(includeVpn: boolean = false, deviceName: string = 'Mobile Device'): Promise<MobileRegistrationToken> {
+export async function generateMobileToken(
+  includeVpn: boolean = false, 
+  deviceName: string = 'Mobile Device',
+  tokenValidityDays: number = 90
+): Promise<MobileRegistrationToken> {
   const res = await apiClient.post('/api/mobile/token/generate', null, {
-    params: { include_vpn: includeVpn, device_name: deviceName }
+    params: { 
+      include_vpn: includeVpn, 
+      device_name: deviceName,
+      token_validity_days: tokenValidityDays
+    }
   });
   return res.data;
 }
@@ -52,6 +62,22 @@ export async function getMobileDevices(): Promise<MobileDevice[]> {
 
 export async function deleteMobileDevice(deviceId: string): Promise<void> {
   await apiClient.delete(`/api/mobile/devices/${deviceId}`);
+}
+
+export interface ExpirationNotification {
+  id: string;
+  notification_type: string;
+  sent_at: string;
+  success: boolean;
+  error_message: string | null;
+  device_expires_at: string | null;
+}
+
+export async function getDeviceNotifications(deviceId: string, limit: number = 10): Promise<ExpirationNotification[]> {
+  const res = await apiClient.get(`/api/mobile/devices/${deviceId}/notifications`, {
+    params: { limit }
+  });
+  return res.data;
 }
 
 // --- File Permissions API ---

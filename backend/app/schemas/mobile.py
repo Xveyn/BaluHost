@@ -31,6 +31,7 @@ class MobileDeviceCreate(BaseModel):
     token: str = Field(..., description="One-time registration token from QR code")
     device_info: DeviceInfo = Field(..., alias="deviceInfo")
     push_token: Optional[str] = Field(None, alias="pushToken")
+    token_validity_days: Optional[int] = Field(None, alias="tokenValidityDays", description="Token validity in days (30-180)")
     
     class Config:
         populate_by_name = True
@@ -49,6 +50,7 @@ class MobileDevice(MobileDeviceBase):
     user_id: str
     is_active: bool
     last_sync: Optional[datetime] = None
+    expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None
 
@@ -63,6 +65,7 @@ class MobileRegistrationToken(BaseModel):
     expires_at: datetime = Field(..., description="Token expiration time")
     qr_code: str = Field(..., description="Base64 encoded QR code image")
     vpn_config: Optional[str] = Field(None, description="Base64 encoded WireGuard config (optional)")
+    device_token_validity_days: int = Field(..., description="Device token validity in days (30-180)")
 
 
 class MobileRegistrationResponse(BaseModel):
@@ -125,3 +128,18 @@ class UploadProgress(BaseModel):
     status: str = Field("uploading", description="uploading, completed, failed")
     speed_mbps: Optional[float] = None
     eta_seconds: Optional[int] = None
+
+
+class ExpirationNotification(BaseModel):
+    """Schema for expiration notification history."""
+    id: str
+    device_id: str
+    notification_type: str = Field(..., description="7_days, 3_days, or 1_hour")
+    sent_at: datetime
+    success: bool
+    fcm_message_id: Optional[str] = None
+    error_message: Optional[str] = None
+    device_expires_at: datetime
+    
+    class Config:
+        from_attributes = True

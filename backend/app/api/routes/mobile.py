@@ -29,27 +29,79 @@ async def generate_registration_token(
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
     include_vpn: bool = False,
-    device_name: str = "iOS Device"
+    device_name: str = "iOS Device",
+    token_validity_days: int = 90
 ):
     """
     Generate a QR code token for mobile device registration.
     
+    **SECURITY: Localhost-only registration**
+    This endpoint can only be accessed from localhost (127.0.0.1, ::1)
+    to prevent remote device hijacking.
+    
     Only authenticated users can generate tokens.
-    Token is valid for 5 minutes and can only be used once.
+    Registration token is valid for 5 minutes and can only be used once.
+    Device token is valid for token_validity_days (30-180 days).
     
     Parameters:
     - include_vpn: Include WireGuard VPN configuration in QR code
     - device_name: Device name for VPN client registration
+    - token_validity_days: Device token validity (30-180 days, default 90)
+    
+    Raises:
+    - 403: If not accessed from localhost
+    - 400: If token_validity_days is out of range
     """
+    # SECURITY: Validate localhost-only access
+    client_host = request.client.host if request.client else None
+    localhost_ips = ["127.0.0.1", "::1", "localhost"]
+    
+    if client_host not in localhost_ips:
+        # Allow dev mode with local network IPs for testing
+        from app.core.config import get_settings
+        settings = get_settings()
+        
+        # In production or if not explicitly in dev network, reject non-localhost
+        if not (settings.nas_mode == "dev" and client_host and client_host.startswith("192.168.")):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Mobile device registration is only allowed from localhost for security reasons. "
+                       "Please access BaluHost from http://localhost:8000 or http://127.0.0.1:8000"
+            )
+    
+    # Validate token_validity_days range (30 days minimum, 180 days maximum)
+    if token_validity_days < 30 or token_validity_days > 180:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="token_validity_days must be between 30 and 180 days"
+        )
+    
     from app.core.config import get_settings
     settings = get_settings()
     
-    # ALWAYS use configured URL for mobile devices (ignore request URL to avoid .local domains)
-    # Use HTTP for mobile during dev (Android network_security_config allows cleartext for 192.168.178.x)
-    server_url = settings.mobile_server_url or "http://192.168.178.21:8000"
+    # Determine server URL for mobile devices
+    if settings.mobile_server_url:
+        server_url = settings.mobile_server_url
+    else:
+        # Auto-detect local IP address for QR code
+        import socket
+        try:
+            # Create a socket to determine the local IP used to reach the internet
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.settimeout(0.1)
+            # Connect to Google DNS (doesn't actually send data)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            # Fallback to localhost if detection fails
+            local_ip = "127.0.0.1"
+        
+        # Use HTTP for mobile (Android network_security_config allows cleartext for local IPs)
+        server_url = f"http://{local_ip}:8000"
     
     # Debug output
-    print(f"[Mobile Token] Using server URL: {server_url}")
+    print(f"[Mobile Token] Client: {client_host}, Server URL: {server_url}, Token validity: {token_validity_days} days")
     
     return MobileService.generate_registration_token(
         db=db,
@@ -57,7 +109,8 @@ async def generate_registration_token(
         server_url=server_url,
         expires_minutes=5,
         include_vpn=include_vpn,
-        device_name=device_name
+        device_name=device_name,
+        token_validity_days=token_validity_days
     )
 
 
@@ -141,6 +194,117 @@ async def delete_device(
         user_id=str(current_user.id)
     )
     return None
+
+
+@router.post("/devices/{device_id}/push-token", response_model=dict)
+async def register_push_token(
+    device_id: str,
+    push_token: str,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Register or update FCM push notification token for a device.
+    
+    This endpoint should be called by the mobile app:
+    - On first app launch after registration
+    - When FCM token is refreshed by Firebase SDK
+    - On app startup to ensure token is up-to-date
+    
+    Args:
+        device_id: ID of the device
+        push_token: Firebase Cloud Messaging registration token
+        
+    Returns:
+        dict: Confirmation with token verification status
+    """
+    from app.services.firebase_service import FirebaseService
+    
+    # Verify device belongs to user
+    device = MobileService.get_device(
+        db=db,
+        device_id=device_id,
+        user_id=str(current_user.id)
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found"
+        )
+    
+    # Update push token
+    device.push_token = push_token
+    db.commit()
+    
+    # Optionally verify token with Firebase (if initialized)
+    token_valid = False
+    if FirebaseService.is_available():
+        token_valid = FirebaseService.verify_token(push_token)
+    
+    print(f"[Mobile] Registered FCM token for {device.device_name}: {push_token[:20]}... (valid: {token_valid})")
+    
+    return {
+        "success": True,
+        "device_id": device_id,
+        "token_verified": token_valid,
+        "message": "Push token registered successfully"
+    }
+
+
+@router.get("/devices/{device_id}/notifications", response_model=List[dict])
+async def get_device_notifications(
+    device_id: str,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Get notification history for a device.
+    
+    Returns the last N notifications sent to this device,
+    including expiration warnings and status updates.
+    
+    Args:
+        device_id: ID of the device
+        limit: Maximum number of notifications to return (default 10)
+        
+    Returns:
+        List of notifications with sent_at, type, success status
+    """
+    from app.models.mobile import ExpirationNotification as ExpirationNotificationModel
+    
+    # Verify device belongs to user
+    device = MobileService.get_device(
+        db=db,
+        device_id=device_id,
+        user_id=str(current_user.id)
+    )
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found"
+        )
+    
+    # Query notification history
+    notifications = (
+        db.query(ExpirationNotificationModel)
+        .filter(ExpirationNotificationModel.device_id == device_id)
+        .order_by(ExpirationNotificationModel.sent_at.desc())
+        .limit(limit)
+        .all()
+    )
+    
+    return [
+        {
+            "id": notif.id,
+            "notification_type": notif.notification_type,
+            "sent_at": notif.sent_at.isoformat(),
+            "success": notif.success,
+            "error_message": notif.error_message,
+            "device_expires_at": notif.device_expires_at.isoformat() if notif.device_expires_at else None
+        }
+        for notif in notifications
+    ]
 
 
 # Camera Backup Endpoints

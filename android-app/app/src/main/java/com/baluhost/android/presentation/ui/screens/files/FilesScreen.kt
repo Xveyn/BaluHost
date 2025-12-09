@@ -3,6 +3,7 @@ package com.baluhost.android.presentation.ui.screens.files
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,12 +14,17 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.FileItem
+import com.baluhost.android.presentation.ui.components.GlassCard
+import com.baluhost.android.presentation.ui.components.GlassIntensity
+import com.baluhost.android.presentation.ui.components.GradientButton
+import com.baluhost.android.presentation.ui.theme.*
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -30,6 +36,7 @@ import java.util.*
 @Composable
 fun FilesScreen(
     onNavigateToVpn: () -> Unit,
+    onNavigateToSettings: () -> Unit = {},
     viewModel: FilesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -57,228 +64,266 @@ fun FilesScreen(
         }
     }
     
-    Scaffold(
-        topBar = {
-            TopAppBar(
-                title = { 
-                    Column {
-                        Text("Files")
-                        if (uiState.currentPath.isNotEmpty()) {
-                            Text(
-                                text = "/${uiState.currentPath}",
-                                style = MaterialTheme.typography.bodySmall,
-                                color = MaterialTheme.colorScheme.onSurfaceVariant
-                            )
-                        }
-                    }
-                },
-                navigationIcon = {
-                    if (uiState.currentPath.isNotEmpty()) {
-                        IconButton(onClick = { viewModel.navigateBack() }) {
-                            Icon(
-                                imageVector = Icons.Default.ArrowBack,
-                                contentDescription = "Back"
-                            )
-                        }
-                    }
-                },
-                actions = {
-                    IconButton(onClick = { showMenu = true }) {
-                        Icon(
-                            imageVector = Icons.Default.Menu,
-                            contentDescription = "Menu"
-                        )
-                    }
-                    DropdownMenu(
-                        expanded = showMenu,
-                        onDismissRequest = { showMenu = false }
-                    ) {
-                        DropdownMenuItem(
-                            text = { Text("VPN Settings") },
-                            onClick = {
-                                showMenu = false
-                                onNavigateToVpn()
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Lock, contentDescription = null)
-                            }
-                        )
-                        DropdownMenuItem(
-                            text = { Text("Refresh") },
-                            onClick = {
-                                showMenu = false
-                                viewModel.loadFiles(uiState.currentPath)
-                            },
-                            leadingIcon = {
-                                Icon(Icons.Default.Refresh, contentDescription = null)
-                            }
-                        )
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.primaryContainer
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(
+                brush = Brush.verticalGradient(
+                    colors = listOf(Slate950, Slate900)
                 )
             )
-        },
-        floatingActionButton = {
-            if (!uiState.isUploading && !uiState.isDownloading) {
-                FloatingActionButton(
-                    onClick = { filePicker.launch("*/*") }
-                ) {
-                    Icon(Icons.Default.Add, contentDescription = "Upload File")
-                }
-            }
-        }
-    ) { paddingValues ->
-        Box(
-            modifier = Modifier
-                .fillMaxSize()
-                .padding(paddingValues)
-        ) {
-            when {
-                uiState.isLoading -> {
-                    CircularProgressIndicator(
-                        modifier = Modifier.align(Alignment.Center)
-                    )
-                }
-                uiState.files.isEmpty() && !uiState.isLoading -> {
-                    Column(
-                        modifier = Modifier.align(Alignment.Center),
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(16.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Folder,
-                            contentDescription = null,
-                            modifier = Modifier.size(64.dp),
-                            tint = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                        Text(
-                            text = "No files here",
-                            style = MaterialTheme.typography.bodyLarge,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
-                    }
-                }
-                else -> {
-                    LazyColumn(
-                        modifier = Modifier.fillMaxSize(),
-                        contentPadding = PaddingValues(8.dp),
-                        verticalArrangement = Arrangement.spacedBy(4.dp)
-                    ) {
-                        items(uiState.files) { file ->
-                            FileListItem(
-                                file = file,
-                                onFileClick = {
-                                    if (file.isDirectory) {
-                                        viewModel.navigateToFolder(file.name)
-                                    }
+    ) {
+        Scaffold(
+            containerColor = androidx.compose.ui.graphics.Color.Transparent,
+            topBar = {
+                TopAppBar(
+                    title = { 
+                        Column {
+                            Text(
+                                "Dateien",
+                                style = MaterialTheme.typography.titleLarge,
+                                fontWeight = FontWeight.Bold,
+                                color = Slate100
+                            )
+                            if (uiState.currentPath.isNotEmpty()) {
+                                Text(
+                                    text = "/${uiState.currentPath}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = Slate400
+                                )
+                            }
+                        }
+                    },
+                    navigationIcon = {
+                        if (uiState.currentPath.isNotEmpty()) {
+                            IconButton(onClick = { viewModel.navigateBack() }) {
+                                Icon(
+                                    imageVector = Icons.Default.ArrowBack,
+                                    contentDescription = "Zurück",
+                                    tint = Sky400
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        IconButton(onClick = { showMenu = true }) {
+                            Icon(
+                                imageVector = Icons.Default.Menu,
+                                contentDescription = "Menü",
+                                tint = Sky400
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = showMenu,
+                            onDismissRequest = { showMenu = false }
+                        ) {
+                            DropdownMenuItem(
+                                text = { Text("VPN-Einstellungen") },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToVpn()
                                 },
-                                onDeleteClick = {
-                                    showDeleteDialog = file
+                                leadingIcon = {
+                                    Icon(Icons.Default.Lock, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Einstellungen") },
+                                onClick = {
+                                    showMenu = false
+                                    onNavigateToSettings()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Settings, contentDescription = null)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Aktualisieren") },
+                                onClick = {
+                                    showMenu = false
+                                    viewModel.loadFiles(uiState.currentPath)
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Default.Refresh, contentDescription = null)
                                 }
                             )
                         }
+                    },
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent
+                    )
+                )
+            },
+            floatingActionButton = {
+                if (!uiState.isUploading && !uiState.isDownloading) {
+                    FloatingActionButton(
+                        onClick = { filePicker.launch("*/*") },
+                        containerColor = Sky400,
+                        contentColor = Slate950
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = "Datei hochladen")
                     }
                 }
             }
+        ) { paddingValues ->
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(paddingValues)
+            ) {
+                when {
+                    uiState.isLoading -> {
+                        CircularProgressIndicator(
+                            modifier = Modifier.align(Alignment.Center),
+                            color = Sky400
+                        )
+                    }
+                    uiState.files.isEmpty() && !uiState.isLoading -> {
+                        Column(
+                            modifier = Modifier.align(Alignment.Center),
+                            horizontalAlignment = Alignment.CenterHorizontally,
+                            verticalArrangement = Arrangement.spacedBy(16.dp)
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Folder,
+                                contentDescription = null,
+                                modifier = Modifier.size(80.dp),
+                                tint = Slate600
+                            )
+                            Text(
+                                text = "Keine Dateien vorhanden",
+                                style = MaterialTheme.typography.bodyLarge,
+                                color = Slate400
+                            )
+                        }
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.fillMaxSize(),
+                            contentPadding = PaddingValues(16.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            items(uiState.files) { file ->
+                                GlassFileListItem(
+                                    file = file,
+                                    onFileClick = {
+                                        if (file.isDirectory) {
+                                            viewModel.navigateToFolder(file.name)
+                                        }
+                                    },
+                                    onDeleteClick = {
+                                        showDeleteDialog = file
+                                    }
+                                )
+                            }
+                        }
+                    }
+                }
             
-            // Upload/Download Progress Overlay
-            if (uiState.isUploading || uiState.isDownloading) {
-                Card(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp)
-                        .fillMaxWidth(),
-                    colors = CardDefaults.cardColors(
-                        containerColor = MaterialTheme.colorScheme.surfaceVariant
-                    )
-                ) {
-                    Column(
-                        modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                // Upload/Download Progress Overlay
+                if (uiState.isUploading || uiState.isDownloading) {
+                    GlassCard(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp)
+                            .fillMaxWidth(),
+                        intensity = GlassIntensity.Heavy
                     ) {
                         Text(
-                            text = if (uiState.isUploading) "Uploading..." else "Downloading...",
+                            text = if (uiState.isUploading) "Hochladen..." else "Herunterladen...",
                             style = MaterialTheme.typography.titleMedium,
-                            fontWeight = FontWeight.Bold
+                            fontWeight = FontWeight.Bold,
+                            color = Slate100
                         )
+                        
+                        Spacer(modifier = Modifier.height(8.dp))
                         
                         LinearProgressIndicator(
                             progress = { if (uiState.isUploading) uiState.uploadProgress else uiState.downloadProgress },
-                            modifier = Modifier.fillMaxWidth()
+                            modifier = Modifier.fillMaxWidth(),
+                            color = Sky400,
+                            trackColor = Slate700
                         )
+                        
+                        Spacer(modifier = Modifier.height(4.dp))
                         
                         Text(
                             text = "${((if (uiState.isUploading) uiState.uploadProgress else uiState.downloadProgress) * 100).toInt()}%",
                             style = MaterialTheme.typography.bodyMedium,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Slate400
                         )
                     }
                 }
-            }
-            
-            // Error Snackbar
-            uiState.error?.let { error ->
-                Snackbar(
-                    modifier = Modifier
-                        .align(Alignment.BottomCenter)
-                        .padding(16.dp),
-                    action = {
-                        TextButton(onClick = { viewModel.clearError() }) {
-                            Text("Dismiss")
+                
+                // Error Snackbar
+                uiState.error?.let { error ->
+                    Snackbar(
+                        modifier = Modifier
+                            .align(Alignment.BottomCenter)
+                            .padding(16.dp),
+                        containerColor = Red500,
+                        contentColor = androidx.compose.ui.graphics.Color.White,
+                        action = {
+                            TextButton(onClick = { viewModel.clearError() }) {
+                                Text("OK", color = androidx.compose.ui.graphics.Color.White)
+                            }
                         }
+                    ) {
+                        Text(error)
                     }
-                ) {
-                    Text(error)
                 }
             }
         }
-    }
-    
-    // Delete Confirmation Dialog
-    showDeleteDialog?.let { file ->
-        AlertDialog(
-            onDismissRequest = { showDeleteDialog = null },
-            title = { Text("Delete ${file.name}?") },
-            text = { 
-                Text(
-                    if (file.isDirectory) {
-                        "This will delete the folder and all its contents. This action cannot be undone."
-                    } else {
-                        "This action cannot be undone."
-                    }
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        val fullPath = if (uiState.currentPath.isEmpty()) {
-                            file.name
+        
+        // Delete Confirmation Dialog
+        showDeleteDialog?.let { file ->
+            AlertDialog(
+                onDismissRequest = { showDeleteDialog = null },
+                title = { 
+                    Text(
+                        "${file.name} löschen?",
+                        fontWeight = FontWeight.Bold
+                    ) 
+                },
+                text = { 
+                    Text(
+                        if (file.isDirectory) {
+                            "Dadurch werden der Ordner und alle seine Inhalte gelöscht. Diese Aktion kann nicht rückgängig gemacht werden."
                         } else {
-                            "${uiState.currentPath}/${file.name}"
+                            "Diese Aktion kann nicht rückgängig gemacht werden."
                         }
-                        viewModel.deleteFile(fullPath)
-                        showDeleteDialog = null
-                    },
-                    colors = ButtonDefaults.textButtonColors(
-                        contentColor = MaterialTheme.colorScheme.error
                     )
-                ) {
-                    Text("Delete")
+                },
+                confirmButton = {
+                    TextButton(
+                        onClick = {
+                            val fullPath = if (uiState.currentPath.isEmpty()) {
+                                file.name
+                            } else {
+                                "${uiState.currentPath}/${file.name}"
+                            }
+                            viewModel.deleteFile(fullPath)
+                            showDeleteDialog = null
+                        },
+                        colors = ButtonDefaults.textButtonColors(
+                            contentColor = Red500
+                        )
+                    ) {
+                        Text("Löschen")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { showDeleteDialog = null }) {
+                        Text("Abbrechen")
+                    }
                 }
-            },
-            dismissButton = {
-                TextButton(onClick = { showDeleteDialog = null }) {
-                    Text("Cancel")
-                }
-            }
-        )
+            )
+        }
     }
 }
 
 @Composable
-private fun FileListItem(
+private fun GlassFileListItem(
     file: FileItem,
     onFileClick: () -> Unit,
     onDeleteClick: () -> Unit,
@@ -286,18 +331,14 @@ private fun FileListItem(
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
-    Card(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable(onClick = onFileClick),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surface
-        )
+    GlassCard(
+        modifier = modifier.fillMaxWidth(),
+        onClick = onFileClick,
+        intensity = GlassIntensity.Medium,
+        padding = PaddingValues(16.dp)
     ) {
         Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
+            modifier = Modifier.fillMaxWidth(),
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
@@ -311,10 +352,7 @@ private fun FileListItem(
                 },
                 contentDescription = null,
                 modifier = Modifier.size(40.dp),
-                tint = if (file.isDirectory) 
-                    MaterialTheme.colorScheme.primary 
-                else 
-                    MaterialTheme.colorScheme.onSurfaceVariant
+                tint = if (file.isDirectory) Sky400 else Indigo400
             )
             
             Column(
@@ -326,7 +364,8 @@ private fun FileListItem(
                     style = MaterialTheme.typography.bodyLarge,
                     fontWeight = FontWeight.Medium,
                     maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
+                    overflow = TextOverflow.Ellipsis,
+                    color = Slate100
                 )
                 
                 Row(
@@ -336,18 +375,18 @@ private fun FileListItem(
                         Text(
                             text = formatFileSize(file.size),
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Slate400
                         )
                         Text(
                             text = "•",
                             style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
+                            color = Slate400
                         )
                     }
                     Text(
                         text = formatDate(file.modifiedAt.epochSecond),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                        color = Slate400
                     )
                 }
             }
@@ -356,7 +395,8 @@ private fun FileListItem(
                 IconButton(onClick = { showMenu = true }) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
-                        contentDescription = "More options"
+                        contentDescription = "Weitere Optionen",
+                        tint = Slate400
                     )
                 }
                 
@@ -365,7 +405,7 @@ private fun FileListItem(
                     onDismissRequest = { showMenu = false }
                 ) {
                     DropdownMenuItem(
-                        text = { Text("Delete") },
+                        text = { Text("Löschen") },
                         onClick = {
                             showMenu = false
                             onDeleteClick()

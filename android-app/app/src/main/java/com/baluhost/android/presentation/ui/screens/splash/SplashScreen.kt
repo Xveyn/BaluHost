@@ -19,6 +19,7 @@ import androidx.hilt.navigation.compose.hiltViewModel
  */
 @Composable
 fun SplashScreen(
+    onNavigateToOnboarding: () -> Unit,
     onNavigateToQrScanner: () -> Unit,
     onNavigateToFiles: () -> Unit,
     viewModel: SplashViewModel = hiltViewModel()
@@ -27,6 +28,7 @@ fun SplashScreen(
     
     LaunchedEffect(uiState) {
         when (uiState) {
+            is SplashState.OnboardingNeeded -> onNavigateToOnboarding()
             is SplashState.Authenticated -> onNavigateToFiles()
             is SplashState.NotAuthenticated -> onNavigateToQrScanner()
             else -> { /* Loading */ }

@@ -38,9 +38,14 @@ class MobileService:
         server_url: str,
         expires_minutes: int = 5,
         include_vpn: bool = False,
-        device_name: str = "iOS Device"
+        device_name: str = "iOS Device",
+        token_validity_days: int = 90
     ) -> MobileRegistrationTokenSchema:
-        """Generate a one-time registration token for mobile device pairing."""
+        """Generate a one-time registration token for mobile device pairing.
+        
+        Args:
+            token_validity_days: How long the device authorization will be valid (30-180 days)
+        """
         # Generate secure random token
         token = f"reg_{secrets.token_urlsafe(32)}"
         expires_at = datetime.utcnow() + timedelta(minutes=expires_minutes)
@@ -78,7 +83,8 @@ class MobileService:
         qr_data = {
             "token": token,
             "server": server_url,
-            "expires_at": expires_at.isoformat()
+            "expires_at": expires_at.isoformat(),
+            "device_token_validity_days": token_validity_days
         }
         if vpn_config_base64:
             qr_data["vpn_config"] = vpn_config_base64
@@ -98,7 +104,8 @@ class MobileService:
             server_url=server_url,
             expires_at=expires_at,
             qr_code=qr_code_base64,
-            vpn_config=vpn_config_base64
+            vpn_config=vpn_config_base64,
+            device_token_validity_days=token_validity_days
         )
     
     @staticmethod
@@ -136,6 +143,18 @@ class MobileService:
         # Extract device info
         device_info = device_data.device_info
         
+        # Calculate device token expiration
+        # Use provided token_validity_days or default to 90 days
+        token_validity_days = device_data.token_validity_days or 90
+        
+        # Enforce security constraints (30-180 days)
+        if token_validity_days < 30:
+            token_validity_days = 30
+        elif token_validity_days > 180:
+            token_validity_days = 180
+        
+        device_expires_at = datetime.utcnow() + timedelta(days=token_validity_days)
+        
         # Create mobile device
         device = MobileDevice(
             user_id=token_record.user_id,
@@ -145,7 +164,8 @@ class MobileService:
             os_version=device_info.os_version,
             app_version=device_info.app_version,
             push_token=device_data.push_token,
-            is_active=True
+            is_active=True,
+            expires_at=device_expires_at
         )
         db.add(device)
         db.flush()  # Generate device.id before creating camera_backup

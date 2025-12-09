@@ -98,7 +98,87 @@ async def get_current_admin(
         print("[AUTH] Admin-Check fehlgeschlagen!")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required",
+            detail="Insufficient permissions: Admin required",
         )
-    print("[AUTH] Admin-Check erfolgreich!")
+    print("[AUTH] Admin-Zugriff gewährt!")
+    return user
+
+
+async def verify_mobile_device_token(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db)
+) -> UserPublic:
+    """
+    Verify mobile device authentication and check if device token hasn't expired.
+    
+    This dependency should be used for mobile-specific endpoints that require
+    valid device authorization.
+    
+    Raises:
+        HTTPException(401): If device token has expired
+        HTTPException(403): If device not found or inactive
+    """
+    from datetime import datetime
+    from app.models.mobile import MobileDevice
+    
+    # First get the current user (validates JWT)
+    user = await get_current_user(token=token, db=db)
+    
+    # Extract device ID from request headers (mobile app should send this)
+    device_id = request.headers.get("X-Device-ID")
+    
+    if not device_id:
+        # If no device ID in header, skip device-specific checks
+        # (allows web access to mobile endpoints for management)
+        return user
+    
+    # Check if device exists and belongs to user
+    device = db.query(MobileDevice).filter(
+        MobileDevice.id == device_id,
+        MobileDevice.user_id == str(user.id)
+    ).first()
+    
+    if not device:
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="unknown_device_access",
+            user=user.username,
+            success=False,
+            error_message=f"Device {device_id} not found",
+            db=db
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Device not found or not authorized"
+        )
+    
+    # Check if device is active
+    if not device.is_active:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Device has been deactivated"
+        )
+    
+    # Check if device token has expired
+    if device.expires_at and device.expires_at < datetime.utcnow():
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="expired_device_token",
+            user=user.username,
+            success=False,
+            error_message=f"Device {device.device_name} token expired at {device.expires_at}",
+            db=db
+        )
+        
+        # Automatically deactivate expired device
+        device.is_active = False
+        db.commit()
+        
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Device authorization expired. Please re-register your device. "
+                   f"Expired on: {device.expires_at.strftime('%Y-%m-%d %H:%M:%S')}"
+        )
+    
     return user

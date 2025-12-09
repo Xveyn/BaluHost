@@ -7,6 +7,7 @@ import androidx.datastore.preferences.preferencesDataStore
 import androidx.room.Room
 import com.baluhost.android.data.local.database.BaluHostDatabase
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.data.local.security.SecureStorage
 import com.baluhost.android.util.Constants
 import dagger.Module
@@ -36,8 +37,9 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun providePreferencesManager(
-        dataStore: DataStore<Preferences>
-    ): PreferencesManager = PreferencesManager(dataStore)
+        dataStore: DataStore<Preferences>,
+        securePreferences: SecurePreferencesManager
+    ): PreferencesManager = PreferencesManager(dataStore, securePreferences)
     
     @Provides
     @Singleton

@@ -4,8 +4,10 @@ import androidx.datastore.core.DataStore
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.util.Constants
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
 import javax.inject.Singleton
@@ -14,16 +16,15 @@ import javax.inject.Singleton
  * Manages app preferences using DataStore.
  * 
  * Stores non-sensitive data like server URL, user preferences.
- * Sensitive data (tokens) are stored in SecureStorage.
+ * Sensitive data (tokens, PIN, biometric settings) are stored in SecurePreferencesManager.
  */
 @Singleton
 class PreferencesManager @Inject constructor(
-    private val dataStore: DataStore<Preferences>
+    private val dataStore: DataStore<Preferences>,
+    private val securePreferences: SecurePreferencesManager
 ) {
     
-    // Keys
-    private val accessTokenKey = stringPreferencesKey(Constants.PrefsKeys.ACCESS_TOKEN)
-    private val refreshTokenKey = stringPreferencesKey(Constants.PrefsKeys.REFRESH_TOKEN)
+    // Keys (access/refresh tokens now stored in SecurePreferencesManager)
     private val serverUrlKey = stringPreferencesKey(Constants.PrefsKeys.SERVER_URL)
     private val userIdKey = stringPreferencesKey(Constants.PrefsKeys.USER_ID)
     private val usernameKey = stringPreferencesKey(Constants.PrefsKeys.USERNAME)
@@ -31,23 +32,26 @@ class PreferencesManager @Inject constructor(
     private val wifiOnlyKey = stringPreferencesKey(Constants.PrefsKeys.WIFI_ONLY)
     private val lastBackupTimeKey = stringPreferencesKey(Constants.PrefsKeys.LAST_BACKUP_TIME)
     private val vpnConfigKey = stringPreferencesKey(Constants.PrefsKeys.VPN_CONFIG)
+    private val fcmTokenKey = stringPreferencesKey("fcm_token")
+    private val deviceIdKey = stringPreferencesKey("device_id")
+    private val onboardingCompletedKey = stringPreferencesKey("onboarding_completed")
     
-    // Access Token
+    // Access Token (delegated to SecurePreferencesManager for encryption)
     suspend fun saveAccessToken(token: String) {
-        dataStore.edit { prefs -> prefs[accessTokenKey] = token }
+        securePreferences.saveAccessToken(token)
     }
     
-    fun getAccessToken(): Flow<String?> {
-        return dataStore.data.map { prefs -> prefs[accessTokenKey] }
+    fun getAccessToken(): Flow<String?> = flow {
+        emit(securePreferences.getAccessToken())
     }
     
-    // Refresh Token
+    // Refresh Token (delegated to SecurePreferencesManager for encryption)
     suspend fun saveRefreshToken(token: String) {
-        dataStore.edit { prefs -> prefs[refreshTokenKey] = token }
+        securePreferences.saveRefreshToken(token)
     }
     
-    fun getRefreshToken(): Flow<String?> {
-        return dataStore.data.map { prefs -> prefs[refreshTokenKey] }
+    fun getRefreshToken(): Flow<String?> = flow {
+        emit(securePreferences.getRefreshToken())
     }
     
     // Server URL
@@ -116,12 +120,38 @@ class PreferencesManager @Inject constructor(
         return dataStore.data.map { prefs -> prefs[vpnConfigKey] }
     }
     
+    // FCM Token (Firebase Cloud Messaging)
+    suspend fun saveFcmToken(token: String) {
+        dataStore.edit { prefs -> prefs[fcmTokenKey] = token }
+    }
+    
+    fun getFcmToken(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[fcmTokenKey] }
+    }
+    
+    // Device ID (from registration)
+    suspend fun saveDeviceId(deviceId: String) {
+        dataStore.edit { prefs -> prefs[deviceIdKey] = deviceId }
+    }
+    
+    fun getDeviceId(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[deviceIdKey] }
+    }
+    
+    // Onboarding State
+    suspend fun saveOnboardingCompleted(completed: Boolean) {
+        dataStore.edit { prefs -> prefs[onboardingCompletedKey] = completed.toString() }
+    }
+    
+    fun isOnboardingCompleted(): Flow<Boolean> {
+        return dataStore.data.map { prefs -> 
+            prefs[onboardingCompletedKey]?.toBoolean() ?: false
+        }
+    }
+    
     // Clear all tokens (on logout or auth failure)
     suspend fun clearTokens() {
-        dataStore.edit { prefs ->
-            prefs.remove(accessTokenKey)
-            prefs.remove(refreshTokenKey)
-        }
+        securePreferences.clearTokens()
     }
     
     // Clear all data

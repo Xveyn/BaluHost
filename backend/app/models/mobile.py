@@ -28,6 +28,9 @@ class MobileDevice(Base):
     is_active = Column(Boolean, default=True, nullable=False)
     last_sync = Column(DateTime, nullable=True)
     
+    # Device token expiration (30 days minimum, 6 months maximum)
+    expires_at = Column(DateTime, nullable=True)  # When the device authorization expires
+    
     # Timestamps
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
@@ -137,3 +140,26 @@ class UploadQueue(Base):
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     started_at = Column(DateTime, nullable=True)
     completed_at = Column(DateTime, nullable=True)
+
+
+class ExpirationNotification(Base):
+    """Track sent expiration warning notifications to prevent duplicates."""
+    __tablename__ = "expiration_notifications"
+
+    id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
+    device_id = Column(String, ForeignKey("mobile_devices.id", ondelete="CASCADE"), nullable=False)
+    
+    # Notification details
+    notification_type = Column(String, nullable=False)  # "7_days", "3_days", "1_hour"
+    sent_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    
+    # FCM response
+    success = Column(Boolean, default=True, nullable=False)
+    fcm_message_id = Column(String, nullable=True)
+    error_message = Column(Text, nullable=True)
+    
+    # Device expiration context (for audit trail)
+    device_expires_at = Column(DateTime, nullable=False)
+    
+    # Relationships
+    device = relationship("MobileDevice")

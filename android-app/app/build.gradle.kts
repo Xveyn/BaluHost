@@ -5,6 +5,7 @@ plugins {
     id("kotlin-kapt")
     id("dagger.hilt.android.plugin")
     id("kotlin-parcelize")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -97,8 +98,9 @@ dependencies {
     kapt("androidx.room:room-compiler:$roomVersion")
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     
-    // Security
+    // Security & Biometrics
     implementation("androidx.security:security-crypto:1.1.0-alpha06")
+    implementation("androidx.biometric:biometric-ktx:1.2.0-alpha05")
     
     // WireGuard VPN
     implementation("com.wireguard.android:tunnel:1.0.20230706")
@@ -127,6 +129,11 @@ dependencies {
     
     // Accompanist (Permissions)
     implementation("com.google.accompanist:accompanist-permissions:0.34.0")
+    
+    // Firebase Cloud Messaging
+    implementation(platform("com.google.firebase:firebase-bom:32.7.0"))
+    implementation("com.google.firebase:firebase-messaging-ktx")
+    implementation("com.google.firebase:firebase-analytics-ktx")
     
     // Testing
     testImplementation("junit:junit:4.13.2")

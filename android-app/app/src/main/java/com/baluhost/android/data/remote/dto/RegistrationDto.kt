@@ -10,13 +10,17 @@ data class RegistrationQrData(
     @SerializedName("expires_at")
     val expiresAt: String,
     @SerializedName("vpn_config")
-    val vpnConfig: String? = null
+    val vpnConfig: String? = null,
+    @SerializedName("device_token_validity_days")
+    val deviceTokenValidityDays: Int = 90
 )
 
 data class RegisterDeviceRequest(
     val token: String,
     @SerializedName("device_info")
-    val deviceInfo: DeviceInfoDto
+    val deviceInfo: DeviceInfoDto,
+    @SerializedName("token_validity_days")
+    val tokenValidityDays: Int? = null
 )
 
 data class DeviceInfoDto(
@@ -56,7 +60,9 @@ data class MobileDeviceDto(
     @SerializedName("last_seen")
     val lastSeen: String,
     @SerializedName("is_active")
-    val isActive: Boolean
+    val isActive: Boolean,
+    @SerializedName("expires_at")
+    val expiresAt: String? = null
 )
 
 data class CameraSettingsDto(

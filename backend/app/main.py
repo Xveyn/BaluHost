@@ -18,11 +18,15 @@ from app.core.database import init_db
 from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry, sync_background
 from app.services.network_discovery import NetworkDiscoveryService
+from app.services.firebase_service import FirebaseService
+from app.services.notification_scheduler import NotificationScheduler
 
 logger = logging.getLogger(__name__)
 
 # Network discovery service instance
 _discovery_service = None
+# APScheduler instance for notifications
+_notification_scheduler = None
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
@@ -49,6 +53,33 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     except Exception as e:
         logger.warning(f"Network discovery could not start: {e}")
     
+    # Initialize Firebase (optional, warnings if not configured)
+    FirebaseService.initialize()
+    
+    # Start notification scheduler (only if Firebase is available)
+    if FirebaseService.is_available():
+        try:
+            from apscheduler.schedulers.background import BackgroundScheduler
+            global _notification_scheduler
+            _notification_scheduler = BackgroundScheduler()
+            
+            # Run every hour to check for expiring devices
+            _notification_scheduler.add_job(
+                func=NotificationScheduler.run_periodic_check,
+                trigger="interval",
+                hours=1,
+                id="device_expiration_check",
+                name="Check and send device expiration warnings",
+                replace_existing=True
+            )
+            
+            _notification_scheduler.start()
+            logger.info("✅ Notification scheduler started (running every hour)")
+        except Exception as e:
+            logger.warning(f"Notification scheduler could not start: {e}")
+    else:
+        logger.info("⏭️  Notification scheduler skipped (Firebase not configured)")
+    
     try:
         yield
     finally:
@@ -61,6 +92,11 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
         # Stop network discovery
         if _discovery_service:
             _discovery_service.stop()
+        
+        # Stop notification scheduler
+        if _notification_scheduler:
+            _notification_scheduler.shutdown()
+            logger.info("Notification scheduler stopped")
 
 
 def create_app() -> FastAPI:

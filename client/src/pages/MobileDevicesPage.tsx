@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock } from 'lucide-react';
-import { generateMobileToken, getMobileDevices, deleteMobileDevice, type MobileRegistrationToken, type MobileDevice } from '../lib/api';
+import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell } from 'lucide-react';
+import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 
 export default function MobileDevicesPage() {
   const [devices, setDevices] = useState<MobileDevice[]>([]);
@@ -9,6 +9,7 @@ export default function MobileDevicesPage() {
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [includeVpn, setIncludeVpn] = useState(false);
   const [deviceName, setDeviceName] = useState('');
+  const [tokenValidityDays, setTokenValidityDays] = useState(90);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
@@ -35,12 +36,13 @@ export default function MobileDevicesPage() {
 
     try {
       setGenerating(true);
-      const token = await generateMobileToken(includeVpn, deviceName.trim());
+      const token = await generateMobileToken(includeVpn, deviceName.trim(), tokenValidityDays);
       setQrData(token);
       setShowQrDialog(true);
-    } catch (error) {
+    } catch (error: any) {
       console.error('Failed to generate token:', error);
-      alert('QR-Code konnte nicht generiert werden');
+      const errorMsg = error?.response?.data?.detail || 'QR-Code konnte nicht generiert werden';
+      alert(errorMsg);
     } finally {
       setGenerating(false);
     }
@@ -104,6 +106,40 @@ export default function MobileDevicesPage() {
               className="input w-full"
             />
           </div>
+          
+          {/* Token Validity Slider */}
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Gültigkeitsdauer der Autorisierung
+            </label>
+            <div className="space-y-2">
+              <input
+                type="range"
+                min="30"
+                max="180"
+                step="1"
+                value={tokenValidityDays}
+                onChange={(e) => setTokenValidityDays(Number(e.target.value))}
+                className="w-full h-2 bg-slate-700 rounded-lg appearance-none cursor-pointer slider-thumb"
+                style={{
+                  background: `linear-gradient(to right, #38bdf8 0%, #38bdf8 ${((tokenValidityDays - 30) / 150) * 100}%, #334155 ${((tokenValidityDays - 30) / 150) * 100}%, #334155 100%)`
+                }}
+              />
+              <div className="flex items-center justify-between text-xs">
+                <span className="text-slate-400">30 Tage (Minimum)</span>
+                <span className="text-sky-400 font-semibold text-base">
+                  {tokenValidityDays} Tage ({Math.round(tokenValidityDays / 30)} Monate)
+                </span>
+                <span className="text-slate-400">180 Tage (Maximum)</span>
+              </div>
+              <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
+                <p className="text-xs text-slate-400">
+                  🔔 <strong>Automatische Benachrichtigungen:</strong> Du wirst <strong>7 Tage</strong>, <strong>3 Tage</strong> und <strong>1 Stunde</strong> vor Ablauf per Push-Benachrichtigung erinnert. Nach Ablauf wird das Gerät automatisch deautorisiert.
+                </p>
+              </div>
+            </div>
+          </div>
+          
           <div className="flex items-center gap-2">
             <input
               type="checkbox"
@@ -221,7 +257,27 @@ export default function MobileDevicesPage() {
                         <span className="font-medium text-slate-300">Zuletzt:</span>
                         <span>{getTimeAgo(device.last_sync)}</span>
                       </div>
+                      {device.expires_at && (() => {
+                        const expiresDate = new Date(device.expires_at);
+                        const daysLeft = Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                        const isExpiringSoon = daysLeft <= 7;
+                        const isExpired = daysLeft <= 0;
+                        return (
+                          <div className={`flex items-center gap-1.5 col-span-2 ${
+                            isExpired ? 'text-red-400' : isExpiringSoon ? 'text-orange-400' : ''
+                          }`}>
+                            <Calendar className="w-3.5 h-3.5" />
+                            <span className="font-medium">Gültig bis:</span>
+                            <span className="font-semibold">{formatDate(device.expires_at)}</span>
+                            {isExpired && <span className="text-xs bg-red-500/20 px-2 py-0.5 rounded">Abgelaufen</span>}
+                            {isExpiringSoon && !isExpired && <span className="text-xs bg-orange-500/20 px-2 py-0.5 rounded">Läuft bald ab ({daysLeft} Tage)</span>}
+                          </div>
+                        );
+                      })()}
                     </div>
+                    
+                    {/* Notification Status */}
+                    <NotificationStatus deviceId={device.id} />
                   </div>
                   <button
                     onClick={() => handleDeleteDevice(device.id, device.device_name)}
@@ -267,10 +323,20 @@ export default function MobileDevicesPage() {
 
             <div className="space-y-2 text-sm text-slate-300 mb-4">
               <p>✓ Scanne diesen QR-Code mit der BaluHost Mobile App</p>
-              <p>✓ Token ist <strong>5 Minuten</strong> gültig</p>
+              <p>✓ Registrierungs-Token ist <strong>5 Minuten</strong> gültig</p>
+              <p>✓ Geräte-Autorisierung gilt für <strong className="text-sky-400">{qrData.device_token_validity_days} Tage ({Math.round(qrData.device_token_validity_days / 30)} Monate)</strong></p>
               {qrData.vpn_config && (
                 <p className="text-green-400">✓ VPN-Konfiguration eingeschlossen</p>
               )}
+            </div>
+
+            <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 mb-4">
+              <p className="text-xs text-sky-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                🔔 Automatische Erinnerungen
+              </p>
+              <p className="text-xs text-slate-300">
+                Du wirst <strong>7 Tage</strong>, <strong>3 Tage</strong> und <strong>1 Stunde</strong> vor Ablauf per Push-Benachrichtigung erinnert.
+              </p>
             </div>
 
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
@@ -282,6 +348,67 @@ export default function MobileDevicesPage() {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/**
+ * Component to display last notification sent to device.
+ */
+function NotificationStatus({ deviceId }: { deviceId: string }) {
+  const [lastNotification, setLastNotification] = useState<ExpirationNotification | null>(null);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const loadNotification = async () => {
+      try {
+        setLoading(true);
+        const notifications = await getDeviceNotifications(deviceId, 1);
+        if (notifications.length > 0) {
+          setLastNotification(notifications[0]);
+        }
+      } catch (error) {
+        console.error('Failed to load notifications:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadNotification();
+  }, [deviceId]);
+
+  if (loading || !lastNotification) return null;
+
+  const notificationLabels: Record<string, string> = {
+    '7_days': '7 Tage Warnung',
+    '3_days': '3 Tage Warnung',
+    '1_hour': '1 Stunde Warnung'
+  };
+
+  const notificationLabel = notificationLabels[lastNotification.notification_type] || lastNotification.notification_type;
+  const sentDate = new Date(lastNotification.sent_at);
+  const timeAgo = (() => {
+    const seconds = Math.floor((Date.now() - sentDate.getTime()) / 1000);
+    if (seconds < 60) return 'Gerade eben';
+    if (seconds < 3600) return `Vor ${Math.floor(seconds / 60)} Min`;
+    if (seconds < 86400) return `Vor ${Math.floor(seconds / 3600)} Std`;
+    return `Vor ${Math.floor(seconds / 86400)} Tagen`;
+  })();
+
+  return (
+    <div className="mt-3 pt-3 border-t border-slate-700/50">
+      <div className="flex items-center gap-2 text-xs text-slate-400">
+        <Bell className={`w-3.5 h-3.5 ${
+          lastNotification.success ? 'text-sky-400' : 'text-red-400'
+        }`} />
+        <span className="font-medium text-slate-300">Letzte Benachrichtigung:</span>
+        <span>{notificationLabel}</span>
+        <span className="text-slate-500">•</span>
+        <span>{timeAgo}</span>
+        {!lastNotification.success && (
+          <span className="text-red-400 font-semibold">Fehlgeschlagen</span>
+        )}
+      </div>
     </div>
   );
 }
