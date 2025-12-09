@@ -32,6 +32,9 @@ class Settings(BaseSettings):
     admin_password: str = "changeme"
     admin_role: str = "admin"
 
+    # Mobile device registration
+    mobile_server_url: str | None = None  # Optional: Override server URL for mobile QR codes
+
     # Storage paths
     nas_storage_path: str = "./storage"
     nas_temp_path: str = "./tmp"

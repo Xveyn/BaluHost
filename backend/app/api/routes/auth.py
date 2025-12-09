@@ -131,3 +131,91 @@ async def change_password(
 @router.post("/logout")
 async def logout() -> dict[str, str]:
     return {"message": "Logged out"}
+
+
+@router.post("/refresh", response_model=TokenResponse)
+async def refresh_token(
+    payload: dict,
+    request: Request,
+    db: Session = Depends(get_db)
+) -> TokenResponse:
+    """
+    Refresh access token using a refresh token (for mobile clients).
+    
+    Mobile clients receive a long-lived refresh token (30 days) during registration.
+    This endpoint allows them to obtain new access tokens without re-authentication.
+    """
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+    
+    refresh_token_str = payload.get("refresh_token")
+    if not refresh_token_str:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Missing refresh_token"
+        )
+    
+    # Verify refresh token (currently using same JWT verification)
+    # In production, refresh tokens should be stored separately with revocation support
+    try:
+        token_data = auth_service.verify_token(refresh_token_str)
+        user_id = token_data.get("sub")
+        
+        # Get user from database
+        user_record = user_service.get_user_by_id(int(user_id), db=db)
+        if not user_record:
+            audit_logger.log_security_event(
+                action="refresh_token_invalid_user",
+                user=f"user_id:{user_id}",
+                error_message="User not found",
+                ip_address=ip_address,
+                db=db
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid refresh token"
+            )
+        
+        # Check if user is active
+        if not user_record.get("is_active", True):
+            audit_logger.log_security_event(
+                action="refresh_token_inactive_user",
+                user=user_record.get("username"),
+                error_message="User account is inactive",
+                ip_address=ip_address,
+                db=db
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account is inactive"
+            )
+        
+        # Generate new access token
+        new_access_token = auth_service.create_access_token(user_record)
+        
+        # Log successful token refresh
+        audit_logger.log_security_event(
+            action="token_refreshed",
+            user=user_record.get("username"),
+            success=True,
+            ip_address=ip_address,
+            db=db
+        )
+        
+        user_public = user_service.serialize_user(user_record)
+        return TokenResponse(access_token=new_access_token, user=user_public)
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        audit_logger.log_security_event(
+            action="refresh_token_failed",
+            user="unknown",
+            error_message=str(e),
+            ip_address=ip_address,
+            db=db
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid refresh token"
+        )

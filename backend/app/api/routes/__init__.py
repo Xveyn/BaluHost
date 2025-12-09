@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, files, logging, system, users, upload_progress, shares, backup
+from app.api.routes import auth, files, logging, system, users, upload_progress, shares, backup, sync, sync_advanced, mobile, vpn
 
 api_router = APIRouter()
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
@@ -11,5 +11,9 @@ api_router.include_router(system.router, prefix="/system", tags=["system"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(shares.router, prefix="/shares", tags=["shares"])
 api_router.include_router(backup.router, prefix="/backups", tags=["backups"])
+api_router.include_router(sync.router)
+api_router.include_router(sync_advanced.router)
+api_router.include_router(mobile.router)
+api_router.include_router(vpn.router)
 
 __all__ = ["api_router"]

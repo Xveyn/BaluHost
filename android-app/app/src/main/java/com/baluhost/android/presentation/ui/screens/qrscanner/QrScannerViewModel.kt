@@ -2,6 +2,7 @@ package com.baluhost.android.presentation.ui.screens.qrscanner
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
+import com.baluhost.android.data.remote.dto.RegistrationQrData
 import com.baluhost.android.domain.model.AuthResult
 import com.baluhost.android.domain.usecase.auth.RegisterDeviceUseCase
 import com.baluhost.android.domain.usecase.vpn.ImportVpnConfigUseCase
@@ -51,7 +52,9 @@ class QrScannerViewModel @Inject constructor(
                     is Result.Success -> {
                         // Import VPN config if available
                         registrationData.vpnConfig?.let { vpnConfig ->
-                            importVpnConfigUseCase(vpnConfig)
+                            viewModelScope.launch {
+                                importVpnConfigUseCase(vpnConfig)
+                            }
                         }
                         
                         _uiState.value = QrScannerState.Success(result.data)
@@ -84,10 +87,3 @@ sealed class QrScannerState {
     data class Success(val authResult: AuthResult) : QrScannerState()
     data class Error(val message: String) : QrScannerState()
 }
-
-data class RegistrationQrData(
-    val token: String,
-    val server: String,
-    val expires_at: String,
-    val vpn_config: String?
-)

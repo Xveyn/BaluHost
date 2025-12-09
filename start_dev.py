@@ -126,8 +126,25 @@ def main() -> int:
         npm_binary = resolve_npm_binary()
         
         # Generate self-signed certificates for HTTPS
-        cert_file, key_file = generate_self_signed_cert()
-        use_https = cert_file is not None and key_file is not None
+        # Check if HTTP-only mode is requested (for mobile development)
+        # Default to false for easier mobile development
+        use_https = os.environ.get("DEV_USE_HTTPS", "false").lower() != "false"
+        
+        if use_https:
+            cert_file, key_file = generate_self_signed_cert()
+            use_https = cert_file is not None and key_file is not None
+        else:
+            cert_file, key_file = None, None
+        
+        # Get local IP for network access
+        import socket
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            local_ip = s.getsockname()[0]
+            s.close()
+        except Exception:
+            local_ip = "localhost"
         
         backend_cmd = [
             backend_python,
@@ -135,6 +152,8 @@ def main() -> int:
             "uvicorn",
             "app.main:app",
             "--reload",
+            "--host",
+            "0.0.0.0",  # Bind to all interfaces for network access
             "--port",
             "8000",
         ]
@@ -144,10 +163,14 @@ def main() -> int:
                 "--ssl-keyfile", str(key_file),
                 "--ssl-certfile", str(cert_file),
             ])
-            print("[info] Backend running with HTTPS on https://localhost:8000")
-            print("[info] You may need to accept the self-signed certificate in your browser")
+            print("[info] Backend running with HTTPS")
+            print(f"[info] - Local: https://localhost:8000")
+            print(f"[info] - Network: https://{local_ip}:8000")
+            print("[info] You may need to accept the self-signed certificate")
         else:
-            print("[info] Backend running with HTTP on http://localhost:8000")
+            print("[info] Backend running with HTTP")
+            print(f"[info] - Local: http://localhost:8000")
+            print(f"[info] - Network: http://{local_ip}:8000")
 
         commands: Dict[str, Dict[str, object]] = {
             "backend": {

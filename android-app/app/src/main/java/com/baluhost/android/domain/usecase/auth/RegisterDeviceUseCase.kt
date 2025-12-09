@@ -34,6 +34,30 @@ class RegisterDeviceUseCase @Inject constructor(
         deviceName: String = "${Build.MANUFACTURER} ${Build.MODEL}"
     ): Result<AuthResult> {
         return try {
+            // CRITICAL: Create a new Retrofit instance with the server URL from QR code
+            // The injected mobileApi uses BuildConfig.BASE_URL which is wrong for dynamic servers
+            val finalUrl = serverUrl.let { if (it.endsWith("/")) it else "$it/" } + "api/"
+            android.util.Log.d("RegisterDevice", "Using server URL: $serverUrl")
+            android.util.Log.d("RegisterDevice", "Final base URL: $finalUrl")
+            
+            val okHttpClient = okhttp3.OkHttpClient.Builder()
+                .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
+                .addInterceptor { chain ->
+                    val request = chain.request()
+                    android.util.Log.d("RegisterDevice", "Request URL: ${request.url}")
+                    chain.proceed(request)
+                }
+                .build()
+            
+            val retrofit = retrofit2.Retrofit.Builder()
+                .baseUrl(finalUrl)
+                .client(okHttpClient)
+                .addConverterFactory(retrofit2.converter.gson.GsonConverterFactory.create())
+                .build()
+            
+            val dynamicMobileApi = retrofit.create(com.baluhost.android.data.remote.api.MobileApi::class.java)
+            
             val deviceInfo = DeviceInfoDto(
                 deviceName = deviceName,
                 deviceType = "android",
@@ -47,7 +71,7 @@ class RegisterDeviceUseCase @Inject constructor(
                 deviceInfo = deviceInfo
             )
             
-            val response = mobileApi.registerDevice(request)
+            val response = dynamicMobileApi.registerDevice(request)
             
             // Save authentication data
             preferencesManager.saveAccessToken(response.accessToken)

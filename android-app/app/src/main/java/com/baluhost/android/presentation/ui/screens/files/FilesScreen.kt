@@ -345,7 +345,7 @@ private fun FileListItem(
                         )
                     }
                     Text(
-                        text = formatDate(file.modifiedAt),
+                        text = formatDate(file.modifiedAt.epochSecond),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant
                     )

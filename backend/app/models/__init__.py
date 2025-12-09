@@ -6,5 +6,6 @@ from app.models.audit_log import AuditLog
 from app.models.share_link import ShareLink
 from app.models.file_share import FileShare
 from app.models.backup import Backup
+from app.models.vpn import VPNConfig, VPNClient
 
-__all__ = ["Base", "User", "FileMetadata", "AuditLog", "ShareLink", "FileShare", "Backup"]
+__all__ = ["Base", "User", "FileMetadata", "AuditLog", "ShareLink", "FileShare", "Backup", "VPNConfig", "VPNClient"]

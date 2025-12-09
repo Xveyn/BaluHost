@@ -99,31 +99,28 @@ class FilesViewModel @Inject constructor(
                 error = null
             )
             
-            uploadFileUseCase(file, uploadPath) { progress ->
-                _uiState.value = _uiState.value.copy(uploadProgress = progress)
-            }.collect { result ->
-                when (result) {
-                    is Result.Success -> {
-                        _uiState.value = _uiState.value.copy(
-                            isUploading = false,
-                            uploadProgress = 0f
-                        )
-                        loadFiles(_uiState.value.currentPath) // Refresh list
-                    }
-                    is Result.Error -> {
-                        _uiState.value = _uiState.value.copy(
-                            isUploading = false,
-                            uploadProgress = 0f,
-                            error = result.exception.message
-                        )
-                    }
-                    else -> {
-                        _uiState.value = _uiState.value.copy(
-                            isUploading = false,
-                            uploadProgress = 0f,
-                            error = "Unknown error"
-                        )
-                    }
+            val result = uploadFileUseCase(file, uploadPath)
+            when (result) {
+                is Result.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUploading = false,
+                        uploadProgress = 0f
+                    )
+                    loadFiles(_uiState.value.currentPath) // Refresh list
+                }
+                is Result.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUploading = false,
+                        uploadProgress = 0f,
+                        error = result.exception.message
+                    )
+                }
+                else -> {
+                    _uiState.value = _uiState.value.copy(
+                        isUploading = false,
+                        uploadProgress = 0f,
+                        error = "Unknown error"
+                    )
                 }
             }
         }
@@ -137,30 +134,27 @@ class FilesViewModel @Inject constructor(
                 error = null
             )
             
-            downloadFileUseCase(filePath, destinationFile) { progress ->
-                _uiState.value = _uiState.value.copy(downloadProgress = progress)
-            }.collect { result ->
-                when (result) {
-                    is Result.Success -> {
-                        _uiState.value = _uiState.value.copy(
-                            isDownloading = false,
-                            downloadProgress = 0f
-                        )
-                    }
-                    is Result.Error -> {
-                        _uiState.value = _uiState.value.copy(
-                            isDownloading = false,
-                            downloadProgress = 0f,
-                            error = result.exception.message
-                        )
-                    }
-                    else -> {
-                        _uiState.value = _uiState.value.copy(
-                            isDownloading = false,
-                            downloadProgress = 0f,
-                            error = "Unknown error"
-                        )
-                    }
+            val result = downloadFileUseCase(filePath, destinationFile)
+            when (result) {
+                is Result.Success -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDownloading = false,
+                        downloadProgress = 0f
+                    )
+                }
+                is Result.Error -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDownloading = false,
+                        downloadProgress = 0f,
+                        error = result.exception.message
+                    )
+                }
+                else -> {
+                    _uiState.value = _uiState.value.copy(
+                        isDownloading = false,
+                        downloadProgress = 0f,
+                        error = "Unknown error"
+                    )
                 }
             }
         }

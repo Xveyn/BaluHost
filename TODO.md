@@ -19,6 +19,7 @@
 | 🔴 High | Backend | Share-Links System (Public Links mit Passwort & Ablaufdatum) | ✅ Done | File Sharing |
 | 🔴 High | Backend | Benutzerfreigaben Backend (Dateien mit anderen Benutzern teilen, granular Rechte-UI, Multi-User-Permissions) | ✅ Done | Collaboration, granular permissions |
 | 🔴 High | Backend | RAID-Management auf echte mdadm-Befehle erweitern | ⏳ Pending | Production Mode |
+| 🔴 High | Backend | Heimnetz-Setup (Windows Service, mDNS, Auto-Discovery) | ✅ Done | iCloud/OneDrive Alternative |
 | 🔴 High | Frontend | Exercise manual test plan in dev mode | ⏳ Pending | Testing |
 | 🔴 High | Frontend | Upload-Progress-UI mit Fortschrittsanzeige | ✅ Done | UX Enhancement |
 | 🔴 High | Frontend | Datei-Vorschau Modal (PDF, Bilder, Videos, Audio, Text) | ✅ Done | Completed |
@@ -34,7 +35,8 @@
 | 🟡 Medium | Backend | Scheduled Health Checks Background Jobs erweitern | ⏳ Pending | Monitoring |
 | 🟡 Medium | Backend | Email-Benachrichtigungen bei kritischen Ereignissen | ⏳ Pending | Notifications |
 | 🟡 Medium | Backend | In-App Notification System (WebSocket/SSE) | ⏳ Pending | Real-time Notifications |
-| 🟡 Medium | Backend | VPN-Integration (WireGuard/OpenVPN) für Remote Access | ⏳ Pending | Remote Access |
+| 🟡 Medium | Backend | VPN-Integration (WireGuard/OpenVPN) für Remote Access | ✅ Done | WireGuard implemented |
+| 🟡 Medium | Backend | Mobile Apps (iOS + Android) | 🚀 In Progress | Guides created, implementation started |
 | 🟡 Medium | Backend | Netzlaufwerk-Management Backend (SMB/CIFS, NFS Shares) | ⏳ Pending | Network Shares |
 | 🟡 Medium | Backend | API-Rate-Limiting implementieren | ⏳ Pending | Security |
 | 🟡 Medium | Backend | Backup von Audit Logs | ⏳ Pending | Data Protection |
@@ -60,9 +62,9 @@
 | 🟢 Low | Backend | GraphQL-Alternative zu REST | ⏳ Pending | API Alternative |
 | 🟢 Low | Backend | Webhooks für externe Integrationen | ⏳ Pending | Integration |
 | 🟢 Low | Frontend | Media-Seite: Musik/Video-Bibliothek mit Player | ⏳ Pending | Media Library |
-| 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform |
+| 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform (see docs/IOS_APP_GUIDE.md for native Swift guide) |
 | 🟢 Low | Frontend | Mobile App (React Native) oder Progressive Web App | ⏳ Pending | Mobile |
-| 🟢 Low | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ⏳ Pending | Remote Access UI |
+| 🟢 Low | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ⏳ Pending | Remote Access UI (Backend ready, frontend pending) |
 | 🟢 Low | Frontend | Datei-Versionierung UI (History, Rollback, Diff) | ⏳ Pending | Version Control UI |
 | 🟢 Low | Frontend | Keyboard-Shortcuts (Vim-Mode im FileManager) | ⏳ Pending | Power User |
 | 🟢 Low | Frontend | Mehrsprachigkeit (i18n - EN/DE) | ⏳ Pending | Localization |

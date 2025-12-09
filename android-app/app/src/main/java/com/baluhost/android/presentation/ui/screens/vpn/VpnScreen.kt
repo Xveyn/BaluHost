@@ -114,8 +114,9 @@ fun VpnScreen(
                         
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
-                        if (uiState.serverEndpoint != null) {
-                            InfoRow(label = "Server", value = uiState.serverEndpoint)
+                        val endpoint = uiState.serverEndpoint
+                        if (endpoint != null) {
+                            InfoRow(label = "Server", value = endpoint)
                         }
                         
                         InfoRow(
@@ -140,12 +141,15 @@ fun VpnScreen(
                         containerColor = MaterialTheme.colorScheme.errorContainer
                     )
                 ) {
-                    Text(
-                        text = uiState.error,
-                        modifier = Modifier.padding(16.dp),
-                        color = MaterialTheme.colorScheme.onErrorContainer,
-                        style = MaterialTheme.typography.bodyMedium
-                    )
+                    val errorMessage = uiState.error
+                    if (errorMessage != null) {
+                        Text(
+                            text = errorMessage,
+                            modifier = Modifier.padding(16.dp),
+                            color = MaterialTheme.colorScheme.onErrorContainer,
+                            style = MaterialTheme.typography.bodyMedium
+                        )
+                    }
                 }
             }
             

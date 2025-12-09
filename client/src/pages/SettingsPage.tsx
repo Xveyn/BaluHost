@@ -253,34 +253,36 @@ export default function SettingsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-3xl font-semibold text-white">Settings</h1>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-white">Settings</h1>
         <p className="mt-1 text-sm text-slate-400">Manage your account settings and preferences</p>
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 flex gap-2 overflow-x-auto border-b border-slate-800">
-        {[
-          { id: 'profile', label: 'Profile', icon: User },
-          { id: 'security', label: 'Security', icon: Lock },
-          { id: 'storage', label: 'Storage', icon: HardDrive },
-          { id: 'activity', label: 'Activity', icon: Activity },
-          ...(profile?.role === 'admin' ? [{ id: 'backup', label: 'Backup', icon: Database }] : [])
-        ].map(tab => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id as any)}
-            className={`flex items-center gap-2 px-4 py-3 font-medium transition-colors whitespace-nowrap border-b-2 ${
-              activeTab === tab.id
-                ? 'text-sky-400 border-sky-500'
-                : 'text-slate-100-secondary border-transparent'
-            }`}
-          >
-            <tab.icon className="w-4 h-4" />
-            {tab.label}
-          </button>
-        ))}
+      <div className="mb-4 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
+        <div className="flex gap-1 sm:gap-2 overflow-x-auto border-b border-slate-800 scrollbar-hide">
+          {[
+            { id: 'profile', label: 'Profile', icon: User },
+            { id: 'security', label: 'Security', icon: Lock },
+            { id: 'storage', label: 'Storage', icon: HardDrive },
+            { id: 'activity', label: 'Activity', icon: Activity },
+            ...(profile?.role === 'admin' ? [{ id: 'backup', label: 'Backup', icon: Database }] : [])
+          ].map(tab => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id as any)}
+              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors whitespace-nowrap border-b-2 touch-manipulation active:scale-95 ${
+                activeTab === tab.id
+                  ? 'text-sky-400 border-sky-500'
+                  : 'text-slate-100-secondary border-transparent hover:text-slate-100'
+              }`}
+            >
+              <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+              <span className="text-xs sm:text-sm">{tab.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       <div className="w-full space-y-6">
@@ -289,8 +291,8 @@ export default function SettingsPage() {
           <>
             {/* Profile Card */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <div className="flex items-center space-x-4 mb-6">
-                <div className="w-20 h-20 rounded-full flex items-center justify-center text-white text-2xl font-bold bg-gradient-to-br from-sky-500 to-violet-500">
+              <div className="flex flex-col sm:flex-row items-center sm:space-x-4 mb-4 sm:mb-6">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white text-xl sm:text-2xl font-bold bg-gradient-to-br from-sky-500 to-violet-500 mb-3 sm:mb-0">
                   {profile.avatar_url ? (
                     <img
                       src={profile.avatar_url}
@@ -349,11 +351,11 @@ export default function SettingsPage() {
 
             {/* Email Update */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Mail className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <Mail className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Email Address
               </h3>
-              <form onSubmit={handleUpdateEmail} className="space-y-4">
+              <form onSubmit={handleUpdateEmail} className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Email</label>
                   <input
@@ -367,7 +369,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50"
+                  className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50 touch-manipulation active:scale-95"
                 >
                   {saving ? 'Saving...' : 'Update Email'}
                 </button>
@@ -376,22 +378,22 @@ export default function SettingsPage() {
 
             {/* Account Info */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <User className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Account Information
               </h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-sm font-medium text-slate-100-secondary">Username</label>
-                  <p className="text-lg">{profile.username}</p>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Username</label>
+                  <p className="text-base sm:text-lg truncate">{profile.username}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-100-secondary">Role</label>
-                  <p className="text-lg capitalize">{profile.role}</p>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Role</label>
+                  <p className="text-base sm:text-lg capitalize">{profile.role}</p>
                 </div>
                 <div>
-                  <label className="block text-sm font-medium text-slate-100-secondary">Account ID</label>
-                  <p className="text-lg font-mono">{profile.id}</p>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Account ID</label>
+                  <p className="text-base sm:text-lg font-mono">{profile.id}</p>
                 </div>
               </div>
             </div>
@@ -403,11 +405,11 @@ export default function SettingsPage() {
           <>
             {/* Password Change */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Lock className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <Lock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Change Password
               </h3>
-              <form onSubmit={handleChangePassword} className="space-y-4">
+              <form onSubmit={handleChangePassword} className="space-y-3 sm:space-y-4">
                 <div>
                   <label className="block text-sm font-medium mb-1">Current Password</label>
                   <input
@@ -443,7 +445,7 @@ export default function SettingsPage() {
                 <button
                   type="submit"
                   disabled={saving}
-                  className="px-4 py-2 text-white rounded-lg transition-colors disabled:opacity-50 bg-sky-500 hover:bg-sky-500-secondary"
+                  className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors disabled:opacity-50 bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
                 >
                   {saving ? 'Changing...' : 'Change Password'}
                 </button>
@@ -452,32 +454,32 @@ export default function SettingsPage() {
 
             {/* Active Sessions */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Clock className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Active Sessions
               </h3>
               <div className="space-y-3">
                 {sessions.map(session => (
                   <div
                     key={session.id}
-                    className="p-4 rounded-lg border"
+                    className="p-3 sm:p-4 rounded-lg border"
                     style={{
                       backgroundColor: 'var(--bg-secondary)',
                       borderColor: 'var(--border-primary)'
                     }}
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{session.user_agent}</p>
-                        <p className="text-sm text-slate-100-secondary">
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm sm:text-base truncate">{session.user_agent}</p>
+                        <p className="text-xs sm:text-sm text-slate-100-secondary">
                           IP: {session.ip_address}
                         </p>
-                        <p className="text-sm text-slate-100-tertiary">
+                        <p className="text-xs sm:text-sm text-slate-100-tertiary">
                           Last active: {formatDate(session.last_active)}
                         </p>
                       </div>
                       {session.is_current && (
-                        <span className="px-2 py-1 text-xs rounded" style={{ backgroundColor: 'var(--success)', color: 'white' }}>
+                        <span className="self-start px-2 py-1 text-xs rounded whitespace-nowrap" style={{ backgroundColor: 'var(--success)', color: 'white' }}>
                           Current
                         </span>
                       )}
@@ -489,16 +491,16 @@ export default function SettingsPage() {
 
             {/* Data Export */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Download className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Data Export
               </h3>
-              <p className="mb-4 text-slate-100-secondary">
+              <p className="mb-3 sm:mb-4 text-sm sm:text-base text-slate-100-secondary">
                 Download all your personal data and files in a portable format.
               </p>
               <button
                 onClick={handleExportData}
-                className="px-4 py-2 text-white rounded-lg transition-colors bg-sky-500 hover:bg-sky-500-secondary"
+                className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
               >
                 Export My Data
               </button>
@@ -516,8 +518,8 @@ export default function SettingsPage() {
           <>
             {/* Storage Quota */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <HardDrive className="w-5 h-5 mr-2 text-sky-400" />
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 Storage Usage
               </h3>
               {storageQuota ? (
@@ -562,8 +564,8 @@ export default function SettingsPage() {
 
             {/* Storage Info */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4">Storage Tips</h3>
-              <ul className="space-y-2 text-slate-100-secondary">
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Storage Tips</h3>
+              <ul className="space-y-2 text-sm sm:text-base text-slate-100-secondary">
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
                   <span>Delete unnecessary files to free up space</span>
@@ -584,27 +586,27 @@ export default function SettingsPage() {
         {/* Activity Tab */}
         {activeTab === 'activity' && (
           <div className="card border-slate-800/60 bg-slate-900/55">
-            <h3 className="text-lg font-semibold mb-4 flex items-center">
-              <Activity className="w-5 h-5 mr-2 text-sky-400" />
+            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+              <Activity className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
               Recent Activity
             </h3>
             {logsLoading ? (
-              <p className="text-slate-100-secondary">Loading activity...</p>
+              <p className="text-sm sm:text-base text-slate-100-secondary">Loading activity...</p>
             ) : auditLogs.length > 0 ? (
-              <div className="space-y-2">
+              <div className="space-y-2 sm:space-y-3">
                 {auditLogs.map(log => (
                   <div
                     key={log.id}
-                    className="p-3 rounded border bg-slate-950-secondary border-slate-800"
+                    className="p-3 sm:p-4 rounded border bg-slate-950-secondary border-slate-800"
                   >
-                    <div className="flex justify-between items-start">
-                      <div>
-                        <p className="font-medium">{log.action.replace(/_/g, ' ')}</p>
+                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
+                      <div className="flex-1 min-w-0">
+                        <p className="font-medium text-sm sm:text-base">{log.action.replace(/_/g, ' ')}</p>
                         {Object.keys(log.details).length > 0 && (
                           Array.isArray(log.details.disks) || typeof log.details.disks === 'object' ? (
-                            <div className="mt-3">
-                              <div className="overflow-x-auto rounded-xl border border-slate-800/60 bg-slate-950/40">
-                                <table className="min-w-full text-xs">
+                            <div className="mt-2 sm:mt-3">
+                              <div className="overflow-x-auto rounded-lg sm:rounded-xl border border-slate-800/60 bg-slate-950/40 -mx-3 sm:mx-0">
+                                <table className="min-w-full text-[10px] sm:text-xs">
                                   <thead>
                                     <tr className="border-b border-slate-800/60">
                                       <th className="px-4 py-3 text-left text-sky-400 font-semibold">Drive</th>
@@ -646,7 +648,7 @@ export default function SettingsPage() {
                         )}
                       </div>
                       <span
-                        className="text-xs px-2 py-1 rounded font-medium"
+                        className="self-start text-[10px] sm:text-xs px-2 py-1 rounded font-medium whitespace-nowrap"
                         style={{
                           backgroundColor: log.success ? '#10b981' : '#ef4444',
                           color: '#ffffff'
@@ -655,7 +657,7 @@ export default function SettingsPage() {
                         {log.success ? 'Success' : 'Failed'}
                       </span>
                     </div>
-                    <p className="text-xs mt-1 text-slate-100-tertiary">
+                    <p className="text-[10px] sm:text-xs mt-1 text-slate-100-tertiary">
                       {formatDate(log.timestamp)}
                     </p>
                   </div>

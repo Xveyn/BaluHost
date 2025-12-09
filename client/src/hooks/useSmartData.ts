@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { fetchSmartStatus, SmartStatusResponse } from '../api/smart';
+import { fetchSmartStatus, type SmartStatusResponse } from '../api/smart';
 
 const CACHE_KEY = 'smart_data_cache';
 const CACHE_TIMESTAMP_KEY = 'smart_data_cache_timestamp';

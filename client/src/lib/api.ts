@@ -14,6 +14,46 @@ export async function memoizedApiRequest<T = any>(url: string, params?: any, ttl
   apiCache.set(key, { data: res.data, expires: now + ttl });
   return res.data;
 }
+
+// --- Mobile Devices API ---
+export interface MobileRegistrationToken {
+  token: string;
+  server_url: string;
+  expires_at: string;
+  qr_code: string;
+  vpn_config?: string;
+}
+
+export interface MobileDevice {
+  id: string;
+  user_id: string;
+  device_name: string;
+  device_type: string;
+  device_model: string | null;
+  os_version: string | null;
+  app_version: string | null;
+  is_active: boolean;
+  last_sync: string | null;
+  created_at: string;
+  updated_at: string | null;
+}
+
+export async function generateMobileToken(includeVpn: boolean = false, deviceName: string = 'Mobile Device'): Promise<MobileRegistrationToken> {
+  const res = await apiClient.post('/api/mobile/token/generate', null, {
+    params: { include_vpn: includeVpn, device_name: deviceName }
+  });
+  return res.data;
+}
+
+export async function getMobileDevices(): Promise<MobileDevice[]> {
+  const res = await apiClient.get('/api/mobile/devices');
+  return res.data;
+}
+
+export async function deleteMobileDevice(deviceId: string): Promise<void> {
+  await apiClient.delete(`/api/mobile/devices/${deviceId}`);
+}
+
 // --- File Permissions API ---
 export async function getFilePermissions(path: string) {
   // Memoized GET: Permissions werden für 60s gecached

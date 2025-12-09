@@ -1,9 +1,9 @@
 """User database model."""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import String, DateTime, Integer
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
@@ -30,6 +30,14 @@ class User(Base):
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True
+    )
+    
+    # Relationships
+    mobile_devices: Mapped[List["MobileDevice"]] = relationship(
+        "MobileDevice", back_populates="user", cascade="all, delete-orphan"
+    )
+    vpn_clients: Mapped[List["VPNClient"]] = relationship(
+        "VPNClient", back_populates="user", cascade="all, delete-orphan"
     )
     
     def __repr__(self) -> str:

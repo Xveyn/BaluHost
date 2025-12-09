@@ -1,0 +1,14 @@
+{
+  "server_url": "https://localhost:8000",
+  "device_id": "desktop-SVEN-PC",
+  "device_name": "Desktop - SVEN-PC",
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI4IiwidXNlcm5hbWUiOiJhZG1pbiIsInJvbGUiOiJhZG1pbiIsImV4cCI6MTc2NTE4MTQzN30.JRvPC3YnjLyQg3XHCM1lEk4Vha3UB0ci4KCd9BEG_Ac",
+  "sync_folders": [
+    "F:/Desktop/Klausur INF2"
+  ],
+  "auto_sync": true,
+  "sync_interval": 60,
+  "debounce_delay": 2,
+  "verify_ssl": false,
+  "username": "admin"
+}

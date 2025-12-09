@@ -11,6 +11,8 @@ import ApiDocs from './pages/ApiDocs';
 import SharesPage from './pages/SharesPage';
 import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
+import SyncSettings from './components/SyncSettings';
+import MobileDevicesPage from './pages/MobileDevicesPage';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -207,6 +209,30 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <SettingsPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/sync"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SyncSettings />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/mobile-devices"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <MobileDevicesPage />
               </Layout>
             ) : (
               <Navigate to="/login" />

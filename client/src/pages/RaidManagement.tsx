@@ -343,30 +343,30 @@ export default function RaidManagement() {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">RAID Control</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">RAID Control</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
             Monitor array integrity, simulate failures, and control rebuilds.
           </p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
-            <span className="text-xs uppercase tracking-[0.24em] text-slate-500">
+            <span className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
               Updated {lastUpdated.toLocaleTimeString()}
             </span>
           )}
           <button
             onClick={() => loadStatus(true)}
             disabled={refreshDisabled}
-            className={`rounded-xl border px-4 py-2 text-sm font-medium transition ${
+            className={`rounded-xl border px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium transition touch-manipulation active:scale-95 ${
               refreshDisabled
                 ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                 : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
             }`}
           >
-            Refresh Now
+            Refresh
           </button>
         </div>
       </div>
@@ -388,16 +388,16 @@ export default function RaidManagement() {
       ) : (
         <div className="space-y-6">
           {speedLimits && (
-            <div className="card border-slate-800/60 bg-slate-900/55 px-6 py-5">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Sync Limits</p>
-                  <p className="mt-2 text-sm text-slate-300">
-                    Minimum Speed: {speedLimits.minimum ?? 'System Default'} kB/s · Maximum: {speedLimits.maximum ?? 'System Default'} kB/s
+            <div className="card border-slate-800/60 bg-slate-900/55 px-4 sm:px-6 py-4 sm:py-5">
+              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
+                <div className="flex-1 min-w-0">
+                  <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-500">Sync Limits</p>
+                  <p className="mt-2 text-xs sm:text-sm text-slate-300">
+                    Min: {speedLimits.minimum ?? 'System Default'} kB/s · Max: {speedLimits.maximum ?? 'System Default'} kB/s
                   </p>
                 </div>
-                <p className="text-xs text-slate-500">
-                  Values apply globally to all mdadm arrays.
+                <p className="text-[10px] sm:text-xs text-slate-500">
+                  Applies globally to all arrays
                 </p>
               </div>
             </div>
@@ -409,102 +409,108 @@ export default function RaidManagement() {
 
             return (
               <div key={array.name} className="card border-slate-800/60 bg-slate-900/55">
-                <div className="flex flex-wrap items-center justify-between gap-4 border-b border-slate-800/60 px-6 py-5">
-                  <div className="space-y-1">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow-lg shadow-sky-500/30">
-                        <svg className="h-5 w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
+                  <div className="space-y-1 flex-1 min-w-0">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <div className="flex h-8 w-8 sm:h-10 sm:w-10 items-center justify-center rounded-xl bg-gradient-to-br from-sky-500 to-indigo-600 shadow-lg shadow-sky-500/30 flex-shrink-0">
+                        <svg className="h-4 w-4 sm:h-5 sm:w-5 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                           <path strokeLinecap="round" strokeLinejoin="round" d="M5.25 14.25h13.5m-13.5 0a3 3 0 01-3-3m3 3a3 3 0 100 6h13.5a3 3 0 100-6m-16.5-3a3 3 0 013-3h13.5a3 3 0 013 3m-19.5 0a4.5 4.5 0 01.9-2.7L5.737 5.1a3.375 3.375 0 012.7-1.35h7.126c1.062 0 2.062.5 2.7 1.35l2.587 3.45a4.5 4.5 0 01.9 2.7m0 0a3 3 0 01-3 3m0 3h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008zm-3 6h.008v.008h-.008v-.008zm0-6h.008v.008h-.008v-.008z" />
                         </svg>
                       </div>
-                      <h2 className="text-xl font-semibold text-white">{array.name}</h2>
-                      <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getStatusStyle(lowerStatus)}`}>
+                      <h2 className="text-base sm:text-xl font-semibold text-white truncate">{array.name}</h2>
+                      <span className={`rounded-full border px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium ${getStatusStyle(lowerStatus)}`}>
                         {upcase(lowerStatus)}
                       </span>
-                      <span className="rounded-full border border-slate-700/70 bg-slate-900/60 px-3 py-1 text-xs uppercase tracking-[0.26em] text-slate-400">
+                      <span className="rounded-full border border-slate-700/70 bg-slate-900/60 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs uppercase tracking-[0.26em] text-slate-400">
                         {array.level.toUpperCase()}
                       </span>
-                      <span className="rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
+                      <span className="hidden sm:inline rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
                         Bitmap: {array.bitmap ? array.bitmap : 'aus'}
                       </span>
                       {array.sync_action && (
-                        <span className="rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
+                        <span className="hidden sm:inline rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
                           Sync: {array.sync_action}
                         </span>
                       )}
                     </div>
-                    <p className="text-sm text-slate-400">
-                      Capacity {formatBytes(array.size_bytes)} · {array.devices.length} Drives
+                    <p className="text-xs sm:text-sm text-slate-400">
+                      {formatBytes(array.size_bytes)} · {array.devices.length} Drives
                     </p>
-                    <div className="flex flex-wrap gap-2 text-xs text-slate-500">
-                      <span>Write-mostly Devices: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
-                      <span>Spare Devices: {array.devices.filter((device) => device.state === 'spare').length}</span>
+                    <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500">
+                      <span>Write-mostly: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
+                      <span>Spares: {array.devices.filter((device) => device.state === 'spare').length}</span>
                     </div>
                   </div>
-                  <div className="flex items-center gap-3">
+                  <div className="w-full sm:w-auto space-y-2">
                     {array.resync_progress !== null && array.resync_progress !== undefined && (
-                      <div className="flex flex-col items-end text-sm text-slate-300">
-                        <span>Synchronization</span>
-                        <span className="text-slate-200">{array.resync_progress.toFixed(1)}%</span>
+                      <div className="flex flex-row sm:flex-col items-center sm:items-end text-xs sm:text-sm text-slate-300">
+                        <span className="mr-2 sm:mr-0">Sync:</span>
+                        <span className="text-slate-200 font-medium">{array.resync_progress.toFixed(1)}%</span>
                       </div>
                     )}
-                    <button
-                      onClick={() => handleToggleBitmap(array)}
-                      disabled={busy}
-                      className={`rounded-xl border px-4 py-2 text-sm transition ${
-                        busy
-                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                          : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
-                      }`}
-                    >
-                      {array.bitmap ? 'Disable Bitmap' : 'Enable Bitmap'}
-                    </button>
-                    <button
-                      onClick={() => handleTriggerScrub(array)}
-                      disabled={busy}
-                      className={`rounded-xl border px-4 py-2 text-sm transition ${
-                        busy
-                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                          : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100 hover:border-indigo-500/60'
-                      }`}
-                    >
-                      Start Integrity Check
-                    </button>
-                    <button
-                      onClick={() => handleSimulateFailure(array)}
-                      disabled={busy}
-                      className={`rounded-xl border px-4 py-2 text-sm transition ${
-                        busy
-                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                          : 'border-amber-500/40 bg-amber-500/15 text-amber-100 hover:border-amber-500/60'
-                      }`}
-                    >
-                      Degrade Array
-                    </button>
-                    {showFinalize && (
+                    <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
                       <button
-                        onClick={() => handleFinalize(array)}
+                        onClick={() => handleToggleBitmap(array)}
                         disabled={busy}
-                        className={`rounded-xl border px-4 py-2 text-sm transition ${
+                        className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
                           busy
                             ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                            : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
+                            : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
                         }`}
                       >
-                        Complete Rebuild
+                        {array.bitmap ? 'Disable Bitmap' : 'Enable Bitmap'}
                       </button>
-                    )}
-                    <button
-                      onClick={() => handleDeleteArray(array.name)}
-                      disabled={busy}
-                      className={`rounded-xl border px-4 py-2 text-sm transition ${
-                        busy
-                          ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                          : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
-                      }`}
-                    >
-                      Delete Array
-                    </button>
+                      <button
+                        onClick={() => handleTriggerScrub(array)}
+                        disabled={busy}
+                        className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                          busy
+                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                            : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100 hover:border-indigo-500/60'
+                        }`}
+                      >
+                        <span className="hidden sm:inline">Start Integrity Check</span>
+                        <span className="sm:hidden">Check</span>
+                      </button>
+                      <button
+                        onClick={() => handleSimulateFailure(array)}
+                        disabled={busy}
+                        className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                          busy
+                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                            : 'border-amber-500/40 bg-amber-500/15 text-amber-100 hover:border-amber-500/60'
+                        }`}
+                      >
+                        <span className="hidden sm:inline">Degrade Array</span>
+                        <span className="sm:hidden">Degrade</span>
+                      </button>
+                      {showFinalize && (
+                        <button
+                          onClick={() => handleFinalize(array)}
+                          disabled={busy}
+                          className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                            busy
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                              : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
+                          }`}
+                        >
+                          <span className="hidden sm:inline">Complete Rebuild</span>
+                          <span className="sm:hidden">Rebuild</span>
+                        </button>
+                      )}
+                      <button
+                        onClick={() => handleDeleteArray(array.name)}
+                        disabled={busy}
+                        className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
+                          busy
+                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                            : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
+                        }`}
+                      >
+                        <span className="hidden sm:inline">Delete Array</span>
+                        <span className="sm:hidden">Delete</span>
+                      </button>
+                    </div>
                   </div>
                 </div>
 
@@ -522,14 +528,14 @@ export default function RaidManagement() {
                   </div>
                 )}
 
-                <div className="px-6 py-5">
-                  <div className="overflow-x-auto">
+                <div className="px-4 sm:px-6 py-4 sm:py-5">
+                  <div className="overflow-x-auto -mx-4 sm:mx-0">
                     <table className="min-w-full divide-y divide-slate-800/60">
                       <thead>
-                        <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
-                          <th className="px-5 py-3">Device</th>
-                          <th className="px-5 py-3">Status</th>
-                          <th className="px-5 py-3">Actions</th>
+                        <tr className="text-left text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">Device</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">Status</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">Actions</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
@@ -540,60 +546,63 @@ export default function RaidManagement() {
 
                           return (
                             <tr key={`${array.name}-${device.name}`} className="group transition hover:bg-slate-900/65">
-                              <td className="px-5 py-4 text-sm font-medium text-slate-200">
+                              <td className="px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-200">
                                 /dev/{device.name}
                               </td>
-                              <td className="px-5 py-4">
-                                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getDeviceStyle(lowerState)}`}>
+                              <td className="px-3 sm:px-5 py-3 sm:py-4">
+                                <span className={`rounded-full border px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium ${getDeviceStyle(lowerState)}`}>
                                   {upcase(lowerState)}
                                 </span>
                               </td>
-                              <td className="px-5 py-4 text-sm">
-                                <div className="flex flex-wrap items-center gap-3">
+                              <td className="px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm">
+                                <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
                                   <button
                                     onClick={() => handleSimulateFailure(array, device)}
                                     disabled={busy || !allowFailure}
-                                    className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !allowFailure
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-500/60'
                                     }`}
                                   >
-                                    Degrade Device
+                                    <span className="hidden sm:inline">Degrade Device</span>
+                                    <span className="sm:hidden">Degrade</span>
                                   </button>
                                   <button
                                     onClick={() => handleStartRebuild(array, device)}
                                     disabled={busy || !allowRebuild}
-                                    className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !allowRebuild
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-sky-500/50 bg-sky-500/10 text-sky-100 hover:border-sky-500/60'
                                     }`}
                                   >
-                                    Start Rebuild
+                                    <span className="hidden sm:inline">Start Rebuild</span>
+                                    <span className="sm:hidden">Rebuild</span>
                                   </button>
                                   <button
                                     onClick={() => handleWriteMostly(array, device)}
                                     disabled={busy || !['active', 'write-mostly'].includes(lowerState)}
-                                    className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !['active', 'write-mostly'].includes(lowerState)
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-slate-600'
                                     }`}
                                   >
-                                    {lowerState === 'write-mostly' ? 'Remove Write-mostly' : 'Set Write-mostly'}
+                                    {lowerState === 'write-mostly' ? 'Rm W-M' : 'W-M'}
                                   </button>
                                   {lowerState === 'spare' && (
                                     <button
                                       onClick={() => handleRemoveDevice(array, device)}
                                       disabled={busy}
-                                      className={`rounded-lg border px-3 py-1.5 text-xs transition ${
+                                      className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
                                         busy
                                           ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                           : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                                       }`}
                                     >
-                                      Remove Spare
+                                      <span className="hidden sm:inline">Remove Spare</span>
+                                      <span className="sm:hidden">Remove</span>
                                     </button>
                                   )}
                                 </div>
@@ -606,20 +615,20 @@ export default function RaidManagement() {
                   </div>
                 </div>
 
-                <div className="border-t border-slate-800/60 px-6 py-5">
-                  <div className="grid gap-5 md:grid-cols-2">
-                    <form onSubmit={(event) => handleAddSpare(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-4 text-sm text-slate-300">
-                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Add Spare</p>
-                      <div className="mt-3 flex items-center gap-3">
+                <div className="border-t border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
+                  <div className="grid gap-3 sm:gap-5 md:grid-cols-2">
+                    <form onSubmit={(event) => handleAddSpare(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-300">
+                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">Add Spare</p>
+                      <div className="mt-2 sm:mt-3 flex items-center gap-2 sm:gap-3">
                         <input
                           name="spare-device"
                           placeholder="e.g. sdc1"
-                          className="flex-1 rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                          className="flex-1 rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                         <button
                           type="submit"
                           disabled={busy}
-                          className={`rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                          className={`rounded-lg border px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition touch-manipulation active:scale-95 ${
                             busy
                               ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                               : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
@@ -630,28 +639,28 @@ export default function RaidManagement() {
                       </div>
                     </form>
 
-                    <form onSubmit={(event) => handleUpdateSpeed(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-4 py-4 text-sm text-slate-300">
-                      <p className="text-xs uppercase tracking-[0.24em] text-slate-500">Set Sync Limits (kB/s)</p>
-                      <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                    <form onSubmit={(event) => handleUpdateSpeed(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-300">
+                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">Set Sync Limits (kB/s)</p>
+                      <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
                         <input
                           name="speed-min"
                           type="number"
                           min={0}
                           placeholder={speedLimits?.minimum?.toString() ?? 'min'}
-                          className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                          className="rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                         <input
                           name="speed-max"
                           type="number"
                           min={0}
                           placeholder={speedLimits?.maximum?.toString() ?? 'max'}
-                          className="rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+                          className="rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                       </div>
                       <button
                         type="submit"
                         disabled={busy}
-                        className={`mt-3 rounded-lg border px-3 py-2 text-xs font-medium transition ${
+                        className={`mt-2 sm:mt-3 w-full sm:w-auto rounded-lg border px-3 py-1.5 sm:py-2 text-[10px] sm:text-xs font-medium transition touch-manipulation active:scale-95 ${
                           busy
                             ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                             : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
@@ -670,17 +679,17 @@ export default function RaidManagement() {
 
       {/* Disk Management Section */}
       <div className="card border-slate-800/60 bg-slate-900/55">
-        <div className="border-b border-slate-800/60 px-6 py-5">
-          <div className="flex items-center justify-between">
+        <div className="border-b border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div>
-              <h2 className="text-xl font-semibold text-white">Disk Management</h2>
-              <p className="mt-1 text-sm text-slate-400">Format available disks and create new arrays</p>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Disk Management</h2>
+              <p className="mt-1 text-xs sm:text-sm text-slate-400">Format available disks and create new arrays</p>
             </div>
-            <div className="flex gap-3">
+            <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
               <button
                 onClick={() => void loadAvailableDisks()}
                 disabled={busy}
-                className={`rounded-xl border px-4 py-2 text-sm transition ${
+                className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
                   busy
                     ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                     : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
@@ -692,20 +701,20 @@ export default function RaidManagement() {
                 <button
                   onClick={() => setShowMockDiskWizard(true)}
                   disabled={busy}
-                  className={`rounded-xl border px-4 py-2 text-sm transition ${
+                  className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
                     busy
                       ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                       : 'border-violet-500/40 bg-violet-500/15 text-violet-100 hover:border-violet-500/60'
                   }`}
                   title="Dev-Mode: Add Mock Disk"
                 >
-                  🧪 Add Mock Disk
+                  🧪 <span className="hidden sm:inline">Add Mock</span>
                 </button>
               )}
               <button
                 onClick={() => setShowCreateArrayDialog(true)}
                 disabled={busy || availableDisks.filter(d => !d.in_raid).length < 2}
-                className={`rounded-xl border px-4 py-2 text-sm transition ${
+                className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
                   busy || availableDisks.filter(d => !d.in_raid).length < 2
                     ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                     : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'

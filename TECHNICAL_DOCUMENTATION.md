@@ -48,11 +48,21 @@
 POST /api/auth/login       - User login
 POST /api/auth/logout      - User logout
 GET  /api/auth/me          - Current user
+POST /api/auth/refresh     - Refresh access token (mobile)
 ```
 
 #### Seed Data (Dev-Mode):
 - Admin: `admin` / `admin123`
 - User: `user` / `user123`
+
+#### Token Refresh (Mobile Support):
+- **Purpose:** Allow mobile clients to refresh expired access tokens without re-authentication
+- **Flow:**
+  1. Mobile registration returns 30-day refresh token
+  2. App stores refresh token in secure storage (Keychain)
+  3. When access token expires, call `/api/auth/refresh` with refresh token
+  4. Receive new access token
+- **Security:** Refresh tokens validated via JWT, audit logging for all refresh attempts
 
 ---
 
@@ -245,12 +255,18 @@ POST /api/sync/force                          - Force sync
 **API Route:** `app/api/routes/mobile.py`  
 **Schemas:** `app/schemas/mobile.py`
 
+#### Mobile Applications:
+- **iOS:** See `docs/IOS_APP_GUIDE.md` - Swift/SwiftUI implementation guide
+- **Android:** See `docs/ANDROID_APP_GUIDE.md` - Kotlin/Jetpack Compose implementation guide
+
 #### Implemented Features:
 - **Device Registration**
   - Secure token-based registration
+  - QR code pairing with desktop
   - Device management and tracking
   - Multiple device support per user
   - Device naming and identification
+  - 30-day refresh tokens for long-lived sessions
 
 - **Camera Backup**
   - Automatic photo/video backup
@@ -266,7 +282,7 @@ POST /api/sync/force                          - Force sync
 
 #### API Endpoints:
 ```
-POST /api/mobile/token/generate               - Generate registration token
+POST /api/mobile/token/generate               - Generate registration token (with VPN config)
 POST /api/mobile/register                     - Register mobile device
 GET  /api/mobile/devices                      - List devices
 GET  /api/mobile/devices/{device_id}          - Get device details
@@ -278,7 +294,106 @@ PUT  /api/mobile/camera/settings/{device_id}  - Update camera settings
 
 ---
 
-### 7. User Management
+### 7. VPN Integration (WireGuard)
+
+**Service:** `app/services/vpn.py`  
+**API Route:** `app/api/routes/vpn.py`  
+**Schemas:** `app/schemas/vpn.py`  
+**Models:** `app/models/vpn.py`
+
+#### Implemented Features:
+- **WireGuard Configuration**
+  - Automatic keypair generation (private/public keys)
+  - Preshared key support for additional security
+  - Client IP assignment from VPN network pool (10.8.0.0/24)
+  - Server configuration management (singleton pattern)
+
+- **VPN Client Management**
+  - Multiple VPN clients per user
+  - Device-specific configurations
+  - Client activation/deactivation
+  - Last handshake tracking
+  - Public key-based authentication
+
+- **QR Code Integration**
+  - Desktop generates QR code with VPN config
+  - Base64-encoded WireGuard configuration
+  - One-time registration token + VPN setup
+  - Seamless mobile pairing (scan & connect)
+
+- **Security Features**
+  - Immutable user IDs in JWT tokens
+  - Time-limited registration tokens (5 minutes)
+  - Per-device VPN credentials
+  - Automatic key rotation support
+
+#### API Endpoints:
+```
+POST   /api/vpn/generate-config            - Generate WireGuard config for device
+GET    /api/vpn/clients                    - List user's VPN clients
+GET    /api/vpn/clients/{client_id}        - Get VPN client details
+PATCH  /api/vpn/clients/{client_id}        - Update VPN client (name, active status)
+DELETE /api/vpn/clients/{client_id}        - Delete VPN client
+POST   /api/vpn/clients/{client_id}/revoke - Revoke VPN access (deactivate)
+GET    /api/vpn/server-config               - Get server config (admin only)
+POST   /api/vpn/handshake/{client_id}      - Update last handshake timestamp
+```
+
+#### Configuration Example:
+**Generated WireGuard Config:**
+```ini
+[Interface]
+PrivateKey = <client_private_key>
+Address = 10.8.0.2/32
+DNS = 1.1.1.1
+
+[Peer]
+PublicKey = <server_public_key>
+PresharedKey = <preshared_key>
+Endpoint = 192.168.1.100:51820
+AllowedIPs = 10.8.0.0/24
+PersistentKeepalive = 25
+```
+
+#### Database Schema:
+**VPN Config Table (Singleton):**
+```sql
+CREATE TABLE vpn_config (
+    id INTEGER PRIMARY KEY,
+    server_private_key VARCHAR(64) NOT NULL,
+    server_public_key VARCHAR(64) UNIQUE NOT NULL,
+    server_ip VARCHAR(15) NOT NULL,
+    server_port INTEGER DEFAULT 51820,
+    network_cidr VARCHAR(18) NOT NULL,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+**VPN Clients Table:**
+```sql
+CREATE TABLE vpn_clients (
+    id INTEGER PRIMARY KEY,
+    user_id INTEGER NOT NULL,
+    device_name VARCHAR(100) NOT NULL,
+    public_key VARCHAR(64) UNIQUE NOT NULL,
+    preshared_key VARCHAR(64) NOT NULL,
+    assigned_ip VARCHAR(15) UNIQUE NOT NULL,
+    is_active BOOLEAN DEFAULT 1,
+    created_at TIMESTAMP,
+    last_handshake TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+);
+```
+
+#### Dev-Mode:
+- **Mock Key Generation:** Uses Base64-encoded random bytes (no `wg` command required)
+- **Automatic Testing:** All VPN APIs functional in dev environment
+- **Windows Compatible:** No Linux-specific dependencies
+
+---
+
+### 8. User Management
 
 **Service:** `app/services/users.py`  
 **API Route:** `app/api/routes/users.py`  

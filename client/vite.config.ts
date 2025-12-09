@@ -7,6 +7,7 @@ import path from 'path'
 export default defineConfig({
   plugins: [react()],
   server: {
+    host: '0.0.0.0',  // Expose to network
     https: (() => {
       const keyPath = path.resolve(__dirname, '../dev-certs/key.pem')
       const certPath = path.resolve(__dirname, '../dev-certs/cert.pem')
@@ -17,7 +18,7 @@ export default defineConfig({
     })(),
     proxy: {
       '/api': {
-        target: 'https://localhost:8000',
+        target: process.env.DEV_USE_HTTPS === 'false' ? 'http://localhost:8000' : 'https://localhost:8000',
         changeOrigin: true,
         secure: false,
         ws: true,

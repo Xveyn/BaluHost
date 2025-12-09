@@ -12,12 +12,28 @@
       #0c0a1f 75%, 
       #020617 100%);
     background-attachment: fixed;
+    /* Mobile optimizations */
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    -webkit-tap-highlight-color: transparent;
+  }
+  
+  /* Improve touch scrolling on mobile */
+  * {
+    -webkit-overflow-scrolling: touch;
+  }
+  
+  /* Better mobile viewport handling */
+  @supports (-webkit-touch-callout: none) {
+    body {
+      min-height: -webkit-fill-available;
+    }
   }
 }
 
 @layer components {
   .btn {
-    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0;
+    @apply inline-flex items-center justify-center gap-2 rounded-xl px-5 py-2.5 font-medium transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-offset-0 touch-manipulation select-none;
   }
   
   .btn-primary {
@@ -29,11 +45,13 @@
   }
   
   .card {
-    @apply relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-6 shadow-[0_20px_60px_rgba(2,6,23,0.55)] backdrop-blur-xl;
+    @apply relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-4 sm:p-6 shadow-[0_20px_60px_rgba(2,6,23,0.55)] backdrop-blur-xl;
   }
   
   .input {
-    @apply w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40;
+    @apply w-full rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-100 placeholder-slate-500 transition-all focus:border-sky-500 focus:outline-none focus:ring-2 focus:ring-sky-500/40 touch-manipulation;
+    /* Prevent iOS zoom on focus */
+    font-size: max(16px, 1em);
   }
   
   .brand-text {

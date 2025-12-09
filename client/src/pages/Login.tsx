@@ -69,21 +69,21 @@ export default function Login({ onLogin }: LoginProps) {
         <div className="absolute left-[45%] bottom-[-180px] h-[340px] w-[340px] rounded-full bg-sky-500/5 blur-[120px]" />
       </div>
 
-      <div className="relative z-10 w-full max-w-md px-6 sm:px-0">
-        <div className="card border border-slate-800 bg-slate-900/55 p-10">
+      <div className="relative z-10 w-full max-w-md px-4 sm:px-6">
+        <div className="card border border-slate-800 bg-slate-900/55 p-6 sm:p-10">
           <div className="flex flex-col items-center text-center">
-            <div className="glow-ring h-16 w-16">
-              <div className="flex h-14 w-14 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
+            <div className="glow-ring h-14 w-14 sm:h-16 sm:w-16">
+              <div className="flex h-12 w-12 sm:h-14 sm:w-14 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
                 <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
               </div>
             </div>
-            <h1 className="mt-6 text-3xl font-semibold tracking-wide text-slate-100">BalùHost</h1>
+            <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">BalùHost</h1>
             <p className="mt-2 text-sm text-slate-100-tertiary">Secure Personal Cloud Gateway</p>
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-10 space-y-5">
+          <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
             {error && (
-              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-4 py-3 text-sm text-rose-200">
+              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
                 {error}
               </div>
             )}
@@ -106,7 +106,7 @@ export default function Login({ onLogin }: LoginProps) {
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
                 <label htmlFor="password">Password</label>
-                <span className="text-slate-100-tertiary normal-case tracking-normal">Keep your vault secure</span>
+                <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">Keep your vault secure</span>
               </div>
               <input
                 type="password"
@@ -121,18 +121,18 @@ export default function Login({ onLogin }: LoginProps) {
 
             <button
               type="submit"
-              className="btn btn-primary w-full mt-6"
+              className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
               disabled={loading}
             >
               {loading ? 'Authorising...' : 'Access System'}
             </button>
           </form>
 
-          <div className="mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-4 text-center text-xs text-slate-100-tertiary">
+          <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
             Default credentials - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
           </div>
 
-          <div className="mt-6 text-center text-[11px] uppercase tracking-[0.35em] text-slate-100-tertiary">
+          <div className="mt-4 sm:mt-6 text-center text-[10px] sm:text-[11px] uppercase tracking-[0.3em] sm:tracking-[0.35em] text-slate-100-tertiary">
             Firmware v4.2.0 - System Status <span className="text-sky-400">Optimal</span>
           </div>
         </div>

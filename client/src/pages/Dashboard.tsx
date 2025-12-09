@@ -354,30 +354,30 @@ export default function Dashboard() {
                     : 'text-sky-400';
 
               return (
-                <div key={stat.id} className="card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)]">
-                <div className="flex items-center justify-between">
-                  <div>
+                <div key={stat.id} className="card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] active:scale-[0.98] touch-manipulation">
+                <div className="flex items-center justify-between gap-3">
+                  <div className="min-w-0 flex-1">
                     <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{stat.title}</p>
-                    <p className="mt-3 text-3xl font-semibold text-white">{stat.value}</p>
+                    <p className="mt-2 text-2xl sm:text-3xl font-semibold text-white truncate">{stat.value}</p>
                   </div>
-                  <div className={`flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.accent} text-white shadow-[0_12px_38px_rgba(59,130,246,0.35)]`}>
+                  <div className={`flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br ${stat.accent} text-white shadow-[0_12px_38px_rgba(59,130,246,0.35)]`}>
                     {stat.icon}
                   </div>
                 </div>
-                <div className="mt-4 flex flex-col gap-1">
-                  <div className="flex items-center justify-between text-xs text-slate-400">
-                    <span className="truncate">{stat.meta}</span>
-                    <span className={deltaToneClass}>{stat.delta.label}</span>
+                <div className="mt-3 sm:mt-4 flex flex-col gap-1">
+                  <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
+                    <span className="truncate flex-1 min-w-0">{stat.meta}</span>
+                    <span className={`${deltaToneClass} shrink-0`}>{stat.delta.label}</span>
                   </div>
                   {stat.submeta && (
-                    <div className="text-xs text-slate-500">
+                    <div className="text-xs text-slate-500 truncate">
                       {stat.submeta}
                     </div>
                   )}
                 </div>
-                <div className="mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
+                <div className="mt-4 sm:mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">
                   <div
-                    className={`h-full rounded-full bg-gradient-to-r ${stat.accent}`}
+                    className={`h-full rounded-full bg-gradient-to-r ${stat.accent} transition-all duration-500`}
                     style={{ width: `${Math.min(Math.max(stat.progress, 0), 100)}%` }}
                   />
                 </div>

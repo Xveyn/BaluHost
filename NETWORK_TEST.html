@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BaluHost Netzwerk-Test</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+        }
+        .container {
+            background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 8px 32px 0 rgba(31, 38, 135, 0.37);
+        }
+        h1 { text-align: center; margin-bottom: 30px; }
+        .success { 
+            background: rgba(16, 185, 129, 0.2);
+            border: 2px solid #10b981;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .info {
+            background: rgba(59, 130, 246, 0.2);
+            border: 2px solid #3b82f6;
+            border-radius: 10px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        .code {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            font-family: 'Consolas', monospace;
+            margin: 10px 0;
+            word-break: break-all;
+        }
+        .button {
+            display: inline-block;
+            background: #10b981;
+            color: white;
+            padding: 15px 30px;
+            border-radius: 8px;
+            text-decoration: none;
+            font-weight: bold;
+            margin: 10px 5px;
+            transition: transform 0.2s;
+        }
+        .button:hover {
+            transform: scale(1.05);
+        }
+        ul { list-style: none; padding: 0; }
+        li { padding: 8px 0; }
+        li:before { content: "✓ "; color: #10b981; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🎉 BaluHost Netzwerk-Test</h1>
+        
+        <div class="success">
+            <h2>✓ Verbindung erfolgreich!</h2>
+            <p>Wenn du diese Seite siehst, funktioniert der Heimnetz-Zugriff!</p>
+        </div>
+
+        <div class="info">
+            <h3>📊 Server-Informationen</h3>
+            <ul>
+                <li>Server IP: <strong>192.168.178.21</strong></li>
+                <li>Frontend Port: <strong>5173</strong></li>
+                <li>Backend Port: <strong>8000</strong></li>
+                <li>Protocol: <strong>HTTPS</strong></li>
+                <li>Status: <strong>Online</strong></li>
+            </ul>
+        </div>
+
+        <div class="info">
+            <h3>🌐 Zugriffs-URLs</h3>
+            <p><strong>Weboberfläche (Frontend):</strong></p>
+            <div class="code">https://192.168.178.21:5173</div>
+            <div class="code">https://localhost:5173 (nur auf Server-PC)</div>
+            <p style="margin-top: 15px;"><strong>API Dokumentation:</strong></p>
+            <div class="code">https://192.168.178.21:8000/docs</div>
+            <div class="code">https://localhost:8000/docs (nur auf Server-PC)</div>
+        </div>
+
+        <div class="info">
+            <h3>💾 WebDAV Netzlaufwerk</h3>
+            <p><strong>Windows:</strong></p>
+            <div class="code">\\192.168.178.21@8080\webdav</div>
+            <p><strong>Mac:</strong></p>
+            <div class="code">http://192.168.178.21:8080/webdav</div>
+        </div>
+
+        <div class="info">
+            <h3>👤 Login</h3>
+            <ul>
+                <li>Username: <strong>admin</strong></li>
+                <li>Password: <strong>changeme</strong></li>
+            </ul>
+        </div>
+
+        <div style="text-align: center; margin-top: 30px;">
+            <a href="https://192.168.178.21:5173" class="button">🏠 Zum Dashboard</a>
+            <a href="https://192.168.178.21:8000/docs" class="button">📚 API Docs</a>
+        </div>
+
+        <div class="info" style="margin-top: 30px;">
+            <h3>🔍 Troubleshooting</h3>
+            <p><strong>Zertifikatswarnung?</strong></p>
+            <ul>
+                <li>Das ist normal bei selbst-signierten Zertifikaten</li>
+                <li>Klicke "Erweitert" → "Weiter zu 192.168.178.21"</li>
+                <li>Die Verbindung ist trotzdem verschlüsselt</li>
+            </ul>
+            
+            <p><strong>Verbindung funktioniert nicht?</strong></p>
+            <ul>
+                <li>Beide Geräte im selben WLAN?</li>
+                <li>Server läuft? (python start_dev.py)</li>
+                <li>Firewall aktiv? (Ports 5173, 8000, 8080, 5353)</li>
+                <li>Netzwerk auf "Private" statt "Public"?</li>
+            </ul>
+        </div>
+    </div>
+</body>
+</html>

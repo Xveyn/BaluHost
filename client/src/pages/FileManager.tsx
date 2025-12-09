@@ -61,6 +61,7 @@ function FileViewer({ file, onClose }: FileViewerProps) {
         URL.revokeObjectURL(blobUrl);
       }
     };
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [file.path]);
 
   const loadFileContent = async () => {
@@ -136,18 +137,19 @@ function FileViewer({ file, onClose }: FileViewerProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4">
-      <div className="card w-full max-w-4xl max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
-        <div className="flex items-center justify-between mb-4">
-          <div>
-            <h3 className="text-xl font-semibold text-white">{file.name}</h3>
-            <p className="text-sm text-slate-400 mt-1">{file.path}</p>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-2 sm:p-4">
+      <div className="card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
+        <div className="flex items-start sm:items-center justify-between gap-3 mb-3 sm:mb-4">
+          <div className="min-w-0 flex-1">
+            <h3 className="text-lg sm:text-xl font-semibold text-white truncate">{file.name}</h3>
+            <p className="text-xs sm:text-sm text-slate-400 mt-1 truncate">{file.path}</p>
           </div>
           <button
             onClick={onClose}
-            className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+            className="shrink-0 rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 sm:px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white touch-manipulation active:scale-95"
           >
-            ✕ Close
+            <span className="hidden sm:inline">✕ Close</span>
+            <span className="sm:hidden">✕</span>
           </button>
         </div>
         <div className="flex-1 overflow-auto">
@@ -833,29 +835,32 @@ export default function FileManager({ user }: FileManagerProps) {
   };
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="space-y-4 sm:space-y-6">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">
             File Manager
           </h1>
           <p className="mt-1 text-sm text-slate-400">Browse, upload, and organise your vaults</p>
           {storageInfo && (
             <div className="mt-2 text-xs text-slate-500">
-              Storage: {formatFileSize(storageInfo.usedBytes)} / {formatFileSize(storageInfo.totalBytes)} used
+              <span className="hidden sm:inline">Storage: </span>
+              {formatFileSize(storageInfo.usedBytes)} / {formatFileSize(storageInfo.totalBytes)} used
               <span className="ml-2 text-sky-400">({formatFileSize(storageInfo.availableBytes)} available)</span>
             </div>
           )}
         </div>
-        <div className="flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           <button
             onClick={() => setShowNewFolderDialog(true)}
-            className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white"
+            className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white touch-manipulation active:scale-95"
           >
-            + New Folder
+            <span className="hidden sm:inline">+ New Folder</span>
+            <span className="sm:hidden">+ Folder</span>
           </button>
-          <label className={`btn btn-primary cursor-pointer ${uploading ? 'opacity-70' : ''}`}>
-            {uploading ? 'Uploading...' : '↑ Upload Files'}
+          <label className={`btn btn-primary cursor-pointer text-xs sm:text-sm px-3 sm:px-5 py-2 sm:py-2.5 touch-manipulation active:scale-95 ${uploading ? 'opacity-70' : ''}`}>
+            <span className="hidden sm:inline">{uploading ? 'Uploading...' : '↑ Upload Files'}</span>
+            <span className="sm:hidden">↑ Files</span>
             <input
               ref={fileInputRef}
               type="file"
@@ -865,7 +870,7 @@ export default function FileManager({ user }: FileManagerProps) {
               disabled={uploading}
             />
           </label>
-          <label className={`rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white cursor-pointer ${uploading ? 'opacity-70' : ''}`}>
+          <label className={`hidden sm:flex rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white cursor-pointer touch-manipulation active:scale-95 ${uploading ? 'opacity-70' : ''}`}>
             📁 Upload Folder
             <input
               ref={folderInputRef}
@@ -882,45 +887,47 @@ export default function FileManager({ user }: FileManagerProps) {
 
       {/* Storage Drive Selector */}
       <div className="card border-slate-800/60 bg-slate-900/55">
-        <div className="flex flex-wrap items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.25em] text-slate-500">Storage Devices:</span>
-          {mountpoints.map((mp) => (
-            <button
-              key={mp.id}
-              onClick={() => {
-                setSelectedMountpoint(mp);
-                setCurrentPath(''); // Reset to root when switching drives
-              }}
-              className={`flex items-center gap-2 rounded-xl border px-4 py-2.5 text-sm font-medium transition ${
-                selectedMountpoint?.id === mp.id
-                  ? 'border-sky-500/50 bg-sky-500/10 text-sky-200'
-                  : 'border-slate-700/70 bg-slate-950/70 text-slate-300 hover:border-sky-500/40 hover:text-white'
-              }`}
-            >
-              <span className="text-base">
-                {mp.type === 'raid' ? '💾' : mp.type === 'dev-storage' ? '🔧' : '💿'}
-              </span>
-              <div className="flex flex-col items-start">
-                <span className="font-semibold">{mp.name}</span>
-                <span className="text-xs text-slate-400">
-                  {formatFileSize(mp.used_bytes)} / {formatFileSize(mp.size_bytes)}
-                  {mp.raid_level && ` • ${mp.raid_level.toUpperCase()}`}
-                  {mp.status !== 'optimal' && (
-                    <span className="ml-1 text-amber-400">⚠ {mp.status}</span>
-                  )}
+        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
+          <span className="text-xs font-semibold uppercase tracking-[0.2em] sm:tracking-[0.25em] text-slate-500">Storage:</span>
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {mountpoints.map((mp) => (
+              <button
+                key={mp.id}
+                onClick={() => {
+                  setSelectedMountpoint(mp);
+                  setCurrentPath(''); // Reset to root when switching drives
+                }}
+                className={`flex items-center gap-2 rounded-xl border px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition touch-manipulation active:scale-95 ${
+                  selectedMountpoint?.id === mp.id
+                    ? 'border-sky-500/50 bg-sky-500/10 text-sky-200'
+                    : 'border-slate-700/70 bg-slate-950/70 text-slate-300 hover:border-sky-500/40 hover:text-white'
+                }`}
+              >
+                <span className="text-sm sm:text-base">
+                  {mp.type === 'raid' ? '💾' : mp.type === 'dev-storage' ? '🔧' : '💿'}
                 </span>
-              </div>
-            </button>
-          ))}
+                <div className="flex flex-col items-start">
+                  <span className="font-semibold truncate max-w-[120px] sm:max-w-none">{mp.name}</span>
+                  <span className="text-[10px] sm:text-xs text-slate-400">
+                    {formatFileSize(mp.used_bytes)} / {formatFileSize(mp.size_bytes)}
+                    {mp.raid_level && <span className="hidden sm:inline"> • {mp.raid_level.toUpperCase()}</span>}
+                    {mp.status !== 'optimal' && (
+                      <span className="ml-1 text-amber-400">⚠</span>
+                    )}
+                  </span>
+                </div>
+              </button>
+            ))}
+          </div>
         </div>
       </div>
 
       {/* Breadcrumb Navigation */}
       <div className="card border-slate-800/60 bg-slate-900/55">
-        <div className="flex flex-wrap items-center gap-3 text-sm text-slate-400">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3 text-xs sm:text-sm text-slate-400">
           <button
             onClick={() => setCurrentPath('')}
-            className="rounded-full border border-slate-700/70 bg-slate-950/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:border-sky-500/40 hover:text-white"
+            className="rounded-full border border-slate-700/70 bg-slate-950/70 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-300 transition hover:border-sky-500/40 hover:text-white touch-manipulation active:scale-95"
           >
             Home
           </button>
@@ -929,12 +936,12 @@ export default function FileManager({ user }: FileManagerProps) {
               <span className="text-slate-600">/</span>
               <button
                 onClick={goBack}
-                className="rounded-full border border-slate-700/70 bg-slate-950/70 px-3 py-1.5 text-xs font-medium uppercase tracking-[0.2em] text-slate-300 transition hover:border-sky-500/40 hover:text-white"
+                className="rounded-full border border-slate-700/70 bg-slate-950/70 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-300 transition hover:border-sky-500/40 hover:text-white touch-manipulation active:scale-95"
               >
                 ← Back
               </button>
-              <span className="text-slate-600">/</span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/80 px-3 py-1.5 text-xs uppercase tracking-[0.25em] text-slate-200">
+              <span className="text-slate-600 hidden sm:inline">/</span>
+              <span className="rounded-full border border-slate-800/70 bg-slate-900/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.25em] text-slate-200 truncate max-w-[150px] sm:max-w-none">
                 {currentPath || '/'}
               </span>
             </>
@@ -965,7 +972,8 @@ export default function FileManager({ user }: FileManagerProps) {
               <p className="text-lg font-semibold text-sky-200">Drop files or folders here</p>
             </div>
           )}
-          <div className="overflow-x-auto">
+          {/* Desktop Table View */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-800/60">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-[0.25em] text-slate-500">
@@ -980,7 +988,7 @@ export default function FileManager({ user }: FileManagerProps) {
               <tbody className="divide-y divide-slate-800/60">
                 {files.length === 0 ? (
                   <tr>
-                    <td colSpan={5} className="px-6 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                       No files found
                     </td>
                   </tr>
@@ -1203,6 +1211,100 @@ export default function FileManager({ user }: FileManagerProps) {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card View */}
+          <div className="lg:hidden space-y-3">
+            {files.length === 0 ? (
+              <div className="py-12 text-center text-sm text-slate-500">
+                No files found
+              </div>
+            ) : (
+              files.map((file) => (
+                <div
+                  key={file.path}
+                  className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4 space-y-3 touch-manipulation active:bg-slate-900/70 transition"
+                >
+                  {/* File Header */}
+                  <div
+                    onClick={() => file.type === 'directory' && navigateToFolder(file.path)}
+                    className="flex items-center gap-3 cursor-pointer"
+                  >
+                    <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-lg ${
+                      file.type === 'directory'
+                        ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                        : 'border-slate-800 bg-slate-900/70 text-slate-400'
+                    }`}>
+                      {file.type === 'directory' ? '📁' : '📄'}
+                    </span>
+                    <div className="flex-1 min-w-0">
+                      <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
+                      <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                        <span className="uppercase tracking-wider">{file.type}</span>
+                        {file.type === 'file' && (
+                          <>
+                            <span>•</span>
+                            <span>{formatFileSize(file.size)}</span>
+                          </>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* File Meta */}
+                  <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-slate-500">
+                    <div>
+                      <span className="text-slate-600">Modified: </span>
+                      {new Date(file.modifiedAt).toLocaleDateString()}
+                    </div>
+                    <div>
+                      <span className="text-slate-600">Owner: </span>
+                      <span className="text-sky-400 font-mono">
+                        {file.ownerName && file.ownerName !== 'null'
+                          ? file.ownerName
+                          : (file.ownerId !== undefined && file.ownerId !== null && userCache[file.ownerId]
+                              ? userCache[file.ownerId]
+                              : (file.ownerId !== undefined && file.ownerId !== null
+                                  ? `UID ${file.ownerId}`
+                                  : '—'))}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* Actions */}
+                  <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-800/40">
+                    {file.type === 'file' && (
+                      <>
+                        <button
+                          onClick={() => handleViewFile(file)}
+                          className="flex-1 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-xs font-medium text-emerald-200 transition hover:border-emerald-400/40 hover:bg-emerald-500/20 touch-manipulation active:scale-95"
+                        >
+                          👁 View
+                        </button>
+                        <button
+                          onClick={() => handleDownload(file)}
+                          className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs font-medium text-sky-200 transition hover:border-sky-400/40 hover:bg-sky-500/20 touch-manipulation active:scale-95"
+                        >
+                          ↓ Download
+                        </button>
+                      </>
+                    )}
+                    <button
+                      onClick={() => startRename(file)}
+                      className="flex-1 rounded-lg border border-slate-700/70 bg-slate-900/70 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-500 hover:text-white touch-manipulation active:scale-95"
+                    >
+                      ✎ Rename
+                    </button>
+                    <button
+                      onClick={() => confirmDelete(file)}
+                      className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-200 transition hover:border-rose-400/40 hover:bg-rose-500/20 touch-manipulation active:scale-95"
+                    >
+                      🗑
+                    </button>
+                  </div>
+                </div>
+              ))
+            )}
           </div>
         </div>
       )}

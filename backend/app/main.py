@@ -16,11 +16,18 @@ from app.api.routes import api_router
 from app.core.config import settings
 from app.core.database import init_db
 from app.services.users import ensure_admin_user
-from app.services import disk_monitor, jobs, seed, telemetry
+from app.services import disk_monitor, jobs, seed, telemetry, sync_background
+from app.services.network_discovery import NetworkDiscoveryService
 
 logger = logging.getLogger(__name__)
+
+# Network discovery service instance
+_discovery_service = None
+
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
+    global _discovery_service
+    
     # Initialize database tables
     init_db()
     logger.info("Database initialized")
@@ -31,12 +38,29 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     await jobs.start_health_monitor()
     await telemetry.start_telemetry_monitor()
     disk_monitor.start_monitoring()
+    await sync_background.start_sync_scheduler()
+    logger.info("Sync scheduler started")
+    
+    # Start network discovery (mDNS/Bonjour)
+    try:
+        port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
+        _discovery_service = NetworkDiscoveryService(port=port)
+        _discovery_service.start()
+    except Exception as e:
+        logger.warning(f"Network discovery could not start: {e}")
+    
     try:
         yield
     finally:
         await jobs.stop_health_monitor()
         await telemetry.stop_telemetry_monitor()
         disk_monitor.stop_monitoring()
+        await sync_background.stop_sync_scheduler()
+        logger.info("Sync scheduler stopped")
+        
+        # Stop network discovery
+        if _discovery_service:
+            _discovery_service.stop()
 
 
 def create_app() -> FastAPI:
@@ -45,6 +69,8 @@ def create_app() -> FastAPI:
         version=__version__,
         debug=settings.debug,
         lifespan=_lifespan,
+        docs_url=None,  # Disable default docs
+        redoc_url=None,  # Disable default redoc
     )
 
     app.add_middleware(
@@ -56,6 +82,10 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix=settings.api_prefix)
+    
+    # Include custom styled docs
+    from app.api.docs import router as docs_router
+    app.include_router(docs_router)
 
     return app
 

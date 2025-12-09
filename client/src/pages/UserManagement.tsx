@@ -399,78 +399,80 @@ export default function UserManagement() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">
             User Management
           </h1>
-          <p className="mt-1 text-sm text-slate-400">Control access policies and collaboration roles</p>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">Control access policies and collaboration roles</p>
         </div>
         <div className="flex gap-2">
           <button 
             onClick={handleExportCSV}
-            className="btn btn-secondary flex items-center gap-2"
+            className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Download className="h-4 w-4" />
-            Export CSV
+            <span className="hidden sm:inline">Export CSV</span>
+            <span className="sm:hidden">Export</span>
           </button>
           <button 
             onClick={openCreateModal}
-            className="btn btn-primary flex items-center gap-2"
+            className="btn btn-primary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            Add User
+            <span className="hidden sm:inline">Add User</span>
+            <span className="sm:hidden">Add</span>
           </button>
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Total Users</p>
-              <p className="mt-1 text-2xl font-semibold text-white">{stats.total}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Total Users</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
             </div>
-            <Users className="h-8 w-8 text-sky-500" />
+            <Users className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
           </div>
         </div>
         
-        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Active Users</p>
-              <p className="mt-1 text-2xl font-semibold text-green-400">{stats.active}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Active</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
             </div>
-            <CheckCircle className="h-8 w-8 text-green-500" />
+            <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
           </div>
         </div>
         
-        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Inactive Users</p>
-              <p className="mt-1 text-2xl font-semibold text-slate-400">{stats.inactive}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Inactive</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-slate-400">{stats.inactive}</p>
             </div>
-            <XCircle className="h-8 w-8 text-slate-500" />
+            <XCircle className="h-6 w-6 sm:h-8 sm:w-8 text-slate-500 flex-shrink-0 ml-2" />
           </div>
         </div>
         
-        <div className="card border-slate-800/60 bg-slate-900/55 p-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm text-slate-400">Administrators</p>
-              <p className="mt-1 text-2xl font-semibold text-sky-400">{stats.admins}</p>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Admins</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.admins}</p>
             </div>
-            <Shield className="h-8 w-8 text-sky-500" />
+            <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
           </div>
         </div>
       </div>
 
       {/* Filters and Search */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-4">
-        <div className="flex flex-wrap gap-4">
-          <div className="flex-1 min-w-[200px]">
+      <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
+        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
+          <div className="flex-1 min-w-0">
             <div className="relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
@@ -487,7 +489,7 @@ export default function UserManagement() {
             <select
               value={roleFilter}
               onChange={(e) => setRoleFilter(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
               <option value="">All Roles</option>
               <option value="admin">Admin</option>
@@ -497,7 +499,7 @@ export default function UserManagement() {
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
-              className="rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
               <option value="">All Status</option>
               <option value="true">Active</option>
@@ -530,13 +532,13 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Users Table */}
+      {/* Desktop Users Table */}
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
           <p className="text-sm text-slate-500">Loading users...</p>
         </div>
       ) : (
-        <div className="card border-slate-800/60 bg-slate-900/55">
+        <div className="hidden lg:block card border-slate-800/60 bg-slate-900/55">
           <div className="overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-800/60">
               <thead>
@@ -674,9 +676,9 @@ export default function UserManagement() {
       {/* User Create/Edit Modal */}
       {showUserModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <div className="mb-4 flex items-center justify-between">
-              <h2 className="text-xl font-semibold text-white">
+          <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
+            <div className="mb-3 sm:mb-4 flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">
                 {editingUser ? 'Edit User' : 'Create User'}
               </h2>
               <button
@@ -685,13 +687,13 @@ export default function UserManagement() {
                   setEditingUser(null);
                   resetForm();
                 }}
-                className="text-slate-400 hover:text-white"
+                className="rounded-lg p-2 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                <X className="h-5 w-5" />
+                <X className="h-5 w-5 text-slate-400" />
               </button>
             </div>
 
-            <div className="space-y-4">
+            <div className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
                   Username
@@ -759,20 +761,20 @@ export default function UserManagement() {
               </div>
             </div>
 
-            <div className="mt-6 flex gap-2">
+            <div className="mt-4 sm:mt-6 flex gap-2">
               <button
                 onClick={() => {
                   setShowUserModal(false);
                   setEditingUser(null);
                   resetForm();
                 }}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
                 Cancel
               </button>
               <button
                 onClick={editingUser ? handleUpdateUser : handleCreateUser}
-                className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20"
+                className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
               >
                 {editingUser ? 'Update' : 'Create'}
               </button>
@@ -784,15 +786,15 @@ export default function UserManagement() {
       {/* Delete Confirmation Modal */}
       {showDeleteConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-6 shadow-xl">
-            <div className="mb-4 flex items-center gap-3">
-              <div className="rounded-full bg-rose-500/20 p-3">
-                <Trash2 className="h-6 w-6 text-rose-500" />
+          <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
+            <div className="mb-3 sm:mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
+                <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
               </div>
-              <h2 className="text-xl font-semibold text-white">Delete User</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Delete User</h2>
             </div>
 
-            <p className="mb-6 text-sm text-slate-400">
+            <p className="mb-4 sm:mb-6 text-sm text-slate-400">
               Are you sure you want to delete this user? This action cannot be undone.
             </p>
 
@@ -802,13 +804,13 @@ export default function UserManagement() {
                   setShowDeleteConfirm(false);
                   setUserToDelete(null);
                 }}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800"
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
                 Cancel
               </button>
               <button
                 onClick={confirmDelete}
-                className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20"
+                className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
               >
                 Delete
               </button>

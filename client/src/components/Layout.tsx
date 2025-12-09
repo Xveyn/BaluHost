@@ -1,5 +1,5 @@
 import { Link, useLocation } from 'react-router-dom';
-import { type ReactNode } from 'react';
+import { type ReactNode, useState } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
 
 interface LayoutProps {
@@ -77,11 +77,25 @@ const navIcon = {
       <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 8.5v-2a1.5 1.5 0 0 1 1.5-1.5h0a1.5 1.5 0 0 1 1.5 1.5v2m-3 7v2a1.5 1.5 0 0 0 1.5 1.5h0a1.5 1.5 0 0 0 1.5-1.5v-2m-7-3.5h-2a1.5 1.5 0 0 1-1.5-1.5v0a1.5 1.5 0 0 1 1.5-1.5h2m7 3h2a1.5 1.5 0 0 0 1.5-1.5v0a1.5 1.5 0 0 0-1.5-1.5h-2" />
       <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M16.2 7.8l1.4-1.4a1.5 1.5 0 0 1 2.1 0v0a1.5 1.5 0 0 1 0 2.1l-1.4 1.4m-10.6 0L6.3 8.5a1.5 1.5 0 0 1 0-2.1v0a1.5 1.5 0 0 1 2.1 0l1.4 1.4m0 8.4l-1.4 1.4a1.5 1.5 0 0 1-2.1 0v0a1.5 1.5 0 0 1 0-2.1l1.4-1.4m8.4 0l1.4 1.4a1.5 1.5 0 0 0 2.1 0v0a1.5 1.5 0 0 0 0-2.1l-1.4-1.4" />
     </svg>
+  ),
+  sync: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8" />
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M21 3v5h-5" />
+      <circle cx="12" cy="12" r="2" fill="currentColor" />
+    </svg>
+  ),
+  mobile: (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <rect x="7" y="3" width="10" height="18" rx="2" stroke="currentColor" />
+      <path stroke="currentColor" strokeLinecap="round" d="M12 18h0" />
+    </svg>
   )
 } as const;
 
 export default function Layout({ children, user, onLogout }: LayoutProps) {
   const location = useLocation();
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   const navItems = [
     {
@@ -113,6 +127,18 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       label: 'Sharing',
       description: 'Share Files',
       icon: navIcon.shares
+    },
+    {
+      path: '/sync',
+      label: 'Sync',
+      description: 'File Sync',
+      icon: navIcon.sync
+    },
+    {
+      path: '/mobile-devices',
+      label: 'Mobile Apps',
+      description: 'Device Registration',
+      icon: navIcon.mobile
     },
     {
       path: '/settings',
@@ -149,6 +175,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   return (
     <div className="relative min-h-screen overflow-hidden text-slate-100">
       <div className="relative z-10 flex min-h-screen">
+        {/* Desktop Sidebar */}
         <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]">
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
@@ -209,51 +236,137 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           </div>
         </aside>
 
+        {/* Mobile Menu Overlay */}
+        {mobileMenuOpen && (
+          <div 
+            className="fixed inset-0 z-40 bg-black/50 backdrop-blur-sm lg:hidden"
+            onClick={() => setMobileMenuOpen(false)}
+          />
+        )}
+
+        {/* Mobile Sidebar */}
+        <aside className={`fixed left-0 top-0 z-50 h-screen w-80 flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
+          mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
+        }`}>
+          <div className="flex items-center justify-between px-6 pt-6 pb-4">
+            <div className="flex items-center gap-3">
+              <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
+                <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+              </div>
+              <div>
+                <p className="text-base font-semibold tracking-wide">BalùHost</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">NAS OS v4</p>
+              </div>
+            </div>
+            <button
+              onClick={() => setMobileMenuOpen(false)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 hover:border-sky-500/50 hover:text-sky-400 transition"
+            >
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-5 w-5">
+                <path stroke="currentColor" strokeLinecap="round" d="M18 6L6 18M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
+
+          <nav className="flex-1 space-y-2 px-4 overflow-y-auto pb-4">
+            {navItems.map((item) => {
+              const active = renderLink(item.path);
+              return (
+                <Link
+                  key={`mobile-nav-${item.path}`}
+                  to={item.path}
+                  onClick={() => setMobileMenuOpen(false)}
+                  className={`group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
+                    active
+                      ? 'border-sky-500 bg-slate-900-hover text-sky-400'
+                      : 'border-transparent text-slate-300 hover:border-slate-800'
+                  }`}
+                >
+                  <span
+                    className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
+                      active
+                        ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
+                        : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
+                    }`}
+                  >
+                    {item.icon}
+                  </span>
+                  <div className="flex flex-col">
+                    <span>{item.label}</span>
+                    <span className="text-xs text-slate-100-tertiary">{item.description}</span>
+                  </div>
+                </Link>
+              );
+            })}
+          </nav>
+
+          <div className="px-4 pb-6">
+            <div className="glass-accent border-slate-800 bg-slate-900/55">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs text-slate-400">Logged in as</p>
+                  <p className="text-sm font-semibold text-slate-100">{user.username}</p>
+                  <p className="text-xs text-slate-100-tertiary">{user.role === 'admin' ? 'Administrator' : 'User'}</p>
+                </div>
+                <div className="flex h-12 w-12 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-lg font-semibold text-sky-400">
+                  {user.username.charAt(0).toUpperCase()}
+                </div>
+              </div>
+            </div>
+          </div>
+        </aside>
+
         <div className="flex flex-1 flex-col lg:pl-72">
-          <header className="fixed top-0 right-0 left-0 lg:left-72 z-20 border-b border-slate-800/50 bg-slate-900/20 px-6 py-6 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-8 lg:px-10">
-            <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
-              <div className="hidden md:flex flex-col items-start">
+          <header className="fixed top-0 right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10">
+            <div className="flex items-center justify-between">
+              {/* Mobile Header Left */}
+              <div className="flex items-center gap-3 lg:hidden">
+                <button
+                  onClick={() => setMobileMenuOpen(true)}
+                  className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 hover:border-sky-500/50 hover:text-sky-400 transition"
+                >
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-5 w-5">
+                    <path stroke="currentColor" strokeLinecap="round" d="M4 6h16M4 12h16M4 18h16" />
+                  </svg>
+                </button>
+                <div className="flex items-center gap-2">
+                  <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-950-tertiary p-[2px]">
+                    <img src={logoMark} alt="BalùHost" className="h-full w-full rounded-full" />
+                  </div>
+                  <span className="text-sm font-semibold">BalùHost</span>
+                </div>
+              </div>
+
+              {/* Desktop Header Left */}
+              <div className="hidden lg:flex flex-col items-start">
                 <span className="text-sm font-medium text-slate-100">{user.username}</span>
                 <span className="text-xs text-slate-100-tertiary">
                   {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-sky-400">Online</span>
                 </span>
               </div>
 
-              <div className="flex items-center gap-4">
-                <div className="flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
+              {/* Header Right */}
+              <div className="flex items-center gap-3">
+                <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
                 <button
                   onClick={onLogout}
-                  className="rounded-xl border border-slate-800 px-4 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100"
+                  className="rounded-xl border border-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100 md:px-4"
                 >
-                  Logout
+                  <span className="hidden sm:inline">Logout</span>
+                  <span className="sm:hidden">
+                    <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-4 w-4">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                  </span>
                 </button>
               </div>
             </div>
-
-            <div className="mt-4 flex gap-2 overflow-x-auto pb-2 text-sm text-slate-100-secondary lg:hidden">
-              {navItems.map((item) => {
-                const active = renderLink(item.path);
-                return (
-                  <Link
-                    key={`mobile-${item.path}`}
-                    to={item.path}
-                    className={`whitespace-nowrap rounded-full border px-3 py-1.5 transition ${
-                      active
-                        ? 'border-sky-500 bg-sky-500/20 text-slate-100'
-                        : 'border-slate-800 bg-slate-950-secondary text-slate-100-secondary hover:border-sky-500/30 hover:text-slate-100'
-                    }`}
-                  >
-                    {item.label}
-                  </Link>
-                );
-              })}
-            </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-6 py-8 sm:px-8 lg:px-10 mt-[140px] md:mt-[120px]">
-            <div className="mx-auto w-full max-w-7xl space-y-8">
+          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 mt-[72px]">
+            <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8">
               {children}
             </div>
           </main>

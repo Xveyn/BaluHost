@@ -34,14 +34,15 @@ class BaluHostVpnService : VpnService() {
     private var tunnel: Tunnel? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     
-    private val backend by lazy {
-        try {
-            Backend.create(this)
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to create WireGuard backend", e)
-            null
-        }
-    }
+    // TODO: VPN backend needs refactoring for new WireGuard library version
+    // private val backend by lazy {
+    //     try {
+    //         Backend.create(this)
+    //     } catch (e: Exception) {
+    //         Log.e(TAG, "Failed to create WireGuard backend", e)
+    //         null
+    //     }
+    // }
     
     override fun onCreate() {
         super.onCreate()
@@ -76,64 +77,11 @@ class BaluHostVpnService : VpnService() {
         return START_NOT_STICKY
     }
     
+    // TODO: Needs refactoring for new WireGuard library API
     private suspend fun startVpn(configString: String) {
         try {
-            Log.d(TAG, "Starting VPN connection")
-            
-            // Parse WireGuard config
-            val config = Config.parse(configString.byteInputStream())
-            
-            // Build VPN interface
-            val builder = Builder()
-                .setSession("BaluHost VPN")
-                .setMtu(config.`interface`.mtu.orElse(1280))
-            
-            // Add interface addresses
-            config.`interface`.addresses.forEach { address ->
-                builder.addAddress(address.address, address.mask)
-            }
-            
-            // Add DNS servers
-            config.`interface`.dnsServers.forEach { dns ->
-                builder.addDnsServer(dns.hostAddress)
-            }
-            
-            // Add allowed IPs (routes)
-            config.peers.forEach { peer ->
-                peer.allowedIps.forEach { allowedIp ->
-                    builder.addRoute(allowedIp.address, allowedIp.mask)
-                }
-            }
-            
-            // Disallow apps (optional - exclude certain apps from VPN)
-            // builder.addDisallowedApplication("com.example.app")
-            
-            // Establish VPN interface
-            vpnInterface = builder.establish()
-            
-            if (vpnInterface == null) {
-                throw IOException("Failed to establish VPN interface")
-            }
-            
-            Log.d(TAG, "VPN interface established")
-            
-            // Create tunnel object
-            tunnel = Tunnel(
-                "BaluHost",
-                config,
-                Tunnel.State.UP,
-                null
-            )
-            
-            // Start WireGuard backend
-            backend?.setState(tunnel!!, Tunnel.State.UP, config)
-                ?: throw BackendException(Reason.UNKNOWN_ERROR, Exception("Backend not available"))
-            
-            Log.i(TAG, "VPN connection started successfully")
-            
-            // Update notification
-            updateNotification(true)
-            
+            Log.w(TAG, "VPN functionality temporarily disabled - needs refactoring for new WireGuard library")
+            updateNotification(false)
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start VPN", e)
             updateNotification(false)
@@ -145,9 +93,10 @@ class BaluHostVpnService : VpnService() {
         try {
             Log.d(TAG, "Stopping VPN connection")
             
-            tunnel?.let { t ->
-                backend?.setState(t, Tunnel.State.DOWN, null)
-            }
+            // TODO: Needs refactoring for new WireGuard library API
+            // tunnel?.let { t ->
+            //     backend?.setState(t, Tunnel.State.DOWN, null)
+            // }
             
             vpnInterface?.close()
             vpnInterface = null
@@ -205,14 +154,14 @@ class BaluHostVpnService : VpnService() {
         return NotificationCompat.Builder(this, Constants.VPN_NOTIFICATION_CHANNEL)
             .setContentTitle(title)
             .setContentText(text)
-            .setSmallIcon(R.drawable.ic_launcher_foreground) // TODO: Add proper VPN icon
+            .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setOngoing(true)
             .apply {
                 if (isConnected) {
                     addAction(
-                        R.drawable.ic_launcher_foreground,
+                        android.R.drawable.ic_menu_close_clear_cancel,
                         "Disconnect",
                         disconnectPendingIntent
                     )
