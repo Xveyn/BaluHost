@@ -1,35 +1,28 @@
 package com.baluhost.android.domain.usecase.files
 
-import com.baluhost.android.data.remote.api.FilesApi
+import com.baluhost.android.data.repository.FileRepository
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.util.Result
-import java.time.Instant
+import kotlinx.coroutines.flow.first
 import javax.inject.Inject
 
 /**
  * Use case for getting list of files in a directory.
+ * 
+ * Uses cache-first strategy: returns cached data if available,
+ * then refreshes from network in background.
  */
 class GetFilesUseCase @Inject constructor(
-    private val filesApi: FilesApi
+    private val fileRepository: FileRepository
 ) {
     
-    suspend operator fun invoke(path: String = "/"): Result<List<FileItem>> {
+    suspend operator fun invoke(
+        path: String = "",
+        forceRefresh: Boolean = false
+    ): Result<List<FileItem>> {
         return try {
-            val response = filesApi.listFiles(path)
-            
-            val files = response.files.map { dto ->
-                FileItem(
-                    name = dto.name,
-                    path = dto.path,
-                    size = dto.size,
-                    isDirectory = dto.isDirectory,
-                    modifiedAt = Instant.parse(dto.modifiedAt),
-                    owner = dto.owner,
-                    permissions = dto.permissions,
-                    mimeType = dto.mimeType
-                )
-            }
-            
+            // Get cached data first (will auto-refresh if stale)
+            val files = fileRepository.getFiles(path, forceRefresh).first()
             Result.Success(files)
         } catch (e: Exception) {
             Result.Error(Exception("Failed to load files: ${e.message}", e))

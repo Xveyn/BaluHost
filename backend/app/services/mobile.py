@@ -196,10 +196,6 @@ class MobileService:
         access_token = auth_service.create_access_token(user=user)
         refresh_token = auth_service.create_access_token(user=user, expires_minutes=60*24*30)  # 30 days
         
-        # Convert UUID to integer for Android app compatibility
-        device_id_int = abs(hash(str(device.id))) % (10 ** 9)
-        user_id_int = int(user.id) if str(user.id).isdigit() else abs(hash(str(user.id))) % (10 ** 9)
-        
         # Format timestamps with timezone for Android parsing (ISO 8601 with Z suffix)
         created_at_iso = user.created_at.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z' if user.created_at else datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         last_seen_iso = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
@@ -209,7 +205,7 @@ class MobileService:
             "refresh_token": refresh_token,
             "token_type": "bearer",
             "user": {
-                "id": user_id_int,
+                "id": int(user.id),
                 "username": user.username,
                 "email": user.email or "",
                 "role": user.role,
@@ -217,8 +213,8 @@ class MobileService:
                 "is_active": True
             },
             "device": {
-                "id": device_id_int,
-                "user_id": user_id_int,
+                "id": str(device.id),  # UUID as string
+                "user_id": int(user.id),
                 "device_name": device.device_name,
                 "device_type": device.device_type,
                 "device_model": device.device_model or "",

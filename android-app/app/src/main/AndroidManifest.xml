@@ -12,6 +12,9 @@
         android:name="android.hardware.camera"
         android:required="false" />
     
+    <!-- Biometric Authentication -->
+    <uses-permission android:name="android.permission.USE_BIOMETRIC" />
+    
     <!-- Storage Permissions (Scoped Storage) -->
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES" />
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO" />
@@ -101,6 +104,17 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="VPN Connection for secure remote NAS access" />
         </service>
+        
+        <!-- Sync Notification Action Receiver -->
+        <receiver
+            android:name=".data.worker.SyncNotificationReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="com.baluhost.android.ACTION_CANCEL_SYNC" />
+                <action android:name="com.baluhost.android.ACTION_RETRY_SYNC" />
+                <action android:name="com.baluhost.android.ACTION_RESOLVE_CONFLICTS" />
+            </intent-filter>
+        </receiver>
         
         <!-- DocumentsProvider temporarily disabled - needs implementation
         <provider

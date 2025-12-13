@@ -25,6 +25,8 @@ import com.baluhost.android.presentation.ui.components.GlassCard
 import com.baluhost.android.presentation.ui.components.GlassIntensity
 import com.baluhost.android.presentation.ui.components.GradientButton
 import com.baluhost.android.presentation.ui.theme.*
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.*
@@ -37,6 +39,7 @@ import java.util.*
 fun FilesScreen(
     onNavigateToVpn: () -> Unit,
     onNavigateToSettings: () -> Unit = {},
+    onNavigateToMediaViewer: (fileUrl: String, fileName: String, mimeType: String?) -> Unit = { _, _, _ -> },
     viewModel: FilesViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
@@ -50,8 +53,18 @@ fun FilesScreen(
     ) { uri: Uri? ->
         uri?.let {
             try {
+                // Get original filename from URI
+                val originalFileName = context.contentResolver.query(uri, null, null, null, null)?.use { cursor ->
+                    val nameIndex = cursor.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME)
+                    if (cursor.moveToFirst() && nameIndex != -1) {
+                        cursor.getString(nameIndex)
+                    } else {
+                        null
+                    }
+                } ?: "upload_${System.currentTimeMillis()}"
+                
                 val inputStream = context.contentResolver.openInputStream(it)
-                val tempFile = File(context.cacheDir, "upload_${System.currentTimeMillis()}")
+                val tempFile = File(context.cacheDir, originalFileName)
                 inputStream?.use { input ->
                     tempFile.outputStream().use { output ->
                         input.copyTo(output)
@@ -166,49 +179,69 @@ fun FilesScreen(
                 }
             }
         ) { paddingValues ->
-            Box(
+            SwipeRefresh(
+                state = rememberSwipeRefreshState(uiState.isRefreshing),
+                onRefresh = { viewModel.refreshFiles() },
                 modifier = Modifier
                     .fillMaxSize()
                     .padding(paddingValues)
             ) {
-                when {
-                    uiState.isLoading -> {
-                        CircularProgressIndicator(
-                            modifier = Modifier.align(Alignment.Center),
-                            color = Sky400
-                        )
-                    }
-                    uiState.files.isEmpty() && !uiState.isLoading -> {
-                        Column(
-                            modifier = Modifier.align(Alignment.Center),
-                            horizontalAlignment = Alignment.CenterHorizontally,
-                            verticalArrangement = Arrangement.spacedBy(16.dp)
-                        ) {
-                            Icon(
-                                imageVector = Icons.Default.Folder,
-                                contentDescription = null,
-                                modifier = Modifier.size(80.dp),
-                                tint = Slate600
-                            )
-                            Text(
-                                text = "Keine Dateien vorhanden",
-                                style = MaterialTheme.typography.bodyLarge,
-                                color = Slate400
+                Box(modifier = Modifier.fillMaxSize()) {
+                    when {
+                        uiState.isLoading -> {
+                            CircularProgressIndicator(
+                                modifier = Modifier.align(Alignment.Center),
+                                color = Sky400
                             )
                         }
-                    }
-                    else -> {
-                        LazyColumn(
-                            modifier = Modifier.fillMaxSize(),
-                            contentPadding = PaddingValues(16.dp),
-                            verticalArrangement = Arrangement.spacedBy(8.dp)
-                        ) {
-                            items(uiState.files) { file ->
-                                GlassFileListItem(
-                                    file = file,
-                                    onFileClick = {
-                                        if (file.isDirectory) {
-                                            viewModel.navigateToFolder(file.name)
+                        uiState.files.isEmpty() && !uiState.isLoading -> {
+                            Column(
+                                modifier = Modifier.align(Alignment.Center),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                verticalArrangement = Arrangement.spacedBy(16.dp)
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.Folder,
+                                    contentDescription = null,
+                                    modifier = Modifier.size(80.dp),
+                                    tint = Slate600
+                                )
+                                Text(
+                                    text = "Keine Dateien vorhanden",
+                                    style = MaterialTheme.typography.bodyLarge,
+                                    color = Slate400
+                                )
+                            }
+                        }
+                        else -> {
+                            LazyColumn(
+                                modifier = Modifier.fillMaxSize(),
+                                contentPadding = PaddingValues(16.dp),
+                                verticalArrangement = Arrangement.spacedBy(8.dp)
+                            ) {
+                                items(uiState.files) { file ->
+                                    GlassFileListItem(
+                                        file = file,
+                                        onFileClick = {
+                                        // Debug logging
+                                        android.util.Log.d("FilesScreen", "Clicked file: ${file.name}, mimeType: ${file.mimeType}, isDirectory: ${file.isDirectory}")
+                                        
+                                        when {
+                                            file.isDirectory -> {
+                                                viewModel.navigateToFolder(file.name)
+                                            }
+                                            file.mimeType?.startsWith("image/") == true ||
+                                            file.mimeType?.startsWith("video/") == true ||
+                                            file.mimeType?.startsWith("audio/") == true -> {
+                                                // Open media viewer for images, videos, audio
+                                                android.util.Log.d("FilesScreen", "Opening media viewer for ${file.name}")
+                                                val fileUrl = viewModel.getFileDownloadUrl(file.path)
+                                                android.util.Log.d("FilesScreen", "fileUrl = $fileUrl")
+                                                onNavigateToMediaViewer(fileUrl, file.name, file.mimeType)
+                                            }
+                                            else -> {
+                                                android.util.Log.d("FilesScreen", "Unknown file type for ${file.name}, mimeType: ${file.mimeType}")
+                                            }
                                         }
                                     },
                                     onDeleteClick = {
@@ -220,8 +253,8 @@ fun FilesScreen(
                     }
                 }
             
-                // Upload/Download Progress Overlay
-                if (uiState.isUploading || uiState.isDownloading) {
+                    // Upload/Download Progress Overlay
+                    if (uiState.isUploading || uiState.isDownloading) {
                     GlassCard(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -255,8 +288,8 @@ fun FilesScreen(
                     }
                 }
                 
-                // Error Snackbar
-                uiState.error?.let { error ->
+                    // Error Snackbar
+                    uiState.error?.let { error -> 
                     Snackbar(
                         modifier = Modifier
                             .align(Alignment.BottomCenter)
@@ -272,8 +305,9 @@ fun FilesScreen(
                         Text(error)
                     }
                 }
-            }
-        }
+                }  // Close Box
+            }  // Close SwipeRefresh
+        }  // Close Scaffold
         
         // Delete Confirmation Dialog
         showDeleteDialog?.let { file ->

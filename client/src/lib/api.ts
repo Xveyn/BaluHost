@@ -56,7 +56,10 @@ export async function generateMobileToken(
 }
 
 export async function getMobileDevices(): Promise<MobileDevice[]> {
-  const res = await apiClient.get('/api/mobile/devices');
+  // Add cache-busting timestamp to prevent stale data
+  const res = await apiClient.get('/api/mobile/devices', {
+    params: { _t: Date.now() }
+  });
   return res.data;
 }
 

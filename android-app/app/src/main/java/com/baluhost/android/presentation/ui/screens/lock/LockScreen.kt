@@ -1,14 +1,19 @@
 package com.baluhost.android.presentation.ui.screens.lock
 
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Backspace
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
@@ -23,6 +28,8 @@ import androidx.lifecycle.compose.LifecycleResumeEffect
 /**
  * Lock screen shown when app resumes after timeout or on demand.
  * Supports both biometric and PIN authentication.
+ * 
+ * SECURITY: Back button and gestures are disabled to prevent bypass.
  */
 @Composable
 fun LockScreen(
@@ -36,6 +43,12 @@ fun LockScreen(
     var pin by remember { mutableStateOf("") }
     var showError by remember { mutableStateOf(false) }
     var errorMessage by remember { mutableStateOf("") }
+    
+    // SECURITY: Block back button and back gestures
+    // User MUST authenticate to proceed
+    BackHandler(enabled = true) {
+        // Do nothing - back button is disabled on lock screen
+    }
     
     // Auto-trigger biometric on screen appear
     LaunchedEffect(Unit) {
@@ -59,9 +72,24 @@ fun LockScreen(
         }
     }
     
-    Surface(
-        modifier = Modifier.fillMaxSize(),
-        color = MaterialTheme.colorScheme.background
+    // Gradient background matching web design - enhanced version
+    val gradientBrush = Brush.linearGradient(
+        colors = listOf(
+            Color(0xFF1e293b), // slate-800
+            Color(0xFF1e1b4b), // indigo-950
+            Color(0xFF0f172a), // slate-900
+            Color(0xFF1e1b4b), // indigo-950
+            Color(0xFF0c0a1f), // very dark violet
+            Color(0xFF020617)  // slate-950
+        ),
+        start = Offset(0f, 0f),
+        end = Offset(1000f, 1200f) // 135deg diagonal
+    )
+    
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(brush = gradientBrush)
     ) {
         Box(
             modifier = Modifier.fillMaxSize()
@@ -141,52 +169,213 @@ fun LockScreen(
                 }
             }
             
-            // PIN authentication
+            // PIN authentication with number pad
             if (uiState.pinAvailable) {
-                OutlinedTextField(
-                    value = pin,
-                    onValueChange = { 
-                        if (it.length <= 8 && it.all { c -> c.isDigit() }) {
-                            pin = it
-                            showError = false
-                        }
-                    },
+                // PIN display (dots)
+                Row(
                     modifier = Modifier.fillMaxWidth(),
-                    label = { Text("PIN eingeben") },
-                    visualTransformation = PasswordVisualTransformation(),
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.NumberPassword),
-                    singleLine = true,
-                    isError = showError,
-                    supportingText = if (showError) {
-                        { Text(errorMessage, color = MaterialTheme.colorScheme.error) }
-                    } else null,
-                    leadingIcon = {
-                        Icon(Icons.Default.Pin, contentDescription = null)
-                    }
-                )
-                
-                Spacer(modifier = Modifier.height(16.dp))
-                
-                Button(
-                    onClick = {
-                        val success = viewModel.authenticatePin(pin)
-                        if (!success) {
-                            showError = true
-                            errorMessage = "Falsche PIN"
-                            pin = ""
-                        }
-                    },
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .height(56.dp),
-                    enabled = pin.length >= 4
+                    horizontalArrangement = Arrangement.Center,
+                    verticalAlignment = Alignment.CenterVertically
                 ) {
                     Icon(
-                        imageVector = Icons.Default.Check,
-                        contentDescription = null
+                        imageVector = Icons.Default.Pin,
+                        contentDescription = null,
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(24.dp)
                     )
-                    Spacer(modifier = Modifier.width(8.dp))
-                    Text("Entsperren")
+                    Spacer(modifier = Modifier.width(16.dp))
+                    
+                    // PIN dots
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        repeat(8) { index ->
+                            Box(
+                                modifier = Modifier
+                                    .size(16.dp)
+                                    .then(
+                                        if (index < pin.length) {
+                                            Modifier
+                                        } else {
+                                            Modifier
+                                        }
+                                    ),
+                                contentAlignment = Alignment.Center
+                            ) {
+                                Surface(
+                                    shape = CircleShape,
+                                    color = if (index < pin.length) {
+                                        MaterialTheme.colorScheme.primary
+                                    } else {
+                                        MaterialTheme.colorScheme.surfaceVariant
+                                    },
+                                    modifier = Modifier.size(if (index < pin.length) 16.dp else 12.dp)
+                                ) {}
+                            }
+                        }
+                    }
+                }
+                
+                if (showError) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = errorMessage,
+                        color = MaterialTheme.colorScheme.error,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+                
+                Spacer(modifier = Modifier.height(32.dp))
+                
+                // Number pad (3x4 grid) - Glass style
+                Column(
+                    modifier = Modifier.fillMaxWidth(0.75f), // Make buttons smaller
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    // Rows 1-3 (numbers 1-9)
+                    for (row in 0..2) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                        ) {
+                            for (col in 1..3) {
+                                val number = row * 3 + col
+                                Surface(
+                                    onClick = {
+                                        if (pin.length < 8) {
+                                            pin += number
+                                            showError = false
+                                        }
+                                    },
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .aspectRatio(1f),
+                                    shape = CircleShape,
+                                    color = Color(0xFF1e293b).copy(alpha = 0.6f), // slate-800 with transparency
+                                    tonalElevation = 2.dp,
+                                    shadowElevation = 4.dp
+                                ) {
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier.fillMaxSize()
+                                    ) {
+                                        Text(
+                                            text = number.toString(),
+                                            style = MaterialTheme.typography.headlineSmall,
+                                            fontWeight = FontWeight.Medium,
+                                            color = Color.White.copy(alpha = 0.95f)
+                                        )
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    
+                    // Row 4 (unlock/empty, 0, backspace)
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally)
+                    ) {
+                        // Unlock button (left position, only visible when PIN length >= 4)
+                        if (pin.length >= 4) {
+                            Surface(
+                                onClick = {
+                                    val success = viewModel.authenticatePin(pin)
+                                    if (!success) {
+                                        showError = true
+                                        errorMessage = "Falsche PIN"
+                                        pin = ""
+                                    }
+                                },
+                                modifier = Modifier
+                                    .weight(1f)
+                                    .aspectRatio(1f),
+                                shape = CircleShape,
+                                color = Color(0xFF38bdf8).copy(alpha = 0.85f), // sky-500 for primary action
+                                tonalElevation = 4.dp,
+                                shadowElevation = 8.dp
+                            ) {
+                                Box(
+                                    contentAlignment = Alignment.Center,
+                                    modifier = Modifier.fillMaxSize()
+                                ) {
+                                    Icon(
+                                        imageVector = Icons.Default.Check,
+                                        contentDescription = "Entsperren",
+                                        modifier = Modifier.size(28.dp),
+                                        tint = Color.White
+                                    )
+                                }
+                            }
+                        } else {
+                            // Empty space when unlock button not visible
+                            Spacer(modifier = Modifier.weight(1f))
+                        }
+                        
+                        // Number 0
+                        Surface(
+                            onClick = {
+                                if (pin.length < 8) {
+                                    pin += "0"
+                                    showError = false
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f),
+                            shape = CircleShape,
+                            color = Color(0xFF1e293b).copy(alpha = 0.6f),
+                            tonalElevation = 2.dp,
+                            shadowElevation = 4.dp
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Text(
+                                    text = "0",
+                                    style = MaterialTheme.typography.headlineSmall,
+                                    fontWeight = FontWeight.Medium,
+                                    color = Color.White.copy(alpha = 0.95f)
+                                )
+                            }
+                        }
+                        
+                        // Backspace
+                        Surface(
+                            onClick = {
+                                if (pin.isNotEmpty()) {
+                                    pin = pin.dropLast(1)
+                                    showError = false
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .aspectRatio(1f),
+                            shape = CircleShape,
+                            color = if (pin.isNotEmpty()) {
+                                Color(0xFF1e293b).copy(alpha = 0.6f)
+                            } else {
+                                Color(0xFF1e293b).copy(alpha = 0.2f)
+                            },
+                            tonalElevation = 2.dp,
+                            shadowElevation = if (pin.isNotEmpty()) 4.dp else 0.dp
+                        ) {
+                            Box(
+                                contentAlignment = Alignment.Center,
+                                modifier = Modifier.fillMaxSize()
+                            ) {
+                                Icon(
+                                    imageVector = Icons.AutoMirrored.Filled.Backspace,
+                                    contentDescription = "Löschen",
+                                    modifier = Modifier.size(20.dp),
+                                    tint = Color.White.copy(
+                                        alpha = if (pin.isNotEmpty()) 0.8f else 0.4f
+                                    )
+                                )
+                            }
+                        }
+                    }
                 }
             }
             
@@ -233,6 +422,6 @@ fun LockScreen(
                     Text(errorMessage)
                 }
             }
-        } // End of Box
-    }
+        } // End of inner Box
+    } // End of outer Box (gradient background)
 }

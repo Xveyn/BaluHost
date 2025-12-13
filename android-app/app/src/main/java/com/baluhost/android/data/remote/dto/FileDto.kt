@@ -17,7 +17,7 @@ data class FileItemDto(
     val isDirectory: Boolean,
     @SerializedName("modified_at")
     val modifiedAt: String,
-    val owner: String,
+    val owner: String? = null,
     val permissions: String? = null,
     @SerializedName("mime_type")
     val mimeType: String? = null
@@ -25,7 +25,9 @@ data class FileItemDto(
 
 data class UploadFileResponse(
     val message: String,
-    val file: FileItemDto
+    val uploaded: Int,
+    @SerializedName("upload_ids")
+    val uploadIds: List<String>? = null
 )
 
 data class DeleteFileRequest(

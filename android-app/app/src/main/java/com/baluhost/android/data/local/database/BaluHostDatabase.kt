@@ -3,6 +3,7 @@ package com.baluhost.android.data.local.database
 import androidx.room.Database
 import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
+import com.baluhost.android.data.local.database.converters.Converters
 import com.baluhost.android.data.local.database.dao.FileDao
 import com.baluhost.android.data.local.database.dao.UserDao
 import com.baluhost.android.data.local.database.entities.FileEntity
@@ -18,7 +19,7 @@ import com.baluhost.android.data.local.database.entities.UserEntity
         FileEntity::class,
         UserEntity::class
     ],
-    version = 1,
+    version = 2, // Incremented for parentPath column
     exportSchema = false
 )
 @TypeConverters(Converters::class)

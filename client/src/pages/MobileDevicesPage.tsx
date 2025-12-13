@@ -5,6 +5,7 @@ import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNot
 export default function MobileDevicesPage() {
   const [devices, setDevices] = useState<MobileDevice[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshKey, setRefreshKey] = useState(0); // Force re-render trigger
   const [qrData, setQrData] = useState<MobileRegistrationToken | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [includeVpn, setIncludeVpn] = useState(false);
@@ -14,12 +15,21 @@ export default function MobileDevicesPage() {
 
   useEffect(() => {
     loadDevices();
+    
+    // Auto-refresh every 10 seconds to detect changes from mobile app
+    const interval = setInterval(() => {
+      loadDevices();
+    }, 10000);
+    
+    return () => clearInterval(interval);
   }, []);
 
   const loadDevices = async () => {
     try {
       setLoading(true);
+      console.log('Loading devices...');
       const data = await getMobileDevices();
+      console.log('Loaded devices:', data);
       setDevices(data);
     } catch (error) {
       console.error('Failed to load devices:', error);
@@ -54,11 +64,21 @@ export default function MobileDevicesPage() {
     }
 
     try {
+      console.log('Deleting device:', deviceId);
+      
+      // Delete device from backend
       await deleteMobileDevice(deviceId);
+      console.log('Device deleted successfully');
+      
+      // Force complete refresh
+      setDevices([]);
+      setRefreshKey(prev => prev + 1);
       await loadDevices();
+      
     } catch (error) {
       console.error('Failed to delete device:', error);
       alert('Gerät konnte nicht gelöscht werden');
+      await loadDevices();
     }
   };
 
@@ -201,10 +221,10 @@ export default function MobileDevicesPage() {
             <p className="text-sm mt-1">Generiere einen QR-Code, um dein erstes Gerät hinzuzufügen</p>
           </div>
         ) : (
-          <div className="space-y-3">
+          <div className="space-y-3" key={refreshKey}>
             {devices.map((device) => (
               <div
-                key={device.id}
+                key={`${device.id}-${refreshKey}`}
                 className="p-4 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors"
               >
                 <div className="flex items-start justify-between gap-4">

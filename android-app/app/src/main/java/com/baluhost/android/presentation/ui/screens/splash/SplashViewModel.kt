@@ -41,10 +41,11 @@ class SplashViewModel @Inject constructor(
                 return@launch
             }
             
-            // Check authentication
+            // Check authentication - both token AND device ID must exist
             val accessToken = preferencesManager.getAccessToken().first()
+            val deviceId = preferencesManager.getDeviceId().first()
             
-            _uiState.value = if (accessToken != null) {
+            _uiState.value = if (accessToken != null && deviceId != null) {
                 SplashState.Authenticated
             } else {
                 SplashState.NotAuthenticated

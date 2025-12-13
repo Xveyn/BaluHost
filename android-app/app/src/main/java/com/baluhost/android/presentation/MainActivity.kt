@@ -14,7 +14,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.lifecycleScope
 import androidx.navigation.compose.rememberNavController
 import com.baluhost.android.data.local.security.AppLockManager
@@ -37,7 +41,6 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        
         setContent {
             BaluHostTheme {
                 Surface(
@@ -47,12 +50,26 @@ class MainActivity : ComponentActivity() {
                     val navController = rememberNavController()
                     var initialRoute by remember { mutableStateOf<String?>(null) }
                     var shouldShowLock by remember { mutableStateOf(false) }
+                    val lifecycleOwner = LocalLifecycleOwner.current
                     
-                    // Check if we should show lock screen on app startup
-                    LaunchedEffect(Unit) {
-                        shouldShowLock = appLockManager.shouldShowLockScreen()
-                        if (shouldShowLock) {
-                            Log.d(TAG, "App lock timeout exceeded, showing lock screen")
+                    // Check lock screen on every resume
+                    DisposableEffect(lifecycleOwner) {
+                        val observer = LifecycleEventObserver { _, event ->
+                            if (event == Lifecycle.Event.ON_RESUME) {
+                                lifecycleScope.launch {
+                                    val showLock = appLockManager.shouldShowLockScreen()
+                                    if (showLock) {
+                                        Log.d(TAG, "App lock check: showing lock screen")
+                                        shouldShowLock = true
+                                    } else {
+                                        Log.d(TAG, "App lock check: no lock needed")
+                                    }
+                                }
+                            }
+                        }
+                        lifecycleOwner.lifecycle.addObserver(observer)
+                        onDispose {
+                            lifecycleOwner.lifecycle.removeObserver(observer)
                         }
                     }
                     

@@ -19,6 +19,7 @@ import retrofit2.http.Multipart
 import retrofit2.http.POST
 import retrofit2.http.PUT
 import retrofit2.http.Part
+import retrofit2.http.Path
 import retrofit2.http.Query
 import retrofit2.http.Streaming
 
@@ -35,8 +36,8 @@ interface FilesApi {
     @Multipart
     @POST("files/upload")
     suspend fun uploadFile(
-        @Part file: MultipartBody.Part,
-        @Query("path") path: String
+        @Part files: MultipartBody.Part,
+        @Part("path") path: okhttp3.RequestBody
     ): UploadFileResponse
     
     @Streaming
@@ -45,9 +46,9 @@ interface FilesApi {
         @Query("path") path: String
     ): ResponseBody
     
-    @DELETE("files/delete")
+    @DELETE("files/{path}")
     suspend fun deleteFile(
-        @Query("path") path: String
+        @Path("path", encoded = true) path: String
     ): DeleteFileResponse
     
     @POST("files/folder")

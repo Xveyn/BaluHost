@@ -24,23 +24,31 @@ class UploadFileUseCase @Inject constructor(
         return try {
             val requestBody = file.asRequestBody("application/octet-stream".toMediaTypeOrNull())
             val multipartBody = MultipartBody.Part.createFormData(
-                "file",
+                "files",  // Backend expects 'files' (plural)
                 file.name,
                 requestBody
             )
             
-            val response = filesApi.uploadFile(multipartBody, destinationPath)
+            // Path must be sent as Form data, not query parameter
+            val pathBody = okhttp3.RequestBody.create(
+                "text/plain".toMediaTypeOrNull(),
+                destinationPath
+            )
             
+            val response = filesApi.uploadFile(multipartBody, pathBody)
+            
+            // Backend returns { message, uploaded, upload_ids } - no file details
+            // We'll return success and let the caller refresh the file list
             Result.Success(
                 FileItem(
-                    name = response.file.name,
-                    path = response.file.path,
-                    size = response.file.size,
-                    isDirectory = response.file.isDirectory,
-                    modifiedAt = Instant.parse(response.file.modifiedAt),
-                    owner = response.file.owner,
-                    permissions = response.file.permissions,
-                    mimeType = response.file.mimeType
+                    name = file.name,
+                    path = "$destinationPath/${file.name}",
+                    size = file.length(),
+                    isDirectory = false,
+                    modifiedAt = Instant.now(),
+                    owner = null,
+                    permissions = null,
+                    mimeType = null
                 )
             )
         } catch (e: Exception) {

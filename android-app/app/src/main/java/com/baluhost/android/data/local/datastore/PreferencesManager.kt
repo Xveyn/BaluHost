@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import com.baluhost.android.data.local.security.SecurePreferencesManager
 import com.baluhost.android.util.Constants
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import javax.inject.Inject
@@ -28,6 +29,8 @@ class PreferencesManager @Inject constructor(
     private val serverUrlKey = stringPreferencesKey(Constants.PrefsKeys.SERVER_URL)
     private val userIdKey = stringPreferencesKey(Constants.PrefsKeys.USER_ID)
     private val usernameKey = stringPreferencesKey(Constants.PrefsKeys.USERNAME)
+    private val userRoleKey = stringPreferencesKey("user_role")
+    private val devModeKey = stringPreferencesKey("dev_mode")
     private val cameraBackupEnabledKey = stringPreferencesKey(Constants.PrefsKeys.CAMERA_BACKUP_ENABLED)
     private val wifiOnlyKey = stringPreferencesKey(Constants.PrefsKeys.WIFI_ONLY)
     private val lastBackupTimeKey = stringPreferencesKey(Constants.PrefsKeys.LAST_BACKUP_TIME)
@@ -78,6 +81,26 @@ class PreferencesManager @Inject constructor(
     
     fun getUsername(): Flow<String?> {
         return dataStore.data.map { prefs -> prefs[usernameKey] }
+    }
+    
+    // User Role
+    suspend fun saveUserRole(role: String) {
+        dataStore.edit { prefs -> prefs[userRoleKey] = role }
+    }
+    
+    fun getUserRole(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[userRoleKey] }
+    }
+    
+    // Dev Mode Flag
+    suspend fun saveDevMode(devMode: Boolean) {
+        dataStore.edit { prefs -> prefs[devModeKey] = devMode.toString() }
+    }
+    
+    fun getDevMode(): Flow<Boolean> {
+        return dataStore.data.map { prefs -> 
+            prefs[devModeKey]?.toBoolean() ?: false 
+        }
     }
     
     // Camera Backup Settings
@@ -147,6 +170,192 @@ class PreferencesManager @Inject constructor(
         return dataStore.data.map { prefs -> 
             prefs[onboardingCompletedKey]?.toBoolean() ?: false
         }
+    }
+    
+    // Sync Folder URIs (stored as JSON string map: folderId -> URI string)
+    suspend fun saveSyncFolderUri(folderId: String, uri: String) {
+        dataStore.edit { prefs ->
+            val key = stringPreferencesKey("sync_folder_uri_$folderId")
+            prefs[key] = uri
+        }
+    }
+    
+    suspend fun getSyncFolderUri(folderId: String): String? {
+        val key = stringPreferencesKey("sync_folder_uri_$folderId")
+        return dataStore.data.map { prefs -> prefs[key] }.first()
+    }
+    
+    suspend fun removeSyncFolderUri(folderId: String) {
+        dataStore.edit { prefs ->
+            val key = stringPreferencesKey("sync_folder_uri_$folderId")
+            prefs.remove(key)
+        }
+    }
+    
+    // Pending conflicts for manual resolution
+    suspend fun savePendingConflicts(folderId: Long, conflicts: List<com.baluhost.android.domain.model.sync.FileConflict>) {
+        val key = stringPreferencesKey("pending_conflicts_$folderId")
+        val conflictsJson = conflicts.joinToString("|||") { conflict ->
+            "${conflict.id}::${conflict.relativePath}::${conflict.fileName}::" +
+            "${conflict.localSize}::${conflict.remoteSize}::" +
+            "${conflict.localModifiedAt}::${conflict.remoteModifiedAt}::${conflict.detectedAt}"
+        }
+        dataStore.edit { prefs ->
+            prefs[key] = conflictsJson
+        }
+    }
+    
+    fun getPendingConflicts(folderId: Long): Flow<List<com.baluhost.android.domain.model.sync.FileConflict>> = flow {
+        val key = stringPreferencesKey("pending_conflicts_$folderId")
+        val conflictsJson = dataStore.data.map { prefs -> prefs[key] }.first()
+        
+        if (conflictsJson.isNullOrEmpty()) {
+            emit(emptyList())
+        } else {
+            val conflicts = conflictsJson.split("|||").mapNotNull { entry ->
+                try {
+                    val parts = entry.split("::")
+                    if (parts.size >= 8) {
+                        com.baluhost.android.domain.model.sync.FileConflict(
+                            id = parts[0],
+                            relativePath = parts[1],
+                            fileName = parts[2],
+                            localSize = parts[3].toLong(),
+                            remoteSize = parts[4].toLong(),
+                            localModifiedAt = parts[5].toLong(),
+                            remoteModifiedAt = parts[6].toLong(),
+                            detectedAt = parts[7].toLong()
+                        )
+                    } else null
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            emit(conflicts)
+        }
+    }
+    
+    suspend fun clearPendingConflicts(folderId: Long) {
+        dataStore.edit { prefs ->
+            val key = stringPreferencesKey("pending_conflicts_$folderId")
+            prefs.remove(key)
+        }
+    }
+    
+    // Sync History (stored as JSON string, max 50 entries)
+    suspend fun saveSyncHistory(history: com.baluhost.android.domain.model.sync.SyncHistory) {
+        val key = stringPreferencesKey("sync_history")
+        
+        // Get existing history
+        val existingJson = dataStore.data.map { prefs -> prefs[key] }.first()
+        val existingHistory = if (!existingJson.isNullOrEmpty()) {
+            existingJson.split("|||").mapNotNull { entry ->
+                try {
+                    val parts = entry.split("::")
+                    if (parts.size >= 10) {
+                        com.baluhost.android.domain.model.sync.SyncHistory(
+                            id = parts[0],
+                            folderId = parts[1].toLong(),
+                            folderName = parts[2],
+                            timestamp = parts[3].toLong(),
+                            status = com.baluhost.android.domain.model.sync.SyncHistoryStatus.valueOf(parts[4]),
+                            filesUploaded = parts[5].toInt(),
+                            filesDownloaded = parts[6].toInt(),
+                            filesDeleted = parts[7].toInt(),
+                            conflictsDetected = parts[8].toInt(),
+                            conflictsResolved = parts[9].toInt(),
+                            bytesTransferred = parts[10].toLong(),
+                            durationMs = parts[11].toLong(),
+                            errorMessage = parts.getOrNull(12)?.takeIf { it != "null" }
+                        )
+                    } else null
+                } catch (e: Exception) {
+                    null
+                }
+            }.toMutableList()
+        } else {
+            mutableListOf()
+        }
+        
+        // Add new entry at the beginning
+        existingHistory.add(0, history)
+        
+        // Keep only last 50 entries
+        val trimmedHistory = existingHistory.take(50)
+        
+        // Serialize back to string
+        val newJson = trimmedHistory.joinToString("|||") { h ->
+            "${h.id}::${h.folderId}::${h.folderName}::" +
+            "${h.timestamp}::${h.status}::" +
+            "${h.filesUploaded}::${h.filesDownloaded}::${h.filesDeleted}::" +
+            "${h.conflictsDetected}::${h.conflictsResolved}::" +
+            "${h.bytesTransferred}::${h.durationMs}::${h.errorMessage}"
+        }
+        
+        dataStore.edit { prefs ->
+            prefs[key] = newJson
+        }
+    }
+    
+    fun getSyncHistory(folderId: Long? = null): Flow<List<com.baluhost.android.domain.model.sync.SyncHistory>> = flow {
+        val key = stringPreferencesKey("sync_history")
+        val historyJson = dataStore.data.map { prefs -> prefs[key] }.first()
+        
+        if (historyJson.isNullOrEmpty()) {
+            emit(emptyList())
+        } else {
+            val history = historyJson.split("|||").mapNotNull { entry ->
+                try {
+                    val parts = entry.split("::")
+                    if (parts.size >= 10) {
+                        com.baluhost.android.domain.model.sync.SyncHistory(
+                            id = parts[0],
+                            folderId = parts[1].toLong(),
+                            folderName = parts[2],
+                            timestamp = parts[3].toLong(),
+                            status = com.baluhost.android.domain.model.sync.SyncHistoryStatus.valueOf(parts[4]),
+                            filesUploaded = parts[5].toInt(),
+                            filesDownloaded = parts[6].toInt(),
+                            filesDeleted = parts[7].toInt(),
+                            conflictsDetected = parts[8].toInt(),
+                            conflictsResolved = parts[9].toInt(),
+                            bytesTransferred = parts[10].toLong(),
+                            durationMs = parts[11].toLong(),
+                            errorMessage = parts.getOrNull(12)?.takeIf { it != "null" }
+                        )
+                    } else null
+                } catch (e: Exception) {
+                    null
+                }
+            }
+            
+            // Filter by folderId if provided
+            val filtered = if (folderId != null) {
+                history.filter { it.folderId == folderId }
+            } else {
+                history
+            }
+            
+            emit(filtered)
+        }
+    }
+    
+    fun getSyncHistorySummary(): Flow<com.baluhost.android.domain.model.sync.SyncHistorySummary> = flow {
+        val history = getSyncHistory().first()
+        
+        val summary = com.baluhost.android.domain.model.sync.SyncHistorySummary(
+            totalSyncs = history.size,
+            successfulSyncs = history.count { it.status == com.baluhost.android.domain.model.sync.SyncHistoryStatus.SUCCESS },
+            failedSyncs = history.count { it.status == com.baluhost.android.domain.model.sync.SyncHistoryStatus.FAILED },
+            totalFilesUploaded = history.sumOf { it.filesUploaded },
+            totalFilesDownloaded = history.sumOf { it.filesDownloaded },
+            totalBytesTransferred = history.sumOf { it.bytesTransferred },
+            totalConflictsDetected = history.sumOf { it.conflictsDetected },
+            totalConflictsResolved = history.sumOf { it.conflictsResolved },
+            lastSyncTimestamp = history.maxOfOrNull { it.timestamp }
+        )
+        
+        emit(summary)
     }
     
     // Clear all tokens (on logout or auth failure)

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import mimetypes
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
@@ -77,6 +78,12 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             continue
 
         stats = entry.stat()
+        
+        # Determine mime type for files
+        mime_type = None
+        if entry.is_file():
+            mime_type, _ = mimetypes.guess_type(entry.name)
+        
         item = FileItem(
             name=entry.name,
             path=relative_entry,
@@ -84,6 +91,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             type="directory" if entry.is_dir() else "file",
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
+            mime_type=mime_type,
         )
         items.append(item)
 

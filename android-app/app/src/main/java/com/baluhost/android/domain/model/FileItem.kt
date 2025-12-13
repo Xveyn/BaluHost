@@ -11,7 +11,7 @@ data class FileItem(
     val size: Long,
     val isDirectory: Boolean,
     val modifiedAt: Instant,
-    val owner: String,
+    val owner: String? = null,
     val permissions: String? = null,
     val mimeType: String? = null
 ) {

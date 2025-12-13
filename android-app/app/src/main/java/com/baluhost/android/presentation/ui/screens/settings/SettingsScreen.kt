@@ -27,6 +27,8 @@ fun SettingsScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
+    var showPinDialog by remember { mutableStateOf(false) }
+    var pinSetupError by remember { mutableStateOf<String?>(null) }
     
     // Handle successful deletion - navigate to splash for re-onboarding
     LaunchedEffect(uiState.deviceDeleted) {
@@ -104,7 +106,7 @@ fun SettingsScreen(
             SecurityCard(
                 uiState = uiState,
                 onToggleBiometric = viewModel::toggleBiometric,
-                onSetupPin = { /* TODO: Show PIN setup dialog */ },
+                onSetupPin = { showPinDialog = true },
                 onRemovePin = viewModel::removePin,
                 onToggleAppLock = viewModel::toggleAppLock,
                 onSetLockTimeout = viewModel::setLockTimeout
@@ -230,6 +232,38 @@ fun SettingsScreen(
                 }
             }
         )
+    }
+    
+    // PIN Setup Dialog
+    if (showPinDialog) {
+        PinSetupDialog(
+            onDismiss = {
+                showPinDialog = false
+                pinSetupError = null
+            },
+            onConfirm = { pin ->
+                viewModel.setupPin(
+                    pin = pin,
+                    onSuccess = {
+                        showPinDialog = false
+                        pinSetupError = null
+                    },
+                    onError = { error ->
+                        pinSetupError = error
+                    }
+                )
+            }
+        )
+    }
+    
+    // Show PIN setup error if any
+    LaunchedEffect(pinSetupError) {
+        pinSetupError?.let { error ->
+            snackbarHostState.showSnackbar(
+                message = error,
+                duration = SnackbarDuration.Short
+            )
+        }
     }
 }
 

@@ -29,6 +29,7 @@ class FileItem(BaseModel):
     type: Literal["file", "directory"]
     modified_at: datetime
     owner_id: str | None = None
+    mime_type: str | None = None
 
 
 class FileListResponse(BaseModel):

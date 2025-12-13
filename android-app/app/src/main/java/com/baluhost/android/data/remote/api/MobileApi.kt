@@ -5,6 +5,7 @@ import com.baluhost.android.data.remote.dto.MobileDeviceDto
 import com.baluhost.android.data.remote.dto.RegisterDeviceRequest
 import com.baluhost.android.data.remote.dto.RegisterDeviceResponse
 import com.baluhost.android.data.remote.dto.UpdateCameraSettingsRequest
+import retrofit2.Response
 import retrofit2.http.Body
 import retrofit2.http.DELETE
 import retrofit2.http.GET
@@ -44,7 +45,7 @@ interface MobileApi {
     @DELETE("mobile/devices/{deviceId}")
     suspend fun deleteDevice(
         @Path("deviceId") deviceId: String
-    )
+    ): Response<Unit>
     
     @POST("mobile/devices/{deviceId}/push-token")
     suspend fun registerPushToken(

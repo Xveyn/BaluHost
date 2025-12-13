@@ -25,14 +25,22 @@ class ErrorInterceptor @Inject constructor() : Interceptor {
             
             // Log errors (4xx and 5xx status codes)
             if (!response.isSuccessful) {
-                val errorBody = response.peekBody(Long.MAX_VALUE).string()
-                
-                // Try to parse error response
+                // Try to peek the body, but handle if it's already consumed
                 val errorMessage = try {
-                    val errorResponse = gson.fromJson(errorBody, ErrorResponse::class.java)
-                    errorResponse.getErrorMessage()
-                } catch (e: Exception) {
-                    errorBody.takeIf { it.isNotBlank() } ?: "HTTP ${response.code}"
+                    val errorBody = response.peekBody(Long.MAX_VALUE).string()
+                    
+                    // Try to parse error response
+                    try {
+                        val errorResponse = gson.fromJson(errorBody, ErrorResponse::class.java)
+                        errorResponse.getErrorMessage()
+                    } catch (e: Exception) {
+                        errorBody.takeIf { it.isNotBlank() } ?: "HTTP ${response.code}"
+                    }
+                } catch (e: IllegalStateException) {
+                    // Body already consumed (e.g., by AuthInterceptor during token refresh)
+                    "HTTP ${response.code} ${response.message}"
+                } catch (e: IOException) {
+                    "HTTP ${response.code} ${response.message}"
                 }
                 
                 Log.e(

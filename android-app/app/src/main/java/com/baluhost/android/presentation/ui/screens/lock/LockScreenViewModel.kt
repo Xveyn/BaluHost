@@ -38,10 +38,16 @@ class LockScreenViewModel @Inject constructor(
      */
     private fun checkAuthenticationMethods() {
         val biometricStatus = biometricAuthManager.checkBiometricAvailability(allowDeviceCredential = false)
+        val isBiometricEnabled = securePreferences.isBiometricEnabled()
         val biometricAvailable = biometricStatus == BiometricAuthManager.BiometricStatus.AVAILABLE &&
-                                securePreferences.isBiometricEnabled()
+                                isBiometricEnabled
         
         val pinAvailable = pinManager.isPinConfigured()
+        
+        android.util.Log.d("LockScreenViewModel", "Biometric status: $biometricStatus")
+        android.util.Log.d("LockScreenViewModel", "Biometric enabled in settings: $isBiometricEnabled")
+        android.util.Log.d("LockScreenViewModel", "Biometric available: $biometricAvailable")
+        android.util.Log.d("LockScreenViewModel", "PIN available: $pinAvailable")
         
         _uiState.update { currentState ->
             currentState.copy(

@@ -24,6 +24,8 @@ val Sky400 = Color(0xFF38BDF8) // Main primary
 val Sky500 = Color(0xFF0EA5E9)
 val Sky600 = Color(0xFF0284C7)
 val Sky700 = Color(0xFF0369A1)
+val Sky800 = Color(0xFF075985)
+val Sky900 = Color(0xFF0C4A6E)
 
 // Secondary Colors (Indigo)
 val Indigo50 = Color(0xFFEEF2FF)
@@ -55,6 +57,10 @@ val Red600 = Color(0xFFDC2626)
 val Yellow400 = Color(0xFFFBBF24)
 val Yellow500 = Color(0xFFF59E0B) // Warning
 val Yellow600 = Color(0xFFD97706)
+
+val Orange400 = Color(0xFFFB923C)
+val Orange500 = Color(0xFFF97316) // Orange accent
+val Orange600 = Color(0xFFEA580C)
 
 // Glassmorphism Effects
 val GlassLight = Color(0x1AFFFFFF) // 10% white

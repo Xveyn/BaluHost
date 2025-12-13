@@ -35,12 +35,15 @@ class AppLockManager @Inject constructor(
     companion object {
         private const val TAG = "AppLockManager"
         
-        // Default auto-lock timeout: 5 minutes
-        const val DEFAULT_TIMEOUT_MILLIS = 5 * 60 * 1000L
+        // Default auto-lock timeout: 10 seconds (for testing - should be 5 minutes in production)
+        const val DEFAULT_TIMEOUT_MILLIS = 10 * 1000L
         
         // Keys
         private val KEY_LAST_BACKGROUND_TIME = longPreferencesKey("last_background_time")
         private val KEY_LOCK_TIMEOUT_MILLIS = longPreferencesKey("lock_timeout_millis")
+        
+        // Track if this is a fresh process start
+        private var isProcessFreshStart = true
     }
     
     /**
@@ -50,6 +53,9 @@ class AppLockManager @Inject constructor(
         if (!isAppLockEnabled()) {
             return
         }
+        
+        // Mark that this is no longer a fresh start
+        isProcessFreshStart = false
         
         val currentTime = System.currentTimeMillis()
         dataStore.edit { prefs ->
@@ -61,7 +67,11 @@ class AppLockManager @Inject constructor(
     /**
      * Check if lock screen should be shown when app resumes.
      * 
-     * @return true if app was in background longer than timeout duration
+     * Best Practice:
+     * - If app process was killed (fresh start) → ALWAYS show lock
+     * - If app was just in background → show lock after timeout (10 seconds)
+     * 
+     * @return true if lock screen should be shown
      */
     suspend fun shouldShowLockScreen(): Boolean {
         // Check if app lock is enabled
@@ -76,18 +86,25 @@ class AppLockManager @Inject constructor(
             return false
         }
         
+        // Check if this is a fresh process start (app was killed and restarted)
+        if (isProcessFreshStart) {
+            android.util.Log.d(TAG, "Fresh process start - showing lock screen")
+            isProcessFreshStart = false // Mark as seen
+            return true
+        }
+        
         // Get last background time
         val lastBackgroundTime = dataStore.data.map { prefs ->
             prefs[KEY_LAST_BACKGROUND_TIME] ?: 0L
         }.first()
         
         if (lastBackgroundTime == 0L) {
-            // First app launch or no background event recorded
-            android.util.Log.d(TAG, "No previous background time recorded")
-            return false
+            // No background time recorded yet - first run after install
+            android.util.Log.d(TAG, "No background time recorded - showing lock screen")
+            return true
         }
         
-        // Calculate elapsed time
+        // App was just in background - check timeout
         val currentTime = System.currentTimeMillis()
         val elapsedTime = currentTime - lastBackgroundTime
         
@@ -104,6 +121,7 @@ class AppLockManager @Inject constructor(
      * Reset lock timer (call after successful authentication).
      */
     suspend fun onAppForeground() {
+        // Clear the timestamp completely so next cold start shows lock screen
         dataStore.edit { prefs ->
             prefs.remove(KEY_LAST_BACKGROUND_TIME)
         }

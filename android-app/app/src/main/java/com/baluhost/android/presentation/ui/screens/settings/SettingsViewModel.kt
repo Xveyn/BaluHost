@@ -78,7 +78,29 @@ class SettingsViewModel @Inject constructor(
     fun toggleBiometric(enabled: Boolean) {
         viewModelScope.launch {
             securePreferences.setBiometricEnabled(enabled)
-            _uiState.update { it.copy(biometricEnabled = enabled) }
+            
+            // If enabling biometric, disable PIN (only one method allowed)
+            if (enabled && pinManager.isPinConfigured()) {
+                pinManager.removePin()
+                _uiState.update { it.copy(
+                    biometricEnabled = true,
+                    pinConfigured = false
+                ) }
+            } else {
+                _uiState.update { it.copy(biometricEnabled = enabled) }
+            }
+            
+            // Automatically enable app lock when biometric is enabled
+            if (enabled) {
+                securePreferences.setAppLockEnabled(true)
+                _uiState.update { it.copy(appLockEnabled = true) }
+            } else {
+                // If disabling biometric and no PIN, disable app lock
+                if (!pinManager.isPinConfigured()) {
+                    securePreferences.setAppLockEnabled(false)
+                    _uiState.update { it.copy(appLockEnabled = false) }
+                }
+            }
         }
     }
     
@@ -100,7 +122,22 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             try {
                 pinManager.setupPin(pin)
-                _uiState.update { it.copy(pinConfigured = true) }
+                
+                // If setting up PIN, disable biometric (only one method allowed)
+                if (securePreferences.isBiometricEnabled()) {
+                    securePreferences.setBiometricEnabled(false)
+                    _uiState.update { it.copy(
+                        pinConfigured = true,
+                        biometricEnabled = false
+                    ) }
+                } else {
+                    _uiState.update { it.copy(pinConfigured = true) }
+                }
+                
+                // Automatically enable app lock when PIN is set up
+                securePreferences.setAppLockEnabled(true)
+                _uiState.update { it.copy(appLockEnabled = true) }
+                
                 onSuccess()
             } catch (e: Exception) {
                 onError(e.message ?: "Failed to setup PIN")
@@ -112,6 +149,12 @@ class SettingsViewModel @Inject constructor(
         viewModelScope.launch {
             pinManager.removePin()
             _uiState.update { it.copy(pinConfigured = false) }
+            
+            // If no authentication method left, disable app lock
+            if (!securePreferences.isBiometricEnabled()) {
+                securePreferences.setAppLockEnabled(false)
+                _uiState.update { it.copy(appLockEnabled = false) }
+            }
         }
     }
     
@@ -119,18 +162,29 @@ class SettingsViewModel @Inject constructor(
      * Delete the current device from the server and clear local data.
      */
     fun deleteDevice() {
-        val deviceId = _uiState.value.deviceId
-        if (deviceId == null) {
-            _uiState.update { it.copy(error = "Device ID not found") }
-            return
-        }
-        
         viewModelScope.launch {
+            val deviceId = _uiState.value.deviceId
+            
+            // Log current state for debugging
+            android.util.Log.d("SettingsViewModel", "Attempting to delete device")
+            android.util.Log.d("SettingsViewModel", "Device ID from state: $deviceId")
+            android.util.Log.d("SettingsViewModel", "Server URL: ${_uiState.value.serverUrl}")
+            
+            if (deviceId == null) {
+                android.util.Log.e("SettingsViewModel", "Device ID is null!")
+                _uiState.update { it.copy(error = "Device ID not found. Please try logging in again.") }
+                return@launch
+            }
+            
             _uiState.update { it.copy(isDeleting = true, error = null) }
             
             try {
+                android.util.Log.d("SettingsViewModel", "Calling deviceRepository.deleteDevice($deviceId)")
+                
                 // Delete device from server
                 deviceRepository.deleteDevice(deviceId)
+                
+                android.util.Log.d("SettingsViewModel", "Device deleted successfully, clearing local data")
                 
                 // Clear all local data (including tokens, server URL, etc.)
                 preferencesManager.clearAll()

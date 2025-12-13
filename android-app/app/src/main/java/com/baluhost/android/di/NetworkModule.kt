@@ -5,8 +5,11 @@ import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.AuthApi
 import com.baluhost.android.data.remote.api.FilesApi
 import com.baluhost.android.data.remote.api.MobileApi
+import com.baluhost.android.data.remote.api.SyncApi
+import com.baluhost.android.data.remote.api.SystemApi
 import com.baluhost.android.data.remote.api.VpnApi
 import com.baluhost.android.data.remote.interceptors.AuthInterceptor
+import com.baluhost.android.data.remote.interceptors.DynamicBaseUrlInterceptor
 import com.baluhost.android.data.remote.interceptors.ErrorInterceptor
 import com.baluhost.android.util.Constants
 import dagger.Module
@@ -56,12 +59,22 @@ object NetworkModule {
     
     @Provides
     @Singleton
+    fun provideDynamicBaseUrlInterceptor(
+        preferencesManager: PreferencesManager
+    ): DynamicBaseUrlInterceptor {
+        return DynamicBaseUrlInterceptor(preferencesManager, BuildConfig.BASE_URL)
+    }
+    
+    @Provides
+    @Singleton
     fun provideOkHttpClient(
         loggingInterceptor: HttpLoggingInterceptor,
         authInterceptor: AuthInterceptor,
-        errorInterceptor: ErrorInterceptor
+        errorInterceptor: ErrorInterceptor,
+        dynamicBaseUrlInterceptor: DynamicBaseUrlInterceptor
     ): OkHttpClient {
         return OkHttpClient.Builder()
+            .addInterceptor(dynamicBaseUrlInterceptor)  // MUST be first to change URL before auth
             .addInterceptor(errorInterceptor)
             .addInterceptor(authInterceptor)
             .addInterceptor(loggingInterceptor)
@@ -105,5 +118,17 @@ object NetworkModule {
     @Singleton
     fun provideVpnApi(retrofit: Retrofit): VpnApi {
         return retrofit.create(VpnApi::class.java)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSystemApi(retrofit: Retrofit): SystemApi {
+        return retrofit.create(SystemApi::class.java)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideSyncApi(retrofit: Retrofit): SyncApi {
+        return retrofit.create(SyncApi::class.java)
     }
 }

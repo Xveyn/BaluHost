@@ -213,6 +213,36 @@ async def list_files(
     return FileListResponse(files=entries)
 
 
+@router.get("/download/{resource_path:path}")
+async def download_file(
+    resource_path: str,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileResponse:
+    """Legacy download endpoint using file path."""
+    audit_logger = get_audit_logger_db()
+    try:
+        file_service.ensure_can_view(resource_path, user, db=db)
+        file_path = file_service.get_absolute_path(resource_path)
+    except PermissionDeniedError as exc:
+        # Log unauthorized file download attempt
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="download_file",
+            resource=resource_path,
+            required_permission="read",
+            db=db
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    if not file_path.exists() or not file_path.is_file():
+        raise HTTPException(status_code=404, detail="File not found")
+
+    return FileResponse(path=file_path, filename=file_path.name)
+
+
 @router.get("/download/{file_id}")
 async def download_file_by_id(
     file_id: int,
@@ -292,36 +322,6 @@ async def download_file_by_id(
         raise HTTPException(status_code=404, detail="File not found on disk")
     
     return FileResponse(path=file_path, filename=file_metadata.name)
-
-
-@router.get("/download/{resource_path:path}")
-async def download_file(
-    resource_path: str,
-    user: UserPublic = Depends(deps.get_current_user),
-    db: Session = Depends(get_db),
-) -> FileResponse:
-    """Legacy download endpoint using file path."""
-    audit_logger = get_audit_logger_db()
-    try:
-        file_service.ensure_can_view(resource_path, user, db=db)
-        file_path = file_service.get_absolute_path(resource_path)
-    except PermissionDeniedError as exc:
-        # Log unauthorized file download attempt
-        audit_logger.log_authorization_failure(
-            user=user.username,
-            action="download_file",
-            resource=resource_path,
-            required_permission="read",
-            db=db
-        )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except file_service.FileAccessError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    if not file_path.exists() or not file_path.is_file():
-        raise HTTPException(status_code=404, detail="File not found")
-
-    return FileResponse(path=file_path, filename=file_path.name)
 
 
 @router.post("/upload", response_model=FileUploadResponse)

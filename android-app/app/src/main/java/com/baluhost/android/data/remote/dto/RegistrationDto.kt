@@ -48,7 +48,7 @@ data class RegisterDeviceResponse(
 )
 
 data class MobileDeviceDto(
-    val id: Int,
+    val id: String,  // UUID from backend
     @SerializedName("user_id")
     val userId: Int,
     @SerializedName("device_name")

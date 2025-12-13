@@ -18,7 +18,7 @@ export default defineConfig({
     })(),
     proxy: {
       '/api': {
-        target: process.env.DEV_USE_HTTPS === 'false' ? 'http://localhost:8000' : 'https://localhost:8000',
+        target: 'http://localhost:8000',  // Backend runs on HTTP in dev mode
         changeOrigin: true,
         secure: false,
         ws: true,

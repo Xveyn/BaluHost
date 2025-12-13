@@ -21,7 +21,7 @@ android {
         
         testInstrumentationRunner = "com.baluhost.android.HiltTestRunner"
         
-        buildConfigField("String", "BASE_URL", "\"https://baluhost.local:3001/api/\"")
+        buildConfigField("String", "BASE_URL", "\"http://192.168.178.21:8000/api/\"")
     }
     
     buildTypes {
@@ -78,6 +78,9 @@ dependencies {
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.6")
     implementation("androidx.compose.material:material-icons-extended")
     
+    // Pull to Refresh
+    implementation("com.google.accompanist:accompanist-swiperefresh:0.36.0")
+    
     // Dependency Injection - Hilt
     implementation("com.google.dagger:hilt-android:2.51.1")
     kapt("com.google.dagger:hilt-compiler:2.51.1")
@@ -119,6 +122,20 @@ dependencies {
     
     // Image Loading
     implementation("io.coil-kt:coil-compose:2.7.0")
+    implementation("io.coil-kt:coil-video:2.7.0")
+    
+    // Media Player - ExoPlayer for video/audio
+    val media3Version = "1.4.1"
+    implementation("androidx.media3:media3-exoplayer:$media3Version")
+    implementation("androidx.media3:media3-ui:$media3Version")
+    implementation("androidx.media3:media3-common:$media3Version")
+    implementation("androidx.media3:media3-session:$media3Version")
+    
+    // Charts - Vico for Compose
+    val vicoVersion = "2.0.0-alpha.28"
+    implementation("com.patrykandpatrick.vico:compose:$vicoVersion")
+    implementation("com.patrykandpatrick.vico:compose-m3:$vicoVersion")
+    implementation("com.patrykandpatrick.vico:core:$vicoVersion")
     
     // Coroutines
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.8.1")

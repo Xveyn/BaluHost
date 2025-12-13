@@ -136,7 +136,11 @@ async def get_devices(
     """
     Get all registered mobile devices for the current user.
     """
-    return MobileService.get_user_devices(db=db, user_id=str(current_user.id))
+    devices = MobileService.get_user_devices(db=db, user_id=str(current_user.id))
+    print(f"[GET DEVICES] User {current_user.id} has {len(devices)} device(s)")
+    for dev in devices:
+        print(f"  - {dev.id}: {dev.device_name}")
+    return devices
 
 
 @router.get("/devices/{device_id}", response_model=MobileDeviceSchema)

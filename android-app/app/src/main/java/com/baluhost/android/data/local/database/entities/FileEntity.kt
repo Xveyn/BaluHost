@@ -18,10 +18,12 @@ data class FileEntity(
     val isDirectory: Boolean,
     @ColumnInfo(name = "modified_at")
     val modifiedAt: Instant,
-    val owner: String,
+    val owner: String?,
     val permissions: String?,
     @ColumnInfo(name = "mime_type")
     val mimeType: String?,
+    @ColumnInfo(name = "parent_path")
+    val parentPath: String = "", // For efficient filtering by directory
     @ColumnInfo(name = "cached_at")
     val cachedAt: Instant = Instant.now()
 )
