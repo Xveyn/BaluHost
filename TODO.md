@@ -18,7 +18,7 @@
 | 🔴 High | Backend | Backup/Restore Funktionalität | ✅ Done | Data Protection |
 | 🔴 High | Backend | Share-Links System (Public Links mit Passwort & Ablaufdatum) | ✅ Done | File Sharing |
 | 🔴 High | Backend | Benutzerfreigaben Backend (Dateien mit anderen Benutzern teilen, granular Rechte-UI, Multi-User-Permissions) | ✅ Done | Collaboration, granular permissions |
-| 🔴 High | Backend | RAID-Management auf echte mdadm-Befehle erweitern | ⏳ Pending | Production Mode |
+| 🔴 High | Backend | RAID-Management auf echte mdadm-Befehle erweitern | ✅ Implemented (dev-mode + UI); mdadm extension pending | Production Mode |
 | 🔴 High | Backend | Heimnetz-Setup (Windows Service, mDNS, Auto-Discovery) | ✅ Done | iCloud/OneDrive Alternative |
 | 🔴 High | Frontend | Exercise manual test plan in dev mode | ⏳ Pending | Testing |
 | 🔴 High | Frontend | Upload-Progress-UI mit Fortschrittsanzeige | ✅ Done | UX Enhancement |
@@ -32,7 +32,7 @@
 | 🔴 High | Frontend | Batch-Operationen (Multi-Select für Dateien) | ⏳ Pending | Bulk Actions |
 | 🔴 High | Frontend | Drag & Drop für Upload | ✅ Done | Completed |
 | 🔴 High | Frontend | Mobile-Optimierung (Responsive Design verbessern) | ⏳ Pending | Responsive |
-| 🟡 Medium | Backend | Scheduled Health Checks Background Jobs erweitern | ⏳ Pending | Monitoring |
+| 🟡 Medium | Backend | Scheduled Health Checks Background Jobs erweitern | ✅ Done | Monitoring |
 | 🟡 Medium | Backend | Email-Benachrichtigungen bei kritischen Ereignissen | ⏳ Pending | Notifications |
 | 🟡 Medium | Backend | In-App Notification System (WebSocket/SSE) | ⏳ Pending | Real-time Notifications |
 | 🟡 Medium | Backend | VPN-Integration (WireGuard/OpenVPN) für Remote Access | ✅ Done | WireGuard implemented |
@@ -41,7 +41,7 @@
 | 🟡 Medium | Backend | API-Rate-Limiting implementieren | ⏳ Pending | Security |
 | 🟡 Medium | Backend | Backup von Audit Logs | ⏳ Pending | Data Protection |
 | 🟡 Medium | Backend | SMART-Warnungen automatisiert verarbeiten | ⏳ Pending | Disk Health |
-| 🟡 Medium | Backend | Disk-Scrubbing initiieren/überwachen | ⏳ Pending | Data Integrity |
+| 🟡 Medium | Backend | Disk-Scrubbing initiieren/überwachen | ✅ Implemented (trigger via RAID options) | Data Integrity |
 | 🟡 Medium | Backend | Datei-Versionierung Backend (Snapshots, Rollback) | ⏳ Pending | Version Control |
 | 🟡 Medium | Frontend | Dark Mode implementieren | ⏳ Pending | UI Enhancement |
 | 🟡 Medium | Frontend | Notifications-Seite mit Notification Center & Badge | ⏳ Pending | Notifications UI |
@@ -152,3 +152,13 @@
 - 🔧 Technical Debt - Refactoring & cleanup
 - ⏳ Pending - Not started
 - ✅ Done - Completed
+
+---
+
+## Review Notes (20. Dezember 2025)
+
+- `TECHNICAL_DOCUMENTATION.md` was rewritten and improved (ASCII diagram fenced) — ✅ Completed 2025-12-20
+- `.gitignore` updated to ignore local DB files and `backend/baluhost.db*` were untracked from Git — ✅ Completed 2025-12-20
+- Local branch `chore/commit-all-2025-12-20` changes merged into `main` and pushed to `origin/main` — ✅ Completed 2025-12-20
+
+Note: I scanned the repository for remaining in-code `TODO` markers. Several implementation TODO comments remain (e.g. in `backend/app/services/sync_scheduler.py`, `backup.py`); these are kept as development TODOs and are not moved to this global list.
