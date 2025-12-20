@@ -10,7 +10,7 @@
 
 **Please do NOT report security vulnerabilities through public GitHub issues.**
 
-Instead, please report them via email to: **[SECURITY_EMAIL_HERE]** (TODO: Set up security email)
+Instead, please report them via email to: **security@baluhost.example**
 
 ### What to Include
 
@@ -185,7 +185,7 @@ npm audit fix
 ## Contact
 
 For security-related questions or concerns:
-- **Email:** [SECURITY_EMAIL_HERE] (TODO)
+- **Email:** security@baluhost.example
 - **PGP Key:** [KEY_ID_HERE] (TODO)
 
 ### Secure Reporting (PGP / Encrypted email)
