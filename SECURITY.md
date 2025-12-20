@@ -188,6 +188,35 @@ For security-related questions or concerns:
 - **Email:** [SECURITY_EMAIL_HERE] (TODO)
 - **PGP Key:** [KEY_ID_HERE] (TODO)
 
+### Secure Reporting (PGP / Encrypted email)
+
+If you prefer to send vulnerability reports encrypted, you can use OpenPGP to encrypt messages to the project's public key. At the moment we haven't published a dedicated security email address — please open a private GitHub issue and request an encrypted channel, or use the placeholder `security@baluhost.example` for general contact.
+
+When a PGP key is available we will publish the full fingerprint here. Use the full fingerprint (or long key ID) to verify the key before encrypting.
+
+Example workflow (using GnuPG):
+
+```bash
+# Import the project's public key (example):
+gpg --import baluhost_pubkey.asc
+
+# Verify the key fingerprint (replace KEY_ID with actual key id):
+gpg --fingerprint KEY_ID
+
+# Encrypt a file for the project's public key (replace KEY_ID):
+gpg --encrypt --recipient KEY_ID --armor -o report.asc report.txt
+
+# Send `report.asc` to the security contact (or attach to a private issue)
+```
+
+What to include in an encrypted report:
+- Vulnerability description and steps to reproduce (as detailed as possible)
+- A minimal proof-of-concept (if available)
+- Affected versions/commit/shas
+- Contact information so we can follow up
+
+If you don't have PGP available, create a private GitHub issue and request an encrypted channel — we'll respond with a preferred method.
+
 ---
 
 **Last Updated:** November 2025  
