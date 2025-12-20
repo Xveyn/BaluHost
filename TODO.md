@@ -162,3 +162,25 @@
 - Local branch `chore/commit-all-2025-12-20` changes merged into `main` and pushed to `origin/main` — ✅ Completed 2025-12-20
 
 Note: I scanned the repository for remaining in-code `TODO` markers. Several implementation TODO comments remain (e.g. in `backend/app/services/sync_scheduler.py`, `backup.py`); these are kept as development TODOs and are not moved to this global list.
+
+---
+
+## 🔎 Scanned Actionable TODOs (20. Dezember 2025)
+
+Below are the most relevant, actionable TODOs found in the repository (excluded virtualenv / third-party packages). These are recommended to be tracked in the global roadmap or converted into GitHub Issues.
+
+- **High**: `backend/app/services/sync_scheduler.py` — Implement scheduled sync trigger and `_execute_sync` (critical for scheduled syncs / background sync worker).
+- **Medium**: `backend/app/services/backup.py` — Add config files to backup and implement restore flow for full-system restores.
+- **Medium**: `backend/app/api/routes/files.py` — Implement accurate per-file/per-array usage tracking (replace placeholder `used_bytes = 0`).
+- **Low**: `client/src/pages/PublicSharePage.tsx` — Implement preview functionality for shared files.
+- **Low**: `docs/STORAGE_MOUNTPOINTS.md` — Implement actual per-array usage tracking documentation and examples.
+- **Low**: `CONTRIBUTING.md` — Add community link (Discord/Matrix) and update contact points.
+- **Low**: `README.md` — Add runnable `npm run test` and `npm run test:e2e` instructions or CI configuration.
+- **Docs/Medium**: `docs/DESKTOP_SYNC_CLIENT.md` — Phase 2/3 sections need concrete implementation plans and test steps.
+
+Suggested next steps:
+
+- Create GitHub issues for each **High** and **Medium** item and assign priorities.
+- For development TODOs inside `backend/app/*`, keep them as in-code TODOs but reference the newly created GitHub issues.
+- Optionally, create a `TODO:dev` section in this file linking to issue IDs for tracking.
+
