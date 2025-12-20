@@ -30,7 +30,11 @@ Projektstruktur (Wichtigste Ordner)
 Architektur-Übersicht (ASCII)
 -
 Dieses Diagramm zeigt die wichtigsten Laufzeit-Komponenten und wie sie interagieren.
+Architektur-Übersicht (ASCII)
+-
+Dieses Diagramm zeigt die wichtigsten Laufzeit-Komponenten und wie sie interagieren.
 
+```text
   +----------------------+            +----------------------+            +--------------------+
   |  Developer / Browser | <---HTTP-->|  Frontend (Vite)     | <---XHR--->|  API Client (axios) |
   |  (React SPA)         |            |  client/src/...      |            |  client/src/lib/api |
@@ -60,6 +64,7 @@ Dieses Diagramm zeigt die wichtigsten Laufzeit-Komponenten und wie sie interagie
              | (auth.py|   |         | |      | | (telemetry)   | Database (SQLAlchemy) |
              +---------+   +---------+ +-----+ +------+        | backend/app/models/    |
                                                               +------------------------+
+``` 
 
 Erläuterung
 -
