@@ -65,15 +65,26 @@ class MobileService:
         if include_vpn:
             try:
                 from app.services.vpn import VPNService
-                # Extract server public endpoint from server_url
-                server_endpoint = server_url.replace("http://", "").replace("https://", "").split(":")[0]
-                vpn_response = VPNService.create_client_config(
-                    db=db,
-                    user_id=int(user_id),
-                    device_name=device_name,
-                    server_public_endpoint=server_endpoint,
-                )
-                vpn_config_base64 = vpn_response.config_base64
+                from app.models.vpn import FritzBoxVPNConfig
+                
+                # PRIORITY 1: Check for Fritz!Box config (uploaded by admin)
+                fritzbox_config = db.query(FritzBoxVPNConfig).filter(
+                    FritzBoxVPNConfig.is_active == True
+                ).first()
+                
+                if fritzbox_config:
+                    # Use Fritz!Box config (shared for all clients)
+                    vpn_config_base64 = VPNService.get_fritzbox_config_base64(db)
+                else:
+                    # FALLBACK: Auto-generate client-specific config (existing behavior)
+                    server_endpoint = server_url.replace("http://", "").replace("https://", "").split(":")[0]
+                    vpn_response = VPNService.create_client_config(
+                        db=db,
+                        user_id=int(user_id),
+                        device_name=device_name,
+                        server_public_endpoint=server_endpoint,
+                    )
+                    vpn_config_base64 = vpn_response.config_base64
             except Exception as e:
                 # VPN generation failed, continue without VPN
                 print(f"Warning: VPN config generation failed: {e}")

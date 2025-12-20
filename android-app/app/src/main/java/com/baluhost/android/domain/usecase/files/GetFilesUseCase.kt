@@ -22,10 +22,14 @@ class GetFilesUseCase @Inject constructor(
     ): Result<List<FileItem>> {
         return try {
             // Get cached data first (will auto-refresh if stale)
+            // Returns empty list if no cache and network fails - that's OK
             val files = fileRepository.getFiles(path, forceRefresh).first()
             Result.Success(files)
         } catch (e: Exception) {
-            Result.Error(Exception("Failed to load files: ${e.message}", e))
+            // Even on error, return success with empty list to avoid navigation to QR screen
+            // The UI will show "Server offline" banner via ServerConnectivityChecker
+            android.util.Log.w("GetFilesUseCase", "Failed to load files, returning empty list: ${e.message}")
+            Result.Success(emptyList())
         }
     }
 }

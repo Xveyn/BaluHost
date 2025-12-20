@@ -1,5 +1,6 @@
 package com.baluhost.android.di
 
+import android.content.Context
 import com.baluhost.android.BuildConfig
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.data.remote.api.AuthApi
@@ -12,9 +13,12 @@ import com.baluhost.android.data.remote.interceptors.AuthInterceptor
 import com.baluhost.android.data.remote.interceptors.DynamicBaseUrlInterceptor
 import com.baluhost.android.data.remote.interceptors.ErrorInterceptor
 import com.baluhost.android.util.Constants
+import com.baluhost.android.util.NetworkMonitor
+import com.baluhost.android.util.NetworkStateManager
 import dagger.Module
 import dagger.Provides
 import dagger.hilt.InstallIn
+import dagger.hilt.android.qualifiers.ApplicationContext
 import dagger.hilt.components.SingletonComponent
 import okhttp3.OkHttpClient
 import okhttp3.logging.HttpLoggingInterceptor
@@ -130,5 +134,14 @@ object NetworkModule {
     @Singleton
     fun provideSyncApi(retrofit: Retrofit): SyncApi {
         return retrofit.create(SyncApi::class.java)
+    }
+    
+    @Provides
+    @Singleton
+    fun provideNetworkStateManager(
+        @ApplicationContext context: Context,
+        networkMonitor: NetworkMonitor
+    ): NetworkStateManager {
+        return NetworkStateManager(context, networkMonitor)
     }
 }

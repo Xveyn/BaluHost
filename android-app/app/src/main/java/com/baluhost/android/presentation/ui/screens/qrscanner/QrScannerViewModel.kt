@@ -51,13 +51,30 @@ class QrScannerViewModel @Inject constructor(
                 when (result) {
                     is Result.Success -> {
                         // Import VPN config if available
+                        var vpnImported = false
                         registrationData.vpnConfig?.let { vpnConfig ->
                             viewModelScope.launch {
-                                importVpnConfigUseCase(vpnConfig)
+                                val vpnResult = importVpnConfigUseCase(
+                                    configBase64 = vpnConfig,
+                                    autoRegister = true
+                                )
+                                when (vpnResult) {
+                                    is Result.Success -> {
+                                        android.util.Log.d("QrScanner", "VPN config imported: ${vpnResult.data.serverEndpoint}")
+                                        vpnImported = true
+                                    }
+                                    is Result.Error -> {
+                                        android.util.Log.e("QrScanner", "VPN import failed: ${vpnResult.exception.message}")
+                                    }
+                                    else -> {}
+                                }
                             }
                         }
                         
-                        _uiState.value = QrScannerState.Success(result.data)
+                        _uiState.value = QrScannerState.Success(
+                            authResult = result.data,
+                            vpnConfigured = vpnImported || registrationData.vpnConfig != null
+                        )
                     }
                     is Result.Error -> {
                         _uiState.value = QrScannerState.Error(
@@ -84,6 +101,9 @@ class QrScannerViewModel @Inject constructor(
 sealed class QrScannerState {
     object Scanning : QrScannerState()
     object Processing : QrScannerState()
-    data class Success(val authResult: AuthResult) : QrScannerState()
+    data class Success(
+        val authResult: AuthResult,
+        val vpnConfigured: Boolean = false
+    ) : QrScannerState()
     data class Error(val message: String) : QrScannerState()
 }

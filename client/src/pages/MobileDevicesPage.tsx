@@ -48,6 +48,13 @@ export default function MobileDevicesPage() {
       setGenerating(true);
       const token = await generateMobileToken(includeVpn, deviceName.trim(), tokenValidityDays);
       setQrData(token);
+      // Persist last generated token briefly so other UIs (SyncSettings) can auto-fill
+      try {
+        const stored = { ...token, device_name: deviceName.trim(), include_vpn: includeVpn };
+        localStorage.setItem('lastMobileToken', JSON.stringify(stored));
+      } catch (e) {
+        console.warn('Failed to store lastMobileToken', e);
+      }
       setShowQrDialog(true);
     } catch (error: any) {
       console.error('Failed to generate token:', error);

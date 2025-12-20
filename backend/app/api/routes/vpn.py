@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, HTTPException, status, Request
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
-from app.api.deps import get_current_user
+from app.api.deps import get_current_user, get_current_admin
 from app.schemas.user import UserPublic
 from app.schemas.vpn import (
     VPNClient as VPNClientSchema,
@@ -14,6 +14,9 @@ from app.schemas.vpn import (
     VPNConfigResponse,
     VPNServerConfig,
     VPNStatusResponse,
+    FritzBoxConfigUpload,
+    FritzBoxConfigResponse,
+    FritzBoxConfigSummary,
 )
 from app.services.vpn import VPNService
 
@@ -76,7 +79,7 @@ async def get_vpn_client(
         )
     
     # Check ownership
-    if client.user_id != current_user.id and current_user.role != "admin":
+    if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to access this VPN client"
@@ -103,7 +106,7 @@ async def update_vpn_client(
         )
     
     # Check ownership
-    if client.user_id != current_user.id and current_user.role != "admin":
+    if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this VPN client"
@@ -137,7 +140,7 @@ async def delete_vpn_client(
         )
     
     # Check ownership
-    if client.user_id != current_user.id and current_user.role != "admin":
+    if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this VPN client"
@@ -168,7 +171,7 @@ async def revoke_vpn_client(
         )
     
     # Check ownership
-    if client.user_id != current_user.id and current_user.role != "admin":
+    if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to revoke this VPN client"
@@ -232,10 +235,108 @@ async def update_handshake(
         )
     
     # Check ownership
-    if client.user_id != current_user.id:
+    if str(client.user_id) != str(current_user.id):
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized"
         )
     
     VPNService.update_last_handshake(db, client_id)
+
+
+# Fritz!Box VPN Configuration Routes
+
+@router.post("/fritzbox/upload", response_model=FritzBoxConfigResponse)
+async def upload_fritzbox_config(
+    config_data: FritzBoxConfigUpload,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_admin)  # Admin only!
+):
+    """
+    Upload Fritz!Box WireGuard configuration (Admin only).
+    
+    - Parses .conf file content
+    - Encrypts sensitive keys
+    - Deactivates old configs
+    - Returns config with Base64 for QR codes
+    """
+    try:
+        config = VPNService.upload_fritzbox_config(
+            db=db,
+            config_content=config_data.config_content,
+            user_id=current_user.id
+        )
+        return config
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid config format: {str(e)}"
+        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload config: {str(e)}"
+        )
+
+
+@router.get("/fritzbox/config", response_model=FritzBoxConfigSummary)
+async def get_fritzbox_config(
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Get active Fritz!Box VPN config summary (ohne sensitive Daten).
+    """
+    config = VPNService.get_active_fritzbox_config(db)
+    
+    if not config:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No Fritz!Box VPN config found"
+        )
+    
+    return FritzBoxConfigSummary(
+        id=config.id,
+        endpoint=config.endpoint,
+        dns_servers=config.dns_servers,
+        is_active=config.is_active,
+        created_at=config.created_at
+    )
+
+
+@router.delete("/fritzbox/config/{config_id}")
+async def delete_fritzbox_config(
+    config_id: int,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_admin)  # Admin only!
+):
+    """
+    Delete Fritz!Box VPN config (Admin only).
+    """
+    success = VPNService.delete_fritzbox_config(db, config_id)
+    
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Config not found"
+        )
+    
+    return {"message": "Config deleted successfully"}
+
+
+@router.get("/fritzbox/qr")
+async def get_fritzbox_qr_code(
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Get Fritz!Box config as Base64 for QR code generation.
+    """
+    try:
+        config_base64 = VPNService.get_fritzbox_config_base64(db)
+        return {"config_base64": config_base64}
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e)
+        )

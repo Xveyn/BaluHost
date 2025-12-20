@@ -51,6 +51,11 @@ fun QrScannerScreen(
     // Navigate to files on successful registration
     LaunchedEffect(uiState) {
         if (uiState is QrScannerState.Success) {
+            // Short delay to show success message if VPN was configured
+            val state = uiState as QrScannerState.Success
+            if (state.vpnConfigured) {
+                kotlinx.coroutines.delay(2000) // Show VPN success message for 2s
+            }
             onNavigateToFiles()
         }
     }
@@ -93,9 +98,12 @@ fun QrScannerScreen(
                         onQrCodeScanned = viewModel::onQrCodeScanned
                     )
                 }
-                uiState is QrScannerState.Processing -> {
-                    // Processing registration
-                    ProcessingOverlay()
+                uiState is QrScannerState.Processing || uiState is QrScannerState.Success -> {
+                    // Processing registration or Success with VPN configured
+                    ProcessingOverlay(
+                        isSuccess = uiState is QrScannerState.Success,
+                        vpnConfigured = (uiState as? QrScannerState.Success)?.vpnConfigured ?: false
+                    )
                 }
                 uiState is QrScannerState.Error -> {
                     // Show error
@@ -243,7 +251,10 @@ private fun CameraPreview(
 }
 
 @Composable
-private fun ProcessingOverlay() {
+private fun ProcessingOverlay(
+    isSuccess: Boolean = false,
+    vpnConfigured: Boolean = false
+) {
     Box(
         modifier = Modifier.fillMaxSize(),
         contentAlignment = Alignment.Center
@@ -256,12 +267,34 @@ private fun ProcessingOverlay() {
                 modifier = Modifier.padding(32.dp),
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
-                CircularProgressIndicator()
-                Spacer(modifier = Modifier.height(16.dp))
-                Text(
-                    text = "Registering device...",
-                    style = MaterialTheme.typography.bodyLarge
-                )
+                if (isSuccess) {
+                    Icon(
+                        imageVector = Icons.Default.CheckCircle,
+                        contentDescription = "Success",
+                        tint = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.size(64.dp)
+                    )
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Registrierung erfolgreich",
+                        style = MaterialTheme.typography.headlineSmall
+                    )
+                    if (vpnConfigured) {
+                        Spacer(modifier = Modifier.height(8.dp))
+                        Text(
+                            text = "✓ VPN konfiguriert",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                } else {
+                    CircularProgressIndicator()
+                    Spacer(modifier = Modifier.height(16.dp))
+                    Text(
+                        text = "Gerät wird registriert...",
+                        style = MaterialTheme.typography.bodyLarge
+                    )
+                }
             }
         }
     }

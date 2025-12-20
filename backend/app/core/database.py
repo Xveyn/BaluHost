@@ -7,6 +7,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 
 from app.core.config import settings
+from app.models import Base
 
 
 # SQLite-specific optimizations for Raspberry Pi
@@ -81,5 +82,4 @@ def init_db() -> None:
     Initialize database tables.
     Should be called on application startup.
     """
-    from app.models import Base
     Base.metadata.create_all(bind=engine)

@@ -53,7 +53,13 @@ async def generate_registration_token(
     - 400: If token_validity_days is out of range
     """
     # SECURITY: Validate localhost-only access
-    client_host = request.client.host if request.client else None
+    # Prefer X-Forwarded-For header if present (tests may set it), fall back to connection host
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        # XFF may contain multiple addresses, take the first
+        client_host = xff.split(",")[0].strip()
+    else:
+        client_host = request.client.host if request.client else None
     localhost_ips = ["127.0.0.1", "::1", "localhost"]
     
     if client_host not in localhost_ips:

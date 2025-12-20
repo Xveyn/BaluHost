@@ -40,3 +40,35 @@ class VPNClient(Base):
     
     def __repr__(self):
         return f"<VPNClient(id={self.id}, device={self.device_name}, ip={self.assigned_ip})>"
+
+
+class FritzBoxVPNConfig(Base):
+    """Fritz!Box WireGuard VPN configuration for shared client access."""
+    __tablename__ = "fritzbox_vpn_configs"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    
+    # Encrypted sensitive data
+    private_key_encrypted = Column(String(255), nullable=False)
+    preshared_key_encrypted = Column(String(255), nullable=False)
+    
+    # Public config data
+    address = Column(String(100), nullable=False)  # e.g., "192.168.178.201/24,fddc:c98b:ce8e::201/64"
+    dns_servers = Column(String(255), nullable=False)  # Comma-separated DNS servers
+    peer_public_key = Column(String(64), nullable=False)
+    allowed_ips = Column(Text, nullable=False)  # Can be very long, e.g., "192.168.178.0/24,0.0.0.0/0,..."
+    endpoint = Column(String(255), nullable=False)  # DynDNS:Port, e.g., "example.myfritz.net:58411"
+    persistent_keepalive = Column(Integer, default=25)
+    
+    # Metadata
+    is_active = Column(Boolean, default=True, nullable=False, index=True)
+    uploaded_by_user_id = Column(Integer, ForeignKey("users.id"), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationships
+    uploaded_by = relationship("User")
+    
+    def __repr__(self):
+        return f"<FritzBoxVPNConfig(id={self.id}, endpoint={self.endpoint}, active={self.is_active})>"
+

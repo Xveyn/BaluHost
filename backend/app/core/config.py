@@ -35,6 +35,9 @@ class Settings(BaseSettings):
     # Mobile device registration
     mobile_server_url: str | None = None  # Optional: Override server URL for mobile QR codes
 
+    # VPN Configuration
+    vpn_encryption_key: str = ""  # Fernet key for encrypting VPN private/preshared keys
+
     # Storage paths
     nas_storage_path: str = "./storage"
     nas_temp_path: str = "./tmp"

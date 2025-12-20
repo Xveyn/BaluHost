@@ -18,6 +18,9 @@ from sqlalchemy.pool import StaticPool
 # Set test environment variables BEFORE importing app
 os.environ.setdefault("NAS_MODE", "dev")
 os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
+# Prevent the application startup lifecycle from performing full DB init/seed during tests
+# Tests create an in-memory DB and manage schema; skip app-level init to avoid touching production DB.
+os.environ.setdefault("SKIP_APP_INIT", "1")
 
 from app.main import app
 from app.core.config import settings
@@ -27,6 +30,8 @@ from app.models.user import User
 from app.models.file_metadata import FileMetadata
 from app.schemas.user import UserCreate
 from app.services import users as user_service
+from app.models.vpn import VPNClient
+from app.services.vpn import VPNService
 
 
 # ============================================================================
@@ -164,6 +169,38 @@ def get_auth_headers(client: TestClient, username: str, password: str) -> dict[s
     assert response.status_code == 200, f"Login failed: {response.json()}"
     token = response.json()["access_token"]
     return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def vpn_client_factory(db_session: Session):
+    """Return a factory that creates a VPNClient owned by a given user id."""
+    def _create(user_id: int | str, device_name: str = "TestPhone") -> int:
+        # Use VPNService to create a client config (ensures model and keys)
+        try:
+            resp = VPNService.create_client_config(
+                db=db_session,
+                user_id=int(user_id),
+                device_name=device_name,
+                server_public_endpoint="127.0.0.1",
+            )
+            # resp.client_id maps to the created VPNClient.id
+            return resp.client_id
+        except Exception:
+            # Fallback: create a simple VPNClient row
+            client = VPNClient(
+                user_id=int(user_id),
+                device_name=device_name,
+                public_key="",
+                preshared_key="",
+                assigned_ip="10.8.0.250",
+                is_active=True
+            )
+            db_session.add(client)
+            db_session.commit()
+            db_session.refresh(client)
+            return client.id
+
+    return _create
 
 
 @pytest.fixture

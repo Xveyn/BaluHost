@@ -12,8 +12,7 @@ import androidx.core.app.NotificationCompat
 import com.baluhost.android.R
 import com.baluhost.android.presentation.MainActivity
 import com.baluhost.android.util.Constants
-import com.wireguard.android.backend.Backend
-import com.wireguard.android.backend.BackendException
+import com.wireguard.android.backend.GoBackend
 import com.wireguard.android.backend.Tunnel
 import com.wireguard.config.Config
 import kotlinx.coroutines.CoroutineScope
@@ -21,7 +20,6 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.launch
-import java.io.IOException
 
 /**
  * VPN Service using WireGuard.
@@ -31,23 +29,17 @@ import java.io.IOException
 class BaluHostVpnService : VpnService() {
     
     private var vpnInterface: ParcelFileDescriptor? = null
-    private var tunnel: Tunnel? = null
+    private var tunnel: WgTunnel? = null
+    private var backend: GoBackend? = null
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
-    
-    // TODO: VPN backend needs refactoring for new WireGuard library version
-    // private val backend by lazy {
-    //     try {
-    //         Backend.create(this)
-    //     } catch (e: Exception) {
-    //         Log.e(TAG, "Failed to create WireGuard backend", e)
-    //         null
-    //     }
-    // }
     
     override fun onCreate() {
         super.onCreate()
         createNotificationChannel()
         startForeground(Constants.VPN_NOTIFICATION_ID, createNotification(false))
+        
+        // Initialize WireGuard backend
+        backend = GoBackend(applicationContext)
     }
     
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
@@ -77,15 +69,37 @@ class BaluHostVpnService : VpnService() {
         return START_NOT_STICKY
     }
     
-    // TODO: Needs refactoring for new WireGuard library API
     private suspend fun startVpn(configString: String) {
         try {
-            Log.w(TAG, "VPN functionality temporarily disabled - needs refactoring for new WireGuard library")
-            updateNotification(false)
+            Log.d(TAG, "Starting VPN connection")
+            
+            if (backend == null) {
+                throw IllegalStateException("WireGuard backend not initialized")
+            }
+            
+            // Parse WireGuard config
+            val config = try {
+                Config.parse(configString.byteInputStream())
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to parse WireGuard config", e)
+                throw IllegalArgumentException("Invalid WireGuard configuration", e)
+            }
+            
+            Log.d(TAG, "Config parsed successfully, creating tunnel")
+            
+            // Create tunnel wrapper
+            tunnel = WgTunnel("BaluHost", config)
+            
+            // Start tunnel using GoBackend - this handles all WireGuard crypto and routing
+            backend?.setState(tunnel!!, Tunnel.State.UP, config)
+            
+            Log.i(TAG, "VPN tunnel started successfully")
+            updateNotification(true)
+            
         } catch (e: Exception) {
             Log.e(TAG, "Failed to start VPN", e)
             updateNotification(false)
-            stopSelf()
+            throw e
         }
     }
     
@@ -93,16 +107,17 @@ class BaluHostVpnService : VpnService() {
         try {
             Log.d(TAG, "Stopping VPN connection")
             
-            // TODO: Needs refactoring for new WireGuard library API
-            // tunnel?.let { t ->
-            //     backend?.setState(t, Tunnel.State.DOWN, null)
-            // }
+            // Stop tunnel using backend
+            tunnel?.let { t ->
+                backend?.setState(t, Tunnel.State.DOWN, null)
+            }
             
+            tunnel = null
             vpnInterface?.close()
             vpnInterface = null
-            tunnel = null
             
             Log.i(TAG, "VPN connection stopped")
+            updateNotification(false)
             
         } catch (e: Exception) {
             Log.e(TAG, "Error stopping VPN", e)
@@ -193,30 +208,19 @@ class BaluHostVpnService : VpnService() {
     }
 }
 
-// WireGuard Tunnel class (simplified version)
-data class Tunnel(
-    val name: String,
-    val config: Config,
-    val state: State,
-    val statistics: Statistics?
-) {
-    enum class State {
-        UP, DOWN
-    }
-}
-
-// Placeholder for tunnel statistics
-data class Statistics(
-    val rxBytes: Long = 0,
-    val txBytes: Long = 0,
-    val lastHandshakeTime: Long = 0
-)
-
-// Backend exception wrapper
-class BackendException(val reason: Reason, cause: Throwable) : Exception(cause) {
-    enum class Reason {
-        UNKNOWN_ERROR,
-        UNABLE_TO_START,
-        TUNNEL_MISSING
+/**
+ * Wrapper class for WireGuard tunnel that implements the Tunnel interface
+ */
+private class WgTunnel(
+    private val tunnelName: String,
+    private val tunnelConfig: Config
+) : Tunnel {
+    private var currentState = Tunnel.State.DOWN
+    
+    override fun getName(): String = tunnelName
+    
+    override fun onStateChange(newState: Tunnel.State) {
+        currentState = newState
+        Log.d("WgTunnel", "State changed to: $newState")
     }
 }

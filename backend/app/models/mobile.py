@@ -26,7 +26,8 @@ class MobileDevice(Base):
     
     # Status
     is_active = Column(Boolean, default=True, nullable=False)
-    last_sync = Column(DateTime, nullable=True)
+    last_seen = Column(DateTime, nullable=True)  # Last API request from this device
+    last_sync = Column(DateTime, nullable=True)  # Last sync operation (camera/files)
     
     # Device token expiration (30 days minimum, 6 months maximum)
     expires_at = Column(DateTime, nullable=True)  # When the device authorization expires

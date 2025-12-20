@@ -37,6 +37,18 @@ interface FileDao {
     @Query("DELETE FROM files WHERE cached_at < :timestamp")
     suspend fun deleteOldCache(timestamp: Long)
     
+    @Query("SELECT COUNT(*) FROM files")
+    suspend fun getCacheFileCount(): Int
+    
+    @Query("DELETE FROM files WHERE path IN (SELECT path FROM files ORDER BY cached_at ASC LIMIT :limit)")
+    suspend fun deleteOldestCacheFiles(limit: Int)
+    
+    @Query("SELECT MIN(cached_at) FROM files")
+    suspend fun getOldestCacheTimestamp(): Long?
+    
+    @Query("SELECT MAX(cached_at) FROM files")
+    suspend fun getNewestCacheTimestamp(): Long?
+    
     @Query("DELETE FROM files")
     suspend fun deleteAll()
 }

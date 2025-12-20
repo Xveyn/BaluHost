@@ -66,3 +66,37 @@ class VPNClientUpdate(BaseModel):
     """Schema for updating VPN client."""
     device_name: Optional[str] = None
     is_active: Optional[bool] = None
+
+
+class FritzBoxConfigUpload(BaseModel):
+    """Schema for uploading Fritz!Box WireGuard config."""
+    config_content: str = Field(..., description="Raw .conf file content")
+
+
+class FritzBoxConfigResponse(BaseModel):
+    """Schema for Fritz!Box config response."""
+    id: int
+    address: str
+    dns_servers: str
+    endpoint: str
+    allowed_ips: str
+    persistent_keepalive: int
+    is_active: bool
+    created_at: datetime
+    updated_at: datetime
+    config_base64: str = Field(..., description="Base64 encoded config for QR codes")
+    
+    class Config:
+        from_attributes = True
+
+
+class FritzBoxConfigSummary(BaseModel):
+    """Summary info (ohne sensitive Daten)."""
+    id: int
+    endpoint: str
+    dns_servers: str
+    is_active: bool
+    created_at: datetime
+    
+    class Config:
+        from_attributes = True

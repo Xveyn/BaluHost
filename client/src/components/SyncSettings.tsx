@@ -8,6 +8,11 @@ interface SyncDevice {
   last_sync: string;
   pending_changes: number;
   conflicts: number;
+  // VPN related (optional)
+  vpn_client_id?: number | null;
+  vpn_assigned_ip?: string | null;
+  vpn_last_handshake?: string | null;
+  vpn_active?: boolean | null;
 }
 
 interface SyncSchedule {
@@ -50,6 +55,29 @@ export default function SyncSettings() {
 
   useEffect(() => {
     loadSyncData();
+
+    // Check for recently generated mobile token that may include VPN config
+    try {
+      const last = localStorage.getItem('lastMobileToken');
+      if (last) {
+        const parsed = JSON.parse(last);
+        // If token includes VPN config, prefill registration fields
+        if (parsed?.vpn_config || parsed?.vpn_config_base64 || parsed?.include_vpn) {
+          if (!newDeviceName && parsed.device_name) {
+            setNewDeviceName(parsed.device_name);
+          }
+          if (!newDeviceId && parsed.device_name) {
+            // generate a sensible default device id from name
+            const slug = String(parsed.device_name).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '').slice(0,30);
+            setNewDeviceId(`${slug}-mobile`);
+          }
+        }
+        // remove after use to avoid repeated autofill
+        localStorage.removeItem('lastMobileToken');
+      }
+    } catch (e) {
+      console.warn('Failed to read lastMobileToken', e);
+    }
   }, []);
 
   async function loadSyncData() {
@@ -70,6 +98,31 @@ export default function SyncSettings() {
       const bandwidthData = await bandwidthRes.json();
       setUploadLimit(bandwidthData.upload_speed_limit);
       setDownloadLimit(bandwidthData.download_speed_limit);
+
+      // Load registered devices (including VPN info when available)
+      try {
+        const devRes = await fetch('/api/sync/devices', { headers: { 'Authorization': `Bearer ${token}` } });
+        if (devRes.ok) {
+          const devData = await devRes.json();
+          // backend may return array or { devices: [...] }
+          const list = Array.isArray(devData) ? devData : (devData.devices || []);
+          setDevices(list.map((d: any) => ({
+            device_id: d.device_id ?? d.id ?? d.name,
+            device_name: d.device_name ?? d.name ?? d.device_name,
+            status: d.status ?? 'unknown',
+            last_sync: d.last_sync ?? d.last_seen ?? null,
+            pending_changes: d.pending_changes ?? 0,
+            conflicts: d.conflicts ?? 0,
+            vpn_client_id: d.vpn_client_id ?? d.vpn?.id ?? d.vpn_client_id ?? null,
+            vpn_assigned_ip: d.vpn_assigned_ip ?? d.vpn?.assigned_ip ?? null,
+            vpn_last_handshake: d.vpn_last_handshake ?? d.vpn?.last_handshake ?? null,
+            vpn_active: d.vpn_active ?? d.vpn?.is_active ?? null,
+          })));
+        }
+      } catch (e) {
+        // non-fatal
+        console.warn('Failed to load devices', e);
+      }
     } catch (err: any) {
       setError('Failed to load sync settings');
     } finally {
@@ -169,6 +222,23 @@ export default function SyncSettings() {
       setSuccess('Bandwidth limits saved');
     } catch (err: any) {
       setError('Failed to save limits');
+    }
+  }
+
+  async function revokeVpnClient(clientId: number) {
+    if (!clientId) return;
+    try {
+      const token = localStorage.getItem('token');
+      const res = await fetch(`/api/vpn/clients/${clientId}/revoke`, {
+        method: 'POST',
+        headers: { 'Authorization': `Bearer ${token}` }
+      });
+      if (!res.ok) throw new Error('Failed to revoke VPN client');
+      setSuccess('VPN access revoked');
+      // refresh devices
+      await loadSyncData();
+    } catch (err: any) {
+      setError(err?.message || 'Failed to revoke VPN client');
     }
   }
 
@@ -339,6 +409,48 @@ export default function SyncSettings() {
           )}
         </div>
       </div>
+
+        {/* Registered Devices */}
+        <div className="mb-6">
+          <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
+            <Smartphone className="w-5 h-5" />
+            Registered Devices
+          </h3>
+          {devices.length === 0 ? (
+            <div className="text-slate-400 text-center py-6">No devices registered</div>
+          ) : (
+            <div className="space-y-3">
+              {devices.map((d) => (
+                <div key={d.device_id} className="p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <div className="font-medium text-slate-200">{d.device_name} <span className="text-xs text-slate-400 ml-2">({d.device_id})</span></div>
+                      <div className="text-xs text-slate-500">Status: {d.status} | Last sync: {formatDate(d.last_sync)}</div>
+                    </div>
+                    <div className="text-right">
+                      {d.vpn_client_id ? (
+                        <div className="text-xs text-slate-300">
+                          <div className="flex items-center gap-3">
+                            <div>VPN: <span className="font-medium text-sky-300">{d.vpn_assigned_ip ?? `client ${d.vpn_client_id}`}</span></div>
+                            <button
+                              onClick={() => revokeVpnClient(d.vpn_client_id!)}
+                              className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded"
+                            >
+                              Revoke VPN
+                            </button>
+                          </div>
+                          <div className="text-xs text-slate-500">Last handshake: {d.vpn_last_handshake ? formatDate(d.vpn_last_handshake) : 'N/A'}</div>
+                        </div>
+                      ) : (
+                        <div className="text-xs text-slate-400">No VPN configured</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
     </div>
   );
 }

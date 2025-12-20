@@ -5,6 +5,7 @@ import androidx.hilt.work.HiltWorkerFactory
 import androidx.work.Configuration
 import coil.ImageLoader
 import coil.ImageLoaderFactory
+import com.baluhost.android.data.worker.OfflineQueueWorkScheduler
 import dagger.hilt.android.HiltAndroidApp
 import javax.inject.Inject
 
@@ -16,6 +17,7 @@ import javax.inject.Inject
  * - Configure WorkManager with Hilt
  * - Setup global application state
  * - Configure Coil ImageLoader with authentication
+ * - Schedule background workers for offline queue
  */
 @HiltAndroidApp
 class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFactory {
@@ -28,7 +30,13 @@ class BaluHostApplication : Application(), Configuration.Provider, ImageLoaderFa
     
     override fun onCreate() {
         super.onCreate()
-        // Additional initialization if needed
+        
+        // Schedule offline queue background workers
+        OfflineQueueWorkScheduler.schedulePeriodicRetry(this)
+        OfflineQueueWorkScheduler.scheduleDailyCleanup(this)
+        
+        // Schedule cache cleanup worker (daily, LRU + age-based)
+        OfflineQueueWorkScheduler.scheduleCacheCleanup(this)
     }
     
     override val workManagerConfiguration: Configuration

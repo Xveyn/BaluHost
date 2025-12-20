@@ -45,7 +45,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
     return TokenResponse(access_token=token, user=user_public)
 
 
-@router.post("/register", response_model=TokenResponse)
+@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
@@ -69,7 +69,7 @@ async def register(payload: RegisterRequest, request: Request, db: Session = Dep
     audit_logger.log_security_event(
         action="user_registered",
         user=payload.username,
-        details={"ip_address": ip_address, "role": user_record.get("role")} if ip_address else {"role": user_record.get("role")},
+        details={"ip_address": ip_address, "role": getattr(user_record, "role", None)} if ip_address else {"role": getattr(user_record, "role", None)},
         success=True,
         db=db
     )
@@ -162,7 +162,7 @@ async def refresh_token(
         user_id = token_data.get("sub")
         
         # Get user from database
-        user_record = user_service.get_user_by_id(int(user_id), db=db)
+        user_record = user_service.get_user(int(user_id), db=db)
         if not user_record:
             audit_logger.log_security_event(
                 action="refresh_token_invalid_user",
@@ -177,10 +177,10 @@ async def refresh_token(
             )
         
         # Check if user is active
-        if not user_record.get("is_active", True):
+        if not getattr(user_record, "is_active", True):
             audit_logger.log_security_event(
                 action="refresh_token_inactive_user",
-                user=user_record.get("username"),
+                user=getattr(user_record, "username", None),
                 error_message="User account is inactive",
                 ip_address=ip_address,
                 db=db
@@ -196,7 +196,7 @@ async def refresh_token(
         # Log successful token refresh
         audit_logger.log_security_event(
             action="token_refreshed",
-            user=user_record.get("username"),
+            user=getattr(user_record, "username", None),
             success=True,
             ip_address=ip_address,
             db=db

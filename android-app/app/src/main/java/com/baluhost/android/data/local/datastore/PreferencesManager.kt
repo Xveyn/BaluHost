@@ -28,6 +28,7 @@ class PreferencesManager @Inject constructor(
     // Keys (access/refresh tokens now stored in SecurePreferencesManager)
     private val serverUrlKey = stringPreferencesKey(Constants.PrefsKeys.SERVER_URL)
     private val userIdKey = stringPreferencesKey(Constants.PrefsKeys.USER_ID)
+    private val vpnConnectedKey = stringPreferencesKey("vpn_connected")
     private val usernameKey = stringPreferencesKey(Constants.PrefsKeys.USERNAME)
     private val userRoleKey = stringPreferencesKey("user_role")
     private val devModeKey = stringPreferencesKey("dev_mode")

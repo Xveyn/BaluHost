@@ -6,12 +6,12 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.navArgument
-import com.baluhost.android.presentation.ui.screens.files.FilesScreen
 import com.baluhost.android.presentation.ui.screens.lock.LockScreen
+import com.baluhost.android.presentation.ui.screens.main.MainScreen
 import com.baluhost.android.presentation.ui.screens.media.MediaViewerScreen
 import com.baluhost.android.presentation.ui.screens.onboarding.OnboardingScreen
+import com.baluhost.android.presentation.ui.screens.pending.PendingOperationsScreen
 import com.baluhost.android.presentation.ui.screens.qrscanner.QrScannerScreen
-import com.baluhost.android.presentation.ui.screens.settings.SettingsScreen
 import com.baluhost.android.presentation.ui.screens.splash.SplashScreen
 import com.baluhost.android.presentation.ui.screens.storage.StorageOverviewScreen
 import com.baluhost.android.presentation.ui.screens.vpn.VpnScreen
@@ -42,7 +42,7 @@ fun NavGraph(
                     }
                 },
                 onNavigateToFiles = {
-                    navController.navigate(Screen.Files.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Splash.route) { inclusive = true }
                     }
                 }
@@ -57,7 +57,7 @@ fun NavGraph(
                     }
                 },
                 onComplete = {
-                    navController.navigate(Screen.Files.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Onboarding.route) { inclusive = true }
                     }
                 }
@@ -80,7 +80,7 @@ fun NavGraph(
         composable(Screen.Storage.route) {
             StorageOverviewScreen(
                 onNavigateToFiles = {
-                    navController.navigate(Screen.Files.route) {
+                    navController.navigate(Screen.Main.route) {
                         popUpTo(Screen.Storage.route) { inclusive = true }
                     }
                 },
@@ -90,19 +90,10 @@ fun NavGraph(
             )
         }
         
-        composable(Screen.Files.route) {
-            FilesScreen(
-                onNavigateToVpn = {
-                    navController.navigate(Screen.Vpn.route)
-                },
-                onNavigateToSettings = {
-                    navController.navigate(Screen.Settings.route)
-                },
-                onNavigateToMediaViewer = { fileUrl, fileName, mimeType ->
-                    navController.navigate(
-                        Screen.MediaViewer.createRoute(fileUrl, fileName, mimeType)
-                    )
-                }
+        // Main screen with bottom navigation (Dashboard, Files, Shares, Settings)
+        composable(Screen.Main.route) {
+            MainScreen(
+                parentNavController = navController
             )
         }
         
@@ -143,22 +134,17 @@ fun NavGraph(
             )
         }
         
-        composable(Screen.Settings.route) {
-            SettingsScreen(
-                onNavigateBack = {
+        composable(Screen.Lock.route) {
+            LockScreen(
+                onUnlocked = {
                     navController.popBackStack()
-                },
-                onNavigateToSplash = {
-                    navController.navigate(Screen.Splash.route) {
-                        popUpTo(0) { inclusive = true }
-                    }
                 }
             )
         }
         
-        composable(Screen.Lock.route) {
-            LockScreen(
-                onUnlocked = {
+        composable(Screen.PendingOperations.route) {
+            PendingOperationsScreen(
+                onNavigateBack = {
                     navController.popBackStack()
                 }
             )

@@ -55,23 +55,23 @@ private fun SystemInfoDto.toDomain() = SystemInfo(
 )
 
 private fun CpuStatsDto.toDomain() = CpuStats(
-    usagePercent = usagePercent,
+    usagePercent = usage,
     cores = cores,
     frequencyMhz = frequencyMhz
 )
 
 private fun MemoryStatsDto.toDomain() = MemoryStats(
-    totalBytes = totalBytes,
-    usedBytes = usedBytes,
-    availableBytes = availableBytes,
-    usagePercent = usagePercent
+    totalBytes = total,
+    usedBytes = used,
+    availableBytes = free,
+    usagePercent = if (total > 0) (used.toDouble() / total.toDouble()) * 100.0 else 0.0
 )
 
 private fun DiskStatsDto.toDomain() = DiskStats(
-    totalBytes = totalBytes,
-    usedBytes = usedBytes,
-    availableBytes = availableBytes,
-    usagePercent = usagePercent
+    totalBytes = total,
+    usedBytes = used,
+    availableBytes = free,
+    usagePercent = if (total > 0) (used.toDouble() / total.toDouble()) * 100.0 else 0.0
 )
 
 private fun RaidArrayDto.toDomain() = RaidArray(

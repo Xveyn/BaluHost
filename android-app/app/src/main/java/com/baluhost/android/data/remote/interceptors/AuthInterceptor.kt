@@ -32,15 +32,23 @@ class AuthInterceptor @Inject constructor(
             return chain.proceed(request)
         }
         
-        // Add access token to request
+        // Add access token and device ID to request
         val token = runBlocking { preferencesManager.getAccessToken().first() }
-        val authenticatedRequest = if (token != null) {
-            request.newBuilder()
-                .header("Authorization", "Bearer $token")
-                .build()
-        } else {
-            request
+        val deviceId = runBlocking { preferencesManager.getDeviceId().first() }
+        
+        val requestBuilder = request.newBuilder()
+        
+        // Add Authorization header
+        if (token != null) {
+            requestBuilder.header("Authorization", "Bearer $token")
         }
+        
+        // Add Device-ID header for last_seen tracking
+        if (deviceId != null) {
+            requestBuilder.header("X-Device-ID", deviceId)
+        }
+        
+        val authenticatedRequest = requestBuilder.build()
         
         var response = chain.proceed(authenticatedRequest)
         
@@ -82,14 +90,27 @@ class AuthInterceptor @Inject constructor(
                                 .build()
                         )
                     } catch (e: Exception) {
-                        Log.e(TAG, "Token refresh failed", e)
-                        // Clear tokens - user needs to re-authenticate
-                        runBlocking {
-                            preferencesManager.clearTokens()
+                        Log.e(TAG, "Token refresh failed: ${e.message}", e)
+                        
+                        // Only clear tokens if it's an authentication error, NOT connection error
+                        // Connection errors (IOException, SocketTimeoutException) should keep tokens
+                        val isConnectionError = e is java.io.IOException || 
+                                               e.message?.contains("Failed to connect", ignoreCase = true) == true ||
+                                               e.message?.contains("timeout", ignoreCase = true) == true ||
+                                               e.message?.contains("refused", ignoreCase = true) == true
+                        
+                        if (!isConnectionError) {
+                            // Clear tokens only for real auth errors (invalid refresh token, etc.)
+                            Log.w(TAG, "Authentication failed - clearing tokens")
+                            runBlocking {
+                                preferencesManager.clearTokens()
+                            }
+                        } else {
+                            Log.d(TAG, "Connection error during token refresh - keeping tokens")
                         }
                     }
                 } else {
-                    Log.w(TAG, "No refresh token available")
+                    Log.w(TAG, "No refresh token available - clearing tokens")
                     runBlocking {
                         preferencesManager.clearTokens()
                     }

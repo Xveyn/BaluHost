@@ -20,6 +20,7 @@ from app.services import disk_monitor, jobs, seed, telemetry, sync_background
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
+from app.middleware.device_tracking import DeviceTrackingMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +32,19 @@ _notification_scheduler = None
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     global _discovery_service
-    
+    # Allow tests to skip full app initialization by setting SKIP_APP_INIT=1
+    import os
+    if os.environ.get('SKIP_APP_INIT') == '1':
+        logger.info('SKIP_APP_INIT set; skipping full app startup (tests)')
+        try:
+            yield
+        finally:
+            return
+
     # Initialize database tables
     init_db()
     logger.info("Database initialized")
-    
+
     ensure_admin_user(settings)
     logger.info("Admin user ensured with username '%s'", settings.admin_username)
     seed.seed_dev_data()
@@ -108,6 +117,9 @@ def create_app() -> FastAPI:
         docs_url=None,  # Disable default docs
         redoc_url=None,  # Disable default redoc
     )
+
+    # Add device tracking middleware (updates last_seen for mobile devices)
+    app.add_middleware(DeviceTrackingMiddleware)
 
     app.add_middleware(
         CORSMiddleware,

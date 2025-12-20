@@ -5,21 +5,24 @@ import androidx.room.RoomDatabase
 import androidx.room.TypeConverters
 import com.baluhost.android.data.local.database.converters.Converters
 import com.baluhost.android.data.local.database.dao.FileDao
+import com.baluhost.android.data.local.database.dao.PendingOperationDao
 import com.baluhost.android.data.local.database.dao.UserDao
 import com.baluhost.android.data.local.database.entities.FileEntity
+import com.baluhost.android.data.local.database.entities.PendingOperationEntity
 import com.baluhost.android.data.local.database.entities.UserEntity
 
 /**
  * BaluHost Room Database.
  * 
- * Stores cached file metadata and user info for offline access.
+ * Stores cached file metadata, user info, and pending operations for offline access.
  */
 @Database(
     entities = [
         FileEntity::class,
-        UserEntity::class
+        UserEntity::class,
+        PendingOperationEntity::class
     ],
-    version = 2, // Incremented for parentPath column
+    version = 3, // Incremented for PendingOperationEntity
     exportSchema = false
 )
 @TypeConverters(Converters::class)
@@ -27,4 +30,5 @@ abstract class BaluHostDatabase : RoomDatabase() {
     
     abstract fun fileDao(): FileDao
     abstract fun userDao(): UserDao
+    abstract fun pendingOperationDao(): PendingOperationDao
 }

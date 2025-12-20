@@ -140,3 +140,49 @@ apiClient.interceptors.request.use((config) => {
   console.log('[API] Request:', config.method?.toUpperCase(), config.url, 'baseURL:', config.baseURL);
   return config;
 });
+
+// --- Admin DB API (read-only, admin-only) ---
+export interface AdminTableSchemaField {
+  name: string;
+  type: string;
+  nullable: boolean;
+  default?: any;
+}
+
+export interface AdminTableSchemaResponse {
+  table: string;
+  columns: AdminTableSchemaField[];
+}
+
+export interface AdminTableRowsResponse {
+  table: string;
+  page: number;
+  page_size: number;
+  rows: Array<Record<string, any>>;
+  total?: number | null;
+}
+
+export async function getAdminTables(): Promise<string[]> {
+  const res = await apiClient.get('/api/admin/db/tables');
+  return res.data.tables;
+}
+
+export async function getAdminTableSchema(table: string): Promise<AdminTableSchemaResponse> {
+  const res = await apiClient.get(`/api/admin/db/table/${encodeURIComponent(table)}/schema`);
+  return res.data;
+}
+
+export async function getAdminTableRows(
+  table: string,
+  page: number = 1,
+  page_size: number = 50,
+  fields?: string[],
+  q?: string
+): Promise<AdminTableRowsResponse> {
+  const params: any = { page, page_size };
+  if (fields && fields.length) params.fields = fields.join(',');
+  if (q) params.q = q;
+  const res = await apiClient.get(`/api/admin/db/table/${encodeURIComponent(table)}`, { params });
+  return res.data;
+}
+

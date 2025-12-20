@@ -21,8 +21,8 @@ data class SystemInfoDto(
 )
 
 data class CpuStatsDto(
-    @SerializedName("usage_percent")
-    val usagePercent: Double,
+    @SerializedName("usage")
+    val usage: Double,
     @SerializedName("cores")
     val cores: Int,
     @SerializedName("frequency_mhz")
@@ -30,25 +30,25 @@ data class CpuStatsDto(
 )
 
 data class MemoryStatsDto(
-    @SerializedName("total_bytes")
-    val totalBytes: Long,
-    @SerializedName("used_bytes")
-    val usedBytes: Long,
-    @SerializedName("available_bytes")
-    val availableBytes: Long,
-    @SerializedName("usage_percent")
-    val usagePercent: Double
+    @SerializedName("total")
+    val total: Long,
+    @SerializedName("used")
+    val used: Long,
+    @SerializedName("free")
+    val free: Long,
+    @SerializedName("speed_mts")
+    val speedMts: Int? = null,
+    @SerializedName("type")
+    val type: String? = null
 )
 
 data class DiskStatsDto(
-    @SerializedName("total_bytes")
-    val totalBytes: Long,
-    @SerializedName("used_bytes")
-    val usedBytes: Long,
-    @SerializedName("available_bytes")
-    val availableBytes: Long,
-    @SerializedName("usage_percent")
-    val usagePercent: Double
+    @SerializedName("total")
+    val total: Long,
+    @SerializedName("used")
+    val used: Long,
+    @SerializedName("free")
+    val free: Long
 )
 
 data class RaidStatusResponseDto(

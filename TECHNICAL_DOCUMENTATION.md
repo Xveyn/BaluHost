@@ -1,26 +1,194 @@
-# BaluHost NAS Manager - Technical Documentation
+﻿# BaluHost — Technical Documentation (Neu, 20. Dezember 2025)
 
-## Project Overview
+Kurzfassung
+-
+BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Python (FastAPI) implementiert, das Frontend ist ein React + TypeScript Single-Page-Application (Vite). Diese Dokumentation beschreibt Architektur, Komponenten, Deployment- und Entwicklungs-Workflows und zeigt ein ASCII-Diagramm, wie Frontend und Backend miteinander zusammenspielen.
 
-**BaluHost** is a full-stack NAS management web application with React TypeScript frontend and Python FastAPI backend. The system provides comprehensive file, user, and system management with a focus on security, performance, and developer-friendliness.
+Version & Datum
+-
+- **Version:** 1.3.0
+- **Last Updated:** 20. Dezember 2025
+- **Maintainer:** Xveyn
 
-### Technology Stack
+Technologie-Überblick
+-
+- Frontend: React 18, TypeScript, Vite, Tailwind CSS
+- Backend: Python 3.11+, FastAPI, Pydantic, SQLAlchemy, Alembic
+- Runtime: Uvicorn (ASGI)
+- System & Monitoring: psutil, smartctl (optional, Linux)
+- Auth: JWT (Access + Refresh flows)
+- DB (dev): SQLite; Production: PostgreSQL empfohlen
 
-**Frontend:**
-- React 18 mit TypeScript
-- Vite (Build-Tool & Dev-Server)
-- Tailwind CSS (Styling)
-- React Router (Navigation)
-- Recharts (Visualisierung)
+Projektstruktur (Wichtigste Ordner)
+-
+- `backend/` — FastAPI App (`app/`), Services, Dev‑Storage, Scripts
+- `client/` — React App (Vite), `src/pages`, `src/api`, `src/lib/api.ts`
+- `docs/` — technische How‑tos, RAID, Telemetrie, Mobile, etc.
+- `start_dev.py` — kombiniertes Dev-Start-Skript
 
-**Backend:**
-- Python 3.11+ mit FastAPI
-- Pydantic (Data Validation)
-- Uvicorn (ASGI Server)
-- psutil (System-Monitoring)
-- JWT (Authentication)
+----------------------------------------
+Architektur-Übersicht (ASCII)
+-
+Dieses Diagramm zeigt die wichtigsten Laufzeit-Komponenten und wie sie interagieren.
 
----
+  +----------------------+            +----------------------+            +--------------------+
+  |  Developer / Browser | <---HTTP-->|  Frontend (Vite)     | <---XHR--->|  API Client (axios) |
+  |  (React SPA)         |            |  client/src/...      |            |  client/src/lib/api |
+  +----------------------+            +----------------------+            +----------+---------+
+                                                                              |         |
+                                                                              |         v
+                                                                     +--------+---------+ 
+                                                                     | Backend API (FastAPI) |
+                                                                     | backend/app/main.py    |
+                                                                     +---+----+----+--------+
+                                                                         |    |    |
+                                           +-----------------------------+    |    +------------------+
+                                           |                                  |                       |
+                                           v                                  v                       v
+                                +------------------+                 +----------------+       +---------------------+
+                                | Services Layer   |                 | Background     |       | Dev / Prod Storage  |
+                                | backend/app/services/ |             | Jobs (jobs.py) |       | - dev-storage/      |
+                                +--+--+---+---+----+--+                 +-------+--------+       +---------------------+
+                                   |  |   |   |   |                             |  
+                                   |  |   |   |   |                             v
+                   +---------------+  |   |   |   |                 +---------------------------+
+                   |                  |   |   |   |                 | Disk I/O Monitor, SMART   |
+                   v                  v   v   v   v                 | (disk_monitor.py, smart.py)|
+             +---------+   +---------+ +-----+ +------+              +---------------------------+
+             | Auth &  |   | Files   | | RAID| | Tele- | 
+             | Users   |   | (files) | | (raid)| | metry |     +----------------+
+             | (auth.py|   |         | |      | | (telemetry)   | Database (SQLAlchemy) |
+             +---------+   +---------+ +-----+ +------+        | backend/app/models/    |
+                                                              +------------------------+
+
+Erläuterung
+-
+- Browser <> Frontend: SPA served by Vite dev server während Entwicklung oder statisch aus `client/dist/` in Produktion.
+- Frontend <> Backend: REST/JSON über `client/src/lib/api.ts` (axios) zu FastAPI Endpoints (`/api/*`).
+- Backend Services: Logik in `backend/app/services/` (z. B. `files.py`, `raid.py`, `smart.py`, `telemetry.py`, `audit_logger.py`).
+- Background Jobs: Telemetrie-Collector, Disk I/O Sampler, Job-Manager lebt in `app/services` + Lifespan events.
+- Storage: Dev-Mode Sandbox unter `backend/dev-storage/` (mit Mock-RAID) oder echte Mountpoints in Production; Metadaten in `.metadata.json` plus DB‑Referenzen.
+
+----------------------------------------
+Backend — Komponenten & Pfade
+-
+- App-Entry: `backend/app/main.py` (FastAPI app + Lifespan)
+- API-Routen: `backend/app/api/routes/` (z. B. `auth.py`, `files.py`, `system.py`, `logging.py`)
+- Services (Business-Logic): `backend/app/services/` —
+  - `auth.py` — JWT, Login/Refresh, Role handling
+  - `files.py` — Upload/Download, Mountpoints, Quota checks
+  - `raid.py` — RAID-Status, Simulation & Control (Dev-Mode)
+  - `disk_monitor.py` / `smart.py` — Disk I/O & SMART
+  - `telemetry.py` — Telemetry collection & history
+  - `audit_logger.py` — JSON-Audit-Logs & API access
+  - `vpn.py`, `mobile.py` — WireGuard config + mobile pairing
+- Schemas: `backend/app/schemas/` (Pydantic Models für Requests/Responses)
+- Models/ORM: `backend/app/models/` (SQLAlchemy)
+- Migrations: Alembic (`alembic/`)
+
+Wichtige Endpoints (Auszug)
+-
+- `POST /api/auth/login`, `POST /api/auth/refresh`, `GET /api/auth/me`
+- `GET /api/files/mountpoints`, `POST /api/files/upload`, `GET /api/files/download`
+- `GET /api/system/raid/status`, `POST /api/system/raid/rebuild`
+- `GET /api/system/smart/status`, `GET /api/system/disk-io/history`
+- `GET /api/logging/audit`
+
+Security & Auth
+-
+- JWT Access Tokens (kurze Laufzeit) + Refresh Token Flow (mobile: 30 Tage)
+- RBAC: `admin` vs `user` — Endpunkte entsprechend eingeschränkt
+- Audit-Logging für sensitive Aktionen (Upload, Delete, VPN-Registration)
+
+----------------------------------------
+Frontend — Komponenten & Pfade
+-
+- App-Entrypoint: `client/src/main.tsx` / `client/src/App.tsx`
+- Seiten: `client/src/pages/` — `Dashboard.tsx`, `FileManager.tsx`, `RaidManagement.tsx`, `SystemMonitor.tsx`, `Logging.tsx`, `UserManagement.tsx`
+- API-Client: `client/src/lib/api.ts` + modulare Endpunkt-Wrapper in `client/src/api/` (e.g. `raid.ts`, `smart.ts`)
+- Hooks: `client/src/hooks/` — `useSystemTelemetry.ts`, `useSmartData.ts`
+- UI: Tailwind + lucide-react icons; Recharts für Graphen
+
+Benutzerablauf (Kurz)
+-
+1. Nutzer öffnet Browser → React SPA lädt → `GET /api/auth/me` prüft Session
+2. Dashboard ruft Telemetrie, Storage und RAID-Status per API ab
+3. FileManager ruft Mountpoints, List, Upload/Download Endpoints auf; Quota wird vor Upload geprüft
+4. Admins sehen zusätzliche Controls (RAID, Disk Format, Create Array)
+
+----------------------------------------
+Dev-Mode & Testing
+-
+- Dev-Flag: `NAS_MODE=dev` (in `backend/app/core/config.py`) aktiviert Sandbox:
+  - `backend/dev-storage/` mit Mock-Disks und automatischer Seed-Daten
+  - Mock SMART / RAID / Telemetry falls System-APIs fehlen
+- Start-Dev (kombiniert):
+  ```bash
+  python start_dev.py
+  ```
+- Backend Tests: `cd backend && python -m pytest`
+
+Deployment (Kurz)
+-
+- Production Backend: `uvicorn app.main:app --host 0.0.0.0 --port 3001`
+- Frontend: `npm run build` → `client/dist/` → Serve via Nginx / static host
+- DB: Verwende PostgreSQL in Produktion, setze `DATABASE_URL`
+
+Konfigurationsempfehlungen
+-
+- Telemetry: `TELEMETRY_INTERVAL_SECONDS` (Prod: 3s, Dev: 2s optional)
+- Telemetry History: `TELEMETRY_HISTORY_SIZE` (Prod: 60 samples)
+- Quota: `NAS_QUOTA_BYTES` oder mountpoint-spezifisch
+
+Dokumentation & Referenzen
+-
+- API-Referenz: `docs/API_REFERENCE.md`
+- RAID-Setup: `docs/RAID_SETUP_WIZARD.md`
+- Telemetrie-Empfehlungen: `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`
+- Audit Logging: `docs/AUDIT_LOGGING.md`
+- Mobile/VPN: `docs/MOBILE_TOKEN_SECURITY.md`, `docs/ANDROID_APP_GUIDE.md`, `docs/IOS_APP_GUIDE.md`
+
+Was ist neu / Highlights (Kurz)
+-
+- Storage Mountpoints (Multi-Drive) & Quota-Prüfung vor Upload
+- Disk-Management UI (Format, Create Array, Device Actions)
+- Erweiterte Disk I/O + SMART Visualisierung
+- QR-basiertes VPN/Mobile Pairing + 30-Tage-Refresh-Tokens
+- Audit-Logging als JSON + API-Zugriff
+
+Änderungs- und Releasehinweis
+-
+- Version: 1.3.0 — Änderungen in Backend-Services (`files.py`, `raid.py`, `disk_monitor.py`, `telemetry.py`, `smart.py`, `audit_logger.py`, `vpn.py`, `mobile.py`) und Frontend-Seiten (`FileManager.tsx`, `RaidManagement.tsx`, `SystemMonitor.tsx`, `Logging.tsx`).
+
+Kontakt & Mitwirkung
+-
+- Issues/PR: GitHub-Repo → Fork → Branch → PR
+- Lokale Dev-Hilfe: `scripts/dev_check.py`, `scripts/reset_dev_storage.py`
+
+Weitere Schritte (optional)
+-
+- Möchtest du, dass ich eine `docs/CHANGELOG.md` mit Release-Notizen anlege oder die Änderungen direkt commite? 
+
+
+## ✨ Was ist neu? / What's New (20. Dezember 2025)
+
+- Storage Mountpoints: Multi-Drive- und RAID-Darstellung in UI und Backend (siehe `app/services/files.py` und `client/pages/FileManager.tsx`).
+- Quota-System: Konfigurierbare Quotas pro Mountpoint mit Echtzeitprüfung vor Uploads.
+- Disk Management UI (Frontend): Verfügbarkeitsliste, Formatierung, Array-Erstellung und Device-Controls in `RaidManagement`.
+- Disk I/O Monitor & SMART: Erweiterte Echtzeit-Metriken und historische Ansichten (`app/services/disk_monitor.py`, `app/services/smart.py`, `client/pages/SystemMonitor.tsx`).
+- Telemetrie: Empfehlungen und konfigurierbare Intervalle; neues Dokument `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`.
+- VPN / Mobile: QR-Code-basierte VPN-Registrierung, 30-Tage-Refresh-Tokens für mobile Geräte und verbesserte Pairing-Flows.
+- Audit-Logging: Verbesserte Ereignistypen und JSON-Format, API-Zugriff auf Audit-Daten.
+- Dev-Mode & Windows: Verbesserter Sandbox-Modus mit Windows-Kompatibilität und Seed-Daten für Entwickler (`start_dev.py`, `backend/dev-storage/`).
+- Neue/aktualisierte Dokumentation: `docs/RAID_SETUP_WIZARD.md`, `docs/UPLOAD_PROGRESS.md`, `docs/MOBILE_TOKEN_SECURITY.md`, `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`.
+
+## Änderungen (Kurzüberblick)
+
+- Backend: Erweiterungen in `app/services/` — insbesondere `files.py`, `raid.py`, `disk_monitor.py`, `telemetry.py`, `smart.py`, `audit_logger.py`, `vpn.py`, `mobile.py`.
+- Frontend: Neue/erweiterte Seiten in `client/src/pages/` — `FileManager.tsx`, `RaidManagement.tsx`, `SystemMonitor.tsx`, `Logging.tsx`.
+- Docs: Viele technische Ergänzungen und How‑tos im `docs/`-Verzeichnis (RAID, Telemetrie, Backup/Restore, Mobile/VPN).
+- Konfiguration: Neue Umgebungs-/Konfigurationsoptionen für Quotas, Telemetrie-Intervalle und Dev-Mode-Seed.
+
 
 ## 🔧 Backend Features
 
@@ -1439,6 +1607,6 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** December 2025  
-**Version:** 1.2.0  
+**Last Updated:** 20. Dezember 2025  
+**Version:** 1.3.0  
 **Maintainer:** Xveyn

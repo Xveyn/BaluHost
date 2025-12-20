@@ -228,3 +228,211 @@ PersistentKeepalive = 25
         if client:
             client.last_handshake = datetime.utcnow()
             db.commit()
+    
+    @staticmethod
+    def parse_fritzbox_config(config_content: str) -> dict:
+        """
+        Parse Fritz!Box WireGuard config file.
+        
+        Args:
+            config_content: Raw .conf file content
+            
+        Returns:
+            dict with keys: private_key, address, dns_servers, peer_public_key,
+                           preshared_key, allowed_ips, endpoint, persistent_keepalive
+        """
+        config = {}
+        current_section = None
+        dns_list = []
+        
+        for line in config_content.split('\n'):
+            line = line.strip()
+            
+            if not line or line.startswith('#'):
+                continue
+                
+            if line.startswith('['):
+                current_section = line
+            elif current_section == '[Interface]':
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    if key == 'PrivateKey':
+                        config['private_key'] = value
+                    elif key == 'Address':
+                        config['address'] = value
+                    elif key == 'DNS':
+                        dns_list.append(value)
+            elif current_section == '[Peer]':
+                if '=' in line:
+                    key, value = line.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    
+                    if key == 'PublicKey':
+                        config['peer_public_key'] = value
+                    elif key == 'PresharedKey':
+                        config['preshared_key'] = value
+                    elif key == 'AllowedIPs':
+                        config['allowed_ips'] = value
+                    elif key == 'Endpoint':
+                        config['endpoint'] = value
+                    elif key == 'PersistentKeepalive':
+                        config['persistent_keepalive'] = int(value)
+        
+        # Join DNS servers
+        config['dns_servers'] = ','.join(dns_list)
+        
+        # Validate required fields
+        required = ['private_key', 'address', 'peer_public_key', 'allowed_ips', 'endpoint']
+        missing = [f for f in required if f not in config]
+        if missing:
+            raise ValueError(f"Missing required fields in config: {', '.join(missing)}")
+        
+        return config
+    
+    @staticmethod
+    def upload_fritzbox_config(
+        db: Session,
+        config_content: str,
+        user_id: int
+    ):
+        """
+        Parse and save Fritz!Box WireGuard config.
+        
+        Args:
+            db: Database session
+            config_content: Raw .conf file content
+            user_id: User ID (admin)
+            
+        Returns:
+            FritzBoxConfigResponse
+        """
+        from app.models.vpn import FritzBoxVPNConfig
+        from app.services.vpn_encryption import VPNEncryption
+        from app.schemas.vpn import FritzBoxConfigResponse
+        
+        # Parse config
+        parsed = VPNService.parse_fritzbox_config(config_content)
+        
+        # Encrypt sensitive keys
+        private_key_encrypted = VPNEncryption.encrypt_key(parsed['private_key'])
+        preshared_key_encrypted = VPNEncryption.encrypt_key(parsed.get('preshared_key', ''))
+        
+        # Deactivate old configs
+        db.query(FritzBoxVPNConfig).update({"is_active": False})
+        
+        # Create new config
+        config = FritzBoxVPNConfig(
+            private_key_encrypted=private_key_encrypted,
+            preshared_key_encrypted=preshared_key_encrypted,
+            address=parsed['address'],
+            dns_servers=parsed.get('dns_servers', ''),
+            peer_public_key=parsed['peer_public_key'],
+            allowed_ips=parsed['allowed_ips'],
+            endpoint=parsed['endpoint'],
+            persistent_keepalive=parsed.get('persistent_keepalive', 25),
+            is_active=True,
+            uploaded_by_user_id=user_id,
+            created_at=datetime.utcnow(),
+            updated_at=datetime.utcnow()
+        )
+        
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        
+        # Generate config_base64 for response
+        config_base64 = VPNService.get_fritzbox_config_base64(db, config.id)
+        
+        return FritzBoxConfigResponse(
+            id=config.id,
+            address=config.address,
+            dns_servers=config.dns_servers,
+            endpoint=config.endpoint,
+            allowed_ips=config.allowed_ips,
+            persistent_keepalive=config.persistent_keepalive,
+            is_active=config.is_active,
+            created_at=config.created_at,
+            updated_at=config.updated_at,
+            config_base64=config_base64
+        )
+    
+    @staticmethod
+    def get_fritzbox_config_base64(db: Session, config_id: int = None) -> str:
+        """
+        Get Fritz!Box config as Base64 (for QR codes).
+        
+        Args:
+            db: Database session
+            config_id: Optional config ID. If None, returns active config.
+            
+        Returns:
+            Base64 encoded config string
+        """
+        from app.models.vpn import FritzBoxVPNConfig
+        from app.services.vpn_encryption import VPNEncryption
+        
+        if config_id:
+            config = db.query(FritzBoxVPNConfig).filter(
+                FritzBoxVPNConfig.id == config_id
+            ).first()
+        else:
+            config = db.query(FritzBoxVPNConfig).filter(
+                FritzBoxVPNConfig.is_active == True
+            ).first()
+        
+        if not config:
+            raise ValueError("No Fritz!Box VPN config found")
+        
+        # Decrypt keys
+        private_key = VPNEncryption.decrypt_key(config.private_key_encrypted)
+        preshared_key = VPNEncryption.decrypt_key(config.preshared_key_encrypted) if config.preshared_key_encrypted else ''
+        
+        # Rebuild config file
+        dns_lines = '\n'.join([f"DNS = {dns.strip()}" for dns in config.dns_servers.split(',') if dns.strip()])
+        
+        config_parts = ["[Interface]"]
+        config_parts.append(f"PrivateKey = {private_key}")
+        config_parts.append(f"Address = {config.address}")
+        if dns_lines:
+            config_parts.append(dns_lines)
+        
+        config_parts.append("")
+        config_parts.append("[Peer]")
+        config_parts.append(f"PublicKey = {config.peer_public_key}")
+        if preshared_key:
+            config_parts.append(f"PresharedKey = {preshared_key}")
+        config_parts.append(f"AllowedIPs = {config.allowed_ips}")
+        config_parts.append(f"Endpoint = {config.endpoint}")
+        config_parts.append(f"PersistentKeepalive = {config.persistent_keepalive}")
+        
+        config_content = '\n'.join(config_parts)
+        
+        # Base64 encode
+        return base64.b64encode(config_content.encode()).decode()
+    
+    @staticmethod
+    def get_active_fritzbox_config(db: Session):
+        """Get currently active Fritz!Box config."""
+        from app.models.vpn import FritzBoxVPNConfig
+        return db.query(FritzBoxVPNConfig).filter(
+            FritzBoxVPNConfig.is_active == True
+        ).first()
+    
+    @staticmethod
+    def delete_fritzbox_config(db: Session, config_id: int) -> bool:
+        """Delete Fritz!Box config."""
+        from app.models.vpn import FritzBoxVPNConfig
+        config = db.query(FritzBoxVPNConfig).filter(
+            FritzBoxVPNConfig.id == config_id
+        ).first()
+        
+        if not config:
+            return False
+        
+        db.delete(config)
+        db.commit()
+        return True

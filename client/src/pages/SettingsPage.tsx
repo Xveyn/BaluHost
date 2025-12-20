@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import BackupSettings from '../components/BackupSettings';
+import VpnManagement from '../components/VpnManagement';
 
 interface UserProfile {
   id: number;
@@ -38,7 +39,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -267,7 +268,10 @@ export default function SettingsPage() {
             { id: 'security', label: 'Security', icon: Lock },
             { id: 'storage', label: 'Storage', icon: HardDrive },
             { id: 'activity', label: 'Activity', icon: Activity },
-            ...(profile?.role === 'admin' ? [{ id: 'backup', label: 'Backup', icon: Database }] : [])
+            ...(profile?.role === 'admin' ? [
+              { id: 'backup', label: 'Backup', icon: Database },
+              { id: 'vpn', label: 'VPN', icon: Wifi }
+            ] : [])
           ].map(tab => (
             <button
               key={tab.id}
@@ -511,6 +515,11 @@ export default function SettingsPage() {
         {/* Backup Tab (Admin only) */}
         {activeTab === 'backup' && profile?.role === 'admin' && (
           <BackupSettings />
+        )}
+
+        {/* VPN Tab (Admin only) */}
+        {activeTab === 'vpn' && profile?.role === 'admin' && (
+          <VpnManagement />
         )}
 
         {/* Storage Tab */}

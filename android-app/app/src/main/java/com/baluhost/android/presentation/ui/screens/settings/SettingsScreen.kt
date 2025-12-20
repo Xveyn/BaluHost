@@ -137,6 +137,88 @@ fun SettingsScreen(
                 }
             }
             
+            // Cache Management Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "Cache-Verwaltung",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    // Cache Stats
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Gecachte Dateien",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = "${uiState.cacheFileCount} Dateien",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                        
+                        Column(
+                            modifier = Modifier.weight(1f),
+                            horizontalAlignment = Alignment.End
+                        ) {
+                            Text(
+                                text = "Älteste Datei",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                            Text(
+                                text = if (uiState.cacheOldestAgeDays != null) {
+                                    "${uiState.cacheOldestAgeDays} Tage"
+                                } else {
+                                    "Keine Daten"
+                                },
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
+                            )
+                        }
+                    }
+                    
+                    Text(
+                        text = "Der Cache wird automatisch bereinigt wenn er älter als 7 Tage ist oder mehr als 1000 Dateien enthält.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    
+                    Button(
+                        onClick = { viewModel.clearCache() },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !uiState.isClearingCache && uiState.cacheFileCount > 0
+                    ) {
+                        if (uiState.isClearingCache) {
+                            CircularProgressIndicator(
+                                modifier = Modifier.size(20.dp),
+                                color = Color.White,
+                                strokeWidth = 2.dp
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Cache wird geleert...")
+                        } else {
+                            Text("Cache jetzt leeren")
+                        }
+                    }
+                }
+            }
+            
             Spacer(modifier = Modifier.weight(1f))
             
             // Danger Zone Card

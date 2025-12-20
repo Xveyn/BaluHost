@@ -17,4 +17,10 @@ interface SystemApi {
     
     @GET("system/raid/available-disks")
     suspend fun getAvailableDisks(): AvailableDisksResponseDto
+    
+    @GET("system/telemetry/history")
+    suspend fun getTelemetryHistory(): TelemetryHistoryDto
+    
+    @GET("system/storage/aggregated")
+    suspend fun getStorageAggregated(): StorageAggregatedDto
 }

@@ -33,22 +33,23 @@ class SplashViewModel @Inject constructor(
         viewModelScope.launch {
             delay(1000) // Show splash for minimum 1 second
             
-            // Check if onboarding is completed
-            val onboardingCompleted = preferencesManager.isOnboardingCompleted().first()
-            
-            if (!onboardingCompleted) {
-                _uiState.value = SplashState.OnboardingNeeded
-                return@launch
-            }
-            
-            // Check authentication - both token AND device ID must exist
+            // Check authentication FIRST - both token AND device ID must exist
             val accessToken = preferencesManager.getAccessToken().first()
             val deviceId = preferencesManager.getDeviceId().first()
             
-            _uiState.value = if (accessToken != null && deviceId != null) {
-                SplashState.Authenticated
+            // If not authenticated, check if onboarding is needed
+            if (accessToken == null || deviceId == null) {
+                // Not authenticated - check if onboarding is completed
+                val onboardingCompleted = preferencesManager.isOnboardingCompleted().first()
+                
+                _uiState.value = if (!onboardingCompleted) {
+                    SplashState.OnboardingNeeded
+                } else {
+                    SplashState.NotAuthenticated
+                }
             } else {
-                SplashState.NotAuthenticated
+                // User has credentials - they are authenticated
+                _uiState.value = SplashState.Authenticated
             }
         }
     }

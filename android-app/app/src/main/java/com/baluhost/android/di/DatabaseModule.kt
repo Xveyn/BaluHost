@@ -68,4 +68,8 @@ object DatabaseModule {
     @Provides
     @Singleton
     fun provideUserDao(database: BaluHostDatabase) = database.userDao()
+    
+    @Provides
+    @Singleton
+    fun providePendingOperationDao(database: BaluHostDatabase) = database.pendingOperationDao()
 }

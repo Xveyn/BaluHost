@@ -27,7 +27,9 @@ class SettingsViewModel @Inject constructor(
     private val securePreferences: SecurePreferencesManager,
     private val biometricAuthManager: BiometricAuthManager,
     private val pinManager: PinManager,
-    private val appLockManager: AppLockManager
+    private val appLockManager: AppLockManager,
+    private val getCacheStatsUseCase: com.baluhost.android.domain.usecase.cache.GetCacheStatsUseCase,
+    private val clearCacheUseCase: com.baluhost.android.domain.usecase.cache.ClearCacheUseCase
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(SettingsUiState())
@@ -36,6 +38,7 @@ class SettingsViewModel @Inject constructor(
     init {
         loadUserInfo()
         loadSecuritySettings()
+        loadCacheStats()
     }
     
     private fun loadUserInfo() {
@@ -206,6 +209,41 @@ class SettingsViewModel @Inject constructor(
         }
     }
     
+    private fun loadCacheStats() {
+        viewModelScope.launch {
+            try {
+                val stats = getCacheStatsUseCase()
+                _uiState.update { currentState ->
+                    currentState.copy(
+                        cacheFileCount = stats.fileCount,
+                        cacheOldestAgeDays = stats.oldestFileAge?.let { (it / (1000 * 60 * 60 * 24)).toInt() },
+                        cacheNewestAgeDays = stats.newestFileAge?.let { (it / (1000 * 60 * 60 * 24)).toInt() }
+                    )
+                }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(error = "Cache-Statistiken konnten nicht geladen werden") }
+            }
+        }
+    }
+    
+    fun clearCache() {
+        viewModelScope.launch {
+            _uiState.update { it.copy(isClearingCache = true) }
+            try {
+                clearCacheUseCase()
+                // Reload stats after clearing
+                kotlinx.coroutines.delay(500)
+                loadCacheStats()
+                _uiState.update { it.copy(isClearingCache = false) }
+            } catch (e: Exception) {
+                _uiState.update { it.copy(
+                    isClearingCache = false,
+                    error = "Cache konnte nicht gelöscht werden"
+                ) }
+            }
+        }
+    }
+    
     fun dismissError() {
         _uiState.update { it.copy(error = null) }
     }
@@ -226,5 +264,10 @@ data class SettingsUiState(
     val biometricEnabled: Boolean = false,
     val pinConfigured: Boolean = false,
     val appLockEnabled: Boolean = false,
-    val lockTimeoutMinutes: Int = 5
+    val lockTimeoutMinutes: Int = 5,
+    // Cache management
+    val cacheFileCount: Int = 0,
+    val cacheOldestAgeDays: Int? = null,
+    val cacheNewestAgeDays: Int? = null,
+    val isClearingCache: Boolean = false
 )

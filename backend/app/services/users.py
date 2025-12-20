@@ -93,7 +93,7 @@ def create_user(payload: UserCreate, db: Optional[Session] = None) -> User:
         user = User(
             username=payload.username,
             email=payload.email,
-            role=payload.role or "user",
+            role=(getattr(payload, "role", None) or "user"),
             hashed_password=password_hash,
         )
         db.add(user)

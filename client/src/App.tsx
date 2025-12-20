@@ -11,6 +11,7 @@ import ApiDocs from './pages/ApiDocs';
 import SharesPage from './pages/SharesPage';
 import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
+import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
 import MobileDevicesPage from './pages/MobileDevicesPage';
 import Layout from './components/Layout';
@@ -149,6 +150,18 @@ function App() {
             user?.role === 'admin' ? (
               <Layout user={user} onLogout={handleLogout}>
                 <UserManagement />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/admin-db"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminDatabase />
               </Layout>
             ) : (
               <Navigate to="/" />

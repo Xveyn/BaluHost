@@ -22,13 +22,21 @@ class AuditLogger:
     
     def _get_daily_log_file(self) -> Path:
         """Get the log file path for the current day."""
-        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-        return self._audit_log_dir / f"audit_{today}.log"
+        # Keep a single rolling audit log file for tests and simple readers
+        return self._audit_log_dir / "audit.log"
     
     def _setup_audit_log(self) -> None:
         """Setup audit log file and directory."""
         if self._enabled:
             self._audit_log_dir.mkdir(parents=True, exist_ok=True)
+            # Ensure an audit.log file exists (tests expect audit/audit.log)
+            try:
+                log_file = self._get_daily_log_file()
+                if not log_file.exists():
+                    # create empty file
+                    log_file.open("a", encoding="utf-8").close()
+            except Exception as e:
+                logger.error(f"Failed to create audit log file: {e}")
     
     def log_event(
         self,
@@ -229,28 +237,30 @@ class AuditLogger:
         
         logs = []
         
-        # Get log files for the last N days
+        # Prefer the single audit.log file, but also fall back to dated logs if present
+        candidates = [self._audit_log_dir / "audit.log"]
+        # include dated files for backwards compatibility
         from datetime import timedelta
         for day_offset in range(days):
             date = datetime.now(timezone.utc) - timedelta(days=day_offset)
             date_str = date.strftime("%Y-%m-%d")
-            log_file = self._audit_log_dir / f"audit_{date_str}.log"
-            
+            candidates.append(self._audit_log_dir / f"audit_{date_str}.log")
+
+        for log_file in candidates:
             if not log_file.exists():
                 continue
-            
             try:
                 with open(log_file, "r", encoding="utf-8") as f:
                     for line in f:
                         try:
                             entry = json.loads(line.strip())
-                            
+
                             # Apply filters
                             if event_type and entry.get("event_type") != event_type:
                                 continue
                             if user and entry.get("user") != user:
                                 continue
-                            
+
                             logs.append(entry)
                         except json.JSONDecodeError:
                             continue

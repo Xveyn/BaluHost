@@ -160,6 +160,18 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             description: 'Arrays & Health',
             icon: navIcon.raid
           },
+              {
+                path: '/admin-db',
+                label: 'Database',
+                description: 'Inspect DB',
+                icon: (
+                  <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                    <rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" />
+                    <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" />
+                    <path stroke="currentColor" strokeLinecap="round" d="M7 10v4" />
+                  </svg>
+                )
+              },
           {
             path: '/users',
             label: 'User Access',
@@ -366,7 +378,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           </header>
 
           <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 mt-[72px]">
-            <div className="mx-auto w-full max-w-7xl space-y-6 sm:space-y-8">
+            <div className={`${location.pathname === '/admin-db' ? 'w-full max-w-none mx-0' : 'mx-auto w-full max-w-7xl'} space-y-6 sm:space-y-8`}>
               {children}
             </div>
           </main>
