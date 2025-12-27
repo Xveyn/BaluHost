@@ -187,6 +187,69 @@ class SyncSchedulerService:
     
     async def _execute_sync(self, schedule: SyncSchedule):
         """Execute a sync for a schedule."""
-        # TODO: Implement actual sync execution
-        # This would call the file_sync service with the schedule's settings
-        pass
+        # Implement a lightweight server-side sync planner.
+        # The real client/device will consume these instructions and perform file transfers.
+        from datetime import datetime as _dt
+        from app.models.sync_state import SyncState, SyncMetadata
+        now = _dt.utcnow()
+
+        # Find registered sync state for this device
+        sync_state = self.db.query(SyncState).filter(
+            SyncState.user_id == schedule.user_id,
+            SyncState.device_id == schedule.device_id
+        ).first()
+
+        if not sync_state:
+            # Nothing to do if device is not registered
+            return {
+                "schedule_id": schedule.id,
+                "status": "no_device_registered"
+            }
+
+        # Gather pending metadata for this sync_state
+        pending = self.db.query(SyncMetadata).filter(
+            SyncMetadata.sync_state_id == sync_state.id
+        ).all()
+
+        plan = {"to_download": [], "to_delete": [], "conflicts": []}
+
+        for meta in pending:
+            # Simple heuristic:
+            # - if conflict detected -> report conflict
+            # - if marked deleted on server -> instruct deletion
+            # - otherwise instruct client to download server version
+            if meta.conflict_detected:
+                plan["conflicts"].append({
+                    "file_metadata_id": meta.file_metadata_id,
+                    "local_modified_at": meta.local_modified_at.isoformat() if meta.local_modified_at else None,
+                    "server_modified_at": meta.server_modified_at.isoformat() if meta.server_modified_at else None,
+                })
+            elif meta.is_deleted:
+                plan["to_delete"].append({
+                    "file_metadata_id": meta.file_metadata_id
+                })
+            else:
+                plan["to_download"].append({
+                    "file_metadata_id": meta.file_metadata_id,
+                    "content_hash": meta.content_hash,
+                    "file_size": meta.file_size,
+                    "server_modified_at": meta.server_modified_at.isoformat() if meta.server_modified_at else None
+                })
+
+            # mark that we've scheduled this metadata for sync
+            meta.sync_modified_at = now
+
+        # Update sync_state timestamps and change token
+        sync_state.last_sync = now
+        sync_state.last_change_token = self.sync_service._generate_change_token()
+
+        # Persist changes
+        self.db.commit()
+
+        return {
+            "schedule_id": schedule.id,
+            "device_id": schedule.device_id,
+            "status": "scheduled",
+            "plan": plan,
+            "executed_at": now.isoformat()
+        }

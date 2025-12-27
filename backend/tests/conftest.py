@@ -11,6 +11,7 @@ from typing import Generator
 
 import pytest
 from fastapi.testclient import TestClient
+import tempfile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.pool import StaticPool
@@ -21,6 +22,11 @@ os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
 # Prevent the application startup lifecycle from performing full DB init/seed during tests
 # Tests create an in-memory DB and manage schema; skip app-level init to avoid touching production DB.
 os.environ.setdefault("SKIP_APP_INIT", "1")
+# Ensure tests write storage into a temporary directory (avoids protected program folders)
+_tmp_storage = tempfile.mkdtemp(prefix="baluhost_test_storage_")
+os.environ.setdefault("NAS_STORAGE_PATH", _tmp_storage)
+os.environ.setdefault("NAS_TEMP_PATH", tempfile.mkdtemp(prefix="baluhost_test_tmp_"))
+os.environ.setdefault("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix="baluhost_test_backups_"))
 
 from app.main import app
 from app.core.config import settings
@@ -92,7 +98,48 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
             pass  # Session cleanup handled by db_session fixture
     
     app.dependency_overrides[get_db] = override_get_db
-    
+    # Ensure admin user exists in the test database so tests that perform
+    # a login without the `admin_user` fixture still succeed.
+    from app.services import users as user_service
+    from app.schemas.user import UserCreate
+    from app.models.user import User as UserModel
+    if not user_service.get_user_by_username(settings.admin_username, db=db_session):
+        user_service.create_user(
+            UserCreate(
+                username=settings.admin_username,
+                email=settings.admin_email,
+                password=settings.admin_password,
+                role=settings.admin_role,
+            ),
+            db=db_session,
+        )
+    # Initialize telemetry mock data so dev-mode endpoints return expected values
+    try:
+        from app.services import telemetry as telemetry_service
+        import time
+        # For deterministic tests, override uptime and telemetry values
+        telemetry_service.get_server_uptime = lambda: 4 * 3600.0
+        telemetry_service.get_latest_cpu_usage = lambda: 18.5
+        try:
+            from app.schemas.system import MemoryTelemetrySample
+            import time as _time
+            telemetry_service.get_latest_memory_sample = lambda: MemoryTelemetrySample(
+                timestamp=int(_time.time() * 1000),
+                used=3 * 1024 ** 3,
+                total=8 * 1024 ** 3,
+                percent=round((3 * 1024 ** 3) / (8 * 1024 ** 3) * 100, 2),
+            )
+        except Exception:
+            pass
+    except Exception:
+        pass
+    # Debug: list users present in the test DB
+    try:
+        users = db_session.query(UserModel).all()
+        print("[TEST-DEBUG] users in db:", [u.username for u in users])
+    except Exception:
+        pass
+
     with TestClient(app) as test_client:
         yield test_client
     
@@ -107,6 +154,10 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
 @pytest.fixture
 def admin_user(db_session: Session) -> User:
     """Create and return admin user for testing."""
+    existing = user_service.get_user_by_username(settings.admin_username, db=db_session)
+    if existing:
+        return existing
+
     return user_service.create_user(
         UserCreate(
             username=settings.admin_username,

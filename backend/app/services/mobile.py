@@ -4,7 +4,7 @@ import secrets
 import qrcode
 import io
 import base64
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List
 from sqlalchemy.orm import Session
 from fastapi import HTTPException, status
@@ -48,7 +48,7 @@ class MobileService:
         """
         # Generate secure random token
         token = f"reg_{secrets.token_urlsafe(32)}"
-        expires_at = datetime.utcnow() + timedelta(minutes=expires_minutes)
+        expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
         
         # Save token to database
         db_token = MobileRegistrationToken(
@@ -142,7 +142,10 @@ class MobileService:
                 detail="Registration token already used"
             )
         
-        if token_record.expires_at < datetime.utcnow():
+        token_expires = token_record.expires_at
+        if token_expires.tzinfo is None:
+            token_expires = token_expires.replace(tzinfo=timezone.utc)
+        if token_expires < datetime.now(timezone.utc):
             raise HTTPException(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Registration token expired"
@@ -164,7 +167,7 @@ class MobileService:
         elif token_validity_days > 180:
             token_validity_days = 180
         
-        device_expires_at = datetime.utcnow() + timedelta(days=token_validity_days)
+        device_expires_at = datetime.now(timezone.utc) + timedelta(days=token_validity_days)
         
         # Create mobile device
         device = MobileDevice(
@@ -208,8 +211,8 @@ class MobileService:
         refresh_token = auth_service.create_access_token(user=user, expires_minutes=60*24*30)  # 30 days
         
         # Format timestamps with timezone for Android parsing (ISO 8601 with Z suffix)
-        created_at_iso = user.created_at.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z' if user.created_at else datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
-        last_seen_iso = datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        created_at_iso = user.created_at.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z' if user.created_at else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
+        last_seen_iso = datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
         
         return {
             "access_token": access_token,

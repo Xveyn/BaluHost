@@ -2,6 +2,15 @@
 import asyncio
 import pytest
 from app.services.upload_progress import get_upload_progress_manager, UploadProgress
+from app.services import upload_progress as upload_progress_service
+
+
+@pytest.fixture(autouse=True)
+def reset_upload_manager():
+    """Reset the global upload progress manager between tests for isolation."""
+    upload_progress_service._manager = None
+    yield
+    upload_progress_service._manager = None
 
 
 @pytest.mark.asyncio

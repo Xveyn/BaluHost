@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 
 interface Column {
   name: string
@@ -9,15 +9,14 @@ interface Props {
   columns: Column[]
   rows: Array<Record<string, any>>
   tableName?: string
-  page: number
-  pageSize: number
+  page?: number
+  pageSize?: number
   total?: number | null
   onPageChange?: (p: number) => void
   ownerMap?: Record<string, string>
 }
 
-export default function AdminDataTable({ columns, rows, tableName, page, pageSize, total, onPageChange, ownerMap }: Props) {
-  const totalPages = total ? Math.ceil((total ?? 0) / pageSize) : null
+export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
   const [isMobile, setIsMobile] = useState(false)
 
   // hide specific columns from display (e.g. parent_path, is_directory, mime_type)
@@ -159,7 +158,6 @@ export default function AdminDataTable({ columns, rows, tableName, page, pageSiz
                   <tr key={idx} className="group transition hover:bg-slate-900/65">
                     {visibleColumns.map((c) => {
                       const raw = r[c.name]
-                      const text = raw === null || raw === undefined ? '-' : String(raw)
                       const wclass = columnMinWidthClass(c.name)
                       const maxclass = columnMaxWidthClass(c.name)
                       const align = cellAlignmentClass(c.name)

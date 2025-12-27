@@ -13,7 +13,7 @@ interface CreateFileShareModalProps {
 
 const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileShareModalProps) => {
   const [loading, setLoading] = useState(false);
-  const [explorerLoading, setExplorerLoading] = useState(false);
+  const [, setExplorerLoading] = useState(false);
   const [explorerPath, setExplorerPath] = useState<string>('/');
   const [explorerFiles, setExplorerFiles] = useState<any[]>([]);
   const [formData, setFormData] = useState<CreateFileShareRequest>({

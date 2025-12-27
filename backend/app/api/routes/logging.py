@@ -178,6 +178,11 @@ async def get_file_access_logs(
     Returns:
         File access log entries
     """
+    # In dev mode return generated mock logs for deterministic UI
+    if settings.is_dev_mode:
+        mock_logs = _generate_mock_file_access_logs(days=days, limit=limit)
+        return {"dev_mode": True, "total": len(mock_logs), "logs": mock_logs}
+
     # Get audit logs from database
     audit = get_audit_logger_db()
     logs = audit.get_logs(
@@ -188,11 +193,8 @@ async def get_file_access_logs(
         days=days,
         db=db
     )
-    
-    return {
-        "total": len(logs),
-        "logs": logs
-    }
+
+    return {"dev_mode": False, "total": len(logs), "logs": logs}
 
 
 @router.get("/stats")
@@ -212,29 +214,61 @@ async def get_logging_stats(
     Returns:
         Statistics about disk I/O and file access
     """
+    # Dev mode: return mock statistics including mock disk I/O summary
+    if settings.is_dev_mode:
+        mock_logs = _generate_mock_file_access_logs(days=days, limit=100)
+        total_ops = len(mock_logs)
+        by_action = {}
+        by_user = {}
+        success_count = 0
+        for log in mock_logs:
+            action = log.get("action", "unknown")
+            user = log.get("user", "unknown")
+            by_action[action] = by_action.get(action, 0) + 1
+            by_user[user] = by_user.get(user, 0) + 1
+            if log.get("success", True):
+                success_count += 1
+        success_rate = success_count / total_ops if total_ops > 0 else 1.0
+
+        # Provide a simple mock disk_io summary
+        disk_io = {"avg_read_mbps": 12.5, "avg_write_mbps": 6.2}
+
+        return {
+            "dev_mode": True,
+            "period_days": days,
+            "file_access": {
+                "total_operations": total_ops,
+                "by_action": by_action,
+                "by_user": by_user,
+                "success_rate": round(success_rate, 3)
+            },
+            "disk_io": disk_io,
+        }
+
     # Get audit logs from database
     audit = get_audit_logger_db()
     logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
-    
+
     # Calculate statistics
     total_ops = len(logs)
     by_action = {}
     by_user = {}
     success_count = 0
-    
+
     for log in logs:
         action = log.get("action", "unknown")
         user = log.get("user", "unknown")
-        
+
         by_action[action] = by_action.get(action, 0) + 1
         by_user[user] = by_user.get(user, 0) + 1
-        
+
         if log.get("success", True):
             success_count += 1
-    
+
     success_rate = success_count / total_ops if total_ops > 0 else 1.0
-    
+
     return {
+        "dev_mode": False,
         "period_days": days,
         "file_access": {
             "total_operations": total_ops,

@@ -374,7 +374,7 @@ export default function FileManager({ user }: FileManagerProps) {
           // ignore
         }
       };
-      const ownerIds = files.map(f => f.ownerId).filter(id => id !== undefined && id !== null && String(id) !== 'null');
+      const ownerIds = files.map(f => f.ownerId).filter(id => id !== undefined && id !== null && String(id) !== 'null') as (string | number)[];
       fetchOwnerNames(ownerIds);
     }, [files]);
 
@@ -1073,7 +1073,7 @@ export default function FileManager({ user }: FileManagerProps) {
                                 try {
                                   const perms = await getFilePermissions(file.path);
                                   if (Array.isArray(perms.rules) && perms.rules.length > 0) {
-                                    setEditRules(perms.rules.map(rule => ({
+                                    setEditRules(perms.rules.map((rule: any) => ({
                                       userId: String(rule.user_id),
                                       canView: rule.can_view,
                                       canEdit: rule.can_edit,

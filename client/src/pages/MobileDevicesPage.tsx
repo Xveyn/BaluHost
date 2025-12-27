@@ -282,7 +282,7 @@ export default function MobileDevicesPage() {
                       <div className="flex items-center gap-1.5">
                         <Clock className="w-3.5 h-3.5 text-slate-400" />
                         <span className="font-medium text-slate-300">Zuletzt:</span>
-                        <span>{getTimeAgo(device.last_sync)}</span>
+                        <span>{getTimeAgo(device.last_sync ?? device.last_seen ?? null)}</span>
                       </div>
                       {device.expires_at && (() => {
                         const expiresDate = new Date(device.expires_at);

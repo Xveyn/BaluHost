@@ -4,11 +4,13 @@ Tests complete sync workflows including login, device registration, and file ope
 """
 
 import pytest
+import pytest_asyncio
 import asyncio
 from pathlib import Path
 import tempfile
 import shutil
 from httpx import AsyncClient
+from httpx._transports.asgi import ASGITransport
 from fastapi import status
 from app.main import app
 from app.core.database import get_db, engine, Base
@@ -20,11 +22,67 @@ import hashlib
 import time
 
 
-@pytest.fixture(scope="function")
+@pytest_asyncio.fixture(scope="function")
 async def async_client():
-    """Create async test client."""
-    async with AsyncClient(app=app, base_url="http://test") as client:
-        yield client
+    """Create async test client using an isolated in-memory DB and ASGITransport.
+
+    Sets `SKIP_APP_INIT=1` to avoid full app startup and overrides `get_db`
+    to use an in-memory SQLite for test isolation.
+    """
+    import os
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from sqlalchemy.pool import StaticPool
+    from app.models.base import Base
+    from app.core.database import get_db
+
+    # In-memory SQLite for test isolation
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = TestingSessionLocal()
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    # Ensure app startup does not perform global init/seed
+    os.environ.setdefault("SKIP_APP_INIT", "1")
+    app.dependency_overrides[get_db] = override_get_db
+
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        class _ClientWrapper:
+            def __init__(self, inner: AsyncClient):
+                self._inner = inner
+
+            def __getattr__(self, name):
+                return getattr(self._inner, name)
+
+            async def delete(self, url, *args, json=None, **kwargs):
+                # Some httpx versions don't accept ``json`` on delete directly
+                # when used with ASGITransport in older environments. Forward
+                # as a request when json is provided to ensure it reaches the app.
+                if json is not None:
+                    return await self._inner.request("DELETE", url, json=json, *args, **kwargs)
+                return await self._inner.delete(url, *args, **kwargs)
+
+        yield _ClientWrapper(client)
+
+    # Teardown
+    db.close()
+    Base.metadata.drop_all(bind=engine)
+    app.dependency_overrides.clear()
+    try:
+        del os.environ["SKIP_APP_INIT"]
+    except Exception:
+        pass
 
 
 @pytest.fixture(scope="function")
@@ -88,16 +146,23 @@ class TestSyncIntegration:
         device_id = response.json()["device_id"]
         
         # 4. Upload file
+        # Ensure target folder exists and is owned by the user
+        await async_client.post(
+            "/api/files/folder",
+            json={"path": "", "name": "sync_test"},
+            headers=headers
+        )
+
         test_content = b"Test sync file content"
         test_hash = hashlib.sha256(test_content).hexdigest()
         
         response = await async_client.post(
             "/api/files/upload",
             files={
-                "file": ("test_sync.txt", test_content, "text/plain")
+                "files": ("test_sync.txt", test_content, "text/plain")
             },
             data={
-                "path": "/sync_test/test_sync.txt"
+                "path": "/sync_test"
             },
             headers=headers
         )
@@ -145,7 +210,7 @@ class TestSyncIntegration:
         assert file_entry["sha256"] != test_hash
         
         # 9. Delete file
-        response = await async_client.delete(
+        response = await async_client.post(
             "/api/files/delete",
             json={"path": "/sync_test/test_sync.txt"},
             headers=headers
@@ -264,7 +329,7 @@ class TestSyncIntegration:
             # Upload file
             response = await async_client.post(
                 "/api/files/upload",
-                files={"file": (Path(file_path).name, b"test content", "text/plain")},
+                files={"files": (Path(file_path).name, b"test content", "text/plain")},
                 data={"path": file_path},
                 headers=headers
             )
@@ -306,7 +371,7 @@ class TestSyncIntegration:
         initial_content = b"Initial version"
         response = await async_client.post(
             "/api/files/upload",
-            files={"file": ("conflict_test.txt", initial_content, "text/plain")},
+            files={"files": ("conflict_test.txt", initial_content, "text/plain")},
             data={"path": "/conflict/conflict_test.txt"},
             headers=headers
         )
@@ -326,7 +391,7 @@ class TestSyncIntegration:
         modified_content = b"Modified version"
         response = await async_client.post(
             "/api/files/upload",
-            files={"file": ("conflict_test.txt", modified_content, "text/plain")},
+            files={"files": ("conflict_test.txt", modified_content, "text/plain")},
             data={"path": "/conflict/conflict_test.txt"},
             headers=headers
         )
@@ -369,7 +434,7 @@ class TestSyncIntegration:
         for file_path in files:
             response = await async_client.post(
                 "/api/files/upload",
-                files={"file": (Path(file_path).name, b"test", "text/plain")},
+                files={"files": (Path(file_path).name, b"test", "text/plain")},
                 data={"path": file_path},
                 headers=headers
             )
@@ -432,7 +497,7 @@ class TestSyncPerformance:
         for i in range(num_files):
             await async_client.post(
                 "/api/files/upload",
-                files={"file": (f"file{i}.txt", b"test content", "text/plain")},
+                files={"files": (f"file{i}.txt", b"test content", "text/plain")},
                 data={"path": f"/perf_test/file{i}.txt"},
                 headers=headers
             )
@@ -475,7 +540,7 @@ class TestSyncPerformance:
         for i in range(num_files):
             response = await async_client.post(
                 "/api/files/upload",
-                files={"file": (f"batch{i}.txt", b"batch test content", "text/plain")},
+                files={"files": (f"batch{i}.txt", b"batch test content", "text/plain")},
                 data={"path": f"/batch_test/batch{i}.txt"},
                 headers=headers
             )

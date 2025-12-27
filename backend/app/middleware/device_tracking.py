@@ -35,6 +35,13 @@ class DeviceTrackingMiddleware(BaseHTTPMiddleware):
                     if device:
                         device.last_seen = datetime.utcnow()
                         db.commit()
+                        try:
+                            print(f"[DeviceTracking] Updated last_seen for device {device_id} -> {device.last_seen.isoformat()}")
+                        except Exception:
+                            # printing should never fail the request
+                            pass
+                    else:
+                        print(f"[DeviceTracking] Device {device_id} not found in DB")
                 except Exception as e:
                     # Don't fail the request if last_seen update fails
                     print(f"[DeviceTracking] Error updating last_seen for device {device_id}: {e}")

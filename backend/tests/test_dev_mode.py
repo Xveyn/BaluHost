@@ -14,11 +14,38 @@ from app.core.config import settings
 from scripts.reset_dev_storage import reset_dev_storage
 
 
-@pytest.fixture(scope="module")
-def client() -> Generator[TestClient, None, None]:
+@pytest.fixture(scope="function")
+def client(db_session) -> Generator[TestClient, None, None]:
     reset_dev_storage()
+
+    # Override DB dependency to use the test in-memory session
+    from app.core.database import get_db
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    # Ensure admin exists in the test DB
+    from app.services import users as user_service
+    from app.schemas.user import UserCreate
+    if not user_service.get_user_by_username(settings.admin_username, db=db_session):
+        user_service.create_user(
+            UserCreate(
+                username=settings.admin_username,
+                email=settings.admin_email,
+                password=settings.admin_password,
+                role=settings.admin_role,
+            ),
+            db=db_session,
+        )
+
     with TestClient(app) as test_client:
         yield test_client
+
+    app.dependency_overrides.clear()
     reset_dev_storage()
 
 

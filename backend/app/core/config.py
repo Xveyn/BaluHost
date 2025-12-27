@@ -103,27 +103,5 @@ settings = get_settings()
 
 def log_cors_origin(origin: str) -> None:
     logging.info(f"[CORS] Incoming Origin: {origin}")
-from functools import lru_cache
-from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import AnyHttpUrl, field_validator, model_validator
-import logging
 
-class Settings(BaseSettings):
-    app_name: str = "Baluhost NAS API"
-    debug: bool = True
-    environment: str = "development"
-    nas_mode: str = "dev"
-    api_prefix: str = "/api"
-    host: str = "0.0.0.0"
-    port: int = 3001
-
-    cors_origins: list[AnyHttpUrl] | list[str] = [
-        "http://localhost:5173",
-        "https://localhost:5173",
-        "http://localhost:8000",
-        "https://localhost:8000"
-    ]
-    admin_username: str = "admin"
-    admin_email: str = "admin@example.com"
-    admin_password: str = "changeme"
 

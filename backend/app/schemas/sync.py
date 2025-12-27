@@ -9,6 +9,7 @@ class RegisterDeviceRequest(BaseModel):
     """Register a device for synchronization."""
     device_id: str = Field(..., description="Unique device identifier")
     device_name: Optional[str] = Field(None, description="Human-readable device name")
+    registration_token: Optional[str] = Field(None, description="One-time registration token (required for registration)")
 
 
 class SyncFileInfo(BaseModel):

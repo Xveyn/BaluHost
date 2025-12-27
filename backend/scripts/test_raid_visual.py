@@ -5,6 +5,11 @@ Shows available disks and creates a test RAID1 array if possible.
 
 import requests
 import sys
+import pytest
+
+# This is a visual/manual script that expects a running server on localhost.
+# Skip when running pytest to avoid failing automated test runs.
+pytest.skip("visual RAID script - requires running dev server", allow_module_level=True)
 from typing import Dict, Any
 
 BASE_URL = "http://localhost:8000"

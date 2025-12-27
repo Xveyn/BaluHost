@@ -35,6 +35,7 @@ export interface MobileDevice {
   app_version: string | null;
   is_active: boolean;
   last_sync: string | null;
+  last_seen?: string | null;
   expires_at: string | null;
   created_at: string;
   updated_at: string | null;

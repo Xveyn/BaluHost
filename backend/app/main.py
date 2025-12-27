@@ -34,12 +34,17 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     global _discovery_service
     # Allow tests to skip full app initialization by setting SKIP_APP_INIT=1
     import os
-    if os.environ.get('SKIP_APP_INIT') == '1':
+    skip_init = os.environ.get('SKIP_APP_INIT') == '1'
+    if skip_init:
         logger.info('SKIP_APP_INIT set; skipping full app startup (tests)')
+        # Do not perform the normal initialization steps, but still enter
+        # the lifespan so the `finally` block runs to perform cleanup.
         try:
             yield
         finally:
-            return
+            # Proceed to cleanup below; avoid starting background services.
+            pass
+        return
 
     # Initialize database tables
     init_db()
@@ -92,11 +97,25 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     try:
         yield
     finally:
-        await jobs.stop_health_monitor()
-        await telemetry.stop_telemetry_monitor()
-        disk_monitor.stop_monitoring()
-        await sync_background.stop_sync_scheduler()
-        logger.info("Sync scheduler stopped")
+        # Stop background services if they were started
+        try:
+            if not skip_init:
+                await jobs.stop_health_monitor()
+                await telemetry.stop_telemetry_monitor()
+                disk_monitor.stop_monitoring()
+                await sync_background.stop_sync_scheduler()
+                logger.info("Sync scheduler stopped")
+        except Exception:
+            logger.debug("Error while stopping background services")
+
+        # Always attempt to shutdown the upload progress manager to cancel any
+        # pending cleanup tasks created during tests or runtime.
+        try:
+            from app.services.upload_progress import get_upload_progress_manager
+            mgr = get_upload_progress_manager()
+            await mgr.shutdown()
+        except Exception:
+            logger.debug("Upload progress manager shutdown skipped or failed")
         
         # Stop network discovery
         if _discovery_service:

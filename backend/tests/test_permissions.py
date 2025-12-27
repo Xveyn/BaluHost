@@ -15,13 +15,54 @@ from app.core.config import settings
 from app.schemas.user import UserCreate
 from app.services import users as user_service
 from scripts.reset_dev_storage import reset_dev_storage
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+from app.core.database import get_db
+from app.models.base import Base
 
 
-@pytest.fixture(scope="module")
+@pytest.fixture(scope="function")
 def client() -> Generator[TestClient, None, None]:
     reset_dev_storage()
+
+    # In-memory SQLite for test isolation
+    engine = create_engine(
+        "sqlite:///:memory:",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    Base.metadata.create_all(bind=engine)
+    TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+    db = TestingSessionLocal()
+
+    def override_get_db():
+        try:
+            yield db
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+
+    # Ensure admin exists in test DB
+    if not user_service.get_user_by_username(settings.admin_username, db=db):
+        user_service.create_user(
+            UserCreate(
+                username=settings.admin_username,
+                email=settings.admin_email,
+                password=settings.admin_password,
+                role=settings.admin_role,
+            ),
+            db=db,
+        )
+
     with TestClient(app) as test_client:
         yield test_client
+
+    # Teardown
+    db.close()
+    Base.metadata.drop_all(bind=engine)
+    app.dependency_overrides.clear()
     reset_dev_storage()
 
 
@@ -35,6 +76,9 @@ def _login(client: TestClient, username: str, password: str) -> str:
 
 
 def _create_user(username: str, email: str, password: str, role: str = "user") -> str:
+    # Create user via service but ensure it uses test DB by passing no db here is unsafe.
+    # Prefer using API registration in fixtures below. Keep as fallback creating via service
+    # if needed by passing db in future.
     user = user_service.create_user(
         UserCreate(username=username, email=email, password=password, role=role)
     )
@@ -43,18 +87,28 @@ def _create_user(username: str, email: str, password: str, role: str = "user") -
 
 @pytest.fixture
 def admin_token(client: TestClient) -> str:
-    return _login(client, "admin", "changeme")
+    # Use configured admin credentials
+    return _login(client, settings.admin_username, settings.admin_password)
 
 
 @pytest.fixture
 def user1_token(client: TestClient) -> str:
-    _create_user("user1", "user1@example.com", "password1", "user")
+    # Register user via API to ensure it's created in the test DB used by the client
+    resp = client.post(
+        f"{settings.api_prefix}/auth/register",
+        json={"username": "user1", "email": "user1@example.com", "password": "password1"},
+    )
+    assert resp.status_code in (200, 201)
     return _login(client, "user1", "password1")
 
 
 @pytest.fixture
 def user2_token(client: TestClient) -> str:
-    _create_user("user2", "user2@example.com", "password2", "user")
+    resp = client.post(
+        f"{settings.api_prefix}/auth/register",
+        json={"username": "user2", "email": "user2@example.com", "password": "password2"},
+    )
+    assert resp.status_code in (200, 201)
     return _login(client, "user2", "password2")
 
 

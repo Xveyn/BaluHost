@@ -13,6 +13,7 @@ import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
 import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
+import SyncPrototype from './pages/SyncPrototype';
 import MobileDevicesPage from './pages/MobileDevicesPage';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
@@ -234,6 +235,18 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <SyncSettings />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/sync-prototype"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SyncPrototype />
               </Layout>
             ) : (
               <Navigate to="/login" />

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { 
   Code, 
   Lock, 
   FileText, 
-  HardDrive, 
+  
   Terminal, 
   Activity, 
   Shield,
@@ -381,7 +381,7 @@ function EndpointCard({ endpoint }: { endpoint: ApiEndpoint }) {
           <code className="text-slate-300 font-mono text-sm">{endpoint.path}</code>
           <span className="text-slate-400 text-sm">{endpoint.description}</span>
           {endpoint.requiresAuth && (
-            <Shield className="w-4 h-4 text-sky-400" title="Requires authentication" />
+            <span title="Requires authentication"><Shield className="w-4 h-4 text-sky-400" /></span>
           )}
         </div>
         {isOpen ? (
@@ -457,6 +457,34 @@ function EndpointCard({ endpoint }: { endpoint: ApiEndpoint }) {
 
 export default function ApiDocs() {
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [showAuth, setShowAuth] = useState(false);
+  const [tokenInput, setTokenInput] = useState('');
+  const [authorized, setAuthorized] = useState(false);
+
+  useEffect(() => {
+    const t = localStorage.getItem('token');
+    if (t) {
+      setAuthorized(true);
+      setTokenInput(t);
+    }
+  }, []);
+
+  const openAuth = () => setShowAuth(true);
+  const closeAuth = () => setShowAuth(false);
+  const saveAuth = () => {
+    const v = tokenInput.trim();
+    if (!v) return;
+    localStorage.setItem('token', v);
+    setAuthorized(true);
+    setShowAuth(false);
+  };
+
+  const clearAuth = () => {
+    localStorage.removeItem('token');
+    setAuthorized(false);
+    setTokenInput('');
+    setShowAuth(false);
+  };
 
   const filteredSections = selectedSection
     ? apiSections.filter(s => s.title === selectedSection)
@@ -474,10 +502,37 @@ export default function ApiDocs() {
             REST API Documentation v1.0.0 • FastAPI 0.115.3
           </p>
         </div>
-        <button className="btn btn-primary">
-          <Lock className="w-4 h-4" />
-          Authorize
-        </button>
+        <>
+          <button className="btn btn-primary" onClick={openAuth}>
+            {authorized ? (
+              <Check className="w-4 h-4 text-green-300" />
+            ) : (
+              <Lock className="w-4 h-4" />
+            )}
+            <span className="ml-2">{authorized ? 'Authorized' : 'Authorize'}</span>
+          </button>
+
+          {showAuth && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center">
+              <div className="absolute inset-0 bg-black/60" onClick={closeAuth} />
+              <div className="bg-slate-900 border border-slate-800 rounded-lg p-6 w-full max-w-lg z-10">
+                <h3 className="text-lg font-semibold text-slate-100 mb-3">Authorize</h3>
+                <p className="text-sm text-slate-400 mb-3">Enter your Bearer token (JWT) to authorize requests from the UI.</p>
+                <input
+                  value={tokenInput}
+                  onChange={(e) => setTokenInput(e.target.value)}
+                  placeholder="Bearer eyJhbGci..."
+                  className="w-full bg-slate-950/60 border border-slate-800 rounded px-3 py-2 text-sm text-slate-200 mb-4"
+                />
+                <div className="flex gap-2 justify-end">
+                  <button className="btn btn-secondary" onClick={clearAuth}>Clear</button>
+                  <button className="btn" onClick={closeAuth}>Cancel</button>
+                  <button className="btn btn-primary" onClick={saveAuth}>Save</button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
       </div>
 
       {/* Info Card */}

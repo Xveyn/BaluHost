@@ -1,6 +1,7 @@
 from typing import Optional
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile, status
+from fastapi import Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -326,7 +327,8 @@ async def download_file_by_id(
 
 @router.post("/upload", response_model=FileUploadResponse)
 async def upload_files(
-    files: list[UploadFile] = File(...),
+    files: list[UploadFile] | None = File(None),
+    file: UploadFile | None = File(None),
     path: str = Form(""),
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -337,7 +339,10 @@ async def upload_files(
     progress_manager = get_upload_progress_manager()
     upload_ids = []
     
-    for upload_file in files:
+    # Normalize incoming file parameters: accept either `files` (list) or `file` (single)
+    incoming = files if files is not None else ([file] if file is not None else [])
+
+    for upload_file in incoming:
         # Get file size from the upload
         upload_file.file.seek(0, 2)  # Seek to end
         file_size = upload_file.file.tell()
@@ -353,7 +358,7 @@ async def upload_files(
     # FastAPI will collect them automatically if present
     try:
         saved = await file_service.save_uploads(
-            path, files, user=user, folder_paths=None, db=db, upload_ids=upload_ids
+            path, incoming, user=user, folder_paths=None, db=db, upload_ids=upload_ids
         )
     except file_service.QuotaExceededError as exc:
         raise HTTPException(status_code=status.HTTP_507_INSUFFICIENT_STORAGE, detail=str(exc)) from exc
@@ -380,17 +385,20 @@ async def get_available_storage(
     }
 
 
-@router.delete("/{resource_path:path}", response_model=FileOperationResponse)
-async def delete_path(
+@router.delete("/raw/{resource_path:path}", response_model=FileOperationResponse)
+async def delete_path_raw(
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    """Internal/raw delete handler kept for compatibility; not used by tests.
+    Use the parameterized delete handler defined later which is registered after
+    the `/delete` static route so that `DELETE /delete` can accept a JSON body.
+    """
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(resource_path, user=user, db=db)
     except PermissionDeniedError as exc:
-        # Log unauthorized delete attempt
         audit_logger.log_authorization_failure(
             user=user.username,
             action="delete_file",
@@ -404,6 +412,42 @@ async def delete_path(
     return FileOperationResponse(message="Deleted")
 
 
+@router.delete("/delete", response_model=FileOperationResponse)
+async def delete_path_body(
+    payload: dict = Body(...),
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileOperationResponse:
+    path = payload.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+    audit_logger = get_audit_logger_db()
+    try:
+        file_service.delete_path(path, user=user, db=db)
+    except PermissionDeniedError as exc:
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="delete_file",
+            resource=path,
+            required_permission="delete",
+            db=db
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return FileOperationResponse(message="Deleted")
+
+
+@router.post("/delete", response_model=FileOperationResponse)
+async def delete_path_post(
+    payload: dict = Body(...),
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileOperationResponse:
+    # Delegate to delete_by_body logic
+    return await delete_path_body(payload=payload, user=user, db=db)
+
+
 @router.post("/folder", response_model=FileOperationResponse)
 async def create_folder(
     payload: FolderCreateRequest,
@@ -415,6 +459,37 @@ async def create_folder(
 
     try:
         file_service.create_folder(payload.path or "", payload.name, owner=user, db=db)
+    except PermissionDeniedError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    return FileOperationResponse(message="Folder created")
+
+
+@router.post("/mkdir", response_model=FileOperationResponse)
+async def mkdir_compat(
+    payload: dict = Body(...),
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileOperationResponse:
+    """Compatibility endpoint for legacy clients/tests that post {"path": "/a/b"}.
+    This will create metadata for the final path segment owned by the current user.
+    """
+    import os
+
+    path = payload.get("path")
+    if not path:
+        raise HTTPException(status_code=400, detail="Path required")
+
+    # normalize and split into parent + name
+    norm = path.rstrip("/")
+    parent, name = os.path.split(norm)
+    if parent == "/":
+        parent = ""
+
+    try:
+        file_service.create_folder(parent or "", name, owner=user, db=db)
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
@@ -469,3 +544,29 @@ async def move_path(
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
     return FileOperationResponse(message="Moved")
+
+
+@router.delete("/{resource_path:path}", response_model=FileOperationResponse)
+async def delete_path_param(
+    resource_path: str,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileOperationResponse:
+    """Delete a file or directory by path (registered after `/delete` routes).
+    This ensures the static `/delete` endpoint can accept a JSON body without
+    being captured by the parameterized route."""
+    audit_logger = get_audit_logger_db()
+    try:
+        file_service.delete_path(resource_path, user=user, db=db)
+    except PermissionDeniedError as exc:
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="delete_file",
+            resource=resource_path,
+            required_permission="delete",
+            db=db
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+    return FileOperationResponse(message="Deleted")

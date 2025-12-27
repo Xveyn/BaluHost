@@ -144,11 +144,38 @@ async def save_uploads(
     progress_manager = get_upload_progress_manager()
     
     target = _resolve_path(relative_path)
+    # If the provided relative_path includes a filename (e.g. updating a single file),
+    # use its parent directory as the target directory.
+    from pathlib import PurePosixPath
+    override_filename: str | None = None
+    if relative_path:
+        last_part = PurePosixPath(relative_path).name
+        # Heuristic: if the last part contains a dot and we only have a single upload,
+        # treat the provided path as a file path and use its parent as the target dir.
+        if "." in last_part:
+            override_filename = last_part
+            target = target.parent
+
     target.mkdir(parents=True, exist_ok=True)
 
     if relative_path:
-        destination_owner = get_owner(relative_path, db=db)
-        ensure_owner_or_privileged(user, destination_owner)
+        # Determine ownership rules:
+        # - If the provided path refers to a directory (no override filename),
+        #   enforce ownership of that destination directory.
+        # - If the provided path refers to a file (override_filename set),
+        #   enforce ownership of the parent directory (if any).
+        from pathlib import PurePosixPath
+        path_obj = PurePosixPath(relative_path)
+        if override_filename is None:
+            # Destination is a directory path -> check its owner
+            dest_owner = get_owner(path_obj.as_posix(), db=db)
+            ensure_owner_or_privileged(user, dest_owner)
+        else:
+            # Destination was a file path -> check parent directory owner if present
+            parent = path_obj.parent.as_posix() if str(path_obj.parent) not in ('.', '/') else ""
+            parent_owner = get_owner(parent, db=db) if parent else None
+            if parent_owner is not None:
+                ensure_owner_or_privileged(user, parent_owner)
 
     owner_id = user.id
 
@@ -193,7 +220,7 @@ async def save_uploads(
                 subfolder.mkdir(parents=True, exist_ok=True)
             destination = target / file_relative_path
         else:
-            filename = upload.filename or "upload.bin"
+            filename = override_filename or upload.filename or "upload.bin"
             destination = target / filename
         
         try:

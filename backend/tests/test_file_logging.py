@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from app.schemas.user import UserPublic
+from datetime import datetime, timezone
 from app.services import files
 
 
@@ -13,10 +14,12 @@ from app.services import files
 def mock_user():
     """Create a mock user."""
     return UserPublic(
-        id="user123",
+        id="123",
         username="testuser",
         email="test@example.com",
-        role="user"
+        role="user",
+        is_active=True,
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -24,10 +27,12 @@ def mock_user():
 def mock_admin():
     """Create a mock admin user."""
     return UserPublic(
-        id="admin123",
+        id="1",
         username="admin",
         email="admin@example.com",
-        role="admin"
+        role="admin",
+        is_active=True,
+        created_at=datetime.now(timezone.utc).isoformat(),
     )
 
 
@@ -48,7 +53,9 @@ class TestFileOperationLogging:
     @pytest.mark.asyncio
     async def test_upload_logs_audit_event(self, temp_storage, mock_user):
         """Test that file upload creates audit log entry."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -77,7 +84,9 @@ class TestFileOperationLogging:
     
     def test_delete_file_logs_audit_event(self, temp_storage, mock_user):
         """Test that file deletion creates audit log entry."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -86,7 +95,7 @@ class TestFileOperationLogging:
             test_file.write_text("test content")
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="user123"):
+            with patch('app.services.files.get_owner', return_value="123"):
                 # Perform deletion
                 files.delete_path("test.txt", mock_user)
             
@@ -102,7 +111,9 @@ class TestFileOperationLogging:
     
     def test_delete_directory_logs_audit_event(self, temp_storage, mock_user):
         """Test that directory deletion creates audit log entry."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -111,7 +122,7 @@ class TestFileOperationLogging:
             test_dir.mkdir()
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="user123"):
+            with patch('app.services.files.get_owner', return_value="123"):
                 # Perform deletion
                 files.delete_path("testdir", mock_user)
             
@@ -121,7 +132,9 @@ class TestFileOperationLogging:
     
     def test_create_folder_logs_audit_event(self, temp_storage, mock_user):
         """Test that folder creation creates audit log entry."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -139,7 +152,9 @@ class TestFileOperationLogging:
     
     def test_move_path_logs_audit_event(self, temp_storage, mock_user):
         """Test that moving files/folders creates audit log entry."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -148,7 +163,7 @@ class TestFileOperationLogging:
             source.write_text("test")
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="user123"):
+            with patch('app.services.files.get_owner', return_value="123"):
                 # Perform move
                 files.move_path("source.txt", "target.txt", mock_user)
             
@@ -164,7 +179,9 @@ class TestFileOperationLogging:
     
     def test_system_operations_log_as_system_user(self, temp_storage):
         """Test that operations without user log as system."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -178,7 +195,9 @@ class TestFileOperationLogging:
     @pytest.mark.asyncio
     async def test_multiple_uploads_log_multiple_entries(self, temp_storage, mock_user):
         """Test that multiple file uploads create multiple audit entries."""
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_audit.return_value = mock_logger
             
@@ -203,7 +222,9 @@ class TestFileOperationLogging:
     def test_audit_logging_disabled_in_dev_mode(self, temp_storage, mock_user):
         """Test that audit logging respects dev mode setting."""
         # In dev mode, audit logger should still be called but won't write to disk
-        with patch('app.services.files.get_audit_logger') as mock_audit:
+        with patch('app.services.files.get_audit_logger_db') as mock_audit, \
+             patch('app.services.file_metadata_db.create_metadata') as mock_create, \
+             patch('app.services.file_metadata_db.update_metadata') as mock_update:
             mock_logger = MagicMock()
             mock_logger.is_enabled.return_value = False
             mock_audit.return_value = mock_logger

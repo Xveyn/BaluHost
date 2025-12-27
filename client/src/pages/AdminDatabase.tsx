@@ -1,5 +1,4 @@
-import React, { useState, useEffect } from 'react'
-import { getAdminTables, getAdminTableSchema, getAdminTableRows } from '../lib/api'
+import { useState, useEffect } from 'react'
 import useAdminDb from '../hooks/useAdminDb'
 import AdminDataTable from '../components/AdminDataTable'
 import { rowsToCsv } from '../lib/csv'

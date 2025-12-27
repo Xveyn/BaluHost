@@ -28,6 +28,8 @@ class BackupService:
         self.db = db
         self.default_backup_dir = Path(settings.nas_backup_path)
         self.default_backup_dir.mkdir(parents=True, exist_ok=True)
+        # Public attribute used by tests and callers to override backup destination
+        self.backup_dir = self.default_backup_dir
         
     def create_backup(
         self,
@@ -48,8 +50,8 @@ class BackupService:
         """
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         filename = f"backup_{timestamp}.tar.gz"
-        # Nutze optionalen Pfad aus Request
-        backup_dir = Path(backup_data.backup_path) if backup_data.backup_path else self.default_backup_dir
+        # Use optional path from request or the service's backup_dir
+        backup_dir = Path(backup_data.backup_path) if backup_data.backup_path else self.backup_dir
         backup_dir.mkdir(parents=True, exist_ok=True)
         filepath = backup_dir / filename
         

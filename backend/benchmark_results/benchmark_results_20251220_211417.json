@@ -1,0 +1,176 @@
+{
+  "file_upload": {
+    "1KB": {
+      "avg_time_ms": 0.3894329071044922,
+      "min_time_ms": 0.3018379211425781,
+      "max_time_ms": 0.9977817535400391,
+      "std_dev_ms": 0.21409528789198365,
+      "avg_throughput_mbps": 2.8325845095662725,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "10KB": {
+      "avg_time_ms": 0.36182403564453125,
+      "min_time_ms": 0.30040740966796875,
+      "max_time_ms": 0.6113052368164062,
+      "std_dev_ms": 0.09254089512285323,
+      "avg_throughput_mbps": 28.088139139019344,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "100KB": {
+      "avg_time_ms": 0.43807029724121094,
+      "min_time_ms": 0.377655029296875,
+      "max_time_ms": 0.7317066192626953,
+      "std_dev_ms": 0.10464117528618137,
+      "avg_throughput_mbps": 230.52010577212516,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "1000KB": {
+      "avg_time_ms": 0.9070873260498047,
+      "min_time_ms": 0.8511543273925781,
+      "max_time_ms": 1.2116432189941406,
+      "std_dev_ms": 0.10807357540519916,
+      "avg_throughput_mbps": 1087.3739054014768,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "5000KB": {
+      "avg_time_ms": 3.3047914505004883,
+      "min_time_ms": 3.1080245971679688,
+      "max_time_ms": 3.7221908569335938,
+      "std_dev_ms": 0.17346418765847885,
+      "avg_throughput_mbps": 1480.9586616953393,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    }
+  },
+  "file_download": {
+    "1KB": {
+      "avg_time_ms": 0.6471633911132812,
+      "min_time_ms": 0.08463859558105469,
+      "max_time_ms": 5.683422088623047,
+      "std_dev_ms": 1.7695620935582175,
+      "avg_throughput_mbps": 10.058054435322264,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "10KB": {
+      "avg_time_ms": 0.6480693817138672,
+      "min_time_ms": 0.08893013000488281,
+      "max_time_ms": 5.631923675537109,
+      "std_dev_ms": 1.751166344605096,
+      "avg_throughput_mbps": 93.95174835749634,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "100KB": {
+      "avg_time_ms": 0.8201122283935547,
+      "min_time_ms": 0.1201629638671875,
+      "max_time_ms": 7.027864456176758,
+      "std_dev_ms": 2.181266835963329,
+      "avg_throughput_mbps": 686.6911169023822,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    },
+    "1000KB": {
+      "avg_time_ms": 1.3436317443847656,
+      "min_time_ms": 0.6515979766845703,
+      "max_time_ms": 6.905317306518555,
+      "std_dev_ms": 1.955039204608712,
+      "avg_throughput_mbps": 1233.016448516854,
+      "memory_delta_mb": 0.00390625,
+      "cpu_percent": 0.0
+    },
+    "5000KB": {
+      "avg_time_ms": 3.937673568725586,
+      "min_time_ms": 3.177642822265625,
+      "max_time_ms": 9.74893569946289,
+      "std_dev_ms": 2.043597055293215,
+      "avg_throughput_mbps": 1385.8527227526968,
+      "memory_delta_mb": 0.0,
+      "cpu_percent": 0.0
+    }
+  },
+  "hash_computation": {
+    "1KB": {
+      "avg_time_ms": 0.0032186508178710938,
+      "min_time_ms": 0.0011920928955078125,
+      "max_time_ms": 0.017404556274414062,
+      "throughput_mbps": 303.4074074074074
+    },
+    "10KB": {
+      "avg_time_ms": 0.005650520324707031,
+      "min_time_ms": 0.0050067901611328125,
+      "max_time_ms": 0.009298324584960938,
+      "throughput_mbps": 1728.2700421940929
+    },
+    "100KB": {
+      "avg_time_ms": 0.04513263702392578,
+      "min_time_ms": 0.04458427429199219,
+      "max_time_ms": 0.04839897155761719,
+      "throughput_mbps": 2163.7612255678814
+    },
+    "1000KB": {
+      "avg_time_ms": 0.4396200180053711,
+      "min_time_ms": 0.4296302795410156,
+      "max_time_ms": 0.4458427429199219,
+      "throughput_mbps": 2221.3785997071423
+    },
+    "5000KB": {
+      "avg_time_ms": 2.205944061279297,
+      "min_time_ms": 2.171754837036133,
+      "max_time_ms": 2.2585391998291016,
+      "throughput_mbps": 2213.4797457956856
+    }
+  },
+  "concurrent_10": {
+    "total_operations": 100,
+    "concurrent_limit": 10,
+    "total_time_seconds": 0.5329170227050781,
+    "operations_per_second": 187.6464735399174,
+    "avg_time_per_operation_ms": 5.329170227050781,
+    "memory_delta_mb": 0.5078125,
+    "cpu_percent": 0.0
+  },
+  "concurrent_50": {
+    "total_operations": 200,
+    "concurrent_limit": 50,
+    "total_time_seconds": 0.23897719383239746,
+    "operations_per_second": 836.8999434325376,
+    "avg_time_per_operation_ms": 1.1948859691619873,
+    "memory_delta_mb": -0.2578125,
+    "cpu_percent": 0.0
+  },
+  "concurrent_100": {
+    "total_operations": 500,
+    "concurrent_limit": 100,
+    "total_time_seconds": 0.31203293800354004,
+    "operations_per_second": 1602.3949368906929,
+    "avg_time_per_operation_ms": 0.6240658760070801,
+    "memory_delta_mb": 0.02734375,
+    "cpu_percent": 0.0
+  },
+  "memory_usage": {
+    "num_files": 100,
+    "file_size_kb": 100,
+    "initial_memory_mb": 29.16796875,
+    "final_memory_mb": 38.9296875,
+    "memory_used_mb": 9.76171875,
+    "memory_per_file_kb": 99.96,
+    "total_data_size_mb": 9.765625
+  },
+  "database_queries_1000": {
+    "num_records": 1000,
+    "find_by_id_avg_ms": 0.014328956604003906,
+    "filter_by_path_avg_ms": 0.10513782501220703,
+    "sort_all_records_ms": 0.07748603820800781
+  },
+  "database_queries_10000": {
+    "num_records": 10000,
+    "find_by_id_avg_ms": 0.14829397201538086,
+    "filter_by_path_avg_ms": 1.002204418182373,
+    "sort_all_records_ms": 0.5145072937011719
+  }
+}
