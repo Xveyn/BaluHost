@@ -51,6 +51,7 @@ fun DashboardScreen(
     val isInHomeNetwork by viewModel.isInHomeNetwork.collectAsState()
     val hasVpnConfig by viewModel.hasVpnConfig.collectAsState()
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
+    val isVpnActive by viewModel.isVpnActive.collectAsState()
     
     // Gradient background from dark blue to teal
     val gradientBrush = Brush.linearGradient(
@@ -170,6 +171,7 @@ fun DashboardScreen(
                     // VPN Status Banner (shows when outside home network)
                     VpnStatusBanner(
                         isInHomeNetwork = isInHomeNetwork,
+                        isVpnActive = isVpnActive,
                         hasVpnConfig = hasVpnConfig,
                         onConnectVpn = onNavigateToVpn,
                         onDismiss = { viewModel.dismissVpnBanner() },

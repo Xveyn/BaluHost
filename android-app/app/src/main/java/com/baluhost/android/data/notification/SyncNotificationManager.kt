@@ -118,7 +118,7 @@ class SyncNotificationManager @Inject constructor(
      * Required for long-running WorkManager jobs.
      */
     fun createForegroundNotification(
-        folderId: Long,
+        folderId: String,
         folderName: String,
         status: String = "Wird synchronisiert..."
     ): android.app.Notification {
@@ -144,7 +144,7 @@ class SyncNotificationManager @Inject constructor(
      * Update progress notification with specific progress values.
      */
     fun updateProgressNotification(
-        folderId: Long,
+        folderId: String,
         folderName: String,
         current: Int,
         total: Int,
@@ -175,7 +175,7 @@ class SyncNotificationManager @Inject constructor(
      * Show success notification when sync completes.
      */
     fun showSyncCompleteNotification(
-        folderId: Long,
+        folderId: String,
         folderName: String,
         filesUploaded: Int,
         filesDownloaded: Int,
@@ -207,7 +207,7 @@ class SyncNotificationManager @Inject constructor(
      * Show error notification when sync fails.
      */
     fun showSyncErrorNotification(
-        folderId: Long,
+        folderId: String,
         folderName: String,
         errorMessage: String,
         canRetry: Boolean = true
@@ -239,7 +239,7 @@ class SyncNotificationManager @Inject constructor(
      * Show notification for detected conflicts requiring user action.
      */
     fun showConflictsNotification(
-        folderId: Long,
+        folderId: String,
         folderName: String,
         conflictCount: Int
     ) {
@@ -302,15 +302,16 @@ class SyncNotificationManager @Inject constructor(
     /**
      * Create intent to cancel sync.
      */
-    private fun createCancelIntent(folderId: Long): PendingIntent {
+    private fun createCancelIntent(folderId: String): PendingIntent {
         val intent = Intent(context, SyncNotificationReceiver::class.java).apply {
             action = ACTION_CANCEL_SYNC
             putExtra(EXTRA_FOLDER_ID, folderId)
         }
-        
+
+        val requestCode = folderId.hashCode()
         return PendingIntent.getBroadcast(
             context,
-            folderId.toInt(),
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -319,15 +320,16 @@ class SyncNotificationManager @Inject constructor(
     /**
      * Create intent to retry sync.
      */
-    private fun createRetryIntent(folderId: Long): PendingIntent {
+    private fun createRetryIntent(folderId: String): PendingIntent {
         val intent = Intent(context, SyncNotificationReceiver::class.java).apply {
             action = ACTION_RETRY_SYNC
             putExtra(EXTRA_FOLDER_ID, folderId)
         }
-        
+
+        val requestCode = folderId.hashCode() + 1000
         return PendingIntent.getBroadcast(
             context,
-            folderId.toInt() + 1000,
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )
@@ -336,16 +338,17 @@ class SyncNotificationManager @Inject constructor(
     /**
      * Create intent to resolve conflicts.
      */
-    private fun createResolveConflictsIntent(folderId: Long): PendingIntent {
+    private fun createResolveConflictsIntent(folderId: String): PendingIntent {
         val intent = Intent(context, com.baluhost.android.presentation.MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             action = ACTION_RESOLVE_CONFLICTS
             putExtra(EXTRA_FOLDER_ID, folderId)
         }
-        
+
+        val requestCode = folderId.hashCode() + 2000
         return PendingIntent.getActivity(
             context,
-            folderId.toInt() + 2000,
+            requestCode,
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE
         )

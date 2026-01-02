@@ -12,6 +12,8 @@ sealed class Screen(val route: String) {
     object Dashboard : Screen("dashboard")
     object Files : Screen("files")
     object Shares : Screen("shares")
+    object Sync : Screen("sync")
+    object Permissions : Screen("permissions")
     object MediaViewer : Screen("media_viewer/{fileUrl}/{fileName}/{mimeType}") {
         fun createRoute(fileUrl: String, fileName: String, mimeType: String?): String {
             val encodedUrl = java.net.URLEncoder.encode(fileUrl, "UTF-8")

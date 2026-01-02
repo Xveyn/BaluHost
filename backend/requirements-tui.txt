@@ -1,0 +1,24 @@
+# BaluHost TUI Dependencies
+# Terminal User Interface for SSH-based server management
+
+# TUI Framework - Modern async TUI with rich widgets
+textual>=0.40.0
+
+# Terminal formatting and rich output
+rich>=13.0.0
+
+# CLI framework for commands
+click>=8.1.0
+
+# HTTP client for remote API access
+httpx>=0.27.0
+
+# SSH key handling
+cryptography>=41.0.0
+paramiko>=3.4.0
+
+# Data validation (already in main requirements, but explicit here)
+pydantic>=2.6.0
+
+# Database access (already in main requirements)
+sqlalchemy>=2.0.0

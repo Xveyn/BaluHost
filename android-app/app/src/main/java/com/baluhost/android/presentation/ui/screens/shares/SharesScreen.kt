@@ -18,7 +18,7 @@ import com.baluhost.android.presentation.ui.theme.*
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun SharesScreen() {
+fun SharesScreen(onManagePermissions: () -> Unit = {}) {
     Scaffold(
         topBar = {
             TopAppBar(
@@ -102,6 +102,10 @@ fun SharesScreen() {
                         style = MaterialTheme.typography.bodySmall,
                         color = Slate400
                     )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Button(onClick = onManagePermissions) {
+                        Text("Berechtigungen verwalten")
+                    }
                 }
             }
         }

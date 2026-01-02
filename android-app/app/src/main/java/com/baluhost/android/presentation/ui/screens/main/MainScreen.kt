@@ -90,8 +90,8 @@ fun MainScreen(
                     )
                 }
 
-                composable(Screen.Shares.route) {
-                    SharesScreen()
+                composable(Screen.Sync.route) {
+                    com.baluhost.android.presentation.ui.screens.sync.SyncScreen()
                 }
 
                 composable(Screen.Settings.route) {
@@ -109,6 +109,9 @@ fun MainScreen(
                             }
                         }
                     )
+                }
+                composable(Screen.Permissions.route) {
+                    com.baluhost.android.presentation.ui.screens.permissions.PermissionsScreen()
                 }
             }
         }

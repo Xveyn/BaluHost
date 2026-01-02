@@ -51,6 +51,6 @@ enum class BottomNavItem(
 ) {
     HOME("dashboard", "Home", Icons.Default.Home),
     FILES("files", "Dateien", Icons.Default.Folder),
-    SHARES("shares", "Geteilt", Icons.Default.Share),
+    SYNC("sync", "Sync", Icons.Default.Sync),
     SETTINGS("settings", "Einstellungen", Icons.Default.Settings)
 }

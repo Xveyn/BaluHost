@@ -21,6 +21,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.platform.LocalContext
+import coil.compose.AsyncImage
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -64,6 +65,9 @@ fun FilesScreen(
     val isInHomeNetwork by viewModel.isInHomeNetwork.collectAsState()
     val hasVpnConfig by viewModel.hasVpnConfig.collectAsState()
     val vpnBannerDismissed by viewModel.vpnBannerDismissed.collectAsState()
+    val isVpnActive by viewModel.isVpnActive.collectAsState()
+    // Floating preview URL for overlay (shows a small image/video thumbnail)
+    var floatingPreviewUrl by remember { mutableStateOf<String?>(null) }
     
     // Observe app lifecycle to trigger server check on resume
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -139,6 +143,7 @@ fun FilesScreen(
             // VPN Status Banner (shows when outside home network)
             VpnStatusBanner(
                 isInHomeNetwork = isInHomeNetwork,
+                isVpnActive = isVpnActive,
                 hasVpnConfig = hasVpnConfig,
                 onConnectVpn = onNavigateToVpn,
                 onDismiss = { viewModel.dismissVpnBanner() },
@@ -357,14 +362,15 @@ fun FilesScreen(
                                                     file.mimeType?.startsWith("image/") == true ||
                                                     file.mimeType?.startsWith("video/") == true ||
                                                     file.mimeType?.startsWith("audio/") == true -> {
-                                                        // Open media viewer for images, videos, audio
-                                                        android.util.Log.d("FilesScreen", "Opening media viewer for ${file.name}")
+                                                        // Show small overlay preview instead of immediately navigating
+                                                        android.util.Log.d("FilesScreen", "Opening preview for ${file.name}")
                                                         val fileUrl = viewModel.getFileDownloadUrl(file.path)
-                                                        android.util.Log.d("FilesScreen", "fileUrl = $fileUrl")
-                                                        onNavigateToMediaViewer(fileUrl, file.name, file.mimeType)
+                                                        android.util.Log.d("FilesScreen", "previewUrl = $fileUrl")
+                                                        floatingPreviewUrl = fileUrl
+                                                        // tapping the overlay will open full viewer
                                                     }
                                                     else -> {
-                                                        android.util.Log.d("FilesScreen", "Unknown file type for ${file.name}, mimeType: ${file.mimeType}")
+                                                        android.util.Log.d("FilesScreen", "Unknown file type for ${file.name}, mimeType = ${file.mimeType}")
                                                     }
                                                 }
                                             }
@@ -377,6 +383,12 @@ fun FilesScreen(
                                             if (!uiState.isSelectionMode) {
                                                 viewModel.toggleSelectionMode()
                                                 viewModel.toggleFileSelection(file)
+                                            }
+                                        },
+                                        onPreviewClick = {
+                                            // preview button directly sets floating preview
+                                            if (!file.isDirectory && (file.mimeType?.startsWith("image/") == true || file.mimeType?.startsWith("video/") == true)) {
+                                                floatingPreviewUrl = viewModel.getFileDownloadUrl(file.path)
                                             }
                                         }
                                     )
@@ -437,6 +449,70 @@ fun FilesScreen(
                         Text(error)
                     }
                 }
+
+                    // Floating preview shown as a modal Dialog to guarantee it's above navigation bars
+                    if (floatingPreviewUrl != null) {
+                        androidx.compose.ui.window.Dialog(
+                            onDismissRequest = { floatingPreviewUrl = null },
+                            properties = androidx.compose.ui.window.DialogProperties(usePlatformDefaultWidth = false)
+                        ) {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                            ) {
+                                // Scrim
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(androidx.compose.ui.graphics.Color.Black.copy(alpha = 0.5f))
+                                        .clickable { floatingPreviewUrl = null }
+                                ) {}
+
+                                // Centered preview card with safe max sizes
+                                Card(
+                                    modifier = Modifier
+                                        .align(Alignment.Center)
+                                        .padding(16.dp)
+                                        .fillMaxWidth(0.9f)
+                                        .heightIn(max = 600.dp)
+                                        .clip(RoundedCornerShape(12.dp)),
+                                    elevation = CardDefaults.cardElevation(defaultElevation = 16.dp),
+                                    shape = RoundedCornerShape(12.dp)
+                                ) {
+                                    Box(modifier = Modifier
+                                        .fillMaxSize()
+                                    ) {
+                                        AsyncImage(
+                                            model = floatingPreviewUrl,
+                                            contentDescription = "Vorschaubild",
+                                            modifier = Modifier.fillMaxSize(),
+                                            contentScale = androidx.compose.ui.layout.ContentScale.Fit
+                                        )
+
+                                        // Close button
+                                        IconButton(
+                                            onClick = { floatingPreviewUrl = null },
+                                            modifier = Modifier
+                                                .align(Alignment.TopEnd)
+                                                .padding(8.dp)
+                                                .size(44.dp)
+                                        ) {
+                                            Icon(Icons.Default.Close, contentDescription = "Schließen", tint = Slate100)
+                                        }
+
+                                        // Click to open full viewer
+                                        Box(modifier = Modifier
+                                            .matchParentSize()
+                                            .clickable {
+                                                onNavigateToMediaViewer(floatingPreviewUrl!!, "Vorschau", null)
+                                                floatingPreviewUrl = null
+                                            }
+                                        ) {}
+                                    }
+                                }
+                            }
+                        }
+                    }
                 }  // Close Box
             }  // Close SwipeRefresh
         }  // Close Scaffold
@@ -522,7 +598,8 @@ private fun GlassFileListItem(
     onFileClick: () -> Unit,
     onDeleteClick: () -> Unit,
     onLongClick: () -> Unit = {},
-    modifier: Modifier = Modifier
+    modifier: Modifier = Modifier,
+    onPreviewClick: () -> Unit = {}
 ) {
     var showMenu by remember { mutableStateOf(false) }
     
@@ -552,11 +629,12 @@ private fun GlassFileListItem(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(12.dp)
         ) {
-            // Checkbox in selection mode
+            // Checkbox in selection mode (ensure minimum touch target)
             if (isSelectionMode) {
                 Checkbox(
                     checked = isSelected,
                     onCheckedChange = { onFileClick() },
+                    modifier = Modifier.size(48.dp),
                     colors = CheckboxDefaults.colors(
                         checkedColor = Sky400,
                         uncheckedColor = Slate400
@@ -573,7 +651,7 @@ private fun GlassFileListItem(
                     else -> Icons.Default.InsertDriveFile
                 },
                 contentDescription = null,
-                modifier = Modifier.size(40.dp),
+                modifier = Modifier.size(44.dp),
                 tint = if (file.isDirectory) Sky400 else Indigo400
             )
             
@@ -613,15 +691,36 @@ private fun GlassFileListItem(
                 }
             }
             
-            Box {
-                IconButton(onClick = { showMenu = true }) {
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
+            ) {
+                // Preview button for media files (image/video)
+                if (!file.isDirectory && (file.mimeType?.startsWith("image/") == true || file.mimeType?.startsWith("video/") == true)) {
+                    IconButton(
+                        onClick = onPreviewClick,
+                        modifier = Modifier
+                            .size(48.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Visibility,
+                            contentDescription = "Vorschau",
+                            tint = Sky400
+                        )
+                    }
+                }
+
+                IconButton(
+                    onClick = { showMenu = true },
+                    modifier = Modifier.size(48.dp)
+                ) {
                     Icon(
                         imageVector = Icons.Default.MoreVert,
                         contentDescription = "Weitere Optionen",
                         tint = Slate400
                     )
                 }
-                
+
                 DropdownMenu(
                     expanded = showMenu,
                     onDismissRequest = { showMenu = false }

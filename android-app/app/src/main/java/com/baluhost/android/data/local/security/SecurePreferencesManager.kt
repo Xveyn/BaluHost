@@ -204,4 +204,37 @@ class SecurePreferencesManager @Inject constructor(
     fun clearAll() {
         sharedPreferences.edit().clear().apply()
     }
+
+    // ========== Adapter Credentials ==========
+
+    /**
+     * Save adapter credentials for a specific adapter key (e.g., folderId or accountId).
+     */
+    fun saveAdapterCredentials(adapterKey: String, username: String?, password: String?) {
+        val userKey = "adapter_${adapterKey}_user"
+        val passKey = "adapter_${adapterKey}_pass"
+        val editor = sharedPreferences.edit()
+        if (username != null) editor.putString(userKey, username) else editor.remove(userKey)
+        if (password != null) editor.putString(passKey, password) else editor.remove(passKey)
+        editor.apply()
+    }
+
+    /**
+     * Retrieve adapter credentials for a key.
+     */
+    fun getAdapterCredentials(adapterKey: String): Pair<String?, String?> {
+        val userKey = "adapter_${adapterKey}_user"
+        val passKey = "adapter_${adapterKey}_pass"
+        return Pair(sharedPreferences.getString(userKey, null), sharedPreferences.getString(passKey, null))
+    }
+
+    /**
+     * Remove stored adapter credentials for a key.
+     */
+    fun removeAdapterCredentials(adapterKey: String) {
+        sharedPreferences.edit()
+            .remove("adapter_${adapterKey}_user")
+            .remove("adapter_${adapterKey}_pass")
+            .apply()
+    }
 }

@@ -194,7 +194,7 @@ class PreferencesManager @Inject constructor(
     }
     
     // Pending conflicts for manual resolution
-    suspend fun savePendingConflicts(folderId: Long, conflicts: List<com.baluhost.android.domain.model.sync.FileConflict>) {
+    suspend fun savePendingConflicts(folderId: String, conflicts: List<com.baluhost.android.domain.model.sync.FileConflict>) {
         val key = stringPreferencesKey("pending_conflicts_$folderId")
         val conflictsJson = conflicts.joinToString("|||") { conflict ->
             "${conflict.id}::${conflict.relativePath}::${conflict.fileName}::" +
@@ -206,7 +206,7 @@ class PreferencesManager @Inject constructor(
         }
     }
     
-    fun getPendingConflicts(folderId: Long): Flow<List<com.baluhost.android.domain.model.sync.FileConflict>> = flow {
+    fun getPendingConflicts(folderId: String): Flow<List<com.baluhost.android.domain.model.sync.FileConflict>> = flow {
         val key = stringPreferencesKey("pending_conflicts_$folderId")
         val conflictsJson = dataStore.data.map { prefs -> prefs[key] }.first()
         
@@ -229,6 +229,7 @@ class PreferencesManager @Inject constructor(
                         )
                     } else null
                 } catch (e: Exception) {
+                    com.baluhost.android.util.Logger.e("PreferencesManager", "Failed to parse pending conflict entry", e)
                     null
                 }
             }
@@ -236,7 +237,7 @@ class PreferencesManager @Inject constructor(
         }
     }
     
-    suspend fun clearPendingConflicts(folderId: Long) {
+    suspend fun clearPendingConflicts(folderId: String) {
         dataStore.edit { prefs ->
             val key = stringPreferencesKey("pending_conflicts_$folderId")
             prefs.remove(key)
@@ -362,6 +363,20 @@ class PreferencesManager @Inject constructor(
     // Clear all tokens (on logout or auth failure)
     suspend fun clearTokens() {
         securePreferences.clearTokens()
+    }
+
+    // Adapter credential helpers (wrap SecurePreferencesManager)
+    suspend fun saveAdapterCredentials(adapterKey: String, username: String?, password: String?) {
+        // securePreferences is synchronous; run on calling coroutine
+        securePreferences.saveAdapterCredentials(adapterKey, username, password)
+    }
+
+    suspend fun getAdapterCredentials(adapterKey: String): Pair<String?, String?> {
+        return securePreferences.getAdapterCredentials(adapterKey)
+    }
+
+    suspend fun removeAdapterCredentials(adapterKey: String) {
+        securePreferences.removeAdapterCredentials(adapterKey)
     }
     
     // Clear all data

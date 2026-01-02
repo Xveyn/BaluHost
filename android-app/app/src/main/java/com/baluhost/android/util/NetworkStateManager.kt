@@ -83,8 +83,8 @@ class NetworkStateManager(
             networkMonitor.isWifiConnected,
             _isInHomeNetwork
         ) { isWifi, isHome ->
-            // Check if VPN is active
-            val isVpnActive = isVpnConnected()
+            // Check if VPN is active (use fallback-aware check)
+            val isVpnActive = isVpnConnectedFallback()
             
             if (isVpnActive) {
                 // VPN connected → treat as "in home network"
@@ -111,6 +111,40 @@ class NetworkStateManager(
             false
         }
     }
+
+    /**
+     * Fallback-aware VPN detection.
+     * First tries ConnectivityManager transport check, then falls back to
+     * checking for typical VPN network interfaces (tun/tap/ppp).
+     */
+    private fun isVpnConnectedFallback(): Boolean {
+        // Primary check
+        try {
+            val activeNetwork = connectivityManager.activeNetwork
+            val networkCapabilities = activeNetwork?.let { connectivityManager.getNetworkCapabilities(it) }
+            if (networkCapabilities != null && networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)) {
+                return true
+            }
+        } catch (_: Exception) {
+            // ignore and continue to fallback
+        }
+
+        // Fallback: look for VPN-like network interface names
+        return try {
+            NetworkInterface.getNetworkInterfaces().toList().any { ni ->
+                val name = ni.name.lowercase()
+                name.contains("tun") || name.contains("tap") || name.contains("ppp")
+            }
+        } catch (e: Exception) {
+            false
+        }
+    }
+
+    /**
+     * Public helper to check VPN state synchronously.
+     * Other components can use this to decide UI behavior.
+     */
+    fun isVpnActive(): Boolean = isVpnConnectedFallback()
     
     /**
      * Extract IP address from server URL.

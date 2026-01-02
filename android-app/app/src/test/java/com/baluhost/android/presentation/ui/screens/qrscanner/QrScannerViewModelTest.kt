@@ -43,7 +43,7 @@ class QrScannerViewModelTest {
     @Test
     fun `initial state should be Scanning`() = runTest {
         // Then
-        viewModel.state.test {
+        viewModel.uiState.test {
             val state = awaitItem()
             assertTrue(state is QrScannerState.Scanning)
         }
@@ -65,25 +65,33 @@ class QrScannerViewModelTest {
             id = 1,
             username = "testuser",
             email = "test@example.com",
-            isAdmin = false
+            role = "user",
+            createdAt = java.time.Instant.now(),
+            isActive = true
         )
-        
+
         val device = MobileDevice(
-            id = 1,
+            id = "device-1",
             userId = 1,
-            deviceType = "android",
             deviceName = "Test Device",
-            lastSeen = System.currentTimeMillis() / 1000,
+            deviceType = "android",
+            deviceModel = "ModelX",
+            lastSeen = java.time.Instant.now().toString(),
             isActive = true
         )
         
-        val authResult = AuthResult(user = user, device = device)
+        val authResult = AuthResult(accessToken = "access123", refreshToken = "refresh123", user = user, device = device)
         
         val vpnConfig = VpnConfig(
+            clientId = 1,
+            deviceName = "Test Device",
+            publicKey = "pubkey",
             assignedIp = "10.0.0.2/24",
+            configString = "config",
             serverPublicKey = "serverkey=",
-            serverEndpoint = "vpn.example.com:51820",
-            configString = "config"
+            serverEndpoint = "vpn.example.com",
+            serverPort = 51820,
+            allowedIps = listOf("0.0.0.0/0")
         )
         
         coEvery { 
@@ -95,7 +103,7 @@ class QrScannerViewModelTest {
         } returns Result.Success(vpnConfig)
         
         // When
-        viewModel.state.test {
+        viewModel.uiState.test {
             skipItems(1) // Skip initial Scanning state
             
             viewModel.onQrCodeScanned(qrJson)
@@ -116,7 +124,7 @@ class QrScannerViewModelTest {
         val invalidJson = "not a json"
         
         // When
-        viewModel.state.test {
+        viewModel.uiState.test {
             skipItems(1) // Skip initial state
             
             viewModel.onQrCodeScanned(invalidJson)
@@ -129,7 +137,7 @@ class QrScannerViewModelTest {
             val errorState = awaitItem()
             assertTrue(errorState is QrScannerState.Error)
             val error = errorState as QrScannerState.Error
-            assertTrue(error.message.contains("Invalid QR code"))
+            assertTrue(error.message.contains("Invalid QR code") || error.message.contains("Invalid QR code format"))
         }
     }
     
@@ -151,7 +159,7 @@ class QrScannerViewModelTest {
         } returns Result.Error(Exception(errorMessage))
         
         // When
-        viewModel.state.test {
+        viewModel.uiState.test {
             skipItems(1)
             
             viewModel.onQrCodeScanned(qrJson)
@@ -182,26 +190,29 @@ class QrScannerViewModelTest {
             id = 1,
             username = "testuser",
             email = "test@example.com",
-            isAdmin = false
-        )
-        
-        val device = MobileDevice(
-            id = 1,
-            userId = 1,
-            deviceType = "android",
-            deviceName = "Test Device",
-            lastSeen = System.currentTimeMillis() / 1000,
+            role = "user",
+            createdAt = java.time.Instant.now(),
             isActive = true
         )
-        
-        val authResult = AuthResult(user = user, device = device)
+
+        val device = MobileDevice(
+            id = "device-2",
+            userId = 1,
+            deviceName = "Test Device",
+            deviceType = "android",
+            deviceModel = "ModelX",
+            lastSeen = java.time.Instant.now().toString(),
+            isActive = true
+        )
+
+        val authResult = AuthResult(accessToken = "access2", refreshToken = "refresh2", user = user, device = device)
         
         coEvery { 
             registerDeviceUseCase(any(), any())
         } returns Result.Success(authResult)
         
         // When
-        viewModel.state.test {
+        viewModel.uiState.test {
             skipItems(1)
             
             viewModel.onQrCodeScanned(qrJson)
@@ -224,7 +235,7 @@ class QrScannerViewModelTest {
         // Given - Set to error state first
         val invalidJson = "invalid"
         
-        viewModel.state.test {
+        viewModel.uiState.test {
             skipItems(1)
             
             viewModel.onQrCodeScanned(invalidJson)
@@ -252,9 +263,9 @@ class QrScannerViewModelTest {
             }
         """.trimIndent()
         
-        val user = User(1, "test", "test@test.com", false)
-        val device = MobileDevice(1, 1, "android", "Test", System.currentTimeMillis() / 1000, true)
-        val authResult = AuthResult(user, device)
+        val user = User(1, "test", "test@test.com", role = "user", createdAt = java.time.Instant.now(), isActive = true)
+        val device = MobileDevice("device-1", 1, "Test", "android", "ModelX", java.time.Instant.now().toString(), true)
+        val authResult = AuthResult(accessToken = "accessSlow", refreshToken = "refreshSlow", user = user, device = device)
         
         coEvery { 
             registerDeviceUseCase(any(), any())

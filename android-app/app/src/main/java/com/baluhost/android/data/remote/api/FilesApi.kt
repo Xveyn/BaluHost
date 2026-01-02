@@ -70,4 +70,15 @@ interface FilesApi {
     suspend fun getFileMetadata(
         @Query("path") path: String
     ): FileMetadataResponse
+
+    // File permissions endpoints
+    @GET("files/permissions")
+    suspend fun getFilePermissions(
+        @Query("path") path: String
+    ): com.baluhost.android.data.remote.dto.FilePermissionsDto
+
+    @PUT("files/permissions")
+    suspend fun updateFilePermissions(
+        @Body request: com.baluhost.android.data.remote.dto.FilePermissionsRequestDto
+    ): com.baluhost.android.data.remote.dto.FilePermissionsDto
 }

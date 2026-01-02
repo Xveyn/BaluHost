@@ -22,7 +22,11 @@ interface SyncRepository {
         syncType: SyncType,
         autoSync: Boolean = true,
         conflictResolution: ConflictResolution = ConflictResolution.KEEP_NEWEST,
-        excludePatterns: List<String> = emptyList()
+        excludePatterns: List<String> = emptyList(),
+        adapterType: String = "webdav",
+        adapterUsername: String? = null,
+        adapterPassword: String? = null,
+        saveCredentials: Boolean = false
     ): Result<SyncFolderConfig>
     
     /**
@@ -35,7 +39,11 @@ interface SyncRepository {
         autoSync: Boolean? = null,
         conflictResolution: ConflictResolution? = null,
         excludePatterns: List<String>? = null,
-        status: SyncStatus? = null
+        status: SyncStatus? = null,
+        adapterType: String? = null,
+        adapterUsername: String? = null,
+        adapterPassword: String? = null,
+        saveCredentials: Boolean? = null
     ): Result<SyncFolderConfig>
     
     /**

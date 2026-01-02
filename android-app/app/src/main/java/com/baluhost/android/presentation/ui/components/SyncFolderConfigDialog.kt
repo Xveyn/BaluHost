@@ -47,9 +47,14 @@ fun SyncFolderConfigDialog(
     var excludePatterns by remember { 
         mutableStateOf(folder?.excludePatterns?.joinToString(", ") ?: ".tmp, .cache, node_modules") 
     }
+    var adapterType by remember { mutableStateOf("webdav") }
+    var adapterUsername by remember { mutableStateOf("") }
+    var adapterPassword by remember { mutableStateOf("") }
+    var saveCredentials by remember { mutableStateOf(false) }
     
     var showSyncTypeMenu by remember { mutableStateOf(false) }
     var showConflictMenu by remember { mutableStateOf(false) }
+    var showAdapterMenu by remember { mutableStateOf(false) }
     
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -303,6 +308,69 @@ fun SyncFolderConfigDialog(
                     style = MaterialTheme.typography.bodySmall,
                     color = Slate400
                 )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // Adapter selection
+                ExposedDropdownMenuBox(
+                    expanded = showAdapterMenu,
+                    onExpandedChange = { showAdapterMenu = it }
+                ) {
+                    OutlinedTextField(
+                        value = adapterType.uppercase(),
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("Adapter") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = showAdapterMenu) },
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .menuAnchor(),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedBorderColor = Sky400,
+                            focusedLabelColor = Sky400,
+                            unfocusedBorderColor = Slate600,
+                            unfocusedLabelColor = Slate400
+                        )
+                    )
+
+                    ExposedDropdownMenu(
+                        expanded = showAdapterMenu,
+                        onDismissRequest = { showAdapterMenu = false }
+                    ) {
+                        listOf("webdav", "smb", "saf").forEach { a ->
+                            DropdownMenuItem(text = { Text(a.uppercase()) }, onClick = { adapterType = a; showAdapterMenu = false })
+                        }
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (adapterType == "webdav" || adapterType == "smb") {
+                    OutlinedTextField(
+                        value = adapterUsername,
+                        onValueChange = { adapterUsername = it },
+                        label = { Text("Benutzername") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    OutlinedTextField(
+                        value = adapterPassword,
+                        onValueChange = { adapterPassword = it },
+                        label = { Text("Passwort") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(checked = saveCredentials, onCheckedChange = { saveCredentials = it })
+                        Spacer(modifier = Modifier.width(8.dp))
+                        Text("Zugangsdaten speichern", style = MaterialTheme.typography.bodySmall, color = Slate400)
+                    }
+                }
             }
         },
         confirmButton = {
@@ -310,29 +378,42 @@ fun SyncFolderConfigDialog(
                 onClick = {
                     val patterns = excludePatterns.split(",").map { it.trim() }.filter { it.isNotEmpty() }
                     
-                    if (isEditMode) {
-                        onConfirm(
-                            SyncFolderUpdateConfig(
-                                folderId = folder!!.id,
-                                remotePath = remotePath,
-                                syncType = syncType,
-                                autoSync = autoSync,
-                                conflictResolution = conflictResolution,
-                                excludePatterns = patterns
+                        val creds = if (adapterUsername.isNotBlank() || adapterPassword.isNotBlank()) {
+                            com.baluhost.android.presentation.ui.screens.sync.Credentials(
+                                username = adapterUsername.ifBlank { null },
+                                password = adapterPassword.ifBlank { null }
                             )
-                        )
-                    } else {
-                        onConfirm(
-                            SyncFolderCreateConfig(
-                                localUri = folderUri!!,
-                                remotePath = remotePath,
-                                syncType = syncType,
-                                autoSync = autoSync,
-                                conflictResolution = conflictResolution,
-                                excludePatterns = patterns
+                        } else null
+
+                        if (isEditMode) {
+                            onConfirm(
+                                SyncFolderUpdateConfig(
+                                    folderId = folder!!.id,
+                                    remotePath = remotePath,
+                                    syncType = syncType,
+                                    autoSync = autoSync,
+                                    conflictResolution = conflictResolution,
+                                    excludePatterns = patterns,
+                                    adapterType = adapterType,
+                                    credentials = creds,
+                                    saveCredentials = saveCredentials
+                                )
                             )
-                        )
-                    }
+                        } else {
+                            onConfirm(
+                                SyncFolderCreateConfig(
+                                    localUri = folderUri!!,
+                                    remotePath = remotePath,
+                                    syncType = syncType,
+                                    autoSync = autoSync,
+                                    conflictResolution = conflictResolution,
+                                    excludePatterns = patterns,
+                                    adapterType = adapterType,
+                                    credentials = creds,
+                                    saveCredentials = saveCredentials
+                                )
+                            )
+                        }
                 },
                 enabled = remotePath.isNotEmpty(),
                 colors = ButtonDefaults.buttonColors(

@@ -22,8 +22,7 @@ class SyncNotificationReceiver : BroadcastReceiver() {
     lateinit var notificationManager: SyncNotificationManager
     
     override fun onReceive(context: Context, intent: Intent) {
-        val folderId = intent.getLongExtra(SyncNotificationManager.EXTRA_FOLDER_ID, -1L)
-        if (folderId == -1L) return
+        val folderId = intent.getStringExtra(SyncNotificationManager.EXTRA_FOLDER_ID) ?: return
         
         when (intent.action) {
             SyncNotificationManager.ACTION_CANCEL_SYNC -> {

@@ -40,8 +40,9 @@ class RegisterDeviceUseCaseTest {
         val serverUrl = "https://test.com"
         
         val deviceInfo = DeviceInfoDto(
-            deviceType = "android",
             deviceName = "Test Device",
+            deviceType = "android",
+            deviceModel = "Pixel 6",
             osVersion = "14",
             appVersion = "1.0.0"
         )
@@ -50,28 +51,32 @@ class RegisterDeviceUseCaseTest {
             id = 1,
             username = "testuser",
             email = "test@example.com",
-            isAdmin = false
-        )
-        
-        val mobileDeviceDto = MobileDeviceDto(
-            id = 1,
-            userId = 1,
-            deviceType = "android",
-            deviceName = "Test Device",
-            lastSeen = System.currentTimeMillis() / 1000,
+            role = "user",
+            createdAt = System.currentTimeMillis().toString(),
             isActive = true
         )
         
+        val mobileDeviceDto = MobileDeviceDto(
+            id = "1",
+            userId = 1,
+            deviceName = "Test Device",
+            deviceType = "android",
+            deviceModel = "Pixel 6",
+            lastSeen = (System.currentTimeMillis() / 1000).toString(),
+            isActive = true,
+            expiresAt = null
+        )
+
         val response = RegisterDeviceResponse(
             accessToken = "access_token_123",
             refreshToken = "refresh_token_123",
-            expiresIn = 3600,
+            tokenType = "bearer",
             user = userDto,
             device = mobileDeviceDto
         )
         
-        coEvery { 
-            mobileApi.registerDevice(any(), any())
+        coEvery {
+            mobileApi.registerDevice(any<RegisterDeviceRequest>())
         } returns response
         
         // When
@@ -81,7 +86,8 @@ class RegisterDeviceUseCaseTest {
         assertTrue(result is Result.Success)
         val successResult = result as Result.Success
         assertEquals("testuser", successResult.data.user.username)
-        assertEquals("Test Device", successResult.data.device.deviceName)
+        assertNotNull(successResult.data.device)
+        assertEquals("Test Device", successResult.data.device!!.deviceName)
         
         // Verify preferences were saved
         coVerify {
@@ -100,8 +106,8 @@ class RegisterDeviceUseCaseTest {
         val serverUrl = "https://test.com"
         val errorMessage = "Network error"
         
-        coEvery { 
-            mobileApi.registerDevice(any(), any())
+        coEvery {
+            mobileApi.registerDevice(any<RegisterDeviceRequest>())
         } throws Exception(errorMessage)
         
         // When
@@ -125,8 +131,8 @@ class RegisterDeviceUseCaseTest {
         val token = "test_token"
         val serverUrl = "https://test.com"
         
-        coEvery { 
-            mobileApi.registerDevice(any(), any())
+        coEvery {
+            mobileApi.registerDevice(any<RegisterDeviceRequest>())
         } throws NullPointerException("User data is null")
         
         // When

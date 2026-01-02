@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 @Composable
 fun VpnStatusBanner(
     isInHomeNetwork: Boolean?,
+    isVpnActive: Boolean = false,
     hasVpnConfig: Boolean,
     onConnectVpn: () -> Unit,
     onDismiss: () -> Unit,
@@ -36,9 +37,10 @@ fun VpnStatusBanner(
 ) {
     // Show banner when:
     // 1. User is NOT in home network (isInHomeNetwork == false)
-    // 2. VPN config is available
-    // 3. Banner was not dismissed
-    val shouldShow = isInHomeNetwork == false && hasVpnConfig && !isDismissed
+    // 2. VPN is NOT active
+    // 3. VPN config is available
+    // 4. Banner was not dismissed
+    val shouldShow = isInHomeNetwork == false && !isVpnActive && hasVpnConfig && !isDismissed
     
     AnimatedVisibility(
         visible = shouldShow,
@@ -137,13 +139,14 @@ fun VpnStatusBanner(
 @Composable
 fun VpnStatusBannerCompact(
     isInHomeNetwork: Boolean?,
+    isVpnActive: Boolean = false,
     hasVpnConfig: Boolean,
     onConnectVpn: () -> Unit,
     onDismiss: () -> Unit,
     modifier: Modifier = Modifier,
     isDismissed: Boolean = false
 ) {
-    val shouldShow = isInHomeNetwork == false && hasVpnConfig && !isDismissed
+    val shouldShow = isInHomeNetwork == false && !isVpnActive && hasVpnConfig && !isDismissed
     
     AnimatedVisibility(
         visible = shouldShow,

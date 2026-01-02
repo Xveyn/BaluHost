@@ -34,7 +34,11 @@ class SyncRepositoryImpl @Inject constructor(
         syncType: SyncType,
         autoSync: Boolean,
         conflictResolution: ConflictResolution,
-        excludePatterns: List<String>
+        excludePatterns: List<String>,
+        adapterType: String,
+        adapterUsername: String?,
+        adapterPassword: String?,
+        saveCredentials: Boolean
     ): Result<SyncFolderConfig> {
         return try {
             val dto = SyncFolderCreateDto(
@@ -43,6 +47,10 @@ class SyncRepositoryImpl @Inject constructor(
                 syncType = syncType.toApiString(),
                 autoSync = autoSync,
                 conflictResolution = conflictResolution.toApiString(),
+                adapterType = adapterType,
+                adapterUsername = adapterUsername,
+                adapterPassword = adapterPassword,
+                saveCredentials = saveCredentials,
                 excludePatterns = excludePatterns
             )
             val response = syncApi.createSyncFolder(deviceId, dto)
@@ -59,7 +67,11 @@ class SyncRepositoryImpl @Inject constructor(
         autoSync: Boolean?,
         conflictResolution: ConflictResolution?,
         excludePatterns: List<String>?,
-        status: SyncStatus?
+        status: SyncStatus?,
+        adapterType: String?,
+        adapterUsername: String?,
+        adapterPassword: String?,
+        saveCredentials: Boolean?
     ): Result<SyncFolderConfig> {
         return try {
             val dto = SyncFolderUpdateDto(
@@ -67,6 +79,10 @@ class SyncRepositoryImpl @Inject constructor(
                 syncType = syncType?.toApiString(),
                 autoSync = autoSync,
                 conflictResolution = conflictResolution?.toApiString(),
+                adapterType = adapterType,
+                adapterUsername = adapterUsername,
+                adapterPassword = adapterPassword,
+                saveCredentials = saveCredentials,
                 excludePatterns = excludePatterns,
                 status = status?.toApiString()
             )

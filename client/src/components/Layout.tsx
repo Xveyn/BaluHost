@@ -148,8 +148,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     },
     {
       path: '/docs',
-      label: 'API Docs',
-      description: 'REST API',
+      label: 'API Center',
+      description: 'Docs & Limits',
       icon: navIcon.docs
     },
     ...(user.role === 'admin'
@@ -232,20 +232,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             })}
           </nav>
 
-          <div className="px-6 pb-10">
-            <div className="glass-accent border-slate-800 bg-slate-900/55">
-              <p className="text-xs uppercase tracking-[0.3em] text-sky-400">System Healthy</p>
-              <div className="mt-4 flex items-center justify-between">
-                <div>
-                  <p className="text-2xl font-semibold text-sky-400">99%</p>
-                  <p className="text-xs text-slate-100-tertiary">Storage 70% free</p>
-                </div>
-                <div className="glow-ring h-16 w-16">
-                  <div className="h-[52px] w-[52px] rounded-full bg-gradient-to-r from-sky-500 via-theme-accent to-theme-bg" />
-                </div>
-              </div>
-            </div>
-          </div>
+
         </aside>
 
         {/* Mobile Menu Overlay */}

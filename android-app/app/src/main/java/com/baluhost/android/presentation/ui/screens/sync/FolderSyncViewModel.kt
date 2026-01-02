@@ -43,6 +43,7 @@ class FolderSyncViewModel @Inject constructor(
             _uiState.value = FolderSyncState.Loading
             
             try {
+                com.baluhost.android.util.Logger.i("FolderSyncViewModel", "loadSyncFolders: start")
                 val deviceId = preferencesManager.getDeviceId().first() 
                     ?: throw Exception("Device ID not found")
                 
@@ -65,16 +66,18 @@ class FolderSyncViewModel @Inject constructor(
                     folders = folders,
                     uploadQueue = uploadQueue
                 )
+                com.baluhost.android.util.Logger.i("FolderSyncViewModel", "loadSyncFolders: loaded ${folders.size} folders, uploadQueue=${uploadQueue.size}")
                 
                 // Check for pending conflicts
                 folders.forEach { folder ->
-                    val conflicts = preferencesManager.getPendingConflicts(folder.id.toLong()).first()
+                    val conflicts = preferencesManager.getPendingConflicts(folder.id).first()
                     if (conflicts.isNotEmpty()) {
                         _pendingConflicts.value = conflicts
                     }
                 }
                 
             } catch (e: Exception) {
+                com.baluhost.android.util.Logger.e("FolderSyncViewModel", "loadSyncFolders failed", e)
                 _uiState.value = FolderSyncState.Error(
                     e.message ?: "Unknown error occurred"
                 )
@@ -95,14 +98,23 @@ class FolderSyncViewModel @Inject constructor(
                     syncType = config.syncType,
                     autoSync = config.autoSync,
                     conflictResolution = config.conflictResolution,
-                    excludePatterns = config.excludePatterns
+                    excludePatterns = config.excludePatterns,
+                    adapterType = config.adapterType,
+                    adapterUsername = config.credentials?.username,
+                    adapterPassword = config.credentials?.password,
+                    saveCredentials = config.saveCredentials
                 )
                 
                 if (result.isSuccess) {
                     val folder = result.getOrNull()!!
                     // Save URI mapping in preferences
                     preferencesManager.saveSyncFolderUri(folder.id, config.localUri.toString())
-                    
+
+                    // Persist credentials securely if requested
+                    if (config.saveCredentials && config.credentials != null) {
+                        preferencesManager.saveAdapterCredentials(folder.id, config.credentials.username, config.credentials.password)
+                    }
+
                     _snackbarMessage.emit("Sync folder created successfully")
                     loadSyncFolders()
                 } else {
@@ -125,10 +137,19 @@ class FolderSyncViewModel @Inject constructor(
                     autoSync = config.autoSync,
                     conflictResolution = config.conflictResolution,
                     excludePatterns = config.excludePatterns,
-                    status = null
+                    status = null,
+                    adapterType = config.adapterType,
+                    adapterUsername = config.credentials?.username,
+                    adapterPassword = config.credentials?.password,
+                    saveCredentials = config.saveCredentials
                 )
                 
                 if (result.isSuccess) {
+                    // Persist credentials if requested
+                    if (config.saveCredentials == true && config.credentials != null) {
+                        preferencesManager.saveAdapterCredentials(config.folderId, config.credentials.username, config.credentials.password)
+                    }
+
                     _snackbarMessage.emit("Sync folder updated")
                     loadSyncFolders()
                 } else {
@@ -167,18 +188,18 @@ class FolderSyncViewModel @Inject constructor(
             try {
                 // Enqueue WorkManager job for background sync
                 val workRequest = FolderSyncWorker.createOneTimeRequest(
-                    folderId = folderId.toLong(),
+                    folderId = folderId,
                     isManual = true
                 )
-                
+
                 workManager.enqueue(workRequest)
-                
+
                 // Schedule periodic sync if auto-sync is enabled
                 val state = _uiState.value
                 if (state is FolderSyncState.Success) {
                     val folder = state.folders.find { it.id == folderId }
                     if (folder?.autoSync == true) {
-                        schedulePeriodicSync(folderId.toLong())
+                        schedulePeriodicSync(folderId)
                     }
                 }
                 
@@ -196,7 +217,7 @@ class FolderSyncViewModel @Inject constructor(
     /**
      * Schedule periodic background sync for a folder.
      */
-    private fun schedulePeriodicSync(folderId: Long) {
+    private fun schedulePeriodicSync(folderId: String) {
         val periodicWork = FolderSyncWorker.createPeriodicRequest(folderId)
         workManager.enqueueUniquePeriodicWork(
             "${FolderSyncWorker.WORK_NAME}_$folderId",
@@ -252,7 +273,7 @@ class FolderSyncViewModel @Inject constructor(
      * Resolve conflicts with specified resolutions.
      * Triggers a new sync with the resolved actions.
      */
-    fun resolveConflicts(folderId: Long, resolutions: Map<String, ConflictResolution>) {
+    fun resolveConflicts(folderId: String, resolutions: Map<String, ConflictResolution>) {
         viewModelScope.launch {
             try {
                 // Apply resolutions by triggering targeted uploads/downloads
@@ -263,7 +284,7 @@ class FolderSyncViewModel @Inject constructor(
                 _pendingConflicts.value = emptyList()
                 
                 // Re-trigger sync which will now succeed without conflicts
-                triggerSync(folderId.toString())
+                triggerSync(folderId)
                 
                 _snackbarMessage.emit("Konflikte aufgelöst, Synchronisation läuft")
                 
@@ -276,7 +297,7 @@ class FolderSyncViewModel @Inject constructor(
     /**
      * Dismiss conflicts without resolving (skip for now).
      */
-    fun dismissConflicts(folderId: Long) {
+    fun dismissConflicts(folderId: String) {
         viewModelScope.launch {
             preferencesManager.clearPendingConflicts(folderId)
             _pendingConflicts.value = emptyList()
@@ -363,7 +384,10 @@ data class SyncFolderCreateConfig(
     val syncType: SyncType,
     val autoSync: Boolean,
     val conflictResolution: ConflictResolution,
-    val excludePatterns: List<String>
+    val excludePatterns: List<String>,
+    val adapterType: String = "webdav",
+    val credentials: Credentials? = null,
+    val saveCredentials: Boolean = false
 )
 
 /**
@@ -375,5 +399,16 @@ data class SyncFolderUpdateConfig(
     val syncType: SyncType?,
     val autoSync: Boolean?,
     val conflictResolution: ConflictResolution?,
-    val excludePatterns: List<String>?
+    val excludePatterns: List<String>?,
+    val adapterType: String? = null,
+    val credentials: Credentials? = null,
+    val saveCredentials: Boolean? = null
 )
+
+data class Credentials(val username: String?, val password: String?)
+
+// Helper to load stored adapter credentials for a folder
+suspend fun PreferencesManager.loadStoredCredentialsFor(folderId: String): Credentials? {
+    val (u, p) = getAdapterCredentials(folderId)
+    return if (u != null || p != null) Credentials(u, p) else null
+}

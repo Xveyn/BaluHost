@@ -14,12 +14,14 @@ import java.util.Base64
 class ImportVpnConfigUseCaseTest {
     
     private lateinit var preferencesManager: PreferencesManager
+    private lateinit var context: android.content.Context
     private lateinit var importVpnConfigUseCase: ImportVpnConfigUseCase
     
     @Before
     fun setup() {
         preferencesManager = mockk(relaxed = true)
-        importVpnConfigUseCase = ImportVpnConfigUseCase(preferencesManager)
+        context = mockk(relaxed = true)
+        importVpnConfigUseCase = ImportVpnConfigUseCase(context, preferencesManager)
     }
     
     @After

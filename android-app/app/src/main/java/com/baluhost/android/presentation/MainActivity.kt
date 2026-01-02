@@ -41,6 +41,9 @@ class MainActivity : ComponentActivity() {
     
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        // Initialize app logger
+        com.baluhost.android.util.Logger.init(applicationContext)
+
         setContent {
             BaluHostTheme {
                 Surface(

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.schemas.files import (
     FileListResponse,
     FileOperationResponse,
@@ -30,7 +31,9 @@ router = APIRouter()
 
 # --- Permissions Endpoints ---
 @router.get("/permissions", response_model=FilePermissions)
+@user_limiter.limit(get_limit("file_list"))
 async def get_permissions(
+    request: Request,
     path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -59,7 +62,9 @@ async def get_permissions(
     )
 
 @router.put("/permissions", response_model=FilePermissions)
+@user_limiter.limit(get_limit("file_delete"))
 async def set_permissions(
+    request: Request,
     payload: FilePermissionsRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -191,7 +196,9 @@ async def get_mountpoints(
 
 
 @router.get("/list", response_model=FileListResponse)
+@user_limiter.limit(get_limit("file_list"))
 async def list_files(
+    request: Request,
     path: str = "",
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -215,7 +222,9 @@ async def list_files(
 
 
 @router.get("/download/{resource_path:path}")
+@user_limiter.limit(get_limit("file_download"))
 async def download_file(
+    request: Request,
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -326,7 +335,9 @@ async def download_file_by_id(
 
 
 @router.post("/upload", response_model=FileUploadResponse)
+@user_limiter.limit(get_limit("file_upload"))
 async def upload_files(
+    request: Request,
     files: list[UploadFile] | None = File(None),
     file: UploadFile | None = File(None),
     path: str = Form(""),
@@ -386,7 +397,9 @@ async def get_available_storage(
 
 
 @router.delete("/raw/{resource_path:path}", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_delete"))
 async def delete_path_raw(
+    request: Request,
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),

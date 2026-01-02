@@ -10,11 +10,14 @@ apply_asyncio_patches()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 from app import __version__
 from app.api.routes import api_router
 from app.core.config import settings
 from app.core.database import init_db
+from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry, sync_background
 from app.services.network_discovery import NetworkDiscoveryService
@@ -136,6 +139,10 @@ def create_app() -> FastAPI:
         docs_url=None,  # Disable default docs
         redoc_url=None,  # Disable default redoc
     )
+    
+    # Add rate limiting state and exception handler
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
 
     # Add device tracking middleware (updates last_seen for mobile devices)
     app.add_middleware(DeviceTrackingMiddleware)

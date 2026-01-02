@@ -7,7 +7,7 @@ import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
 import RaidManagement from './pages/RaidManagement';
 import Logging from './pages/Logging';
-import ApiDocs from './pages/ApiDocs';
+import ApiCenterPage from './pages/ApiCenterPage';
 import SharesPage from './pages/SharesPage';
 import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
@@ -270,7 +270,7 @@ function App() {
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
-                <ApiDocs />
+                <ApiCenterPage />
               </Layout>
             ) : (
               <Navigate to="/login" />

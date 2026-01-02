@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.rate_limiter import limiter, get_limit
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserPublic
 from app.services import auth as auth_service
@@ -13,6 +14,7 @@ router = APIRouter()
 
 
 @router.post("/login", response_model=TokenResponse)
+@limiter.limit(get_limit("auth_login"))
 async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
@@ -46,6 +48,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit(get_limit("auth_register"))
 async def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None

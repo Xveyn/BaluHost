@@ -41,6 +41,14 @@ data class SyncFolderCreateDto(
     val autoSync: Boolean = true,
     @SerializedName("conflict_resolution")
     val conflictResolution: String = "keep_newest",
+    @SerializedName("adapter_type")
+    val adapterType: String = "webdav",
+    @SerializedName("adapter_username")
+    val adapterUsername: String? = null,
+    @SerializedName("adapter_password")
+    val adapterPassword: String? = null,
+    @SerializedName("save_credentials")
+    val saveCredentials: Boolean = false,
     @SerializedName("exclude_patterns")
     val excludePatterns: List<String> = emptyList()
 )
@@ -54,6 +62,14 @@ data class SyncFolderUpdateDto(
     val autoSync: Boolean? = null,
     @SerializedName("conflict_resolution")
     val conflictResolution: String? = null,
+    @SerializedName("adapter_type")
+    val adapterType: String? = null,
+    @SerializedName("adapter_username")
+    val adapterUsername: String? = null,
+    @SerializedName("adapter_password")
+    val adapterPassword: String? = null,
+    @SerializedName("save_credentials")
+    val saveCredentials: Boolean? = null,
     @SerializedName("exclude_patterns")
     val excludePatterns: List<String>? = null,
     @SerializedName("status")

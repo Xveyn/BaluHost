@@ -10,6 +10,7 @@ import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -33,6 +34,7 @@ fun FolderSyncScreen(
     
     var showFolderPicker by remember { mutableStateOf(false) }
     var showConfigDialog by remember { mutableStateOf(false) }
+    var showWebDavDialog by remember { mutableStateOf(false) }
     var showConflictDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<SyncFolderConfig?>(null) }
     var selectedFolderUri by remember { mutableStateOf<Uri?>(null) }
@@ -56,6 +58,11 @@ fun FolderSyncScreen(
                             contentDescription = "Zurück",
                             tint = Sky400
                         )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { showWebDavDialog = true }) {
+                        Icon(imageVector = Icons.Default.Cloud, contentDescription = "WebDAV", tint = Sky400)
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -125,6 +132,98 @@ fun FolderSyncScreen(
             onDismiss = { showFolderPicker = false }
         )
     }
+
+    // WebDAV modal (inline)
+    if (showWebDavDialog) {
+        val webDavVm: com.baluhost.android.presentation.viewmodel.WebDavViewModel = hiltViewModel()
+        var wdUsername by remember { mutableStateOf("") }
+        var wdPassword by remember { mutableStateOf("") }
+        var wdPath by remember { mutableStateOf("") }
+
+        val wdListing by webDavVm.listing.collectAsState()
+        val wdAuthOk by webDavVm.authOk.collectAsState()
+
+        AlertDialog(
+            onDismissRequest = { showWebDavDialog = false },
+            title = { Text("WebDAV verbinden") },
+            text = {
+                Column(modifier = Modifier.fillMaxWidth()) {
+                    OutlinedTextField(
+                        value = wdUsername,
+                        onValueChange = { wdUsername = it },
+                        label = { Text("Benutzer") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = wdPassword,
+                        onValueChange = { wdPassword = it },
+                        label = { Text("Passwort") },
+                        visualTransformation = androidx.compose.ui.text.input.PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth()
+                    )
+                    Spacer(modifier = Modifier.height(8.dp))
+                    OutlinedTextField(
+                        value = wdPath,
+                        onValueChange = { wdPath = it },
+                        label = { Text("Remote Path (URL)") },
+                        modifier = Modifier.fillMaxWidth()
+                    )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Button(onClick = { webDavVm.testCredentials(wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) }) {
+                            Text("Test Credentials")
+                        }
+                        Button(onClick = { webDavVm.listRemote(wdPath, wdUsername.ifBlank { null }, wdPassword.ifBlank { null }) }) {
+                            Text("List")
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    wdAuthOk?.let { ok ->
+                        if (ok) Text("Authentication successful", color = Color(0xFF2E7D32))
+                        else Text("Authentication failed", color = Color(0xFFB00020))
+                    }
+
+                    Spacer(modifier = Modifier.height(8.dp))
+
+                    if (wdListing.isNotEmpty()) {
+                        LazyColumn(modifier = Modifier.heightIn(max = 200.dp)) {
+                            items(wdListing) { item ->
+                                Row(modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(8.dp)) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(item.name, color = Slate100)
+                                        Text("${item.size} bytes", style = MaterialTheme.typography.bodySmall, color = Slate300)
+                                    }
+                                    Button(onClick = {
+                                        // select this remote path and open config dialog
+                                        selectedFolderUri = Uri.parse(item.uri)
+                                        selectedFolderName = item.name
+                                        showWebDavDialog = false
+                                        showConfigDialog = true
+                                    }) {
+                                        Text("Select")
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { showWebDavDialog = false }) { Text("Close") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showWebDavDialog = false }) { Text("Cancel") }
+            },
+            containerColor = Slate900
+        )
+    }
     
     // Configuration dialog
     if (showConfigDialog) {
@@ -157,17 +256,17 @@ fun FolderSyncScreen(
         ConflictResolutionDialog(
             conflicts = pendingConflicts,
             onResolve = { resolutions ->
-                // Get folder ID from first conflict
-                val folderId = pendingConflicts.firstOrNull()?.id?.substringBefore('_')?.toLongOrNull()
-                if (folderId != null) {
+                // Get folder ID from first conflict (string prefix)
+                val folderId = pendingConflicts.firstOrNull()?.id?.substringBefore('_')
+                if (!folderId.isNullOrEmpty()) {
                     viewModel.resolveConflicts(folderId, resolutions)
                 }
                 showConflictDialog = false
             },
             onDismiss = {
-                // Get folder ID from first conflict
-                val folderId = pendingConflicts.firstOrNull()?.id?.substringBefore('_')?.toLongOrNull()
-                if (folderId != null) {
+                // Get folder ID from first conflict (string prefix)
+                val folderId = pendingConflicts.firstOrNull()?.id?.substringBefore('_')
+                if (!folderId.isNullOrEmpty()) {
                     viewModel.dismissConflicts(folderId)
                 }
                 showConflictDialog = false

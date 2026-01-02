@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.models.user import User
 from app.models.file_metadata import FileMetadata
 from app.services.shares import ShareService
@@ -23,6 +24,7 @@ router = APIRouter()
 # ===========================
 
 @router.post("/links", response_model=ShareLinkResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("share_create"))
 async def create_share_link(
     data: ShareLinkCreate,
     request: Request,
@@ -78,7 +80,9 @@ async def create_share_link(
 
 
 @router.get("/links", response_model=List[ShareLinkResponse])
+@user_limiter.limit(get_limit("share_list"))
 async def list_share_links(
+    request: Request,
     include_expired: bool = False,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
@@ -236,6 +240,7 @@ async def delete_share_link(
 # ===========================
 
 @router.post("/public/{token}/access")
+@limiter.limit(get_limit("public_share"))
 async def access_share_link(
     token: str,
     data: ShareLinkAccessRequest,

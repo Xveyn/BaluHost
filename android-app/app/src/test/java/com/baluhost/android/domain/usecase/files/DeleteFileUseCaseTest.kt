@@ -1,6 +1,7 @@
 package com.baluhost.android.domain.usecase.files
 
-import com.baluhost.android.domain.repository.FilesRepository
+import com.baluhost.android.data.remote.api.FilesApi
+import com.baluhost.android.data.remote.dto.DeleteFileResponse
 import com.baluhost.android.util.Result
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -11,13 +12,13 @@ import org.junit.Assert.*
 
 class DeleteFileUseCaseTest {
     
-    private lateinit var filesRepository: FilesRepository
+    private lateinit var filesApi: FilesApi
     private lateinit var deleteFileUseCase: DeleteFileUseCase
     
     @Before
     fun setup() {
-        filesRepository = mockk()
-        deleteFileUseCase = DeleteFileUseCase(filesRepository)
+        filesApi = mockk()
+        deleteFileUseCase = DeleteFileUseCase(filesApi)
     }
     
     @After
@@ -30,9 +31,9 @@ class DeleteFileUseCaseTest {
         // Given
         val filePath = "documents/file.txt"
         
-        coEvery { 
-            filesRepository.deleteFile(filePath)
-        } returns Result.Success(true)
+        coEvery {
+            filesApi.deleteFile(filePath)
+        } returns DeleteFileResponse(message = "deleted", path = filePath)
         
         // When
         val result = deleteFileUseCase(filePath)
@@ -43,7 +44,7 @@ class DeleteFileUseCaseTest {
         assertTrue(successResult.data)
         
         coVerify(exactly = 1) {
-            filesRepository.deleteFile(filePath)
+            filesApi.deleteFile(filePath)
         }
     }
     
@@ -52,9 +53,9 @@ class DeleteFileUseCaseTest {
         // Given
         val folderPath = "documents/folder"
         
-        coEvery { 
-            filesRepository.deleteFile(folderPath)
-        } returns Result.Success(true)
+        coEvery {
+            filesApi.deleteFile(folderPath)
+        } returns DeleteFileResponse(message = "deleted", path = folderPath)
         
         // When
         val result = deleteFileUseCase(folderPath)
@@ -71,9 +72,9 @@ class DeleteFileUseCaseTest {
         val filePath = "documents/nonexistent.txt"
         val errorMessage = "File not found"
         
-        coEvery { 
-            filesRepository.deleteFile(filePath)
-        } returns Result.Error(Exception(errorMessage))
+        coEvery {
+            filesApi.deleteFile(filePath)
+        } throws Exception(errorMessage)
         
         // When
         val result = deleteFileUseCase(filePath)
@@ -90,9 +91,9 @@ class DeleteFileUseCaseTest {
         val filePath = "documents/protected.txt"
         val errorMessage = "Permission denied"
         
-        coEvery { 
-            filesRepository.deleteFile(filePath)
-        } returns Result.Error(Exception(errorMessage))
+        coEvery {
+            filesApi.deleteFile(filePath)
+        } throws Exception(errorMessage)
         
         // When
         val result = deleteFileUseCase(filePath)
@@ -108,9 +109,9 @@ class DeleteFileUseCaseTest {
         // Given
         val filePath = "documents/file.txt"
         
-        coEvery { 
-            filesRepository.deleteFile(filePath)
-        } returns Result.Error(Exception("Network error"))
+        coEvery {
+            filesApi.deleteFile(filePath)
+        } throws Exception("Network error")
         
         // When
         val result = deleteFileUseCase(filePath)

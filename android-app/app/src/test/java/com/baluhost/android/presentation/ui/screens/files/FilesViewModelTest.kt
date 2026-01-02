@@ -25,6 +25,12 @@ class FilesViewModelTest {
     private lateinit var uploadFileUseCase: UploadFileUseCase
     private lateinit var downloadFileUseCase: DownloadFileUseCase
     private lateinit var deleteFileUseCase: DeleteFileUseCase
+    private lateinit var moveFileUseCase: com.baluhost.android.domain.usecase.files.MoveFileUseCase
+    private lateinit var preferencesManager: com.baluhost.android.data.local.datastore.PreferencesManager
+    private lateinit var networkMonitor: com.baluhost.android.data.network.NetworkMonitor
+    private lateinit var serverConnectivityChecker: com.baluhost.android.data.network.ServerConnectivityChecker
+    private lateinit var offlineQueueManager: com.baluhost.android.domain.usecase.OfflineQueueManager
+    private lateinit var networkStateManager: com.baluhost.android.util.NetworkStateManager
     private lateinit var viewModel: FilesViewModel
     
     private val testDispatcher = StandardTestDispatcher()
@@ -36,15 +42,27 @@ class FilesViewModelTest {
         uploadFileUseCase = mockk()
         downloadFileUseCase = mockk()
         deleteFileUseCase = mockk()
-        
+        moveFileUseCase = mockk()
+        preferencesManager = mockk(relaxed = true)
+        networkMonitor = mockk(relaxed = true)
+        serverConnectivityChecker = mockk(relaxed = true)
+        offlineQueueManager = mockk(relaxed = true)
+        networkStateManager = mockk(relaxed = true)
+
         // Default mock for initial load
-        coEvery { getFilesUseCase(any()) } returns Result.Success(emptyList())
-        
+        coEvery { getFilesUseCase(any(), any()) } returns Result.Success(emptyList())
+
         viewModel = FilesViewModel(
             getFilesUseCase,
             uploadFileUseCase,
             downloadFileUseCase,
-            deleteFileUseCase
+            deleteFileUseCase,
+            moveFileUseCase,
+            preferencesManager,
+            networkMonitor,
+            serverConnectivityChecker,
+            offlineQueueManager,
+            networkStateManager
         )
     }
     
@@ -58,14 +76,25 @@ class FilesViewModelTest {
     fun `initial state should load files at root`() = runTest {
         // Given
         val rootFiles = listOf(
-            FileItem("Documents", "Documents", 0, true, System.currentTimeMillis() / 1000, "user"),
-            FileItem("Pictures", "Pictures", 0, true, System.currentTimeMillis() / 1000, "user")
+            FileItem("Documents", "Documents", 0, true, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user"),
+            FileItem("Pictures", "Pictures", 0, true, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
         
         coEvery { getFilesUseCase("") } returns Result.Success(rootFiles)
         
         // When
-        viewModel = FilesViewModel(getFilesUseCase, uploadFileUseCase, downloadFileUseCase, deleteFileUseCase)
+        viewModel = FilesViewModel(
+            getFilesUseCase,
+            uploadFileUseCase,
+            downloadFileUseCase,
+            deleteFileUseCase,
+            moveFileUseCase,
+            preferencesManager,
+            networkMonitor,
+            serverConnectivityChecker,
+            offlineQueueManager,
+            networkStateManager
+        )
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then
@@ -81,7 +110,7 @@ class FilesViewModelTest {
     fun `loadFiles should update state with file list`() = runTest {
         // Given
         val files = listOf(
-            FileItem("file1.txt", "documents/file1.txt", 1024, false, System.currentTimeMillis() / 1000, "user")
+            FileItem("file1.txt", "documents/file1.txt", 1024, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
         
         coEvery { getFilesUseCase("documents") } returns Result.Success(files)
@@ -108,7 +137,7 @@ class FilesViewModelTest {
     fun `navigateToFolder should update path and load files`() = runTest {
         // Given
         val folderFiles = listOf(
-            FileItem("photo.jpg", "Pictures/photo.jpg", 2048, false, System.currentTimeMillis() / 1000, "user")
+            FileItem("photo.jpg", "Pictures/photo.jpg", 2048, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
         
         coEvery { getFilesUseCase("Pictures") } returns Result.Success(folderFiles)
@@ -135,11 +164,11 @@ class FilesViewModelTest {
     fun `navigateBack should return to previous path`() = runTest {
         // Given
         val rootFiles = listOf(
-            FileItem("Documents", "Documents", 0, true, System.currentTimeMillis() / 1000, "user")
+            FileItem("Documents", "Documents", 0, true, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
-        
+
         val subFiles = listOf(
-            FileItem("file.txt", "Documents/file.txt", 100, false, System.currentTimeMillis() / 1000, "user")
+            FileItem("file.txt", "Documents/file.txt", 100, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
         
         coEvery { getFilesUseCase("") } returns Result.Success(rootFiles)
@@ -182,14 +211,14 @@ class FilesViewModelTest {
         every { file.name } returns "test.txt"
         
         val refreshedFiles = listOf(
-            FileItem("test.txt", "test.txt", 100, false, System.currentTimeMillis() / 1000, "user")
+            FileItem("test.txt", "test.txt", 100, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user")
         )
-        
-        coEvery { 
-            uploadFileUseCase(any(), any(), any())
-        } returns flowOf(Result.Success(true))
-        
-        coEvery { getFilesUseCase("") } returns Result.Success(refreshedFiles)
+
+        coEvery {
+            uploadFileUseCase(any(), any())
+        } returns Result.Success(refreshedFiles[0])
+
+        coEvery { getFilesUseCase("", false) } returns Result.Success(refreshedFiles)
         
         testDispatcher.scheduler.advanceUntilIdle()
         
@@ -220,11 +249,11 @@ class FilesViewModelTest {
         val filePath = "documents/file.txt"
         
         coEvery { deleteFileUseCase(filePath) } returns Result.Success(true)
-        coEvery { getFilesUseCase("documents") } returns Result.Success(emptyList())
+        coEvery { getFilesUseCase("documents", false) } returns Result.Success(emptyList())
         
         // Set current path first
-        coEvery { getFilesUseCase("documents") } returns Result.Success(
-            listOf(FileItem("file.txt", filePath, 100, false, System.currentTimeMillis() / 1000, "user"))
+        coEvery { getFilesUseCase("documents", false) } returns Result.Success(
+            listOf(FileItem("file.txt", filePath, 100, false, java.time.Instant.ofEpochSecond(System.currentTimeMillis() / 1000), "user"))
         )
         
         viewModel.loadFiles("documents")

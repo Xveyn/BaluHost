@@ -43,7 +43,7 @@ class FolderSyncWorker @AssistedInject constructor(
         const val PROGRESS_CURRENT = "current"
         const val PROGRESS_TOTAL = "total"
         
-        fun createOneTimeRequest(folderId: Long, isManual: Boolean = false): OneTimeWorkRequest {
+        fun createOneTimeRequest(folderId: String, isManual: Boolean = false): OneTimeWorkRequest {
             val inputData = workDataOf(
                 INPUT_FOLDER_ID to folderId,
                 INPUT_IS_MANUAL to isManual
@@ -59,7 +59,7 @@ class FolderSyncWorker @AssistedInject constructor(
                 .build()
         }
         
-        fun createPeriodicRequest(folderId: Long): PeriodicWorkRequest {
+        fun createPeriodicRequest(folderId: String): PeriodicWorkRequest {
             val inputData = workDataOf(INPUT_FOLDER_ID to folderId)
             
             return PeriodicWorkRequestBuilder<FolderSyncWorker>(

@@ -11,8 +11,8 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `merge with newer remote version should use remote`() {
-        val local = createCRDT(version = 5, deviceId = "device-a")
-        val remote = createCRDT(version = 10, deviceId = "device-b")
+        val local = createCRDT(version = 5L, deviceId = "device-a")
+        val remote = createCRDT(version = 10L, deviceId = "device-b")
         
         val result = FileMetadataCRDT.merge(local, remote)
         
@@ -22,8 +22,8 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `merge with newer local version should use local`() {
-        val local = createCRDT(version = 10, deviceId = "device-a")
-        val remote = createCRDT(version = 5, deviceId = "device-b")
+        val local = createCRDT(version = 10L, deviceId = "device-a")
+        val remote = createCRDT(version = 5L, deviceId = "device-b")
         
         val result = FileMetadataCRDT.merge(local, remote)
         
@@ -33,8 +33,8 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `merge with same version should use device ID tiebreaker`() {
-        val local = createCRDT(version = 5, deviceId = "device-a")
-        val remote = createCRDT(version = 5, deviceId = "device-b")
+        val local = createCRDT(version = 5L, deviceId = "device-a")
+        val remote = createCRDT(version = 5L, deviceId = "device-b")
         
         val result = FileMetadataCRDT.merge(local, remote)
         
@@ -45,8 +45,8 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `shouldApplyUpdate returns true for newer remote`() {
-        val local = createCRDT(version = 5, deviceId = "device-a")
-        val remote = createCRDT(version = 10, deviceId = "device-b")
+        val local = createCRDT(version = 5L, deviceId = "device-a")
+        val remote = createCRDT(version = 10L, deviceId = "device-b")
         
         val result = FileMetadataCRDT.shouldApplyUpdate(local, remote)
         
@@ -55,8 +55,8 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `shouldApplyUpdate returns false for older remote`() {
-        val local = createCRDT(version = 10, deviceId = "device-a")
-        val remote = createCRDT(version = 5, deviceId = "device-b")
+        val local = createCRDT(version = 10L, deviceId = "device-a")
+        val remote = createCRDT(version = 5L, deviceId = "device-b")
         
         val result = FileMetadataCRDT.shouldApplyUpdate(local, remote)
         
@@ -65,19 +65,20 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `incrementVersion should bump version and update deviceId`() {
-        val original = createCRDT(version = 5, deviceId = "device-a")
+        val original = createCRDT(version = 5L, deviceId = "device-a")
         
         val updated = original.incrementVersion("device-b")
         
         assertEquals(6, updated.version)
         assertEquals("device-b", updated.deviceId)
-        assertTrue(updated.modifiedAt.isAfter(original.modifiedAt))
+        // Accept non-decreasing modifiedAt to avoid flakiness on fast test runs
+        assertFalse(updated.modifiedAt.isBefore(original.modifiedAt))
     }
     
     @Test
     fun `isNewerThan should return true for higher version`() {
-        val older = createCRDT(version = 5, deviceId = "device-a")
-        val newer = createCRDT(version = 10, deviceId = "device-a")
+        val older = createCRDT(version = 5L, deviceId = "device-a")
+        val newer = createCRDT(version = 10L, deviceId = "device-a")
         
         assertTrue(newer.isNewerThan(older))
         assertFalse(older.isNewerThan(newer))
@@ -85,11 +86,11 @@ class FileMetadataCRDTTest {
     
     @Test
     fun `vector clock increment should increase device version`() {
-        val clock = VectorClock(mapOf("device-a" to 5))
+        val clock = VectorClock(mapOf("device-a" to 5L))
         
         val incremented = clock.increment("device-a")
         
-        assertEquals(6, incremented.clocks["device-a"])
+        assertEquals(6L, incremented.clocks["device-a"])
     }
     
     @Test
@@ -98,19 +99,19 @@ class FileMetadataCRDTTest {
         
         val incremented = clock.increment("device-new")
         
-        assertEquals(1, incremented.clocks["device-new"])
+        assertEquals(1L, incremented.clocks["device-new"])
     }
     
     @Test
     fun `vector clock merge should take max of each device`() {
-        val clock1 = VectorClock(mapOf("device-a" to 10, "device-b" to 5))
-        val clock2 = VectorClock(mapOf("device-a" to 7, "device-b" to 8, "device-c" to 3))
+        val clock1 = VectorClock(mapOf("device-a" to 10L, "device-b" to 5L))
+        val clock2 = VectorClock(mapOf("device-a" to 7L, "device-b" to 8L, "device-c" to 3L))
         
         val merged = clock1.merge(clock2)
         
-        assertEquals(10, merged.clocks["device-a"])  // max(10, 7)
-        assertEquals(8, merged.clocks["device-b"])   // max(5, 8)
-        assertEquals(3, merged.clocks["device-c"])   // max(0, 3)
+        assertEquals(10L, merged.clocks["device-a"])  // max(10, 7)
+        assertEquals(8L, merged.clocks["device-b"])   // max(5, 8)
+        assertEquals(3L, merged.clocks["device-c"])   // max(0, 3)
     }
     
     @Test

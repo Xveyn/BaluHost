@@ -7,5 +7,19 @@ from app.models.share_link import ShareLink
 from app.models.file_share import FileShare
 from app.models.backup import Backup
 from app.models.vpn import VPNConfig, VPNClient
+from app.models.mobile import MobileDevice
+from app.models.rate_limit_config import RateLimitConfig
 
-__all__ = ["Base", "User", "FileMetadata", "AuditLog", "ShareLink", "FileShare", "Backup", "VPNConfig", "VPNClient"]
+__all__ = [
+    "Base",
+    "User",
+    "FileMetadata",
+    "AuditLog",
+    "ShareLink",
+    "FileShare",
+    "Backup",
+    "VPNConfig",
+    "VPNClient",
+    "MobileDevice",
+    "RateLimitConfig"
+]

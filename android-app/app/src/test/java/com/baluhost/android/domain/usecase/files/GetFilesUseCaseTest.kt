@@ -1,7 +1,9 @@
 package com.baluhost.android.domain.usecase.files
 
 import com.baluhost.android.domain.model.FileItem
-import com.baluhost.android.domain.repository.FilesRepository
+import com.baluhost.android.data.repository.FileRepository
+import kotlinx.coroutines.flow.flowOf
+import java.time.Instant
 import com.baluhost.android.util.Result
 import io.mockk.*
 import kotlinx.coroutines.test.runTest
@@ -12,13 +14,13 @@ import org.junit.Assert.*
 
 class GetFilesUseCaseTest {
     
-    private lateinit var filesRepository: FilesRepository
+    private lateinit var fileRepository: FileRepository
     private lateinit var getFilesUseCase: GetFilesUseCase
     
     @Before
     fun setup() {
-        filesRepository = mockk()
-        getFilesUseCase = GetFilesUseCase(filesRepository)
+        fileRepository = mockk()
+        getFilesUseCase = GetFilesUseCase(fileRepository)
     }
     
     @After
@@ -36,7 +38,7 @@ class GetFilesUseCaseTest {
                 path = "documents/file1.txt",
                 size = 1024,
                 isDirectory = false,
-                modifiedAt = System.currentTimeMillis() / 1000,
+                modifiedAt = Instant.ofEpochSecond(System.currentTimeMillis() / 1000),
                 owner = "user1"
             ),
             FileItem(
@@ -44,14 +46,14 @@ class GetFilesUseCaseTest {
                 path = "documents/folder1",
                 size = 0,
                 isDirectory = true,
-                modifiedAt = System.currentTimeMillis() / 1000,
+                modifiedAt = Instant.ofEpochSecond(System.currentTimeMillis() / 1000),
                 owner = "user1"
             )
         )
-        
-        coEvery { 
-            filesRepository.listFiles(path)
-        } returns Result.Success(expectedFiles)
+
+        coEvery {
+            fileRepository.getFiles(path, false)
+        } returns flowOf(expectedFiles)
         
         // When
         val result = getFilesUseCase(path)
@@ -65,7 +67,7 @@ class GetFilesUseCaseTest {
         assertTrue(successResult.data[1].isDirectory)
         
         coVerify(exactly = 1) {
-            filesRepository.listFiles(path)
+            fileRepository.getFiles(path, false)
         }
     }
     
@@ -74,9 +76,9 @@ class GetFilesUseCaseTest {
         // Given
         val path = "empty_folder"
         
-        coEvery { 
-            filesRepository.listFiles(path)
-        } returns Result.Success(emptyList())
+        coEvery {
+            fileRepository.getFiles(path, false)
+        } returns flowOf(emptyList())
         
         // When
         val result = getFilesUseCase(path)
@@ -93,9 +95,9 @@ class GetFilesUseCaseTest {
         val path = "documents"
         val errorMessage = "Failed to list files"
         
-        coEvery { 
-            filesRepository.listFiles(path)
-        } returns Result.Error(Exception(errorMessage))
+        coEvery {
+            fileRepository.getFiles(path, false)
+        } throws Exception(errorMessage)
         
         // When
         val result = getFilesUseCase(path)
@@ -116,7 +118,7 @@ class GetFilesUseCaseTest {
                 path = "Documents",
                 size = 0,
                 isDirectory = true,
-                modifiedAt = System.currentTimeMillis() / 1000,
+                modifiedAt = Instant.ofEpochSecond(System.currentTimeMillis() / 1000),
                 owner = "user1"
             ),
             FileItem(
@@ -124,14 +126,14 @@ class GetFilesUseCaseTest {
                 path = "Pictures",
                 size = 0,
                 isDirectory = true,
-                modifiedAt = System.currentTimeMillis() / 1000,
+                modifiedAt = Instant.ofEpochSecond(System.currentTimeMillis() / 1000),
                 owner = "user1"
             )
         )
-        
-        coEvery { 
-            filesRepository.listFiles(path)
-        } returns Result.Success(rootFiles)
+
+        coEvery {
+            fileRepository.getFiles(path, false)
+        } returns flowOf(rootFiles)
         
         // When
         val result = getFilesUseCase(path)

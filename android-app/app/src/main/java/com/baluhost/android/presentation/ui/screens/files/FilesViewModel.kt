@@ -56,6 +56,9 @@ class FilesViewModel @Inject constructor(
     private val _vpnBannerDismissed = MutableStateFlow(false)
     val vpnBannerDismissed: StateFlow<Boolean> = _vpnBannerDismissed.asStateFlow()
     
+    private val _isVpnActive = MutableStateFlow(false)
+    val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
+    
     private val pathStack = mutableListOf<String>()
     
     private var wasOffline = false
@@ -154,6 +157,8 @@ class FilesViewModel @Inject constructor(
                     networkStateManager.observeHomeNetworkStatus(serverUrl)
                         .collect { isHome -> 
                             _isInHomeNetwork.value = isHome
+                                // update explicit vpn active flag from network manager
+                                _isVpnActive.value = networkStateManager.isVpnActive()
                         }
                 }
             }

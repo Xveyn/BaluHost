@@ -48,6 +48,9 @@ class DashboardViewModel @Inject constructor(
     private val _vpnBannerDismissed = MutableStateFlow(false)
     val vpnBannerDismissed: StateFlow<Boolean> = _vpnBannerDismissed.asStateFlow()
     
+    private val _isVpnActive = MutableStateFlow(false)
+    val isVpnActive: StateFlow<Boolean> = _isVpnActive.asStateFlow()
+    
     private var pollingJob: kotlinx.coroutines.Job? = null
     
     init {
@@ -178,6 +181,7 @@ class DashboardViewModel @Inject constructor(
                     networkStateManager.observeHomeNetworkStatus(serverUrl)
                         .collect { isHome -> 
                             _isInHomeNetwork.value = isHome
+                                _isVpnActive.value = networkStateManager.isVpnActive()
                         }
                 }
             }
