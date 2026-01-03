@@ -1,0 +1,18 @@
+# CMake generation dependency list for this directory.
+C:/Program Files/CMake/share/cmake-4.2/Modules/BasicConfigVersion-AnyNewerVersion.cmake.in
+C:/Program Files/CMake/share/cmake-4.2/Modules/CMakePackageConfigHelpers.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/CheckCSourceCompiles.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/CheckIncludeFile.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/CheckLibraryExists.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/FindPackageHandleStandardArgs.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/FindPackageMessage.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/FindPython/Support.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/FindPython3.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/FindThreads.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/Internal/CheckSourceCompiles.cmake
+C:/Program Files/CMake/share/cmake-4.2/Modules/WriteBasicConfigVersionFile.cmake
+F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/googletest-src/googletest/CMakeLists.txt
+F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/googletest-src/googletest/cmake/Config.cmake.in
+F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/googletest-src/googletest/cmake/gtest.pc.in
+F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/googletest-src/googletest/cmake/gtest_main.pc.in
+F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/googletest-src/googletest/cmake/internal_utils.cmake

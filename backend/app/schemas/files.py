@@ -30,6 +30,7 @@ class FileItem(BaseModel):
     modified_at: datetime
     owner_id: str | None = None
     mime_type: str | None = None
+    file_id: int | None = None
 
 
 class FileListResponse(BaseModel):

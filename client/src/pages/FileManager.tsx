@@ -333,6 +333,12 @@ export default function FileManager({ user }: FileManagerProps) {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
   const [versionCounts, setVersionCounts] = useState<Record<number, number>>({});
+  const [vclQuota, setVclQuota] = useState<{
+    usagePercent: number;
+    warning: 'warning' | 'critical' | null;
+    current: number;
+    max: number;
+  } | null>(null);
 
   const getToken = (notify = true): string | null => {
     const token = localStorage.getItem('token');
@@ -342,6 +348,14 @@ export default function FileManager({ user }: FileManagerProps) {
     return token;
   };
 
+  const formatBytes = (bytes: number): string => {
+    if (bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
+  };
+
   const getErrorMessage = (error: any): string => {
     if (!error) return 'Unknown error';
     return error.error ?? error.detail ?? 'Unknown error';
@@ -349,6 +363,7 @@ export default function FileManager({ user }: FileManagerProps) {
 
     useEffect(() => {
       loadMountpoints();
+      loadVclQuota(); // Load quota on mount
     }, []);
 
     useEffect(() => {
@@ -357,6 +372,34 @@ export default function FileManager({ user }: FileManagerProps) {
         loadStorageInfo();
       }
     }, [currentPath, selectedMountpoint]);
+
+    // Load VCL Quota
+    const loadVclQuota = async () => {
+      try {
+        const quota = await vclApi.getQuota();
+        setVclQuota({
+          usagePercent: quota.usage_percent,
+          warning: quota.quota_warning as 'warning' | 'critical' | null,
+          current: quota.current_usage_bytes,
+          max: quota.max_size_bytes,
+        });
+        
+        // Show toast if warning/critical
+        if (quota.quota_warning === 'critical') {
+          toast.error(
+            `VCL Storage Critical: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
+            { duration: 8000 }
+          );
+        } else if (quota.quota_warning === 'warning') {
+          toast(
+            `VCL Storage Warning: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
+            { duration: 6000, icon: '⚠️' }
+          );
+        }
+      } catch (err) {
+        // Silently ignore quota errors
+      }
+    };
 
     // Load version counts for all files with file_id
     useEffect(() => {
@@ -582,6 +625,7 @@ export default function FileManager({ user }: FileManagerProps) {
         sessionStorage.removeItem('storage_info_cache');
         loadFiles(currentPath, false);
         loadStorageInfo();
+        loadVclQuota(); // Reload VCL quota after upload
       } else {
         const error = await response.json();
         toast.error(`Upload failed: ${getErrorMessage(error)}`);
@@ -885,6 +929,22 @@ export default function FileManager({ user }: FileManagerProps) {
               <span className="hidden sm:inline">Storage: </span>
               {formatFileSize(storageInfo.usedBytes)} / {formatFileSize(storageInfo.totalBytes)} used
               <span className="ml-2 text-sky-400">({formatFileSize(storageInfo.availableBytes)} available)</span>
+            </div>
+          )}
+          {vclQuota && (
+            <div className="mt-1 text-xs">
+              <span className={`inline-flex items-center gap-1 px-2 py-0.5 rounded ${
+                vclQuota.warning === 'critical'
+                  ? 'bg-red-500/20 text-red-300 border border-red-500/30'
+                  : vclQuota.warning === 'warning'
+                  ? 'bg-amber-500/20 text-amber-300 border border-amber-500/30'
+                  : 'bg-sky-500/10 text-sky-400 border border-sky-500/20'
+              }`}>
+                {vclQuota.warning === 'critical' && '🔴'}
+                {vclQuota.warning === 'warning' && '⚠️'}
+                {!vclQuota.warning && '📦'}
+                VCL: {vclQuota.usagePercent.toFixed(1)}% ({formatBytes(vclQuota.current)} / {formatBytes(vclQuota.max)})
+              </span>
             </div>
           )}
         </div>

@@ -3,6 +3,7 @@
 #include "sync/sync_engine.h"
 #include <string>
 #include <vector>
+#include <optional>
 #include <sqlite3.h>
 
 namespace baludesk {
@@ -49,9 +50,12 @@ public:
 
     // File metadata
     bool upsertFileMetadata(const FileMetadata& metadata);
-    FileMetadata getFileMetadata(const std::string& path);
+    bool upsertFileMetadata(const std::string& path, const std::string& folderId, uint64_t size, const std::string& checksum, const std::string& modifiedAt);
+    std::optional<FileMetadata> getFileMetadata(const std::string& path);
+    std::vector<FileMetadata> getFilesInFolder(const std::string& folderId);
     std::vector<FileMetadata> getChangedFilesSince(const std::string& timestamp);
     bool deleteFileMetadata(const std::string& path);
+    bool updateSyncFolderTimestamp(const std::string& folderId);
 
     // Conflicts
     bool logConflict(const Conflict& conflict);

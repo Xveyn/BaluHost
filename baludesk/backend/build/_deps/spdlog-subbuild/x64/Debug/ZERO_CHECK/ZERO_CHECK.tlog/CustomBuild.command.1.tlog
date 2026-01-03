@@ -1,0 +1,10 @@
+^F:\PROGRAMME (X86)\BALUHOST\BALUDESK\BACKEND\BUILD\_DEPS\SPDLOG-SUBBUILD\CMAKEFILES\8611938EDDB17431C679B4C7B4EED61B\GENERATE.STAMP.RULE
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SF:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild" "-BF:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild" --check-stamp-list CMakeFiles/generate.stamp.list --vs-solution-file "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild/spdlog-populate.sln"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

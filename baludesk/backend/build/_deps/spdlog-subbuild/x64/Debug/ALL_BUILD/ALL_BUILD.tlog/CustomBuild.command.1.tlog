@@ -1,0 +1,10 @@
+^F:\PROGRAMME (X86)\BALUHOST\BALUDESK\BACKEND\BUILD\_DEPS\SPDLOG-SUBBUILD\CMAKELISTS.TXT
+setlocal
+"C:\Program Files\CMake\bin\cmake.exe" "-SF:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild" "-BF:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild" --check-stamp-file "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/spdlog-subbuild/CMakeFiles/generate.stamp"
+if %errorlevel% neq 0 goto :cmEnd
+:cmEnd
+endlocal & call :cmErrorLevel %errorlevel% & goto :cmDone
+:cmErrorLevel
+exit /b %1
+:cmDone
+if %errorlevel% neq 0 goto :VCEnd

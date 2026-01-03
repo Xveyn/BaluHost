@@ -1,5 +1,6 @@
 """VCL (Version Control Light) API Routes."""
 from typing import List, Optional
+from datetime import datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -22,6 +23,7 @@ from app.schemas.vcl import (
     CleanupRequest,
     CleanupResponse,
 )
+from app.schemas.vcl_diff import VersionDiffResponse, DiffLine
 from app.services.vcl import VCLService
 from app.services.vcl_priority import VCLPriorityMode
 from app.services.audit_logger_db import get_audit_logger_db
@@ -274,6 +276,173 @@ async def restore_file_version(
         )
 
 
+@router.get("/versions/diff", response_model=VersionDiffResponse)
+@user_limiter.limit(get_limit("file_list"))
+async def get_version_diff(
+    request: Request,
+    response: Response,
+    version_id_old: int,
+    version_id_new: int,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> VersionDiffResponse:
+    """
+    Get diff between two file versions.
+    
+    Args:
+        version_id_old: ID of older version
+        version_id_new: ID of newer version
+        
+    Returns:
+        Diff between versions (line-by-line for text, binary marker otherwise)
+        
+    Raises:
+        404: Version not found or user has no access
+        400: Both versions must belong to same file
+    """
+    import difflib
+    from pathlib import Path
+    
+    # Get both versions
+    version_old = db.query(FileVersion).filter(
+        FileVersion.id == version_id_old,
+        FileVersion.user_id == user.id
+    ).first()
+    
+    version_new = db.query(FileVersion).filter(
+        FileVersion.id == version_id_new,
+        FileVersion.user_id == user.id
+    ).first()
+    
+    if not version_old or not version_new:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="One or both versions not found"
+        )
+    
+    # Check they belong to same file
+    if version_old.file_id != version_new.file_id:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Versions must belong to the same file"
+        )
+    
+    # Get file metadata for name
+    file_meta = db.query(FileMetadata).filter(FileMetadata.id == version_old.file_id).first()
+    if not file_meta:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="File not found")
+    
+    file_name = Path(file_meta.path).name
+    
+    # Helper to check if file is binary
+    def is_binary_content(content: bytes) -> bool:
+        """Check if content is binary."""
+        # Check for null bytes
+        if b'\x00' in content[:1024]:
+            return True
+        # Check for high ratio of non-text bytes
+        text_chars = bytearray({7,8,9,10,12,13,27} | set(range(0x20, 0x7f)))
+        non_text = len([b for b in content[:1024] if b not in text_chars])
+        return non_text / min(len(content[:1024]), 1024) > 0.3
+    
+    # Read content from storage
+    vcl_service = VCLService(db)
+    try:
+        content_old = vcl_service.read_version_content(version_old)
+        content_new = vcl_service.read_version_content(version_new)
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to read version content: {str(e)}"
+        )
+    
+    # Check if binary
+    is_binary = is_binary_content(content_old) or is_binary_content(content_new)
+    
+    if is_binary:
+        return VersionDiffResponse(
+            version_id_old=version_id_old,
+            version_id_new=version_id_new,
+            file_name=file_name,
+            is_binary=True,
+            old_size=len(content_old),
+            new_size=len(content_new),
+            message="Binary files cannot be compared line-by-line"
+        )
+    
+    # Text diff
+    try:
+        text_old = content_old.decode('utf-8')
+        text_new = content_new.decode('utf-8')
+    except UnicodeDecodeError:
+        return VersionDiffResponse(
+            version_id_old=version_id_old,
+            version_id_new=version_id_new,
+            file_name=file_name,
+            is_binary=True,
+            old_size=len(content_old),
+            new_size=len(content_new),
+            message="File encoding not supported"
+        )
+    
+    lines_old = text_old.splitlines(keepends=True)
+    lines_new = text_new.splitlines(keepends=True)
+    
+    # Generate unified diff
+    diff = list(difflib.unified_diff(lines_old, lines_new, lineterm=''))
+    
+    # Parse diff into structured format
+    diff_lines = []
+    old_line_num = 0
+    new_line_num = 0
+    
+    for line in diff[2:]:  # Skip header lines
+        if line.startswith('@@'):
+            # Parse line numbers from @@ -old_start,old_count +new_start,new_count @@
+            import re
+            match = re.match(r'@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@', line)
+            if match:
+                old_line_num = int(match.group(1)) - 1
+                new_line_num = int(match.group(2)) - 1
+            continue
+        
+        if line.startswith('-'):
+            old_line_num += 1
+            diff_lines.append(DiffLine(
+                line_number_old=old_line_num,
+                line_number_new=None,
+                content=line[1:],
+                type='removed'
+            ))
+        elif line.startswith('+'):
+            new_line_num += 1
+            diff_lines.append(DiffLine(
+                line_number_old=None,
+                line_number_new=new_line_num,
+                content=line[1:],
+                type='added'
+            ))
+        else:
+            old_line_num += 1
+            new_line_num += 1
+            diff_lines.append(DiffLine(
+                line_number_old=old_line_num,
+                line_number_new=new_line_num,
+                content=line[1:] if line.startswith(' ') else line,
+                type='unchanged'
+            ))
+    
+    return VersionDiffResponse(
+        version_id_old=version_id_old,
+        version_id_new=version_id_new,
+        file_name=file_name,
+        is_binary=False,
+        old_size=len(content_old),
+        new_size=len(content_new),
+        diff_lines=diff_lines
+    )
+
+
 @router.get("/quota", response_model=QuotaInfo)
 @user_limiter.limit(get_limit("file_list"))
 async def get_user_quota(
@@ -304,6 +473,13 @@ async def get_user_quota(
     max_size: int = int(settings.max_size_bytes)  # type: ignore
     usage_percent = (current_usage / max_size * 100) if max_size > 0 else 0
     
+    # Determine quota warning level
+    quota_warning = None
+    if usage_percent >= 95:
+        quota_warning = 'critical'
+    elif usage_percent >= 80:
+        quota_warning = 'warning'
+    
     # Check if cleanup needed
     cleanup_needed = needs_cleanup(settings)
     
@@ -317,6 +493,7 @@ async def get_user_quota(
         compression_enabled=bool(settings.compression_enabled),  # type: ignore
         dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
         cleanup_needed=cleanup_needed,
+        quota_warning=quota_warning,
     )
 
 
@@ -529,17 +706,42 @@ async def list_user_quotas(
     # Get ALL users first
     all_users = db.query(User).all()
     
+    # Get all existing settings in one query
+    existing_settings = {
+        s.user_id: s 
+        for s in db.query(VCLSettings).filter(
+            VCLSettings.user_id.in_([u.id for u in all_users])
+        ).all()
+    }
+    
+    # Create missing settings in batch (avoid locks)
+    from app.services.vcl import VCLService
+    vcl_service = VCLService(db)
+    
+    for user_obj in all_users:
+        if user_obj.id not in existing_settings:
+            # Create default settings
+            new_settings = VCLSettings(
+                user_id=user_obj.id,
+                max_size_bytes=10 * 1024 * 1024 * 1024,  # 10 GB default
+                current_usage_bytes=0,
+                depth=5,
+                headroom_percent=10,
+                is_enabled=True,
+                compression_enabled=True,
+                dedupe_enabled=True,
+                debounce_window_seconds=30,
+                max_batch_window_seconds=300,
+            )
+            db.add(new_settings)
+            existing_settings[user_obj.id] = new_settings
+    
+    # Commit all new settings at once
+    db.commit()
+    
     result = []
     for user_obj in all_users:
-        # Get or create default settings for this user
-        settings = db.query(VCLSettings).filter(VCLSettings.user_id == user_obj.id).first()
-        
-        if not settings:
-            # Create default settings if not exists
-            from app.services.vcl import VCLService
-            vcl_service = VCLService(db)
-            settings = vcl_service.get_or_create_user_settings(user_obj.id)
-            db.flush()
+        settings = existing_settings[user_obj.id]
         
         # Count total versions for this user
         total_versions = db.query(func.count(FileVersion.id)).filter(

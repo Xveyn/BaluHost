@@ -151,3 +151,21 @@ export interface CleanupResponse {
     created_at: string;
   }>;
 }
+
+export interface DiffLine {
+  line_number_old: number | null;
+  line_number_new: number | null;
+  content: string;
+  type: 'added' | 'removed' | 'unchanged' | 'modified';
+}
+
+export interface VersionDiffResponse {
+  version_id_old: number;
+  version_id_new: number;
+  file_name: string;
+  is_binary: boolean;
+  old_size: number;
+  new_size: number;
+  diff_lines?: DiffLine[];
+  message?: string;
+}

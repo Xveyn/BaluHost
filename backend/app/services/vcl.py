@@ -410,6 +410,32 @@ class VCLService:
         
         return version
     
+    def get_quota_status(self, user_id: int) -> tuple[float, Optional[str]]:
+        """
+        Get quota usage percentage and warning status.
+        
+        Args:
+            user_id: User ID
+            
+        Returns:
+            Tuple of (usage_percent, warning_level)
+            warning_level: None | 'warning' (>80%) | 'critical' (>95%)
+        """
+        settings = self.get_or_create_settings(user_id)
+        
+        if settings.max_size_bytes <= 0:
+            return 0.0, None
+        
+        usage_percent = (settings.current_usage_bytes / settings.max_size_bytes) * 100
+        
+        warning = None
+        if usage_percent >= 95:
+            warning = 'critical'
+        elif usage_percent >= 80:
+            warning = 'warning'
+        
+        return usage_percent, warning
+    
     def get_version_content(self, version: FileVersion) -> bytes:
         """
         Get decompressed content of a version.

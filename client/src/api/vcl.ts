@@ -15,6 +15,7 @@ import type {
   AdminStatsResponse,
   CleanupRequest,
   CleanupResponse,
+  VersionDiffResponse,
 } from '../types/vcl';
 
 // ========== User Endpoints ==========
@@ -60,6 +61,22 @@ export const toggleVersionPriority = async (
 ): Promise<{ success: boolean; message: string }> => {
   const response = await apiClient.patch(`/api/vcl/versions/${versionId}/priority`, {
     is_high_priority: isHighPriority,
+  });
+  return response.data;
+};
+
+/**
+ * Get diff between two versions
+ */
+export const getVersionDiff = async (
+  versionIdOld: number,
+  versionIdNew: number
+): Promise<VersionDiffResponse> => {
+  const response = await apiClient.get('/api/vcl/versions/diff', {
+    params: {
+      version_id_old: versionIdOld,
+      version_id_new: versionIdNew,
+    },
   });
   return response.data;
 };
@@ -198,6 +215,7 @@ export const vclApi = {
   restoreVersion,
   deleteVersion,
   toggleVersionPriority,
+  getVersionDiff,
   downloadVersion,
   getUserQuota,
   getUserSettings,

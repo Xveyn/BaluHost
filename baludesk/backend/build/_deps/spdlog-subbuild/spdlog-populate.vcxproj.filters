@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\e3ab48c5f70bd385e4e3b6ff25974055\spdlog-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\69e85a29d67dcf66cfc8beaeae869131\spdlog-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\8611938eddb17431c679b4c7b4eed61b\spdlog-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\spdlog-subbuild\CMakeFiles\spdlog-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{A7AAEE13-36A9-37DA-A33C-7C0F73DE2BC4}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

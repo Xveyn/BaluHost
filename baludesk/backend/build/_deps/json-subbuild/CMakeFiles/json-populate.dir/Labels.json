@@ -1,0 +1,46 @@
+{
+	"sources" : 
+	[
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/json-populate"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/a6060ca8b8d48ff3f456060c2f2e4344/json-populate.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/da77f6421092a3bda327b3cc0a817307/json-populate-complete.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-build.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-configure.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-download.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-install.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-mkdir.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-patch.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-test.rule"
+		},
+		{
+			"file" : "F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/4eedbcc7b63e8e4964895c924b1c92d7/json-populate-update.rule"
+		}
+	],
+	"target" : 
+	{
+		"labels" : 
+		[
+			"json-populate"
+		],
+		"name" : "json-populate"
+	}
+}

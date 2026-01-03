@@ -84,6 +84,14 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         if entry.is_file():
             mime_type, _ = mimetypes.guess_type(entry.name)
         
+        # Get file_id from metadata if exists
+        file_id = None
+        if db and entry.is_file():
+            from app.services import file_metadata_db
+            metadata = file_metadata_db.get_metadata(relative_entry, db=db)
+            if metadata:
+                file_id = metadata.id
+        
         item = FileItem(
             name=entry.name,
             path=relative_entry,
@@ -92,6 +100,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
             mime_type=mime_type,
+            file_id=file_id,
         )
         items.append(item)
 

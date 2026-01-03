@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\4eedbcc7b63e8e4964895c924b1c92d7\json-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\da77f6421092a3bda327b3cc0a817307\json-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\a6060ca8b8d48ff3f456060c2f2e4344\json-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-subbuild\CMakeFiles\json-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{7A8554FB-3215-3862-9343-0739A5368E48}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

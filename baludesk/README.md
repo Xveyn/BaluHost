@@ -59,34 +59,67 @@ BaluDesk is a cross-platform desktop synchronization client for BaluHost NAS, pr
 
 ## 🚀 Quick Start
 
-> **Note**: BaluDesk is currently in the planning phase. Check [TODO.md](TODO.md) for development roadmap.
-
 ### Prerequisites
 
-- **Backend Build**: CMake 3.20+, C++17 Compiler, libcurl, SQLite3
+- **Backend Build**: CMake 3.20+, C++17 Compiler, vcpkg dependencies
 - **Frontend Build**: Node.js 18+, npm 9+
 - **Runtime**: BaluHost NAS instance (v1.0+)
 
-### Build from Source
+### Development Mode
 
 ```bash
 # Clone repository
 git clone https://github.com/Xveyn/BaluHost.git
 cd BaluHost/baludesk
 
-# Build C++ Backend
+# Quick Start (starts both Frontend and Backend)
+python start.py
+
+# Or start components separately:
+python start.py --backend   # Only C++ Backend
+python start.py --frontend  # Only Electron Frontend
+```
+
+### Build from Source
+
+#### 1. Build C++ Backend
+
+```bash
 cd backend
 mkdir build && cd build
-cmake ..
-make -j$(nproc)
 
-# Build Electron Frontend
+# Configure with vcpkg
+cmake .. -DCMAKE_TOOLCHAIN_FILE=[path-to-vcpkg]/scripts/buildsystems/vcpkg.cmake
+
+# Build
+cmake --build . --config Release
+```
+
+#### 2. Install Frontend Dependencies
+
+```bash
 cd ../../frontend
 npm install
-npm run build
+```
 
-# Package Application
-npm run package
+#### 3. Run Development
+
+```bash
+# From baludesk root
+python start.py
+```
+
+The app will start with:
+- **Backend**: C++ Sync Engine on stdin/stdout IPC
+- **Frontend**: Electron app with Vite dev server (http://localhost:5173)
+- **Login**: Use your BaluHost credentials
+
+### Production Build
+
+```bash
+cd frontend
+npm run build              # Creates production build
+npm run package            # Creates installers in dist-electron/
 ```
 
 ---

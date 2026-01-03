@@ -15,6 +15,7 @@ import {
   Archive,
   AlertCircle,
   Check,
+  Loader2,
 } from 'lucide-react';
 import {
   getFileVersions,
@@ -22,11 +23,12 @@ import {
   deleteVersion,
   toggleVersionPriority,
   downloadVersion,
+  getVersionDiff,
   formatBytes,
   formatCompressionRatio,
   calculateSavingsPercent,
 } from '../../api/vcl';
-import type { VersionDetail } from '../../types/vcl';
+import type { VersionDetail, VersionDiffResponse } from '../../types/vcl';
 
 interface VersionHistoryModalProps {
   fileId: number;
@@ -46,6 +48,12 @@ export function VersionHistoryModal({
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  
+  // Diff state
+  const [selectedForDiff, setSelectedForDiff] = useState<number[]>([]);
+  const [diffData, setDiffData] = useState<VersionDiffResponse | null>(null);
+  const [showDiff, setShowDiff] = useState(false);
+  const [diffLoading, setDiffLoading] = useState(false);
 
   useEffect(() => {
     loadVersions();
@@ -136,6 +144,119 @@ export function VersionHistoryModal({
     }
   };
 
+  const handleSelectForDiff = (versionId: number) => {
+    setSelectedForDiff((prev) => {
+      if (prev.includes(versionId)) {
+        return prev.filter((id) => id !== versionId);
+      }
+      if (prev.length >= 2) {
+        return [prev[1], versionId]; // Keep only last and new
+      }
+      return [...prev, versionId];
+    });
+  };
+
+  const handleCompareDiff = async () => {
+    if (selectedForDiff.length !== 2) return;
+    
+    try {
+      setDiffLoading(true);
+      setError(null);
+      // Always compare older vs newer
+      const [id1, id2] = selectedForDiff.sort((a, b) => a - b);
+      const data = await getVersionDiff(id1, id2);
+      setDiffData(data);
+      setShowDiff(true);
+    } catch (err: any) {
+      setError(err.response?.data?.detail || 'Failed to load diff');
+    } finally {
+      setDiffLoading(false);
+    }
+  };
+
+  const closeDiff = () => {
+    setShowDiff(false);
+    setDiffData(null);
+    setSelectedForDiff([]);
+  };
+
+  if (showDiff && diffData) {
+    return (
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4">
+        <div className="card w-full max-w-6xl max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-xl font-semibold text-white">Version Diff: {diffData.file_name}</h3>
+            <button
+              onClick={closeDiff}
+              className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+            >
+              ✕ Close
+            </button>
+          </div>
+          
+          <div className="text-sm text-slate-400 mb-4 flex gap-4">
+            <span>Old: v{selectedForDiff[0]} ({formatBytes(diffData.old_size)})</span>
+            <span>→</span>
+            <span>New: v{selectedForDiff[1]} ({formatBytes(diffData.new_size)})</span>
+          </div>
+
+          {diffData.is_binary ? (
+            <div className="flex-1 flex items-center justify-center text-slate-500">
+              <div className="text-center">
+                <AlertCircle className="w-12 h-12 mx-auto mb-3 text-amber-500" />
+                <p>{diffData.message || 'Binary files cannot be compared'}</p>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 overflow-auto bg-slate-950/50 rounded-lg p-4 font-mono text-xs">
+              {diffData.diff_lines && diffData.diff_lines.length > 0 ? (
+                <table className="w-full border-collapse">
+                  <tbody>
+                    {diffData.diff_lines.map((line, idx) => (
+                      <tr
+                        key={idx}
+                        className={`${
+                          line.type === 'added'
+                            ? 'bg-green-500/10'
+                            : line.type === 'removed'
+                            ? 'bg-red-500/10'
+                            : ''
+                        }`}
+                      >
+                        <td className="px-2 py-0.5 text-slate-600 text-right select-none w-12 border-r border-slate-800">
+                          {line.line_number_old ?? ''}
+                        </td>
+                        <td className="px-2 py-0.5 text-slate-600 text-right select-none w-12 border-r border-slate-800">
+                          {line.line_number_new ?? ''}
+                        </td>
+                        <td className="px-2 py-0.5 w-8">
+                          {line.type === 'added' && <span className="text-green-400">+</span>}
+                          {line.type === 'removed' && <span className="text-red-400">-</span>}
+                          {line.type === 'unchanged' && <span className="text-slate-600"> </span>}
+                        </td>
+                        <td className="px-2 py-0.5">
+                          <pre className={`whitespace-pre-wrap break-all ${
+                            line.type === 'added'
+                              ? 'text-green-300'
+                              : line.type === 'removed'
+                              ? 'text-red-300'
+                              : 'text-slate-300'
+                          }`}>{line.content}</pre>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              ) : (
+                <div className="text-center text-slate-500">No differences found</div>
+              )}
+            </div>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
       <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-4xl max-h-[85vh] flex flex-col">
@@ -148,12 +269,30 @@ export function VersionHistoryModal({
             </h2>
             <p className="text-sm text-slate-400 mt-1">{fileName}</p>
           </div>
-          <button
-            onClick={onClose}
-            className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
-          >
-            <X className="w-5 h-5 text-slate-400" />
-          </button>
+          <div className="flex items-center gap-2">
+            {selectedForDiff.length === 2 && (
+              <button
+                onClick={handleCompareDiff}
+                disabled={diffLoading}
+                className="rounded-lg border border-blue-700/70 bg-blue-900/50 px-4 py-2 text-sm font-medium text-blue-200 transition hover:border-blue-500 hover:bg-blue-900/70 disabled:opacity-50 flex items-center gap-2"
+              >
+                {diffLoading ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    Loading...
+                  </>
+                ) : (
+                  <>Compare v{selectedForDiff[0]} ↔ v{selectedForDiff[1]}</>
+                )}
+              </button>
+            )}
+            <button
+              onClick={onClose}
+              className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+            >
+              <X className="w-5 h-5 text-slate-400" />
+            </button>
+          </div>
         </div>
 
         {/* Messages */}
@@ -200,6 +339,17 @@ export function VersionHistoryModal({
                   }`}
                 >
                   <div className="flex items-start justify-between gap-4">
+                    {/* Checkbox for Diff */}
+                    <div className="flex-shrink-0 pt-1">
+                      <input
+                        type="checkbox"
+                        checked={selectedForDiff.includes(version.id)}
+                        onChange={() => handleSelectForDiff(version.id)}
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                        title="Select for comparison"
+                      />
+                    </div>
+
                     {/* Version Info */}
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">

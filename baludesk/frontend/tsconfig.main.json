@@ -1,0 +1,17 @@
+{
+  "compilerOptions": {
+    "outDir": "dist",
+    "noEmit": false,
+    "module": "CommonJS",
+    "moduleResolution": "node",
+    "target": "ES2020",
+    "lib": ["ES2020"],
+    "skipLibCheck": true,
+    "strict": false,
+    "resolveJsonModule": true,
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true
+  },
+  "include": ["src/main/**/*", "src/renderer/types.ts"],
+  "exclude": ["node_modules", "dist", "src/renderer/!(types.ts)"]
+}

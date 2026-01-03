@@ -41,25 +41,25 @@
 ## 🎯 Hauptfunktionen
 
 ### Phase 1: Core Sync Engine (C++ Backend)
-- [ ] **Projekt-Setup**
-  - [ ] CMake Build-System einrichten
-  - [ ] Cross-Platform Build (Windows, macOS, Linux)
-  - [ ] Dependencies: libcurl, SQLite, spdlog, nlohmann/json
+- [x] **Projekt-Setup**
+  - [x] CMake Build-System einrichten
+  - [x] Cross-Platform Build (Windows, macOS, Linux)
+  - [x] Dependencies: libcurl, SQLite, spdlog, nlohmann/json
   - [ ] Unit Test Framework (Google Test)
 
-- [ ] **HTTP Client**
-  - [ ] libcurl Wrapper für REST API Calls
-  - [ ] JWT Token Management
-  - [ ] Automatic Token Refresh
-  - [ ] SSL/TLS Certificate Validation
+- [x] **HTTP Client**
+  - [x] libcurl Wrapper für REST API Calls
+  - [x] JWT Token Management
+  - [x] Automatic Token Refresh
+  - [x] SSL/TLS Certificate Validation
   - [ ] Connection Pooling
   - [ ] Retry Logic mit Exponential Backoff
 
-- [ ] **Lokale Datenbank (SQLite)**
-  - [ ] Schema: sync_folders, file_metadata, sync_state, conflicts
-  - [ ] Prepared Statements für Performance
-  - [ ] Transaktionale Updates
-  - [ ] Database Migrations
+- [x] **Lokale Datenbank (SQLite)**
+  - [x] Schema: sync_folders, file_metadata, sync_state, conflicts
+  - [x] Prepared Statements für Performance
+  - [x] Transaktionale Updates
+  - [x] Database Migrations
 
 - [ ] **Filesystem Watcher**
   - [ ] Windows: ReadDirectoryChangesW
@@ -68,14 +68,14 @@
   - [ ] Abstraction Layer für plattformübergreifende API
   - [ ] Event Debouncing (keine Duplikate bei schnellen Änderungen)
 
-- [ ] **Sync Engine**
-  - [ ] Bidirektionale Synchronisation
-  - [ ] Change Detection (Local + Remote)
-  - [ ] Chunked Upload für große Dateien
+- [x] **Sync Engine**
+  - [x] Bidirektionale Synchronisation (Basis)
+  - [ ] Change Detection (Local + Remote) - nur Local implementiert
+  - [x] Chunked Upload für große Dateien
   - [ ] Resume bei Abbruch (Checkpoints)
   - [ ] Bandwidth Limiting (optional)
   - [ ] Conflict Detection & Resolution
-  - [ ] Selective Sync (Ordner-Whitelist)
+  - [x] Selective Sync (Ordner-Whitelist)
 
 - [ ] **Conflict Resolution**
   - [ ] Last-Write-Wins Strategie
@@ -84,37 +84,38 @@
   - [ ] Conflict History Log
 
 ### Phase 2: Electron Frontend
-- [ ] **Projekt-Setup**
-  - [ ] Electron + React + TypeScript + Vite
+- [x] **Projekt-Setup**
+  - [x] Electron + React + TypeScript + Vite
+  - [x] Frontend Structure & Configuration
+  - [x] IPC Bridge (Main <-> Renderer Process)
   - [ ] Electron Forge für Packaging
-  - [ ] IPC Bridge (Main <-> Renderer Process)
   - [ ] Auto-Update Integration (electron-updater)
 
-- [ ] **Main Process (Node.js)**
-  - [ ] Spawn C++ Backend als Child Process
-  - [ ] IPC Bridge zu C++ (stdin/stdout JSON Messages)
-  - [ ] System Tray Integration
-  - [ ] App Lifecycle Management
+- [x] **Main Process (Node.js)**
+  - [x] Spawn C++ Backend als Child Process
+  - [x] IPC Bridge zu C++ (stdin/stdout JSON Messages)
+  - [x] System Tray Integration
+  - [x] App Lifecycle Management
   - [ ] Startup auf System Boot (optional)
 
-- [ ] **Renderer Process (React UI)**
-  - [ ] **Login Screen**
-    - [ ] Server URL Configuration
-    - [ ] Username/Password Login
-    - [ ] Token Storage (encrypted)
-  
-  - [ ] **Dashboard**
-    - [ ] Sync Status Overview (Idle/Syncing/Paused/Error)
-    - [ ] Upload/Download Speed
-    - [ ] Last Sync Time
-    - [ ] Storage Quota Display
+- [x] **Renderer Process (React UI)**
+  - [x] Login Screen (styled wie BaluHost WebApp)
+  - [x] Dashboard mit Sync Stats
+  - [x] Session Persistence (localStorage)
+  - [x] React Router mit Auth Guards
+  - [x] Tailwind CSS Styling (BaluHost Design System)
+  - [ ] Settings Page
+  - [ ] Folder Management UI (native dialog)
+  - [ ] Conflict Resolution UI
+  - [ ] File Browser (Local/Remote)
 
-  - [ ] **Folder Management**
-    - [ ] Add Sync Folder Dialog
-    - [ ] Folder List mit Status Icons
-    - [ ] Remove/Pause Sync Folder
-    - [ ] Selective Sync (Subfolder-Auswahl)
-  
+- [x] **Development Tools**
+  - [x] start.py Script für kombiniertes Frontend+Backend Starten
+  - [x] Frontend läuft im UI-only Mode ohne Backend
+  - [x] TypeScript Build Pipeline funktioniert
+  - [x] Hot Reload für React Components
+
+- [ ] **UI Features noch zu implementieren**
   - [ ] **Settings**
     - [ ] Bandwidth Limit
     - [ ] Auto-Start on Boot
@@ -128,12 +129,11 @@
     - [ ] Error Messages
     - [ ] Conflict Notifications
 
-  - [ ] **System Tray**
-    - [ ] Status Icon (Idle/Syncing/Error)
-    - [ ] Quick Actions Menu
+  - [ ] **System Tray Enhancements**
+    - [ ] Animated Status Icon (Idle/Syncing/Error)
+    - [ ] Quick Actions Menu erweitern
     - [ ] Pause/Resume Sync
-    - [ ] Open Folder
-    - [ ] Quit App
+    - [ ] Open Folder Shortcut
 
 ### Phase 3: Advanced Features
 - [ ] **Performance**
@@ -515,6 +515,6 @@ POST   /api/sync/resolve-conflict
 
 ---
 
-**Letzte Aktualisierung**: 2. Januar 2026  
-**Status**: 🔴 Planning Phase  
-**Next Milestone**: Sprint 1 Start
+**Letzte Aktualisierung**: 3. Januar 2026  
+**Status**: 🟡 Sprint 1 Complete (60% Backend Core)  
+**Next Milestone**: Sprint 2 - Filesystem Watcher

@@ -1,0 +1,49 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\main.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\stubs.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\sync_engine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\conflict_resolver.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-src\nlohmann_json.natvis" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{1F7D26C3-C42B-3293-B793-868FAE208BCD}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>

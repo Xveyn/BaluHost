@@ -2,6 +2,7 @@
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 #include <spdlog/sinks/rotating_file_sink.h>
+#include <iostream>
 
 namespace baludesk {
 
@@ -22,7 +23,7 @@ void Logger::initialize(const std::string& logFile, bool verbose) {
         std::vector<spdlog::sink_ptr> sinks {console_sink, file_sink};
         logger_ = std::make_shared<spdlog::logger>("baludesk", sinks.begin(), sinks.end());
         logger_->set_level(spdlog::level::trace);
-        logger_->flush_on(spdlog::level::error);
+        logger_->flush_on(spdlog::level::err);
 
         spdlog::register_logger(logger_);
         spdlog::set_default_logger(logger_);

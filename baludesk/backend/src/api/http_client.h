@@ -3,6 +3,7 @@
 #include <string>
 #include <vector>
 #include <memory>
+#include <functional>
 #include <curl/curl.h>
 
 namespace baludesk {
@@ -13,12 +14,19 @@ struct RemoteFile {
     uint64_t size;
     bool isDirectory;
     std::string modifiedAt;
+    std::string hash;  // SHA256 hash for file integrity
 };
 
 struct RemoteChange {
     std::string path;
     std::string action; // created, modified, deleted
     std::string timestamp;
+};
+
+struct DownloadProgress {
+    size_t bytesDownloaded;
+    size_t totalBytes;
+    double percentage;
 };
 
 /**
@@ -42,6 +50,22 @@ public:
     bool uploadFile(const std::string& localPath, const std::string& remotePath);
     bool downloadFile(const std::string& remotePath, const std::string& localPath);
     bool deleteFile(const std::string& remotePath);
+    
+    // Advanced download with resume support
+    bool downloadFileRange(
+        const std::string& remotePath, 
+        const std::string& localPath,
+        size_t startByte,
+        size_t endByte = 0  // 0 = until end
+    );
+    
+    // Download with progress callback
+    using ProgressCallback = std::function<void(const DownloadProgress&)>;
+    bool downloadFileWithProgress(
+        const std::string& remotePath,
+        const std::string& localPath,
+        ProgressCallback callback
+    );
 
     // Sync operations
     std::vector<RemoteChange> getChangesSince(const std::string& timestamp);
@@ -55,6 +79,9 @@ private:
                                const std::string& body = "");
     static size_t writeCallback(void* contents, size_t size, size_t nmemb, void* userp);
     static size_t readCallback(void* ptr, size_t size, size_t nmemb, void* userp);
+    static size_t writeFileCallback(void* contents, size_t size, size_t nmemb, void* userp);
+    static int progressCallback(void* clientp, curl_off_t dltotal, curl_off_t dlnow,
+                               curl_off_t ultotal, curl_off_t ulnow);
 
     std::string baseUrl_;
     std::string authToken_;

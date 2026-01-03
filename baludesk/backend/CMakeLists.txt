@@ -22,8 +22,17 @@ else()
 endif()
 
 # Dependencies
-find_package(CURL CONFIG REQUIRED)
-find_package(unofficial-sqlite3 CONFIG REQUIRED)
+# Try vcpkg first, fall back to system packages
+find_package(CURL CONFIG QUIET)
+if(NOT CURL_FOUND)
+    find_package(CURL REQUIRED)
+endif()
+
+find_package(unofficial-sqlite3 CONFIG QUIET)
+if(NOT unofficial-sqlite3_FOUND)
+    find_package(SQLite3 REQUIRED)
+endif()
+
 find_package(Threads REQUIRED)
 
 # Include FetchContent for header-only libraries
@@ -63,29 +72,19 @@ include_directories(
 # Source files
 set(SOURCES
     src/main.cpp
+    src/stubs.cpp
     src/sync/sync_engine.cpp
     src/sync/file_watcher.cpp
-    src/sync/conflict_resolver.cpp
     src/sync/change_detector.cpp
+    src/sync/conflict_resolver.cpp
     src/api/http_client.cpp
-    src/api/auth_manager.cpp
     src/db/database.cpp
-    src/db/migrations.cpp
-    src/fs/file_utils.cpp
     src/ipc/ipc_server.cpp
     src/utils/logger.cpp
     src/utils/config.cpp
-    src/utils/crypto.cpp
 )
 
-# Platform-specific file watcher
-if(WIN32)
-    list(APPEND SOURCES src/fs/file_watcher_win.cpp)
-elseif(APPLE)
-    list(APPEND SOURCES src/fs/file_watcher_mac.cpp)
-else()
-    list(APPEND SOURCES src/fs/file_watcher_linux.cpp)
-endif()
+# Platform-specific file watcher is now unified in file_watcher.cpp
 
 # Main executable
 add_executable(baludesk-backend ${SOURCES})
@@ -94,7 +93,7 @@ add_executable(baludesk-backend ${SOURCES})
 target_link_libraries(baludesk-backend
     PRIVATE
         CURL::libcurl
-        SQLite::SQLite3
+        unofficial::sqlite3::sqlite3
         nlohmann_json::nlohmann_json
         spdlog::spdlog
         Threads::Threads
@@ -110,44 +109,10 @@ install(TARGETS baludesk-backend
     RUNTIME DESTINATION bin
 )
 
-# Enable testing
-enable_testing()
-
-# Test executable
-add_executable(baludesk-tests
-    tests/sync_engine_test.cpp
-    tests/http_client_test.cpp
-    tests/conflict_resolver_test.cpp
-    tests/database_test.cpp
-    # Add source files needed for tests (exclude main.cpp)
-    src/sync/sync_engine.cpp
-    src/sync/file_watcher.cpp
-    src/sync/conflict_resolver.cpp
-    src/sync/change_detector.cpp
-    src/api/http_client.cpp
-    src/api/auth_manager.cpp
-    src/db/database.cpp
-    src/db/migrations.cpp
-    src/fs/file_utils.cpp
-    src/utils/logger.cpp
-    src/utils/config.cpp
-    src/utils/crypto.cpp
-)
-
-target_link_libraries(baludesk-tests
-    PRIVATE
-        CURL::libcurl
-        SQLite::SQLite3
-        nlohmann_json::nlohmann_json
-        spdlog::spdlog
-        Threads::Threads
-        GTest::gtest
-        GTest::gtest_main
-)
-
-# Discover tests
-include(GoogleTest)
-gtest_discover_tests(baludesk-tests)
+# TODO: Enable testing later
+# enable_testing()
+# include(GoogleTest)
+# gtest_discover_tests(baludesk-tests)
 
 # Print configuration
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

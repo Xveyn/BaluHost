@@ -8,6 +8,10 @@
 #include <mutex>
 #include <atomic>
 #include <thread>
+#include <chrono>
+#include "change_detector.h"  // For DetectedChange, ConflictInfo
+
+namespace baludesk {
 
 // Forward declarations
 class FileWatcher;
@@ -16,14 +20,12 @@ class Database;
 class ConflictResolver;
 class ChangeDetector;
 
-namespace baludesk {
-
 // Sync status enumeration
 enum class SyncStatus {
     IDLE,
     SYNCING,
     PAUSED,
-    ERROR
+    SYNC_ERROR
 };
 
 // File change action
@@ -88,15 +90,16 @@ public:
     bool isAuthenticated() const;
 
     // Sync folder management
-    std::string addSyncFolder(const std::string& localPath, const std::string& remotePath);
+    bool addSyncFolder(SyncFolder& folder);  // Modified to set folder.id
     bool removeSyncFolder(const std::string& folderId);
-    bool pauseSyncFolder(const std::string& folderId);
-    bool resumeSyncFolder(const std::string& folderId);
+    bool pauseSync(const std::string& folderId);
+    bool resumeSync(const std::string& folderId);
     std::vector<SyncFolder> getSyncFolders() const;
 
-    // Sync operations
+    // Sync operations & state
     void triggerSync(const std::string& folderId = "");
-    SyncStats getStats() const;
+    void triggerBidirectionalSync(const std::string& folderId = "");  // Sprint 3 - Active
+    SyncStats getSyncState() const;
 
     // Callbacks for status updates
     using StatusCallback = std::function<void(const SyncStats&)>;
@@ -116,6 +119,12 @@ private:
     void uploadFile(const std::string& localPath, const std::string& remotePath);
     void downloadFile(const std::string& remotePath, const std::string& localPath);
     void handleConflict(const std::string& path);
+    
+    // Sprint 3 methods - Active
+    void syncBidirectional(const SyncFolder& folder);
+    void handleRemoteChange(const DetectedChange& change, const SyncFolder& folder);
+    void handleLocalChange(const DetectedChange& change, const SyncFolder& folder);
+    void resolveConflict(const ConflictInfo& conflict, const SyncFolder& folder);
 
     // Update stats
     void updateStats();

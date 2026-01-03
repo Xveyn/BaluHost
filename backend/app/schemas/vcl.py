@@ -70,6 +70,7 @@ class FileVersionResponse(FileVersionInDB):
     file_name: Optional[str] = None
     user_name: Optional[str] = None
     size_saved: Optional[int] = None  # Bytes saved via compression
+    quota_warning: Optional[str] = None  # 'warning' or 'critical' if approaching limit
 
 
 # ========== VCL Settings Schemas ==========
@@ -214,6 +215,7 @@ class QuotaInfo(BaseModel):
     compression_enabled: bool
     dedupe_enabled: bool
     cleanup_needed: bool
+    quota_warning: Optional[str] = None  # 'warning' (>80%) or 'critical' (>95%)
 
 
 class AdminVCLOverview(BaseModel):

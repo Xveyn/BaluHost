@@ -1,0 +1,44 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="17.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-mkdir.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-download.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-update.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-patch.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-configure.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-build.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-install.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\ddade286e044607c2c52c86c4ce99ef0\googletest-populate-test.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\32511b1b4655e8a3fac8058b3e77f5d8\googletest-populate-complete.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\c338e817a34add58ec15b984f6bf2750\googletest-populate.rule">
+      <Filter>CMake Rules</Filter>
+    </CustomBuild>
+    <CustomBuild Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeLists.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\googletest-subbuild\CMakeFiles\googletest-populate" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="CMake Rules">
+      <UniqueIdentifier>{7DDCD0C3-F06E-31AC-92A1-242C5E420A2C}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+</Project>
