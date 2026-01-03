@@ -654,7 +654,11 @@ class VCLService:
     
     def recalculate_stats(self):
         """Recalculate all statistics from scratch."""
-        stats = self.get_stats()
+        # Get or create stats WITHOUT flush
+        stats = self.db.query(VCLStats).first()
+        if not stats:
+            stats = VCLStats(id=1)
+            self.db.add(stats)
         
         # Count versions
         total_versions: int = self.db.query(func.count(FileVersion.id)).scalar() or 0

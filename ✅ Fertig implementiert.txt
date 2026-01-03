@@ -1,0 +1,49 @@
+✅ Fertig implementiert:
+CLI Framework mit Click
+Emergency Commands: reset-password, status, users
+Basis-App-Struktur (app.py mit Welcome Screen)
+Context Management (mode detection)
+Rich Console Output
+❌ Noch fehlt (TODO):
+Kritisch (Dashboard funktioniert nicht):
+Dashboard Screen - Aktuell nur "Coming soon" Placeholder
+
+Live System Metrics (CPU, RAM, Storage)
+RAID Status Widget
+Active Users Display
+Recent Audit Logs
+Authentication System
+
+Token-basiertes Login
+Token Storage in ~/.baluhost/token
+Auto-refresh bei Expired Token
+User Management Screen
+
+User List Table (mit Filter/Sort)
+Create/Edit/Delete User Forms
+Role Assignment
+Password Reset Dialog
+File Browser Screen
+
+Directory Tree View
+File Operations (Delete, Rename, View Metadata)
+Search Functionality
+Audit Log Viewer Screen
+
+Real-time Log Streaming
+Search/Filter by User/Action
+Export Logs
+RAID Management Screen
+
+Array Status Display
+Rebuild Progress Bar
+SMART Data Viewer
+Backup Management Screen
+
+List Backups
+Create Backup (mit Progress)
+Restore Dialog
+Nice-to-Have:
+SSH Key Auth in WebApp - Settings Page für SSH Key Management
+Remote Mode mit API Client - httpx-basierter API Client
+Configuration Editor - Settings bearbeiten im TUI

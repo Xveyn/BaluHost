@@ -2,6 +2,8 @@ import { useState, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api';
 import { UploadProgressModal } from '../components/UploadProgressModal';
+import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
+import { vclApi } from '../api/vcl';
 
 interface StorageInfo {
   totalBytes: number;
@@ -30,6 +32,7 @@ interface FileItem {
   modifiedAt: string;
   ownerId?: number;
   ownerName?: string;
+  file_id?: number;
 }
 
 interface ApiFileItem {
@@ -326,6 +329,10 @@ export default function FileManager({ user }: FileManagerProps) {
   const [selectedMountpoint, setSelectedMountpoint] = useState<StorageMountpoint | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+  // VCL State
+  const [showVersionHistory, setShowVersionHistory] = useState(false);
+  const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
+  const [versionCounts, setVersionCounts] = useState<Record<number, number>>({});
 
   const getToken = (notify = true): string | null => {
     const token = localStorage.getItem('token');
@@ -350,6 +357,36 @@ export default function FileManager({ user }: FileManagerProps) {
         loadStorageInfo();
       }
     }, [currentPath, selectedMountpoint]);
+
+    // Load version counts for all files with file_id
+    useEffect(() => {
+      const loadVersionCounts = async () => {
+        const fileIds = files
+          .filter(f => f.type === 'file' && f.file_id)
+          .map(f => f.file_id!);
+        
+        if (fileIds.length === 0) return;
+
+        try {
+          const counts: Record<number, number> = {};
+          await Promise.all(
+            fileIds.map(async (fileId) => {
+              try {
+                const response = await vclApi.getFileVersions(fileId);
+                counts[fileId] = response.total;
+              } catch (err) {
+                // Ignore errors for individual files
+              }
+            })
+          );
+          setVersionCounts(counts);
+        } catch (err) {
+          console.error('Failed to load version counts:', err);
+        }
+      };
+
+      loadVersionCounts();
+    }, [files]);
 
     // Ownernamen nachladen, wenn Files geladen werden
     useEffect(() => {
@@ -481,6 +518,7 @@ export default function FileManager({ user }: FileManagerProps) {
           modifiedAt: file.modified_at ?? file.mtime ?? new Date().toISOString(),
           ownerId: (file as any).ownerId ?? (file as any).owner_id,
           ownerName: (file as any).ownerName ?? (file as any).owner_name,
+          file_id: (file as any).file_id,
         }));
         setFiles(mappedFiles);
         
@@ -1010,9 +1048,19 @@ export default function FileManager({ user }: FileManagerProps) {
                           }`}>
                             {file.type === 'directory' ? '📁' : '📄'}
                           </span>
-                          <span className="truncate font-medium group-hover:text-white">
-                            {file.name}
-                          </span>
+                          <div className="flex items-center gap-2 min-w-0 flex-1">
+                            <span className="truncate font-medium group-hover:text-white">
+                              {file.name}
+                            </span>
+                            {file.type === 'file' && file.file_id && versionCounts[file.file_id] > 0 && (
+                              <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+                                <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                {versionCounts[file.file_id]}
+                              </span>
+                            )}
+                          </div>
                         </div>
                       </td>
                       <td className="px-6 py-4 text-xs uppercase tracking-[0.25em] text-slate-500">
@@ -1049,6 +1097,25 @@ export default function FileManager({ user }: FileManagerProps) {
                               >
                                 ↓ Download
                               </button>
+                              {file.file_id && (
+                                <button
+                                  onClick={() => {
+                                    setVersionHistoryFile(file);
+                                    setShowVersionHistory(true);
+                                  }}
+                                  className="rounded-xl border border-violet-500/30 bg-violet-500/10 px-3 py-1.5 text-xs font-medium text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/20"
+                                >
+                                  <svg className="inline-block h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                  </svg>
+                                  Versionen
+                                  {versionCounts[file.file_id] > 0 && (
+                                    <span className="ml-1 inline-flex items-center justify-center rounded-full bg-violet-400/20 px-1.5 py-0.5 text-[10px] font-bold">
+                                      {versionCounts[file.file_id]}
+                                    </span>
+                                  )}
+                                </button>
+                              )}
                             </>
                           )}
                           <button
@@ -1238,7 +1305,17 @@ export default function FileManager({ user }: FileManagerProps) {
                       {file.type === 'directory' ? '📁' : '📄'}
                     </span>
                     <div className="flex-1 min-w-0">
-                      <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
+                      <div className="flex items-center gap-2">
+                        <p className="text-sm font-medium text-slate-200 truncate">{file.name}</p>
+                        {file.type === 'file' && file.file_id && versionCounts[file.file_id] > 0 && (
+                          <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
+                            <svg className="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                            </svg>
+                            {versionCounts[file.file_id]}
+                          </span>
+                        )}
+                      </div>
                       <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                         <span className="uppercase tracking-wider">{file.type}</span>
                         {file.type === 'file' && (
@@ -1288,6 +1365,25 @@ export default function FileManager({ user }: FileManagerProps) {
                           ↓ Download
                         </button>
                       </>
+                    )}
+                    {file.type === 'file' && file.file_id && (
+                      <button
+                        onClick={() => {
+                          setVersionHistoryFile(file);
+                          setShowVersionHistory(true);
+                        }}
+                        className="w-full rounded-lg border border-violet-500/30 bg-violet-500/10 px-3 py-2 text-xs font-medium text-violet-200 transition hover:border-violet-400/40 hover:bg-violet-500/20 touch-manipulation active:scale-95"
+                      >
+                        <svg className="inline-block h-3 w-3 mr-1" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                        Versionen anzeigen
+                        {versionCounts[file.file_id] > 0 && (
+                          <span className="ml-1.5 inline-flex items-center justify-center rounded-full bg-violet-400/20 px-2 py-0.5 text-[10px] font-bold">
+                            {versionCounts[file.file_id]}
+                          </span>
+                        )}
+                      </button>
                     )}
                     <button
                       onClick={() => startRename(file)}
@@ -1415,6 +1511,22 @@ export default function FileManager({ user }: FileManagerProps) {
       {/* File Viewer Modal */}
       {viewingFile && (
         <FileViewer file={viewingFile} onClose={() => setViewingFile(null)} />
+      )}
+
+      {/* Version History Modal */}
+      {showVersionHistory && versionHistoryFile && versionHistoryFile.file_id && (
+        <VersionHistoryModal
+          fileId={versionHistoryFile.file_id}
+          fileName={versionHistoryFile.name}
+          onClose={() => {
+            setShowVersionHistory(false);
+            setVersionHistoryFile(null);
+          }}
+          onVersionRestored={() => {
+            // Reload files to show updated version count
+            loadFiles(currentPath, false);
+          }}
+        />
       )}
 
       {/* Upload Progress Modal */}

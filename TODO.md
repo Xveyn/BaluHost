@@ -42,7 +42,7 @@
 | 🟡 Medium | Backend | Backup von Audit Logs | ⏳ Pending | Data Protection |
 | 🟡 Medium | Backend | SMART-Warnungen automatisiert verarbeiten | ⏳ Pending | Disk Health |
 | 🟡 Medium | Backend | Disk-Scrubbing initiieren/überwachen | ✅ Implemented (trigger via RAID options) | Data Integrity |
-| 🟡 Medium | Backend | Datei-Versionierung Backend (Snapshots, Rollback) | ⏳ Pending | Version Control |
+| 🟡 Medium | Backend | Datei-Versionierung Backend (Snapshots, Rollback) | ✅ Done | VCL implemented (Phases 1-7) |
 | 🟡 Medium | Frontend | Dark Mode implementieren | ✅ Done | 6 Themes implemented (light, dark, ocean, forest, sunset, midnight) |
 | 🟡 Medium | Frontend | Notifications-Seite mit Notification Center & Badge | ⏳ Pending | Notifications UI |
 | 🟡 Medium | Frontend | NetworkShares-Seite: SMB/CIFS/NFS Shares verwalten | ⏳ Pending | Network Shares UI |
@@ -65,7 +65,7 @@
 | 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform (see docs/IOS_APP_GUIDE.md for native Swift guide) |
 | 🟢 Low | Frontend | Mobile App (React Native) oder Progressive Web App | ⏳ Pending | Mobile |
 | � Medium | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ⏳ Pending | Remote Access UI (Backend ready, frontend pending) |
-| 🟢 Low | Frontend | Datei-Versionierung UI (History, Rollback, Diff) | ⏳ Pending | Version Control UI |
+| 🟢 Low | Frontend | Datei-Versionierung UI (History, Rollback, Diff) | 🟡 Partial | Version History Modal done, FileManager integration pending |
 | 🟢 Low | Frontend | Keyboard-Shortcuts (Vim-Mode im FileManager) | ⏳ Pending | Power User |
 | 🟢 Low | Frontend | Mehrsprachigkeit (i18n - EN/DE) | ⏳ Pending | Localization |
 | 🟢 Low | Frontend | Accessibility (ARIA, Screen-Reader) | ⏳ Pending | A11y |

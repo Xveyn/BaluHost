@@ -2,6 +2,7 @@
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from app.api import deps
 from app.core.database import get_db
@@ -24,7 +25,9 @@ from app.schemas.vcl import (
 from app.services.vcl import VCLService
 from app.services.vcl_priority import VCLPriorityMode
 from app.services.audit_logger_db import get_audit_logger_db
-from app.models.vcl import VCLSettings, VCLStats
+from app.models.vcl import VCLSettings, VCLStats, FileVersion
+from app.models.user import User
+from app.models.file_metadata import FileMetadata
 
 
 def needs_cleanup(settings: VCLSettings) -> bool:
@@ -76,9 +79,6 @@ async def list_file_versions(
     Raises:
         404: File not found or user has no access
     """
-    from app.models.file_metadata import FileMetadata
-    from app.models.vcl import FileVersion
-    
     # Check if file exists and user has access
     file_meta = db.query(FileMetadata).filter(
         FileMetadata.id == file_id,
@@ -147,8 +147,6 @@ async def restore_file_version(
         404: Version not found or user has no access
         500: Restore operation failed
     """
-    from app.models.vcl import FileVersion
-    from app.models.file_metadata import FileMetadata
     import shutil
     from pathlib import Path
     from app.core.config import settings
@@ -182,7 +180,8 @@ async def restore_file_version(
         vcl_service = VCLService(db)
         
         # Get version content (decompress if needed)
-        if version.blob_id:
+        blob_id_val: int = int(version.blob_id) if version.blob_id else 0  # type: ignore
+        if blob_id_val:
             blob = version.blob
             if not blob:
                 raise HTTPException(
@@ -191,7 +190,8 @@ async def restore_file_version(
                 )
             
             # Read and decompress content
-            blob_path = Path(settings.nas_storage_path) / blob.storage_path
+            blob_storage_path: str = str(blob.storage_path)  # type: ignore
+            blob_path = Path(settings.nas_storage_path) / blob_storage_path
             if not blob_path.exists():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -215,36 +215,47 @@ async def restore_file_version(
                 content = f.read()
         
         # Write restored content to file
-        file_path = Path(settings.nas_storage_path) / file_meta.path
+        file_meta_path: str = str(file_meta.path)  # type: ignore
+        file_path = Path(settings.nas_storage_path) / file_meta_path
         file_path.parent.mkdir(parents=True, exist_ok=True)
         
         with open(file_path, 'wb') as f:
             f.write(content)
         
-        # Update file metadata
-        file_meta.size = len(content)
+        # Update file metadata - use SQL update to avoid Column assignment
+        from sqlalchemy import update as sql_update
+        db.execute(
+            sql_update(FileMetadata).
+            where(FileMetadata.id == file_meta.id).
+            values(size_bytes=len(content))
+        )
         db.commit()
         
         # Log restore action
+        vers_id: int = int(version.id)  # type: ignore
+        vers_number: int = int(version.version_number)  # type: ignore
+        
         audit_logger.log_file_access(
             user=user.username,
-            file_path=file_meta.path,
+            file_path=file_meta_path,
             action="restore_version",
             success=True,
             metadata={
-                "version_id": version.id,
-                "version_number": version.version_number,
+                "version_id": vers_id,
+                "version_number": vers_number,
                 "file_size": len(content),
             },
             db=db
         )
         
+        file_meta_id: int = int(file_meta.id)  # type: ignore
+        
         return RestoreResponse(
             success=True,
-            message=f"File restored to version {version.version_number}",
-            file_id=file_meta.id,
-            file_path=file_meta.path,
-            restored_version=version.version_number,
+            message=f"File restored to version {vers_number}",
+            file_id=file_meta_id,
+            file_path=file_meta_path,
+            restored_version=vers_number,
             file_size=len(content),
         )
         
@@ -286,23 +297,25 @@ async def get_user_quota(
         # Create default settings
         from app.services.vcl import VCLService
         vcl_service = VCLService(db)
-        settings = vcl_service.get_or_create_settings(user.id)
+        settings = vcl_service.get_or_create_user_settings(user.id)
     
-    # Calculate percentage
-    usage_percent = (settings.current_usage_bytes / settings.max_size_bytes * 100) if settings.max_size_bytes > 0 else 0
+    # Calculate percentage - cast Columns
+    current_usage: int = int(settings.current_usage_bytes)  # type: ignore
+    max_size: int = int(settings.max_size_bytes)  # type: ignore
+    usage_percent = (current_usage / max_size * 100) if max_size > 0 else 0
     
     # Check if cleanup needed
     cleanup_needed = needs_cleanup(settings)
     
     return QuotaInfo(
-        max_size_bytes=settings.max_size_bytes,
-        current_usage_bytes=settings.current_usage_bytes,
-        available_bytes=max(0, settings.max_size_bytes - settings.current_usage_bytes),
+        max_size_bytes=max_size,
+        current_usage_bytes=current_usage,
+        available_bytes=max(0, max_size - current_usage),
         usage_percent=usage_percent,
-        is_enabled=settings.is_enabled,
-        depth=settings.depth,
-        compression_enabled=settings.compression_enabled,
-        dedupe_enabled=settings.dedupe_enabled,
+        is_enabled=bool(settings.is_enabled),  # type: ignore
+        depth=int(settings.depth),  # type: ignore
+        compression_enabled=bool(settings.compression_enabled),  # type: ignore
+        dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
         cleanup_needed=cleanup_needed,
     )
 
@@ -329,21 +342,22 @@ async def get_vcl_settings(
         # Create default settings
         from app.services.vcl import VCLService
         vcl_service = VCLService(db)
-        settings = vcl_service.get_or_create_settings(user.id)
+        settings = vcl_service.get_or_create_user_settings(user.id)
     
+    # Cast all Columns to Python types for Pydantic schema
     return VCLSettingsResponse(
-        user_id=settings.user_id,
-        max_size_bytes=settings.max_size_bytes,
-        current_usage_bytes=settings.current_usage_bytes,
-        depth=settings.depth,
-        headroom_percent=settings.headroom_percent,
-        is_enabled=settings.is_enabled,
-        compression_enabled=settings.compression_enabled,
-        dedupe_enabled=settings.dedupe_enabled,
-        debounce_window_seconds=settings.debounce_window_seconds,
-        max_batch_window_seconds=settings.max_batch_window_seconds,
-        created_at=settings.created_at,
-        updated_at=settings.updated_at,
+        user_id=int(settings.user_id) if settings.user_id else None,  # type: ignore
+        max_size_bytes=int(settings.max_size_bytes),  # type: ignore
+        current_usage_bytes=int(settings.current_usage_bytes),  # type: ignore
+        depth=int(settings.depth),  # type: ignore
+        headroom_percent=int(settings.headroom_percent),  # type: ignore
+        is_enabled=bool(settings.is_enabled),  # type: ignore
+        compression_enabled=bool(settings.compression_enabled),  # type: ignore
+        dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
+        debounce_window_seconds=int(settings.debounce_window_seconds),  # type: ignore
+        max_batch_window_seconds=int(settings.max_batch_window_seconds),  # type: ignore
+        created_at=settings.created_at,  # type: ignore
+        updated_at=settings.updated_at,  # type: ignore
     )
 
 
@@ -368,52 +382,61 @@ async def update_vcl_settings(
     from app.services.vcl import VCLService
     
     vcl_service = VCLService(db)
-    settings = vcl_service.get_or_create_settings(user.id)
+    settings = vcl_service.get_or_create_user_settings(user.id)
     
-    # Update fields
+    # Build update dict
+    update_values = {}
     if settings_update.max_size_bytes is not None:
-        settings.max_size_bytes = settings_update.max_size_bytes
+        update_values['max_size_bytes'] = settings_update.max_size_bytes
     if settings_update.depth is not None:
-        settings.depth = settings_update.depth
+        update_values['depth'] = settings_update.depth
     if settings_update.headroom_percent is not None:
-        settings.headroom_percent = settings_update.headroom_percent
+        update_values['headroom_percent'] = settings_update.headroom_percent
     if settings_update.is_enabled is not None:
-        settings.is_enabled = settings_update.is_enabled
+        update_values['is_enabled'] = settings_update.is_enabled
     if settings_update.compression_enabled is not None:
-        settings.compression_enabled = settings_update.compression_enabled
+        update_values['compression_enabled'] = settings_update.compression_enabled
     if settings_update.dedupe_enabled is not None:
-        settings.dedupe_enabled = settings_update.dedupe_enabled
+        update_values['dedupe_enabled'] = settings_update.dedupe_enabled
     if settings_update.debounce_window_seconds is not None:
-        settings.debounce_window_seconds = settings_update.debounce_window_seconds
+        update_values['debounce_window_seconds'] = settings_update.debounce_window_seconds
     if settings_update.max_batch_window_seconds is not None:
-        settings.max_batch_window_seconds = settings_update.max_batch_window_seconds
+        update_values['max_batch_window_seconds'] = settings_update.max_batch_window_seconds
     
-    db.commit()
-    db.refresh(settings)
+    # Apply updates with SQL to avoid Column assignment issues
+    if update_values:
+        from sqlalchemy import update as sql_update
+        db.execute(
+            sql_update(VCLSettings).
+            where(VCLSettings.user_id == user.id).
+            values(**update_values)
+        )
+        db.commit()
+        db.refresh(settings)
     
     # Log settings change
     audit_logger = get_audit_logger_db()
-    audit_logger.log_settings_change(
-        user=user.username,
-        setting_name="vcl_settings",
-        old_value="<settings>",
-        new_value=settings_update.model_dump_json(),
+    audit_logger.log_system_event(
+        event_type="vcl_settings_update",
+        description=f"User {user.username} updated VCL settings",
+        metadata=settings_update.model_dump(),
         db=db
     )
     
+    # Cast Columns for response
     return VCLSettingsResponse(
-        user_id=settings.user_id,
-        max_size_bytes=settings.max_size_bytes,
-        current_usage_bytes=settings.current_usage_bytes,
-        depth=settings.depth,
-        headroom_percent=settings.headroom_percent,
-        is_enabled=settings.is_enabled,
-        compression_enabled=settings.compression_enabled,
-        dedupe_enabled=settings.dedupe_enabled,
-        debounce_window_seconds=settings.debounce_window_seconds,
-        max_batch_window_seconds=settings.max_batch_window_seconds,
-        created_at=settings.created_at,
-        updated_at=settings.updated_at,
+        user_id=int(settings.user_id) if settings.user_id else None,  # type: ignore
+        max_size_bytes=int(settings.max_size_bytes),  # type: ignore
+        current_usage_bytes=int(settings.current_usage_bytes),  # type: ignore
+        depth=int(settings.depth),  # type: ignore
+        headroom_percent=int(settings.headroom_percent),  # type: ignore
+        is_enabled=bool(settings.is_enabled),  # type: ignore
+        compression_enabled=bool(settings.compression_enabled),  # type: ignore
+        dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
+        debounce_window_seconds=int(settings.debounce_window_seconds),  # type: ignore
+        max_batch_window_seconds=int(settings.max_batch_window_seconds),  # type: ignore
+        created_at=settings.created_at,  # type: ignore
+        updated_at=settings.updated_at,  # type: ignore
     )
 
 
@@ -441,33 +464,51 @@ async def get_vcl_overview(
         # Create initial stats
         from app.services.vcl import VCLService
         vcl_service = VCLService(db)
-        vcl_service.recalculate_stats()
-        stats = db.query(VCLStats).first()
+        try:
+            vcl_service.recalculate_stats()
+            db.commit()
+            stats = db.query(VCLStats).first()
+        except Exception as e:
+            db.rollback()
+            # If stats creation fails, return empty stats
+            stats = None
     
     # Get total users count
     total_users = db.query(VCLSettings).count()
     
-    # Calculate average compression ratio
+    # Calculate average compression ratio - cast Columns
+    total_comp: int = int(stats.total_compressed_bytes) if stats else 0  # type: ignore
+    total_size: int = int(stats.total_size_bytes) if stats else 0  # type: ignore
+    
     compression_ratio = 0.0
-    if stats.total_compressed_bytes > 0:
-        compression_ratio = (1 - stats.total_compressed_bytes / stats.total_size_bytes) * 100
+    if total_comp > 0 and total_size > 0:
+        compression_ratio = (1 - total_comp / total_size) * 100
+    
+    # Cast all stat Columns for response
+    total_versions: int = int(stats.total_versions) if stats else 0  # type: ignore
+    total_blobs: int = int(stats.total_blobs) if stats else 0  # type: ignore
+    unique_blobs: int = int(stats.unique_blobs) if stats else 0  # type: ignore
+    dedup_savings: int = int(stats.deduplication_savings_bytes) if stats else 0  # type: ignore
+    comp_savings: int = int(stats.compression_savings_bytes) if stats else 0  # type: ignore
+    priority_count: int = int(stats.priority_count) if stats else 0  # type: ignore
+    cached_count: int = int(stats.cached_versions_count) if stats else 0  # type: ignore
     
     return AdminVCLOverview(
-        total_versions=stats.total_versions,
-        total_size_bytes=stats.total_size_bytes,
-        total_compressed_bytes=stats.total_compressed_bytes,
-        total_blobs=stats.total_blobs,
-        unique_blobs=stats.unique_blobs,
-        deduplication_savings_bytes=stats.deduplication_savings_bytes,
-        compression_savings_bytes=stats.compression_savings_bytes,
-        total_savings_bytes=stats.deduplication_savings_bytes + stats.compression_savings_bytes,
+        total_versions=total_versions,
+        total_size_bytes=total_size,
+        total_compressed_bytes=total_comp,
+        total_blobs=total_blobs,
+        unique_blobs=unique_blobs,
+        deduplication_savings_bytes=dedup_savings,
+        compression_savings_bytes=comp_savings,
+        total_savings_bytes=dedup_savings + comp_savings,
         compression_ratio=compression_ratio,
-        priority_count=stats.priority_count,
-        cached_versions_count=stats.cached_versions_count,
+        priority_count=priority_count,
+        cached_versions_count=cached_count,
         total_users=total_users,
-        last_cleanup_at=stats.last_cleanup_at,
-        last_priority_mode_at=stats.last_priority_mode_at,
-        updated_at=stats.updated_at,
+        last_cleanup_at=stats.last_cleanup_at if stats else None,  # type: ignore
+        last_priority_mode_at=stats.last_priority_mode_at if stats else None,  # type: ignore
+        updated_at=stats.updated_at if stats else None,  # type: ignore
     )
 
 
@@ -485,25 +526,36 @@ async def list_user_quotas(
     Returns:
         List of user quotas
     """
-    from app.models.user import User
-    
-    settings_list = db.query(VCLSettings).all()
+    # Get ALL users first
+    all_users = db.query(User).all()
     
     result = []
-    for settings in settings_list:
-        user_obj = db.query(User).filter(User.id == settings.user_id).first()
-        if not user_obj:
-            continue
+    for user_obj in all_users:
+        # Get or create default settings for this user
+        settings = db.query(VCLSettings).filter(VCLSettings.user_id == user_obj.id).first()
+        
+        if not settings:
+            # Create default settings if not exists
+            from app.services.vcl import VCLService
+            vcl_service = VCLService(db)
+            settings = vcl_service.get_or_create_user_settings(user_obj.id)
+            db.flush()
+        
+        # Count total versions for this user
+        total_versions = db.query(func.count(FileVersion.id)).filter(
+            FileVersion.user_id == user_obj.id
+        ).scalar() or 0
         
         usage_percent = (settings.current_usage_bytes / settings.max_size_bytes * 100) if settings.max_size_bytes > 0 else 0
         cleanup_needed = needs_cleanup(settings)
         
         result.append(AdminUserQuota(
-            user_id=settings.user_id,
+            user_id=user_obj.id,
             username=user_obj.username,
             max_size_bytes=settings.max_size_bytes,
             current_usage_bytes=settings.current_usage_bytes,
             usage_percent=usage_percent,
+            total_versions=total_versions,
             is_enabled=settings.is_enabled,
             cleanup_needed=cleanup_needed,
         ))
@@ -618,17 +670,38 @@ async def trigger_manual_cleanup(
                     detail="User VCL settings not found"
                 )
             
-            deleted, freed_bytes = priority_mode.cleanup_user_versions(cleanup_req.user_id)
-            
-            # Also enforce depth limit
-            priority_mode.enforce_depth_limit(cleanup_req.user_id)
-            
-            # Update stats
-            vcl_service.recalculate_stats()
+            if cleanup_req.dry_run:
+                # Dry run - only calculate what would be deleted
+                # Count versions that would be deleted
+                deleted = 0
+                freed_bytes = 0
+                # Simple estimation: count old versions
+                versions = db.query(FileVersion).filter(
+                    FileVersion.user_id == cleanup_req.user_id
+                ).order_by(FileVersion.created_at.desc()).offset(10).all()
+                deleted = len(versions)
+                freed_bytes = sum(v.file_size for v in versions)
+            else:
+                # Actually perform cleanup
+                deleted, freed_bytes = priority_mode.cleanup_user_versions(cleanup_req.user_id)
+                
+                # Also enforce depth limit
+                priority_mode.enforce_depth_limit(cleanup_req.user_id)
+                
+                # Commit changes
+                db.commit()
+                
+                # Update stats
+                try:
+                    vcl_service.recalculate_stats()
+                    db.commit()
+                except Exception:
+                    # Stats recalculation is not critical
+                    pass
             
             audit_logger.log_admin_action(
                 admin=admin.username,
-                action="manual_vcl_cleanup",
+                action="manual_vcl_cleanup" + ("_dry_run" if cleanup_req.dry_run else ""),
                 target=f"user_id:{cleanup_req.user_id}",
                 metadata={"deleted_versions": deleted, "freed_bytes": freed_bytes},
                 db=db
@@ -636,7 +709,7 @@ async def trigger_manual_cleanup(
             
             return CleanupResponse(
                 success=True,
-                message=f"Cleanup completed for user {cleanup_req.user_id}",
+                message=f"{'[DRY RUN] Would cleanup' if cleanup_req.dry_run else 'Cleanup completed'} for user {cleanup_req.user_id}",
                 deleted_versions=deleted,
                 freed_bytes=freed_bytes,
                 affected_users=1,
@@ -650,20 +723,38 @@ async def trigger_manual_cleanup(
             
             for settings in all_settings:
                 if needs_cleanup(settings):
-                    deleted, freed_bytes = priority_mode.cleanup_user_versions(settings.user_id)
-                    total_deleted += deleted
-                    total_freed += freed_bytes
-                    affected += 1
-                
-                # Enforce depth limit
-                priority_mode.enforce_depth_limit(settings.user_id)
+                    if cleanup_req.dry_run:
+                        # Dry run estimation
+                        versions = db.query(FileVersion).filter(
+                            FileVersion.user_id == settings.user_id
+                        ).order_by(FileVersion.created_at.desc()).offset(10).all()
+                        total_deleted += len(versions)
+                        total_freed += sum(v.file_size for v in versions)
+                        affected += 1
+                    else:
+                        deleted, freed_bytes = priority_mode.cleanup_user_versions(settings.user_id)
+                        total_deleted += deleted
+                        total_freed += freed_bytes
+                        affected += 1
+                    
+                        # Enforce depth limit
+                        priority_mode.enforce_depth_limit(settings.user_id)
             
-            # Update stats
-            vcl_service.recalculate_stats()
+            if not cleanup_req.dry_run:
+                # Commit all changes
+                db.commit()
+                
+                # Update stats
+                try:
+                    vcl_service.recalculate_stats()
+                    db.commit()
+                except Exception:
+                    # Stats recalculation is not critical
+                    pass
             
             audit_logger.log_admin_action(
                 admin=admin.username,
-                action="manual_vcl_cleanup_all",
+                action="manual_vcl_cleanup_all" + ("_dry_run" if cleanup_req.dry_run else ""),
                 target="all_users",
                 metadata={
                     "deleted_versions": total_deleted,
@@ -675,7 +766,7 @@ async def trigger_manual_cleanup(
             
             return CleanupResponse(
                 success=True,
-                message=f"Cleanup completed for {affected} users",
+                message=f"{'[DRY RUN] Would cleanup' if cleanup_req.dry_run else 'Cleanup completed'} for {affected} users",
                 deleted_versions=total_deleted,
                 freed_bytes=total_freed,
                 affected_users=affected,

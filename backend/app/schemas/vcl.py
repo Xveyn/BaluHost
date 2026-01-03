@@ -242,6 +242,7 @@ class AdminUserQuota(BaseModel):
     max_size_bytes: int
     current_usage_bytes: int
     usage_percent: float
+    total_versions: int
     is_enabled: bool
     cleanup_needed: bool
 
@@ -249,6 +250,7 @@ class AdminUserQuota(BaseModel):
 class CleanupRequest(BaseModel):
     """Request for manual cleanup."""
     user_id: Optional[int] = None  # None = all users
+    dry_run: bool = False  # If True, only simulate cleanup
 
 
 class CleanupResponse(BaseModel):
