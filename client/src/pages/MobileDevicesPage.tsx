@@ -1,19 +1,39 @@
 import { useState, useEffect } from 'react';
-import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell } from 'lucide-react';
-import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
+import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
+import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
+
+interface UserInfo {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+}
 
 export default function MobileDevicesPage() {
+  const [user, setUser] = useState<UserInfo | null>(null);
   const [devices, setDevices] = useState<MobileDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0); // Force re-render trigger
   const [qrData, setQrData] = useState<MobileRegistrationToken | null>(null);
   const [showQrDialog, setShowQrDialog] = useState(false);
+  const [selectedDevice, setSelectedDevice] = useState<MobileDevice | null>(null); // Für existierenden QR-Code
   const [includeVpn, setIncludeVpn] = useState(false);
   const [deviceName, setDeviceName] = useState('');
   const [tokenValidityDays, setTokenValidityDays] = useState(90);
   const [generating, setGenerating] = useState(false);
 
   useEffect(() => {
+    // User-Info aus Token laden
+    const token = localStorage.getItem('token');
+    if (token) {
+      fetch(buildApiUrl('/api/auth/me'), {
+        headers: { 'Authorization': `Bearer ${token}` }
+      })
+        .then(res => res.json())
+        .then(data => setUser(data))
+        .catch(err => console.error('Failed to load user:', err));
+    }
+
     loadDevices();
     
     // Auto-refresh every 10 seconds to detect changes from mobile app
@@ -104,6 +124,11 @@ export default function MobileDevicesPage() {
     if (seconds < 3600) return `Vor ${Math.floor(seconds / 60)} Min`;
     if (seconds < 86400) return `Vor ${Math.floor(seconds / 3600)} Std`;
     return `Vor ${Math.floor(seconds / 86400)} Tagen`;
+  };
+
+  const handleShowDeviceQr = (device: MobileDevice) => {
+    setSelectedDevice(device);
+    setShowQrDialog(true);
   };
 
   return (
@@ -232,13 +257,21 @@ export default function MobileDevicesPage() {
             {devices.map((device) => (
               <div
                 key={`${device.id}-${refreshKey}`}
-                className="p-4 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors"
+                className="p-4 rounded-lg bg-slate-800/40 border border-slate-700/50 hover:border-slate-600/50 transition-colors cursor-pointer"
+                onClick={() => handleShowDeviceQr(device)}
+                title="Klicken um QR-Code anzuzeigen"
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center gap-2 mb-2">
                       <Smartphone className="w-5 h-5 text-sky-400 flex-shrink-0" />
                       <h4 className="font-semibold text-white truncate">{device.device_name}</h4>
+                      {user?.role === 'admin' && device.username && (
+                        <span className="flex items-center gap-1 text-xs text-purple-400 bg-purple-400/10 px-2 py-0.5 rounded-full">
+                          <User className="w-3 h-3" />
+                          {device.username}
+                        </span>
+                      )}
                       {device.is_active ? (
                         <span className="flex items-center gap-1 text-xs text-green-400 bg-green-400/10 px-2 py-0.5 rounded-full">
                           <Wifi className="w-3 h-3" />
@@ -307,7 +340,10 @@ export default function MobileDevicesPage() {
                     <NotificationStatus deviceId={device.id} />
                   </div>
                   <button
-                    onClick={() => handleDeleteDevice(device.id, device.device_name)}
+                    onClick={(e) => {
+                      e.stopPropagation(); // Verhindere QR-Dialog
+                      handleDeleteDevice(device.id, device.device_name);
+                    }}
                     className="p-2 text-red-400 hover:text-red-300 hover:bg-red-400/10 rounded-lg transition-colors"
                     title="Gerät löschen"
                   >
@@ -321,18 +357,21 @@ export default function MobileDevicesPage() {
       </div>
 
       {/* QR Code Dialog */}
-      {showQrDialog && qrData && (
+      {showQrDialog && (qrData || selectedDevice) && (
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-white">QR-Code für Mobile App</h3>
+              <h3 className="text-xl font-semibold text-white">
+                {qrData ? 'QR-Code für Mobile App' : `QR-Code: ${selectedDevice?.device_name}`}
+              </h3>
               <button
                 onClick={() => {
                   setShowQrDialog(false);
                   setQrData(null);
+                  setSelectedDevice(null);
                   setDeviceName('');
                   setIncludeVpn(false);
-                  loadDevices();
+                  if (qrData) loadDevices(); // Nur bei neuem Token neu laden
                 }}
                 className="text-slate-400 hover:text-white transition-colors"
               >
@@ -340,38 +379,137 @@ export default function MobileDevicesPage() {
               </button>
             </div>
 
-            <div className="bg-white p-4 rounded-lg mb-4">
-              <img
-                src={`data:image/png;base64,${qrData.qr_code}`}
-                alt="QR Code"
-                className="w-full h-auto"
-              />
-            </div>
+            {qrData ? (
+              // Neues Gerät
+              <>
+                <div className="bg-white p-4 rounded-lg mb-4">
+                  <img
+                    src={`data:image/png;base64,${qrData.qr_code}`}
+                    alt="QR Code"
+                    className="w-full h-auto"
+                  />
+                </div>
 
-            <div className="space-y-2 text-sm text-slate-300 mb-4">
-              <p>✓ Scanne diesen QR-Code mit der BaluHost Mobile App</p>
-              <p>✓ Registrierungs-Token ist <strong>5 Minuten</strong> gültig</p>
-              <p>✓ Geräte-Autorisierung gilt für <strong className="text-sky-400">{qrData.device_token_validity_days} Tage ({Math.round(qrData.device_token_validity_days / 30)} Monate)</strong></p>
-              {qrData.vpn_config && (
-                <p className="text-green-400">✓ VPN-Konfiguration eingeschlossen</p>
-              )}
-            </div>
+                <div className="space-y-2 text-sm text-slate-300 mb-4">
+                  <p>✓ Scanne diesen QR-Code mit der BaluHost Mobile App</p>
+                  <p>✓ Registrierungs-Token ist <strong>5 Minuten</strong> gültig</p>
+                  <p>✓ Geräte-Autorisierung gilt für <strong className="text-sky-400">{qrData.device_token_validity_days} Tage ({Math.round(qrData.device_token_validity_days / 30)} Monate)</strong></p>
+                  {qrData.vpn_config && (
+                    <p className="text-green-400">✓ VPN-Konfiguration eingeschlossen</p>
+                  )}
+                </div>
 
-            <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 mb-4">
-              <p className="text-xs text-sky-300 font-semibold mb-1.5 flex items-center gap-1.5">
-                🔔 Automatische Erinnerungen
-              </p>
-              <p className="text-xs text-slate-300">
-                Du wirst <strong>7 Tage</strong>, <strong>3 Tage</strong> und <strong>1 Stunde</strong> vor Ablauf per Push-Benachrichtigung erinnert.
-              </p>
-            </div>
+                <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 mb-4">
+                  <p className="text-xs text-sky-300 font-semibold mb-1.5 flex items-center gap-1.5">
+                    🔔 Automatische Erinnerungen
+                  </p>
+                  <p className="text-xs text-slate-300">
+                    Du wirst <strong>7 Tage</strong>, <strong>3 Tage</strong> und <strong>1 Stunde</strong> vor Ablauf per Push-Benachrichtigung erinnert.
+                  </p>
+                </div>
 
-            <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-              <p className="text-xs text-slate-400 mb-1">Token läuft ab:</p>
-              <p className="text-sm text-white font-mono">
-                {new Date(qrData.expires_at).toLocaleString('de-DE')}
-              </p>
-            </div>
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
+                  <p className="text-xs text-slate-400 mb-1">Token läuft ab:</p>
+                  <p className="text-sm text-white font-mono">
+                    {new Date(qrData.expires_at).toLocaleString('de-DE')}
+                  </p>
+                </div>
+              </>
+            ) : selectedDevice ? (
+              // Existierendes Gerät - Info-Ansicht (kein Registrierungs-QR-Code!)
+              <>
+                <div className="bg-amber-500/10 border border-amber-500/30 rounded-lg p-4 mb-4">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Smartphone className="w-5 h-5 text-amber-400" />
+                    <span className="text-amber-300 font-semibold">⚠️ Registriertes Gerät</span>
+                  </div>
+                  <p className="text-sm text-slate-300 mb-2">
+                    Dieses Gerät ist bereits bei BaluHost registriert und kann nicht erneut gescannt werden.
+                  </p>
+                  <p className="text-xs text-slate-400">
+                    Um das Gerät neu zu registrieren, lösche es zuerst mit dem Papierkorb-Symbol und generiere dann einen neuen QR-Code.
+                  </p>
+                </div>
+
+                <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-4 mb-4">
+                  <div className="space-y-2 text-sm">
+                    <div className="flex items-center gap-2">
+                      <Smartphone className="w-4 h-4 text-sky-400" />
+                      <span className="text-sky-300 font-medium">Geräte-Informationen</span>
+                    </div>
+                    {user?.role === 'admin' && selectedDevice.username && (
+                      <div className="flex items-center gap-2">
+                        <User className="w-4 h-4 text-purple-400" />
+                        <span className="text-slate-300">Benutzer:</span>
+                        <span className="text-white font-semibold">{selectedDevice.username}</span>
+                      </div>
+                    )}
+                    <div className="flex items-center gap-2">
+                      <Calendar className="w-4 h-4 text-slate-400" />
+                      <span className="text-slate-300">Registriert:</span>
+                      <span className="text-white">{formatDate(selectedDevice.created_at)}</span>
+                    </div>
+                    {selectedDevice.expires_at && (
+                      <div className={`flex items-center gap-2 ${
+                        (() => {
+                          const expiresDate = new Date(selectedDevice.expires_at!);
+                          const daysLeft = Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                          const isExpired = daysLeft <= 0;
+                          const isExpiringSoon = daysLeft <= 7;
+                          return isExpired ? 'text-red-400' : isExpiringSoon ? 'text-orange-400' : 'text-green-400';
+                        })()
+                      }`}>
+                        <Calendar className="w-4 h-4" />
+                        <span>Gültig bis:</span>
+                        <span className="font-semibold">{formatDate(selectedDevice.expires_at)}</span>
+                        {(() => {
+                          const expiresDate = new Date(selectedDevice.expires_at!);
+                          const daysLeft = Math.ceil((expiresDate.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+                          const isExpired = daysLeft <= 0;
+                          const isExpiringSoon = daysLeft <= 7;
+                          if (isExpired) return <span className="text-xs bg-red-500/20 px-2 py-0.5 rounded">Abgelaufen</span>;
+                          if (isExpiringSoon) return <span className="text-xs bg-orange-500/20 px-2 py-0.5 rounded">{daysLeft} Tage</span>;
+                          return <span className="text-xs bg-green-500/20 px-2 py-0.5 rounded">Aktiv</span>;
+                        })()}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-4 mb-4">
+                  <p className="text-xs text-slate-400 mb-2">📱 Verbindungs-Details:</p>
+                  <div className="space-y-1.5 text-xs font-mono text-slate-300">
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Server:</span> 
+                      <span className="text-white">{window.location.origin}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Device ID:</span> 
+                      <span className="text-white truncate ml-2">{selectedDevice.id}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-slate-500">Status:</span> 
+                      <span className={selectedDevice.is_active ? 'text-green-400 font-semibold' : 'text-red-400'}>
+                        {selectedDevice.is_active ? '● Aktiv' : '○ Inaktiv'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-red-500/10 border border-red-500/30 rounded-lg p-4">
+                  <p className="text-sm font-semibold text-red-300 mb-2 flex items-center gap-2">
+                    <QrCodeIcon className="w-4 h-4" />
+                    So registrierst du das Gerät neu:
+                  </p>
+                  <ol className="list-decimal list-inside space-y-2 text-sm text-slate-300">
+                    <li>Klicke auf das <Trash2 className="inline w-3.5 h-3.5 mx-1 text-red-400" /> Papierkorb-Symbol bei diesem Gerät</li>
+                    <li>Bestätige die Löschung</li>
+                    <li>Generiere einen neuen QR-Code oben auf der Seite</li>
+                    <li>Scanne den neuen Code mit deiner BaluHost Mobile App</li>
+                  </ol>
+                </div>
+              </>
+            ) : null}
           </div>
         </div>
       )}

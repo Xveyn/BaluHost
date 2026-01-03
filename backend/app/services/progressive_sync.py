@@ -117,7 +117,7 @@ class ProgressiveSyncService:
         # Update upload progress
         upload.completed_chunks += 1
         upload.uploaded_bytes += len(chunk_data)
-        upload.updated_at = datetime.utcnow()
+        # updated_at is set automatically by onupdate
         
         # Check if upload complete
         if upload.completed_chunks == upload.total_chunks:
@@ -248,7 +248,7 @@ class ProgressiveSyncService:
         
         if file_metadata:
             file_metadata.size_bytes = upload.total_size
-            file_metadata.updated_at = datetime.utcnow()
+            # updated_at is set automatically by onupdate
     
     def cleanup_expired_uploads(self):
         """Clean up old incomplete uploads."""

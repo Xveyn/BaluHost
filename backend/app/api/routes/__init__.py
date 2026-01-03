@@ -1,6 +1,6 @@
 from fastapi import APIRouter
 
-from app.api.routes import auth, files, logging, system, users, upload_progress, shares, backup, sync, sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config
+from app.api.routes import auth, files, logging, system, users, upload_progress, shares, backup, sync, sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config, vcl
 
 api_router = APIRouter()
 api_router.include_router(health.router, tags=["health"])  # Health check endpoint (no prefix)
@@ -12,6 +12,7 @@ api_router.include_router(system.router, prefix="/system", tags=["system"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])
 api_router.include_router(shares.router, prefix="/shares", tags=["shares"])
 api_router.include_router(backup.router, prefix="/backups", tags=["backups"])
+api_router.include_router(vcl.router, prefix="/vcl", tags=["vcl"])
 api_router.include_router(sync.router)
 api_router.include_router(sync_advanced.router)
 api_router.include_router(sync_compat.router)

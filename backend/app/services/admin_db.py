@@ -112,10 +112,25 @@ class AdminDBService:
 
         total = None
         try:
-            # Count approximate total (simple count)
-            total = db.execute(select([table.count()])).scalar()
-        except Exception:
+            # Count total rows
+            from sqlalchemy import func
+            count_stmt = select(func.count()).select_from(table)
+            if q:
+                # Apply same filter to count
+                q_clauses = []
+                for col in table.columns:
+                    try:
+                        if hasattr(col.type, "python_type") and col.type.python_type is str:
+                            q_clauses.append(col.ilike(f"%{q}%"))
+                    except Exception:
+                        continue
+                if q_clauses:
+                    from sqlalchemy import or_
+                    count_stmt = count_stmt.where(or_(*q_clauses))
+            total = db.execute(count_stmt).scalar()
+        except Exception as e:
             # fallback: None
+            print(f"[ADMIN_DB] Failed to count rows: {e}")
             total = None
 
         stmt = stmt.limit(page_size).offset(offset)

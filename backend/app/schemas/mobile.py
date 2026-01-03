@@ -48,8 +48,10 @@ class MobileDevice(MobileDeviceBase):
     """Schema for mobile device in responses."""
     id: str
     user_id: str
+    username: Optional[str] = None  # Nur für Admin sichtbar
     is_active: bool
     last_sync: Optional[datetime] = None
+    last_seen: Optional[datetime] = None
     expires_at: Optional[datetime] = None
     created_at: datetime
     updated_at: Optional[datetime] = None

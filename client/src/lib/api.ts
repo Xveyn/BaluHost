@@ -28,6 +28,7 @@ export interface MobileRegistrationToken {
 export interface MobileDevice {
   id: string;
   user_id: string;
+  username?: string; // Nur für Admin sichtbar
   device_name: string;
   device_type: string;
   device_model: string | null;

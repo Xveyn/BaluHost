@@ -1,6 +1,6 @@
 """API routes for file sharing."""
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -28,6 +28,7 @@ router = APIRouter()
 async def create_share_link(
     data: ShareLinkCreate,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -83,6 +84,7 @@ async def create_share_link(
 @user_limiter.limit(get_limit("share_list"))
 async def list_share_links(
     request: Request,
+    response: Response,
     include_expired: bool = False,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
@@ -245,6 +247,7 @@ async def access_share_link(
     token: str,
     data: ShareLinkAccessRequest,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """Verify access to a public share link (with optional password)."""

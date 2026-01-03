@@ -56,10 +56,10 @@ class SyncMetadata(Base):
     sync_state = relationship("SyncState", back_populates="sync_metadata")
 
 
-class FileVersion(Base):
+class SyncFileVersion(Base):
     """Keep historical versions of files for rollback and versioning."""
     
-    __tablename__ = "file_versions"
+    __tablename__ = "sync_file_versions"
     
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     file_metadata_id: Mapped[int] = mapped_column(Integer, ForeignKey("file_metadata.id"), nullable=False, index=True)

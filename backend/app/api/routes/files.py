@@ -1,6 +1,6 @@
 from typing import Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, Response, UploadFile, status
 from fastapi import Body
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
@@ -34,6 +34,7 @@ router = APIRouter()
 @user_limiter.limit(get_limit("file_list"))
 async def get_permissions(
     request: Request,
+    response: Response,
     path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -65,6 +66,7 @@ async def get_permissions(
 @user_limiter.limit(get_limit("file_delete"))
 async def set_permissions(
     request: Request,
+    response: Response,
     payload: FilePermissionsRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -199,6 +201,7 @@ async def get_mountpoints(
 @user_limiter.limit(get_limit("file_list"))
 async def list_files(
     request: Request,
+    response: Response,
     path: str = "",
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -225,6 +228,7 @@ async def list_files(
 @user_limiter.limit(get_limit("file_download"))
 async def download_file(
     request: Request,
+    response: Response,
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -338,6 +342,7 @@ async def download_file_by_id(
 @user_limiter.limit(get_limit("file_upload"))
 async def upload_files(
     request: Request,
+    response: Response,
     files: list[UploadFile] | None = File(None),
     file: UploadFile | None = File(None),
     path: str = Form(""),
@@ -400,6 +405,7 @@ async def get_available_storage(
 @user_limiter.limit(get_limit("file_delete"))
 async def delete_path_raw(
     request: Request,
+    response: Response,
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),

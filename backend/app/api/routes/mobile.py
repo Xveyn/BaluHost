@@ -141,11 +141,21 @@ async def get_devices(
 ):
     """
     Get all registered mobile devices for the current user.
+    Admins see all devices with username included.
     """
-    devices = MobileService.get_user_devices(db=db, user_id=str(current_user.id))
-    print(f"[GET DEVICES] User {current_user.id} has {len(devices)} device(s)")
+    # Admin sieht alle Geräte aller Nutzer
+    if current_user.role == "admin":
+        devices = MobileService.get_all_devices_with_users(db=db)
+        print(f"[GET DEVICES] Admin sees all {len(devices)} device(s)")
+    else:
+        devices = MobileService.get_user_devices(db=db, user_id=str(current_user.id))
+        print(f"[GET DEVICES] User {current_user.id} has {len(devices)} device(s)")
+    
     for dev in devices:
-        print(f"  - {dev.id}: {dev.device_name}")
+        # Für Admin: dev ist dict, für User: dev ist MobileDevice-Objekt
+        device_id = dev.get('id') if isinstance(dev, dict) else dev.id
+        device_name = dev.get('device_name') if isinstance(dev, dict) else dev.device_name
+        print(f"  - {device_id}: {device_name}")
     return devices
 
 

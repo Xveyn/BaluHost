@@ -7,7 +7,7 @@ from app import api
 from app.api import deps
 from app.core.database import get_db
 from app.models.user import User
-from app.models.sync_state import FileVersion
+from app.models.sync_state import SyncFileVersion
 from app.models.mobile import MobileRegistrationToken
 from app.models.file_metadata import FileMetadata
 from app.services.file_sync import FileSyncService
@@ -180,9 +180,9 @@ async def get_file_history(
             detail="File not found"
         )
     
-    versions = db.query(FileVersion).filter(
-        FileVersion.file_metadata_id == file_metadata.id
-    ).order_by(FileVersion.version_number.desc()).all()
+    versions = db.query(SyncFileVersion).filter(
+        SyncFileVersion.file_metadata_id == file_metadata.id
+    ).order_by(SyncFileVersion.version_number.desc()).all()
     
     return {
         "file_path": file_path,

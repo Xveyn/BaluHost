@@ -7,7 +7,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
-from app.models.sync_state import SyncState, SyncMetadata, FileVersion
+from app.models.sync_state import SyncState, SyncMetadata, SyncFileVersion
 from app.models.file_metadata import FileMetadata
 from app.core.config import settings
 
@@ -193,11 +193,11 @@ class FileSyncService:
         if not actual_path.exists():
             return
         
-        version_count = self.db.query(FileVersion).filter(
-            FileVersion.file_metadata_id == file_metadata.id
+        version_count = self.db.query(SyncFileVersion).filter(
+            SyncFileVersion.file_metadata_id == file_metadata.id
         ).count()
         
-        version = FileVersion(
+        version = SyncFileVersion(
             file_metadata_id=file_metadata.id,
             version_number=version_count + 1,
             file_path=str(actual_path),

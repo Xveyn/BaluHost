@@ -22,8 +22,8 @@ else()
 endif()
 
 # Dependencies
-find_package(CURL REQUIRED)
-find_package(SQLite3 REQUIRED)
+find_package(CURL CONFIG REQUIRED)
+find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 
 # Include FetchContent for header-only libraries

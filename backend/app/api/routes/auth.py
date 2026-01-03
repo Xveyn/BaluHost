@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -15,7 +15,7 @@ router = APIRouter()
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit(get_limit("auth_login"))
-async def login(payload: LoginRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+async def login(payload: LoginRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
     user_agent = request.headers.get("user-agent")
@@ -49,7 +49,7 @@ async def login(payload: LoginRequest, request: Request, db: Session = Depends(g
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(get_limit("auth_register"))
-async def register(payload: RegisterRequest, request: Request, db: Session = Depends(get_db)) -> TokenResponse:
+async def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
     

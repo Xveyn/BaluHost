@@ -147,7 +147,7 @@ def update_metadata(
         if mime_type is not None:
             metadata.mime_type = mime_type
         
-        metadata.updated_at = datetime.now(timezone.utc)
+        # updated_at is set automatically by onupdate
         db.commit()
         db.refresh(metadata)
         return metadata
@@ -225,7 +225,7 @@ def rename_metadata(
         metadata.path = new_normalized
         metadata.name = new_name
         metadata.parent_path = _get_parent_path(new_normalized)
-        metadata.updated_at = datetime.now(timezone.utc)
+        # updated_at is set automatically by onupdate
         
         db.commit()
         db.refresh(metadata)
@@ -305,7 +305,7 @@ def set_owner_id(relative_path: str, owner_id: int, db: Optional[Session] = None
             return False
         
         metadata.owner_id = owner_id
-        metadata.updated_at = datetime.now(timezone.utc)
+        # updated_at is set automatically by onupdate
         db.commit()
         return True
     except Exception:

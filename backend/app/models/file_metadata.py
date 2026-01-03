@@ -1,6 +1,6 @@
 """File metadata database model."""
 from datetime import datetime
-from typing import Optional
+from typing import Optional, List
 
 from sqlalchemy import String, DateTime, Integer, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -31,6 +31,13 @@ class FileMetadata(Base):
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True
+    )
+    
+    # VCL Relationship
+    versions: Mapped[List["FileVersion"]] = relationship(
+        "FileVersion",
+        back_populates="file",
+        cascade="all, delete-orphan"
     )
     
     def __repr__(self) -> str:

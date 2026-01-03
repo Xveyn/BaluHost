@@ -142,7 +142,14 @@ class MobileService:
                 detail="Registration token already used"
             )
         
+        # Check token expiration
         token_expires = token_record.expires_at
+        if token_expires is None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid registration token"
+            )
+        
         if token_expires.tzinfo is None:
             token_expires = token_expires.replace(tzinfo=timezone.utc)
         if token_expires < datetime.now(timezone.utc):
@@ -245,6 +252,40 @@ class MobileService:
         ).all()
     
     @staticmethod
+    def get_all_devices_with_users(db: Session) -> List[dict]:
+        """Get all mobile devices with username (Admin only)."""
+        from sqlalchemy import select
+        from app.models.user import User
+        
+        devices = db.query(MobileDevice).join(
+            User, MobileDevice.user_id == User.id
+        ).all()
+        
+        # Konvertiere zu dict und füge username hinzu
+        result = []
+        for device in devices:
+            user = db.query(User).filter(User.id == device.user_id).first()
+            device_dict = {
+                "id": device.id,
+                "user_id": device.user_id,
+                "username": user.username if user else "Unknown",
+                "device_name": device.device_name,
+                "device_type": device.device_type,
+                "device_model": device.device_model,
+                "os_version": device.os_version,
+                "app_version": device.app_version,
+                "is_active": device.is_active,
+                "last_sync": device.last_sync.isoformat() if device.last_sync else None,
+                "last_seen": device.last_seen.isoformat() if device.last_seen else None,
+                "expires_at": device.expires_at.isoformat() if device.expires_at else None,
+                "created_at": device.created_at.isoformat(),
+                "updated_at": device.updated_at.isoformat() if device.updated_at else None
+            }
+            result.append(device_dict)
+        
+        return result
+    
+    @staticmethod
     def get_device(db: Session, device_id: str, user_id: str) -> Optional[MobileDevice]:
         """Get a specific mobile device."""
         return db.query(MobileDevice).filter(
@@ -317,7 +358,6 @@ class MobileService:
         for field, value in settings.dict().items():
             setattr(backup, field, value)
         
-        backup.updated_at = datetime.utcnow()
         db.commit()
         db.refresh(backup)
         return backup
