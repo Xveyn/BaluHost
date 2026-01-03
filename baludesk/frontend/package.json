@@ -44,7 +44,16 @@
     },
     "files": [
       "dist/**/*",
-      "package.json"
+      "package.json",
+      "../backend/build/Release/baludesk-backend.exe",
+      "../backend/build/Release/*.dll"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/build/Release/",
+        "to": "backend",
+        "filter": ["*.exe", "*.dll"]
+      }
     ],
     "win": {
       "target": ["nsis", "portable"],

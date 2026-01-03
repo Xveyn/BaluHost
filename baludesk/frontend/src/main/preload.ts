@@ -6,6 +6,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // Send command to backend
   sendBackendCommand: (command: any) => ipcRenderer.invoke('backend-command', command),
   
+  // Convenient invoke method for direct backend communication
+  invoke: (type: string, data: any) => ipcRenderer.invoke('backend-command', { type, data }),
+  
   // Listen to backend messages
   onBackendMessage: (callback: (message: any) => void) => {
     ipcRenderer.on('backend-message', (_event, message) => callback(message));
@@ -18,14 +21,23 @@ contextBridge.exposeInMainWorld('electronAPI', {
   removeBackendListener: () => {
     ipcRenderer.removeAllListeners('backend-message');
   },
+
+  // File system dialogs
+  selectFile: () => ipcRenderer.invoke('dialog:openFile'),
+  selectFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  selectSaveLocation: (defaultName: string) => ipcRenderer.invoke('dialog:saveFile', defaultName),
 });
 
 // Type definitions for TypeScript
 export interface ElectronAPI {
   sendBackendCommand: (command: any) => Promise<any>;
+  invoke: (type: string, data: any) => Promise<any>;
   onBackendMessage: (callback: (message: any) => void) => void;
   getAppVersion: () => Promise<string>;
   removeBackendListener: () => void;
+  selectFile: () => Promise<string | null>;
+  selectFolder: () => Promise<string | null>;
+  selectSaveLocation: (defaultName: string) => Promise<string | null>;
 }
 
 declare global {

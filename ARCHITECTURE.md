@@ -194,9 +194,9 @@ baluhost/
 ### Authentication Flow
 
 ```
-┌──────┐                           ┌──────────┐
-│Client│                           │ Backend  │
-└──┬───┘                           └────┬─────┘
+┌──────┐                            ┌──────────┐
+│Client│                            │ Backend  │
+└──┬───┘                            └────┬─────┘
    │                                     │
    │ POST /api/auth/login                │
    │ { username, password }              │
@@ -206,7 +206,7 @@ baluhost/
    │                  Generate JWT token │
    │                                     │
    │        200 OK                       │
-   │ { token, user: { id, role, ... } } │
+   │ { token, user: { id, role, ... } }  │
    │<────────────────────────────────────│
    │                                     │
    │ Store token in localStorage         │

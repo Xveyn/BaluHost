@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import FileExplorer from './pages/FileExplorer';
+import FileExplorerTest from './pages/FileExplorerTest';
 
 interface User {
   username: string;
@@ -66,6 +68,20 @@ export default function App() {
           element={
             user ? (
               <Dashboard user={user} onLogout={handleLogout} />
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+        <Route
+          path="/files-test"
+          element={user ? <FileExplorerTest /> : <Navigate to="/login" replace />}
+        />
+        <Route
+          path="/files"
+          element={
+            user ? (
+              <FileExplorer />
             ) : (
               <Navigate to="/login" replace />
             )

@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -212,6 +212,49 @@ ipcMain.handle('backend-command', async (_event, command) => {
 
 ipcMain.handle('get-app-version', () => {
   return app.getVersion();
+});
+
+// Dialog handlers
+ipcMain.handle('dialog:openFile', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openFile'],
+    filters: [
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  
+  if (result.canceled) {
+    return null;
+  }
+  
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('dialog:openFolder', async () => {
+  const result = await dialog.showOpenDialog(mainWindow, {
+    properties: ['openDirectory']
+  });
+  
+  if (result.canceled) {
+    return null;
+  }
+  
+  return result.filePaths[0] || null;
+});
+
+ipcMain.handle('dialog:saveFile', async (_event, defaultName: string) => {
+  const result = await dialog.showSaveDialog(mainWindow, {
+    defaultPath: defaultName,
+    filters: [
+      { name: 'All Files', extensions: ['*'] }
+    ]
+  });
+  
+  if (result.canceled) {
+    return null;
+  }
+  
+  return result.filePath || null;
 });
 
 // App Lifecycle

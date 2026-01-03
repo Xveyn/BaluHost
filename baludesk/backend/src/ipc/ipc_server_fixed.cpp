@@ -1,6 +1,7 @@
 #include "ipc_server.h"
 #include "../sync/sync_engine.h"
 #include "../utils/logger.h"
+#include "../baluhost_client.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <sstream>
@@ -11,6 +12,8 @@ using json = nlohmann::json;
 namespace baludesk {
 
 IpcServer::IpcServer(SyncEngine* engine) : engine_(engine) {}
+
+IpcServer::~IpcServer() {}
 
 bool IpcServer::start() {
     Logger::info("IPC Server started, listening on stdin");
@@ -67,6 +70,39 @@ void IpcServer::processMessages() {
             else if (type == "get_folders") {
                 handleGetFolders(requestId);
             }
+            else if (type == "list_files") {
+                handleListFiles(message, requestId);
+            }
+            else if (type == "get_mountpoints") {
+                handleGetMountpoints(requestId);
+            }
+            else if (type == "create_folder") {
+                handleCreateFolder(message, requestId);
+            }
+            else if (type == "rename_file") {
+                handleRenameFile(message, requestId);
+            }
+            else if (type == "move_file") {
+                handleMoveFile(message, requestId);
+            }
+            else if (type == "delete_file") {
+                handleDeleteFile(message, requestId);
+            }
+            else if (type == "download_file") {
+                handleDownloadFile(message, requestId);
+            }
+            else if (type == "upload_file") {
+                handleUploadFile(message, requestId);
+            }
+            else if (type == "get_permissions") {
+                handleGetPermissions(message, requestId);
+            }
+            else if (type == "set_permission") {
+                handleSetPermission(message, requestId);
+            }
+            else if (type == "remove_permission") {
+                handleRemovePermission(message, requestId);
+            }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
                 sendError("Unknown command type", requestId);
@@ -105,14 +141,26 @@ void IpcServer::handleLogin(const json& message, int requestId) {
         
         Logger::info("Login attempt: {} @ {}", username, serverUrl);
         
-        // Note: SyncEngine currently doesn't support serverUrl parameter
-        // TODO: Update SyncEngine::login() to accept serverUrl
+        // Initialize BaluHost client
+        if (!baluhostClient_) {
+            baluhostClient_ = std::make_unique<BaluhostClient>(serverUrl);
+        }
+        
+        // Authenticate with BaluHost server
+        bool baluhostAuth = baluhostClient_->login(username, password);
+        if (!baluhostAuth) {
+            sendError("BaluHost authentication failed: " + baluhostClient_->getLastError(), requestId);
+            Logger::warn("BaluHost login failed for user: {}", username);
+            return;
+        }
+        
+        // Also authenticate with SyncEngine (for backward compatibility)
         bool success = engine_->login(username, password);
         
-        if (success) {
+        if (success && baluhostAuth) {
             json response = {
                 {"success", true},
-                {"token", "mock-token-" + username}, // TODO: Get real token from engine
+                {"token", "authenticated"},
                 {"user", {
                     {"username", username},
                     {"id", 1}
@@ -328,6 +376,376 @@ void IpcServer::broadcastEvent(const std::string& eventType, const json& data) {
         {"data", data}
     };
     sendResponse(event, -1);
+}
+
+// File operation handlers
+void IpcServer::handleListFiles(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string path = data.value("path", "/");
+        std::string mountId = data.value("mountId", "");
+        
+        auto files = baluhostClient_->listFiles(path, mountId);
+        
+        json filesJson = json::array();
+        for (const auto& file : files) {
+            filesJson.push_back({
+                {"id", file.id},
+                {"name", file.name},
+                {"path", file.path},
+                {"type", file.type},
+                {"size", file.size},
+                {"owner", file.owner},
+                {"created_at", file.created_at},
+                {"updated_at", file.updated_at}
+            });
+            if (file.mount_id.has_value()) {
+                filesJson.back()["mount_id"] = file.mount_id.value();
+            }
+        }
+        
+        json response = {
+            {"success", true},
+            {"files", filesJson}
+        };
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("List files error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleGetMountpoints(int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto mountpoints = baluhostClient_->getMountpoints();
+        
+        json mountpointsJson = json::array();
+        for (const auto& mp : mountpoints) {
+            mountpointsJson.push_back({
+                {"id", mp.id},
+                {"name", mp.name},
+                {"mount_path", mp.mount_path},
+                {"raid_level", mp.raid_level},
+                {"total_size", mp.total_size},
+                {"used_size", mp.used_size}
+            });
+        }
+        
+        json response = {
+            {"success", true},
+            {"mountpoints", mountpointsJson}
+        };
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Get mountpoints error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleCreateFolder(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string path = data.value("path", "");
+        std::string name = data.value("name", "");
+        std::string mountId = data.value("mountId", "");
+        
+        if (name.empty()) {
+            sendError("Folder name required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->createFolder(path, name, mountId);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to create folder: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Create folder error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleRenameFile(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        std::string newName = data.value("newName", "");
+        
+        if (fileId == 0 || newName.empty()) {
+            sendError("File ID and new name required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->renameFile(fileId, newName);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to rename file: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Rename file error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleMoveFile(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        std::string newPath = data.value("newPath", "");
+        
+        if (fileId == 0 || newPath.empty()) {
+            sendError("File ID and new path required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->moveFile(fileId, newPath);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to move file: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Move file error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleDeleteFile(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        
+        if (fileId == 0) {
+            sendError("File ID required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->deleteFile(fileId);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to delete file: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Delete file error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleDownloadFile(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string remotePath = data.value("remotePath", "");
+        std::string localPath = data.value("localPath", "");
+        
+        if (remotePath.empty() || localPath.empty()) {
+            sendError("Remote path and local path required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->downloadFileByPath(remotePath, localPath);
+        
+        if (success) {
+            json response = {
+                {"success", true},
+                {"localPath", localPath}
+            };
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to download file: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Download file error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleUploadFile(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string localPath = data.value("localPath", "");
+        std::string remotePath = data.value("remotePath", "/");
+        std::string mountId = data.value("mountId", "");
+        
+        if (localPath.empty()) {
+            sendError("Local file path required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->uploadFile(localPath, remotePath, mountId);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to upload file: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Upload file error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleGetPermissions(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        
+        if (fileId == 0) {
+            sendError("File ID required", requestId);
+            return;
+        }
+        
+        auto permissions = baluhostClient_->getPermissions(fileId);
+        
+        json permsJson = json::array();
+        for (const auto& perm : permissions) {
+            permsJson.push_back({
+                {"username", perm.username},
+                {"can_view", perm.can_view},
+                {"can_edit", perm.can_edit},
+                {"can_delete", perm.can_delete}
+            });
+        }
+        
+        json response = {
+            {"success", true},
+            {"permissions", permsJson}
+        };
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Get permissions error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleSetPermission(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        std::string username = data.value("username", "");
+        bool canView = data.value("can_view", false);
+        bool canEdit = data.value("can_edit", false);
+        bool canDelete = data.value("can_delete", false);
+        
+        if (fileId == 0 || username.empty()) {
+            sendError("File ID and username required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->setPermission(fileId, username, canView, canEdit, canDelete);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to set permission: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Set permission error: ") + e.what(), requestId);
+    }
+}
+
+void IpcServer::handleRemovePermission(const json& message, int requestId) {
+    (void)requestId;
+    try {
+        if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+            sendError("Not authenticated to BaluHost server", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        int fileId = data.value("fileId", 0);
+        std::string username = data.value("username", "");
+        
+        if (fileId == 0 || username.empty()) {
+            sendError("File ID and username required", requestId);
+            return;
+        }
+        
+        bool success = baluhostClient_->removePermission(fileId, username);
+        
+        if (success) {
+            json response = {{"success", true}};
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to remove permission: " + baluhostClient_->getLastError(), requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Remove permission error: ") + e.what(), requestId);
+    }
 }
 
 } // namespace baludesk

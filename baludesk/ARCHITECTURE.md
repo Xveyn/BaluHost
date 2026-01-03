@@ -6,9 +6,9 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
-│                        Presentation Layer                       │
-│                    (Electron + React Frontend)                  │
-│                                                                  │
+│                        Presentation Layer                      │
+│                    (Electron + React Frontend)                 │
+│                                                                │
 │  • User Interface (React Components)                           │
 │  • System Tray Integration                                     │
 │  • IPC Client (communicates with Main Process)                 │
@@ -18,10 +18,10 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
                          │ Electron IPC (JSON Messages)
                          │
 ┌────────────────────────┴───────────────────────────────────────┐
-│                      Application Layer                          │
-│                   (Electron Main Process)                       │
-│                                                                  │
-│  • IPC Bridge (Frontend ↔ C++ Backend)                        │
+│                      Application Layer                         │
+│                   (Electron Main Process)                      │
+│                                                                │
+│  • IPC Bridge (Frontend ↔ C++ Backend)                         │
 │  • Process Manager (spawns C++ backend)                        │
 │  • System Tray Controller                                      │
 │  • Auto-Update Manager                                         │
@@ -30,9 +30,9 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
                          │ stdin/stdout JSON Messages
                          │
 ┌────────────────────────┴───────────────────────────────────────┐
-│                         Business Logic Layer                    │
-│                         (C++ Sync Engine)                       │
-│                                                                  │
+│                         Business Logic Layer                   │
+│                         (C++ Sync Engine)                      │
+│                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Sync Engine                                             │  │
 │  │  • Change Detection (Local + Remote)                     │  │
@@ -40,14 +40,14 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
 │  │  • Upload/Download Manager                               │  │
 │  │  • Queue Management                                      │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Filesystem Watcher                                      │  │
 │  │  • Platform-Specific Implementations                     │  │
 │  │  • Event Debouncing                                      │  │
 │  │  • Change Notification                                   │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  HTTP Client                                             │  │
 │  │  • REST API Calls (libcurl)                              │  │
@@ -55,7 +55,7 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
 │  │  • Connection Pooling                                    │  │
 │  │  • Retry Logic                                           │  │
 │  └──────────────────────────────────────────────────────────┘  │
-│                                                                  │
+│                                                                │
 │  ┌──────────────────────────────────────────────────────────┐  │
 │  │  Local Database (SQLite)                                 │  │
 │  │  • Sync State                                            │  │
@@ -67,9 +67,9 @@ BaluDesk follows a **three-tier architecture** with clear separation of concerns
                          │ HTTPS REST API
                          │
 ┌────────────────────────┴───────────────────────────────────────┐
-│                         Data Layer                              │
-│                     (BaluHost NAS Backend)                      │
-│                                                                  │
+│                         Data Layer                             │
+│                     (BaluHost NAS Backend)                     │
+│                                                                │
 │  • File Storage (FastAPI)                                      │
 │  • User Management                                             │
 │  • Sync Endpoints                                              │

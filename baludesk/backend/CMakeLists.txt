@@ -79,9 +79,10 @@ set(SOURCES
     src/sync/conflict_resolver.cpp
     src/api/http_client.cpp
     src/db/database.cpp
-    src/ipc/ipc_server.cpp
+    src/ipc/ipc_server_fixed.cpp
     src/utils/logger.cpp
     src/utils/config.cpp
+    src/baluhost_client.cpp
 )
 
 # Platform-specific file watcher is now unified in file_watcher.cpp

@@ -391,6 +391,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\baluhost_client.cpp" />
     <Natvis Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-src\nlohmann_json.natvis">
     </Natvis>
   </ItemGroup>

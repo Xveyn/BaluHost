@@ -35,24 +35,24 @@ Architektur-Übersicht (ASCII)
 Dieses Diagramm zeigt die wichtigsten Laufzeit-Komponenten und wie sie interagieren.
 
 ```text
-  +----------------------+            +----------------------+            +--------------------+
+  +----------------------+            +----------------------+            +---------------------+
   |  Developer / Browser | <---HTTP-->|  Frontend (Vite)     | <---XHR--->|  API Client (axios) |
   |  (React SPA)         |            |  client/src/...      |            |  client/src/lib/api |
-  +----------------------+            +----------------------+            +----------+---------+
+  +----------------------+            +----------------------+            +----------+----------+
                                                                               |         |
                                                                               |         v
-                                                                     +--------+---------+ 
+                                                                     +--------+--------------+ 
                                                                      | Backend API (FastAPI) |
-                                                                     | backend/app/main.py    |
-                                                                     +---+----+----+--------+
+                                                                     | backend/app/main.py   |
+                                                                     +---+----+----+---------+
                                                                          |    |    |
                                            +-----------------------------+    |    +------------------+
                                            |                                  |                       |
                                            v                                  v                       v
-                                +------------------+                 +----------------+       +---------------------+
-                                | Services Layer   |                 | Background     |       | Dev / Prod Storage  |
-                                | backend/app/services/ |             | Jobs (jobs.py) |       | - dev-storage/      |
-                                +--+--+---+---+----+--+                 +-------+--------+       +---------------------+
+                                +------------------+                  +-------------+      +--------------------+
+                                | Services Layer        |             |   Background   |      | Dev / Prod Storage |
+                                | backend/app/services/ |             | Jobs (jobs.py) |      | - dev-storage/     |
+                                +--+--+---+---+----+--+               |  +-------+------+      +--------------------+
                                    |  |   |   |   |                             |  
                                    |  |   |   |   |                             v
                    +---------------+  |   |   |   |                 +---------------------------+
