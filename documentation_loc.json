@@ -1,0 +1,400 @@
+{
+  "project": "BaluHost",
+  "timestamp": "2026-01-04T00:07:02.182726",
+  "base_path": "F:\\Programme (x86)\\Baluhost",
+  "components": [
+    {
+      "name": "BaluHost Backend (FastAPI)",
+      "path": "backend",
+      "files": 134,
+      "total_lines": 24734,
+      "code_lines": 19261,
+      "comment_lines": 1127,
+      "blank_lines": 4346,
+      "extensions": [
+        ".py"
+      ],
+      "top_files": [
+        {
+          "file": "backend\\app\\services\\raid.py",
+          "lines": 1048
+        },
+        {
+          "file": "backend\\app\\api\\routes\\vcl.py",
+          "lines": 1035
+        },
+        {
+          "file": "backend\\app\\services\\smart.py",
+          "lines": 791
+        },
+        {
+          "file": "backend\\app\\api\\docs.py",
+          "lines": 787
+        },
+        {
+          "file": "backend\\app\\services\\vcl.py",
+          "lines": 767
+        },
+        {
+          "file": "backend\\baluhost_tui\\screens\\users.py",
+          "lines": 627
+        },
+        {
+          "file": "backend\\app\\api\\routes\\files.py",
+          "lines": 591
+        },
+        {
+          "file": "backend\\scripts\\load_test_sync.py",
+          "lines": 581
+        },
+        {
+          "file": "backend\\app\\api\\routes\\shares.py",
+          "lines": 567
+        },
+        {
+          "file": "backend\\app\\services\\vcl_priority.py",
+          "lines": 552
+        }
+      ]
+    },
+    {
+      "name": "BaluHost Frontend (React)",
+      "path": "client",
+      "files": 55,
+      "total_lines": 16423,
+      "code_lines": 14845,
+      "comment_lines": 342,
+      "blank_lines": 1236,
+      "extensions": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx"
+      ],
+      "top_files": [
+        {
+          "file": "client\\src\\pages\\FileManager.tsx",
+          "lines": 1604
+        },
+        {
+          "file": "client\\src\\pages\\RaidManagement.tsx",
+          "lines": 898
+        },
+        {
+          "file": "client\\src\\pages\\ApiCenterPage.tsx",
+          "lines": 885
+        },
+        {
+          "file": "client\\src\\pages\\UserManagement.tsx",
+          "lines": 823
+        },
+        {
+          "file": "client\\src\\pages\\SharesPage.tsx",
+          "lines": 702
+        },
+        {
+          "file": "client\\src\\pages\\SettingsPage.tsx",
+          "lines": 690
+        },
+        {
+          "file": "client\\src\\pages\\Dashboard.tsx",
+          "lines": 685
+        },
+        {
+          "file": "client\\src\\pages\\ApiDocs.tsx",
+          "lines": 595
+        },
+        {
+          "file": "client\\src\\pages\\MobileDevicesPage.tsx",
+          "lines": 579
+        },
+        {
+          "file": "client\\src\\components\\RaidSetupWizard.tsx",
+          "lines": 541
+        }
+      ]
+    },
+    {
+      "name": "Android App",
+      "path": "android-app",
+      "files": 188,
+      "total_lines": 23486,
+      "code_lines": 18462,
+      "comment_lines": 2485,
+      "blank_lines": 2539,
+      "extensions": [
+        ".kt",
+        ".java",
+        ".xml"
+      ],
+      "top_files": [
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\files\\FilesScreen.kt",
+          "lines": 988
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\files\\FilesViewModel.kt",
+          "lines": 725
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\sync\\FolderSyncScreen.kt",
+          "lines": 687
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\onboarding\\OnboardingScreen.kt",
+          "lines": 666
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\dashboard\\DashboardScreen.kt",
+          "lines": 656
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\settings\\SettingsScreen.kt",
+          "lines": 502
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\components\\SyncFolderConfigDialog.kt",
+          "lines": 469
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\lock\\LockScreen.kt",
+          "lines": 427
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\components\\ConflictResolutionDialog.kt",
+          "lines": 426
+        },
+        {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\storage\\StorageOverviewScreen.kt",
+          "lines": 417
+        }
+      ]
+    },
+    {
+      "name": "TUI (Terminal UI)",
+      "path": "backend/baluhost_tui",
+      "files": 15,
+      "total_lines": 2258,
+      "code_lines": 1754,
+      "comment_lines": 68,
+      "blank_lines": 436,
+      "extensions": [
+        ".py"
+      ],
+      "top_files": [
+        {
+          "file": "backend\\baluhost_tui\\screens\\users.py",
+          "lines": 627
+        },
+        {
+          "file": "backend\\baluhost_tui\\screens\\dashboard.py",
+          "lines": 398
+        },
+        {
+          "file": "backend\\baluhost_tui\\screens\\logs.py",
+          "lines": 391
+        },
+        {
+          "file": "backend\\baluhost_tui\\screens\\login.py",
+          "lines": 234
+        },
+        {
+          "file": "backend\\baluhost_tui\\app.py",
+          "lines": 140
+        },
+        {
+          "file": "backend\\baluhost_tui\\context.py",
+          "lines": 116
+        },
+        {
+          "file": "backend\\baluhost_tui\\main.py",
+          "lines": 106
+        },
+        {
+          "file": "backend\\baluhost_tui\\commands\\status.py",
+          "lines": 76
+        },
+        {
+          "file": "backend\\baluhost_tui\\commands\\users.py",
+          "lines": 76
+        },
+        {
+          "file": "backend\\baluhost_tui\\config.py",
+          "lines": 46
+        }
+      ]
+    },
+    {
+      "name": "BaluDesk Backend (C++)",
+      "path": "baludesk/backend",
+      "files": 24,
+      "total_lines": 5965,
+      "code_lines": 4334,
+      "comment_lines": 538,
+      "blank_lines": 1093,
+      "extensions": [
+        ".cpp",
+        ".h",
+        ".hpp"
+      ],
+      "top_files": [
+        {
+          "file": "baludesk\\backend\\src\\ipc\\ipc_server_fixed.cpp",
+          "lines": 751
+        },
+        {
+          "file": "baludesk\\backend\\src\\sync\\file_watcher.cpp",
+          "lines": 650
+        },
+        {
+          "file": "baludesk\\backend\\src\\api\\http_client.cpp",
+          "lines": 620
+        },
+        {
+          "file": "baludesk\\backend\\src\\db\\database.cpp",
+          "lines": 607
+        },
+        {
+          "file": "baludesk\\backend\\src\\sync\\sync_engine.cpp",
+          "lines": 559
+        },
+        {
+          "file": "baludesk\\backend\\src\\baluhost_client.cpp",
+          "lines": 479
+        },
+        {
+          "file": "baludesk\\backend\\src\\ipc\\ipc_server.cpp",
+          "lines": 332
+        },
+        {
+          "file": "baludesk\\backend\\src\\ipc\\ipc_server_temp.cpp",
+          "lines": 322
+        },
+        {
+          "file": "baludesk\\backend\\src\\sync\\change_detector.cpp",
+          "lines": 315
+        },
+        {
+          "file": "baludesk\\backend\\src\\sync\\conflict_resolver.cpp",
+          "lines": 272
+        }
+      ]
+    },
+    {
+      "name": "BaluDesk Frontend (Electron)",
+      "path": "baludesk/frontend",
+      "files": 13,
+      "total_lines": 1871,
+      "code_lines": 1645,
+      "comment_lines": 42,
+      "blank_lines": 184,
+      "extensions": [
+        ".ts",
+        ".tsx",
+        ".js",
+        ".jsx"
+      ],
+      "top_files": [
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\FileExplorer.tsx",
+          "lines": 494
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\FileExplorer_old.tsx",
+          "lines": 401
+        },
+        {
+          "file": "baludesk\\frontend\\src\\main\\main.ts",
+          "lines": 282
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\Dashboard.tsx",
+          "lines": 269
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\Login.tsx",
+          "lines": 158
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\App.tsx",
+          "lines": 93
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\types.ts",
+          "lines": 56
+        },
+        {
+          "file": "baludesk\\frontend\\src\\main\\preload.ts",
+          "lines": 47
+        },
+        {
+          "file": "baludesk\\frontend\\tailwind.config.js",
+          "lines": 26
+        },
+        {
+          "file": "baludesk\\frontend\\vite.config.ts",
+          "lines": 22
+        }
+      ]
+    },
+    {
+      "name": "Scripts & Tools",
+      "path": "scripts",
+      "files": 9,
+      "total_lines": 1149,
+      "code_lines": 894,
+      "comment_lines": 84,
+      "blank_lines": 171,
+      "extensions": [
+        ".py",
+        ".sh",
+        ".ps1"
+      ],
+      "top_files": [
+        {
+          "file": "scripts\\diagnose.ps1",
+          "lines": 206
+        },
+        {
+          "file": "scripts\\install_windows_service.ps1",
+          "lines": 182
+        },
+        {
+          "file": "scripts\\heimnetz_fix.ps1",
+          "lines": 154
+        },
+        {
+          "file": "scripts\\mount-dev-storage.ps1",
+          "lines": 137
+        },
+        {
+          "file": "scripts\\configure_firewall.ps1",
+          "lines": 134
+        },
+        {
+          "file": "scripts\\start_network.ps1",
+          "lines": 129
+        },
+        {
+          "file": "scripts\\firewall_fix.ps1",
+          "lines": 100
+        },
+        {
+          "file": "scripts\\unmount-dev-storage.ps1",
+          "lines": 63
+        },
+        {
+          "file": "scripts\\export-ca-for-mobile.ps1",
+          "lines": 44
+        }
+      ]
+    }
+  ],
+  "totals": {
+    "files": 438,
+    "total_lines": 75886,
+    "code_lines": 61195,
+    "comment_lines": 4686,
+    "blank_lines": 10005
+  }
+}

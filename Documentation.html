@@ -1,0 +1,1326 @@
+<!doctype html>
+<html lang="de" class="scroll-smooth">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#0f172a" />
+    <title>BalùHost - Technical Documentation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: {
+                        primary: {
+                            50: '#f5f3ff',
+                            100: '#ede9fe',
+                            200: '#ddd6fe',
+                            300: '#c4b5fd',
+                            400: '#a78bfa',
+                            500: '#8b5cf6',
+                            600: '#7c3aed',
+                            700: '#6d28d9',
+                            800: '#5b21b6',
+                            900: '#4c1d95',
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, 
+                #0f172a 0%, 
+                #1e1b4b 25%, 
+                #1e293b 50%, 
+                #0c0a1f 75%, 
+                #020617 100%);
+            background-attachment: fixed;
+            transition: background 0.3s ease;
+        }
+        
+        body.light-mode {
+            background: linear-gradient(135deg, #f8fafc 0%, #e2e8f0 50%, #cbd5e1 100%);
+        }
+        
+        .gradient-bg {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        }
+        
+        .gradient-text {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .card-hover {
+            transition: all 0.3s ease;
+        }
+        
+        .card-hover:hover {
+            transform: translateY(-4px);
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3), 0 10px 10px -5px rgba(0, 0, 0, 0.15);
+        }
+        
+        .dark .card-hover:hover {
+            box-shadow: 0 20px 25px -5px rgba(139, 92, 246, 0.3), 0 10px 10px -5px rgba(139, 92, 246, 0.15);
+        }
+        
+        .code-block {
+            background: #1e293b;
+            border-left: 4px solid #667eea;
+        }
+        
+        .stat-card {
+            background: linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%);
+        }
+        
+        .nav-link {
+            transition: all 0.2s ease;
+        }
+        
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+        
+        .fade-in {
+            animation: fadeIn 0.6s ease forwards;
+        }
+        
+        .tech-badge {
+            background: rgba(102, 126, 234, 0.1);
+            border: 1px solid rgba(102, 126, 234, 0.3);
+        }
+        
+        .dark .tech-badge {
+            background: rgba(139, 92, 246, 0.2);
+            border: 1px solid rgba(139, 92, 246, 0.4);
+        }
+        
+        /* Dark mode toggle button */
+        .theme-toggle {
+            position: relative;
+            width: 60px;
+            height: 30px;
+            background: #cbd5e1;
+            border-radius: 15px;
+            cursor: pointer;
+            transition: background 0.3s ease;
+        }
+        
+        .dark .theme-toggle {
+            background: #667eea;
+        }
+        
+        .theme-toggle-slider {
+            position: absolute;
+            top: 3px;
+            left: 3px;
+            width: 24px;
+            height: 24px;
+            background: white;
+            border-radius: 50%;
+            transition: transform 0.3s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 12px;
+        }
+        
+        .dark .theme-toggle-slider {
+            transform: translateX(30px);
+        }
+    </style>
+</head>
+<body class="dark text-slate-100 min-h-screen">
+    <!-- Navigation -->
+    <nav class="bg-slate-900/80 backdrop-blur-lg shadow-lg sticky top-0 z-50 border-b border-purple-500/20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16">
+                <div class="flex items-center">
+                    <h1 class="text-2xl font-bold gradient-text">BalùHost</h1>
+                    <span class="ml-3 text-sm text-slate-400">Technical Documentation</span>
+                </div>
+                <div class="flex items-center space-x-6">
+                    <a href="#overview" class="nav-link text-slate-300 hover:text-purple-400">Overview</a>
+                    <a href="#architecture" class="nav-link text-slate-300 hover:text-purple-400">Architecture</a>
+                    <a href="#components" class="nav-link text-slate-300 hover:text-purple-400">Components</a>
+                    <a href="#features" class="nav-link text-slate-300 hover:text-purple-400">Features</a>
+                    <a href="#api" class="nav-link text-slate-300 hover:text-purple-400">API</a>
+                    <a href="#statistics" class="nav-link text-slate-300 hover:text-purple-400">Statistics</a>
+                    
+                    <!-- Dark Mode Toggle -->
+                    <div class="theme-toggle" onclick="toggleTheme()" title="Toggle Dark/Light Mode">
+                        <div class="theme-toggle-slider">
+                            <i class="fas fa-moon dark:hidden"></i>
+                            <i class="fas fa-sun hidden dark:inline"></i>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </nav>
+
+    <!-- Hero Section -->
+    <div class="gradient-bg text-white py-20">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="text-center fade-in">
+                <h1 class="text-5xl font-bold mb-4">🌐 BalùHost</h1>
+                <p class="text-xl text-purple-100 mb-6">Modern Self-Hosted NAS Management Platform</p>
+                <div class="flex justify-center space-x-4">
+                    <span class="px-4 py-2 bg-white/20 rounded-full text-sm">v1.3.0</span>
+                    <span class="px-4 py-2 bg-white/20 rounded-full text-sm">Januar 2026</span>
+                    <span class="px-4 py-2 bg-white/20 rounded-full text-sm">Full-Stack</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content -->
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        
+        <!-- Overview Section -->
+        <section id="overview" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">📖 Project Overview</h2>
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-purple-500/20">
+                <p class="text-lg text-slate-300 mb-4">
+                    BaluHost ist eine umfassende Full-Stack NAS-Management-Plattform, entwickelt mit modernen Web-Technologien. 
+                    Das System bietet File-Management, RAID-Monitoring, System-Telemetrie und Benutzer-Zugriffskontrolle durch 
+                    eine intuitive Web-Oberfläche.
+                </p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mt-8">
+                    <div class="stat-card p-6 rounded-lg border border-purple-500/30">
+                        <div class="text-4xl font-bold text-purple-400 mb-2" id="total-files">-</div>
+                        <div class="text-slate-400">Total Files</div>
+                    </div>
+                    <div class="stat-card p-6 rounded-lg border border-purple-500/30">
+                        <div class="text-4xl font-bold text-purple-400 mb-2" id="total-loc">-</div>
+                        <div class="text-slate-400">Lines of Code</div>
+                    </div>
+                    <div class="stat-card p-6 rounded-lg border border-purple-500/30">
+                        <div class="text-4xl font-bold text-purple-400 mb-2">7</div>
+                        <div class="text-slate-400">Components</div>
+                    </div>
+                </div>
+
+                <h3 class="text-xl font-semibold mt-8 mb-4 text-slate-200">🎯 Perfect für:</h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-home text-purple-400 mt-1"></i>
+                        <div>
+                            <div class="font-semibold text-slate-200">Home Lab Enthusiasts</div>
+                            <div class="text-sm text-slate-400">Ideal für private Heimnetzwerke</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-briefcase text-purple-400 mt-1"></i>
+                        <div>
+                            <div class="font-semibold text-slate-200">Small Office/Home Office</div>
+                            <div class="text-sm text-slate-400">SOHO Setup mit professionellen Features</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-graduation-cap text-purple-400 mt-1"></i>
+                        <div>
+                            <div class="font-semibold text-slate-200">Learning Sysadmin</div>
+                            <div class="text-sm text-slate-400">Perfekt zum Lernen von System-Administration</div>
+                        </div>
+                    </div>
+                    <div class="flex items-start space-x-3">
+                        <i class="fas fa-server text-purple-400 mt-1"></i>
+                        <div>
+                            <div class="font-semibold text-slate-200">Self-Hosted Solutions</div>
+                            <div class="text-sm text-slate-400">Komplette Kontrolle über Ihre Daten</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Technology Stack -->
+        <section id="tech-stack" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">🔧 Technology Stack</h2>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- Backend -->
+                <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 card-hover border border-purple-500/20">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center text-slate-200">
+                        <i class="fas fa-server text-purple-400 mr-2"></i>
+                        Backend
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fab fa-python mr-2"></i>Python 3.11+
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-bolt mr-2"></i>FastAPI
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-database mr-2"></i>SQLAlchemy + Alembic
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-check-circle mr-2"></i>Pydantic
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-chart-line mr-2"></i>psutil (System Monitoring)
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Frontend -->
+                <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 card-hover border border-purple-500/20">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center text-slate-200">
+                        <i class="fas fa-desktop text-purple-400 mr-2"></i>
+                        Frontend
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fab fa-react mr-2"></i>React 18
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-code mr-2"></i>TypeScript
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-bolt mr-2"></i>Vite
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-paint-brush mr-2"></i>Tailwind CSS
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-chart-bar mr-2"></i>Recharts
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Mobile -->
+                <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 card-hover border border-purple-500/20">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center text-slate-200">
+                        <i class="fas fa-mobile-alt text-purple-400 mr-2"></i>
+                        Mobile Apps
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fab fa-android mr-2"></i>Kotlin/Java (Android)
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-camera mr-2"></i>Camera Backup
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-sync mr-2"></i>Offline Queue
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-shield-alt mr-2"></i>JWT Auth
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Desktop Client -->
+                <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 card-hover border border-purple-500/20">
+                    <h3 class="text-xl font-semibold mb-4 flex items-center text-slate-200">
+                        <i class="fas fa-laptop text-purple-400 mr-2"></i>
+                        Desktop Client (BaluDesk)
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-code mr-2"></i>C++ Backend
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fab fa-react mr-2"></i>Electron Frontend
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-sync-alt mr-2"></i>Real-time Sync
+                        </div>
+                        <div class="tech-badge px-3 py-2 rounded-lg">
+                            <i class="fas fa-sitemap mr-2"></i>CRDT Conflict Resolution
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Architecture Diagram -->
+        <section id="architecture" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">🏗️ System Architecture</h2>
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 overflow-x-auto border border-purple-500/20">
+                <svg viewBox="0 0 1200 900" class="w-full h-auto">
+                    <!-- Definitions -->
+                    <defs>
+                        <linearGradient id="grad1" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop offset="0%" style="stop-color:#667eea;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#764ba2;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="grad2" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style="stop-color:#f093fb;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#f5576c;stop-opacity:1" />
+                        </linearGradient>
+                        <linearGradient id="grad3" x1="0%" y1="0%" x2="100%" y2="0%">
+                            <stop offset="0%" style="stop-color:#4facfe;stop-opacity:1" />
+                            <stop offset="100%" style="stop-color:#00f2fe;stop-opacity:1" />
+                        </linearGradient>
+                        <filter id="shadow">
+                            <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.3"/>
+                        </filter>
+                    </defs>
+                    
+                    <!-- Title -->
+                    <text x="600" y="30" text-anchor="middle" font-size="24" font-weight="bold" fill="url(#grad1)">
+                        BalùHost Ecosystem Architecture
+                    </text>
+                    
+                    <!-- Client Layer -->
+                    <text x="600" y="70" text-anchor="middle" font-size="16" font-weight="600" fill="#475569">Client Layer</text>
+                    
+                    <!-- Web App -->
+                    <rect x="50" y="90" width="180" height="80" rx="8" fill="url(#grad1)" filter="url(#shadow)" />
+                    <text x="140" y="120" text-anchor="middle" font-size="14" font-weight="bold" fill="white">🌐 Web App</text>
+                    <text x="140" y="140" text-anchor="middle" font-size="11" fill="white">React + TypeScript</text>
+                    <text x="140" y="155" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">Vite + Tailwind</text>
+                    
+                    <!-- Android App -->
+                    <rect x="260" y="90" width="180" height="80" rx="8" fill="url(#grad2)" filter="url(#shadow)" />
+                    <text x="350" y="120" text-anchor="middle" font-size="14" font-weight="bold" fill="white">📱 Android App</text>
+                    <text x="350" y="140" text-anchor="middle" font-size="11" fill="white">Kotlin + Jetpack</text>
+                    <text x="350" y="155" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">Camera Backup</text>
+                    
+                    <!-- iOS App -->
+                    <rect x="470" y="90" width="180" height="80" rx="8" fill="url(#grad2)" filter="url(#shadow)" />
+                    <text x="560" y="120" text-anchor="middle" font-size="14" font-weight="bold" fill="white">📱 iOS App</text>
+                    <text x="560" y="140" text-anchor="middle" font-size="11" fill="white">Swift + SwiftUI</text>
+                    <text x="560" y="155" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">Camera Backup</text>
+                    
+                    <!-- BaluDesk -->
+                    <rect x="680" y="90" width="180" height="80" rx="8" fill="url(#grad3)" filter="url(#shadow)" />
+                    <text x="770" y="120" text-anchor="middle" font-size="14" font-weight="bold" fill="white">💻 BaluDesk</text>
+                    <text x="770" y="140" text-anchor="middle" font-size="11" fill="white">Electron + C++</text>
+                    <text x="770" y="155" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">Sync Client</text>
+                    
+                    <!-- TUI -->
+                    <rect x="890" y="90" width="180" height="80" rx="8" fill="#0f172a" filter="url(#shadow)" />
+                    <text x="980" y="120" text-anchor="middle" font-size="14" font-weight="bold" fill="white">⌨️ TUI</text>
+                    <text x="980" y="140" text-anchor="middle" font-size="11" fill="white">Python + Textual</text>
+                    <text x="980" y="155" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">Terminal UI</text>
+                    
+                    <!-- Connection Lines to Backend -->
+                    <line x1="140" y1="170" x2="600" y2="280" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5,5" />
+                    <line x1="350" y1="170" x2="600" y2="280" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5,5" />
+                    <line x1="560" y1="170" x2="600" y2="280" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5,5" />
+                    <line x1="770" y1="170" x2="600" y2="280" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5,5" />
+                    <line x1="980" y1="170" x2="600" y2="280" stroke="#cbd5e1" stroke-width="2" stroke-dasharray="5,5" />
+                    
+                    <!-- API Label -->
+                    <text x="600" y="230" text-anchor="middle" font-size="12" fill="#64748b">REST API / WebDAV / WebSocket</text>
+                    
+                    <!-- Backend Core -->
+                    <rect x="400" y="280" width="400" height="100" rx="8" fill="url(#grad1)" filter="url(#shadow)" />
+                    <text x="600" y="310" text-anchor="middle" font-size="16" font-weight="bold" fill="white">⚡ BalùHost Backend</text>
+                    <text x="600" y="335" text-anchor="middle" font-size="13" fill="white">FastAPI + Python 3.11+</text>
+                    <text x="600" y="355" text-anchor="middle" font-size="11" fill="rgba(255,255,255,0.8)">Port: 3001 | Uvicorn ASGI</text>
+                    <text x="600" y="370" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">JWT Auth • RBAC • Audit Logging</text>
+                    
+                    <!-- Services Layer -->
+                    <text x="600" y="420" text-anchor="middle" font-size="14" font-weight="600" fill="#475569">Services Layer</text>
+                    
+                    <!-- Auth Service -->
+                    <rect x="50" y="440" width="160" height="70" rx="6" fill="#8b5cf6" filter="url(#shadow)" />
+                    <text x="130" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">🔐 Auth</text>
+                    <text x="130" y="485" text-anchor="middle" font-size="10" fill="white">JWT • RBAC</text>
+                    <text x="130" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">Mobile Tokens</text>
+                    
+                    <!-- Files Service -->
+                    <rect x="230" y="440" width="160" height="70" rx="6" fill="#ec4899" filter="url(#shadow)" />
+                    <text x="310" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">📁 Files</text>
+                    <text x="310" y="485" text-anchor="middle" font-size="10" fill="white">Upload • Download</text>
+                    <text x="310" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">Quota • Sharing</text>
+                    
+                    <!-- RAID Service -->
+                    <rect x="410" y="440" width="160" height="70" rx="6" fill="#f59e0b" filter="url(#shadow)" />
+                    <text x="490" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">💾 RAID</text>
+                    <text x="490" y="485" text-anchor="middle" font-size="10" fill="white">mdadm • Mock</text>
+                    <text x="490" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">0, 1, 5, 6, 10</text>
+                    
+                    <!-- Telemetry Service -->
+                    <rect x="590" y="440" width="160" height="70" rx="6" fill="#10b981" filter="url(#shadow)" />
+                    <text x="670" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">📊 Telemetry</text>
+                    <text x="670" y="485" text-anchor="middle" font-size="10" fill="white">CPU • RAM • I/O</text>
+                    <text x="670" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">psutil</text>
+                    
+                    <!-- SMART Service -->
+                    <rect x="770" y="440" width="160" height="70" rx="6" fill="#3b82f6" filter="url(#shadow)" />
+                    <text x="850" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">🔍 SMART</text>
+                    <text x="850" y="485" text-anchor="middle" font-size="10" fill="white">Disk Health</text>
+                    <text x="850" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">smartctl</text>
+                    
+                    <!-- Audit Service -->
+                    <rect x="950" y="440" width="160" height="70" rx="6" fill="#6366f1" filter="url(#shadow)" />
+                    <text x="1030" y="465" text-anchor="middle" font-size="12" font-weight="bold" fill="white">📝 Audit</text>
+                    <text x="1030" y="485" text-anchor="middle" font-size="10" fill="white">Logging</text>
+                    <text x="1030" y="500" text-anchor="middle" font-size="9" fill="rgba(255,255,255,0.8)">JSON API</text>
+                    
+                    <!-- Connection Lines to Data Layer -->
+                    <line x1="130" y1="510" x2="400" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="310" y1="510" x2="400" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="490" y1="510" x2="600" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="670" y1="510" x2="600" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="850" y1="510" x2="800" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="1030" y1="510" x2="800" y2="610" stroke="#cbd5e1" stroke-width="2" />
+                    
+                    <!-- Data Layer -->
+                    <text x="600" y="590" text-anchor="middle" font-size="14" font-weight="600" fill="#475569">Data Layer</text>
+                    
+                    <!-- Database -->
+                    <rect x="320" y="610" width="240" height="80" rx="6" fill="#475569" filter="url(#shadow)" />
+                    <text x="440" y="640" text-anchor="middle" font-size="13" font-weight="bold" fill="white">🗄️ Database</text>
+                    <text x="440" y="660" text-anchor="middle" font-size="11" fill="white">SQLAlchemy ORM</text>
+                    <text x="440" y="678" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">SQLite / PostgreSQL</text>
+                    
+                    <!-- Storage -->
+                    <rect x="640" y="610" width="240" height="80" rx="6" fill="#475569" filter="url(#shadow)" />
+                    <text x="760" y="640" text-anchor="middle" font-size="13" font-weight="bold" fill="white">💿 Storage</text>
+                    <text x="760" y="660" text-anchor="middle" font-size="11" fill="white">Physical Disks</text>
+                    <text x="760" y="678" text-anchor="middle" font-size="10" fill="rgba(255,255,255,0.8)">dev-storage/ | /mnt/*</text>
+                    
+                    <!-- Connection to Infrastructure -->
+                    <line x1="440" y1="690" x2="440" y2="750" stroke="#cbd5e1" stroke-width="2" />
+                    <line x1="760" y1="690" x2="760" y2="750" stroke="#cbd5e1" stroke-width="2" />
+                    
+                    <!-- Infrastructure Layer -->
+                    <rect x="280" y="750" width="640" height="100" rx="8" fill="#1e293b" filter="url(#shadow)" />
+                    <text x="600" y="780" text-anchor="middle" font-size="14" font-weight="bold" fill="white">🖥️ Infrastructure & System</text>
+                    <text x="600" y="805" text-anchor="middle" font-size="11" fill="#94a3b8">
+                        Linux/Windows • RAID Arrays • VPN (WireGuard) • WebDAV • mDNS
+                    </text>
+                    <text x="600" y="825" text-anchor="middle" font-size="10" fill="#64748b">
+                        Background Jobs • Telemetry Collector • Disk Monitor • Job Manager
+                    </text>
+                    
+                    <!-- Legend -->
+                    <rect x="50" y="720" width="200" height="120" rx="6" fill="#f8fafc" stroke="#e2e8f0" stroke-width="1" />
+                    <text x="150" y="745" text-anchor="middle" font-size="12" font-weight="bold" fill="#1e293b">Legend</text>
+                    <text x="60" y="770" font-size="10" fill="#475569">━━━ Solid: Direct Call</text>
+                    <text x="60" y="790" font-size="10" fill="#475569">╌╌╌ Dashed: REST/API</text>
+                    <text x="60" y="810" font-size="10" fill="#475569">📊 Real-time Updates</text>
+                    <text x="60" y="830" font-size="10" fill="#475569">🔒 Secured by JWT</text>
+                </svg>
+            </div>
+        </section>
+
+        <!-- Components Overview -->
+        <section id="components" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">🧩 Components</h2>
+            
+            <div class="grid grid-cols-1 gap-6" id="components-container">
+                <!-- Will be populated by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Features -->
+        <section id="features" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">✨ Features</h2>
+            
+            <!-- Authentication & Security -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-shield-alt text-purple-400 mr-3"></i>
+                    🔐 Authentication & Security
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>JWT-based Authentication mit Access & Refresh Tokens</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Role-Based Access Control (Admin/User)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>File Ownership & Granular Permissions</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Comprehensive Audit Logging</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Mobile Token Security (30-day Refresh)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>VPN Integration mit WireGuard</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- File Management -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-folder text-purple-400 mr-3"></i>
+                    📁 File Management
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Drag & Drop Multi-File Upload mit Progress</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>File Preview (Images, Videos, Audio, PDFs, Text)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>File Sharing mit Public Links</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Storage Mountpoints / Multi-Drive Support</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Quota System mit Real-time Tracking</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>CRUD Operations (Create, Rename, Move, Delete)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>WebDAV Network Drive Support</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Folder Sync mit CRDT Conflict Resolution</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- RAID Management -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-database text-purple-400 mr-3"></i>
+                    💾 RAID & Storage Management
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Real-time RAID Array Status Monitoring</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Support für RAID 0, 1, 5, 6, 10</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Disk Health Tracking mit SMART Data</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Simulate Degraded/Rebuild Scenarios</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>mdadm Integration (Production)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Disk Format & Array Creation UI</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Monitoring -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-chart-line text-purple-400 mr-3"></i>
+                    📊 System Monitoring & Telemetry
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Live CPU, RAM, Disk I/O & Network Metrics</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Historical Telemetry mit Recharts Visualisierung</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Process Monitoring</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>SMART Disk Health Status</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Storage Capacity Tracking</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Configurable Telemetry Intervals</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Mobile & Sync -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-mobile-alt text-purple-400 mr-3"></i>
+                    📱 Mobile & Sync Features
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Android & iOS Apps</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Camera Backup (Auto-Upload)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Offline Queue Support</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>QR-Code VPN Registration</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Desktop Sync Client (BaluDesk)</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Real-time Folder Synchronization</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>CRDT-based Conflict Resolution</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>mDNS Auto-Discovery</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Backup & Restore -->
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 card-hover border border-purple-500/20">
+                <h3 class="text-2xl font-semibold mb-4 flex items-center">
+                    <i class="fas fa-save text-purple-400 mr-3"></i>
+                    💾 Backup & Restore
+                </h3>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Full & Incremental Backups</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Scheduled Automatic Backups</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Restore mit Integrity Verification</span>
+                    </div>
+                    <div class="flex items-start space-x-2">
+                        <i class="fas fa-check text-green-500 mt-1"></i>
+                        <span>Compression & Encryption Support</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- API Documentation -->
+        <section id="api" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">🔌 API Reference</h2>
+            
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 mb-6 border border-purple-500/20">
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2 text-slate-200">Base URL</h3>
+                    <div class="code-block rounded-lg p-4 text-slate-100">
+                        <code>Development: http://localhost:3001/api</code><br>
+                        <code>Production: https://your-domain.com/api</code>
+                    </div>
+                </div>
+
+                <div class="mb-6">
+                    <h3 class="text-xl font-semibold mb-2 text-slate-200">Authentication</h3>
+                    <p class="text-slate-300 mb-3">JWT Token im Authorization Header:</p>
+                    <div class="code-block rounded-lg p-4 text-slate-100">
+                        <code>Authorization: Bearer &lt;your_jwt_token&gt;</code>
+                    </div>
+                </div>
+
+                <!-- Auth Endpoints -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-slate-200">🔐 Authentication Endpoints</h3>
+                    <div class="space-y-3">
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/auth/login</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">User login - Returns JWT token</p>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/auth/logout</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">User logout</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/auth/me</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get current user info</p>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/auth/refresh</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Refresh access token (mobile)</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- File Endpoints -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-slate-200">📁 File Management Endpoints</h3>
+                    <div class="space-y-3">
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/files/mountpoints</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">List storage devices/arrays</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/files/list</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">List files and folders</p>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/files/upload</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Upload file(s)</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/files/download</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Download file</p>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/files/create-folder</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Create new folder</p>
+                        </div>
+                        <div class="border-l-4 border-orange-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-orange-100 text-orange-800 px-2 py-1 rounded">PUT</span>
+                                <span class="ml-2">/api/files/rename</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Rename file/folder</p>
+                        </div>
+                        <div class="border-l-4 border-red-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-red-100 text-red-800 px-2 py-1 rounded">DELETE</span>
+                                <span class="ml-2">/api/files/delete</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Delete file/folder</p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- System Endpoints -->
+                <div class="mb-8">
+                    <h3 class="text-xl font-semibold mb-4 text-slate-200">📊 System & Monitoring Endpoints</h3>
+                    <div class="space-y-3">
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/system/raid/status</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get RAID array status</p>
+                        </div>
+                        <div class="border-l-4 border-green-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-green-100 text-green-800 px-2 py-1 rounded">POST</span>
+                                <span class="ml-2">/api/system/raid/rebuild</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Trigger RAID rebuild</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/system/smart/status</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get SMART disk health</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/system/disk-io/history</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get disk I/O history</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/system/telemetry</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get system telemetry (CPU, RAM, etc.)</p>
+                        </div>
+                        <div class="border-l-4 border-blue-500 pl-4">
+                            <div class="font-mono text-sm">
+                                <span class="bg-blue-100 text-blue-800 px-2 py-1 rounded">GET</span>
+                                <span class="ml-2">/api/logging/audit</span>
+                            </div>
+                            <p class="text-sm text-slate-400 mt-1">Get audit logs</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Code Statistics -->
+        <section id="statistics" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">📊 Code Statistics</h2>
+            
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-purple-500/20">
+                <div class="mb-6">
+                    <p class="text-slate-300">
+                        Diese Statistiken wurden automatisch mit <code class="bg-slate-700/50 px-2 py-1 rounded text-purple-300">doc_calc.py</code> generiert 
+                        und zeigen die Größe und Komplexität jeder Komponente.
+                    </p>
+                </div>
+
+                <div class="overflow-x-auto">
+                    <table class="w-full text-left">
+                        <thead class="bg-slate-700/50">
+                            <tr>
+                                <th class="px-4 py-3 font-semibold text-slate-200">Component</th>
+                                <th class="px-4 py-3 font-semibold text-right text-slate-200">Files</th>
+                                <th class="px-4 py-3 font-semibold text-right text-slate-200">Total Lines</th>
+                                <th class="px-4 py-3 font-semibold text-right text-slate-200">Code Lines</th>
+                                <th class="px-4 py-3 font-semibold text-right text-slate-200">Comment Lines</th>
+                                <th class="px-4 py-3 font-semibold text-slate-200">Extensions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="stats-table" class="divide-y divide-slate-600/50">
+                            <!-- Will be populated by JavaScript -->
+                        </tbody>
+                        <tfoot class="bg-purple-900/30 font-semibold">
+                            <tr>
+                                <td class="px-4 py-3 text-slate-200">Total</td>
+                                <td class="px-4 py-3 text-right text-slate-200" id="total-files-footer">-</td>
+                                <td class="px-4 py-3 text-right text-slate-200" id="total-lines-footer">-</td>
+                                <td class="px-4 py-3 text-right text-slate-200" id="total-code-footer">-</td>
+                                <td class="px-4 py-3 text-right text-slate-200" id="total-comments-footer">-</td>
+                                <td class="px-4 py-3">-</td>
+                            </tr>
+                        </tfoot>
+                    </table>
+                </div>
+
+                <!-- Visual Chart -->
+                <div class="mt-8">
+                    <h3 class="text-xl font-semibold mb-4">Code Distribution (Lines of Code)</h3>
+                    
+                    <!-- Donut Chart Container -->
+                    <div class="flex flex-col md:flex-row items-center gap-8">
+                        <!-- SVG Donut Chart -->
+                        <div class="flex-shrink-0">
+                            <svg viewBox="0 0 400 400" class="w-80 h-80">
+                                <defs>
+                                    <filter id="pie-shadow">
+                                        <feDropShadow dx="0" dy="2" stdDeviation="4" flood-opacity="0.2"/>
+                                    </filter>
+                                </defs>
+                                <!-- Center circle for donut effect -->
+                                <circle cx="200" cy="200" r="80" fill="white" />
+                                <!-- Slices will be added by JavaScript -->
+                                <g id="pie-chart"></g>
+                                <!-- Center text -->
+                                <text x="200" y="190" text-anchor="middle" font-size="24" font-weight="bold" fill="#1e293b" id="total-loc-center">-</text>
+                                <text x="200" y="215" text-anchor="middle" font-size="14" fill="#64748b">Total LOC</text>
+                            </svg>
+                        </div>
+                        
+                        <!-- Legend -->
+                        <div class="flex-1" id="pie-legend">
+                            <!-- Legend items will be added by JavaScript -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Development -->
+        <section id="development" class="mb-16 fade-in">
+            <h2 class="text-3xl font-bold mb-6 gradient-text">🚀 Development & Deployment</h2>
+            
+            <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 border border-purple-500/20">
+                <h3 class="text-xl font-semibold mb-4 text-slate-200">Quick Start (Dev-Mode)</h3>
+                <div class="code-block rounded-lg p-4 text-slate-100 mb-6">
+                    <code># Start combined (Backend + Frontend)</code><br>
+                    <code>python start_dev.py</code>
+                </div>
+
+                <h3 class="text-xl font-semibold mb-4 text-slate-200">Backend Testing</h3>
+                <div class="code-block rounded-lg p-4 text-slate-100 mb-6">
+                    <code>cd backend</code><br>
+                    <code>python -m pytest</code>
+                </div>
+
+                <h3 class="text-xl font-semibold mb-4 text-slate-200">Frontend Build</h3>
+                <div class="code-block rounded-lg p-4 text-slate-100 mb-6">
+                    <code>cd client</code><br>
+                    <code>npm install</code><br>
+                    <code>npm run build</code>
+                </div>
+
+                <h3 class="text-xl font-semibold mb-4 text-slate-200">Production Deployment</h3>
+                <div class="code-block rounded-lg p-4 text-slate-100">
+                    <code># Backend</code><br>
+                    <code>uvicorn app.main:app --host 0.0.0.0 --port 3001</code><br>
+                    <code></code><br>
+                    <code># Frontend (serve dist/ via Nginx)</code><br>
+                    <code>npm run build</code>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <!-- Footer -->
+    <footer class="gradient-bg text-white py-8 mt-16">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 text-center">
+            <p class="text-purple-100">BalùHost v1.3.0 • Modern NAS Management Platform</p>
+            <p class="text-purple-200 text-sm mt-2">Built with ❤️ using FastAPI, React, and modern web technologies</p>
+            <p class="text-purple-200 text-sm mt-2">© 2026 Xveyn • MIT License</p>
+        </div>
+    </footer>
+
+    <script>
+        // Embedded LOC data (to avoid CORS issues when opening HTML directly)
+        const locData = {
+            "project": "BaluHost",
+            "timestamp": "2026-01-04T00:03:45.792405",
+            "components": [
+                {
+                    "name": "BaluHost Backend (FastAPI)",
+                    "path": "backend",
+                    "files": 134,
+                    "total_lines": 24734,
+                    "code_lines": 19261,
+                    "comment_lines": 1127,
+                    "blank_lines": 4346,
+                    "extensions": [".py"]
+                },
+                {
+                    "name": "BaluHost Frontend (React)",
+                    "path": "client",
+                    "files": 55,
+                    "total_lines": 16423,
+                    "code_lines": 14845,
+                    "comment_lines": 342,
+                    "blank_lines": 1236,
+                    "extensions": [".ts", ".tsx", ".js", ".jsx"]
+                },
+                {
+                    "name": "Android App",
+                    "path": "android-app",
+                    "files": 188,
+                    "total_lines": 23486,
+                    "code_lines": 18462,
+                    "comment_lines": 2485,
+                    "blank_lines": 2539,
+                    "extensions": [".kt", ".java", ".xml"]
+                },
+                {
+                    "name": "TUI (Terminal UI)",
+                    "path": "backend/baluhost_tui",
+                    "files": 15,
+                    "total_lines": 2258,
+                    "code_lines": 1754,
+                    "comment_lines": 68,
+                    "blank_lines": 436,
+                    "extensions": [".py"]
+                },
+                {
+                    "name": "BaluDesk Backend (C++)",
+                    "path": "baludesk/backend",
+                    "files": 24,
+                    "total_lines": 5965,
+                    "code_lines": 4334,
+                    "comment_lines": 538,
+                    "blank_lines": 1093,
+                    "extensions": [".cpp", ".h", ".hpp"]
+                },
+                {
+                    "name": "BaluDesk Frontend (Electron)",
+                    "path": "baludesk/frontend",
+                    "files": 13,
+                    "total_lines": 1871,
+                    "code_lines": 1645,
+                    "comment_lines": 42,
+                    "blank_lines": 184,
+                    "extensions": [".ts", ".tsx", ".js", ".jsx"]
+                },
+                {
+                    "name": "Scripts & Tools",
+                    "path": "scripts",
+                    "files": 9,
+                    "total_lines": 1149,
+                    "code_lines": 894,
+                    "comment_lines": 84,
+                    "blank_lines": 171,
+                    "extensions": [".py", ".sh", ".ps1"]
+                }
+            ],
+            "totals": {
+                "files": 438,
+                "total_lines": 75886,
+                "code_lines": 61195,
+                "comment_lines": 4686,
+                "blank_lines": 10005
+            }
+        };
+        
+        // Load LOC data and populate statistics
+        async function loadStatistics() {
+            try {
+                const data = locData;
+                
+                // Update header stats
+                document.getElementById('total-files').textContent = data.totals.files.toLocaleString();
+                document.getElementById('total-loc').textContent = data.totals.code_lines.toLocaleString();
+                
+                // Populate components grid
+                const componentsContainer = document.getElementById('components-container');
+                data.components.forEach((component, index) => {
+                    const colorSchemes = [
+                        { bg: 'bg-blue-900/30', text: 'text-blue-400', stat: 'bg-blue-800/30' },
+                        { bg: 'bg-purple-900/30', text: 'text-purple-400', stat: 'bg-purple-800/30' },
+                        { bg: 'bg-green-900/30', text: 'text-green-400', stat: 'bg-green-800/30' },
+                        { bg: 'bg-orange-900/30', text: 'text-orange-400', stat: 'bg-orange-800/30' },
+                        { bg: 'bg-red-900/30', text: 'text-red-400', stat: 'bg-red-800/30' },
+                        { bg: 'bg-indigo-900/30', text: 'text-indigo-400', stat: 'bg-indigo-800/30' },
+                        { bg: 'bg-pink-900/30', text: 'text-pink-400', stat: 'bg-pink-800/30' }
+                    ];
+                    const scheme = colorSchemes[index % colorSchemes.length];
+                    
+                    const card = `
+                        <div class="bg-slate-800/50 backdrop-blur-lg rounded-xl shadow-2xl p-8 card-hover border border-purple-500/20">
+                            <div class="flex items-start justify-between mb-4">
+                                <h3 class="text-xl font-semibold text-slate-200">${component.name}</h3>
+                                <div class="text-sm text-slate-400">${component.extensions.join(', ')}</div>
+                            </div>
+                            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                <div class="text-center p-3 ${scheme.stat} rounded-lg border border-${scheme.text.replace('text-', '')}/20">
+                                    <div class="text-2xl font-bold ${scheme.text}">${component.files.toLocaleString()}</div>
+                                    <div class="text-xs text-slate-400">Files</div>
+                                </div>
+                                <div class="text-center p-3 ${scheme.stat} rounded-lg border border-${scheme.text.replace('text-', '')}/20">
+                                    <div class="text-2xl font-bold ${scheme.text}">${component.total_lines.toLocaleString()}</div>
+                                    <div class="text-xs text-slate-400">Total Lines</div>
+                                </div>
+                                <div class="text-center p-3 ${scheme.stat} rounded-lg border border-${scheme.text.replace('text-', '')}/20">
+                                    <div class="text-2xl font-bold ${scheme.text}">${component.code_lines.toLocaleString()}</div>
+                                    <div class="text-xs text-slate-400">Code Lines</div>
+                                </div>
+                                <div class="text-center p-3 ${scheme.stat} rounded-lg border border-${scheme.text.replace('text-', '')}/20">
+                                    <div class="text-2xl font-bold ${scheme.text}">${component.comment_lines.toLocaleString()}</div>
+                                    <div class="text-xs text-slate-400">Comments</div>
+                                </div>
+                            </div>
+                            <div class="mt-4 text-sm text-slate-400">
+                                <i class="fas fa-folder mr-2"></i>${component.path}
+                            </div>
+                        </div>
+                    `;
+                    componentsContainer.innerHTML += card;
+                });
+                
+                // Populate statistics table
+                const statsTable = document.getElementById('stats-table');
+                data.components.forEach(component => {
+                    const row = `
+                        <tr>
+                            <td class="px-4 py-3 font-medium text-slate-200">${component.name}</td>
+                            <td class="px-4 py-3 text-right text-slate-300">${component.files.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-right text-slate-300">${component.total_lines.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-right text-slate-300">${component.code_lines.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-right text-slate-300">${component.comment_lines.toLocaleString()}</td>
+                            <td class="px-4 py-3 text-sm text-slate-400">${component.extensions.join(', ')}</td>
+                        </tr>
+                    `;
+                    statsTable.innerHTML += row;
+                });
+                
+                // Update footer totals
+                document.getElementById('total-files-footer').textContent = data.totals.files.toLocaleString();
+                document.getElementById('total-lines-footer').textContent = data.totals.total_lines.toLocaleString();
+                document.getElementById('total-code-footer').textContent = data.totals.code_lines.toLocaleString();
+                document.getElementById('total-comments-footer').textContent = data.totals.comment_lines.toLocaleString();
+                
+                // Create donut chart
+                createDonutChart(data);
+                
+            } catch (error) {
+                console.error('Error loading statistics:', error);
+                document.getElementById('total-files').textContent = 'Error';
+                document.getElementById('total-loc').textContent = 'Error';
+            }
+        }
+        
+        function createDonutChart(data) {
+            const colors = [
+                '#667eea', // Backend - Purple
+                '#ec4899', // Frontend - Pink
+                '#10b981', // Android - Green
+                '#f59e0b', // TUI - Orange
+                '#3b82f6', // BaluDesk Backend - Blue
+                '#8b5cf6', // BaluDesk Frontend - Violet
+                '#64748b'  // Scripts - Gray
+            ];
+            
+            const total = data.totals.code_lines;
+            document.getElementById('total-loc-center').textContent = total.toLocaleString();
+            
+            const pieChart = document.getElementById('pie-chart');
+            const legend = document.getElementById('pie-legend');
+            
+            let currentAngle = 0;
+            const radius = 140;
+            const centerX = 200;
+            const centerY = 200;
+            
+            data.components.forEach((component, index) => {
+                const percentage = (component.code_lines / total) * 100;
+                const angle = (percentage / 100) * 360;
+                
+                // Create pie slice
+                const slice = createPieSlice(
+                    centerX, 
+                    centerY, 
+                    radius, 
+                    currentAngle, 
+                    currentAngle + angle, 
+                    colors[index]
+                );
+                pieChart.innerHTML += slice;
+                
+                // Create legend item
+                const legendItem = `
+                    <div class="flex items-center justify-between p-3 rounded-lg hover:bg-slate-700/30 transition-colors">
+                        <div class="flex items-center space-x-3">
+                            <div class="w-4 h-4 rounded" style="background-color: ${colors[index]}"></div>
+                            <div>
+                                <div class="font-medium text-sm text-slate-200">${component.name}</div>
+                                <div class="text-xs text-slate-400">${component.code_lines.toLocaleString()} lines</div>
+                            </div>
+                        </div>
+                        <div class="text-right">
+                            <div class="font-bold text-lg" style="color: ${colors[index]}">${percentage.toFixed(1)}%</div>
+                            <div class="text-xs text-slate-400">${component.files} files</div>
+                        </div>
+                    </div>
+                `;
+                legend.innerHTML += legendItem;
+                
+                currentAngle += angle;
+            });
+        }
+        
+        function createPieSlice(cx, cy, r, startAngle, endAngle, color) {
+            const start = polarToCartesian(cx, cy, r, endAngle);
+            const end = polarToCartesian(cx, cy, r, startAngle);
+            const largeArcFlag = endAngle - startAngle <= 180 ? "0" : "1";
+            
+            const d = [
+                "M", cx, cy,
+                "L", start.x, start.y,
+                "A", r, r, 0, largeArcFlag, 0, end.x, end.y,
+                "Z"
+            ].join(" ");
+            
+            return `<path d="${d}" fill="${color}" filter="url(#pie-shadow)" class="hover:opacity-80 transition-opacity cursor-pointer" />`;
+        }
+        
+        function polarToCartesian(cx, cy, r, angle) {
+            const radians = (angle - 90) * Math.PI / 180;
+            return {
+                x: cx + (r * Math.cos(radians)),
+                y: cy + (r * Math.sin(radians))
+            };
+        }
+        
+        // Dark mode toggle
+        function toggleTheme() {
+            const html = document.documentElement;
+            const body = document.body;
+            
+            if (html.classList.contains('dark')) {
+                html.classList.remove('dark');
+                body.classList.add('light-mode');
+                localStorage.setItem('theme', 'light');
+            } else {
+                html.classList.add('dark');
+                body.classList.remove('light-mode');
+                localStorage.setItem('theme', 'dark');
+            }
+        }
+        
+        // Load theme preference
+        function loadTheme() {
+            const savedTheme = localStorage.getItem('theme') || 'dark';
+            if (savedTheme === 'light') {
+                document.documentElement.classList.remove('dark');
+                document.body.classList.add('light-mode');
+            } else {
+                document.documentElement.classList.add('dark');
+                document.body.classList.remove('light-mode');
+            }
+        }
+        
+        // Smooth scroll for navigation links
+        document.querySelectorAll('a[href^="#"]').forEach(anchor => {
+            anchor.addEventListener('click', function (e) {
+                e.preventDefault();
+                const target = document.querySelector(this.getAttribute('href'));
+                if (target) {
+                    target.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                }
+            });
+        });
+        
+        // Load statistics when page loads
+        document.addEventListener('DOMContentLoaded', () => {
+            loadTheme();
+            loadStatistics();
+        });
+    </script>
+</body>
+</html>
