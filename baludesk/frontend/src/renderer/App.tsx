@@ -3,11 +3,14 @@ import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { Toaster } from 'react-hot-toast';
 import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
+import Sync from './pages/Sync';
 import FileExplorer from './pages/FileExplorer';
-import FileExplorerTest from './pages/FileExplorerTest';
+import Settings from './components/Settings';
+import MainLayout from './components/MainLayout';
 
 interface User {
   username: string;
+  serverUrl?: string;
 }
 
 export default function App() {
@@ -63,25 +66,54 @@ export default function App() {
           path="/login"
           element={user ? <Navigate to="/" replace /> : <Login onLogin={handleLogin} />}
         />
+        
+        {/* Protected routes with MainLayout */}
         <Route
           path="/"
           element={
             user ? (
-              <Dashboard user={user} onLogout={handleLogout} />
+              <MainLayout user={user} onLogout={handleLogout}>
+                <Dashboard user={user} onLogout={handleLogout} />
+              </MainLayout>
             ) : (
               <Navigate to="/login" replace />
             )
           }
         />
+        
         <Route
-          path="/files-test"
-          element={user ? <FileExplorerTest /> : <Navigate to="/login" replace />}
+          path="/sync"
+          element={
+            user ? (
+              <MainLayout user={user} onLogout={handleLogout}>
+                <Sync />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
         />
+        
         <Route
           path="/files"
           element={
             user ? (
-              <FileExplorer />
+              <MainLayout user={user} onLogout={handleLogout}>
+                <FileExplorer />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/settings"
+          element={
+            user ? (
+              <MainLayout user={user} onLogout={handleLogout}>
+                <Settings onClose={() => window.location.href = '/'} />
+              </MainLayout>
             ) : (
               <Navigate to="/login" replace />
             )

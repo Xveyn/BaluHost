@@ -16,7 +16,7 @@ endif()
 
 # Compiler flags
 if(MSVC)
-    add_compile_options(/W4 /WX)
+    add_compile_options(/W4 /WX /D_CRT_SECURE_NO_WARNINGS)
 else()
     add_compile_options(-Wall -Wextra -Wpedantic -Werror)
 endif()
@@ -46,13 +46,8 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
-# spdlog
-FetchContent_Declare(
-    spdlog
-    GIT_REPOSITORY https://github.com/gabime/spdlog.git
-    GIT_TAG v1.12.0
-)
-FetchContent_MakeAvailable(spdlog)
+# spdlog (use vcpkg instead of FetchContent to avoid locking issues)
+find_package(spdlog CONFIG REQUIRED)
 
 # Google Test (for unit tests)
 FetchContent_Declare(
@@ -76,6 +71,9 @@ set(SOURCES
     src/ipc/ipc_server_fixed.cpp
     src/utils/logger.cpp
     src/utils/config.cpp
+    src/utils/system_info.cpp
+    src/utils/raid_info.cpp
+    src/utils/settings_manager.cpp
     src/baluhost_client.cpp
 )
 
@@ -111,7 +109,7 @@ else()
     message(WARNING "CURL not found - some features may be unavailable")
 endif()
 
-if(official-sqlite3_FOUND)
+if(unofficial-sqlite3_FOUND)
     list(APPEND LINK_LIBS unofficial::sqlite3::sqlite3)
 elseif(SQLite3_FOUND)
     list(APPEND LINK_LIBS SQLite3::SQLite3)

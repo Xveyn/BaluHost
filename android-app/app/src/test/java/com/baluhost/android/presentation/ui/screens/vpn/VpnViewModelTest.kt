@@ -4,6 +4,7 @@ import app.cash.turbine.test
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.usecase.vpn.ConnectVpnUseCase
 import com.baluhost.android.domain.usecase.vpn.DisconnectVpnUseCase
+import com.baluhost.android.domain.usecase.vpn.FetchVpnConfigUseCase
 import com.baluhost.android.util.Result
 import io.mockk.*
 import kotlinx.coroutines.Dispatchers
@@ -18,6 +19,7 @@ import org.junit.Assert.*
 @OptIn(ExperimentalCoroutinesApi::class)
 class VpnViewModelTest {
     
+    private lateinit var fetchVpnConfigUseCase: FetchVpnConfigUseCase
     private lateinit var connectVpnUseCase: ConnectVpnUseCase
     private lateinit var disconnectVpnUseCase: DisconnectVpnUseCase
     private lateinit var preferencesManager: PreferencesManager
@@ -29,6 +31,7 @@ class VpnViewModelTest {
     @Before
     fun setup() {
         Dispatchers.setMain(testDispatcher)
+        fetchVpnConfigUseCase = mockk()
         connectVpnUseCase = mockk()
         disconnectVpnUseCase = mockk()
         preferencesManager = mockk()
@@ -36,8 +39,9 @@ class VpnViewModelTest {
         
         // Default: no VPN config
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
+        coEvery { fetchVpnConfigUseCase() } returns Result.Error(Exception("No config"))
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
     }
     
     @After
@@ -52,7 +56,7 @@ class VpnViewModelTest {
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config_string")
         
         // When
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then
@@ -69,7 +73,7 @@ class VpnViewModelTest {
         every { preferencesManager.getVpnConfig() } returns flowOf(null)
         
         // When
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Then
@@ -85,7 +89,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } returns Result.Success(true)
@@ -113,7 +117,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         val errorMessage = "VPN connection failed"
@@ -141,7 +145,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // Connect first
@@ -174,7 +178,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } returns Result.Success(true)
@@ -198,7 +202,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         // When - Try to disconnect when not connected
@@ -216,7 +220,7 @@ class VpnViewModelTest {
         // Given
         every { preferencesManager.getVpnConfig() } returns flowOf("vpn_config")
         
-        viewModel = VpnViewModel(connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
+        viewModel = VpnViewModel(fetchVpnConfigUseCase, connectVpnUseCase, disconnectVpnUseCase, preferencesManager, context)
         testDispatcher.scheduler.advanceUntilIdle()
         
         coEvery { connectVpnUseCase() } coAnswers {

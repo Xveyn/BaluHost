@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { ChevronRight, Folder, File, HardDrive, RefreshCw, Upload, FolderPlus, Trash2, Edit2, Download, Home } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
+import { formatSize, formatDate } from '../../lib/formatters';
+import { getBreadcrumbs, goToParent } from '../../lib/paths';
 
 interface FileItem {
   id: number;
@@ -47,7 +49,9 @@ const FileExplorer: React.FC = () => {
   const loadMountpoints = async () => {
     try {
       setLoading(true);
-      const response = await window.electronAPI.invoke('get_mountpoints', {});
+      const response = await window.electronAPI.sendBackendCommand({
+        type: 'get_mountpoints',
+      });
       
       if (response.success && response.mountpoints) {
         setMountpoints(response.mountpoints);
@@ -55,7 +59,8 @@ const FileExplorer: React.FC = () => {
           setSelectedMount(response.mountpoints[0]);
         }
       } else {
-        setError('Failed to load storage drives');
+        const errorMsg = response.message || response.error || 'Failed to load storage drives';
+        setError(errorMsg);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load storage drives');
@@ -70,9 +75,12 @@ const FileExplorer: React.FC = () => {
     try {
       setLoading(true);
       setError(null);
-      const response = await window.electronAPI.invoke('list_files', {
-        path: currentPath,
-        mountId: selectedMount.id
+      const response = await window.electronAPI.sendBackendCommand({
+        type: 'list_files',
+        data: {
+          path: currentPath,
+          mountId: selectedMount.id
+        }
       });
 
       if (response.success && response.files) {
@@ -95,49 +103,24 @@ const FileExplorer: React.FC = () => {
 
   const navigateUp = () => {
     if (currentPath === '/') return;
-    const parts = currentPath.split('/').filter(Boolean);
-    parts.pop();
-    setCurrentPath('/' + parts.join('/'));
+    setCurrentPath(goToParent(currentPath));
   };
 
-  const formatSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + ' ' + sizes[i];
-  };
-
-  const formatDate = (dateString: string): string => {
-    try {
-      return new Date(dateString).toLocaleString();
-    } catch {
-      return dateString;
-    }
-  };
-
-  const getBreadcrumbs = () => {
-    const parts = currentPath.split('/').filter(Boolean);
-    const breadcrumbs = [{ name: 'Root', path: '/' }];
-    
-    let path = '';
-    for (const part of parts) {
-      path += '/' + part;
-      breadcrumbs.push({ name: part, path });
-    }
-    
-    return breadcrumbs;
+  const getBreadcrumbItems = () => {
+    return getBreadcrumbs(currentPath);
   };
 
   const handleCreateFolder = async () => {
-    const name = prompt('Enter folder name:');
     if (!name || !selectedMount) return;
 
     try {
-      const response = await window.electronAPI.invoke('create_folder', {
-        path: currentPath,
-        name,
-        mountId: selectedMount.id
+      const response = await window.electronAPI.sendBackendCommand({
+        type: 'create_folder',
+        data: {
+          path: currentPath,
+          name,
+          mountId: selectedMount.id
+        }
       });
 
       if (response.success) {
@@ -334,7 +317,7 @@ const FileExplorer: React.FC = () => {
       {/* Breadcrumb Navigation */}
       <div className="bg-white/5 px-6 py-3 border-b border-white/10">
         <div className="flex items-center gap-2 text-sm">
-          {getBreadcrumbs().map((crumb, index) => (
+          {getBreadcrumbItems().map((crumb, index) => (
             <div key={crumb.path} className="flex items-center gap-2">
               {index > 0 && <ChevronRight className="w-4 h-4 text-slate-500" />}
               <button

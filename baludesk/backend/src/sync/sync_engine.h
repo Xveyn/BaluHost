@@ -52,6 +52,7 @@ struct SyncFolder {
     bool enabled;
     std::string createdAt;
     std::string lastSync;
+    uint64_t size;  // Folder size in bytes
 };
 
 // Sync statistics
@@ -94,6 +95,7 @@ public:
     bool removeSyncFolder(const std::string& folderId);
     bool pauseSync(const std::string& folderId);
     bool resumeSync(const std::string& folderId);
+    bool updateSyncFolderSettings(const std::string& folderId, const std::string& conflictResolution);
     std::vector<SyncFolder> getSyncFolders() const;
 
     // Sync operations & state

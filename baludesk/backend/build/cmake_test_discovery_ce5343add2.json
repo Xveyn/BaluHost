@@ -1,0 +1,57 @@
+{
+  "tests": 9,
+  "name": "AllTests",
+  "testsuites": [
+    {
+      "name": "FileWatcherTest",
+      "tests": 9,
+      "testsuite": [
+        {
+          "name": "Initialization",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 96
+        },
+        {
+          "name": "WatchDirectory",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 101
+        },
+        {
+          "name": "WatchInvalidDirectory",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 107
+        },
+        {
+          "name": "DetectFileCreation",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 112
+        },
+        {
+          "name": "DetectFileModification",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 158
+        },
+        {
+          "name": "DetectFileDeletion",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 187
+        },
+        {
+          "name": "Debouncing",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 225
+        },
+        {
+          "name": "UnwatchDirectory",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 250
+        },
+        {
+          "name": "StopAll",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
+          "line": 264
+        }
+      ]
+    }
+  ]
+}

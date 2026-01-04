@@ -1,6 +1,7 @@
 #include "ipc_server.h"
 #include "../sync/sync_engine.h"
 #include "../utils/logger.h"
+#include "../utils/system_info.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
 #include <sstream>
@@ -61,11 +62,17 @@ void IpcServer::processMessages() {
             else if (type == "resume_sync") {
                 handleResumeSync(message, requestId);
             }
+            else if (type == "update_sync_folder") {
+                handleUpdateSyncFolder(message, requestId);
+            }
             else if (type == "get_sync_state") {
                 handleGetSyncState(requestId);
             }
             else if (type == "get_folders") {
                 handleGetFolders(requestId);
+            }
+            else if (type == "get_system_info") {
+                handleGetSystemInfo(requestId);
             }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
@@ -281,7 +288,8 @@ void IpcServer::handleGetFolders() {
                 {"local_path", folder.localPath},
                 {"remote_path", folder.remotePath},
                 {"status", status_str},
-                {"enabled", folder.enabled}
+                {"enabled", folder.enabled},
+                {"size", folder.size}
             };
             folderArray.push_back(folderJson);
         }
@@ -327,6 +335,27 @@ void IpcServer::broadcastEvent(const std::string& eventType, const json& data) {
         {"data", data}
     };
     sendResponse(event);
+}
+
+void IpcServer::handleGetSystemInfo(int requestId) {
+    try {
+        // Collect system information
+        SystemInfo sysInfo = SystemInfoCollector::getSystemInfo();
+        
+        // Convert to JSON response
+        json response = {
+            {"type", "system_info"},
+            {"success", true},
+            {"data", SystemInfoCollector::toJson(sysInfo)}
+        };
+        
+        sendResponse(response, requestId);
+        Logger::debug("System info sent to frontend");
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get system info: ") + e.what(), requestId);
+        Logger::error("Error in handleGetSystemInfo: {}", e.what());
+    }
 }
 
 } // namespace baludesk

@@ -21,7 +21,7 @@ class SyncRepositoryImpl @Inject constructor(
     override suspend fun getSyncFolders(deviceId: String): Result<List<SyncFolderConfig>> {
         return try {
             val response = syncApi.getSyncFolders(deviceId)
-            Result.success(response.folders.map { it.toDomain() })
+            Result.success(response.map { it.toDomain() })
         } catch (e: Exception) {
             Result.failure(e)
         }

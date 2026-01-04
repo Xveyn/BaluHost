@@ -30,8 +30,15 @@ private:
     void handleRemoveSyncFolder(const nlohmann::json& message, int requestId = -1);
     void handlePauseSync(const nlohmann::json& message, int requestId = -1);
     void handleResumeSync(const nlohmann::json& message, int requestId = -1);
+    void handleUpdateSyncFolder(const nlohmann::json& message, int requestId = -1);
     void handleGetSyncState(int requestId = -1);
     void handleGetFolders(int requestId = -1);
+    
+    // System info handler
+    void handleGetSystemInfo(int requestId = -1);
+    
+    // RAID info handler
+    void handleGetRaidStatus(int requestId = -1);
     
     // File operation handlers
     void handleListFiles(const nlohmann::json& message, int requestId = -1);
@@ -45,6 +52,10 @@ private:
     void handleGetPermissions(const nlohmann::json& message, int requestId = -1);
     void handleSetPermission(const nlohmann::json& message, int requestId = -1);
     void handleRemovePermission(const nlohmann::json& message, int requestId = -1);
+    
+    // Settings handlers
+    void handleGetSettings(const nlohmann::json& message, int requestId = -1);
+    void handleUpdateSettings(const nlohmann::json& message, int requestId = -1);
     
     void sendResponse(const nlohmann::json& response, int requestId = -1);
     void sendError(const std::string& error, int requestId = -1);

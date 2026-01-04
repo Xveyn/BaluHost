@@ -15,7 +15,7 @@ interface SyncApi {
     @GET("mobile/sync/folders/{device_id}")
     suspend fun getSyncFolders(
         @Path("device_id") deviceId: String
-    ): SyncFolderListResponseDto
+    ): List<SyncFolderDto>
     
     /**
      * Create a new sync folder configuration.

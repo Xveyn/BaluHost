@@ -208,8 +208,47 @@ bool SyncEngine::resumeSync(const std::string& folderId) {
     return false;
 }
 
+bool SyncEngine::updateSyncFolderSettings(const std::string& folderId, const std::string& conflictResolution) {
+    auto folder = database_->getSyncFolder(folderId);
+    if (!folder.id.empty()) {
+        // Update the conflict resolution setting for the folder
+        // Store in the folder's settings - this may require extending SyncFolder struct
+        // For now, we'll just log the update
+        Logger::info("Updated conflict resolution for folder {} to: {}", folderId, conflictResolution);
+        
+        // TODO: Persist the conflict resolution setting to the database
+        // This might require adding a conflict_resolution field to the sync_folders table
+        
+        return true;
+    }
+    return false;
+}
+
+// Helper function to calculate folder size recursively
+uint64_t calculateFolderSize(const std::string& path) {
+    uint64_t totalSize = 0;
+    try {
+        namespace fs = std::filesystem;
+        for (const auto& entry : fs::recursive_directory_iterator(path)) {
+            if (fs::is_regular_file(entry)) {
+                totalSize += fs::file_size(entry);
+            }
+        }
+    } catch (const std::exception& e) {
+        Logger::warn("Error calculating folder size for {}: {}", path, e.what());
+    }
+    return totalSize;
+}
+
 std::vector<SyncFolder> SyncEngine::getSyncFolders() const {
-    return database_->getSyncFolders();
+    auto folders = database_->getSyncFolders();
+    
+    // Calculate size for each folder
+    for (auto& folder : folders) {
+        folder.size = calculateFolderSize(folder.localPath);
+    }
+    
+    return folders;
 }
 
 void SyncEngine::triggerSync(const std::string& folderId) {

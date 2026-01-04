@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from contextlib import asynccontextmanager
 from typing import Any
+from pathlib import Path
 
 from app.compat import apply_asyncio_patches
 
@@ -10,6 +11,7 @@ apply_asyncio_patches()
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -156,6 +158,11 @@ def create_app() -> FastAPI:
     )
 
     app.include_router(api_router, prefix=settings.api_prefix)
+    
+    # Mount static files for avatars
+    avatars_path = Path("storage/avatars")
+    avatars_path.mkdir(parents=True, exist_ok=True)
+    app.mount("/avatars", StaticFiles(directory=str(avatars_path)), name="avatars")
     
     # Include custom styled docs
     from app.api.docs import router as docs_router

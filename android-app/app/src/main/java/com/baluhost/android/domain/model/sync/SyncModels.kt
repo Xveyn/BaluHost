@@ -111,6 +111,45 @@ enum class ConflictResolution {
 }
 
 /**
+ * Configuration for creating a new sync folder.
+ */
+data class SyncFolderCreateConfig(
+    val localUri: android.net.Uri,
+    val remotePath: String,
+    val syncType: SyncType,
+    val autoSync: Boolean,
+    val conflictResolution: ConflictResolution,
+    val excludePatterns: List<String> = emptyList(),
+    val adapterType: String = "filesystem",
+    val credentials: SyncCredentials? = null,
+    val saveCredentials: Boolean = false
+)
+
+/**
+ * Configuration for updating an existing sync folder.
+ */
+data class SyncFolderUpdateConfig(
+    val folderId: String,
+    val remotePath: String? = null,
+    val syncType: SyncType? = null,
+    val autoSync: Boolean? = null,
+    val conflictResolution: ConflictResolution? = null,
+    val excludePatterns: List<String>? = null,
+    val status: String? = null,
+    val adapterType: String? = null,
+    val credentials: SyncCredentials? = null,
+    val saveCredentials: Boolean? = null
+)
+
+/**
+ * Credentials for sync adapters (WebDAV, etc).
+ */
+data class SyncCredentials(
+    val username: String,
+    val password: String
+)
+
+/**
  * Upload queue item for tracking individual file uploads.
  */
 data class UploadQueueItem(

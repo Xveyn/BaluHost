@@ -49,6 +49,40 @@ export interface FileEvent {
   timestamp: number;
 }
 
+// Settings Types
+export interface AppSettings {
+  // Server Connection
+  serverUrl: string;
+  serverPort: number;
+  username: string;
+  rememberPassword: boolean;
+
+  // Sync Behavior
+  autoStartSync: boolean;
+  syncInterval: number;  // seconds
+  maxConcurrentTransfers: number;
+  bandwidthLimitMbps: number;  // 0 = unlimited
+  conflictResolution: 'ask' | 'local' | 'remote' | 'newer';
+
+  // UI Preferences
+  theme: 'dark' | 'light' | 'system';
+  language: string;
+  startMinimized: boolean;
+  showNotifications: boolean;
+  notifyOnSyncComplete: boolean;
+  notifyOnErrors: boolean;
+
+  // Advanced
+  enableDebugLogging: boolean;
+  chunkSizeMb: number;
+}
+
+export interface SettingsResponse {
+  success: boolean;
+  data?: Partial<AppSettings>;
+  error?: string;
+}
+
 // User Types
 export interface User {
   username: string;

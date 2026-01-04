@@ -18,6 +18,7 @@ from app.schemas.mobile import (
     SyncFolder as SyncFolderSchema,
     SyncFolderCreate,
 )
+from app.models.mobile import MobileDevice
 from app.services.mobile import MobileService
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
@@ -148,7 +149,7 @@ async def get_devices(
         devices = MobileService.get_all_devices_with_users(db=db)
         print(f"[GET DEVICES] Admin sees all {len(devices)} device(s)")
     else:
-        devices = MobileService.get_user_devices(db=db, user_id=str(current_user.id))
+        devices = MobileService.get_user_devices(db=db, user_id=current_user.id)
         print(f"[GET DEVICES] User {current_user.id} has {len(devices)} device(s)")
     
     for dev in devices:
@@ -171,7 +172,7 @@ async def get_device(
     device = MobileService.get_device(
         db=db,
         device_id=device_id,
-        user_id=str(current_user.id)
+        user_id=current_user.id
     )
     if not device:
         raise HTTPException(
@@ -194,7 +195,7 @@ async def update_device(
     return MobileService.update_device(
         db=db,
         device_id=device_id,
-        user_id=str(current_user.id),
+        user_id=current_user.id,
         device_update=device_update
     )
 
@@ -207,12 +208,25 @@ async def delete_device(
 ):
     """
     Delete a mobile device registration.
+    Admins can delete any device, regular users can only delete their own.
     """
-    MobileService.delete_device(
-        db=db,
-        device_id=device_id,
-        user_id=str(current_user.id)
-    )
+    # Get the device
+    device = db.query(MobileDevice).filter(MobileDevice.id == device_id).first()
+    if not device:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Device not found"
+        )
+    
+    # Check permissions: admin can delete any device, users can only delete their own
+    if current_user.role != "admin" and device.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You don't have permission to delete this device"
+        )
+    
+    db.delete(device)
+    db.commit()
     return None
 
 
@@ -244,7 +258,7 @@ async def register_push_token(
     device = MobileService.get_device(
         db=db,
         device_id=device_id,
-        user_id=str(current_user.id)
+        user_id=current_user.id
     )
     if not device:
         raise HTTPException(
@@ -297,7 +311,7 @@ async def get_device_notifications(
     device = MobileService.get_device(
         db=db,
         device_id=device_id,
-        user_id=str(current_user.id)
+        user_id=current_user.id
     )
     if not device:
         raise HTTPException(

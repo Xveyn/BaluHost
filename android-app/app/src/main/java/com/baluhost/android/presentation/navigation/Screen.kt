@@ -26,4 +26,5 @@ sealed class Screen(val route: String) {
     object Settings : Screen("settings")
     object Lock : Screen("lock")
     object PendingOperations : Screen("pending_operations")
+    object FolderSync : Screen("folder_sync")
 }

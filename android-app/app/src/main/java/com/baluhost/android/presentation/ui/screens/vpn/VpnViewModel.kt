@@ -3,11 +3,13 @@ package com.baluhost.android.presentation.ui.screens.vpn
 import android.content.Context
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
+import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baluhost.android.data.local.datastore.PreferencesManager
 import com.baluhost.android.domain.usecase.vpn.ConnectVpnUseCase
 import com.baluhost.android.domain.usecase.vpn.DisconnectVpnUseCase
+import com.baluhost.android.domain.usecase.vpn.FetchVpnConfigUseCase
 import com.baluhost.android.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
 import dagger.hilt.android.qualifiers.ApplicationContext
@@ -23,10 +25,11 @@ import javax.inject.Inject
 /**
  * ViewModel for VPN Screen.
  * 
- * Manages VPN connection state.
+ * Manages VPN connection state and configuration.
  */
 @HiltViewModel
 class VpnViewModel @Inject constructor(
+    private val fetchVpnConfigUseCase: FetchVpnConfigUseCase,
     private val connectVpnUseCase: ConnectVpnUseCase,
     private val disconnectVpnUseCase: DisconnectVpnUseCase,
     private val preferencesManager: PreferencesManager,
@@ -37,15 +40,76 @@ class VpnViewModel @Inject constructor(
     val uiState: StateFlow<VpnUiState> = _uiState.asStateFlow()
     
     init {
-        checkVpnConfig()
+        loadVpnConfig()
         checkVpnStatus()
         startVpnStatusMonitoring()
     }
     
-    private fun checkVpnConfig() {
+    /**
+     * Load VPN configuration from backend or cache.
+     */
+    private fun loadVpnConfig() {
         viewModelScope.launch {
-            val configString = preferencesManager.getVpnConfig().first()
-            val hasConfig = !configString.isNullOrEmpty()
+            _uiState.value = _uiState.value.copy(isLoading = true)
+            
+            Log.d(TAG, "Loading VPN config")
+            val result = fetchVpnConfigUseCase()
+            
+            when (result) {
+                is Result.Success -> {
+                    val config = result.data
+                    Log.d(TAG, "VPN config loaded: ${config.deviceName}")
+                    
+                    // Extract endpoint from config
+                    var endpoint: String? = null
+                    try {
+                        val lines = config.configString.lines()
+                        for (line in lines) {
+                            if (line.trim().startsWith("Endpoint")) {
+                                endpoint = line.substringAfter("=").trim()
+                                break
+                            }
+                        }
+                    } catch (e: Exception) {
+                        Log.e(TAG, "Failed to parse endpoint", e)
+                    }
+                    
+                    _uiState.value = _uiState.value.copy(
+                        hasConfig = true,
+                        serverEndpoint = endpoint ?: config.assignedIp,
+                        clientIp = config.assignedIp,
+                        deviceName = config.deviceName,
+                        isLoading = false,
+                        error = null
+                    )
+                }
+                is Result.Error -> {
+                    Log.e(TAG, "Failed to load VPN config", result.exception)
+                    
+                    // Try to load from local cache
+                    checkVpnConfig()
+                    
+                    _uiState.value = _uiState.value.copy(
+                        isLoading = false,
+                        error = "Konfiguration konnte nicht geladen werden: ${result.exception.message}"
+                    )
+                }
+                is Result.Loading -> {
+                    // Already loading
+                }
+            }
+        }
+    }
+    
+    /**
+     * Check cached VPN config.
+     */
+    private suspend fun checkVpnConfig() {
+        val configString = preferencesManager.getVpnConfig().first()
+        val hasConfig = !configString.isNullOrEmpty()
+        
+        if (hasConfig) {
+            Log.d(TAG, "Found cached VPN config")
             
             // Extract endpoint from config if available
             var endpoint: String? = null
@@ -59,26 +123,37 @@ class VpnViewModel @Inject constructor(
                         }
                     }
                 } catch (e: Exception) {
-                    android.util.Log.e("VpnViewModel", "Failed to parse endpoint", e)
+                    Log.e(TAG, "Failed to parse endpoint", e)
                 }
             }
             
+            val assignedIp = preferencesManager.getVpnAssignedIp().first()
+            val deviceName = preferencesManager.getVpnDeviceName().first()
+            
             _uiState.value = _uiState.value.copy(
-                hasConfig = hasConfig,
-                serverEndpoint = endpoint,
-                error = if (!hasConfig) "Keine VPN-Konfiguration gefunden" else null
+                hasConfig = true,
+                serverEndpoint = endpoint ?: assignedIp,
+                clientIp = assignedIp,
+                deviceName = deviceName ?: "Unbekanntes Gerät",
+                error = null
             )
         }
     }
     
+    /**
+     * Check current VPN status.
+     */
     private fun checkVpnStatus() {
         viewModelScope.launch {
             val isVpnActive = isVpnActive()
             _uiState.value = _uiState.value.copy(isConnected = isVpnActive)
-            android.util.Log.d("VpnViewModel", "VPN status check: isConnected=$isVpnActive")
+            Log.d(TAG, "VPN status check: isConnected=$isVpnActive")
         }
     }
     
+    /**
+     * Start monitoring VPN status periodically.
+     */
     private fun startVpnStatusMonitoring() {
         viewModelScope.launch {
             while (isActive) {
@@ -86,7 +161,7 @@ class VpnViewModel @Inject constructor(
                 val currentState = _uiState.value.isConnected
                 
                 if (isVpnActive != currentState) {
-                    android.util.Log.d("VpnViewModel", "VPN status changed: $currentState -> $isVpnActive")
+                    Log.d(TAG, "VPN status changed: $currentState -> $isVpnActive")
                     _uiState.value = _uiState.value.copy(isConnected = isVpnActive)
                 }
                 
@@ -95,6 +170,9 @@ class VpnViewModel @Inject constructor(
         }
     }
     
+    /**
+     * Check if VPN is currently active.
+     */
     private fun isVpnActive(): Boolean {
         return try {
             val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
@@ -104,29 +182,45 @@ class VpnViewModel @Inject constructor(
             // Check if the active network is a VPN
             networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
         } catch (e: Exception) {
-            android.util.Log.e("VpnViewModel", "Error checking VPN status", e)
+            Log.e(TAG, "Error checking VPN status", e)
             false
         }
     }
     
+    /**
+     * Refresh VPN configuration from backend.
+     */
+    fun refreshConfig() {
+        loadVpnConfig()
+    }
+    
+    /**
+     * Connect to VPN.
+     */
     fun connect() {
         if (_uiState.value.isConnected || _uiState.value.isLoading) return
+        if (!_uiState.value.hasConfig) {
+            _uiState.value = _uiState.value.copy(
+                error = "VPN-Konfiguration nicht verfügbar"
+            )
+            return
+        }
         
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
-            android.util.Log.d("VpnViewModel", "Initiating VPN connection")
+            Log.d(TAG, "Initiating VPN connection")
             val result = connectVpnUseCase()
             
             when (result) {
                 is Result.Success -> {
-                    android.util.Log.d("VpnViewModel", "VPN connection initiated successfully")
+                    Log.d(TAG, "VPN connection initiated successfully")
                     // Give service time to establish connection
-                    kotlinx.coroutines.delay(2000)
+                    delay(2000)
                     
                     // Check actual VPN status after delay
                     val isVpnActive = isVpnActive()
-                    android.util.Log.d("VpnViewModel", "VPN active after connect: $isVpnActive")
+                    Log.d(TAG, "VPN active after connect: $isVpnActive")
                     
                     _uiState.value = _uiState.value.copy(
                         isConnected = isVpnActive,
@@ -135,53 +229,56 @@ class VpnViewModel @Inject constructor(
                     )
                 }
                 is Result.Error -> {
-                    android.util.Log.e("VpnViewModel", "VPN connection failed", result.exception)
+                    Log.e(TAG, "VPN connection failed", result.exception)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         isConnected = false,
                         error = "Verbindung fehlgeschlagen: ${result.exception.message}"
                     )
                 }
-                else -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        isConnected = false,
-                        error = "Unbekannter Fehler"
-                    )
+                is Result.Loading -> {
+                    // Connection loading
                 }
             }
         }
     }
     
+    /**
+     * Disconnect from VPN.
+     */
     fun disconnect() {
         if (!_uiState.value.isConnected || _uiState.value.isLoading) return
         
         viewModelScope.launch {
             _uiState.value = _uiState.value.copy(isLoading = true, error = null)
             
+            Log.d(TAG, "Disconnecting VPN")
             val result = disconnectVpnUseCase()
             
             when (result) {
                 is Result.Success -> {
+                    Log.d(TAG, "VPN disconnected successfully")
                     _uiState.value = _uiState.value.copy(
                         isConnected = false,
                         isLoading = false
                     )
                 }
                 is Result.Error -> {
+                    Log.e(TAG, "VPN disconnect failed", result.exception)
                     _uiState.value = _uiState.value.copy(
                         isLoading = false,
                         error = result.exception.message
                     )
                 }
-                else -> {
-                    _uiState.value = _uiState.value.copy(
-                        isLoading = false,
-                        error = "Unknown error"
-                    )
+                is Result.Loading -> {
+                    // Disconnection loading
                 }
             }
         }
+    }
+    
+    companion object {
+        private const val TAG = "VpnViewModel"
     }
 }
 
@@ -190,5 +287,7 @@ data class VpnUiState(
     val isLoading: Boolean = false,
     val hasConfig: Boolean = false,
     val serverEndpoint: String? = null,
+    val clientIp: String? = null,
+    val deviceName: String? = null,
     val error: String? = null
 )

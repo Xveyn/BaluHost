@@ -1,7 +1,7 @@
 F:\Programme (x86)\Baluhost\baludesk\backend\src\main.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\main.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\stubs.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\stubs.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\sync_engine.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\sync_engine.obj
-F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\file_watcher.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\file_watcher_v2.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\change_detector.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\conflict_resolver.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\conflict_resolver.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\http_client.obj
@@ -9,4 +9,8 @@ F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp;F:\Programme (x
 F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\ipc_server_fixed.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\logger.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\config.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\system_info.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\system_info.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\raid_info.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\raid_info.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\settings_manager.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\settings_manager.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\baluhost_client.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\baluhost_client.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_windows.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\file_watcher_windows.obj

@@ -201,9 +201,24 @@ class SettingsViewModel @Inject constructor(
                     deviceDeleted = true
                 ) }
             } catch (e: Exception) {
+                android.util.Log.e("SettingsViewModel", "Error deleting device: ${e.message}", e)
+                
+                // Provide helpful error messages
+                val errorMessage = when {
+                    e.message?.contains("401", ignoreCase = true) == true -> 
+                        "Authentifizierung erforderlich. Bitte melden Sie sich erneut an."
+                    e.message?.contains("403", ignoreCase = true) == true -> 
+                        "Nicht berechtigt, dieses Gerät zu löschen."
+                    e.message?.contains("Network error", ignoreCase = true) == true -> 
+                        "Netzwerkfehler. Bitte überprüfen Sie Ihre Verbindung und versuchen Sie es erneut."
+                    e.message?.contains("404", ignoreCase = true) == true -> 
+                        "Gerät nicht gefunden. Es wurde möglicherweise bereits gelöscht."
+                    else -> "Gerätelöschung fehlgeschlagen: ${e.message}"
+                }
+                
                 _uiState.update { it.copy(
                     isDeleting = false,
-                    error = "Failed to remove device: ${e.message}"
+                    error = errorMessage
                 ) }
             }
         }

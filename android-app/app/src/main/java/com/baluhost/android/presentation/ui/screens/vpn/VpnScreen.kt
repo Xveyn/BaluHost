@@ -10,6 +10,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -49,6 +50,14 @@ fun VpnScreen(
                         Icon(
                             imageVector = Icons.Default.ArrowBack,
                             contentDescription = "Back"
+                        )
+                    }
+                },
+                actions = {
+                    IconButton(onClick = { viewModel.refreshConfig() }) {
+                        Icon(
+                            imageVector = Icons.Default.Refresh,
+                            contentDescription = "Refresh Config"
                         )
                     }
                 },
@@ -104,7 +113,7 @@ fun VpnScreen(
                 ) {
                     Column(
                         modifier = Modifier.padding(16.dp),
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
                     ) {
                         Text(
                             text = "Connection Details",
@@ -114,9 +123,16 @@ fun VpnScreen(
                         
                         HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
                         
-                        val endpoint = uiState.serverEndpoint
-                        if (endpoint != null) {
+                        uiState.deviceName?.let { name ->
+                            InfoRow(label = "Device", value = name)
+                        }
+                        
+                        uiState.serverEndpoint?.let { endpoint ->
                             InfoRow(label = "Server", value = endpoint)
+                        }
+                        
+                        uiState.clientIp?.let { ip ->
+                            InfoRow(label = "Local IP", value = ip)
                         }
                         
                         InfoRow(
@@ -125,7 +141,7 @@ fun VpnScreen(
                         )
                         
                         if (uiState.isConnected) {
-                            InfoRow(label = "Encryption", value = "WireGuard")
+                            InfoRow(label = "Protocol", value = "WireGuard (UDP)")
                         }
                     }
                 }

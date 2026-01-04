@@ -1,6 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File
 from sqlalchemy.orm import Session
 from sqlalchemy import or_, func
+import os
+from pathlib import Path
+import uuid
+import shutil
 
 from app.api import deps
 from app.core.database import get_db
@@ -138,6 +142,63 @@ async def toggle_user_active(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     
     user.is_active = not user.is_active
+    db.commit()
+    db.refresh(user)
+    
+    return user_service.serialize_user(user)
+
+
+@router.post("/{user_id}/avatar", response_model=UserPublic)
+async def upload_avatar(
+    user_id: str,
+    avatar: UploadFile = File(...),
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db)
+) -> UserPublic:
+    """Upload avatar for a user. Users can only upload their own avatar."""
+    # Check if user is uploading their own avatar or is admin
+    if current_user.id != int(user_id) and current_user.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="You can only upload your own avatar"
+        )
+    
+    # Get the user
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    
+    # Validate file type
+    allowed_types = {"image/jpeg", "image/png", "image/gif", "image/webp"}
+    if avatar.content_type not in allowed_types:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only image files (JPEG, PNG, GIF, WebP) are allowed"
+        )
+    
+    # Create avatars directory if it doesn't exist
+    avatars_dir = Path("storage/avatars")
+    avatars_dir.mkdir(parents=True, exist_ok=True)
+    
+    # Delete old avatar if exists
+    if user.avatar_url and user.avatar_url.startswith("/avatars/"):
+        old_avatar_path = Path("storage") / user.avatar_url.lstrip("/")
+        try:
+            old_avatar_path.unlink()
+        except FileNotFoundError:
+            pass
+    
+    # Generate unique filename
+    file_ext = Path(avatar.filename).suffix
+    unique_filename = f"{uuid.uuid4()}{file_ext}"
+    file_path = avatars_dir / unique_filename
+    
+    # Save file
+    with open(file_path, "wb") as buffer:
+        shutil.copyfileobj(avatar.file, buffer)
+    
+    # Update user avatar_url
+    user.avatar_url = f"/avatars/{unique_filename}"
     db.commit()
     db.refresh(user)
     

@@ -235,7 +235,7 @@ class MobileService:
             },
             "device": {
                 "id": str(device.id),  # UUID as string
-                "user_id": int(user.id),
+                "user_id": int(device.user_id),  # Integer matching database schema
                 "device_name": device.device_name,
                 "device_type": device.device_type,
                 "device_model": device.device_model or "",
@@ -245,7 +245,7 @@ class MobileService:
         }
     
     @staticmethod
-    def get_user_devices(db: Session, user_id: str) -> List[MobileDevice]:
+    def get_user_devices(db: Session, user_id: int) -> List[MobileDevice]:
         """Get all mobile devices for a user."""
         return db.query(MobileDevice).filter(
             MobileDevice.user_id == user_id
@@ -286,18 +286,19 @@ class MobileService:
         return result
     
     @staticmethod
-    def get_device(db: Session, device_id: str, user_id: str) -> Optional[MobileDevice]:
+    def get_device(db: Session, device_id: str, user_id: int) -> Optional[MobileDevice]:
         """Get a specific mobile device."""
-        return db.query(MobileDevice).filter(
+        device = db.query(MobileDevice).filter(
             MobileDevice.id == device_id,
             MobileDevice.user_id == user_id
         ).first()
+        return device
     
     @staticmethod
     def update_device(
         db: Session,
         device_id: str,
-        user_id: str,
+        user_id: int,
         device_update: MobileDeviceUpdate
     ) -> MobileDevice:
         """Update mobile device settings."""
@@ -317,7 +318,7 @@ class MobileService:
         return device
     
     @staticmethod
-    def delete_device(db: Session, device_id: str, user_id: str) -> bool:
+    def delete_device(db: Session, device_id: str, user_id: int) -> bool:
         """Delete a mobile device."""
         print(f"[DELETE] Trying to delete device_id={device_id} for user_id={user_id}")
         device = MobileService.get_device(db, device_id, user_id)

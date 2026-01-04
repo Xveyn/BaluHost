@@ -1,6 +1,8 @@
 package com.baluhost.android.presentation.ui.screens.sync
 
 import android.net.Uri
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.*
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,16 +14,29 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
 import com.baluhost.android.domain.model.sync.*
 import com.baluhost.android.presentation.ui.theme.*
 import com.baluhost.android.presentation.ui.components.*
+import com.baluhost.android.util.PermissionHelper
+import com.google.accompanist.swiperefresh.SwipeRefresh
+import com.google.accompanist.swiperefresh.rememberSwipeRefreshState
+import kotlinx.coroutines.delay
 
 /**
  * Folder Sync Screen
  * Displays configured sync folders, upload queue, and allows adding new folders.
+ * 
+ * Best Practices Implemented:
+ * - Pull-to-refresh for manual data update
+ * - Storage permission handling for Android 11+
+ * - Last sync timestamp prominently displayed
+ * - Clear empty state with actionable guidance
+ * - Smooth animations and glass morphism UI
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -31,14 +46,24 @@ fun FolderSyncScreen(
 ) {
     val uiState by viewModel.uiState.collectAsState()
     val pendingConflicts by viewModel.pendingConflicts.collectAsState()
+    val context = LocalContext.current
     
     var showFolderPicker by remember { mutableStateOf(false) }
     var showConfigDialog by remember { mutableStateOf(false) }
     var showWebDavDialog by remember { mutableStateOf(false) }
     var showConflictDialog by remember { mutableStateOf(false) }
+    var showPermissionDialog by remember { mutableStateOf(false) }
     var selectedFolder by remember { mutableStateOf<SyncFolderConfig?>(null) }
     var selectedFolderUri by remember { mutableStateOf<Uri?>(null) }
     var selectedFolderName by remember { mutableStateOf<String?>(null) }
+    var isRefreshing by remember { mutableStateOf(false) }
+    
+    // Check storage permissions on first load
+    LaunchedEffect(Unit) {
+        if (!PermissionHelper.hasStoragePermissions(context)) {
+            showPermissionDialog = true
+        }
+    }
     
     // Show conflict dialog when conflicts are detected
     LaunchedEffect(pendingConflicts) {
@@ -62,7 +87,11 @@ fun FolderSyncScreen(
                 },
                 actions = {
                     IconButton(onClick = { showWebDavDialog = true }) {
-                        Icon(imageVector = Icons.Default.Cloud, contentDescription = "WebDAV", tint = Sky400)
+                        Icon(
+                            imageVector = Icons.Default.Cloud, 
+                            contentDescription = "WebDAV-Browser", 
+                            tint = Sky400
+                        )
                     }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(
@@ -72,8 +101,15 @@ fun FolderSyncScreen(
         },
         floatingActionButton = {
             FloatingActionButton(
-                onClick = { showFolderPicker = true },
-                containerColor = Sky500
+                onClick = { 
+                    if (PermissionHelper.hasStoragePermissions(context)) {
+                        showFolderPicker = true
+                    } else {
+                        showPermissionDialog = true
+                    }
+                },
+                containerColor = Sky500,
+                contentColor = Slate950
             ) {
                 Icon(
                     imageVector = Icons.Default.Add,
@@ -97,18 +133,35 @@ fun FolderSyncScreen(
                 }
                 is FolderSyncState.Success -> {
                     val state = uiState as FolderSyncState.Success
-                    SyncContent(
-                        folders = state.folders,
-                        uploadQueue = state.uploadQueue,
-                        onFolderClick = { folder ->
-                            selectedFolder = folder
-                            showConfigDialog = true
-                        },
-                        onDeleteFolder = viewModel::deleteFolder,
-                        onTriggerSync = viewModel::triggerSync,
-                        onCancelUpload = viewModel::cancelUpload,
-                        onRetryUpload = viewModel::retryUpload
-                    )
+                    
+                    // Handle refresh state changes
+                    LaunchedEffect(isRefreshing) {
+                        if (isRefreshing) {
+                            viewModel.loadSyncFolders()
+                            delay(1000)  // Simulate network delay
+                            isRefreshing = false
+                        }
+                    }
+                    
+                    SwipeRefresh(
+                        state = rememberSwipeRefreshState(isRefreshing),
+                        onRefresh = {
+                            isRefreshing = true
+                        }
+                    ) {
+                        SyncContent(
+                            folders = state.folders,
+                            uploadQueue = state.uploadQueue,
+                            onFolderClick = { folder ->
+                                selectedFolder = folder
+                                showConfigDialog = true
+                            },
+                            onDeleteFolder = viewModel::deleteFolder,
+                            onTriggerSync = viewModel::triggerSync,
+                            onCancelUpload = viewModel::cancelUpload,
+                            onRetryUpload = viewModel::retryUpload
+                        )
+                    }
                 }
                 is FolderSyncState.Error -> {
                     ErrorContent(
@@ -225,18 +278,103 @@ fun FolderSyncScreen(
         )
     }
     
-    // Configuration dialog
-    if (showConfigDialog) {
+    // Storage Permission Dialog
+    if (showPermissionDialog) {
+        val permissionLauncher = rememberLauncherForActivityResult(
+            contract = ActivityResultContracts.RequestMultiplePermissions()
+        ) { permissions ->
+            val allGranted = permissions.values.all { it }
+            if (allGranted) {
+                showPermissionDialog = false
+                showFolderPicker = true
+            }
+        }
+        
+        AlertDialog(
+            onDismissRequest = { showPermissionDialog = false },
+            icon = {
+                Icon(
+                    imageVector = Icons.Default.SecurityUpdateWarning,
+                    contentDescription = null,
+                    tint = Sky400,
+                    modifier = Modifier.size(32.dp)
+                )
+            },
+            title = { Text("Speicherzugriff erforderlich") },
+            text = {
+                Column(
+                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    Text(
+                        text = PermissionHelper.getPermissionRationale(),
+                        style = MaterialTheme.typography.bodyMedium,
+                        color = Slate300
+                    )
+                }
+            },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        permissionLauncher.launch(PermissionHelper.getStoragePermissions())
+                    },
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = Sky500
+                    )
+                ) {
+                    Text("Berechtigung erteilen")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showPermissionDialog = false }) {
+                    Text("Später", color = Slate400)
+                }
+            },
+            containerColor = Slate900,
+            iconContentColor = Sky400,
+            titleContentColor = Slate100,
+            textContentColor = Slate300
+        )
+    }
+    
+    // Add Sync Folder dialog - simplified for new folder creation
+    if (showConfigDialog && selectedFolder == null) {
+        AddSyncFolderDialog(
+            localFolderUri = selectedFolderUri,
+            localFolderName = selectedFolderName,
+            onDismiss = {
+                showConfigDialog = false
+                selectedFolderUri = null
+                selectedFolderName = null
+            },
+            onConfirm = { localPath, remotePath, syncType, conflictResolution, autoSync ->
+                viewModel.createFolder(
+                    SyncFolderCreateConfig(
+                        localUri = Uri.parse(localPath),
+                        remotePath = remotePath,
+                        syncType = syncType,
+                        autoSync = autoSync,
+                        conflictResolution = conflictResolution,
+                        excludePatterns = emptyList(),
+                        adapterType = "filesystem",
+                        credentials = null,
+                        saveCredentials = false
+                    )
+                )
+                showConfigDialog = false
+                selectedFolderUri = null
+                selectedFolderName = null
+            }
+        )
+    }
+    
+    // Edit Sync Folder dialog - for existing folders
+    if (showConfigDialog && selectedFolder != null) {
         SyncFolderConfigDialog(
             folder = selectedFolder,
             folderUri = selectedFolderUri,
             folderName = selectedFolderName,
             onConfirm = { config ->
-                if (selectedFolder != null) {
-                    viewModel.updateFolder(config as SyncFolderUpdateConfig)
-                } else {
-                    viewModel.createFolder(config as SyncFolderCreateConfig)
-                }
+                viewModel.updateFolder(config as SyncFolderUpdateConfig)
                 showConfigDialog = false
                 selectedFolder = null
                 selectedFolderUri = null
@@ -290,10 +428,15 @@ private fun SyncContent(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // Summary Card - Last Sync and Status Overview
+        item {
+            SyncSummaryCard(folders = folders)
+        }
+        
         // Sync Folders Section
         item {
             Text(
-                text = "Synchronisierte Ordner",
+                text = "Synchronisierte Ordner (${folders.size})",
                 style = MaterialTheme.typography.titleLarge,
                 color = Slate100,
                 fontWeight = FontWeight.Bold
@@ -302,29 +445,7 @@ private fun SyncContent(
         
         if (folders.isEmpty()) {
             item {
-                GlassCard(intensity = GlassIntensity.Light) {
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        verticalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FolderOff,
-                            contentDescription = null,
-                            tint = Slate400,
-                            modifier = Modifier.size(48.dp)
-                        )
-                        Text(
-                            text = "Keine Ordner konfiguriert",
-                            style = MaterialTheme.typography.bodyMedium,
-                            color = Slate400
-                        )
-                        Text(
-                            text = "Tippen Sie auf + um einen Ordner hinzuzufügen",
-                            style = MaterialTheme.typography.bodySmall,
-                            color = Slate500
-                        )
-                    }
-                }
+                EmptySyncState()
             }
         } else {
             items(folders, key = { it.id }) { folder ->
@@ -355,6 +476,194 @@ private fun SyncContent(
                     onCancel = { onCancelUpload(item.id) },
                     onRetry = { onRetryUpload(item.id) }
                 )
+            }
+        }
+    }
+}
+
+/**
+ * Summary card showing overall sync status and last sync time.
+ */
+@Composable
+private fun SyncSummaryCard(folders: List<SyncFolderConfig>) {
+    val lastSyncTime = folders.mapNotNull { it.lastSync }.maxOrNull()
+    val activeSyncs = folders.count { it.syncStatus == SyncStatus.SYNCING }
+    val errorCount = folders.count { it.syncStatus == SyncStatus.ERROR }
+    
+    GlassCard(intensity = GlassIntensity.Medium) {
+        Column(
+            verticalArrangement = Arrangement.spacedBy(12.dp)
+        ) {
+            // Last Sync Time - Prominent Display
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Schedule,
+                    contentDescription = null,
+                    tint = Sky400,
+                    modifier = Modifier.size(20.dp)
+                )
+                
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = "Letzter Sync",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400
+                    )
+                    Text(
+                        text = if (lastSyncTime != null) {
+                            formatTimestamp(lastSyncTime)
+                        } else {
+                            "Noch nicht synchronisiert"
+                        },
+                        style = MaterialTheme.typography.titleMedium,
+                        color = Slate100,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+            
+            Divider(color = Slate700, modifier = Modifier.fillMaxWidth())
+            
+            // Status Summary
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(16.dp)
+            ) {
+                // Active Syncs
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Badge(
+                        containerColor = if (activeSyncs > 0) Sky400 else Slate700,
+                        contentColor = Slate950
+                    ) {
+                        Text(
+                            activeSyncs.toString(),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Aktiv",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                
+                // Total Folders
+                Column(
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Badge(
+                        containerColor = Green500,
+                        contentColor = Slate950
+                    ) {
+                        Text(
+                            folders.size.toString(),
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
+                    Text(
+                        text = "Ordner",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Slate400,
+                        modifier = Modifier.padding(top = 4.dp)
+                    )
+                }
+                
+                // Errors
+                if (errorCount > 0) {
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        modifier = Modifier.weight(1f)
+                    ) {
+                        Badge(
+                            containerColor = Red500,
+                            contentColor = Slate950
+                        ) {
+                            Text(
+                                errorCount.toString(),
+                                fontWeight = FontWeight.Bold
+                            )
+                        }
+                        Text(
+                            text = "Fehler",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400,
+                            modifier = Modifier.padding(top = 4.dp)
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Empty state with guidance for adding first sync folder.
+ */
+@Composable
+private fun EmptySyncState() {
+    GlassCard(intensity = GlassIntensity.Light) {
+        Column(
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Icon(
+                imageVector = Icons.Default.FolderOff,
+                contentDescription = null,
+                tint = Slate400,
+                modifier = Modifier.size(56.dp)
+            )
+            
+            Text(
+                text = "Keine Ordner konfiguriert",
+                style = MaterialTheme.typography.titleMedium,
+                color = Slate200,
+                fontWeight = FontWeight.Bold
+            )
+            
+            Text(
+                text = "Fügen Sie einen Ordner hinzu, um Dateien mit Ihrem NAS zu synchronisieren",
+                style = MaterialTheme.typography.bodySmall,
+                color = Slate400,
+                textAlign = TextAlign.Center
+            )
+            
+            Spacer(modifier = Modifier.height(8.dp))
+            
+            // Tips
+            Column(
+                verticalArrangement = Arrangement.spacedBy(6.dp),
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                listOf(
+                    "Tippen Sie auf + um einen lokalen Ordner zu wählen",
+                    "Geben Sie einen Pfad auf dem NAS ein",
+                    "Wählen Sie die Synchronisationsart (Upload/Download/Bidirektional)"
+                ).forEach { tip ->
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        verticalAlignment = Alignment.Top
+                    ) {
+                        Text(
+                            text = "•",
+                            color = Sky400,
+                            fontWeight = FontWeight.Bold
+                        )
+                        Text(
+                            text = tip,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Slate400
+                        )
+                    }
+                }
             }
         }
     }

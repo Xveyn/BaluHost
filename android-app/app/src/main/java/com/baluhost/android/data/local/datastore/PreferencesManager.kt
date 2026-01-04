@@ -379,6 +379,41 @@ class PreferencesManager @Inject constructor(
         securePreferences.removeAdapterCredentials(adapterKey)
     }
     
+    // VPN Additional Data
+    suspend fun saveVpnClientId(clientId: Int) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("vpn_client_id")] = clientId.toString() }
+    }
+    
+    fun getVpnClientId(): Flow<Int?> {
+        return dataStore.data.map { prefs -> 
+            prefs[stringPreferencesKey("vpn_client_id")]?.toIntOrNull()
+        }
+    }
+    
+    suspend fun saveVpnDeviceName(deviceName: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("vpn_device_name")] = deviceName }
+    }
+    
+    fun getVpnDeviceName(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_device_name")] }
+    }
+    
+    suspend fun saveVpnPublicKey(publicKey: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("vpn_public_key")] = publicKey }
+    }
+    
+    fun getVpnPublicKey(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_public_key")] }
+    }
+    
+    suspend fun saveVpnAssignedIp(assignedIp: String) {
+        dataStore.edit { prefs -> prefs[stringPreferencesKey("vpn_assigned_ip")] = assignedIp }
+    }
+    
+    fun getVpnAssignedIp(): Flow<String?> {
+        return dataStore.data.map { prefs -> prefs[stringPreferencesKey("vpn_assigned_ip")] }
+    }
+    
     // Clear all data
     suspend fun clearAll() {
         dataStore.edit { prefs -> prefs.clear() }

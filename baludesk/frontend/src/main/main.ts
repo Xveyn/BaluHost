@@ -49,13 +49,20 @@ function startBackend() {
           const jsonMsg = JSON.parse(line);
           console.log('[Backend Response]:', jsonMsg);
           
-          // Check if this is a response to a pending request
-          if (jsonMsg.id !== undefined && pendingRequests.has(jsonMsg.id)) {
-            const resolve = pendingRequests.get(jsonMsg.id);
-            pendingRequests.delete(jsonMsg.id);
+          // Check if this is a response to a pending request (check both 'id' and 'requestId')
+          // Important: Use explicit check for 'id' !== undefined to handle id: 0
+          const requestId = jsonMsg.id !== undefined ? jsonMsg.id : jsonMsg.requestId;
+          
+          console.log('[IPC] Looking for id:', requestId, 'in pending:', Array.from(pendingRequests.keys()));
+          
+          if (requestId !== undefined && pendingRequests.has(requestId)) {
+            console.log('[IPC] ✅ Found pending request:', requestId, '- resolving promise');
+            const resolve = pendingRequests.get(requestId);
+            pendingRequests.delete(requestId);
             resolve(jsonMsg);
           } else {
             // It's an event, forward to renderer
+            console.log('[IPC] No pending request found, forwarding as event');
             if (mainWindow) {
               mainWindow.webContents.send('backend-message', jsonMsg);
             }
@@ -255,6 +262,81 @@ ipcMain.handle('dialog:saveFile', async (_event, defaultName: string) => {
   }
   
   return result.filePath || null;
+});
+
+// Settings Handlers
+ipcMain.handle('settings:get', async () => {
+  console.log('[IPC] Getting settings from backend');
+  const id = requestId++;
+  
+  return new Promise<any>((resolve) => {
+    const timeout = setTimeout(() => {
+      console.error('[IPC] ❌ Settings get TIMEOUT - id:', id, 'still in map:', pendingRequests.has(id));
+      if (pendingRequests.has(id)) {
+        pendingRequests.delete(id);
+      }
+      resolve({ success: false, error: 'Settings request timeout' });
+    }, 5000);
+    
+    // Register handler in pendingRequests
+    pendingRequests.set(id, resolve);
+    console.log('[IPC] Registered id in map:', id, 'Map size:', pendingRequests.size);
+    
+    console.log('[IPC] Sending get_settings to backend with id:', id);
+    sendToBackend({ 
+      type: 'get_settings',
+      id
+    });
+  });
+});
+
+ipcMain.handle('settings:update', async (_event, settings: any) => {
+  console.log('[IPC] Updating settings:', settings);
+  const id = requestId++;
+  
+  return new Promise<any>((resolve) => {
+    const timeout = setTimeout(() => {
+      console.error('[IPC] ❌ Settings update TIMEOUT - id:', id, 'still in map:', pendingRequests.has(id));
+      if (pendingRequests.has(id)) {
+        pendingRequests.delete(id);
+      }
+      resolve({ success: false, error: 'Settings update timeout' });
+    }, 5000);
+    
+    // Register handler in pendingRequests
+    pendingRequests.set(id, resolve);
+    console.log('[IPC] Registered id in map:', id, 'Map size:', pendingRequests.size);
+    
+    console.log('[IPC] Sending update_settings to backend with id:', id);
+    sendToBackend({ 
+      type: 'update_settings',
+      data: settings,
+      id 
+    });
+  });
+});
+
+// User Info Handler
+ipcMain.handle('user:getInfo', async () => {
+  console.log('[IPC] Getting user info from settings');
+  
+  try {
+    // Get settings (which includes username)
+    const settings = await (ipcMain as any).handle('settings:get', null);
+    
+    // Return user info with username from settings
+    return {
+      success: true,
+      data: {
+        id: settings.data?.username || 'user', // Use username as ID
+        username: settings.data?.username || '',
+        avatar_url: settings.data?.avatar_url
+      }
+    };
+  } catch (error) {
+    console.error('[IPC] Error getting user info:', error);
+    return { success: false, error: 'Failed to get user info' };
+  }
 });
 
 // App Lifecycle

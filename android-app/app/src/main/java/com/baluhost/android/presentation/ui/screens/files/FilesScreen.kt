@@ -217,49 +217,6 @@ fun FilesScreen(
                                 }
                             }
                         }
-                        
-                        IconButton(onClick = { showMenu = true }) {
-                            Icon(
-                                imageVector = Icons.Default.Menu,
-                                contentDescription = "Menü",
-                                tint = Sky400
-                            )
-                        }
-                        DropdownMenu(
-                            expanded = showMenu,
-                            onDismissRequest = { showMenu = false }
-                        ) {
-                            DropdownMenuItem(
-                                text = { Text("VPN-Einstellungen") },
-                                onClick = {
-                                    showMenu = false
-                                    onNavigateToVpn()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Lock, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Einstellungen") },
-                                onClick = {
-                                    showMenu = false
-                                    onNavigateToSettings()
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Settings, contentDescription = null)
-                                }
-                            )
-                            DropdownMenuItem(
-                                text = { Text("Aktualisieren") },
-                                onClick = {
-                                    showMenu = false
-                                    viewModel.loadFiles(uiState.currentPath)
-                                },
-                                leadingIcon = {
-                                    Icon(Icons.Default.Refresh, contentDescription = null)
-                                }
-                            )
-                        }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
                         containerColor = androidx.compose.ui.graphics.Color.Transparent

@@ -8,6 +8,9 @@
       <FullPath>F:\Programme (x86)\Baluhost\baludesk\backend\build\Release\baludesk-backend.exe</FullPath>
     </ProjectOutput>
     <ProjectOutput>
+      <FullPath>F:\Programme (x86)\Baluhost\baludesk\backend\build\Release\baludesk-tests.exe</FullPath>
+    </ProjectOutput>
+    <ProjectOutput>
       <FullPath>F:\Programme (x86)\Baluhost\baludesk\backend\build\x64\Release\ALL_BUILD</FullPath>
     </ProjectOutput>
   </ProjectOutputs>

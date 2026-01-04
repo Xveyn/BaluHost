@@ -20,7 +20,7 @@ class UserUpdate(BaseModel):
 
 
 class UserPublic(UserBase):
-    id: str
+    id: int
     role: str
     is_active: bool
     created_at: str

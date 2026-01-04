@@ -16,6 +16,7 @@ import com.baluhost.android.presentation.ui.screens.dashboard.DashboardScreen
 import com.baluhost.android.presentation.ui.screens.files.FilesScreen
 import com.baluhost.android.presentation.ui.screens.settings.SettingsScreen
 import com.baluhost.android.presentation.ui.screens.shares.SharesScreen
+import com.baluhost.android.presentation.ui.screens.sync.FolderSyncScreen
 
 /**
  * Main container screen that manages bottom navigation between
@@ -91,7 +92,13 @@ fun MainScreen(
                 }
 
                 composable(Screen.Sync.route) {
-                    com.baluhost.android.presentation.ui.screens.sync.SyncScreen()
+                    FolderSyncScreen(
+                        onNavigateBack = {
+                            navController.navigate(Screen.Dashboard.route) {
+                                popUpTo(Screen.Dashboard.route) { inclusive = false }
+                            }
+                        }
+                    )
                 }
 
                 composable(Screen.Settings.route) {
@@ -107,6 +114,19 @@ fun MainScreen(
                             parentNavController.navigate(Screen.Splash.route) {
                                 popUpTo(0) { inclusive = true }
                             }
+                        },
+                        onNavigateToFolderSync = {
+                            // Navigate to FolderSync screen
+                            parentNavController.navigate(Screen.FolderSync.route)
+                        }
+                    )
+                }
+                
+                composable(Screen.FolderSync.route) {
+                    FolderSyncScreen(
+                        onNavigateBack = {
+                            // Go back to settings
+                            parentNavController.popBackStack()
                         }
                     )
                 }

@@ -3,9 +3,13 @@ package com.baluhost.android.presentation.ui.screens.settings
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.clickable
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.ArrowBack
 import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Lock
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.ChevronRight
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -14,6 +18,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.hilt.navigation.compose.hiltViewModel
+import com.baluhost.android.presentation.ui.screens.vpn.VpnViewModel
 
 /**
  * Settings screen with device management options.
@@ -23,9 +28,12 @@ import androidx.hilt.navigation.compose.hiltViewModel
 fun SettingsScreen(
     onNavigateBack: () -> Unit,
     onNavigateToSplash: () -> Unit,
-    viewModel: SettingsViewModel = hiltViewModel()
+    onNavigateToFolderSync: () -> Unit,
+    viewModel: SettingsViewModel = hiltViewModel(),
+    vpnViewModel: VpnViewModel = hiltViewModel()
 ) {
     val uiState by viewModel.uiState.collectAsState()
+    val vpnUiState by vpnViewModel.uiState.collectAsState()
     var showDeleteDialog by remember { mutableStateOf(false) }
     var showPinDialog by remember { mutableStateOf(false) }
     var pinSetupError by remember { mutableStateOf<String?>(null) }
@@ -215,6 +223,173 @@ fun SettingsScreen(
                         } else {
                             Text("Cache jetzt leeren")
                         }
+                    }
+                }
+            }
+            
+            // Folder Sync Settings Card
+            Card(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable(onClick = onNavigateToFolderSync),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "Ordner-Synchronisation",
+                                style = MaterialTheme.typography.titleMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            Text(
+                                text = "Verwalte synchronisierte Verzeichnisse",
+                                style = MaterialTheme.typography.bodyMedium,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
+                        Icon(
+                            imageVector = Icons.Default.ChevronRight,
+                            contentDescription = "Öffnen",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+            }
+            
+            // VPN Settings Card
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                colors = CardDefaults.cardColors(
+                    containerColor = MaterialTheme.colorScheme.surfaceVariant
+                )
+            ) {
+                Column(
+                    modifier = Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    Text(
+                        text = "VPN-Einstellungen",
+                        style = MaterialTheme.typography.titleMedium,
+                        fontWeight = FontWeight.Bold
+                    )
+                    
+                    // VPN Status Card
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.primary.copy(alpha = 0.1f)
+                        )
+                    ) {
+                        Column(
+                            modifier = Modifier.padding(12.dp),
+                            verticalArrangement = Arrangement.spacedBy(8.dp)
+                        ) {
+                            Row(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Text(
+                                    text = "Status:",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    fontWeight = FontWeight.SemiBold
+                                )
+                                Text(
+                                    text = if (vpnUiState.isConnected) "Verbunden" else "Getrennt",
+                                    style = MaterialTheme.typography.bodyMedium,
+                                    color = if (vpnUiState.isConnected) 
+                                        Color(0xFF4CAF50) else Color(0xFFFF5252),
+                                    fontWeight = FontWeight.Bold
+                                )
+                            }
+                            
+                            vpnUiState.clientIp?.let { ip ->
+                                InfoRow(label = "Lokale IP", value = ip)
+                            }
+                            
+                            vpnUiState.serverEndpoint?.let { endpoint ->
+                                InfoRow(label = "Server", value = endpoint)
+                            }
+                            
+                            vpnUiState.deviceName?.let { deviceName ->
+                                InfoRow(label = "Gerätename", value = deviceName)
+                            }
+                        }
+                    }
+                    
+                    // VPN Action Buttons
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(top = 8.dp),
+                        horizontalArrangement = Arrangement.spacedBy(8.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (vpnUiState.isConnected) {
+                                    vpnViewModel.disconnect()
+                                } else {
+                                    vpnViewModel.connect()
+                                }
+                            },
+                            modifier = Modifier.weight(1f),
+                            enabled = !vpnUiState.isLoading && vpnUiState.hasConfig,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (vpnUiState.isConnected) 
+                                    MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.primary
+                            )
+                        ) {
+                            if (vpnUiState.isLoading) {
+                                CircularProgressIndicator(
+                                    modifier = Modifier.size(16.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(if (vpnUiState.isConnected) "Trennen..." else "Verbinde...")
+                            } else {
+                                Text(if (vpnUiState.isConnected) "Trennen" else "Verbinden")
+                            }
+                        }
+                        
+                        Button(
+                            onClick = { vpnViewModel.refreshConfig() },
+                            modifier = Modifier.weight(1f),
+                            enabled = !vpnUiState.isLoading,
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.secondary
+                            )
+                        ) {
+                            Icon(
+                                Icons.Default.Refresh,
+                                contentDescription = null,
+                                modifier = Modifier.size(16.dp)
+                            )
+                            Spacer(modifier = Modifier.width(8.dp))
+                            Text("Aktualisieren")
+                        }
+                    }
+                    
+                    // VPN Error Message
+                    vpnUiState.error?.let { error ->
+                        Text(
+                            text = "Fehler: $error",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.error,
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .padding(top = 8.dp)
+                        )
                     }
                 }
             }

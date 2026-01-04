@@ -24,8 +24,15 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // File system dialogs
   selectFile: () => ipcRenderer.invoke('dialog:openFile'),
-  selectFolder: () => ipcRenderer.invoke('dialog:openFolder'),
+  selectFolder: (options?: any) => ipcRenderer.invoke('dialog:openFolder', options),
   selectSaveLocation: (defaultName: string) => ipcRenderer.invoke('dialog:saveFile', defaultName),
+
+  // Settings management
+  getSettings: () => ipcRenderer.invoke('settings:get'),
+  updateSettings: (settings: any) => ipcRenderer.invoke('settings:update', settings),
+
+  // User info
+  getUserInfo: () => ipcRenderer.invoke('user:getInfo'),
 });
 
 // Type definitions for TypeScript
@@ -36,8 +43,11 @@ export interface ElectronAPI {
   getAppVersion: () => Promise<string>;
   removeBackendListener: () => void;
   selectFile: () => Promise<string | null>;
-  selectFolder: () => Promise<string | null>;
+  selectFolder: (options?: any) => Promise<any>;
   selectSaveLocation: (defaultName: string) => Promise<string | null>;
+  getSettings: () => Promise<any>;
+  updateSettings: (settings: any) => Promise<any>;
+  getUserInfo: () => Promise<any>;
 }
 
 declare global {

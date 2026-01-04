@@ -1,6 +1,9 @@
 #include "ipc_server.h"
 #include "../sync/sync_engine.h"
 #include "../utils/logger.h"
+#include "../utils/system_info.h"
+#include "../utils/raid_info.h"
+#include "../utils/settings_manager.h"
 #include "../baluhost_client.h"
 #include <nlohmann/json.hpp>
 #include <iostream>
@@ -70,6 +73,12 @@ void IpcServer::processMessages() {
             else if (type == "get_folders") {
                 handleGetFolders(requestId);
             }
+            else if (type == "get_system_info") {
+                handleGetSystemInfo(requestId);
+            }
+            else if (type == "get_raid_status") {
+                handleGetRaidStatus(requestId);
+            }
             else if (type == "list_files") {
                 handleListFiles(message, requestId);
             }
@@ -102,6 +111,12 @@ void IpcServer::processMessages() {
             }
             else if (type == "remove_permission") {
                 handleRemovePermission(message, requestId);
+            }
+            else if (type == "get_settings") {
+                handleGetSettings(message, requestId);
+            }
+            else if (type == "update_settings") {
+                handleUpdateSettings(message, requestId);
             }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
@@ -258,7 +273,8 @@ void IpcServer::handlePauseSync(const json& message, int requestId) {
 
         json response = {
             {"type", "sync_paused"},
-            {"folder_id", folderId}
+            {"folder_id", folderId},
+            {"success", true}
         };
         sendResponse(response, requestId);
 
@@ -280,12 +296,46 @@ void IpcServer::handleResumeSync(const json& message, int requestId) {
 
         json response = {
             {"type", "sync_resumed"},
-            {"folder_id", folderId}
+            {"folder_id", folderId},
+            {"success", true}
         };
         sendResponse(response, requestId);
 
     } catch (const std::exception& e) {
         Logger::error("handleResumeSync error: {}", e.what());
+        sendError(e.what(), requestId);
+    }
+}
+
+void IpcServer::handleUpdateSyncFolder(const json& message, int requestId) {
+    try {
+        if (!message.contains("payload") || !message["payload"].contains("folder_id")) {
+            sendError("Missing folder_id", requestId);
+            return;
+        }
+
+        std::string folderId = message["payload"]["folder_id"];
+        
+        // Get conflict resolution setting if provided
+        std::string conflictResolution = "ask"; // Default
+        if (message["payload"].contains("conflict_resolution")) {
+            conflictResolution = message["payload"]["conflict_resolution"];
+        }
+
+        // Update the folder settings in the sync engine
+        // This would typically store the settings in a database
+        engine_->updateSyncFolderSettings(folderId, conflictResolution);
+
+        json response = {
+            {"type", "sync_folder_updated"},
+            {"folder_id", folderId},
+            {"conflict_resolution", conflictResolution},
+            {"success", true}
+        };
+        sendResponse(response, requestId);
+
+    } catch (const std::exception& e) {
+        Logger::error("handleUpdateSyncFolder error: {}", e.what());
         sendError(e.what(), requestId);
     }
 }
@@ -330,7 +380,8 @@ void IpcServer::handleGetFolders(int requestId) {
                 {"local_path", folder.localPath},
                 {"remote_path", folder.remotePath},
                 {"status", status_str},
-                {"enabled", folder.enabled}
+                {"enabled", folder.enabled},
+                {"size", folder.size}
             };
             folderArray.push_back(folderJson);
         }
@@ -748,4 +799,120 @@ void IpcServer::handleRemovePermission(const json& message, int requestId) {
     }
 }
 
-} // namespace baludesk
+void IpcServer::handleGetSystemInfo(int requestId) {
+    try {
+        auto sysInfo = SystemInfoCollector::getSystemInfo();
+
+        json response = {
+            {"type", "system_info"},
+            {"success", true},
+            {"data", {
+                {"cpu", {
+                    {"usage", sysInfo.cpu.usage},
+                    {"cores", sysInfo.cpu.cores},
+                    {"frequency_mhz", sysInfo.cpu.frequency}
+                }},
+                {"memory", {
+                    {"total", sysInfo.memory.total},
+                    {"used", sysInfo.memory.used},
+                    {"available", sysInfo.memory.available}
+                }},
+                {"disk", {
+                    {"total", sysInfo.disk.total},
+                    {"used", sysInfo.disk.used},
+                    {"available", sysInfo.disk.available}
+                }},
+                {"uptime", sysInfo.uptime}
+            }}
+        };
+        
+        sendResponse(response, requestId);
+        Logger::debug("System info sent to frontend");
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get system info: ") + e.what(), requestId);
+        Logger::error("Error in handleGetSystemInfo: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetRaidStatus(int requestId) {
+    try {
+        auto raidStatus = RaidInfoCollector::getRaidStatus();
+
+        json response = {
+            {"type", "raid_status"},
+            {"success", true},
+            {"data", raidStatus.toJson()}
+        };
+        
+        sendResponse(response, requestId);
+        Logger::debug("RAID status sent to frontend");
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get RAID status: ") + e.what(), requestId);
+        Logger::error("Error in handleGetRaidStatus: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetSettings(const nlohmann::json& message, int requestId) {
+    try {
+        auto& settingsManager = SettingsManager::getInstance();
+        auto settings = settingsManager.getSettings();
+        
+        json response = {
+            {"type", "settings_response"},
+            {"success", true},
+            {"data", settings}
+        };
+        
+        // Preserve the requestId from the message
+        if (message.contains("requestId")) {
+            response["requestId"] = message["requestId"];
+        }
+        
+        sendResponse(response, requestId);
+        Logger::debug("Settings sent to frontend");
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get settings: ") + e.what(), requestId);
+        Logger::error("Error in handleGetSettings: {}", e.what());
+    }
+}
+
+void IpcServer::handleUpdateSettings(const nlohmann::json& message, int requestId) {
+    try {
+        if (!message.contains("data")) {
+            sendError("Missing 'data' field in update_settings", requestId);
+            return;
+        }
+        
+        auto& settingsManager = SettingsManager::getInstance();
+        bool success = settingsManager.updateSettings(message["data"]);
+        
+        json response = {
+            {"type", "settings_updated"},
+            {"success", success}
+        };
+        
+        // Preserve the requestId from the message
+        if (message.contains("requestId")) {
+            response["requestId"] = message["requestId"];
+        }
+        
+        if (success) {
+            response["data"] = settingsManager.getSettings();
+            Logger::info("Settings updated successfully");
+        } else {
+            response["error"] = "Failed to update settings";
+        }
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to update settings: ") + e.what(), requestId);
+        Logger::error("Error in handleUpdateSettings: {}", e.what());
+    }
+}
+
+}  // namespace baludesk
+

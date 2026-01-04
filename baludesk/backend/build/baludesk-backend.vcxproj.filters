@@ -10,7 +10,7 @@
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\sync_engine.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher.cpp">
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp">
@@ -34,7 +34,19 @@
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\system_info.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\raid_info.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\settings_manager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\baluhost_client.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_windows.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>

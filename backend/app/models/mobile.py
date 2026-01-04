@@ -12,7 +12,7 @@ class MobileDevice(Base):
     __tablename__ = "mobile_devices"
 
     id = Column(String, primary_key=True, default=lambda: str(uuid.uuid4()))
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)  # Changed from String to Integer
     
     # Device info
     device_name = Column(String, nullable=False)

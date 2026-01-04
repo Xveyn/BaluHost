@@ -47,7 +47,7 @@ class MobileDeviceUpdate(BaseModel):
 class MobileDevice(MobileDeviceBase):
     """Schema for mobile device in responses."""
     id: str
-    user_id: str
+    user_id: int
     username: Optional[str] = None  # Nur für Admin sichtbar
     is_active: bool
     last_sync: Optional[datetime] = None
