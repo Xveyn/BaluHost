@@ -25,12 +25,12 @@ endif()
 # Try vcpkg first, fall back to system packages
 find_package(CURL CONFIG QUIET)
 if(NOT CURL_FOUND)
-    find_package(CURL REQUIRED)
+    find_package(CURL QUIET)
 endif()
 
 find_package(unofficial-sqlite3 CONFIG QUIET)
 if(NOT unofficial-sqlite3_FOUND)
-    find_package(SQLite3 REQUIRED)
+    find_package(SQLite3 QUIET)
 endif()
 
 find_package(Threads REQUIRED)
@@ -60,21 +60,15 @@ FetchContent_Declare(
     GIT_REPOSITORY https://github.com/google/googletest.git
     GIT_TAG v1.14.0
 )
+set(gtest_force_shared_crt ON CACHE BOOL "" FORCE)
 FetchContent_MakeAvailable(googletest)
-
-# Include directories
-include_directories(
-    ${CMAKE_CURRENT_SOURCE_DIR}/src
-    ${CURL_INCLUDE_DIRS}
-    ${SQLite3_INCLUDE_DIRS}
-)
 
 # Source files
 set(SOURCES
     src/main.cpp
     src/stubs.cpp
     src/sync/sync_engine.cpp
-    src/sync/file_watcher.cpp
+    src/sync/file_watcher_v2.cpp
     src/sync/change_detector.cpp
     src/sync/conflict_resolver.cpp
     src/api/http_client.cpp
@@ -85,19 +79,49 @@ set(SOURCES
     src/baluhost_client.cpp
 )
 
-# Platform-specific file watcher is now unified in file_watcher.cpp
+# Platform-specific file watcher implementations
+if(WIN32)
+    list(APPEND SOURCES src/sync/file_watcher_windows.cpp)
+    message(STATUS "Windows FileWatcher enabled")
+elseif(APPLE)
+    list(APPEND SOURCES src/sync/file_watcher_macos.cpp)
+    message(STATUS "macOS FileWatcher enabled (FSEvents)")
+elseif(UNIX AND NOT APPLE)
+    list(APPEND SOURCES src/sync/file_watcher_linux.cpp)
+    message(STATUS "Linux FileWatcher enabled (inotify)")
+else()
+    message(WARNING "No platform-specific FileWatcher available")
+endif()
 
 # Main executable
 add_executable(baludesk-backend ${SOURCES})
 
-# Link libraries
+# Include directories (modern target-based approach)
+target_include_directories(baludesk-backend
+    PRIVATE
+        ${CMAKE_CURRENT_SOURCE_DIR}/src
+)
+
+# Link libraries with proper interface propagation
+set(LINK_LIBS nlohmann_json::nlohmann_json spdlog::spdlog Threads::Threads)
+
+if(CURL_FOUND)
+    list(APPEND LINK_LIBS CURL::libcurl)
+else()
+    message(WARNING "CURL not found - some features may be unavailable")
+endif()
+
+if(official-sqlite3_FOUND)
+    list(APPEND LINK_LIBS unofficial::sqlite3::sqlite3)
+elseif(SQLite3_FOUND)
+    list(APPEND LINK_LIBS SQLite3::SQLite3)
+else()
+    message(WARNING "SQLite3 not found - database features unavailable")
+endif()
+
 target_link_libraries(baludesk-backend
     PRIVATE
-        CURL::libcurl
-        unofficial::sqlite3::sqlite3
-        nlohmann_json::nlohmann_json
-        spdlog::spdlog
-        Threads::Threads
+        ${LINK_LIBS}
 )
 
 # Platform-specific libraries
@@ -110,10 +134,93 @@ install(TARGETS baludesk-backend
     RUNTIME DESTINATION bin
 )
 
-# TODO: Enable testing later
-# enable_testing()
-# include(GoogleTest)
-# gtest_discover_tests(baludesk-tests)
+# Configure compile features for better IDE support
+target_compile_features(baludesk-backend PRIVATE cxx_std_17)
+
+# Add compile definitions for debug/release
+target_compile_definitions(baludesk-backend
+    PRIVATE
+        $<$<CONFIG:Debug>:DEBUG_BUILD>
+        $<$<CONFIG:Release>:NDEBUG>
+)
+
+# ============================================================================
+# Unit Tests
+# ============================================================================
+
+option(BUILD_TESTS "Build unit tests" ON)
+
+if(BUILD_TESTS)
+    enable_testing()
+    include(GoogleTest)
+    
+    # Test source files
+    set(TEST_SOURCES
+        tests/file_watcher_test.cpp
+    )
+    
+    # Common sources needed by tests (exclude main.cpp, DB, HTTP)
+    set(TEST_COMMON_SOURCES
+        src/utils/logger.cpp
+        src/sync/file_watcher_v2.cpp
+    )
+    
+    # Platform-specific test sources
+    if(WIN32)
+        list(APPEND TEST_COMMON_SOURCES src/sync/file_watcher_windows.cpp)
+    elseif(APPLE)
+        list(APPEND TEST_COMMON_SOURCES src/sync/file_watcher_macos.cpp)
+    elseif(UNIX AND NOT APPLE)
+        list(APPEND TEST_COMMON_SOURCES src/sync/file_watcher_linux.cpp)
+    endif()
+    
+    # Create test executable
+    add_executable(baludesk-tests ${TEST_SOURCES} ${TEST_COMMON_SOURCES})
+    
+    # Include directories for tests
+    target_include_directories(baludesk-tests
+        PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+    )
+    
+    # Link test libraries
+    set(TEST_LINK_LIBS nlohmann_json::nlohmann_json spdlog::spdlog Threads::Threads GTest::gtest GTest::gtest_main)
+    
+    if(CURL_FOUND)
+        list(APPEND TEST_LINK_LIBS CURL::libcurl)
+    endif()
+    
+    if(official-sqlite3_FOUND)
+        list(APPEND TEST_LINK_LIBS unofficial::sqlite3::sqlite3)
+    elseif(SQLite3_FOUND)
+        list(APPEND TEST_LINK_LIBS SQLite3::SQLite3)
+    endif()
+    
+    target_link_libraries(baludesk-tests
+        PRIVATE
+            ${TEST_LINK_LIBS}
+    )
+    
+    # Platform-specific libraries for tests
+    if(APPLE)
+        target_link_libraries(baludesk-tests PRIVATE "-framework CoreServices")
+    endif()
+    
+    # Discover tests
+    gtest_discover_tests(baludesk-tests
+        WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+        PROPERTIES
+            LABELS "unit"
+    )
+    
+    message(STATUS "Unit tests enabled")
+else()
+    message(STATUS "Unit tests disabled (use -DBUILD_TESTS=ON to enable)")
+endif()
+
+# ============================================================================
+# Documentation
+# ============================================================================
 
 # Print configuration
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")

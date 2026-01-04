@@ -1,5 +1,5 @@
 #include "sync/sync_engine.h"
-#include "sync/file_watcher.h"
+#include "sync/file_watcher_v2.h"
 #include "api/http_client.h"
 #include "db/database.h"
 #include "sync/conflict_resolver.h"
