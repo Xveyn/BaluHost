@@ -34,24 +34,39 @@ RequestExecutionLevel admin
 ; ============================================================================
 
 Section "Install"
+  ; Copy entire Electron runtime
   SetOutPath "$INSTDIR"
-  
-  ; Copy Electron runtime and React frontend
   File /r "node_modules\electron\dist\*.*"
-  File /r "dist\*.*"
+  
+  ; Copy main app files - preserve directory structure
+  ; This copies dist/index.html to $INSTDIR/dist/index.html
+  ; and dist/main/* to $INSTDIR/dist/main/*
+  SetOutPath "$INSTDIR\dist\assets"
+  File /r "dist\assets\*"
+  
+  SetOutPath "$INSTDIR\dist\main"
+  File /r "dist\main\*"
+  
+  SetOutPath "$INSTDIR\dist"
+  File "dist\index.html"
   
   ; Create and copy backend
   CreateDirectory "$INSTDIR\backend"
   SetOutPath "$INSTDIR\backend"
   File "..\backend\build\Release\baludesk-backend.exe"
   
-  ; Copy DLLs for backend (if any)
+  ; Copy backend DLLs
   File /r /x "*.exe" "..\backend\build\Release\*.dll"
   
-  ; Copy configuration
-  SetOutPath "$INSTDIR"
+  ; Create and copy backend
+  CreateDirectory "$INSTDIR\backend"
+  SetOutPath "$INSTDIR\backend"
+  File "..\backend\build\Release\baludesk-backend.exe"
   
+  ; Copy backend DLLs
+  File /r /x "*.exe" "..\backend\build\Release\*.dll"
   ; Create registry entry
+  SetOutPath "$INSTDIR"
   WriteRegStr HKCU "Software\BaluDesk" "Install_Dir" "$INSTDIR"
   WriteRegStr HKCU "Software\BaluDesk" "Exe_Path" "$INSTDIR\electron.exe"
   
@@ -60,15 +75,11 @@ Section "Install"
   
   ; Create Start Menu shortcuts
   CreateDirectory "$SMPROGRAMS\BaluDesk"
-  CreateShortcut "$SMPROGRAMS\BaluDesk\BaluDesk.lnk" "$INSTDIR\electron.exe" "" "$INSTDIR\resources\app\public\icon.ico" 0
+  CreateShortcut "$SMPROGRAMS\BaluDesk\BaluDesk.lnk" "$INSTDIR\electron.exe"
   CreateShortcut "$SMPROGRAMS\BaluDesk\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
   ; Create Desktop shortcut
-  CreateShortcut "$DESKTOP\BaluDesk.lnk" "$INSTDIR\electron.exe" "" "$INSTDIR\resources\app\public\icon.ico" 0
-  
-  ; Create program files menu entry
-  CreateDirectory "$SMPROGRAMS\BaluDesk"
-  CreateShortcut "$SMPROGRAMS\BaluDesk\BaluDesk.lnk" "$INSTDIR\electron.exe"
+  CreateShortcut "$DESKTOP\BaluDesk.lnk" "$INSTDIR\electron.exe"
 
 SectionEnd
 

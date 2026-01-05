@@ -135,14 +135,26 @@ function createWindow() {
 
   // Load app
   const isDev = !app.isPackaged;
+  console.log('[Main] isDev:', isDev);
+  console.log('[Main] app.getAppPath():', app.getAppPath());
   
   if (isDev) {
     // Development mode: load from Vite dev server
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // Production mode: load from built files
-    mainWindow.loadFile(path.join(__dirname, '../renderer/index.html'));
+    // Production mode: load directly from dist folder (not app.asar)
+    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+    console.log('[Main] Loading from:', indexPath);
+    console.log('[Main] Exists:', fs.existsSync(indexPath));
+    
+    if (fs.existsSync(indexPath)) {
+      mainWindow.loadFile(indexPath);
+    } else {
+      console.error('[Main] ❌ index.html not found at:', indexPath);
+      mainWindow.loadURL('about:blank');
+      mainWindow.webContents.openDevTools();
+    }
   }
 
   mainWindow.on('closed', () => {
