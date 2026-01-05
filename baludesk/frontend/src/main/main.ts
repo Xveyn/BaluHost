@@ -2,33 +2,97 @@ const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } = require
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const { pathToFileURL } = require('url');
 
+// HTTP Server für packaged app (statt file:// URLs für React Router Kompatibilität)
 let mainWindow = null;
+let appServer = null;
+
+function startAppServer(distPath) {
+  return new Promise((resolve) => {
+    const server = http.createServer((req, res) => {
+      let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url);
+      
+      // Security: prevent directory traversal
+      if (!filePath.startsWith(distPath)) {
+        res.writeHead(403);
+        res.end('Forbidden');
+        return;
+      }
+      
+      fs.readFile(filePath, (err, content) => {
+        if (err) {
+          // For SPA: serve index.html for all non-existent routes
+          if (path.extname(filePath) === '') {
+            fs.readFile(path.join(distPath, 'index.html'), (err, content) => {
+              res.writeHead(200, { 'Content-Type': 'text/html' });
+              res.end(content);
+            });
+          } else {
+            res.writeHead(404);
+            res.end('Not Found');
+          }
+        } else {
+          const ext = path.extname(filePath);
+          const contentType = {
+            '.html': 'text/html',
+            '.js': 'application/javascript',
+            '.css': 'text/css',
+            '.json': 'application/json',
+            '.png': 'image/png',
+            '.jpg': 'image/jpeg',
+            '.gif': 'image/gif',
+            '.svg': 'image/svg+xml',
+            '.woff': 'font/woff',
+            '.woff2': 'font/woff2',
+            '.ttf': 'font/ttf',
+          }[ext] || 'text/plain';
+          
+          res.writeHead(200, { 
+            'Content-Type': contentType,
+            'Cache-Control': 'no-cache'
+          });
+          res.end(content);
+        }
+      });
+    });
+
+    server.listen(0, 'localhost', () => {
+      const port = server.address().port;
+      console.log('[AppServer] Listening on http://localhost:' + port);
+      appServer = server;
+      resolve('http://localhost:' + port);
+    });
+  });
+}
 let backendProcess = null;
 let tray = null;
 let isQuitting = false;
 
 // Backend Process Management
 function startBackend() {
-  // In packaged app, backend is in app/backend/
-  // In development, it's in ../backend/build/Release/
-  const isDev = !app.isPackaged;
+  // Check if dist/index.html exists to determine if we're packaged
+  // This must be consistent with createWindow() logic!
+  const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+  const isDev = !fs.existsSync(indexPath);
   
-  const backendPath = isDev
-    ? path.join(
-        app.getAppPath(),
-        '..',
-        'backend',
-        'build',
-        'Release',
-        'baludesk-backend.exe'
-      )
-    : path.join(
-        app.getAppPath(),
-        'backend',
-        'baludesk-backend.exe'
-      );
-
+  let backendPath: string;
+  
+  if (isDev) {
+    // Development mode: backend is in the repo structure
+    backendPath = path.join(
+      app.getAppPath(),
+      '..',
+      'backend',
+      'build',
+      'Release',
+      'baludesk-backend.exe'
+    );
+  } else {
+    // Production mode: backend is in the installation directory
+    backendPath = path.join(app.getAppPath(), 'backend', 'baludesk-backend.exe');
+  }
 
   // Check if backend exists before starting
   if (!fs.existsSync(backendPath)) {
@@ -134,27 +198,27 @@ function createWindow() {
   });
 
   // Load app
-  const isDev = !app.isPackaged;
+  // Check if dist/index.html exists to determine if we're packaged
+  const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
+  const distPath = path.join(app.getAppPath(), 'dist');
+  const isDev = !fs.existsSync(indexPath);
+  
   console.log('[Main] isDev:', isDev);
+  console.log('[Main] app.isPackaged:', app.isPackaged);
   console.log('[Main] app.getAppPath():', app.getAppPath());
+  console.log('[Main] indexPath exists:', fs.existsSync(indexPath));
   
   if (isDev) {
     // Development mode: load from Vite dev server
     mainWindow.loadURL('http://localhost:5173');
     mainWindow.webContents.openDevTools();
   } else {
-    // Production mode: load directly from dist folder (not app.asar)
-    const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
-    console.log('[Main] Loading from:', indexPath);
-    console.log('[Main] Exists:', fs.existsSync(indexPath));
-    
-    if (fs.existsSync(indexPath)) {
-      mainWindow.loadFile(indexPath);
-    } else {
-      console.error('[Main] ❌ index.html not found at:', indexPath);
-      mainWindow.loadURL('about:blank');
-      mainWindow.webContents.openDevTools();
-    }
+    // Production mode: start local HTTP server for dist/ files
+    console.log('[Main] Loading from packaged app, starting HTTP server...');
+    startAppServer(distPath).then((url) => {
+      console.log('[Main] Loading from server:', url);
+      mainWindow.loadURL(url);
+    });
   }
 
   mainWindow.on('closed', () => {

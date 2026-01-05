@@ -38,9 +38,15 @@ Section "Install"
   SetOutPath "$INSTDIR"
   File /r "node_modules\electron\dist\*.*"
   
+  ; Copy package.json so Electron can find the app
+  File "package.json"
+  
+  ; Copy start scripts (Windows)
+  File "start.bat"
+  File "start.ps1"
+  File "start.sh"
+  
   ; Copy main app files - preserve directory structure
-  ; This copies dist/index.html to $INSTDIR/dist/index.html
-  ; and dist/main/* to $INSTDIR/dist/main/*
   SetOutPath "$INSTDIR\dist\assets"
   File /r "dist\assets\*"
   
@@ -54,17 +60,8 @@ Section "Install"
   CreateDirectory "$INSTDIR\backend"
   SetOutPath "$INSTDIR\backend"
   File "..\backend\build\Release\baludesk-backend.exe"
-  
-  ; Copy backend DLLs
   File /r /x "*.exe" "..\backend\build\Release\*.dll"
   
-  ; Create and copy backend
-  CreateDirectory "$INSTDIR\backend"
-  SetOutPath "$INSTDIR\backend"
-  File "..\backend\build\Release\baludesk-backend.exe"
-  
-  ; Copy backend DLLs
-  File /r /x "*.exe" "..\backend\build\Release\*.dll"
   ; Create registry entry
   SetOutPath "$INSTDIR"
   WriteRegStr HKCU "Software\BaluDesk" "Install_Dir" "$INSTDIR"
@@ -73,13 +70,18 @@ Section "Install"
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"
   
-  ; Create Start Menu shortcuts
+  ; Create Start Menu shortcuts (using start.bat with admin)
   CreateDirectory "$SMPROGRAMS\BaluDesk"
-  CreateShortcut "$SMPROGRAMS\BaluDesk\BaluDesk.lnk" "$INSTDIR\electron.exe"
+  CreateShortcut "$SMPROGRAMS\BaluDesk\BaluDesk.lnk" "$INSTDIR\start.bat" "" "$INSTDIR\electron.exe" 0
+  
+  ; Set shortcut to run with admin privileges by writing registry entry
+  WriteRegStr HKCU "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" "$INSTDIR\start.bat" "RUNASADMIN"
+  WriteRegStr HKCU "Software\Microsoft\Windows NT\CurrentVersion\AppCompatFlags\Layers" "$INSTDIR\start.ps1" "RUNASADMIN"
+  
   CreateShortcut "$SMPROGRAMS\BaluDesk\Uninstall.lnk" "$INSTDIR\uninstall.exe"
   
-  ; Create Desktop shortcut
-  CreateShortcut "$DESKTOP\BaluDesk.lnk" "$INSTDIR\electron.exe"
+  ; Create Desktop shortcut (using start.bat)
+  CreateShortcut "$DESKTOP\BaluDesk.lnk" "$INSTDIR\start.bat" "" "$INSTDIR\electron.exe" 0
 
 SectionEnd
 
