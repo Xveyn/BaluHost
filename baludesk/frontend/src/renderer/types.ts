@@ -49,6 +49,34 @@ export interface FileEvent {
   timestamp: number;
 }
 
+// Conflict Resolution Types
+export interface FileConflict {
+  id: string;
+  path: string;
+  localVersion: FileVersion;
+  remoteVersion: FileVersion;
+  conflictType: 'modified-modified' | 'modified-deleted' | 'deleted-modified' | 'name-conflict';
+}
+
+export interface FileVersion {
+  content?: string;
+  size: number;
+  modifiedAt: string;
+  hash: string;
+  exists: boolean;
+}
+
+export type ConflictResolutionOption = 'keep-local' | 'keep-remote' | 'keep-both' | 'manual';
+
+export interface ConflictResolution {
+  conflictId: string;
+  resolution: ConflictResolutionOption;
+  metadata?: {
+    customPath?: string;
+    timestamp?: string;
+  };
+}
+
 // Settings Types
 export interface AppSettings {
   // Server Connection

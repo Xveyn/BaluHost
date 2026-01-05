@@ -9,6 +9,7 @@
 #include <thread>
 #include <filesystem>
 #include <ctime>
+#include <cmath>
 #include <sstream>
 #include <iomanip>
 
@@ -344,13 +345,100 @@ void SyncEngine::processFileEvent(const FileEvent& event) {
 }
 
 void SyncEngine::scanLocalChanges(const SyncFolder& folder) {
-    // TODO: Implement local change scanning
-    Logger::debug("Scanning local changes for: " + folder.localPath);
+    Logger::info("Scanning local changes for: " + folder.localPath);
+    
+    if (!changeDetector_) {
+        Logger::error("ChangeDetector not initialized");
+        return;
+    }
+    
+    try {
+        // Get current timestamp
+        auto now = std::chrono::system_clock::now();
+        auto now_time_t = std::chrono::system_clock::to_time_t(now);
+        std::tm tm;
+        localtime_s(&tm, &now_time_t);
+        char buffer[32];
+        std::strftime(buffer, sizeof(buffer), "%Y-%m-%dT%H:%M:%S", &tm);
+        std::string currentTimestamp(buffer);
+        
+        // Detect local changes
+        auto localChanges = changeDetector_->detectLocalChanges(folder.id, folder.localPath);
+        Logger::debug("Found {} local changes", localChanges.size());
+        
+        // Update metadata and queue uploads
+        for (const auto& change : localChanges) {
+            std::string fullPath = folder.localPath + "/" + change.path;
+            FileMetadata metadata;
+            metadata.path = fullPath;
+            metadata.folderId = folder.id;
+            metadata.size = change.size;
+            metadata.isDirectory = false;
+            metadata.modifiedAt = std::to_string(std::chrono::system_clock::to_time_t(change.timestamp));
+            metadata.syncStatus = "pending_upload";
+            if (change.hash.has_value()) metadata.checksum = change.hash.value();
+            database_->upsertFileMetadata(metadata);
+            
+            if (change.type != ChangeType::DELETED) {
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                FileEvent event;
+                event.path = fullPath;
+                event.action = (change.type == ChangeType::CREATED) ? FileAction::CREATED : FileAction::MODIFIED;
+                event.size = change.size;
+                event.timestamp = currentTimestamp;
+                eventQueue_.push(event);
+            }
+        }
+    } catch (const std::exception& e) {
+        Logger::error("Error scanning local changes: {}", e.what());
+    }
 }
 
 void SyncEngine::fetchRemoteChanges(const SyncFolder& folder) {
-    // TODO: Implement remote change fetching
-    Logger::debug("Fetching remote changes for: " + folder.remotePath);
+    Logger::info("Fetching remote changes for: " + folder.remotePath);
+    
+    if (!authenticated_) {
+        Logger::warn("Cannot fetch remote changes: not authenticated");
+        return;
+    }
+    if (!httpClient_) {
+        Logger::error("HTTP client not initialized");
+        return;
+    }
+    
+    try {
+        auto lastSyncFolder = database_->getSyncFolder(folder.id);
+        std::string lastSyncTimestamp = lastSyncFolder.lastSync.empty() ? "1970-01-01T00:00:00" : lastSyncFolder.lastSync;
+        auto remoteChanges = httpClient_->getChangesSince(lastSyncTimestamp);
+        Logger::debug("Found {} remote changes", remoteChanges.size());
+        
+        for (const auto& remoteChange : remoteChanges) {
+            if (remoteChange.path.find(folder.remotePath) != 0) continue;
+            std::string relativePath = remoteChange.path.substr(folder.remotePath.length());
+            std::string localPath = folder.localPath + relativePath;
+            Logger::debug("Remote change detected: {} ({})", localPath, remoteChange.action);
+            
+            if (remoteChange.action == "deleted") {
+                database_->deleteFileMetadata(localPath);
+            } else if (remoteChange.action == "created" || remoteChange.action == "modified") {
+                FileMetadata metadata;
+                metadata.path = localPath;
+                metadata.folderId = folder.id;
+                metadata.syncStatus = "pending_download";
+                database_->upsertFileMetadata(metadata);
+                
+                std::lock_guard<std::mutex> lock(queueMutex_);
+                FileEvent event;
+                event.path = localPath;
+                event.action = (remoteChange.action == "created") ? FileAction::CREATED : FileAction::MODIFIED;
+                event.timestamp = remoteChange.timestamp;
+                eventQueue_.push(event);
+            }
+        }
+        database_->updateSyncFolderTimestamp(folder.id);
+    } catch (const std::exception& e) {
+        Logger::error("Error fetching remote changes: {}", e.what());
+    }
 }
 
 void SyncEngine::uploadFile(const std::string& localPath, const std::string& remotePath) {
@@ -383,15 +471,106 @@ void SyncEngine::uploadFile(const std::string& localPath, const std::string& rem
 }
 
 void SyncEngine::downloadFile(const std::string& remotePath, const std::string& localPath) {
-    Logger::info("Downloading: " + remotePath + " -> " + localPath);
+    Logger::info("Downloading: {} -> {}", remotePath, localPath);
     
-    // TODO: Implement download
+    if (!authenticated_) {
+        Logger::error("Cannot download: not authenticated");
+        return;
+    }
+    if (!httpClient_) {
+        Logger::error("HTTP client not initialized");
+        return;
+    }
+    
+    try {
+        std::filesystem::path localPathObj(localPath);
+        std::filesystem::create_directories(localPathObj.parent_path());
+        
+        stats_.status = SyncStatus::SYNCING;
+        notifyStatusChange();
+        
+        // Use retry logic for download with exponential backoff
+        bool success = retryWithBackoff([this, &remotePath, &localPath]() {
+            return httpClient_->downloadFileWithProgress(
+                remotePath, localPath,
+                [this](const DownloadProgress& progress) {
+                    std::lock_guard<std::mutex> lock(statsMutex_);
+                    stats_.downloadSpeed = static_cast<uint64_t>(progress.bytesDownloaded);
+                }
+            );
+        }, 3, 1000);  // 3 retries, starting at 1000ms
+        
+        if (success) {
+            Logger::info("Download successful: {}", localPath);
+            if (auto metadata = database_->getFileMetadata(localPath)) {
+                FileMetadata updated = metadata.value();
+                updated.syncStatus = "synced";
+                database_->upsertFileMetadata(updated);
+            }
+            if (stats_.pendingDownloads > 0) {
+                stats_.pendingDownloads--;
+            }
+        } else {
+            Logger::error("Download failed after retries: {}", remotePath);
+            stats_.status = SyncStatus::SYNC_ERROR;
+        }
+        stats_.status = SyncStatus::IDLE;
+        notifyStatusChange();
+    } catch (const std::exception& e) {
+        Logger::error("Download error: {}", e.what());
+        stats_.status = SyncStatus::SYNC_ERROR;
+        notifyStatusChange();
+    }
 }
 
 void SyncEngine::handleConflict(const std::string& path) {
-    Logger::warn("Conflict detected: " + path);
+    Logger::warn("Conflict detected: {}", path);
     
-    // TODO: Implement conflict handling
+    if (!database_) {
+        Logger::error("Database not initialized");
+        return;
+    }
+    if (!conflictResolver_) {
+        Logger::error("ConflictResolver not initialized");
+        return;
+    }
+    
+    try {
+        auto localMetadata = database_->getFileMetadata(path);
+        if (!localMetadata) {
+            Logger::warn("File metadata not found for conflict: {}", path);
+            return;
+        }
+        
+        auto localTime = std::chrono::system_clock::from_time_t(std::stoll(localMetadata->modifiedAt));
+        Conflict conflict;
+        conflict.id = database_->generateId();
+        conflict.path = path;
+        conflict.folderId = localMetadata->folderId;
+        conflict.localModified = localMetadata->modifiedAt;
+        conflict.remoteModified = std::to_string(std::chrono::system_clock::to_time_t(std::chrono::system_clock::now()));
+        conflict.resolution = "pending";
+        database_->logConflict(conflict);
+        
+        auto resolution = conflictResolver_->resolveAuto(path, path, localTime, std::chrono::system_clock::now());
+        if (resolution.success) {
+            Logger::info("Conflict resolved automatically: {} ({})", path, resolution.action);
+            database_->resolveConflict(conflict.id, resolution.action);
+            if (resolution.finalPath != path) {
+                if (auto metadata = database_->getFileMetadata(path)) {
+                    FileMetadata updated = metadata.value();
+                    updated.path = resolution.finalPath;
+                    database_->upsertFileMetadata(updated);
+                    database_->deleteFileMetadata(path);
+                }
+            }
+        } else {
+            Logger::warn("Could not resolve conflict automatically: {}", path);
+            if (errorCallback_) errorCallback_("Conflict at: " + path + " - Manual resolution needed");
+        }
+    } catch (const std::exception& e) {
+        Logger::error("Error handling conflict: {}", e.what());
+    }
 }
 
 // Sprint 3 methods - now active
@@ -532,7 +711,10 @@ void SyncEngine::handleLocalChange(const DetectedChange& change, const SyncFolde
         case ChangeType::CREATED:
         case ChangeType::MODIFIED:
             Logger::info("Uploading local change: " + change.path);
-            if (httpClient_->uploadFile(localPath, remotePath)) {
+            // Use retry logic for upload with exponential backoff
+            if (retryWithBackoff([this, &localPath, &remotePath]() {
+                return httpClient_->uploadFile(localPath, remotePath);
+            }, 3, 1000)) {  // 3 retries, starting at 1000ms
                 // Convert timestamp to ISO8601 string
                 auto time = std::chrono::system_clock::to_time_t(change.timestamp);
                 std::tm timeInfo;
@@ -549,13 +731,21 @@ void SyncEngine::handleLocalChange(const DetectedChange& change, const SyncFolde
                 );
                 stats_.pendingUploads++;
                 notifyStatusChange();
+            } else {
+                Logger::error("Upload failed after retries: {}", change.path);
             }
             break;
             
         case ChangeType::DELETED:
             Logger::info("Deleting remote file (local deleted): " + change.path);
-            httpClient_->deleteFile(remotePath);
-            database_->deleteFileMetadata(change.path);
+            // Use retry logic for delete with exponential backoff
+            if (retryWithBackoff([this, &remotePath]() {
+                return httpClient_->deleteFile(remotePath);
+            }, 3, 1000)) {  // 3 retries, starting at 1000ms
+                database_->deleteFileMetadata(change.path);
+            } else {
+                Logger::error("Delete failed after retries: {}", change.path);
+            }
             break;
     }
 }

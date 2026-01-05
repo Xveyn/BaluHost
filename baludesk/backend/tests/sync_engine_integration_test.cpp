@@ -30,7 +30,8 @@ protected:
     void SetUp() override {
         // Create test directory
         testDir_ = fs::temp_directory_path() / TEST_DIR;
-        fs::remove_all(testDir_, std::error_code{});
+        std::error_code ec;
+        fs::remove_all(testDir_, ec);
         fs::create_directories(testDir_);
 
         // Initialize logger
@@ -50,7 +51,8 @@ protected:
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(200));
-        fs::remove_all(testDir_, std::error_code{});
+        std::error_code ec;
+        fs::remove_all(testDir_, ec);
     }
 
     // Helper: Create test file

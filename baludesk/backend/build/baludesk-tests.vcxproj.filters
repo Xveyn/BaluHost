@@ -4,6 +4,12 @@
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\file_watcher_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\sync_engine_retry_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\sync_engine_performance_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

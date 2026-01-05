@@ -118,6 +118,15 @@ void IpcServer::processMessages() {
             else if (type == "update_settings") {
                 handleUpdateSettings(message, requestId);
             }
+            else if (type == "get_conflicts") {
+                handleGetConflicts(requestId);
+            }
+            else if (type == "resolve_conflict") {
+                handleResolveConflict(message, requestId);
+            }
+            else if (type == "resolve_all_conflicts") {
+                handleResolveAllConflicts(message, requestId);
+            }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
                 sendError("Unknown command type", requestId);
@@ -911,6 +920,132 @@ void IpcServer::handleUpdateSettings(const nlohmann::json& message, int requestI
     } catch (const std::exception& e) {
         sendError(std::string("Failed to update settings: ") + e.what(), requestId);
         Logger::error("Error in handleUpdateSettings: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetConflicts(int requestId) {
+    try {
+        json response;
+        response["type"] = "conflicts";
+        response["success"] = true;
+        response["id"] = requestId;
+        
+        // Mock conflicts for dev mode
+        // In production, this would query actual sync engine for conflicts
+        json conflicts = json::array();
+        
+        // Mock conflict 1: modified-modified
+        json conflict1;
+        conflict1["id"] = "conflict_1";
+        conflict1["path"] = "/Documents/report.txt";
+        conflict1["conflictType"] = "modified-modified";
+        conflict1["localVersion"]["size"] = 2048;
+        conflict1["localVersion"]["modifiedAt"] = "2026-01-05T16:30:00Z";
+        conflict1["localVersion"]["hash"] = "abc123local";
+        conflict1["localVersion"]["exists"] = true;
+        conflict1["localVersion"]["content"] = "This is the local version\nwith some content...";
+        conflict1["remoteVersion"]["size"] = 2150;
+        conflict1["remoteVersion"]["modifiedAt"] = "2026-01-05T17:00:00Z";
+        conflict1["remoteVersion"]["hash"] = "abc456remote";
+        conflict1["remoteVersion"]["exists"] = true;
+        conflict1["remoteVersion"]["content"] = "This is the remote version\nwith updated content...";
+        conflicts.push_back(conflict1);
+        
+        // Mock conflict 2: deleted-modified
+        json conflict2;
+        conflict2["id"] = "conflict_2";
+        conflict2["path"] = "/Pictures/vacation.jpg";
+        conflict2["conflictType"] = "modified-deleted";
+        conflict2["localVersion"]["size"] = 0;
+        conflict2["localVersion"]["modifiedAt"] = "2026-01-05T15:00:00Z";
+        conflict2["localVersion"]["hash"] = "";
+        conflict2["localVersion"]["exists"] = false;
+        conflict2["remoteVersion"]["size"] = 1024000;
+        conflict2["remoteVersion"]["modifiedAt"] = "2026-01-05T14:00:00Z";
+        conflict2["remoteVersion"]["hash"] = "def789remote";
+        conflict2["remoteVersion"]["exists"] = true;
+        conflicts.push_back(conflict2);
+        
+        response["data"]["conflicts"] = conflicts;
+        Logger::info("Returning {} conflicts", conflicts.size());
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get conflicts: ") + e.what(), requestId);
+        Logger::error("Error in handleGetConflicts: {}", e.what());
+    }
+}
+
+void IpcServer::handleResolveConflict(const json& message, int requestId) {
+    try {
+        if (!message.contains("data")) {
+            sendError("Missing 'data' field in resolve_conflict message", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string conflictId = data.value("conflictId", "");
+        std::string resolution = data.value("resolution", "");
+        
+        if (conflictId.empty() || resolution.empty()) {
+            sendError("Missing conflictId or resolution", requestId);
+            return;
+        }
+        
+        Logger::info("Resolving conflict {} with strategy: {}", conflictId, resolution);
+        
+        // In production: apply resolution strategy to sync engine
+        // resolution: "keep-local" | "keep-remote" | "keep-both" | "manual"
+        
+        json response;
+        response["type"] = "conflict_resolved";
+        response["success"] = true;
+        response["id"] = requestId;
+        response["data"]["conflictId"] = conflictId;
+        response["data"]["resolution"] = resolution;
+        response["data"]["message"] = "Conflict resolved successfully";
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to resolve conflict: ") + e.what(), requestId);
+        Logger::error("Error in handleResolveConflict: {}", e.what());
+    }
+}
+
+void IpcServer::handleResolveAllConflicts(const json& message, int requestId) {
+    try {
+        if (!message.contains("data")) {
+            sendError("Missing 'data' field in resolve_all_conflicts message", requestId);
+            return;
+        }
+        
+        auto data = message["data"];
+        std::string resolution = data.value("resolution", "");
+        
+        if (resolution.empty()) {
+            sendError("Missing resolution strategy", requestId);
+            return;
+        }
+        
+        Logger::info("Resolving all conflicts with strategy: {}", resolution);
+        
+        // In production: apply bulk resolution to all conflicts
+        
+        json response;
+        response["type"] = "all_conflicts_resolved";
+        response["success"] = true;
+        response["id"] = requestId;
+        response["data"]["resolution"] = resolution;
+        response["data"]["resolvedCount"] = 2;  // Mock: resolved 2 conflicts
+        response["data"]["message"] = "All conflicts resolved successfully";
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to resolve conflicts: ") + e.what(), requestId);
+        Logger::error("Error in handleResolveAllConflicts: {}", e.what());
     }
 }
 

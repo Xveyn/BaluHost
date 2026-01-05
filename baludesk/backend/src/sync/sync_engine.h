@@ -122,6 +122,32 @@ private:
     void downloadFile(const std::string& remotePath, const std::string& localPath);
     void handleConflict(const std::string& path);
     
+    // Retry logic with exponential backoff
+    template<typename Func>
+    bool retryWithBackoff(const Func& operation, int maxRetries = 3, int initialDelayMs = 1000) {
+        for (int attempt = 0; attempt < maxRetries; ++attempt) {
+            try {
+                if (operation()) {
+                    if (attempt > 0) {
+                        Logger::info("Retry successful on attempt {}/{}", attempt + 1, maxRetries);
+                    }
+                    return true;
+                }
+            } catch (const std::exception& e) {
+                Logger::warn("Attempt {}/{} failed: {}", attempt + 1, maxRetries, e.what());
+            }
+            
+            if (attempt < maxRetries - 1) {
+                int delayMs = static_cast<int>(initialDelayMs * std::pow(2.0, static_cast<double>(attempt)));
+                Logger::debug("Retrying in {}ms...", delayMs);
+                std::this_thread::sleep_for(std::chrono::milliseconds(delayMs));
+            }
+        }
+        
+        Logger::error("Operation failed after {} retries", maxRetries);
+        return false;
+    }
+    
     // Sprint 3 methods - Active
     void syncBidirectional(const SyncFolder& folder);
     void handleRemoteChange(const DetectedChange& change, const SyncFolder& folder);

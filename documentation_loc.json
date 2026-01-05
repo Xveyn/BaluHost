@@ -1,16 +1,16 @@
 {
   "project": "BaluHost",
-  "timestamp": "2026-01-04T00:52:23.830872",
+  "timestamp": "2026-01-05T00:27:21.446405",
   "base_path": "F:\\Programme (x86)\\Baluhost",
   "components": [
     {
       "name": "BaluHost Backend (FastAPI)",
       "path": "backend",
       "files": 134,
-      "total_lines": 24734,
-      "code_lines": 19261,
-      "comment_lines": 1127,
-      "blank_lines": 4346,
+      "total_lines": 24817,
+      "code_lines": 19320,
+      "comment_lines": 1138,
+      "blank_lines": 4359,
       "extensions": [
         ".py"
       ],
@@ -117,11 +117,11 @@
     {
       "name": "Android App",
       "path": "android-app",
-      "files": 188,
-      "total_lines": 23486,
-      "code_lines": 18462,
-      "comment_lines": 2485,
-      "blank_lines": 2539,
+      "files": 191,
+      "total_lines": 24803,
+      "code_lines": 19524,
+      "comment_lines": 2618,
+      "blank_lines": 2661,
       "extensions": [
         ".kt",
         ".java",
@@ -129,16 +129,20 @@
       ],
       "top_files": [
         {
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\sync\\FolderSyncScreen.kt",
+          "lines": 996
+        },
+        {
           "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\files\\FilesScreen.kt",
-          "lines": 988
+          "lines": 945
         },
         {
           "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\files\\FilesViewModel.kt",
           "lines": 725
         },
         {
-          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\sync\\FolderSyncScreen.kt",
-          "lines": 687
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\settings\\SettingsScreen.kt",
+          "lines": 677
         },
         {
           "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\onboarding\\OnboardingScreen.kt",
@@ -147,10 +151,6 @@
         {
           "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\dashboard\\DashboardScreen.kt",
           "lines": 656
-        },
-        {
-          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\settings\\SettingsScreen.kt",
-          "lines": 502
         },
         {
           "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\components\\SyncFolderConfigDialog.kt",
@@ -165,8 +165,8 @@
           "lines": 426
         },
         {
-          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\presentation\\ui\\screens\\storage\\StorageOverviewScreen.kt",
-          "lines": 417
+          "file": "android-app\\app\\src\\main\\java\\com\\baluhost\\android\\data\\local\\datastore\\PreferencesManager.kt",
+          "lines": 421
         }
       ]
     },
@@ -227,11 +227,11 @@
     {
       "name": "BaluDesk Backend (C++)",
       "path": "baludesk/backend",
-      "files": 31,
-      "total_lines": 7227,
-      "code_lines": 5084,
-      "comment_lines": 823,
-      "blank_lines": 1320,
+      "files": 43,
+      "total_lines": 9107,
+      "code_lines": 6299,
+      "comment_lines": 1145,
+      "blank_lines": 1663,
       "extensions": [
         ".cpp",
         ".h",
@@ -240,7 +240,7 @@
       "top_files": [
         {
           "file": "baludesk\\backend\\src\\ipc\\ipc_server_fixed.cpp",
-          "lines": 751
+          "lines": 918
         },
         {
           "file": "baludesk\\backend\\src\\sync\\file_watcher.cpp",
@@ -256,7 +256,7 @@
         },
         {
           "file": "baludesk\\backend\\src\\sync\\sync_engine.cpp",
-          "lines": 559
+          "lines": 598
         },
         {
           "file": "baludesk\\backend\\src\\baluhost_client.cpp",
@@ -264,7 +264,7 @@
         },
         {
           "file": "baludesk\\backend\\src\\ipc\\ipc_server.cpp",
-          "lines": 332
+          "lines": 361
         },
         {
           "file": "baludesk\\backend\\src\\ipc\\ipc_server_temp.cpp",
@@ -276,18 +276,18 @@
         },
         {
           "file": "baludesk\\backend\\src\\sync\\file_watcher_windows.cpp",
-          "lines": 284
+          "lines": 293
         }
       ]
     },
     {
       "name": "BaluDesk Frontend (Electron)",
       "path": "baludesk/frontend",
-      "files": 13,
-      "total_lines": 1871,
-      "code_lines": 1645,
-      "comment_lines": 42,
-      "blank_lines": 184,
+      "files": 23,
+      "total_lines": 3650,
+      "code_lines": 3132,
+      "comment_lines": 167,
+      "blank_lines": 351,
       "extensions": [
         ".ts",
         ".tsx",
@@ -297,7 +297,15 @@
       "top_files": [
         {
           "file": "baludesk\\frontend\\src\\renderer\\pages\\FileExplorer.tsx",
-          "lines": 494
+          "lines": 477
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\Dashboard.tsx",
+          "lines": 444
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\components\\Settings.tsx",
+          "lines": 433
         },
         {
           "file": "baludesk\\frontend\\src\\renderer\\pages\\FileExplorer_old.tsx",
@@ -305,35 +313,27 @@
         },
         {
           "file": "baludesk\\frontend\\src\\main\\main.ts",
-          "lines": 282
+          "lines": 364
         },
         {
-          "file": "baludesk\\frontend\\src\\renderer\\pages\\Dashboard.tsx",
-          "lines": 269
+          "file": "baludesk\\frontend\\src\\renderer\\pages\\Sync.tsx",
+          "lines": 343
+        },
+        {
+          "file": "baludesk\\frontend\\src\\renderer\\components\\UserProfile.tsx",
+          "lines": 254
         },
         {
           "file": "baludesk\\frontend\\src\\renderer\\pages\\Login.tsx",
           "lines": 158
         },
         {
+          "file": "baludesk\\frontend\\src\\renderer\\components\\MainLayout.tsx",
+          "lines": 140
+        },
+        {
           "file": "baludesk\\frontend\\src\\renderer\\App.tsx",
-          "lines": 93
-        },
-        {
-          "file": "baludesk\\frontend\\src\\renderer\\types.ts",
-          "lines": 56
-        },
-        {
-          "file": "baludesk\\frontend\\src\\main\\preload.ts",
-          "lines": 47
-        },
-        {
-          "file": "baludesk\\frontend\\tailwind.config.js",
-          "lines": 26
-        },
-        {
-          "file": "baludesk\\frontend\\vite.config.ts",
-          "lines": 22
+          "lines": 125
         }
       ]
     },
@@ -391,10 +391,10 @@
     }
   ],
   "totals": {
-    "files": 445,
-    "total_lines": 77148,
-    "code_lines": 61945,
-    "comment_lines": 4971,
-    "blank_lines": 10232
+    "files": 470,
+    "total_lines": 82207,
+    "code_lines": 65768,
+    "comment_lines": 5562,
+    "blank_lines": 10877
   }
 }

@@ -1,4 +1,4 @@
-import { Cloud, Activity, Files, FolderSync, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Cloud, Activity, Files, FolderSync, AlertCircle, LogOut, Settings as SettingsIcon } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -6,6 +6,7 @@ interface MainLayoutProps {
   user: { username: string; serverUrl?: string };
   onLogout: () => void;
   children: React.ReactNode;
+  conflictCount?: number;
 }
 
 interface NavTab {
@@ -13,9 +14,10 @@ interface NavTab {
   label: string;
   path: string;
   icon: React.ReactNode;
+  badge?: number;
 }
 
-export default function MainLayout({ user, onLogout, children }: MainLayoutProps) {
+export default function MainLayout({ user, onLogout, children, conflictCount = 0 }: MainLayoutProps) {
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -37,6 +39,13 @@ export default function MainLayout({ user, onLogout, children }: MainLayoutProps
       label: 'Files',
       path: '/files',
       icon: <Files className="h-4 w-4" />,
+    },
+    {
+      id: 'conflicts',
+      label: 'Conflicts',
+      path: '/conflicts',
+      icon: <AlertCircle className="h-4 w-4" />,
+      badge: conflictCount > 0 ? conflictCount : undefined,
     },
   ];
 
@@ -79,7 +88,7 @@ export default function MainLayout({ user, onLogout, children }: MainLayoutProps
               <button
                 key={tab.id}
                 onClick={() => navigate(tab.path)}
-                className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm font-medium transition-all ${
+                className={`flex items-center space-x-2 rounded-lg px-4 py-2 text-sm font-medium transition-all relative ${
                   isActiveTab(tab.path)
                     ? 'bg-white/20 text-white shadow-lg shadow-blue-500/20'
                     : 'text-slate-300 hover:bg-white/10'
@@ -87,6 +96,11 @@ export default function MainLayout({ user, onLogout, children }: MainLayoutProps
               >
                 {tab.icon}
                 <span>{tab.label}</span>
+                {tab.badge && (
+                  <span className="ml-2 inline-flex items-center justify-center h-5 w-5 rounded-full bg-red-500 text-white text-xs font-bold">
+                    {tab.badge}
+                  </span>
+                )}
               </button>
             ))}
           </nav>

@@ -57,6 +57,11 @@ private:
     void handleGetSettings(const nlohmann::json& message, int requestId = -1);
     void handleUpdateSettings(const nlohmann::json& message, int requestId = -1);
     
+    // Conflict resolution handlers
+    void handleGetConflicts(int requestId = -1);
+    void handleResolveConflict(const nlohmann::json& message, int requestId = -1);
+    void handleResolveAllConflicts(const nlohmann::json& message, int requestId = -1);
+    
     void sendResponse(const nlohmann::json& response, int requestId = -1);
     void sendError(const std::string& error, int requestId = -1);
 

@@ -5,7 +5,8 @@ import Login from './pages/Login';
 import Dashboard from './pages/Dashboard';
 import Sync from './pages/Sync';
 import FileExplorer from './pages/FileExplorer';
-import Settings from './components/Settings';
+import Conflicts from './pages/Conflicts';
+import SettingsPanel from './components/SettingsPanel';
 import MainLayout from './components/MainLayout';
 
 interface User {
@@ -16,6 +17,7 @@ interface User {
 export default function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [conflictCount, setConflictCount] = useState(0);
 
   useEffect(() => {
     // Check for stored session
@@ -29,6 +31,25 @@ export default function App() {
     }
     setLoading(false);
   }, []);
+
+  // Listen to conflict updates
+  useEffect(() => {
+    const handleBackendMessage = (message: any) => {
+      if (message.type === 'conflicts_updated') {
+        setConflictCount(message.data?.conflicts?.length || 0);
+      } else if (message.type === 'conflict_detected') {
+        setConflictCount((prev) => prev + 1);
+      }
+    };
+
+    if (user) {
+      window.electronAPI?.onBackendMessage(handleBackendMessage);
+    }
+
+    return () => {
+      window.electronAPI?.removeBackendListener?.();
+    };
+  }, [user]);
 
   const handleLogin = (userData: User) => {
     setUser(userData);
@@ -72,7 +93,7 @@ export default function App() {
           path="/"
           element={
             user ? (
-              <MainLayout user={user} onLogout={handleLogout}>
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
                 <Dashboard user={user} onLogout={handleLogout} />
               </MainLayout>
             ) : (
@@ -85,7 +106,7 @@ export default function App() {
           path="/sync"
           element={
             user ? (
-              <MainLayout user={user} onLogout={handleLogout}>
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
                 <Sync />
               </MainLayout>
             ) : (
@@ -98,8 +119,21 @@ export default function App() {
           path="/files"
           element={
             user ? (
-              <MainLayout user={user} onLogout={handleLogout}>
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
                 <FileExplorer />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/conflicts"
+          element={
+            user ? (
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
+                <Conflicts />
               </MainLayout>
             ) : (
               <Navigate to="/login" replace />
@@ -111,8 +145,8 @@ export default function App() {
           path="/settings"
           element={
             user ? (
-              <MainLayout user={user} onLogout={handleLogout}>
-                <Settings onClose={() => window.location.href = '/'} />
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
+                <SettingsPanel onClose={() => window.history.back()} />
               </MainLayout>
             ) : (
               <Navigate to="/login" replace />

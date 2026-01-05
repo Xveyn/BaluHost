@@ -155,6 +155,11 @@ if(BUILD_TESTS)
     # Test source files
     set(TEST_SOURCES
         tests/file_watcher_test.cpp
+        tests/sync_engine_retry_test.cpp
+        tests/sync_engine_performance_test.cpp
+        # Note: sync_engine_integration_test.cpp requires full build context with
+        # mocked HttpClient and Database - see comments in sync_engine_integration_test.cpp
+        # tests/sync_engine_integration_test.cpp
     )
     
     # Common sources needed by tests (exclude main.cpp, DB, HTTP)
