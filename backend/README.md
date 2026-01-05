@@ -42,12 +42,75 @@ echo "NAS_QUOTA_BYTES=10737418240" >> .env
 ```
 
 ### Database Setup
+
+#### Development (SQLite)
 ```bash
 # Database seeden (Admin User + Demo Data)
 python scripts/seed.py
 
 # Alembic Migrations (bei Schema-Änderungen)
 alembic upgrade head
+```
+
+#### Production (PostgreSQL Migration)
+Phase 1 PostgreSQL Migration ist implementiert. Schritte zur Migration:
+
+**1. PostgreSQL Setup**
+```bash
+# Option A: Docker Compose (empfohlen)
+python scripts/setup_postgresql.py --docker
+
+# Option B: Native PostgreSQL Installation
+python scripts/setup_postgresql.py --native
+
+# Verify PostgreSQL connection
+python scripts/setup_postgresql.py --verify
+```
+
+**2. Environment konfigurieren**
+```bash
+# .env file aktualisieren mit PostgreSQL URL:
+DATABASE_URL=postgresql://baluhost_user:baluhost_password@localhost:5432/baluhost
+
+# Async variant (für Produktionsumgebungen):
+DATABASE_URL=postgresql+asyncpg://baluhost_user:baluhost_password@localhost:5432/baluhost
+```
+
+**3. SQLite → PostgreSQL Migration**
+```bash
+# Dry-run (preview ohne Änderungen)
+python scripts/migrate_sqlite_to_postgresql.py --dry-run
+
+# Tatsächliche Migration (erstellt automatisch Backup)
+python scripts/migrate_sqlite_to_postgresql.py
+
+# Mit Custom-Backup-Verzeichnis
+python scripts/migrate_sqlite_to_postgresql.py --backup --source baluhost.db
+
+# Verbose Logging
+python scripts/migrate_sqlite_to_postgresql.py --verbose
+```
+
+**Migration Features:**
+- ✅ Automatische SQLite Backup vor Migration
+- ✅ Datenbankverifikation (SQLite Format Validierung)
+- ✅ Dry-Run Mode (Vorschau ohne Schreiben)
+- ✅ JSON Audit Log (`dev-backups/migration_*.json`)
+- ✅ Fehlerbehandlung & Logging
+- ✅ Tabellen-für-Tabellen Migration mit Zähler
+
+**4. Alembic Migrations ausführen**
+```bash
+alembic upgrade head
+```
+
+**Nach erfolgreichem Migration:**
+```bash
+# Verify PostgreSQL connection
+python -c "from app.core.database import engine; print(engine)"
+
+# Backup vor Migrationen
+python scripts/migrate_sqlite_to_postgresql.py --backup --no-migrate
 ```
 
 ### Start Application
