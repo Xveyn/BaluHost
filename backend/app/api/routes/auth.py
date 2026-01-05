@@ -5,7 +5,7 @@ from app.api import deps
 from app.core.database import get_db
 from app.core.rate_limiter import limiter, get_limit
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
-from app.schemas.user import UserPublic
+from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
 from app.services import users as user_service
 from app.services.audit_logger_db import get_audit_logger_db
@@ -66,7 +66,14 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
-    user_record = user_service.create_user(payload, db=db)
+    # Convert RegisterRequest to UserCreate
+    user_create = UserCreate(
+        username=payload.username,
+        email=payload.email,
+        password=payload.password,
+        role=payload.role or "user"
+    )
+    user_record = user_service.create_user(user_create, db=db)
     
     # Log successful registration
     audit_logger.log_security_event(
@@ -161,8 +168,8 @@ async def refresh_token(
     # Verify refresh token (currently using same JWT verification)
     # In production, refresh tokens should be stored separately with revocation support
     try:
-        token_data = auth_service.verify_token(refresh_token_str)
-        user_id = token_data.get("sub")
+        token_data = auth_service.decode_token(refresh_token_str)
+        user_id = token_data.sub  # TokenPayload is a Pydantic model, use attribute access
         
         # Get user from database
         user_record = user_service.get_user(int(user_id), db=db)
