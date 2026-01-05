@@ -10,14 +10,25 @@ let isQuitting = false;
 
 // Backend Process Management
 function startBackend() {
-  const backendPath = path.join(
-    app.getAppPath(),
-    '..',
-    'backend',
-    'build',
-    'Release',
-    'baludesk-backend.exe'
-  );
+  // In packaged app, backend is in app/backend/
+  // In development, it's in ../backend/build/Release/
+  const isDev = !app.isPackaged;
+  
+  const backendPath = isDev
+    ? path.join(
+        app.getAppPath(),
+        '..',
+        'backend',
+        'build',
+        'Release',
+        'baludesk-backend.exe'
+      )
+    : path.join(
+        app.getAppPath(),
+        'backend',
+        'baludesk-backend.exe'
+      );
+
 
   // Check if backend exists before starting
   if (!fs.existsSync(backendPath)) {

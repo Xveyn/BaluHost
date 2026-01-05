@@ -36,21 +36,24 @@ RequestExecutionLevel admin
 Section "Install"
   SetOutPath "$INSTDIR"
   
-  ; Copy frontend files
+  ; Copy Electron runtime and React frontend
+  File /r "node_modules\electron\dist\*.*"
   File /r "dist\*.*"
   
-  ; Copy Electron runtime
-  File /r "node_modules\electron\dist\*.*"
-  
-  ; Create backend directory
+  ; Create and copy backend
   CreateDirectory "$INSTDIR\backend"
-  File /oname=backend\baludesk-backend.exe "..\backend\build\Release\baludesk-backend.exe"
+  SetOutPath "$INSTDIR\backend"
+  File "..\backend\build\Release\baludesk-backend.exe"
   
-  ; Copy DLLs (if any)
+  ; Copy DLLs for backend (if any)
   File /r /x "*.exe" "..\backend\build\Release\*.dll"
+  
+  ; Copy configuration
+  SetOutPath "$INSTDIR"
   
   ; Create registry entry
   WriteRegStr HKCU "Software\BaluDesk" "Install_Dir" "$INSTDIR"
+  WriteRegStr HKCU "Software\BaluDesk" "Exe_Path" "$INSTDIR\electron.exe"
   
   ; Create uninstaller
   WriteUninstaller "$INSTDIR\uninstall.exe"

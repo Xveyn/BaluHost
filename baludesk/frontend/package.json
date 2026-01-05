@@ -43,7 +43,9 @@
       "output": "dist-electron"
     },
     "files": [
-      "dist/**/*",
+      "dist/main/**/*",
+      "dist/assets/**/*",
+      "dist/index.html",
       "package.json",
       "../backend/build/Release/baludesk-backend.exe",
       "../backend/build/Release/*.dll"
@@ -56,7 +58,7 @@
       }
     ],
     "win": {
-      "target": ["nsis", "portable"],
+      "target": ["portable"],
       "icon": "public/icon.ico"
     },
     "mac": {

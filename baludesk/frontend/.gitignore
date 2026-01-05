@@ -1,8 +1,6 @@
 node_modules/
 dist/
 dist-electron/
-*.log
-.DS_Store
-*.local
+releases/
 .vite
 .electron-builder.yml
