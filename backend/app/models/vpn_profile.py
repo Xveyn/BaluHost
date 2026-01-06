@@ -29,23 +29,23 @@ class VPNProfile(Base):
     
     __tablename__ = "vpn_profiles"
     
-    id: int = Column(Integer, primary_key=True, index=True)
-    user_id: int = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name: str = Column(String(255), nullable=False)  # e.g., "Home OpenVPN", "Office WireGuard"
-    vpn_type: VPNType = Column(SQLEnum(VPNType), nullable=False)
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name = Column(String(255), nullable=False)  # e.g., "Home OpenVPN", "Office WireGuard"
+    vpn_type = Column(SQLEnum(VPNType), nullable=False)
     
     # Encrypted configurations
-    config_file_encrypted: str = Column(Text, nullable=False)  # .ovpn or .conf file (encrypted)
-    certificate_encrypted: str | None = Column(Text, nullable=True)  # Client certificate (encrypted)
-    private_key_encrypted: str | None = Column(Text, nullable=True)  # Private key (encrypted)
+    config_file_encrypted = Column(Text, nullable=False)  # .ovpn or .conf file (encrypted)
+    certificate_encrypted = Column(Text, nullable=True)  # Client certificate (encrypted)
+    private_key_encrypted = Column(Text, nullable=True)  # Private key (encrypted)
     
     # Options
-    auto_connect: bool = Column(Boolean, default=False)
-    description: str | None = Column(Text, nullable=True)
+    auto_connect = Column(Boolean, default=False)
+    description = Column(Text, nullable=True)
     
     # Metadata
-    created_at: datetime = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at: datetime = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="vpn_profiles")
