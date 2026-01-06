@@ -22,23 +22,23 @@ class ServerProfile(Base):
     
     __tablename__ = "server_profiles"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)  # e.g., "Home NAS", "Office Server"
-    ssh_host = Column(String(255), nullable=False)  # IP or hostname
-    ssh_port = Column(Integer, default=22)
-    ssh_username = Column(String(255), nullable=False)
-    ssh_key_encrypted = Column(Text, nullable=False)  # Encrypted private key
+    id: int = Column(Integer, primary_key=True, index=True)
+    user_id: int = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name: str = Column(String(255), nullable=False)  # e.g., "Home NAS", "Office Server"
+    ssh_host: str = Column(String(255), nullable=False)  # IP or hostname
+    ssh_port: int = Column(Integer, default=22)
+    ssh_username: str = Column(String(255), nullable=False)
+    ssh_key_encrypted: str = Column(Text, nullable=False)  # Encrypted private key
     
     # VPN Configuration
-    vpn_profile_id = Column(Integer, ForeignKey("vpn_profiles.id"), nullable=True, index=True)
+    vpn_profile_id: int | None = Column(Integer, ForeignKey("vpn_profiles.id"), nullable=True, index=True)
     
     # Server startup command
-    power_on_command = Column(String(500), nullable=True)  # e.g., "systemctl start baluhost-backend"
+    power_on_command: str | None = Column(String(500), nullable=True)  # e.g., "systemctl start baluhost-backend"
     
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    last_used = Column(DateTime, nullable=True)
+    created_at: datetime = Column(DateTime, default=datetime.utcnow, index=True)
+    last_used: datetime | None = Column(DateTime, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="server_profiles")
