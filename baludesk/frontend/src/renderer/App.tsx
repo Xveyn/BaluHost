@@ -6,6 +6,7 @@ import Dashboard from './pages/Dashboard';
 import Sync from './pages/Sync';
 import FileExplorer from './pages/FileExplorer';
 import Conflicts from './pages/Conflicts';
+import { RemoteServersPage } from './pages/RemoteServers';
 import SettingsPanel from './components/SettingsPanel';
 import MainLayout from './components/MainLayout';
 
@@ -134,6 +135,19 @@ export default function App() {
             user ? (
               <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
                 <Conflicts />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/remote-servers"
+          element={
+            user ? (
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
+                <RemoteServersPage />
               </MainLayout>
             ) : (
               <Navigate to="/login" replace />
