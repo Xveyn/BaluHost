@@ -1,23 +1,4 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/use-toast';
 import {
   Power,
   Trash2,
@@ -26,43 +7,44 @@ import {
   CheckCircle,
   AlertCircle,
   Clock,
+  ChevronRight,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
-import * as api from '@/api/remote-servers';
+import * as api from '/api/remote-servers';
 
 interface ServerProfileListProps {
   profiles: api.ServerProfile[];
-  vpnProfiles: api.VPNProfile[];
-  loading: boolean;
-  onDelete: (id: number) => Promise<void>;
-  onTestConnection: (id: number) => Promise<api.SSHConnectionTest>;
-  onStartServer: (id: number) => Promise<api.ServerStartResponse>;
+  isLoading?: boolean;
+  onTestConnection?: (id: number) => Promise<void>;
+  onStartServer?: (id: number) => Promise<void>;
+  onDelete?: (id: number) => Promise<void>;
 }
 
 export function ServerProfileList({
   profiles,
-  vpnProfiles,
-  loading,
-  onDelete,
+  isLoading = false,
   onTestConnection,
   onStartServer,
+  onDelete,
 }: ServerProfileListProps) {
-  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
   const [startingId, setStartingId] = useState<number | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<Record<number, api.SSHConnectionTest>>({});
-  const { toast } = useToast();
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+
+  const handleDelete = async (id: number, name: string) => {
+    if (window.confirm(`Delete server profile "${name}"? This cannot be undone.`)) {
+      try {
+        setDeleteConfirm(id);
+        await onDelete?.(id);
+      } finally {
+        setDeleteConfirm(null);
+      }
+    }
+  };
 
   const handleTest = async (id: number) => {
     setTestingId(id);
     try {
-      const result = await onTestConnection(id);
-      setConnectionStatus({ ...connectionStatus, [id]: result });
-      toast({
-        title: result.ssh_reachable ? 'Connected' : 'Disconnected',
-        description: result.error_message || 'SSH connection successful',
-        variant: result.ssh_reachable ? 'default' : 'destructive',
-      });
+      await onTestConnection?.(id);
     } finally {
       setTestingId(null);
     }
@@ -71,180 +53,106 @@ export function ServerProfileList({
   const handleStart = async (id: number) => {
     setStartingId(id);
     try {
-      const result = await onStartServer(id);
-      if (result.status === 'starting') {
-        toast({
-          title: 'Server Starting',
-          description: 'Check the server status in a few moments',
-        });
-      }
+      await onStartServer?.(id);
     } finally {
       setStartingId(null);
     }
   };
 
-  const handleDelete = async () => {
-    if (deleteId) {
-      await onDelete(deleteId);
-      setDeleteId(null);
-    }
-  };
-
-  const getVpnName = (vpnId?: number) => {
-    if (!vpnId) return 'None';
-    return vpnProfiles.find(p => p.id === vpnId)?.name || 'Unknown';
-  };
-
-  if (loading) {
+  if (profiles.length === 0) {
     return (
-      <div className="space-y-4">
-        {[1, 2, 3].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64 mt-2" />
-            </CardHeader>
-          </Card>
-        ))}
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="text-center max-w-md">
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <ChevronRight className="w-6 h-6 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No Server Profiles</h3>
+          <p className="text-sm text-gray-600">
+            Add your first remote server profile to get started managing BaluHost instances from here.
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (profiles.length === 0) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-center text-muted-foreground">
-            No server profiles yet. Add one to get started.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {profiles.map((profile) => {
-        const status = connectionStatus[profile.id];
-        const isConnected = status?.ssh_reachable;
-        
-        return (
-          <Card key={profile.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div>
-                  <CardTitle>{profile.name}</CardTitle>
-                  <CardDescription>
-                    {profile.ssh_username}@{profile.ssh_host}:{profile.ssh_port}
-                  </CardDescription>
-                </div>
-                {isConnected !== undefined && (
-                  <div className="flex items-center gap-2">
-                    {isConnected ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
-                )}
-              </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Details */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">VPN Profile</p>
-                    <p className="font-medium">{getVpnName(profile.vpn_profile_id)}</p>
-                  </div>
-                  {profile.power_on_command && (
-                    <div>
-                      <p className="text-muted-foreground">Power-On Command</p>
-                      <p className="font-mono text-xs">{profile.power_on_command}</p>
-                    </div>
-                  )}
-                  {profile.last_used && (
-                    <div>
-                      <p className="text-muted-foreground">Last Used</p>
-                      <p className="font-medium flex items-center gap-1">
-                        <Clock className="w-4 h-4" />
-                        {formatDistanceToNow(new Date(profile.last_used), { addSuffix: true })}
-                      </p>
-                    </div>
-                  )}
-                </div>
-
-                {/* Error message */}
-                {status?.error_message && (
-                  <div className="bg-destructive/10 text-destructive p-2 rounded text-sm">
-                    {status.error_message}
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTest(profile.id)}
-                    disabled={testingId === profile.id}
-                  >
-                    {testingId === profile.id ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <Network className="w-4 h-4 mr-2" />
-                    )}
-                    Test Connection
-                  </Button>
-
-                  {profile.power_on_command && (
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleStart(profile.id)}
-                      disabled={startingId === profile.id}
-                      className="text-green-600 hover:text-green-700"
-                    >
-                      {startingId === profile.id ? (
-                        <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                      ) : (
-                        <Power className="w-4 h-4 mr-2" />
-                      )}
-                      Start Server
-                    </Button>
-                  )}
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteId(profile.id)}
-                    className="text-destructive hover:text-destructive ml-auto"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-
-      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete Profile?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will permanently delete the profile. This action cannot be undone.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex gap-2 justify-end">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
+    <div className="space-y-3">
+      {profiles.map((profile) => (
+        <div
+          key={profile.id}
+          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+        >
+          {/* Profile Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <h3 className="text-base font-semibold text-gray-900 truncate">{profile.name}</h3>
+              <p className="text-sm text-gray-600 mt-1">
+                {profile.ssh_username}@{profile.ssh_host}:{profile.ssh_port}
+              </p>
+            </div>
+            {profile.vpn_profile_id && (
+              <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
+                VPN
+              </span>
+            )}
           </div>
-        </AlertDialogContent>
-      </AlertDialog>
+
+          {/* Power-On Command */}
+          {profile.power_on_command && (
+            <div className="mb-3 p-2 bg-gray-50 rounded text-xs font-mono text-gray-700 truncate">
+              {profile.power_on_command}
+            </div>
+          )}
+
+          {/* Last Used */}
+          {profile.last_used && (
+            <div className="mb-3 text-xs text-gray-500 flex items-center gap-1">
+              <Clock className="w-3 h-3" />
+              Last used: {new Date(profile.last_used).toLocaleString()}
+            </div>
+          )}
+
+          {/* Actions */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => handleTest(profile.id)}
+              disabled={isLoading || testingId === profile.id}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Test SSH connection"
+            >
+              {testingId === profile.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Network className="w-4 h-4" />
+              )}
+              Test
+            </button>
+
+            <button
+              onClick={() => handleStart(profile.id)}
+              disabled={isLoading || startingId === profile.id}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Start remote server"
+            >
+              {startingId === profile.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <Power className="w-4 h-4" />
+              )}
+              Start
+            </button>
+
+            <button
+              onClick={() => handleDelete(profile.id, profile.name)}
+              disabled={isLoading || deleteConfirm === profile.id}
+              className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Delete profile"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

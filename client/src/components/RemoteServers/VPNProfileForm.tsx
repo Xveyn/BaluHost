@@ -1,24 +1,4 @@
 import { useState, useRef } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Checkbox } from '@/components/ui/checkbox';
 import { Plus, Upload, Loader2, X } from 'lucide-react';
 import * as api from '@/api/remote-servers';
 
@@ -84,159 +64,212 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button><Plus className="w-4 h-4 mr-2" /> Add VPN Profile</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add VPN Profile</DialogTitle>
-          <DialogDescription>
-            Upload VPN configuration for secure remote access
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isLoading}
+      >
+        <Plus className="w-4 h-4" />
+        Add VPN Profile
+      </button>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Profile Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g., Home OpenVPN"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="type">VPN Type</Label>
-            <Select value={vpnType} onValueChange={(v) => setVpnType(v as any)}>
-              <SelectTrigger id="type">
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="openvpn">OpenVPN</SelectItem>
-                <SelectItem value="wireguard">WireGuard</SelectItem>
-                <SelectItem value="custom">Custom</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-
-          <div className="space-y-2">
-            <Label htmlFor="description">Description</Label>
-            <Input
-              id="description"
-              placeholder="Optional description"
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-            />
-          </div>
-
-          {/* Config file upload */}
-          <div className="space-y-2">
-            <Label>Configuration File *</Label>
-            <div
-              onClick={() => configInputRef.current?.click()}
-              className="border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center justify-center gap-2">
-                <Upload className="w-4 h-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">
-                  {configFile ? configFile.name : 'Click to upload config'}
-                </span>
+      {open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md my-8">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Add VPN Profile</h2>
+                <p className="text-sm text-gray-600 mt-1">Upload VPN configuration for secure remote access</p>
               </div>
-              <input
-                ref={configInputRef}
-                type="file"
-                hidden
-                onChange={handleFileChange(setConfigFile)}
-                accept=".ovpn,.conf"
-              />
+              <button
+                onClick={() => setOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-          </div>
 
-          {/* Certificate file upload */}
-          <div className="space-y-2">
-            <Label>Certificate (Optional)</Label>
-            <div
-              onClick={() => certInputRef.current?.click()}
-              className="border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Upload className="w-4 h-4" />
-                  {certFile ? certFile.name : 'Click to upload certificate'}
-                </span>
-                {certFile && (
-                  <X
-                    className="w-4 h-4 cursor-pointer hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setCertFile(null);
-                    }}
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Profile Name */}
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Profile Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="e.g., Home OpenVPN"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* VPN Type */}
+              <div>
+                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+                  VPN Type <span className="text-red-500">*</span>
+                </label>
+                <select
+                  id="type"
+                  value={vpnType}
+                  onChange={(e) => setVpnType(e.target.value as any)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="openvpn">OpenVPN</option>
+                  <option value="wireguard">WireGuard</option>
+                  <option value="custom">Custom</option>
+                </select>
+              </div>
+
+              {/* Description */}
+              <div>
+                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                  Description
+                </label>
+                <input
+                  id="description"
+                  type="text"
+                  placeholder="Optional description"
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Config File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Configuration File <span className="text-red-500">*</span>
+                </label>
+                <div
+                  onClick={() => configInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="flex items-center justify-center gap-2">
+                    <Upload className="w-4 h-4 text-gray-400" />
+                    <span className="text-sm text-gray-600">
+                      {configFile ? configFile.name : 'Click to upload config'}
+                    </span>
+                  </div>
+                  <input
+                    ref={configInputRef}
+                    type="file"
+                    hidden
+                    onChange={handleFileChange(setConfigFile)}
+                    accept=".ovpn,.conf"
                   />
-                )}
+                </div>
               </div>
-              <input
-                ref={certInputRef}
-                type="file"
-                hidden
-                onChange={handleFileChange(setCertFile)}
-                accept=".crt,.pem,.cert"
-              />
-            </div>
-          </div>
 
-          {/* Private key file upload */}
-          <div className="space-y-2">
-            <Label>Private Key (Optional)</Label>
-            <div
-              onClick={() => keyInputRef.current?.click()}
-              className="border-2 border-dashed rounded-lg p-4 cursor-pointer hover:bg-muted transition-colors"
-            >
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-sm text-muted-foreground flex items-center gap-2">
-                  <Upload className="w-4 h-4" />
-                  {keyFile ? keyFile.name : 'Click to upload private key'}
-                </span>
-                {keyFile && (
-                  <X
-                    className="w-4 h-4 cursor-pointer hover:text-destructive"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      setKeyFile(null);
-                    }}
+              {/* Certificate File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Certificate (Optional)
+                </label>
+                <div
+                  onClick={() => certInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-gray-600 flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      {certFile ? certFile.name : 'Click to upload certificate'}
+                    </span>
+                    {certFile && (
+                      <X
+                        className="w-4 h-4 cursor-pointer text-gray-400 hover:text-red-500"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setCertFile(null);
+                        }}
+                      />
+                    )}
+                  </div>
+                  <input
+                    ref={certInputRef}
+                    type="file"
+                    hidden
+                    onChange={handleFileChange(setCertFile)}
+                    accept=".crt,.pem,.cert"
                   />
-                )}
+                </div>
               </div>
-              <input
-                ref={keyInputRef}
-                type="file"
-                hidden
-                onChange={handleFileChange(setKeyFile)}
-                accept=".key,.pem"
-              />
-            </div>
-          </div>
 
-          {/* Auto-connect checkbox */}
-          <div className="flex items-center space-x-2">
-            <Checkbox
-              id="auto"
-              checked={autoConnect}
-              onCheckedChange={(checked) => setAutoConnect(checked as boolean)}
-            />
-            <Label htmlFor="auto" className="cursor-pointer">
-              Auto-connect on startup
-            </Label>
-          </div>
+              {/* Private Key File Upload */}
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Private Key (Optional)
+                </label>
+                <div
+                  onClick={() => keyInputRef.current?.click()}
+                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                >
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-sm text-gray-600 flex items-center gap-2">
+                      <Upload className="w-4 h-4" />
+                      {keyFile ? keyFile.name : 'Click to upload private key'}
+                    </span>
+                    {keyFile && (
+                      <X
+                        className="w-4 h-4 cursor-pointer text-gray-400 hover:text-red-500"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setKeyFile(null);
+                        }}
+                      />
+                    )}
+                  </div>
+                  <input
+                    ref={keyInputRef}
+                    type="file"
+                    hidden
+                    onChange={handleFileChange(setKeyFile)}
+                    accept=".key,.pem"
+                  />
+                </div>
+              </div>
 
-          <Button type="submit" disabled={loading || isLoading || !configFile} className="w-full">
-            {loading || isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            Create VPN Profile
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {/* Auto-connect Checkbox */}
+              <div className="flex items-center gap-2">
+                <input
+                  id="auto"
+                  type="checkbox"
+                  checked={autoConnect}
+                  onChange={(e) => setAutoConnect(e.target.checked)}
+                  className="w-4 h-4 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                />
+                <label htmlFor="auto" className="text-sm text-gray-700 cursor-pointer">
+                  Auto-connect on startup
+                </label>
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || isLoading || !configFile}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {(loading || isLoading) && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Create VPN Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }

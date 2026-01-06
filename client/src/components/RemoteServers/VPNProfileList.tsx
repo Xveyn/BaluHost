@@ -1,24 +1,4 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from '@/components/ui/card';
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog';
-import { Badge } from '@/components/ui/badge';
-import { Skeleton } from '@/components/ui/skeleton';
-import { useToast } from '@/components/ui/use-toast';
 import {
   Trash2,
   CheckCircle,
@@ -26,198 +6,134 @@ import {
   Loader2,
   Shield,
   RefreshCw,
+  ChevronRight,
 } from 'lucide-react';
-import { formatDistanceToNow } from 'date-fns';
 import * as api from '@/api/remote-servers';
 
 interface VPNProfileListProps {
   profiles: api.VPNProfile[];
-  loading: boolean;
-  onDelete: (id: number) => Promise<void>;
-  onTestConnection: (id: number) => Promise<api.VPNConnectionTest>;
+  isLoading?: boolean;
+  onTestConnection?: (id: number) => Promise<void>;
+  onDelete?: (id: number) => Promise<void>;
 }
 
 export function VPNProfileList({
   profiles,
-  loading,
-  onDelete,
+  isLoading = false,
   onTestConnection,
+  onDelete,
 }: VPNProfileListProps) {
-  const [deleteId, setDeleteId] = useState<number | null>(null);
   const [testingId, setTestingId] = useState<number | null>(null);
-  const [connectionStatus, setConnectionStatus] = useState<Record<number, api.VPNConnectionTest>>({});
-  const { toast } = useToast();
+  const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const handleTest = async (id: number) => {
     setTestingId(id);
     try {
-      const result = await onTestConnection(id);
-      setConnectionStatus({ ...connectionStatus, [id]: result });
-      toast({
-        title: result.connected ? 'Valid' : 'Invalid',
-        description: result.error_message || 'Configuration is valid',
-        variant: result.connected ? 'default' : 'destructive',
-      });
+      await onTestConnection?.(id);
     } finally {
       setTestingId(null);
     }
   };
 
-  const handleDelete = async () => {
-    if (deleteId) {
-      await onDelete(deleteId);
-      setDeleteId(null);
+  const handleDelete = async (id: number, name: string) => {
+    if (window.confirm(`Delete VPN profile "${name}"? This cannot be undone.`)) {
+      try {
+        setDeleteConfirm(id);
+        await onDelete?.(id);
+      } finally {
+        setDeleteConfirm(null);
+      }
     }
   };
 
   const getVpnTypeColor = (type: string) => {
     switch (type) {
       case 'openvpn':
-        return 'bg-blue-100 text-blue-800';
+        return 'bg-blue-100 text-blue-700';
       case 'wireguard':
-        return 'bg-purple-100 text-purple-800';
+        return 'bg-purple-100 text-purple-700';
       default:
-        return 'bg-gray-100 text-gray-800';
+        return 'bg-gray-100 text-gray-700';
     }
   };
 
-  if (loading) {
+  if (profiles.length === 0) {
     return (
-      <div className="space-y-4">
-        {[1, 2].map((i) => (
-          <Card key={i}>
-            <CardHeader>
-              <Skeleton className="h-6 w-48" />
-              <Skeleton className="h-4 w-64 mt-2" />
-            </CardHeader>
-          </Card>
-        ))}
+      <div className="flex flex-col items-center justify-center py-12 px-4">
+        <div className="text-center max-w-md">
+          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
+            <ChevronRight className="w-6 h-6 text-gray-400" />
+          </div>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">No VPN Profiles</h3>
+          <p className="text-sm text-gray-600">
+            Add your first VPN profile to connect to remote networks securely.
+          </p>
+        </div>
       </div>
     );
   }
 
-  if (profiles.length === 0) {
-    return (
-      <Card>
-        <CardContent className="pt-6">
-          <p className="text-center text-muted-foreground">
-            No VPN profiles yet. Add one to connect to remote networks.
-          </p>
-        </CardContent>
-      </Card>
-    );
-  }
-
   return (
-    <div className="space-y-4">
-      {profiles.map((profile) => {
-        const status = connectionStatus[profile.id];
-        const isValid = status?.connected;
-
-        return (
-          <Card key={profile.id}>
-            <CardHeader>
-              <div className="flex items-start justify-between">
-                <div className="flex-1">
-                  <div className="flex items-center gap-2">
-                    <CardTitle>{profile.name}</CardTitle>
-                    <Badge className={getVpnTypeColor(profile.vpn_type)}>
-                      {profile.vpn_type.toUpperCase()}
-                    </Badge>
-                    {profile.auto_connect && (
-                      <Badge variant="secondary">
-                        <Shield className="w-3 h-3 mr-1" />
-                        Auto
-                      </Badge>
-                    )}
-                  </div>
-                  {profile.description && (
-                    <CardDescription className="mt-2">{profile.description}</CardDescription>
-                  )}
-                </div>
-                {isValid !== undefined && (
-                  <div className="flex items-center gap-2">
-                    {isValid ? (
-                      <CheckCircle className="w-5 h-5 text-green-500" />
-                    ) : (
-                      <AlertCircle className="w-5 h-5 text-red-500" />
-                    )}
-                  </div>
+    <div className="space-y-3">
+      {profiles.map((profile) => (
+        <div
+          key={profile.id}
+          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+        >
+          {/* Profile Header */}
+          <div className="flex items-start justify-between mb-3">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 mb-1">
+                <h3 className="text-base font-semibold text-gray-900 truncate">{profile.name}</h3>
+                <span className={`px-2 py-1 text-xs font-medium rounded ${getVpnTypeColor(profile.vpn_type)}`}>
+                  {profile.vpn_type.toUpperCase()}
+                </span>
+                {profile.auto_connect && (
+                  <span className="px-2 py-1 text-xs font-medium bg-green-100 text-green-700 rounded flex items-center gap-1">
+                    <Shield className="w-3 h-3" />
+                    Auto
+                  </span>
                 )}
               </div>
-            </CardHeader>
-            <CardContent>
-              <div className="space-y-4">
-                {/* Details */}
-                <div className="grid grid-cols-2 gap-4 text-sm">
-                  <div>
-                    <p className="text-muted-foreground">Created</p>
-                    <p className="font-medium">
-                      {formatDistanceToNow(new Date(profile.created_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                  <div>
-                    <p className="text-muted-foreground">Last Updated</p>
-                    <p className="font-medium">
-                      {formatDistanceToNow(new Date(profile.updated_at), { addSuffix: true })}
-                    </p>
-                  </div>
-                </div>
-
-                {/* Error message */}
-                {status?.error_message && (
-                  <div className="bg-destructive/10 text-destructive p-2 rounded text-sm">
-                    {status.error_message}
-                  </div>
-                )}
-
-                {/* Actions */}
-                <div className="flex gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => handleTest(profile.id)}
-                    disabled={testingId === profile.id}
-                  >
-                    {testingId === profile.id ? (
-                      <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                    ) : (
-                      <RefreshCw className="w-4 h-4 mr-2" />
-                    )}
-                    Validate Config
-                  </Button>
-
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    onClick={() => setDeleteId(profile.id)}
-                    className="text-destructive hover:text-destructive ml-auto"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </Button>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        );
-      })}
-
-      <AlertDialog open={deleteId !== null} onOpenChange={(open) => !open && setDeleteId(null)}>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Delete VPN Profile?</AlertDialogTitle>
-            <AlertDialogDescription>
-              This will remove the VPN profile and any server profiles using it will have the VPN reference cleared.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div className="flex gap-2 justify-end">
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction onClick={handleDelete} className="bg-destructive hover:bg-destructive/90">
-              Delete
-            </AlertDialogAction>
+              {profile.description && (
+                <p className="text-sm text-gray-600">{profile.description}</p>
+              )}
+            </div>
           </div>
-        </AlertDialogContent>
-      </AlertDialog>
+
+          {/* Dates */}
+          <div className="mb-3 text-xs text-gray-500 space-y-1">
+            <p>Created: {new Date(profile.created_at).toLocaleString()}</p>
+            <p>Updated: {new Date(profile.updated_at).toLocaleString()}</p>
+          </div>
+
+          {/* Actions */}
+          <div className="flex gap-2 flex-wrap">
+            <button
+              onClick={() => handleTest(profile.id)}
+              disabled={isLoading || testingId === profile.id}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Validate VPN configuration"
+            >
+              {testingId === profile.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <RefreshCw className="w-4 h-4" />
+              )}
+              Validate
+            </button>
+
+            <button
+              onClick={() => handleDelete(profile.id, profile.name)}
+              disabled={isLoading || deleteConfirm === profile.id}
+              className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title="Delete profile"
+            >
+              <Trash2 className="w-4 h-4" />
+            </button>
+          </div>
+        </div>
+      ))}
     </div>
   );
 }

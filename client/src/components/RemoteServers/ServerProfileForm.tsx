@@ -1,24 +1,5 @@
 import { useState } from 'react';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Textarea } from '@/components/ui/textarea';
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-import { Plus, Loader2 } from 'lucide-react';
+import { Plus, Loader2, X } from 'lucide-react';
 import * as api from '@/api/remote-servers';
 
 interface ServerProfileFormProps {
@@ -70,110 +51,172 @@ export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = fa
   };
 
   return (
-    <Dialog open={open} onOpenChange={setOpen}>
-      <DialogTrigger asChild>
-        <Button><Plus className="w-4 h-4 mr-2" /> Add Server</Button>
-      </DialogTrigger>
-      <DialogContent className="max-w-md">
-        <DialogHeader>
-          <DialogTitle>Add Server Profile</DialogTitle>
-          <DialogDescription>
-            Add SSH credentials to manage a remote BaluHost server
-          </DialogDescription>
-        </DialogHeader>
+    <>
+      <button
+        onClick={() => setOpen(true)}
+        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled={isLoading}
+      >
+        <Plus className="w-4 h-4" />
+        Add Server
+      </button>
 
-        <form onSubmit={handleSubmit} className="space-y-4">
-          <div className="space-y-2">
-            <Label htmlFor="name">Profile Name</Label>
-            <Input
-              id="name"
-              placeholder="e.g., Home NAS"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div className="grid grid-cols-3 gap-2">
-            <div className="space-y-2 col-span-2">
-              <Label htmlFor="host">SSH Host</Label>
-              <Input
-                id="host"
-                placeholder="192.168.1.100"
-                value={sshHost}
-                onChange={(e) => setSshHost(e.target.value)}
-                required
-              />
+      {open && (
+        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg shadow-lg w-full max-w-md">
+            {/* Header */}
+            <div className="flex items-center justify-between border-b px-6 py-4">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">Add Server Profile</h2>
+                <p className="text-sm text-gray-600 mt-1">Add SSH credentials to manage a remote BaluHost server</p>
+              </div>
+              <button
+                onClick={() => setOpen(false)}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X className="w-5 h-5" />
+              </button>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="port">Port</Label>
-              <Input
-                id="port"
-                type="number"
-                placeholder="22"
-                value={sshPort}
-                onChange={(e) => setSshPort(e.target.value)}
-                required
-              />
-            </div>
-          </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="username">SSH Username</Label>
-            <Input
-              id="username"
-              placeholder="root"
-              value={sshUsername}
-              onChange={(e) => setSshUsername(e.target.value)}
-              required
-            />
-          </div>
+            {/* Form */}
+            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+              {/* Profile Name */}
+              <div>
+                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                  Profile Name <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="name"
+                  type="text"
+                  placeholder="e.g., Home NAS"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="key">SSH Private Key</Label>
-            <Textarea
-              id="key"
-              placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
-              value={sshKey}
-              onChange={(e) => setSshKey(e.target.value)}
-              required
-              className="font-mono text-xs"
-            />
-          </div>
+              {/* SSH Host & Port */}
+              <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label htmlFor="host" className="block text-sm font-medium text-gray-700 mb-1">
+                    SSH Host <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="host"
+                    type="text"
+                    placeholder="192.168.1.100"
+                    value={sshHost}
+                    onChange={(e) => setSshHost(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+                <div>
+                  <label htmlFor="port" className="block text-sm font-medium text-gray-700 mb-1">
+                    Port <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    id="port"
+                    type="number"
+                    placeholder="22"
+                    value={sshPort}
+                    onChange={(e) => setSshPort(e.target.value)}
+                    required
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="vpn">VPN Profile (Optional)</Label>
-            <Select value={vpnId} onValueChange={setVpnId}>
-              <SelectTrigger id="vpn">
-                <SelectValue placeholder="None" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="">None</SelectItem>
-                {vpnProfiles.map((profile) => (
-                  <SelectItem key={profile.id} value={profile.id.toString()}>
-                    {profile.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-          </div>
+              {/* SSH Username */}
+              <div>
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 mb-1">
+                  SSH Username <span className="text-red-500">*</span>
+                </label>
+                <input
+                  id="username"
+                  type="text"
+                  placeholder="root"
+                  value={sshUsername}
+                  onChange={(e) => setSshUsername(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
 
-          <div className="space-y-2">
-            <Label htmlFor="command">Power-On Command</Label>
-            <Input
-              id="command"
-              placeholder="systemctl start baluhost-backend"
-              value={powerOnCommand}
-              onChange={(e) => setPowerOnCommand(e.target.value)}
-            />
-          </div>
+              {/* SSH Private Key */}
+              <div>
+                <label htmlFor="key" className="block text-sm font-medium text-gray-700 mb-1">
+                  SSH Private Key <span className="text-red-500">*</span>
+                </label>
+                <textarea
+                  id="key"
+                  placeholder="-----BEGIN PRIVATE KEY-----&#10;...&#10;-----END PRIVATE KEY-----"
+                  value={sshKey}
+                  onChange={(e) => setSshKey(e.target.value)}
+                  required
+                  rows={6}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-xs"
+                />
+              </div>
 
-          <Button type="submit" disabled={loading || isLoading} className="w-full">
-            {loading || isLoading ? <Loader2 className="w-4 h-4 mr-2 animate-spin" /> : null}
-            Create Profile
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+              {/* VPN Profile */}
+              <div>
+                <label htmlFor="vpn" className="block text-sm font-medium text-gray-700 mb-1">
+                  VPN Profile (Optional)
+                </label>
+                <select
+                  id="vpn"
+                  value={vpnId}
+                  onChange={(e) => setVpnId(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="">None</option>
+                  {vpnProfiles.map((profile) => (
+                    <option key={profile.id} value={profile.id.toString()}>
+                      {profile.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Power-On Command */}
+              <div>
+                <label htmlFor="command" className="block text-sm font-medium text-gray-700 mb-1">
+                  Power-On Command
+                </label>
+                <input
+                  id="command"
+                  type="text"
+                  placeholder="systemctl start baluhost-backend"
+                  value={powerOnCommand}
+                  onChange={(e) => setPowerOnCommand(e.target.value)}
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+
+              {/* Buttons */}
+              <div className="flex gap-3 pt-4">
+                <button
+                  type="button"
+                  onClick={() => setOpen(false)}
+                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={loading || isLoading}
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {loading || isLoading && <Loader2 className="w-4 h-4 animate-spin" />}
+                  Create Profile
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
