@@ -6,7 +6,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from app.api import deps
+from app.core.database import get_db
 from app.models import VPNProfile, User, VPNType, ServerProfile
 from app.schemas.vpn_profile import (
     VPNProfileCreate,
@@ -33,7 +34,7 @@ async def create_vpn_profile(
     auto_connect: bool = Form(False),
     description: str = Form(""),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> VPNProfileResponse:
     """Create a new VPN profile."""
     try:
@@ -104,7 +105,7 @@ async def create_vpn_profile(
 @router.get("", response_model=List[VPNProfileList])
 async def list_vpn_profiles(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> List[VPNProfileList]:
     """List all VPN profiles for current user."""
     profiles = db.query(VPNProfile).filter(
@@ -118,7 +119,7 @@ async def list_vpn_profiles(
 async def get_vpn_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> VPNProfileResponse:
     """Get specific VPN profile."""
     profile = db.query(VPNProfile).filter(
@@ -145,7 +146,7 @@ async def update_vpn_profile(
     certificate_file: UploadFile = File(None),
     private_key_file: UploadFile = File(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> VPNProfileResponse:
     """Update VPN profile."""
     profile = db.query(VPNProfile).filter(
@@ -210,7 +211,7 @@ async def update_vpn_profile(
 async def delete_vpn_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ):
     """Delete VPN profile."""
     profile = db.query(VPNProfile).filter(
@@ -241,7 +242,7 @@ async def delete_vpn_profile(
 async def test_vpn_connection(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> VPNConnectionTest:
     """Test VPN configuration validity."""
     profile = db.query(VPNProfile).filter(

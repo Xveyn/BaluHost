@@ -6,7 +6,8 @@ from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from app.api.dependencies import get_db, get_current_user
+from app.api import deps
+from app.core.database import get_db
 from app.models import ServerProfile, User
 from app.schemas.server_profile import (
     ServerProfileCreate,
@@ -28,7 +29,7 @@ router = APIRouter(prefix="/api/server-profiles", tags=["server-profiles"])
 async def create_server_profile(
     profile_data: ServerProfileCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> ServerProfileResponse:
     """Create a new server profile."""
     try:
@@ -72,7 +73,7 @@ async def create_server_profile(
 @router.get("", response_model=List[ServerProfileList])
 async def list_server_profiles(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> List[ServerProfileList]:
     """List all server profiles for current user."""
     profiles = db.query(ServerProfile).filter(
@@ -86,7 +87,7 @@ async def list_server_profiles(
 async def get_server_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> ServerProfileResponse:
     """Get specific server profile."""
     profile = db.query(ServerProfile).filter(
@@ -108,7 +109,7 @@ async def update_server_profile(
     profile_id: int,
     profile_data: ServerProfileUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> ServerProfileResponse:
     """Update server profile."""
     profile = db.query(ServerProfile).filter(
@@ -160,7 +161,7 @@ async def update_server_profile(
 async def delete_server_profile(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ):
     """Delete server profile."""
     profile = db.query(ServerProfile).filter(
@@ -191,7 +192,7 @@ async def delete_server_profile(
 async def check_ssh_connection(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> SSHConnectionTest:
     """Test SSH connectivity to server."""
     profile = db.query(ServerProfile).filter(
@@ -238,7 +239,7 @@ async def check_ssh_connection(
 async def start_remote_server(
     profile_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(deps.get_current_user),
 ) -> ServerStartResponse:
     """Start remote BaluHost server."""
     profile = db.query(ServerProfile).filter(
