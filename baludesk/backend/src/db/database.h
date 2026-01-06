@@ -28,6 +28,33 @@ struct Conflict {
     std::string resolvedAt;
 };
 
+struct RemoteServerProfile {
+    int id;
+    std::string name;
+    std::string sshHost;
+    int sshPort;
+    std::string sshUsername;
+    std::string sshPrivateKey;  // Encrypted
+    int vpnProfileId;
+    std::string powerOnCommand;
+    std::string lastUsed;
+    std::string createdAt;
+    std::string updatedAt;
+};
+
+struct VPNProfile {
+    int id;
+    std::string name;
+    std::string vpnType;  // OpenVPN, WireGuard, Custom
+    std::string description;
+    std::string configContent;  // Encrypted
+    std::string certificate;    // Encrypted
+    std::string privateKey;     // Encrypted
+    bool autoConnect;
+    std::string createdAt;
+    std::string updatedAt;
+};
+
 /**
  * Database - SQLite database for local metadata
  * 
@@ -61,6 +88,20 @@ public:
     bool logConflict(const Conflict& conflict);
     std::vector<Conflict> getPendingConflicts();
     bool resolveConflict(const std::string& conflictId, const std::string& resolution);
+
+    // Remote Server Profiles
+    bool addRemoteServerProfile(const RemoteServerProfile& profile);
+    bool updateRemoteServerProfile(const RemoteServerProfile& profile);
+    bool deleteRemoteServerProfile(int id);
+    RemoteServerProfile getRemoteServerProfile(int id);
+    std::vector<RemoteServerProfile> getRemoteServerProfiles();
+
+    // VPN Profiles
+    bool addVPNProfile(const VPNProfile& profile);
+    bool updateVPNProfile(const VPNProfile& profile);
+    bool deleteVPNProfile(int id);
+    VPNProfile getVPNProfile(int id);
+    std::vector<VPNProfile> getVPNProfiles();
 
     // Utilities
     std::string generateId();

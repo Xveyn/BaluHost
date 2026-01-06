@@ -62,6 +62,23 @@ private:
     void handleResolveConflict(const nlohmann::json& message, int requestId = -1);
     void handleResolveAllConflicts(const nlohmann::json& message, int requestId = -1);
     
+    // Remote Server Profile handlers
+    void handleAddRemoteServerProfile(const nlohmann::json& message, int requestId = -1);
+    void handleUpdateRemoteServerProfile(const nlohmann::json& message, int requestId = -1);
+    void handleDeleteRemoteServerProfile(const nlohmann::json& message, int requestId = -1);
+    void handleGetRemoteServerProfiles(int requestId = -1);
+    void handleGetRemoteServerProfile(const nlohmann::json& message, int requestId = -1);
+    void handleTestServerConnection(const nlohmann::json& message, int requestId = -1);
+    void handleStartRemoteServer(const nlohmann::json& message, int requestId = -1);
+    
+    // VPN Profile handlers
+    void handleAddVPNProfile(const nlohmann::json& message, int requestId = -1);
+    void handleUpdateVPNProfile(const nlohmann::json& message, int requestId = -1);
+    void handleDeleteVPNProfile(const nlohmann::json& message, int requestId = -1);
+    void handleGetVPNProfiles(int requestId = -1);
+    void handleGetVPNProfile(const nlohmann::json& message, int requestId = -1);
+    void handleTestVPNConnection(const nlohmann::json& message, int requestId = -1);
+    
     void sendResponse(const nlohmann::json& response, int requestId = -1);
     void sendError(const std::string& error, int requestId = -1);
 
