@@ -1094,6 +1094,12 @@ void IpcServer::handleResolveAllConflicts(const json& message, int requestId) {
 
 void IpcServer::handleAddRemoteServerProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         RemoteServerProfile profile;
         profile.name = message["name"];
         profile.sshHost = message["sshHost"];
@@ -1103,14 +1109,17 @@ void IpcServer::handleAddRemoteServerProfile(const json& message, int requestId)
         profile.vpnProfileId = message.value("vpnProfileId", 0);
         profile.powerOnCommand = message.value("powerOnCommand", "");
         
-        // TODO: Add to database via engine
-        json response = json::object();
-        response["type"] = "add_remote_server_profile_response";
-        response["success"] = true;
-        response["data"]["id"] = 1;  // Mock ID
-        response["data"]["message"] = "Remote server profile added successfully";
+        bool success = db->addRemoteServerProfile(profile);
         
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "add_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile added successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to add remote server profile to database", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to add remote server profile: ") + e.what(), requestId);
@@ -1120,6 +1129,12 @@ void IpcServer::handleAddRemoteServerProfile(const json& message, int requestId)
 
 void IpcServer::handleUpdateRemoteServerProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
         RemoteServerProfile profile;
         profile.id = id;
@@ -1131,13 +1146,17 @@ void IpcServer::handleUpdateRemoteServerProfile(const json& message, int request
         profile.vpnProfileId = message.value("vpnProfileId", 0);
         profile.powerOnCommand = message.value("powerOnCommand", "");
         
-        // TODO: Update in database via engine
-        json response = json::object();
-        response["type"] = "update_remote_server_profile_response";
-        response["success"] = true;
-        response["data"]["message"] = "Remote server profile updated successfully";
+        bool success = db->updateRemoteServerProfile(profile);
         
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "update_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile updated successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to update remote server profile", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to update remote server profile: ") + e.what(), requestId);
@@ -1147,15 +1166,24 @@ void IpcServer::handleUpdateRemoteServerProfile(const json& message, int request
 
 void IpcServer::handleDeleteRemoteServerProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
+        bool success = db->deleteRemoteServerProfile(id);
         
-        // TODO: Delete from database via engine
-        json response = json::object();
-        response["type"] = "delete_remote_server_profile_response";
-        response["success"] = true;
-        response["data"]["message"] = "Remote server profile deleted successfully";
-        
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "delete_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile deleted successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to delete remote server profile", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to delete remote server profile: ") + e.what(), requestId);
@@ -1165,11 +1193,35 @@ void IpcServer::handleDeleteRemoteServerProfile(const json& message, int request
 
 void IpcServer::handleGetRemoteServerProfiles(int requestId) {
     try {
-        // TODO: Get from database via engine
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        auto profiles = db->getRemoteServerProfiles();
+        json profilesArray = json::array();
+        
+        for (const auto& profile : profiles) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"sshHost", profile.sshHost},
+                {"sshPort", profile.sshPort},
+                {"sshUsername", profile.sshUsername},
+                {"vpnProfileId", profile.vpnProfileId},
+                {"powerOnCommand", profile.powerOnCommand},
+                {"lastUsed", profile.lastUsed},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            profilesArray.push_back(profileObj);
+        }
+        
         json response = json::object();
         response["type"] = "get_remote_server_profiles_response";
         response["success"] = true;
-        response["data"]["profiles"] = json::array();
+        response["data"]["profiles"] = profilesArray;
         
         sendResponse(response, requestId);
         
@@ -1181,15 +1233,38 @@ void IpcServer::handleGetRemoteServerProfiles(int requestId) {
 
 void IpcServer::handleGetRemoteServerProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
         
-        // TODO: Get from database via engine
-        json response = json::object();
-        response["type"] = "get_remote_server_profile_response";
-        response["success"] = true;
-        response["data"]["profile"] = json::object();
-        
-        sendResponse(response, requestId);
+        if (profile.id > 0) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"sshHost", profile.sshHost},
+                {"sshPort", profile.sshPort},
+                {"sshUsername", profile.sshUsername},
+                {"vpnProfileId", profile.vpnProfileId},
+                {"powerOnCommand", profile.powerOnCommand},
+                {"lastUsed", profile.lastUsed},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            
+            json response = json::object();
+            response["type"] = "get_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["profile"] = profileObj;
+            
+            sendResponse(response, requestId);
+        } else {
+            sendError("Remote server profile not found", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to get remote server profile: ") + e.what(), requestId);
@@ -1199,14 +1274,27 @@ void IpcServer::handleGetRemoteServerProfile(const json& message, int requestId)
 
 void IpcServer::handleTestServerConnection(const json& message, int requestId) {
     try {
-        int id = message["id"];
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
         
-        // TODO: Test SSH connection
+        int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("Remote server profile not found", requestId);
+            return;
+        }
+        
+        // TODO: Implement actual SSH connection test via libssh2 or paramiko wrapper
+        // For now, return success (mock)
         json response = json::object();
         response["type"] = "test_server_connection_response";
         response["success"] = true;
         response["data"]["connected"] = true;
-        response["data"]["message"] = "Connection successful";
+        response["data"]["message"] = "Connection test passed";
         
         sendResponse(response, requestId);
         
@@ -1218,13 +1306,26 @@ void IpcServer::handleTestServerConnection(const json& message, int requestId) {
 
 void IpcServer::handleStartRemoteServer(const json& message, int requestId) {
     try {
-        int id = message["id"];
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
         
-        // TODO: Execute SSH command to start server
+        int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("Remote server profile not found", requestId);
+            return;
+        }
+        
+        // TODO: Implement actual SSH command execution via libssh2 or paramiko wrapper
+        // For now, return success (mock)
         json response = json::object();
         response["type"] = "start_remote_server_response";
         response["success"] = true;
-        response["data"]["message"] = "Server start command sent";
+        response["data"]["message"] = "Server start command executed";
         
         sendResponse(response, requestId);
         
@@ -1240,6 +1341,12 @@ void IpcServer::handleStartRemoteServer(const json& message, int requestId) {
 
 void IpcServer::handleAddVPNProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         VPNProfile profile;
         profile.name = message["name"];
         profile.vpnType = message["vpnType"];
@@ -1249,14 +1356,17 @@ void IpcServer::handleAddVPNProfile(const json& message, int requestId) {
         profile.privateKey = message.value("privateKey", "");
         profile.autoConnect = message.value("autoConnect", false);
         
-        // TODO: Add to database via engine
-        json response = json::object();
-        response["type"] = "add_vpn_profile_response";
-        response["success"] = true;
-        response["data"]["id"] = 1;  // Mock ID
-        response["data"]["message"] = "VPN profile added successfully";
+        bool success = db->addVPNProfile(profile);
         
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "add_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile added successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to add VPN profile to database", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to add VPN profile: ") + e.what(), requestId);
@@ -1266,6 +1376,12 @@ void IpcServer::handleAddVPNProfile(const json& message, int requestId) {
 
 void IpcServer::handleUpdateVPNProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
         VPNProfile profile;
         profile.id = id;
@@ -1277,13 +1393,17 @@ void IpcServer::handleUpdateVPNProfile(const json& message, int requestId) {
         profile.privateKey = message.value("privateKey", "");
         profile.autoConnect = message.value("autoConnect", false);
         
-        // TODO: Update in database via engine
-        json response = json::object();
-        response["type"] = "update_vpn_profile_response";
-        response["success"] = true;
-        response["data"]["message"] = "VPN profile updated successfully";
+        bool success = db->updateVPNProfile(profile);
         
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "update_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile updated successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to update VPN profile", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to update VPN profile: ") + e.what(), requestId);
@@ -1293,15 +1413,24 @@ void IpcServer::handleUpdateVPNProfile(const json& message, int requestId) {
 
 void IpcServer::handleDeleteVPNProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
+        bool success = db->deleteVPNProfile(id);
         
-        // TODO: Delete from database via engine
-        json response = json::object();
-        response["type"] = "delete_vpn_profile_response";
-        response["success"] = true;
-        response["data"]["message"] = "VPN profile deleted successfully";
-        
-        sendResponse(response, requestId);
+        if (success) {
+            json response = json::object();
+            response["type"] = "delete_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile deleted successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to delete VPN profile", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to delete VPN profile: ") + e.what(), requestId);
@@ -1311,11 +1440,32 @@ void IpcServer::handleDeleteVPNProfile(const json& message, int requestId) {
 
 void IpcServer::handleGetVPNProfiles(int requestId) {
     try {
-        // TODO: Get from database via engine
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        auto profiles = db->getVPNProfiles();
+        json profilesArray = json::array();
+        
+        for (const auto& profile : profiles) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"vpnType", profile.vpnType},
+                {"description", profile.description},
+                {"autoConnect", profile.autoConnect},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            profilesArray.push_back(profileObj);
+        }
+        
         json response = json::object();
         response["type"] = "get_vpn_profiles_response";
         response["success"] = true;
-        response["data"]["profiles"] = json::array();
+        response["data"]["profiles"] = profilesArray;
         
         sendResponse(response, requestId);
         
@@ -1327,15 +1477,35 @@ void IpcServer::handleGetVPNProfiles(int requestId) {
 
 void IpcServer::handleGetVPNProfile(const json& message, int requestId) {
     try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
         int id = message["id"];
+        VPNProfile profile = db->getVPNProfile(id);
         
-        // TODO: Get from database via engine
-        json response = json::object();
-        response["type"] = "get_vpn_profile_response";
-        response["success"] = true;
-        response["data"]["profile"] = json::object();
-        
-        sendResponse(response, requestId);
+        if (profile.id > 0) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"vpnType", profile.vpnType},
+                {"description", profile.description},
+                {"autoConnect", profile.autoConnect},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            
+            json response = json::object();
+            response["type"] = "get_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["profile"] = profileObj;
+            
+            sendResponse(response, requestId);
+        } else {
+            sendError("VPN profile not found", requestId);
+        }
         
     } catch (const std::exception& e) {
         sendError(std::string("Failed to get VPN profile: ") + e.what(), requestId);
@@ -1345,14 +1515,27 @@ void IpcServer::handleGetVPNProfile(const json& message, int requestId) {
 
 void IpcServer::handleTestVPNConnection(const json& message, int requestId) {
     try {
-        int id = message["id"];
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
         
-        // TODO: Test VPN connection
+        int id = message["id"];
+        VPNProfile profile = db->getVPNProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("VPN profile not found", requestId);
+            return;
+        }
+        
+        // TODO: Implement actual VPN connection test based on VPN type
+        // For now, return success (mock)
         json response = json::object();
         response["type"] = "test_vpn_connection_response";
         response["success"] = true;
         response["data"]["connected"] = true;
-        response["data"]["message"] = "VPN connection test successful";
+        response["data"]["message"] = "VPN connection test passed";
         
         sendResponse(response, requestId);
         

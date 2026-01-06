@@ -3,6 +3,7 @@
 #include <nlohmann/json.hpp>
 #include <string>
 #include <memory>
+#include "../db/database.h"
 
 namespace baludesk {
 
