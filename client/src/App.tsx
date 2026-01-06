@@ -15,6 +15,7 @@ import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
 import SyncPrototype from './pages/SyncPrototype';
 import MobileDevicesPage from './pages/MobileDevicesPage';
+import { RemoteServersPage } from './pages/RemoteServersPage';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -259,6 +260,18 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <MobileDevicesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/remote-servers"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <RemoteServersPage />
               </Layout>
             ) : (
               <Navigate to="/login" />
