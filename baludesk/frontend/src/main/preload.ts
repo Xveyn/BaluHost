@@ -14,6 +14,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('backend-message', (_event, message) => callback(message));
   },
 
+  // IPC message handling for Remote Servers - Uses invoke (request/response)
+  sendIPCMessage: (message: any) => ipcRenderer.invoke('ipc-message', message),
+
   // App info
   getAppVersion: () => ipcRenderer.invoke('get-app-version'),
 

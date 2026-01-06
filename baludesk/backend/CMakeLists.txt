@@ -69,6 +69,8 @@ set(SOURCES
     src/api/http_client.cpp
     src/db/database.cpp
     src/ipc/ipc_server_fixed.cpp
+    src/services/ssh_service.cpp
+    src/services/vpn_service.cpp
     src/utils/logger.cpp
     src/utils/config.cpp
     src/utils/system_info.cpp

@@ -28,6 +28,12 @@
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\services\ssh_service.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\services\vpn_service.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>

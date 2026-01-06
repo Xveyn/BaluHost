@@ -10,8 +10,10 @@ export function useRemoteServerProfiles() {
     try {
       setLoading(true);
       setError(null);
-      const data = await ipcClient.getRemoteServerProfiles();
-      setProfiles(data || []);
+      const response = await ipcClient.getRemoteServerProfiles();
+      // Extract profiles array from response
+      const profilesArray = Array.isArray(response) ? response : (response?.data?.profiles || response?.profiles || []);
+      setProfiles(profilesArray);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load profiles');
     } finally {

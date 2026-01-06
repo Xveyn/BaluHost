@@ -7,6 +7,8 @@ F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\conflict_resolver.cpp;F:\P
 F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\http_client.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\database.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\ipc_server_fixed.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\services\ssh_service.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\ssh_service.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\services\vpn_service.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\vpn_service.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\logger.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\config.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\system_info.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\system_info.obj

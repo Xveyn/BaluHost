@@ -75,15 +75,18 @@ function startBackend() {
   // Check if dist/index.html exists to determine if we're packaged
   // This must be consistent with createWindow() logic!
   const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
-  const isDev = !fs.existsSync(indexPath);
+  const isDev = !fs.existsSync(indexPath) || !app.isPackaged;
   
   let backendPath: string;
   
   if (isDev) {
     // Development mode: backend is in the repo structure
+    // app.getAppPath() = /baluhost/baludesk/frontend
+    // We need to go to /baluhost/baludesk/backend/build/Release
+    const repoRoot = path.resolve(app.getAppPath(), '..', '..');
     backendPath = path.join(
-      app.getAppPath(),
-      '..',
+      repoRoot,
+      'baludesk',
       'backend',
       'build',
       'Release',
@@ -126,15 +129,21 @@ function startBackend() {
           
           // Check if this is a response to a pending request (check both 'id' and 'requestId')
           // Important: Use explicit check for 'id' !== undefined to handle id: 0
-          const requestId = jsonMsg.id !== undefined ? jsonMsg.id : jsonMsg.requestId;
+          const messageId = jsonMsg.id !== undefined ? jsonMsg.id : jsonMsg.requestId;
           
-          console.log('[IPC] Looking for id:', requestId, 'in pending:', Array.from(pendingRequests.keys()));
+          console.log('[IPC] Looking for id:', messageId, 'in pending:', Array.from(pendingRequests.keys()));
           
-          if (requestId !== undefined && pendingRequests.has(requestId)) {
-            console.log('[IPC] ✅ Found pending request:', requestId, '- resolving promise');
-            const resolve = pendingRequests.get(requestId);
-            pendingRequests.delete(requestId);
-            resolve(jsonMsg);
+          if (messageId !== undefined && pendingRequests.has(messageId)) {
+            console.log('[IPC] ✅ Found pending request:', messageId, '- resolving promise');
+            const resolver = pendingRequests.get(messageId);
+            pendingRequests.delete(messageId);
+            
+            // Call the resolver (which could be a simple resolve or a renderer send)
+            if (typeof resolver === 'function') {
+              // Add the requestId field to match what the renderer expects
+              const responseWithRequestId = { ...jsonMsg, requestId: messageId };
+              resolver(responseWithRequestId);
+            }
           } else {
             // It's an event, forward to renderer
             console.log('[IPC] No pending request found, forwarding as event');
@@ -201,7 +210,7 @@ function createWindow() {
   // Check if dist/index.html exists to determine if we're packaged
   const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
   const distPath = path.join(app.getAppPath(), 'dist');
-  const isDev = !fs.existsSync(indexPath);
+  const isDev = !app.isPackaged;
   
   console.log('[Main] isDev:', isDev);
   console.log('[Main] app.isPackaged:', app.isPackaged);
@@ -301,6 +310,51 @@ ipcMain.handle('backend-command', async (_event, command) => {
         resolve({ error: 'Backend timeout' });
       }
     }, 10000);
+  });
+});
+
+// IPC Message Handler for Remote Servers feature
+// This handles request/response of IPC messages with the backend
+ipcMain.handle('ipc-message', async (_event, message: any) => {
+  console.log('[IPC Main] Received message from renderer:', message);
+  
+  if (!backendProcess) {
+    console.error('[IPC Main] Backend not running');
+    return { 
+      error: 'Backend not running',
+      requestId: message.requestId 
+    };
+  }
+
+  // Create a promise that resolves when the backend responds
+  return new Promise<any>((resolve) => {
+    const messageId = message.requestId;
+    
+    // Store the resolver
+    const resolver = (response: any) => {
+      console.log('[IPC Main] Got response, resolving:', response);
+      // Make sure response has the requestId
+      const responseWithId = { ...response, requestId: messageId };
+      resolve(responseWithId);
+    };
+    
+    pendingRequests.set(messageId, resolver);
+
+    // Setup timeout
+    const timeoutId = setTimeout(() => {
+      if (pendingRequests.has(messageId)) {
+        pendingRequests.delete(messageId);
+        console.error('[IPC Main] ❌ Request timeout:', messageId);
+        resolve({
+          error: 'IPC request timeout',
+          requestId: messageId
+        });
+      }
+    }, 30000); // 30 second timeout
+
+    // Send to backend
+    console.log('[IPC Main] Forwarding to backend:', message);
+    sendToBackend(message);
   });
 });
 

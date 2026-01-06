@@ -1,5 +1,8 @@
 #include "ipc_server.h"
 #include "../sync/sync_engine.h"
+#include "../db/database.h"
+#include "../services/ssh_service.h"
+#include "../services/vpn_service.h"
 #include "../utils/logger.h"
 #include "../utils/system_info.h"
 #include "../utils/raid_info.h"
@@ -45,8 +48,18 @@ void IpcServer::processMessages() {
             std::string type = message["type"];
             Logger::debug("Received IPC message: {}", type);
             
-            // Extract request ID for responses
-            int requestId = message.value("id", -1);
+            // Extract request ID for responses - check both 'id' and 'requestId' fields
+            int requestId = -1;
+            if (message.contains("requestId")) {
+                requestId = message["requestId"];
+            } else if (message.contains("id")) {
+                requestId = message["id"];
+            }
+            if (message.contains("requestId")) {
+                requestId = message["requestId"];
+            } else if (message.contains("id")) {
+                requestId = message["id"];
+            }
             
             // Handle different message types
             if (type == "ping") {
@@ -1288,13 +1301,24 @@ void IpcServer::handleTestServerConnection(const json& message, int requestId) {
             return;
         }
         
-        // TODO: Implement actual SSH connection test via libssh2 or paramiko wrapper
-        // For now, return success (mock)
+        // Test SSH connection using SSH service
+        SshService sshService;
+        auto connectionResult = sshService.testConnection(
+            profile.sshHost,
+            profile.sshPort,
+            profile.sshUsername,
+            profile.sshPrivateKey,
+            10  // 10 second timeout
+        );
+        
         json response = json::object();
         response["type"] = "test_server_connection_response";
         response["success"] = true;
-        response["data"]["connected"] = true;
-        response["data"]["message"] = "Connection test passed";
+        response["data"]["connected"] = connectionResult.connected;
+        response["data"]["message"] = connectionResult.message;
+        if (!connectionResult.errorCode.empty()) {
+            response["data"]["errorCode"] = connectionResult.errorCode;
+        }
         
         sendResponse(response, requestId);
         
@@ -1320,12 +1344,34 @@ void IpcServer::handleStartRemoteServer(const json& message, int requestId) {
             return;
         }
         
-        // TODO: Implement actual SSH command execution via libssh2 or paramiko wrapper
-        // For now, return success (mock)
+        // Check if power-on command is configured
+        if (profile.powerOnCommand.empty()) {
+            sendError("No power-on command configured for this server", requestId);
+            return;
+        }
+        
+        // Execute power-on command via SSH
+        SshService sshService;
+        auto executionResult = sshService.executeCommand(
+            profile.sshHost,
+            profile.sshPort,
+            profile.sshUsername,
+            profile.sshPrivateKey,
+            profile.powerOnCommand,
+            30  // 30 second timeout
+        );
+        
         json response = json::object();
         response["type"] = "start_remote_server_response";
-        response["success"] = true;
-        response["data"]["message"] = "Server start command executed";
+        response["success"] = executionResult.success;
+        response["data"]["message"] = executionResult.success ? 
+            "Server start command executed successfully" : 
+            "Failed to execute server start command";
+        response["data"]["output"] = executionResult.output;
+        if (!executionResult.errorOutput.empty()) {
+            response["data"]["error"] = executionResult.errorOutput;
+        }
+        response["data"]["exitCode"] = executionResult.exitCode;
         
         sendResponse(response, requestId);
         
@@ -1529,13 +1575,23 @@ void IpcServer::handleTestVPNConnection(const json& message, int requestId) {
             return;
         }
         
-        // TODO: Implement actual VPN connection test based on VPN type
-        // For now, return success (mock)
+        // Test VPN configuration using VPN service
+        VpnService vpnService;
+        auto connectionResult = vpnService.testConnection(
+            profile.vpnType,
+            profile.configContent,
+            profile.certificate,
+            profile.privateKey
+        );
+        
         json response = json::object();
         response["type"] = "test_vpn_connection_response";
         response["success"] = true;
-        response["data"]["connected"] = true;
-        response["data"]["message"] = "VPN connection test passed";
+        response["data"]["connected"] = connectionResult.connected;
+        response["data"]["message"] = connectionResult.message;
+        if (!connectionResult.errorCode.empty()) {
+            response["data"]["errorCode"] = connectionResult.errorCode;
+        }
         
         sendResponse(response, requestId);
         

@@ -42,28 +42,22 @@ class IPCClient {
     return new Promise((resolve, reject) => {
       const id = ++this.requestId;
       
-      const handleResponse = (event: any, response: any) => {
-        if (response.requestId === id) {
-          window.electronAPI?.removeIPCListener?.(handleResponse);
-          
-          if (response.success) {
-            resolve(response.data);
-          } else {
-            reject(new Error(response.error || 'IPC request failed'));
-          }
-        }
-      };
-
-      window.electronAPI?.onIPCMessage?.(handleResponse);
-      
       const msg = { ...message, requestId: id };
-      window.electronAPI?.sendIPCMessage?.(msg);
-
-      // Timeout after 30 seconds
-      setTimeout(() => {
-        window.electronAPI?.removeIPCListener?.(handleResponse);
-        reject(new Error('IPC request timeout'));
-      }, 30000);
+      
+      // Use invoke for request/response pattern
+      window.electronAPI?.sendIPCMessage?.(msg).then((response: any) => {
+        if (response && response.error) {
+          reject(new Error(response.error));
+        } else if (response && response.success === false && response.message) {
+          reject(new Error(response.message));
+        } else if (response && response.data !== undefined) {
+          resolve(response.data);
+        } else {
+          resolve(response);
+        }
+      }).catch((error: any) => {
+        reject(error);
+      });
     });
   }
 

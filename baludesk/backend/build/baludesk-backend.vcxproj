@@ -442,6 +442,8 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\ipc\ipc_server_fixed.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\services\ssh_service.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\services\vpn_service.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\config.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\system_info.cpp" />
