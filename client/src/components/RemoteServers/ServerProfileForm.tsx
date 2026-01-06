@@ -21,13 +21,13 @@ import {
 import { Plus, Loader2 } from 'lucide-react';
 import * as api from '@/api/remote-servers';
 
-interface VPNProfileFormProps {
+interface ServerProfileFormProps {
   vpnProfiles: api.VPNProfile[];
-  onCreateProfile: (formData: FormData) => Promise<api.VPNProfile>;
+  onCreateProfile: (data: api.ServerProfileCreate) => Promise<api.ServerProfile>;
   isLoading?: boolean;
 }
 
-export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = false }: VPNProfileFormProps) {
+export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = false }: ServerProfileFormProps) {
   const [open, setOpen] = useState(false);
   const [name, setName] = useState('');
   const [sshHost, setSshHost] = useState('');
