@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, s
 from sqlalchemy.orm import Session
 
 from app.api.dependencies import get_db, get_current_user
-from app.models import VPNProfile, User
+from app.models import VPNProfile, User, VPNType, ServerProfile
 from app.schemas.vpn_profile import (
     VPNProfileCreate,
     VPNProfileResponse,
@@ -37,11 +37,20 @@ async def create_vpn_profile(
 ) -> VPNProfileResponse:
     """Create a new VPN profile."""
     try:
+        # Validate and convert vpn_type
+        try:
+            vpn_type_enum = VPNType(vpn_type.lower())
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid VPN type. Must be one of: {', '.join([t.value for t in VPNType])}",
+            )
+        
         # Read config file
         config_content = (await config_file.read()).decode('utf-8')
         
         # Validate config
-        valid, error = VPNService.validate_config(vpn_type, config_content)
+        valid, error = VPNService.validate_config(vpn_type_enum.value, config_content)
         if not valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -66,7 +75,7 @@ async def create_vpn_profile(
         db_profile = VPNProfile(
             user_id=current_user.id,
             name=name,
-            vpn_type=vpn_type,
+            vpn_type=vpn_type_enum,
             config_file_encrypted=encrypted_config,
             certificate_encrypted=encrypted_cert,
             private_key_encrypted=encrypted_key,
@@ -253,16 +262,10 @@ async def test_vpn_connection(
         # Validate
         valid, error = VPNService.validate_config(profile.vpn_type, config_content)
         
-        # Extract server info
-        server_info = None
-        if valid:
-            server_info = VPNService.extract_server_info(config_content, profile.vpn_type)
-        
         return VPNConnectionTest(
             profile_id=profile_id,
             connected=valid,
             error_message=error or None,
-            server_info=server_info,
         )
         
     except Exception as e:

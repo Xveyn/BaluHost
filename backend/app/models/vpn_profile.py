@@ -9,7 +9,7 @@ from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, T
 from sqlalchemy.orm import relationship
 import enum
 
-from app.core.database import Base
+from app.models.base import Base
 
 
 class VPNType(str, enum.Enum):
