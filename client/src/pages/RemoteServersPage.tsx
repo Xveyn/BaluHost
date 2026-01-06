@@ -1,9 +1,9 @@
 import { useState } from 'react';
-import { useServerProfiles, useVPNProfiles } from '@/hooks/useRemoteServers';
-import { ServerProfileForm } from '@/components/RemoteServers/ServerProfileForm';
-import { ServerProfileList } from '@/components/RemoteServers/ServerProfileList';
-import { VPNProfileForm } from '@/components/RemoteServers/VPNProfileForm';
-import { VPNProfileList } from '@/components/RemoteServers/VPNProfileList';
+import { useServerProfiles, useVPNProfiles } from '../hooks/useRemoteServers';
+import { ServerProfileForm } from '../components/RemoteServers/ServerProfileForm';
+import { ServerProfileList } from '../components/RemoteServers/ServerProfileList';
+import { VPNProfileForm } from '../components/RemoteServers/VPNProfileForm';
+import { VPNProfileList } from '../components/RemoteServers/VPNProfileList';
 import { Server, Lock } from 'lucide-react';
 
 export function RemoteServersPage() {

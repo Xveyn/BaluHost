@@ -1,5 +1,5 @@
 // --- Remote Server Start API ---
-import { apiClient } from '@/lib/api';
+import { apiClient } from '../lib/api';
 
 export interface ServerProfile {
   id: number;

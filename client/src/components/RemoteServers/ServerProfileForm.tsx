@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Plus, Loader2, X } from 'lucide-react';
-import * as api from '@/api/remote-servers';
+import * as api from '../../api/remote-servers';
 
 interface ServerProfileFormProps {
   vpnProfiles: api.VPNProfile[];

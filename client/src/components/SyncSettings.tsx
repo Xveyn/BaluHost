@@ -175,11 +175,6 @@ export default function SyncSettings() {
     }
   }
 
-  async function registerDevice() {
-    // registration via web is disabled; mobile apps manage device registration
-    setError('Device registration via web UI is disabled. Use Mobile Apps to register devices.');
-  }
-
   async function createSchedule() {
     if (!selectedDevice) {
       setError('Please select a device first');

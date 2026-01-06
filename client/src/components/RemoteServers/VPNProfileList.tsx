@@ -1,19 +1,17 @@
 import { useState } from 'react';
 import {
   Trash2,
-  CheckCircle,
-  AlertCircle,
   Loader2,
   Shield,
   RefreshCw,
   ChevronRight,
 } from 'lucide-react';
-import * as api from '@/api/remote-servers';
+import * as api from '../../api/remote-servers';
 
 interface VPNProfileListProps {
   profiles: api.VPNProfile[];
   isLoading?: boolean;
-  onTestConnection?: (id: number) => Promise<void>;
+  onTestConnection?: (id: number) => Promise<api.VPNConnectionTest>;
   onDelete?: (id: number) => Promise<void>;
 }
 

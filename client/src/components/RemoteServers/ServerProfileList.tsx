@@ -4,18 +4,16 @@ import {
   Trash2,
   Network,
   Loader2,
-  CheckCircle,
-  AlertCircle,
   Clock,
   ChevronRight,
 } from 'lucide-react';
-import * as api from '/api/remote-servers';
+import * as api from '../../api/remote-servers';
 
 interface ServerProfileListProps {
   profiles: api.ServerProfile[];
   isLoading?: boolean;
-  onTestConnection?: (id: number) => Promise<void>;
-  onStartServer?: (id: number) => Promise<void>;
+  onTestConnection?: (id: number) => Promise<api.SSHConnectionTest>;
+  onStartServer?: (id: number) => Promise<api.ServerStartResponse>;
   onDelete?: (id: number) => Promise<void>;
 }
 

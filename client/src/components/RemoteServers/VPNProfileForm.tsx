@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { Plus, Upload, Loader2, X } from 'lucide-react';
-import * as api from '@/api/remote-servers';
+import * as api from '../../api/remote-servers';
 
 interface VPNProfileFormProps {
   onCreateProfile: (formData: FormData) => Promise<api.VPNProfile>;
