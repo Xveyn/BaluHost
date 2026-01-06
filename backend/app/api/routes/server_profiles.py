@@ -126,21 +126,21 @@ async def update_server_profile(
     try:
         # Update fields
         if profile_data.name is not None:
-            profile.name = profile_data.name
+            profile.name = profile_data.name  # type: ignore
         if profile_data.ssh_host is not None:
-            profile.ssh_host = profile_data.ssh_host
+            profile.ssh_host = profile_data.ssh_host  # type: ignore
         if profile_data.ssh_port is not None:
-            profile.ssh_port = profile_data.ssh_port
+            profile.ssh_port = profile_data.ssh_port  # type: ignore
         if profile_data.ssh_username is not None:
-            profile.ssh_username = profile_data.ssh_username
+            profile.ssh_username = profile_data.ssh_username  # type: ignore
         if profile_data.ssh_private_key is not None:
             profile.ssh_key_encrypted = VPNEncryption.encrypt_ssh_private_key(
                 profile_data.ssh_private_key
             )
         if profile_data.vpn_profile_id is not None:
-            profile.vpn_profile_id = profile_data.vpn_profile_id
+            profile.vpn_profile_id = profile_data.vpn_profile_id  # type: ignore
         if profile_data.power_on_command is not None:
-            profile.power_on_command = profile_data.power_on_command
+            profile.power_on_command = profile_data.power_on_command  # type: ignore
         
         db.commit()
         db.refresh(profile)

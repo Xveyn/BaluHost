@@ -163,11 +163,11 @@ async def update_vpn_profile(
     try:
         # Update basic fields
         if name is not None:
-            profile.name = name
+            profile.name = name  # type: ignore
         if description is not None:
-            profile.description = description
+            profile.description = description  # type: ignore
         if auto_connect is not None:
-            profile.auto_connect = auto_connect
+            profile.auto_connect = auto_connect  # type: ignore
         
         # Update config if provided
         if config_file:
