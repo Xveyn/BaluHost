@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, safeStorage } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 const fs = require('fs');
@@ -187,11 +187,19 @@ function sendToBackend(message: any) {
 
 // Window Management
 function createWindow() {
+  // Load window icon
+  let iconPath = path.join(__dirname, '../../public/icon.png');
+  let windowIcon;
+  if (fs.existsSync(iconPath)) {
+    windowIcon = nativeImage.createFromPath(iconPath);
+  }
+
   mainWindow = new BrowserWindow({
     width: 1200,
     height: 800,
     minWidth: 800,
     minHeight: 600,
+    icon: windowIcon,
     webPreferences: {
       preload: path.join(__dirname, 'preload.js'),
       contextIsolation: true,
@@ -201,6 +209,9 @@ function createWindow() {
     backgroundColor: '#0f172a',
     show: false,
   });
+
+  // Hide menu bar
+  mainWindow.removeMenu();
 
   mainWindow.once('ready-to-show', () => {
     mainWindow?.show();
@@ -245,9 +256,13 @@ function createWindow() {
 
 // System Tray
 function createTray() {
-  const icon = nativeImage.createFromPath(
-    path.join(__dirname, '../../public/icon.png')
-  );
+  // Try to use the tray-specific icon, fallback to main icon
+  let iconPath = path.join(__dirname, '../../public/icon-tray.png');
+  if (!fs.existsSync(iconPath)) {
+    iconPath = path.join(__dirname, '../../public/icon.png');
+  }
+  
+  const icon = nativeImage.createFromPath(iconPath);
   
   tray = new Tray(icon.resize({ width: 16, height: 16 }));
   
@@ -480,8 +495,165 @@ ipcMain.handle('user:getInfo', async () => {
   }
 });
 
+// ============================================================================
+// Secure Storage Handlers (OS Keyring via Electron safeStorage)
+// ============================================================================
+
+// Store for encrypted data - uses file-based persistence
+const STORAGE_FILE = path.join(app.getPath('userData'), 'secure-storage.json');
+let secureStore: Record<string, string> = {};
+
+// Load secure storage from disk
+async function loadSecureStore() {
+  try {
+    if (fs.existsSync(STORAGE_FILE)) {
+      const data = fs.readFileSync(STORAGE_FILE, 'utf-8');
+      secureStore = JSON.parse(data);
+      console.log('[SafeStorage] Loaded', Object.keys(secureStore).length, 'encrypted items');
+    } else {
+      console.log('[SafeStorage] No existing store, creating new one');
+      secureStore = {};
+    }
+  } catch (error) {
+    console.error('[SafeStorage] Error loading store:', error);
+    secureStore = {};
+  }
+}
+
+// Save secure storage to disk
+async function saveSecureStore() {
+  try {
+    const dir = path.dirname(STORAGE_FILE);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(STORAGE_FILE, JSON.stringify(secureStore, null, 2));
+    console.log('[SafeStorage] Saved', Object.keys(secureStore).length, 'encrypted items');
+  } catch (error) {
+    console.error('[SafeStorage] Error saving store:', error);
+    throw error;
+  }
+}
+
+// Check if safeStorage is available (requires Electron 13+)
+function isSafeStorageAvailable(): boolean {
+  try {
+    return safeStorage && typeof safeStorage.isEncryptionAvailable === 'function' 
+      && safeStorage.isEncryptionAvailable();
+  } catch (error) {
+    console.warn('[SafeStorage] safeStorage not available:', error);
+    return false;
+  }
+}
+
+// Set item in secure storage
+ipcMain.handle('safeStorage:set', async (_event, key: string, value: string) => {
+  try {
+    console.log('[SafeStorage] Setting item:', key);
+    
+    if (!key || typeof key !== 'string') {
+      throw new Error('Invalid key: must be a non-empty string');
+    }
+    
+    if (!value || typeof value !== 'string') {
+      throw new Error('Invalid value: must be a non-empty string');
+    }
+    
+    // Encrypt using Electron's safeStorage if available
+    if (isSafeStorageAvailable()) {
+      const encrypted = safeStorage.encryptString(value);
+      secureStore[key] = encrypted.toString('base64');
+      console.log('[SafeStorage] ✓ Encrypted with OS keyring (AES-256-GCM)');
+    } else {
+      // Fallback: store plaintext (with warning)
+      console.warn('[SafeStorage] ⚠️ safeStorage unavailable, storing plaintext (INSECURE)');
+      secureStore[key] = Buffer.from(value).toString('base64');
+    }
+    
+    await saveSecureStore();
+    console.log('[SafeStorage] ✓ Item saved:', key);
+  } catch (error) {
+    console.error('[SafeStorage] Error setting item:', error);
+    throw error;
+  }
+});
+
+// Get item from secure storage
+ipcMain.handle('safeStorage:get', async (_event, key: string) => {
+  try {
+    console.log('[SafeStorage] Getting item:', key);
+    
+    if (!key || typeof key !== 'string') {
+      throw new Error('Invalid key: must be a non-empty string');
+    }
+    
+    const encrypted = secureStore[key];
+    if (!encrypted) {
+      console.log('[SafeStorage] Item not found:', key);
+      return null;
+    }
+    
+    // Decrypt using Electron's safeStorage if available
+    if (isSafeStorageAvailable()) {
+      const buffer = Buffer.from(encrypted, 'base64');
+      const decrypted = safeStorage.decryptString(buffer);
+      console.log('[SafeStorage] ✓ Decrypted from OS keyring');
+      return decrypted;
+    } else {
+      // Fallback: decode base64
+      console.warn('[SafeStorage] ⚠️ safeStorage unavailable, decoding plaintext');
+      return Buffer.from(encrypted, 'base64').toString('utf-8');
+    }
+  } catch (error) {
+    console.error('[SafeStorage] Error getting item:', error);
+    // Return null instead of throwing to avoid breaking auth flow
+    return null;
+  }
+});
+
+// Delete item from secure storage
+ipcMain.handle('safeStorage:delete', async (_event, key: string) => {
+  try {
+    console.log('[SafeStorage] Deleting item:', key);
+    
+    if (!key || typeof key !== 'string') {
+      throw new Error('Invalid key: must be a non-empty string');
+    }
+    
+    delete secureStore[key];
+    await saveSecureStore();
+    console.log('[SafeStorage] ✓ Item deleted:', key);
+  } catch (error) {
+    console.error('[SafeStorage] Error deleting item:', error);
+    throw error;
+  }
+});
+
+// Check if item exists in secure storage
+ipcMain.handle('safeStorage:has', async (_event, key: string) => {
+  try {
+    console.log('[SafeStorage] Checking if item exists:', key);
+    
+    if (!key || typeof key !== 'string') {
+      throw new Error('Invalid key: must be a non-empty string');
+    }
+    
+    const exists = key in secureStore;
+    console.log('[SafeStorage] Item exists:', key, '→', exists);
+    return exists;
+  } catch (error) {
+    console.error('[SafeStorage] Error checking item:', error);
+    return false;
+  }
+});
+
+// ============================================================================
 // App Lifecycle
-app.whenReady().then(() => {
+// ============================================================================
+app.whenReady().then(async () => {
+  // Load secure storage before creating window
+  await loadSecureStore();
+  
   createWindow();
   createTray();
   startBackend();

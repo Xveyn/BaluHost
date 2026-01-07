@@ -10,7 +10,11 @@
 namespace baludesk {
 
 SystemInfo SystemInfoCollector::getSystemInfo() {
-    SystemInfo info;
+    SystemInfo info{};
+    info.cpu = CpuInfo{0.0, 0, 0};
+    info.memory = MemoryInfo{0, 0, 0};
+    info.disk = DiskInfo{0, 0, 0};
+    info.uptime = 0;
     
     try {
         info.cpu = getCpuInfo();

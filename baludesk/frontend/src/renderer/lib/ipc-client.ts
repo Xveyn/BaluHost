@@ -50,9 +50,8 @@ class IPCClient {
           reject(new Error(response.error));
         } else if (response && response.success === false && response.message) {
           reject(new Error(response.message));
-        } else if (response && response.data !== undefined) {
-          resolve(response.data);
         } else {
+          // Return full response to preserve success and data structure
           resolve(response);
         }
       }).catch((error: any) => {
@@ -175,6 +174,19 @@ class IPCClient {
     return this.sendMessage({
       type: 'test_vpn_connection',
       id,
+    });
+  }
+
+  async discoverNetworkServers(): Promise<any> {
+    return this.sendMessage({
+      type: 'discover_network_servers',
+    });
+  }
+
+  async checkServerHealth(serverUrl: string): Promise<ConnectionTestResult> {
+    return this.sendMessage({
+      type: 'check_server_health',
+      server_url: serverUrl,
     });
   }
 }

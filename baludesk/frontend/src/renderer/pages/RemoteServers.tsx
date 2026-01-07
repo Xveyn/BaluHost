@@ -5,7 +5,9 @@ import { ServerProfileForm } from '../components/RemoteServers/ServerProfileForm
 import { ServerProfileList } from '../components/RemoteServers/ServerProfileList';
 import { VPNProfileForm } from '../components/RemoteServers/VPNProfileForm';
 import { VPNProfileList } from '../components/RemoteServers/VPNProfileList';
+import { AvailableServers } from '../components/RemoteServers/AvailableServers';
 import { RemoteServerProfile, VPNProfile } from '../lib/ipc-client';
+import type { DiscoveredServer } from '../hooks/useDiscoverServers';
 import { Plus, Server, Lock } from 'lucide-react';
 
 type Tab = 'servers' | 'vpn';
@@ -85,6 +87,22 @@ export function RemoteServersPage() {
     setSelectedVpnProfile(null);
   };
 
+  const handleAddDiscoveredServer = async (server: DiscoveredServer) => {
+    // Create a new profile from discovered server info
+    const newProfile: Omit<RemoteServerProfile, 'id' | 'createdAt' | 'updatedAt'> = {
+      name: server.hostname,
+      sshHost: server.ipAddress,
+      sshPort: server.sshPort,
+      sshUsername: 'admin', // BaluHost default username
+      sshPrivateKey: '',
+      vpnProfileId: undefined,
+      powerOnCommand: '',
+    };
+    
+    await serverProfiles.addProfile(newProfile);
+    setServerFormMode('view');
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -137,7 +155,7 @@ export function RemoteServersPage() {
 
       {/* Server Profiles Tab */}
       {activeTab === 'servers' && (
-        <div className="space-y-4">
+        <div className="space-y-6">
           {serverFormMode === 'view' ? (
             <>
               <button
@@ -148,6 +166,15 @@ export function RemoteServersPage() {
                 <Plus className="w-4 h-4" />
                 Add Server Profile
               </button>
+
+              {/* Available Servers Panel */}
+              <div className="bg-slate-800/30 border border-slate-700 rounded-lg p-4">
+                <AvailableServers
+                  onAddServer={handleAddDiscoveredServer}
+                  savedServerHosts={new Set(serverProfiles.profiles.map(p => p.sshHost))}
+                />
+              </div>
+
               <ServerProfileList
                 profiles={serverProfiles.profiles}
                 isLoading={serverProfiles.loading}

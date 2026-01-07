@@ -9,7 +9,11 @@ REM Configuration
 set BUILD_TYPE=Release
 set BUILD_DIR=build
 set CMAKE_GENERATOR="Visual Studio 17 2022"
-set VCPKG_ROOT=F:\Programme (x86)\Baluhost\vcpkg
+REM Compute absolute path to vcpkg
+pushd %~dp0
+cd ..\..
+set VCPKG_ROOT=%CD%\vcpkg
+popd
 
 REM Parse arguments
 :parse_args

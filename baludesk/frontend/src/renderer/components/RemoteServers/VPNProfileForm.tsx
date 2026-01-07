@@ -24,6 +24,7 @@ export function VPNProfileForm({ profile, onSave, onCancel, isLoading = false }:
 
   const [validationErrors, setValidationErrors] = useState<Record<string, string>>({});
   const [isSaving, setIsSaving] = useState(false);
+  const [dragActive, setDragActive] = useState(false);
 
   useEffect(() => {
     if (profile) {
@@ -62,6 +63,33 @@ export function VPNProfileForm({ profile, onSave, onCancel, isLoading = false }:
     }
   };
 
+  const handleDrag = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    if (e.type === 'dragenter' || e.type === 'dragover') {
+      setDragActive(true);
+    } else if (e.type === 'dragleave') {
+      setDragActive(false);
+    }
+  };
+
+  const handleDrop = async (e: React.DragEvent<HTMLDivElement>, field: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const files = e.dataTransfer.files;
+    if (files && files.length > 0) {
+      const file = files[0];
+      try {
+        const content = await file.text();
+        setFormData({ ...formData, [field]: content });
+      } catch (err) {
+        alert('Failed to read file');
+      }
+    }
+  };
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
@@ -72,10 +100,10 @@ export function VPNProfileForm({ profile, onSave, onCancel, isLoading = false }:
       await onSave({
         name: formData.name,
         vpnType: formData.vpnType,
-        description: formData.description || null,
-        configContent: formData.configContent || null,
-        certificate: formData.certificate || null,
-        privateKey: formData.privateKey || null,
+        description: formData.description || undefined,
+        configContent: formData.configContent || undefined,
+        certificate: formData.certificate || undefined,
+        privateKey: formData.privateKey || undefined,
         autoConnect: formData.autoConnect,
       });
     } finally {
@@ -135,18 +163,28 @@ export function VPNProfileForm({ profile, onSave, onCancel, isLoading = false }:
       <div>
         <label className="block text-sm font-medium text-slate-300 mb-2">VPN Configuration *</label>
         <div className="space-y-2">
-          <textarea
-            value={formData.configContent}
-            onChange={(e) => setFormData({ ...formData, configContent: e.target.value })}
-            className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
-            placeholder="Paste VPN configuration content here..."
-            rows={8}
-          />
-          <div className="flex gap-2">
-            <label className="cursor-pointer">
-              <span className="text-sm text-slate-400 hover:text-slate-300">
-                or upload .conf/.ovpn file:
-              </span>
+          <div
+            onDragEnter={handleDrag}
+            onDragLeave={handleDrag}
+            onDragOver={handleDrag}
+            onDrop={(e) => handleDrop(e, 'configContent')}
+            className={`w-full p-4 border-2 border-dashed rounded-md transition-all ${
+              dragActive
+                ? 'border-blue-400 bg-blue-900/20'
+                : 'border-slate-600 hover:border-slate-500 bg-slate-800/50 hover:bg-slate-800'
+            }`}
+          >
+            <textarea
+              value={formData.configContent}
+              onChange={(e) => setFormData({ ...formData, configContent: e.target.value })}
+              className="w-full px-3 py-2 bg-slate-800 border border-slate-600 rounded-md text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-blue-500 font-mono text-sm"
+              placeholder="Paste VPN configuration or drag & drop .ovpn/.conf file here..."
+              rows={8}
+            />
+          </div>
+          <div className="flex gap-2 text-xs text-slate-400">
+            <label className="cursor-pointer hover:text-slate-300">
+              <span>or click to browse</span>
               <input
                 type="file"
                 onChange={(e) => handleFileUpload(e, 'configContent')}

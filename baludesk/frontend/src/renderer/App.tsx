@@ -13,6 +13,7 @@ import MainLayout from './components/MainLayout';
 interface User {
   username: string;
   serverUrl?: string;
+  selectedProfileId?: number;
 }
 
 export default function App() {

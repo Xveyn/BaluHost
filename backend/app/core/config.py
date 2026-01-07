@@ -17,7 +17,9 @@ class Settings(BaseSettings):
         "http://localhost:5173",
         "https://localhost:5173",
         "http://localhost:8000",
-        "https://localhost:8000"
+        "https://localhost:8000",
+        "app://-",  # Electron default origin
+        "file://"  # Electron file protocol
     ]
 
     # Auth configuration
@@ -28,6 +30,10 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Access token TTL (short)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Refresh token TTL (long)
     privileged_roles: list[str] = ["admin"]
+    
+    # Local-only access enforcement (Option B security)
+    enforce_local_only: bool = False  # Set True to restrict sensitive endpoints to localhost
+    allow_public_profile_list: bool = True  # Allow unauthenticated profile list for login screen
 
     # Admin seed
     admin_username: str = "admin"

@@ -36,9 +36,24 @@ contextBridge.exposeInMainWorld('electronAPI', {
 
   // User info
   getUserInfo: () => ipcRenderer.invoke('user:getInfo'),
+
+  // Secure Storage API (OS Keyring)
+  safeStorage: {
+    setItem: (key: string, value: string) => ipcRenderer.invoke('safeStorage:set', key, value),
+    getItem: (key: string) => ipcRenderer.invoke('safeStorage:get', key),
+    deleteItem: (key: string) => ipcRenderer.invoke('safeStorage:delete', key),
+    hasItem: (key: string) => ipcRenderer.invoke('safeStorage:has', key),
+  },
 });
 
 // Type definitions for TypeScript
+export interface SafeStorage {
+  setItem: (key: string, value: string) => Promise<void>;
+  getItem: (key: string) => Promise<string | null>;
+  deleteItem: (key: string) => Promise<void>;
+  hasItem: (key: string) => Promise<boolean>;
+}
+
 export interface ElectronAPI {
   sendBackendCommand: (command: any) => Promise<any>;
   invoke: (type: string, data: any) => Promise<any>;
@@ -51,6 +66,7 @@ export interface ElectronAPI {
   getSettings: () => Promise<any>;
   updateSettings: (settings: any) => Promise<any>;
   getUserInfo: () => Promise<any>;
+  safeStorage: SafeStorage;
 }
 
 declare global {

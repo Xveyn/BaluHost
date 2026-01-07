@@ -1,13 +1,14 @@
 """API routes for Server Profile management."""
 
 import logging
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.config import settings
 from app.models import ServerProfile, User
 from app.schemas.server_profile import (
     ServerProfileCreate,
@@ -23,6 +24,44 @@ from app.services.vpn_encryption import VPNEncryption
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/server-profiles", tags=["server-profiles"])
+
+
+@router.get("/public", response_model=List[ServerProfileList])
+async def list_server_profiles_public(
+    db: Session = Depends(get_db),
+) -> List[ServerProfileList]:
+    """
+    List ALL server profiles without authentication (for login screen).
+    
+    Only enabled when ALLOW_PUBLIC_PROFILE_LIST=true in config.
+    Returns profile names and owners to help users select their server.
+    SSH keys and sensitive data are excluded.
+    
+    Security note: This is safe for local-only deployments where
+    profile discovery is needed before login. For production, disable
+    or ensure enforce_local_only is enabled.
+    """
+    if not settings.allow_public_profile_list:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public profile listing is disabled"
+        )
+    
+    profiles = db.query(ServerProfile).all()
+    return [
+        ServerProfileList(
+            id=p.id,
+            name=p.name,
+            ssh_host=p.ssh_host,
+            ssh_port=p.ssh_port,
+            ssh_username=p.ssh_username,
+            last_used=p.last_used,
+            created_at=p.created_at,
+            # Include owner info for client to filter/display
+            user_id=p.user_id,
+        )
+        for p in profiles
+    ]
 
 
 @router.post("", response_model=ServerProfileResponse, status_code=status.HTTP_201_CREATED)

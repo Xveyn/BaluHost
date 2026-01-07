@@ -80,11 +80,16 @@ private:
     void handleGetVPNProfile(const nlohmann::json& message, int requestId = -1);
     void handleTestVPNConnection(const nlohmann::json& message, int requestId = -1);
     
+    // Network discovery handlers
+    void handleDiscoverNetworkServers(int requestId = -1);
+    void handleCheckServerHealth(const nlohmann::json& message, int requestId = -1);
+    
     void sendResponse(const nlohmann::json& response, int requestId = -1);
     void sendError(const std::string& error, int requestId = -1);
 
     SyncEngine* engine_;
     std::unique_ptr<BaluhostClient> baluhostClient_;
+    std::string currentUsername_;  // Track currently logged-in user
 };
 
 } // namespace baludesk

@@ -1,5 +1,7 @@
 import { useState, FormEvent } from 'react';
 import toast from 'react-hot-toast';
+import { ServerSelector } from '../components/Login/ServerSelector';
+import type { RemoteServerProfile } from '../types/RemoteServerProfile';
 
 interface LoginProps {
   onLogin: (user: any) => void;
@@ -9,10 +11,29 @@ export default function Login({ onLogin }: LoginProps) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [serverUrl, setServerUrl] = useState('https://localhost:8000');
+  const [selectedProfileId, setSelectedProfileId] = useState<number | null>(null);
+  const [useServerSelection, setUseServerSelection] = useState(true);
   const [loading, setLoading] = useState(false);
+
+  const handleSelectProfile = (profile: RemoteServerProfile) => {
+    setSelectedProfileId(profile.id);
+    // Build server URL from profile SSH host with BaluHost HTTP port (8000)
+    const url = `http://${profile.sshHost}:8000`;
+    setServerUrl(url);
+    // Auto-fill username from profile if available
+    if (profile.sshUsername && !username) {
+      setUsername(profile.sshUsername);
+    }
+  };
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
+    
+    if (!serverUrl.trim()) {
+      toast.error('Please select or enter a server URL');
+      return;
+    }
+
     setLoading(true);
 
     try {
@@ -23,12 +44,19 @@ export default function Login({ onLogin }: LoginProps) {
           username,
           password,
           serverUrl,
+          profileId: selectedProfileId, // Pass selected profile ID if available
         },
       });
 
       if (response.success) {
         toast.success('Login successful!');
-        onLogin({ username, serverUrl });
+        // Store user with profile selection
+        const userData = { 
+          username, 
+          serverUrl,
+          selectedProfileId, 
+        };
+        onLogin(userData);
       } else {
         toast.error(response.error || 'Login failed');
       }
@@ -76,23 +104,44 @@ export default function Login({ onLogin }: LoginProps) {
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
-            <div className="space-y-2">
-              <label
-                htmlFor="serverUrl"
-                className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400"
-              >
-                Server URL
-              </label>
-              <input
-                type="text"
-                id="serverUrl"
-                className="input"
-                value={serverUrl}
-                onChange={(e) => setServerUrl(e.target.value)}
-                placeholder="https://localhost:8000"
-                required
+            {/* Server Selection Mode Toggle */}
+            {useServerSelection ? (
+              <ServerSelector
+                selectedProfileId={selectedProfileId}
+                onSelectProfile={handleSelectProfile}
+                onManualMode={() => {
+                  setUseServerSelection(false);
+                  setSelectedProfileId(null);
+                }}
               />
-            </div>
+            ) : (
+              <>
+                <div className="space-y-2">
+                  <label
+                    htmlFor="serverUrl"
+                    className="text-xs font-medium uppercase tracking-[0.2em] text-slate-400"
+                  >
+                    Server URL
+                  </label>
+                  <input
+                    type="text"
+                    id="serverUrl"
+                    className="input"
+                    value={serverUrl}
+                    onChange={(e) => setServerUrl(e.target.value)}
+                    placeholder="https://localhost:8000"
+                    required
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setUseServerSelection(true)}
+                    className="text-xs text-slate-400 hover:text-slate-300"
+                  >
+                    Or select from saved servers
+                  </button>
+                </div>
+              </>
+            )}
 
             <div className="space-y-2">
               <label

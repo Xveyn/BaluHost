@@ -30,6 +30,7 @@ struct Conflict {
 
 struct RemoteServerProfile {
     int id;
+    std::string owner;  // Username who owns this profile
     std::string name;
     std::string sshHost;
     int sshPort;
@@ -93,8 +94,10 @@ public:
     bool addRemoteServerProfile(const RemoteServerProfile& profile);
     bool updateRemoteServerProfile(const RemoteServerProfile& profile);
     bool deleteRemoteServerProfile(int id);
+    bool clearAllRemoteServerProfiles();  // Clear all profiles for user isolation
     RemoteServerProfile getRemoteServerProfile(int id);
-    std::vector<RemoteServerProfile> getRemoteServerProfiles();
+    std::vector<RemoteServerProfile> getRemoteServerProfiles(const std::string& owner);  // Get profiles for owner
+    std::vector<RemoteServerProfile> getRemoteServerProfiles();  // Get ALL profiles (for login screen)
 
     // VPN Profiles
     bool addVPNProfile(const VPNProfile& profile);

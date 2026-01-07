@@ -9,13 +9,25 @@
 #include "../utils/settings_manager.h"
 #include "../baluhost_client.h"
 #include <nlohmann/json.hpp>
+#include <curl/curl.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <string>
+#include <functional>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 
 using json = nlohmann::json;
 
 namespace baludesk {
+
+// CURL write callback for health check
+static size_t HealthCheckWriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
 
 IpcServer::IpcServer(SyncEngine* engine) : engine_(engine) {}
 
@@ -23,6 +35,12 @@ IpcServer::~IpcServer() {}
 
 bool IpcServer::start() {
     Logger::info("IPC Server started, listening on stdin");
+    
+    // Don't load username from file on start
+    // Each session should start fresh without automatic login
+    // currentUsername_ will be set when user logs in
+    Logger::info("currentUsername_ starts empty until user logs in");
+    
     return true;
 }
 
@@ -179,6 +197,12 @@ void IpcServer::processMessages() {
             else if (type == "test_vpn_connection") {
                 handleTestVPNConnection(message, requestId);
             }
+            else if (type == "discover_network_servers") {
+                handleDiscoverNetworkServers(requestId);
+            }
+            else if (type == "check_server_health") {
+                handleCheckServerHealth(message, requestId);
+            }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
                 sendError("Unknown command type", requestId);
@@ -200,6 +224,8 @@ void IpcServer::handlePing(int requestId) {
 
 void IpcServer::handleLogin(const json& message, int requestId) {
     try {
+        Logger::info("=== handleLogin called ===");
+        
         if (!message.contains("data")) {
             sendError("Missing data", requestId);
             return;
@@ -210,17 +236,58 @@ void IpcServer::handleLogin(const json& message, int requestId) {
         std::string password = data.value("password", "");
         std::string serverUrl = data.value("serverUrl", "");
         
+        Logger::info("Login attempt: username='{}', currentUsername_before='{}'", username, currentUsername_);
+        
+        // Handle profileId which can be null, number, or missing
+        int profileId = -1;
+        if (data.contains("profileId") && !data["profileId"].is_null()) {
+            profileId = data["profileId"].get<int>();
+        }
+        
         if (username.empty() || password.empty() || serverUrl.empty()) {
             sendError("Username, password and serverUrl required", requestId);
             return;
         }
         
-        Logger::info("Login attempt: {} @ {}", username, serverUrl);
+        Logger::info("Login attempt: {} @ {} (profileId: {})", username, serverUrl, profileId);
         
-        // Initialize BaluHost client
-        if (!baluhostClient_) {
-            baluhostClient_ = std::make_unique<BaluhostClient>(serverUrl);
+        // If profileId provided, validate it exists in database
+        if (profileId >= 0) {
+            auto db = engine_->getDatabase();
+            if (db) {
+                RemoteServerProfile profile = db->getRemoteServerProfile(profileId);
+                if (profile.id <= 0) {
+                    Logger::warn("Profile {} not found in database", profileId);
+                    // Continue anyway - serverUrl might still be valid
+                }
+            }
         }
+        
+        // Check if user is different - if so, clear old profiles
+        if (!currentUsername_.empty() && currentUsername_ != username) {
+            auto db = engine_->getDatabase();
+            if (db) {
+                Logger::info("User changed from {} to {} - clearing old profiles", currentUsername_, username);
+                db->clearAllRemoteServerProfiles();
+            }
+        }
+        
+        // Update current username and save to file
+        currentUsername_ = username;
+        Logger::info("Updated currentUsername_ to '{}'", currentUsername_);
+        
+        // Save username to file for persistence across restarts
+        std::ofstream userFile("current_user.txt");
+        if (userFile.is_open()) {
+            userFile << username;
+            userFile.close();
+            Logger::info("Saved current user '{}' to file", username);
+        } else {
+            Logger::warn("Failed to open current_user.txt for writing");
+        }
+        
+        // Initialize BaluHost client (always create new to use the provided serverUrl)
+        baluhostClient_ = std::make_unique<BaluhostClient>(serverUrl);
         
         // Authenticate with BaluHost server
         bool baluhostAuth = baluhostClient_->login(username, password);
@@ -1114,6 +1181,11 @@ void IpcServer::handleAddRemoteServerProfile(const json& message, int requestId)
         }
         
         RemoteServerProfile profile;
+        
+        // Set owner to current username
+        profile.owner = currentUsername_;
+        Logger::info("Adding profile with owner='{}' (currentUsername_='{}')", profile.owner, currentUsername_);
+        
         profile.name = message["name"];
         profile.sshHost = message["sshHost"];
         profile.sshPort = message.value("sshPort", 22);
@@ -1212,22 +1284,30 @@ void IpcServer::handleGetRemoteServerProfiles(int requestId) {
             return;
         }
         
-        auto profiles = db->getRemoteServerProfiles();
+        // If user is logged in, get their profiles only
+        // If not logged in (currentUsername_ is empty), get ALL profiles for login screen
+        std::vector<RemoteServerProfile> profiles;
+        if (!currentUsername_.empty()) {
+            profiles = db->getRemoteServerProfiles(currentUsername_);
+        } else {
+            profiles = db->getRemoteServerProfiles();  // Get all for login screen
+        }
+        
         json profilesArray = json::array();
         
         for (const auto& profile : profiles) {
-            json profileObj = {
-                {"id", profile.id},
-                {"name", profile.name},
-                {"sshHost", profile.sshHost},
-                {"sshPort", profile.sshPort},
-                {"sshUsername", profile.sshUsername},
-                {"vpnProfileId", profile.vpnProfileId},
-                {"powerOnCommand", profile.powerOnCommand},
-                {"lastUsed", profile.lastUsed},
-                {"createdAt", profile.createdAt},
-                {"updatedAt", profile.updatedAt}
-            };
+            json profileObj = json::object();
+            profileObj["id"] = profile.id;
+            profileObj["name"] = profile.name.empty() ? "" : profile.name;
+            profileObj["sshHost"] = profile.sshHost.empty() ? "" : profile.sshHost;
+            profileObj["sshPort"] = profile.sshPort > 0 ? profile.sshPort : 22;
+            profileObj["sshUsername"] = profile.sshUsername.empty() ? "" : profile.sshUsername;
+            profileObj["vpnProfileId"] = profile.vpnProfileId > 0 ? profile.vpnProfileId : 0;
+            profileObj["powerOnCommand"] = profile.powerOnCommand.empty() ? "" : profile.powerOnCommand;
+            profileObj["lastUsed"] = profile.lastUsed.empty() ? "" : profile.lastUsed;
+            profileObj["createdAt"] = profile.createdAt.empty() ? "" : profile.createdAt;
+            profileObj["updatedAt"] = profile.updatedAt.empty() ? "" : profile.updatedAt;
+            profileObj["owner"] = profile.owner.empty() ? "" : profile.owner;  // Include owner for display
             profilesArray.push_back(profileObj);
         }
         
@@ -1598,6 +1678,143 @@ void IpcServer::handleTestVPNConnection(const json& message, int requestId) {
     } catch (const std::exception& e) {
         sendError(std::string("Failed to test VPN connection: ") + e.what(), requestId);
         Logger::error("Error in handleTestVPNConnection: {}", e.what());
+    }
+}
+
+void IpcServer::handleDiscoverNetworkServers(int requestId) {
+    try {
+        json servers = json::array();
+        
+        // Get current timestamp as ISO string
+        auto now = std::chrono::system_clock::now();
+        auto time_t_now = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&time_t_now), "%Y-%m-%dT%H:%M:%SZ");
+        std::string timestamp = ss.str();
+        
+        std::string discoveryMethod = "none";
+        
+        // Check if localhost BaluHost server is running
+        if (baluhostClient_ && baluhostClient_->isAuthenticated()) {
+            // User is authenticated, so we know localhost:8000 is running
+            json localServer = json::object();
+            localServer["hostname"] = "localhost";
+            localServer["ipAddress"] = "127.0.0.1";
+            localServer["port"] = 8000;
+            localServer["sshPort"] = 22;
+            localServer["description"] = "Local BaluHost Server";
+            localServer["discoveredAt"] = timestamp;
+            servers.push_back(localServer);
+            discoveryMethod = "authenticated";
+            Logger::info("Discovered local BaluHost server (authenticated)");
+        } else {
+            // Try to detect localhost server via HTTP probe
+            try {
+                // Simple check: try to create a client and see if server responds
+                auto testClient = std::make_unique<BaluhostClient>("http://localhost:8000");
+                // We don't actually need to login, just check if server exists
+                // For now, assume localhost:8000 is the default
+                json localServer = json::object();
+                localServer["hostname"] = "localhost";
+                localServer["ipAddress"] = "127.0.0.1";
+                localServer["port"] = 8000;
+                localServer["sshPort"] = 22;
+                localServer["description"] = "Local BaluHost Server";
+                localServer["discoveredAt"] = timestamp;
+                servers.push_back(localServer);
+                discoveryMethod = "localhost_probe";
+                Logger::info("Discovered local BaluHost server (probe)");
+            } catch (const std::exception& e) {
+                Logger::warn("Could not detect localhost BaluHost server: {}", e.what());
+            }
+        }
+        
+        // Future: Could add network scanning for other servers
+        // - mDNS/Bonjour discovery
+        // - Previously connected servers from database
+        // - Manual server entries
+        
+        json response = json::object();
+        response["type"] = "discover_network_servers_response";
+        response["success"] = true;
+        response["data"]["servers"] = servers;
+        response["data"]["discoveryMethod"] = discoveryMethod;
+        
+        sendResponse(response, requestId);
+        
+        Logger::info("Network discovery complete: {} servers found", servers.size());
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to discover network servers: ") + e.what(), requestId);
+        Logger::error("Error in handleDiscoverNetworkServers: {}", e.what());
+    }
+}
+
+void IpcServer::handleCheckServerHealth(const json& message, int requestId) {
+    try {
+        if (!message.contains("server_url")) {
+            sendError("Missing server_url parameter", requestId);
+            return;
+        }
+        
+        std::string serverUrl = message["server_url"].get<std::string>();
+        
+        Logger::info("Checking server health: {}", serverUrl);
+        
+        // Perform a simple HTTP health check
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            sendError("Failed to initialize CURL", requestId);
+            return;
+        }
+        
+        // Construct the health check URL - use /api/health endpoint which doesn't require auth
+        std::string healthUrl = serverUrl + "/api/health";
+        
+        // Response buffer
+        std::string responseBuffer;
+        
+        // Set up CURL options
+        curl_easy_setopt(curl, CURLOPT_URL, healthUrl.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, HealthCheckWriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&responseBuffer);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        
+        // Perform the request
+        CURLcode res = curl_easy_perform(curl);
+        
+        json result = json::object();
+        result["type"] = "check_server_health_response";
+        result["success"] = true;
+        
+        if (res == CURLE_OK) {
+            long httpCode = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+            
+            if (httpCode >= 200 && httpCode < 300) {
+                result["data"]["connected"] = true;
+                result["data"]["message"] = "Server is online";
+                Logger::info("Server health check passed for: {} (HTTP {})", serverUrl, httpCode);
+            } else {
+                result["data"]["connected"] = false;
+                result["data"]["message"] = "Server returned HTTP " + std::to_string(httpCode);
+                Logger::warn("Server health check failed for {}: HTTP {}", serverUrl, httpCode);
+            }
+        } else {
+            result["data"]["connected"] = false;
+            result["data"]["message"] = std::string("Connection failed: ") + curl_easy_strerror(res);
+            Logger::warn("Server health check failed for {}: {}", serverUrl, curl_easy_strerror(res));
+        }
+        
+        curl_easy_cleanup(curl);
+        sendResponse(result, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to check server health: ") + e.what(), requestId);
+        Logger::error("Error in handleCheckServerHealth: {}", e.what());
     }
 }
 

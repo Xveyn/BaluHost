@@ -114,7 +114,8 @@ bool Database::runMigrations() {
     std::string createRemoteServerProfilesTable = R"(
         CREATE TABLE IF NOT EXISTS remote_server_profiles (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT NOT NULL UNIQUE,
+            owner TEXT,
+            name TEXT NOT NULL,
             ssh_host TEXT NOT NULL,
             ssh_port INTEGER NOT NULL DEFAULT 22,
             ssh_username TEXT NOT NULL,
@@ -610,24 +611,25 @@ bool Database::addRemoteServerProfile(const RemoteServerProfile& profile) {
     Logger::info("Adding remote server profile: {}", profile.name);
     
     const char* sql = R"(
-        INSERT INTO remote_server_profiles (name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command)
-        VALUES (?, ?, ?, ?, ?, ?, ?);
+        INSERT INTO remote_server_profiles (owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
     )";
     
     sqlite3_stmt* stmt = prepareStatement(sql);
     if (!stmt) return false;
     
-    sqlite3_bind_text(stmt, 1, profile.name.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 2, profile.sshHost.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_int(stmt, 3, profile.sshPort);
-    sqlite3_bind_text(stmt, 4, profile.sshUsername.c_str(), -1, SQLITE_TRANSIENT);
-    sqlite3_bind_text(stmt, 5, profile.sshPrivateKey.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 1, profile.owner.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, profile.name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, profile.sshHost.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, profile.sshPort);
+    sqlite3_bind_text(stmt, 5, profile.sshUsername.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 6, profile.sshPrivateKey.c_str(), -1, SQLITE_TRANSIENT);
     if (profile.vpnProfileId > 0) {
-        sqlite3_bind_int(stmt, 6, profile.vpnProfileId);
+        sqlite3_bind_int(stmt, 7, profile.vpnProfileId);
     } else {
-        sqlite3_bind_null(stmt, 6);
+        sqlite3_bind_null(stmt, 7);
     }
-    sqlite3_bind_text(stmt, 7, profile.powerOnCommand.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 8, profile.powerOnCommand.c_str(), -1, SQLITE_TRANSIENT);
     
     int rc = sqlite3_step(stmt);
     sqlite3_finalize(stmt);
@@ -695,8 +697,26 @@ bool Database::deleteRemoteServerProfile(int id) {
     return true;
 }
 
+bool Database::clearAllRemoteServerProfiles() {
+    Logger::info("Clearing all remote server profiles");
+    
+    const char* sql = "DELETE FROM remote_server_profiles;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to clear remote server profiles: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
 RemoteServerProfile Database::getRemoteServerProfile(int id) {
-    const char* sql = "SELECT id, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles WHERE id = ?;";
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles WHERE id = ?;";
     sqlite3_stmt* stmt = prepareStatement(sql);
     
     RemoteServerProfile profile{};
@@ -704,18 +724,19 @@ RemoteServerProfile Database::getRemoteServerProfile(int id) {
         sqlite3_bind_int(stmt, 1, id);
         if (sqlite3_step(stmt) == SQLITE_ROW) {
             profile.id = sqlite3_column_int(stmt, 0);
-            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-            profile.sshPort = sqlite3_column_int(stmt, 3);
-            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-            profile.vpnProfileId = sqlite3_column_int(stmt, 6);
-            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-            if (sqlite3_column_text(stmt, 8)) {
-                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
             }
-            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
-            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
         }
         sqlite3_finalize(stmt);
     }
@@ -723,28 +744,30 @@ RemoteServerProfile Database::getRemoteServerProfile(int id) {
     return profile;
 }
 
-std::vector<RemoteServerProfile> Database::getRemoteServerProfiles() {
+std::vector<RemoteServerProfile> Database::getRemoteServerProfiles(const std::string& owner) {
     std::vector<RemoteServerProfile> profiles;
     
-    const char* sql = "SELECT id, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles ORDER BY name;";
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles WHERE owner = ? ORDER BY name;";
     sqlite3_stmt* stmt = prepareStatement(sql);
     
     if (stmt) {
+        sqlite3_bind_text(stmt, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
         while (sqlite3_step(stmt) == SQLITE_ROW) {
             RemoteServerProfile profile;
             profile.id = sqlite3_column_int(stmt, 0);
-            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
-            profile.sshPort = sqlite3_column_int(stmt, 3);
-            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
-            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
-            profile.vpnProfileId = sqlite3_column_int(stmt, 6);
-            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
-            if (sqlite3_column_text(stmt, 8)) {
-                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
             }
-            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
-            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
             profiles.push_back(profile);
         }
         sqlite3_finalize(stmt);
@@ -752,6 +775,38 @@ std::vector<RemoteServerProfile> Database::getRemoteServerProfiles() {
     
     return profiles;
 }
+
+std::vector<RemoteServerProfile> Database::getRemoteServerProfiles() {
+    std::vector<RemoteServerProfile> profiles;
+    
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles ORDER BY name;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    if (stmt) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            RemoteServerProfile profile;
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+            }
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+            profiles.push_back(profile);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profiles;
+}
+
 
 // ============================================================================
 // VPN Profiles

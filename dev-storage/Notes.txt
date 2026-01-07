@@ -1,0 +1,1 @@
+Notizen zum NAS Dev Mode. Setup: 2x5GB RAID1 (effektiv 5GB Speicher).

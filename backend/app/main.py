@@ -26,6 +26,7 @@ from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
 from app.middleware.device_tracking import DeviceTrackingMiddleware
+from app.middleware.local_only import LocalOnlyMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,18 @@ def create_app() -> FastAPI:
     # Add rate limiting state and exception handler
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+    # Add local-only enforcement middleware (Option B security)
+    if settings.enforce_local_only:
+        app.add_middleware(
+            LocalOnlyMiddleware,
+            enforce=True,
+            protected_prefixes=[
+                "/api/server-profiles",
+                "/api/auth/login",
+                "/api/auth/register",
+            ]
+        )
 
     # Add device tracking middleware (updates last_seen for mobile devices)
     app.add_middleware(DeviceTrackingMiddleware)
