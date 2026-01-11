@@ -59,13 +59,16 @@ jobs:
 
       - name: Wait for services
         run: |
-          for i in {1..30}; do curl -sSf http://localhost:5173 && break || sleep 1; done
-          for i in {1..30}; do curl -sSf http://127.0.0.1:8000 || sleep 1 && break || true; done
+          # Wait up to 60s for frontend and backend to be reachable (check http and https fallback)
+          for i in {1..60}; do curl -sSf http://localhost:5173 && break || sleep 1; done
+          for i in {1..60}; do curl -sSf https://localhost:5173 && break || true; sleep 1; done
+          for i in {1..60}; do curl -sSf http://127.0.0.1:8000 && break || sleep 1; done
 
       - name: Run mocked Playwright tests
         run: |
           cd client
-          npx playwright test tests/e2e/schedulers.spec.ts --project=chromium --reporter=list
+          # Ensure Playwright uses the explicit HTTP base url in CI
+          PLAYWRIGHT_BASE_URL=http://localhost:5173 npx playwright test tests/e2e/schedulers.spec.ts --project=chromium --reporter=list
 
   live-e2e:
     name: Live E2E (gated)
