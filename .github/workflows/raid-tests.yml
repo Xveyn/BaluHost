@@ -1,0 +1,72 @@
+name: RAID Tests
+
+on:
+  push:
+    paths:
+      - 'backend/**'
+      - '.github/workflows/raid-tests.yml'
+  pull_request:
+    paths:
+      - 'backend/**'
+  workflow_dispatch: {}
+
+jobs:
+  raid-safe:
+    name: RAID tests (safe mode - Dev backend)
+    runs-on: ubuntu-latest
+    env:
+      # Force use of DevRaidBackend so tests run without mdadm on any runner
+      RAID_FORCE_DEV_BACKEND: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - name: Setup Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Upgrade pip
+        run: python -m pip install --upgrade pip
+      - name: Install backend (dev extras)
+        run: |
+          cd backend
+          python -m pip install -e .[dev]
+      - name: Run RAID tests (safe mode)
+        working-directory: backend
+        run: pytest -q -k raid
+
+  raid-mdadm:
+    name: RAID tests (mdadm if available)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for mdadm
+        id: check_mdadm
+        run: |
+          if ! command -v mdadm >/dev/null 2>&1; then
+            echo "mdadm_missing=true" >> $GITHUB_OUTPUT
+            echo "mdadm not found; job will skip tests that require mdadm"
+            exit 0
+          else
+            echo "mdadm_missing=false" >> $GITHUB_OUTPUT
+          fi
+      - name: Setup Python
+        if: steps.check_mdadm.outputs.mdadm_missing == 'false'
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.11'
+      - name: Install backend (dev extras)
+        if: steps.check_mdadm.outputs.mdadm_missing == 'false'
+        run: |
+          cd backend
+          python -m pip install -e .[dev]
+      - name: Run RAID tests (mdadm)
+        if: steps.check_mdadm.outputs.mdadm_missing == 'false'
+        working-directory: backend
+        run: pytest -q -k raid
+
+# Notes:
+# - The 'raid-safe' job sets RAID_FORCE_DEV_BACKEND=1 so the DevRaidBackend is used and
+#   tests do not require system tools like mdadm/lsblk. This is suitable for most CI runners.
+# - The 'raid-mdadm' job will attempt to run tests using the real mdadm backend if mdadm
+#   is present on the runner; otherwise it will skip (no failures).
+# - To run the mdadm-backed tests in CI explicitly, ensure the runner has mdadm installed
+#   or use a self-hosted Linux runner with mdadm available and set up with required devices.
