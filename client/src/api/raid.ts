@@ -218,3 +218,56 @@ export const deleteArray = async (payload: DeleteArrayPayload): Promise<RaidActi
 
   return parseResponse<RaidActionResponse>(response);
 };
+
+export const triggerRaidScrub = async (array?: string): Promise<RaidActionResponse> => {
+  const token = getToken();
+  const body: Record<string, string | undefined> = {};
+  if (array) body.array = array;
+
+  const response = await fetch(buildApiUrl('/api/system/raid/scrub'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(body),
+  });
+
+  return parseResponse<RaidActionResponse>(response);
+};
+
+export interface ConfirmTokenResponse {
+  token: string;
+  expires_at: number;
+}
+
+export const requestConfirmation = async (action: string, payload: object, ttl_seconds?: number): Promise<ConfirmTokenResponse> => {
+  const token = getToken();
+  const body: any = { action, payload };
+  if (ttl_seconds) body.ttl_seconds = ttl_seconds;
+
+  const response = await fetch(buildApiUrl('/api/system/raid/confirm/request'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(body)
+  });
+
+  return parseResponse<ConfirmTokenResponse>(response);
+};
+
+export const executeConfirmation = async (tokenStr: string): Promise<RaidActionResponse> => {
+  const token = getToken();
+  const response = await fetch(buildApiUrl('/api/system/raid/confirm/execute'), {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify({ token: tokenStr })
+  });
+
+  return parseResponse<RaidActionResponse>(response);
+};

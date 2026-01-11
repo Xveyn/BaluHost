@@ -65,10 +65,13 @@ set(SOURCES
     src/sync/sync_engine.cpp
     src/sync/file_watcher_v2.cpp
     src/sync/change_detector.cpp
+    src/utils/sha256.cpp
     src/sync/conflict_resolver.cpp
     src/api/http_client.cpp
     src/db/database.cpp
     src/ipc/ipc_server_fixed.cpp
+    src/services/ssh_service.cpp
+    src/services/vpn_service.cpp
     src/utils/logger.cpp
     src/utils/config.cpp
     src/utils/system_info.cpp
@@ -155,6 +158,7 @@ if(BUILD_TESTS)
     # Test source files
     set(TEST_SOURCES
         tests/file_watcher_test.cpp
+        tests/change_detector_hash_test.cpp
         tests/sync_engine_retry_test.cpp
         tests/sync_engine_performance_test.cpp
         # Note: sync_engine_integration_test.cpp requires full build context with
@@ -166,6 +170,8 @@ if(BUILD_TESTS)
     set(TEST_COMMON_SOURCES
         src/utils/logger.cpp
         src/sync/file_watcher_v2.cpp
+        src/sync/change_detector.cpp
+        src/utils/sha256.cpp
     )
     
     # Platform-specific test sources

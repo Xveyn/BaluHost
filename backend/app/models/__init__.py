@@ -10,6 +10,8 @@ from app.models.vpn import VPNConfig, VPNClient
 from app.models.mobile import MobileDevice
 from app.models.rate_limit_config import RateLimitConfig
 from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
+from app.models.server_profile import ServerProfile
+from app.models.vpn_profile import VPNProfile, VPNType
 
 __all__ = [
     "Base",
@@ -26,5 +28,8 @@ __all__ = [
     "FileVersion",
     "VersionBlob",
     "VCLSettings",
-    "VCLStats"
+    "VCLStats",
+    "ServerProfile",
+    "VPNProfile",
+    "VPNType"
 ]

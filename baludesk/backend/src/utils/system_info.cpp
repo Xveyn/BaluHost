@@ -1,7 +1,12 @@
 #include "system_info.h"
 #include "logger.h"
+#include "../api/http_client.h"
+#include "settings_manager.h"
+#include <nlohmann/json.hpp>
 #include <windows.h>
 #include <psapi.h>
+#include <thread>
+#include <chrono>
 #include <filesystem>
 
 #pragma comment(lib, "psapi.lib")
@@ -10,13 +15,79 @@
 namespace baludesk {
 
 SystemInfo SystemInfoCollector::getSystemInfo() {
-    SystemInfo info;
+    SystemInfo info{};
+    info.cpu = CpuInfo{0.0, 0, 0};
+    info.memory = MemoryInfo{0, 0, 0};
+    info.disk = DiskInfo{0, 0, 0};
+    info.uptime = 0;
+    info.serverUptime = 0;
     
     try {
         info.cpu = getCpuInfo();
         info.memory = getMemoryInfo();
-        info.disk = getDiskInfo();
+        // Use aggregated disk information across all fixed drives
+        info.disk = getAggregateDiskInfo();
         info.uptime = getUptime();
+
+        // Try to fetch server (Python backend) uptime from the REST API
+        try {
+            using json = nlohmann::json;
+            std::string serverBase = baludesk::SettingsManager::getInstance().getServerUrl();
+            int serverPort = baludesk::SettingsManager::getInstance().getServerPort();
+            // If serverBase does not include an explicit port, append the configured port
+            size_t schemePos = serverBase.find("//");
+            size_t hostPortPos = std::string::npos;
+            if (schemePos != std::string::npos) {
+                hostPortPos = serverBase.find(':', schemePos + 2);
+            }
+            if (hostPortPos == std::string::npos) {
+                // remove trailing slash if present
+                if (!serverBase.empty() && serverBase.back() == '/') serverBase.pop_back();
+                serverBase += ":" + std::to_string(serverPort);
+            }
+
+            baludesk::HttpClient client(serverBase);
+            // Increase timeout to 5s and perform retries with exponential backoff
+            client.setTimeout(5); // seconds
+
+            const int maxAttempts = 3;
+            int attempt = 0;
+            int backoffMs = 200;
+            bool got = false;
+
+            for (; attempt < maxAttempts; ++attempt) {
+                try {
+                    // Use absolute URL to avoid baseUrl_ concatenation issues
+                    std::string resp = client.get(serverBase + "/api/system/info/local");
+                    Logger::debug("Server /api/system/info/local response: {}", resp);
+                    auto j = json::parse(resp);
+                    if (j.contains("uptime")) {
+                        double su = j["uptime"].get<double>();
+                        if (su < 0) su = 0;
+                        info.serverUptime = static_cast<uint64_t>(su);
+                        Logger::debug("Fetched server uptime: {} s (attempt {})", info.serverUptime, attempt + 1);
+                        got = true;
+                        break;
+                    }
+                    // If the response doesn't contain uptime, treat as failure and retry
+                    Logger::debug("Server uptime response missing 'uptime' field (attempt {})", attempt + 1);
+                } catch (const std::exception& e) {
+                    Logger::debug("Could not fetch server uptime (attempt {}): {}", attempt + 1, e.what());
+                }
+
+                // exponential backoff before next attempt
+                if (attempt + 1 < maxAttempts) {
+                    std::this_thread::sleep_for(std::chrono::milliseconds(backoffMs));
+                    backoffMs *= 2;
+                }
+            }
+
+            if (!got) {
+                Logger::debug("Failed to fetch server uptime after {} attempts", maxAttempts);
+            }
+        } catch (const std::exception& e) {
+            Logger::debug("Server uptime fetch skipped: {}", e.what());
+        }
         
         Logger::debug("System info collected: CPU {}%, RAM {}/{} MB, Uptime {} s",
                      info.cpu.usage,
@@ -49,7 +120,8 @@ nlohmann::json SystemInfoCollector::toJson(const SystemInfo& info) {
             {"used", info.disk.used},
             {"available", info.disk.available}
         }},
-        {"uptime", info.uptime}
+        {"uptime", info.uptime},
+        {"serverUptime", info.serverUptime}
     };
 }
 
@@ -180,11 +252,48 @@ DiskInfo SystemInfoCollector::getDiskInfo(const std::string& path) {
     return info;
 }
 
+DiskInfo SystemInfoCollector::getAggregateDiskInfo() {
+    DiskInfo aggregate = {0, 0, 0};
+    try {
+        DWORD bufSize = GetLogicalDriveStringsA(0, NULL);
+        if (bufSize == 0) return aggregate;
+
+        std::string buffer(bufSize, '\0');
+        if (GetLogicalDriveStringsA(bufSize, &buffer[0]) == 0) return aggregate;
+
+        const char* p = buffer.c_str();
+        while (*p) {
+            std::string drive = p; // e.g., "C:\\"
+            UINT type = GetDriveTypeA(drive.c_str());
+            if (type == DRIVE_FIXED || type == DRIVE_REMOTE) {
+                ULARGE_INTEGER freeBytesAvailable, totalBytes, totalFreeBytes;
+                if (GetDiskFreeSpaceExA(drive.c_str(), &freeBytesAvailable, &totalBytes, &totalFreeBytes)) {
+                    aggregate.total += totalBytes.QuadPart;
+                    aggregate.available += freeBytesAvailable.QuadPart;
+                }
+            }
+            // advance to next null-terminated string
+            p += drive.size() + 1;
+        }
+
+        if (aggregate.total >= aggregate.available) {
+            aggregate.used = aggregate.total - aggregate.available;
+        } else {
+            aggregate.used = 0;
+        }
+
+        Logger::debug("Aggregated Disk Info: used={} MB total={} MB", aggregate.used / (1024 * 1024), aggregate.total / (1024 * 1024));
+    } catch (const std::exception& e) {
+        Logger::error("Failed to aggregate disk info: {}", e.what());
+    }
+    return aggregate;
+}
+
 uint64_t SystemInfoCollector::getUptime() {
     try {
-        // GetTickCount returns milliseconds since system start
-        DWORD tickCount = GetTickCount();
-        uint64_t uptime = tickCount / 1000; // Convert to seconds
+        // Use GetTickCount64 to avoid 49.7-day wraparound and get milliseconds since system start
+        ULONGLONG tickCount = GetTickCount64();
+        uint64_t uptime = static_cast<uint64_t>(tickCount / 1000ULL); // Convert to seconds
         
         Logger::debug("System uptime: {} seconds", uptime);
         return uptime;

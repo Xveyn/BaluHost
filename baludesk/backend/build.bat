@@ -8,8 +8,15 @@ setlocal EnableDelayedExpansion
 REM Configuration
 set BUILD_TYPE=Release
 set BUILD_DIR=build
-set CMAKE_GENERATOR="Visual Studio 17 2022"
-set VCPKG_ROOT=F:\Programme (x86)\Baluhost\vcpkg
+set CMAKE_GENERATOR=Visual Studio 17 2022
+REM Compute absolute path to vcpkg
+pushd %~dp0
+cd ..\..
+set VCPKG_ROOT=%CD%\vcpkg
+popd
+
+REM Ensure working directory is the script directory (backend/) so build dir is created there
+cd /d "%~dp0"
 
 REM Parse arguments
 :parse_args
@@ -36,22 +43,22 @@ echo ===========================================================================
 
 REM Check if vcpkg toolchain exists
 if not exist "%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" (
-    echo ERROR: vcpkg toolchain not found at %VCPKG_ROOT%
+    echo ERROR: vcpkg toolchain not found at "%VCPKG_ROOT%"
     echo Please install vcpkg and set VCPKG_ROOT correctly
     exit /b 1
 )
 
 REM Create build directory
-if not exist %BUILD_DIR% mkdir %BUILD_DIR%
-cd %BUILD_DIR%
+if not exist "%BUILD_DIR%" mkdir "%BUILD_DIR%"
+cd "%BUILD_DIR%"
 
 echo.
 echo [1/3] Configuring CMake...
 echo ============================================================================
 cmake .. ^
-    -G %CMAKE_GENERATOR% ^
+    -G "%CMAKE_GENERATOR%" ^
     -A x64 ^
-    -DCMAKE_BUILD_TYPE=%BUILD_TYPE% ^
+    -DCMAKE_BUILD_TYPE="%BUILD_TYPE%" ^
     -DCMAKE_TOOLCHAIN_FILE="%VCPKG_ROOT%\scripts\buildsystems\vcpkg.cmake" ^
     -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
 
@@ -64,7 +71,7 @@ if errorlevel 1 (
 echo.
 echo [2/3] Building project...
 echo ============================================================================
-cmake --build . --config %BUILD_TYPE% --parallel
+cmake --build . --config "%BUILD_TYPE%" --parallel
 
 if errorlevel 1 (
     echo ERROR: Build failed

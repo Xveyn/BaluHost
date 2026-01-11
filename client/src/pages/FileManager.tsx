@@ -376,21 +376,29 @@ export default function FileManager({ user }: FileManagerProps) {
     // Load VCL Quota
     const loadVclQuota = async () => {
       try {
-        const quota = await vclApi.getQuota();
+        const quota = await vclApi.getUserQuota();
+        // Determine warning level based on usage percent
+        let warningLevel: 'warning' | 'critical' | null = null;
+        if (quota.usage_percent >= 95) {
+          warningLevel = 'critical';
+        } else if (quota.usage_percent >= 80) {
+          warningLevel = 'warning';
+        }
+        
         setVclQuota({
           usagePercent: quota.usage_percent,
-          warning: quota.quota_warning as 'warning' | 'critical' | null,
+          warning: warningLevel,
           current: quota.current_usage_bytes,
           max: quota.max_size_bytes,
         });
         
         // Show toast if warning/critical
-        if (quota.quota_warning === 'critical') {
+        if (warningLevel === 'critical') {
           toast.error(
             `VCL Storage Critical: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
             { duration: 8000 }
           );
-        } else if (quota.quota_warning === 'warning') {
+        } else if (warningLevel === 'warning') {
           toast(
             `VCL Storage Warning: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
             { duration: 6000, icon: '⚠️' }

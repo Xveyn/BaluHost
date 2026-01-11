@@ -141,6 +141,20 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       icon: navIcon.mobile
     },
     {
+      path: '/remote-servers',
+      label: 'Remote Servers',
+      description: 'SSH & VPN',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+          <rect x="3" y="4" width="18" height="12" rx="1" stroke="currentColor" />
+          <path stroke="currentColor" strokeLinecap="round" d="M3 16h18" />
+          <circle cx="8" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
+          <circle cx="12" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
+          <circle cx="16" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
+        </svg>
+      )
+    },
+    {
       path: '/settings',
       label: 'Settings',
       description: 'Account',
@@ -160,6 +174,17 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             description: 'Arrays & Health',
             icon: navIcon.raid
           },
+                  {
+                    path: '/schedulers',
+                    label: 'Schedulers',
+                    description: 'Manual tests & triggers',
+                    icon: (
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" />
+                      </svg>
+                    )
+                  },
               {
                 path: '/admin-db',
                 label: 'Database',

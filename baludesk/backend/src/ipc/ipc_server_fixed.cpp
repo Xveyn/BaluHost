@@ -1,18 +1,33 @@
 #include "ipc_server.h"
 #include "../sync/sync_engine.h"
+#include "../db/database.h"
+#include "../services/ssh_service.h"
+#include "../services/vpn_service.h"
 #include "../utils/logger.h"
 #include "../utils/system_info.h"
 #include "../utils/raid_info.h"
 #include "../utils/settings_manager.h"
 #include "../baluhost_client.h"
 #include <nlohmann/json.hpp>
+#include <curl/curl.h>
 #include <iostream>
 #include <sstream>
+#include <fstream>
 #include <string>
+#include <functional>
+#include <chrono>
+#include <ctime>
+#include <iomanip>
 
 using json = nlohmann::json;
 
 namespace baludesk {
+
+// CURL write callback for health check
+static size_t HealthCheckWriteCallback(void* contents, size_t size, size_t nmemb, void* userp) {
+    ((std::string*)userp)->append((char*)contents, size * nmemb);
+    return size * nmemb;
+}
 
 IpcServer::IpcServer(SyncEngine* engine) : engine_(engine) {}
 
@@ -20,6 +35,37 @@ IpcServer::~IpcServer() {}
 
 bool IpcServer::start() {
     Logger::info("IPC Server started, listening on stdin");
+    
+    // Don't load username from file on start
+    // Each session should start fresh without automatic login
+    // currentUsername_ will be set when user logs in
+    Logger::info("currentUsername_ starts empty until user logs in");
+    
+    // Register for sync status updates to broadcast to frontend
+    if (engine_) {
+        engine_->setStatusCallback([this](const SyncStats& state) {
+            try {
+                std::string status_str = "idle";
+                if (state.status == SyncStatus::SYNCING) status_str = "syncing";
+                else if (state.status == SyncStatus::PAUSED) status_str = "paused";
+                else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
+
+                json data = {
+                    {"status", status_str},
+                    {"uploadSpeed", state.uploadSpeed},
+                    {"downloadSpeed", state.downloadSpeed},
+                    {"pendingUploads", state.pendingUploads},
+                    {"pendingDownloads", state.pendingDownloads},
+                    {"lastSync", state.lastSync}
+                };
+
+                broadcastEvent("sync_state_update", data);
+            } catch (const std::exception& e) {
+                Logger::error("Failed to broadcast sync state: {}", e.what());
+            }
+        });
+    }
+
     return true;
 }
 
@@ -45,8 +91,18 @@ void IpcServer::processMessages() {
             std::string type = message["type"];
             Logger::debug("Received IPC message: {}", type);
             
-            // Extract request ID for responses
-            int requestId = message.value("id", -1);
+            // Extract request ID for responses - check both 'id' and 'requestId' fields
+            int requestId = -1;
+            if (message.contains("requestId")) {
+                requestId = message["requestId"];
+            } else if (message.contains("id")) {
+                requestId = message["id"];
+            }
+            if (message.contains("requestId")) {
+                requestId = message["requestId"];
+            } else if (message.contains("id")) {
+                requestId = message["id"];
+            }
             
             // Handle different message types
             if (type == "ping") {
@@ -127,6 +183,51 @@ void IpcServer::processMessages() {
             else if (type == "resolve_all_conflicts") {
                 handleResolveAllConflicts(message, requestId);
             }
+            else if (type == "add_remote_server_profile") {
+                handleAddRemoteServerProfile(message, requestId);
+            }
+            else if (type == "update_remote_server_profile") {
+                handleUpdateRemoteServerProfile(message, requestId);
+            }
+            else if (type == "delete_remote_server_profile") {
+                handleDeleteRemoteServerProfile(message, requestId);
+            }
+            else if (type == "get_remote_server_profiles") {
+                handleGetRemoteServerProfiles(requestId);
+            }
+            else if (type == "get_remote_server_profile") {
+                handleGetRemoteServerProfile(message, requestId);
+            }
+            else if (type == "test_server_connection") {
+                handleTestServerConnection(message, requestId);
+            }
+            else if (type == "start_remote_server") {
+                handleStartRemoteServer(message, requestId);
+            }
+            else if (type == "add_vpn_profile") {
+                handleAddVPNProfile(message, requestId);
+            }
+            else if (type == "update_vpn_profile") {
+                handleUpdateVPNProfile(message, requestId);
+            }
+            else if (type == "delete_vpn_profile") {
+                handleDeleteVPNProfile(message, requestId);
+            }
+            else if (type == "get_vpn_profiles") {
+                handleGetVPNProfiles(requestId);
+            }
+            else if (type == "get_vpn_profile") {
+                handleGetVPNProfile(message, requestId);
+            }
+            else if (type == "test_vpn_connection") {
+                handleTestVPNConnection(message, requestId);
+            }
+            else if (type == "discover_network_servers") {
+                handleDiscoverNetworkServers(requestId);
+            }
+            else if (type == "check_server_health") {
+                handleCheckServerHealth(message, requestId);
+            }
             else {
                 Logger::warn("Unknown IPC message type: {}", type);
                 sendError("Unknown command type", requestId);
@@ -148,6 +249,8 @@ void IpcServer::handlePing(int requestId) {
 
 void IpcServer::handleLogin(const json& message, int requestId) {
     try {
+        Logger::info("=== handleLogin called ===");
+        
         if (!message.contains("data")) {
             sendError("Missing data", requestId);
             return;
@@ -158,17 +261,58 @@ void IpcServer::handleLogin(const json& message, int requestId) {
         std::string password = data.value("password", "");
         std::string serverUrl = data.value("serverUrl", "");
         
+        Logger::info("Login attempt: username='{}', currentUsername_before='{}'", username, currentUsername_);
+        
+        // Handle profileId which can be null, number, or missing
+        int profileId = -1;
+        if (data.contains("profileId") && !data["profileId"].is_null()) {
+            profileId = data["profileId"].get<int>();
+        }
+        
         if (username.empty() || password.empty() || serverUrl.empty()) {
             sendError("Username, password and serverUrl required", requestId);
             return;
         }
         
-        Logger::info("Login attempt: {} @ {}", username, serverUrl);
+        Logger::info("Login attempt: {} @ {} (profileId: {})", username, serverUrl, profileId);
         
-        // Initialize BaluHost client
-        if (!baluhostClient_) {
-            baluhostClient_ = std::make_unique<BaluhostClient>(serverUrl);
+        // If profileId provided, validate it exists in database
+        if (profileId >= 0) {
+            auto db = engine_->getDatabase();
+            if (db) {
+                RemoteServerProfile profile = db->getRemoteServerProfile(profileId);
+                if (profile.id <= 0) {
+                    Logger::warn("Profile {} not found in database", profileId);
+                    // Continue anyway - serverUrl might still be valid
+                }
+            }
         }
+        
+        // Check if user is different - if so, clear old profiles
+        if (!currentUsername_.empty() && currentUsername_ != username) {
+            auto db = engine_->getDatabase();
+            if (db) {
+                Logger::info("User changed from {} to {} - clearing old profiles", currentUsername_, username);
+                db->clearAllRemoteServerProfiles();
+            }
+        }
+        
+        // Update current username and save to file
+        currentUsername_ = username;
+        Logger::info("Updated currentUsername_ to '{}'", currentUsername_);
+        
+        // Save username to file for persistence across restarts
+        std::ofstream userFile("current_user.txt");
+        if (userFile.is_open()) {
+            userFile << username;
+            userFile.close();
+            Logger::info("Saved current user '{}' to file", username);
+        } else {
+            Logger::warn("Failed to open current_user.txt for writing");
+        }
+        
+        // Initialize BaluHost client (always create new to use the provided serverUrl)
+        baluhostClient_ = std::make_unique<BaluhostClient>(serverUrl);
         
         // Authenticate with BaluHost server
         bool baluhostAuth = baluhostClient_->login(username, password);
@@ -358,13 +502,24 @@ void IpcServer::handleGetSyncState(int requestId) {
         else if (state.status == SyncStatus::PAUSED) status_str = "paused";
         else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
 
+        // Build a consistent response structure matching other endpoints
+        auto folders = engine_->getSyncFolders();
+        json data = {
+            {"status", status_str},
+            {"uploadSpeed", state.uploadSpeed},
+            {"downloadSpeed", state.downloadSpeed},
+            {"pendingUploads", state.pendingUploads},
+            {"pendingDownloads", state.pendingDownloads},
+            {"lastSync", state.lastSync},
+            {"syncFolderCount", static_cast<int>(folders.size())}
+        };
+
         json response = {
             {"type", "sync_state"},
-            {"status", status_str},
-            {"upload_speed", state.uploadSpeed},
-            {"download_speed", state.downloadSpeed},
-            {"last_sync", state.lastSync}
+            {"success", true},
+            {"data", data}
         };
+
         sendResponse(response, requestId);
 
     } catch (const std::exception& e) {
@@ -1049,5 +1204,654 @@ void IpcServer::handleResolveAllConflicts(const json& message, int requestId) {
     }
 }
 
-}  // namespace baludesk
+// ============================================================================
+// Remote Server Profile Handlers
+// ============================================================================
 
+void IpcServer::handleAddRemoteServerProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        RemoteServerProfile profile;
+        
+        // Set owner to current username
+        profile.owner = currentUsername_;
+        Logger::info("Adding profile with owner='{}' (currentUsername_='{}')", profile.owner, currentUsername_);
+        
+        profile.name = message["name"];
+        profile.sshHost = message["sshHost"];
+        profile.sshPort = message.value("sshPort", 22);
+        profile.sshUsername = message["sshUsername"];
+        profile.sshPrivateKey = message["sshPrivateKey"];
+        profile.vpnProfileId = message.value("vpnProfileId", 0);
+        profile.powerOnCommand = message.value("powerOnCommand", "");
+        
+        bool success = db->addRemoteServerProfile(profile);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "add_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile added successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to add remote server profile to database", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to add remote server profile: ") + e.what(), requestId);
+        Logger::error("Error in handleAddRemoteServerProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleUpdateRemoteServerProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        RemoteServerProfile profile;
+        profile.id = id;
+        profile.name = message["name"];
+        profile.sshHost = message["sshHost"];
+        profile.sshPort = message.value("sshPort", 22);
+        profile.sshUsername = message["sshUsername"];
+        profile.sshPrivateKey = message["sshPrivateKey"];
+        profile.vpnProfileId = message.value("vpnProfileId", 0);
+        profile.powerOnCommand = message.value("powerOnCommand", "");
+        
+        bool success = db->updateRemoteServerProfile(profile);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "update_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile updated successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to update remote server profile", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to update remote server profile: ") + e.what(), requestId);
+        Logger::error("Error in handleUpdateRemoteServerProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleDeleteRemoteServerProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        bool success = db->deleteRemoteServerProfile(id);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "delete_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "Remote server profile deleted successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to delete remote server profile", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to delete remote server profile: ") + e.what(), requestId);
+        Logger::error("Error in handleDeleteRemoteServerProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetRemoteServerProfiles(int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        // If user is logged in, get their profiles only
+        // If not logged in (currentUsername_ is empty), get ALL profiles for login screen
+        std::vector<RemoteServerProfile> profiles;
+        if (!currentUsername_.empty()) {
+            profiles = db->getRemoteServerProfiles(currentUsername_);
+        } else {
+            profiles = db->getRemoteServerProfiles();  // Get all for login screen
+        }
+        
+        json profilesArray = json::array();
+        
+        for (const auto& profile : profiles) {
+            json profileObj = json::object();
+            profileObj["id"] = profile.id;
+            profileObj["name"] = profile.name.empty() ? "" : profile.name;
+            profileObj["sshHost"] = profile.sshHost.empty() ? "" : profile.sshHost;
+            profileObj["sshPort"] = profile.sshPort > 0 ? profile.sshPort : 22;
+            profileObj["sshUsername"] = profile.sshUsername.empty() ? "" : profile.sshUsername;
+            profileObj["vpnProfileId"] = profile.vpnProfileId > 0 ? profile.vpnProfileId : 0;
+            profileObj["powerOnCommand"] = profile.powerOnCommand.empty() ? "" : profile.powerOnCommand;
+            profileObj["lastUsed"] = profile.lastUsed.empty() ? "" : profile.lastUsed;
+            profileObj["createdAt"] = profile.createdAt.empty() ? "" : profile.createdAt;
+            profileObj["updatedAt"] = profile.updatedAt.empty() ? "" : profile.updatedAt;
+            profileObj["owner"] = profile.owner.empty() ? "" : profile.owner;  // Include owner for display
+            profilesArray.push_back(profileObj);
+        }
+        
+        json response = json::object();
+        response["type"] = "get_remote_server_profiles_response";
+        response["success"] = true;
+        response["data"]["profiles"] = profilesArray;
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get remote server profiles: ") + e.what(), requestId);
+        Logger::error("Error in handleGetRemoteServerProfiles: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetRemoteServerProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
+        
+        if (profile.id > 0) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"sshHost", profile.sshHost},
+                {"sshPort", profile.sshPort},
+                {"sshUsername", profile.sshUsername},
+                {"vpnProfileId", profile.vpnProfileId},
+                {"powerOnCommand", profile.powerOnCommand},
+                {"lastUsed", profile.lastUsed},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            
+            json response = json::object();
+            response["type"] = "get_remote_server_profile_response";
+            response["success"] = true;
+            response["data"]["profile"] = profileObj;
+            
+            sendResponse(response, requestId);
+        } else {
+            sendError("Remote server profile not found", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get remote server profile: ") + e.what(), requestId);
+        Logger::error("Error in handleGetRemoteServerProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleTestServerConnection(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("Remote server profile not found", requestId);
+            return;
+        }
+        
+        // Test SSH connection using SSH service
+        SshService sshService;
+        auto connectionResult = sshService.testConnection(
+            profile.sshHost,
+            profile.sshPort,
+            profile.sshUsername,
+            profile.sshPrivateKey,
+            10  // 10 second timeout
+        );
+        
+        json response = json::object();
+        response["type"] = "test_server_connection_response";
+        response["success"] = true;
+        response["data"]["connected"] = connectionResult.connected;
+        response["data"]["message"] = connectionResult.message;
+        if (!connectionResult.errorCode.empty()) {
+            response["data"]["errorCode"] = connectionResult.errorCode;
+        }
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to test server connection: ") + e.what(), requestId);
+        Logger::error("Error in handleTestServerConnection: {}", e.what());
+    }
+}
+
+void IpcServer::handleStartRemoteServer(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        RemoteServerProfile profile = db->getRemoteServerProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("Remote server profile not found", requestId);
+            return;
+        }
+        
+        // Check if power-on command is configured
+        if (profile.powerOnCommand.empty()) {
+            sendError("No power-on command configured for this server", requestId);
+            return;
+        }
+        
+        // Execute power-on command via SSH
+        SshService sshService;
+        auto executionResult = sshService.executeCommand(
+            profile.sshHost,
+            profile.sshPort,
+            profile.sshUsername,
+            profile.sshPrivateKey,
+            profile.powerOnCommand,
+            30  // 30 second timeout
+        );
+        
+        json response = json::object();
+        response["type"] = "start_remote_server_response";
+        response["success"] = executionResult.success;
+        response["data"]["message"] = executionResult.success ? 
+            "Server start command executed successfully" : 
+            "Failed to execute server start command";
+        response["data"]["output"] = executionResult.output;
+        if (!executionResult.errorOutput.empty()) {
+            response["data"]["error"] = executionResult.errorOutput;
+        }
+        response["data"]["exitCode"] = executionResult.exitCode;
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to start remote server: ") + e.what(), requestId);
+        Logger::error("Error in handleStartRemoteServer: {}", e.what());
+    }
+}
+
+// ============================================================================
+// VPN Profile Handlers
+// ============================================================================
+
+void IpcServer::handleAddVPNProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        VPNProfile profile;
+        profile.name = message["name"];
+        profile.vpnType = message["vpnType"];
+        profile.description = message.value("description", "");
+        profile.configContent = message["configContent"];
+        profile.certificate = message.value("certificate", "");
+        profile.privateKey = message.value("privateKey", "");
+        profile.autoConnect = message.value("autoConnect", false);
+        
+        bool success = db->addVPNProfile(profile);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "add_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile added successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to add VPN profile to database", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to add VPN profile: ") + e.what(), requestId);
+        Logger::error("Error in handleAddVPNProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleUpdateVPNProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        VPNProfile profile;
+        profile.id = id;
+        profile.name = message["name"];
+        profile.vpnType = message["vpnType"];
+        profile.description = message.value("description", "");
+        profile.configContent = message["configContent"];
+        profile.certificate = message.value("certificate", "");
+        profile.privateKey = message.value("privateKey", "");
+        profile.autoConnect = message.value("autoConnect", false);
+        
+        bool success = db->updateVPNProfile(profile);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "update_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile updated successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to update VPN profile", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to update VPN profile: ") + e.what(), requestId);
+        Logger::error("Error in handleUpdateVPNProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleDeleteVPNProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        bool success = db->deleteVPNProfile(id);
+        
+        if (success) {
+            json response = json::object();
+            response["type"] = "delete_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["message"] = "VPN profile deleted successfully";
+            sendResponse(response, requestId);
+        } else {
+            sendError("Failed to delete VPN profile", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to delete VPN profile: ") + e.what(), requestId);
+        Logger::error("Error in handleDeleteVPNProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetVPNProfiles(int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        auto profiles = db->getVPNProfiles();
+        json profilesArray = json::array();
+        
+        for (const auto& profile : profiles) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"vpnType", profile.vpnType},
+                {"description", profile.description},
+                {"autoConnect", profile.autoConnect},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            profilesArray.push_back(profileObj);
+        }
+        
+        json response = json::object();
+        response["type"] = "get_vpn_profiles_response";
+        response["success"] = true;
+        response["data"]["profiles"] = profilesArray;
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get VPN profiles: ") + e.what(), requestId);
+        Logger::error("Error in handleGetVPNProfiles: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetVPNProfile(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        VPNProfile profile = db->getVPNProfile(id);
+        
+        if (profile.id > 0) {
+            json profileObj = {
+                {"id", profile.id},
+                {"name", profile.name},
+                {"vpnType", profile.vpnType},
+                {"description", profile.description},
+                {"autoConnect", profile.autoConnect},
+                {"createdAt", profile.createdAt},
+                {"updatedAt", profile.updatedAt}
+            };
+            
+            json response = json::object();
+            response["type"] = "get_vpn_profile_response";
+            response["success"] = true;
+            response["data"]["profile"] = profileObj;
+            
+            sendResponse(response, requestId);
+        } else {
+            sendError("VPN profile not found", requestId);
+        }
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get VPN profile: ") + e.what(), requestId);
+        Logger::error("Error in handleGetVPNProfile: {}", e.what());
+    }
+}
+
+void IpcServer::handleTestVPNConnection(const json& message, int requestId) {
+    try {
+        auto db = engine_->getDatabase();
+        if (!engine_ || !db) {
+            sendError("Database not initialized", requestId);
+            return;
+        }
+        
+        int id = message["id"];
+        VPNProfile profile = db->getVPNProfile(id);
+        
+        if (profile.id <= 0) {
+            sendError("VPN profile not found", requestId);
+            return;
+        }
+        
+        // Test VPN configuration using VPN service
+        VpnService vpnService;
+        auto connectionResult = vpnService.testConnection(
+            profile.vpnType,
+            profile.configContent,
+            profile.certificate,
+            profile.privateKey
+        );
+        
+        json response = json::object();
+        response["type"] = "test_vpn_connection_response";
+        response["success"] = true;
+        response["data"]["connected"] = connectionResult.connected;
+        response["data"]["message"] = connectionResult.message;
+        if (!connectionResult.errorCode.empty()) {
+            response["data"]["errorCode"] = connectionResult.errorCode;
+        }
+        
+        sendResponse(response, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to test VPN connection: ") + e.what(), requestId);
+        Logger::error("Error in handleTestVPNConnection: {}", e.what());
+    }
+}
+
+void IpcServer::handleDiscoverNetworkServers(int requestId) {
+    try {
+        json servers = json::array();
+        
+        // Get current timestamp as ISO string
+        auto now = std::chrono::system_clock::now();
+        auto time_t_now = std::chrono::system_clock::to_time_t(now);
+        std::stringstream ss;
+        ss << std::put_time(std::gmtime(&time_t_now), "%Y-%m-%dT%H:%M:%SZ");
+        std::string timestamp = ss.str();
+        
+        std::string discoveryMethod = "none";
+        
+        // Check if localhost BaluHost server is running
+        if (baluhostClient_ && baluhostClient_->isAuthenticated()) {
+            // User is authenticated, so we know localhost:8000 is running
+            json localServer = json::object();
+            localServer["hostname"] = "localhost";
+            localServer["ipAddress"] = "127.0.0.1";
+            localServer["port"] = 8000;
+            localServer["sshPort"] = 22;
+            localServer["description"] = "Local BaluHost Server";
+            localServer["discoveredAt"] = timestamp;
+            servers.push_back(localServer);
+            discoveryMethod = "authenticated";
+            Logger::info("Discovered local BaluHost server (authenticated)");
+        } else {
+            // Try to detect localhost server via HTTP probe
+            try {
+                // Simple check: try to create a client and see if server responds
+                auto testClient = std::make_unique<BaluhostClient>("http://localhost:8000");
+                // We don't actually need to login, just check if server exists
+                // For now, assume localhost:8000 is the default
+                json localServer = json::object();
+                localServer["hostname"] = "localhost";
+                localServer["ipAddress"] = "127.0.0.1";
+                localServer["port"] = 8000;
+                localServer["sshPort"] = 22;
+                localServer["description"] = "Local BaluHost Server";
+                localServer["discoveredAt"] = timestamp;
+                servers.push_back(localServer);
+                discoveryMethod = "localhost_probe";
+                Logger::info("Discovered local BaluHost server (probe)");
+            } catch (const std::exception& e) {
+                Logger::warn("Could not detect localhost BaluHost server: {}", e.what());
+            }
+        }
+        
+        // Future: Could add network scanning for other servers
+        // - mDNS/Bonjour discovery
+        // - Previously connected servers from database
+        // - Manual server entries
+        
+        json response = json::object();
+        response["type"] = "discover_network_servers_response";
+        response["success"] = true;
+        response["data"]["servers"] = servers;
+        response["data"]["discoveryMethod"] = discoveryMethod;
+        
+        sendResponse(response, requestId);
+        
+        Logger::info("Network discovery complete: {} servers found", servers.size());
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to discover network servers: ") + e.what(), requestId);
+        Logger::error("Error in handleDiscoverNetworkServers: {}", e.what());
+    }
+}
+
+void IpcServer::handleCheckServerHealth(const json& message, int requestId) {
+    try {
+        if (!message.contains("server_url")) {
+            sendError("Missing server_url parameter", requestId);
+            return;
+        }
+        
+        std::string serverUrl = message["server_url"].get<std::string>();
+        
+        Logger::info("Checking server health: {}", serverUrl);
+        
+        // Perform a simple HTTP health check
+        CURL* curl = curl_easy_init();
+        if (!curl) {
+            sendError("Failed to initialize CURL", requestId);
+            return;
+        }
+        
+        // Construct the health check URL - use /api/health endpoint which doesn't require auth
+        std::string healthUrl = serverUrl + "/api/health";
+        
+        // Response buffer
+        std::string responseBuffer;
+        
+        // Set up CURL options
+        curl_easy_setopt(curl, CURLOPT_URL, healthUrl.c_str());
+        curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, HealthCheckWriteCallback);
+        curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void*)&responseBuffer);
+        curl_easy_setopt(curl, CURLOPT_TIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 5L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        
+        // Perform the request
+        CURLcode res = curl_easy_perform(curl);
+        
+        json result = json::object();
+        result["type"] = "check_server_health_response";
+        result["success"] = true;
+        
+        if (res == CURLE_OK) {
+            long httpCode = 0;
+            curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &httpCode);
+            
+            if (httpCode >= 200 && httpCode < 300) {
+                result["data"]["connected"] = true;
+                result["data"]["message"] = "Server is online";
+                Logger::info("Server health check passed for: {} (HTTP {})", serverUrl, httpCode);
+            } else {
+                result["data"]["connected"] = false;
+                result["data"]["message"] = "Server returned HTTP " + std::to_string(httpCode);
+                Logger::warn("Server health check failed for {}: HTTP {}", serverUrl, httpCode);
+            }
+        } else {
+            result["data"]["connected"] = false;
+            result["data"]["message"] = std::string("Connection failed: ") + curl_easy_strerror(res);
+            Logger::warn("Server health check failed for {}: {}", serverUrl, curl_easy_strerror(res));
+        }
+        
+        curl_easy_cleanup(curl);
+        sendResponse(result, requestId);
+        
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to check server health: ") + e.what(), requestId);
+        Logger::error("Error in handleCheckServerHealth: {}", e.what());
+    }
+}
+
+}  // namespace baludesk

@@ -1,5 +1,6 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
+import { localApi } from '../lib/localApi';
 
 interface LoginProps {
   onLogin: (user: any, token: string) => void;
@@ -10,6 +11,19 @@ export default function Login({ onLogin }: LoginProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [localBackendAvailable, setLocalBackendAvailable] = useState(false);
+  const [connectionMode, setConnectionMode] = useState<'checking' | 'local' | 'ipc' | 'fallback'>('checking');
+
+  // Check if local backend is available on component mount
+  useEffect(() => {
+    const checkBackend = async () => {
+      const available = await localApi.isAvailable();
+      setLocalBackendAvailable(available);
+      setConnectionMode(available ? 'local' : 'ipc');
+      console.log('[Login] Local backend available:', available);
+    };
+    checkBackend();
+  }, []);
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -17,7 +31,30 @@ export default function Login({ onLogin }: LoginProps) {
     setLoading(true);
 
     try {
-        const response = await fetch('/api/auth/login', {
+      // Strategy 1: Try local API if available
+      if (localBackendAvailable) {
+        try {
+          console.log('[Login] Attempting login via local HTTP API...');
+          const loginResult = await localApi.login(username, password);
+          
+          console.log('[Login] Local API login successful:', {
+            username: loginResult.user.username,
+            hasToken: !!loginResult.access_token
+          });
+
+          setConnectionMode('local');
+          onLogin(loginResult.user, loginResult.access_token);
+          return;
+        } catch (localErr: any) {
+          console.warn('[Login] Local API login failed, trying fallback:', localErr.message);
+          setConnectionMode('fallback');
+          // Continue to fallback strategy
+        }
+      }
+
+      // Strategy 2: Fall back to regular fetch (via proxy or IPC)
+      console.log('[Login] Using fallback fetch method...');
+      const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -52,6 +89,7 @@ export default function Login({ onLogin }: LoginProps) {
         throw new Error('Login response did not include an access token');
       }
 
+      console.log('[Login] Fallback login successful');
       onLogin(data.user, token);
     } catch (err: any) {
       console.error('Login error:', err);
@@ -79,6 +117,22 @@ export default function Login({ onLogin }: LoginProps) {
             </div>
             <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">BalùHost</h1>
             <p className="mt-2 text-sm text-slate-100-tertiary">Secure Personal Cloud Gateway</p>
+            
+            {/* Connection mode indicator */}
+            {connectionMode !== 'checking' && (
+              <div className="mt-3 flex items-center gap-2 text-xs">
+                <div className={`h-2 w-2 rounded-full ${
+                  connectionMode === 'local' ? 'bg-emerald-400 animate-pulse' :
+                  connectionMode === 'ipc' ? 'bg-amber-400' :
+                  'bg-slate-400'
+                }`} />
+                <span className="text-slate-100-tertiary uppercase tracking-wider">
+                  {connectionMode === 'local' ? 'Direct Local Access' :
+                   connectionMode === 'ipc' ? 'Network Mode' :
+                   'Fallback Mode'}
+                </span>
+              </div>
+            )}
           </div>
 
           <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">

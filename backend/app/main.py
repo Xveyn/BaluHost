@@ -10,6 +10,8 @@ from app.compat import apply_asyncio_patches
 apply_asyncio_patches()
 
 from fastapi import FastAPI
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from slowapi import _rate_limit_exceeded_handler
@@ -21,11 +23,13 @@ from app.core.config import settings
 from app.core.database import init_db
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.services.users import ensure_admin_user
-from app.services import disk_monitor, jobs, seed, telemetry, sync_background
+from app.services import disk_monitor, jobs, seed, telemetry, sync_background, raid as raid_service
+from app.services import smart as smart_service
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
 from app.middleware.device_tracking import DeviceTrackingMiddleware
+from app.middleware.local_only import LocalOnlyMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -98,6 +102,16 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
             logger.warning(f"Notification scheduler could not start: {e}")
     else:
         logger.info("⏭️  Notification scheduler skipped (Firebase not configured)")
+    # Start RAID scrub scheduler (if enabled in settings)
+    try:
+        raid_service.start_scrub_scheduler()
+    except Exception as e:
+        logger.warning(f"RAID scrub scheduler could not start: {e}")
+    # Start SMART scheduler (if enabled in settings)
+    try:
+        smart_service.start_smart_scheduler()
+    except Exception as e:
+        logger.warning(f"SMART scheduler could not start: {e}")
     
     try:
         yield
@@ -130,6 +144,16 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
         if _notification_scheduler:
             _notification_scheduler.shutdown()
             logger.info("Notification scheduler stopped")
+        # Stop RAID scrub scheduler
+        try:
+            raid_service.stop_scrub_scheduler()
+        except Exception:
+            logger.debug("Error while stopping RAID scrub scheduler")
+        # Stop SMART scheduler
+        try:
+            smart_service.stop_smart_scheduler()
+        except Exception:
+            logger.debug("Error while stopping SMART scheduler")
 
 
 def create_app() -> FastAPI:
@@ -145,6 +169,34 @@ def create_app() -> FastAPI:
     # Add rate limiting state and exception handler
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+
+    # Map specific validation errors (e.g. SSH private key format) to 400
+    def _validation_exception_handler(request, exc: RequestValidationError):
+        try:
+            errors = exc.errors()
+            # If any validation message mentions PRIVATE KEY, return 400
+            for e in errors:
+                msg = e.get("msg", "")
+                if "PRIVATE KEY" in str(msg).upper():
+                    return JSONResponse(status_code=400, content={"detail": msg})
+        except Exception:
+            pass
+        # Default behavior: return standard 422 response body
+        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
+    app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+
+    # Add local-only enforcement middleware (Option B security)
+    if settings.enforce_local_only:
+        app.add_middleware(
+            LocalOnlyMiddleware,
+            enforce=True,
+            protected_prefixes=[
+                "/api/server-profiles",
+                "/api/auth/login",
+                "/api/auth/register",
+            ]
+        )
 
     # Add device tracking middleware (updates last_seen for mobile devices)
     app.add_middleware(DeviceTrackingMiddleware)

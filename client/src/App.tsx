@@ -6,6 +6,8 @@ import FileManager from './pages/FileManager';
 import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
 import RaidManagement from './pages/RaidManagement';
+import AdminHealth from './pages/AdminHealth';
+import SchedulerControls from './pages/SchedulerControls';
 import Logging from './pages/Logging';
 import ApiCenterPage from './pages/ApiCenterPage';
 import SharesPage from './pages/SharesPage';
@@ -15,6 +17,7 @@ import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
 import SyncPrototype from './pages/SyncPrototype';
 import MobileDevicesPage from './pages/MobileDevicesPage';
+import { RemoteServersPage } from './pages/RemoteServersPage';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -182,6 +185,30 @@ function App() {
           }
         />
         <Route
+          path="/schedulers"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SchedulerControls />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/health"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminHealth />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
           path="/system"
           element={
             user ? (
@@ -259,6 +286,18 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <MobileDevicesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/remote-servers"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <RemoteServersPage />
               </Layout>
             ) : (
               <Navigate to="/login" />

@@ -1,4 +1,4 @@
-import { Cloud, Activity, Files, FolderSync, AlertCircle, LogOut, Settings as SettingsIcon } from 'lucide-react';
+import { Cloud, Activity, Files, FolderSync, AlertCircle, LogOut, Settings as SettingsIcon, Server } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -46,6 +46,12 @@ export default function MainLayout({ user, onLogout, children, conflictCount = 0
       path: '/conflicts',
       icon: <AlertCircle className="h-4 w-4" />,
       badge: conflictCount > 0 ? conflictCount : undefined,
+    },
+    {
+      id: 'remote-servers',
+      label: 'Remote Servers',
+      path: '/remote-servers',
+      icon: <Server className="h-4 w-4" />,
     },
   ];
 

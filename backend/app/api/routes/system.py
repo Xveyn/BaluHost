@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 
 from app.api import deps
 from app.schemas.system import (
@@ -13,6 +13,7 @@ from app.schemas.system import (
     RaidOptionsRequest,
     RaidSimulationRequest,
     RaidStatusResponse,
+    SystemHealthResponse,
     SmartStatusResponse,
     StorageInfo,
     SystemInfo,
@@ -31,6 +32,22 @@ router = APIRouter()
 
 @router.get("/info", response_model=SystemInfo)
 async def get_system_info(_: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
+    return system_service.get_system_info()
+
+
+@router.get("/info/local", response_model=SystemInfo)
+def get_system_info_local(request: Request) -> SystemInfo:
+    """Local-only unauthenticated access for trusted localhost clients.
+
+    This endpoint is intended for desktop integrations running on the same
+    host (e.g. the Baludesk C++ backend). It rejects requests that do not
+    originate from localhost to avoid exposing system telemetry over the
+    network without authentication.
+    """
+    client_host = request.client.host if request.client else None
+    allowed = {"127.0.0.1", "::1", "localhost"}
+    if client_host not in allowed:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Local access only")
     return system_service.get_system_info()
 
 
@@ -251,6 +268,36 @@ async def delete_array(
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
+@router.get("/health", response_model=SystemHealthResponse)
+async def get_system_health(_: UserPublic = Depends(deps.get_current_user)) -> SystemHealthResponse:
+    """Aggregated health summary combining system, SMART, RAID and disk I/O info."""
+    from app.services import disk_monitor
+
+    system_info = system_service.get_system_info()
+
+    # SMART data: best-effort, may fallback to mock
+    try:
+        smart_info = smart_service.get_smart_status()
+    except Exception:
+        smart_info = None
+
+    # RAID status: optional
+    try:
+        raid_info = raid_service.get_status()
+    except Exception:
+        raid_info = None
+
+    disk_io = disk_monitor.get_latest_disk_io()
+
+    return SystemHealthResponse(
+        status="ok",
+        system=system_info,
+        smart=smart_info,
+        raid=raid_info,
+        disk_io=disk_io,
+    )
+
+
 # Dev-Mode: Mock Disk Management
 class AddMockDiskRequest(BaseModel):
     letter: str
@@ -278,4 +325,93 @@ async def add_mock_disk(
     except ValueError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+class SmartTestRequest(BaseModel):
+    device: str
+    type: str = "short"  # short or long
+
+
+@router.post("/smart/test")
+async def trigger_smart_test(
+    payload: SmartTestRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> dict:
+    """Trigger a SMART self-test on a given device (admin only)."""
+    try:
+        msg = smart_service.run_smart_self_test(payload.device, payload.type)
+        return {"message": msg}
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+class ScrubRequest(BaseModel):
+    array: str | None = None
+
+
+@router.post("/raid/scrub", response_model=RaidActionResponse)
+async def trigger_raid_scrub(
+    payload: ScrubRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Trigger an immediate RAID scrub/check for a specific array or all arrays (admin only)."""
+    try:
+        return raid_service.scrub_now(payload.array)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+# Two-step confirmation API for destructive RAID operations
+class ConfirmRequest(BaseModel):
+    action: str
+    payload: dict
+    ttl_seconds: int | None = 3600
+
+
+class ConfirmResponse(BaseModel):
+    token: str
+    expires_at: int
+
+
+@router.post("/raid/confirm/request", response_model=ConfirmResponse)
+async def request_raid_confirmation(
+    payload: ConfirmRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> ConfirmResponse:
+    """Request a one-time confirmation token for a destructive RAID action.
+
+    Supported actions: `delete_array`, `format_disk`, `create_array`.
+    """
+    allowed = {"delete_array", "format_disk", "create_array"}
+    if payload.action not in allowed:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported action: {payload.action}")
+    try:
+        res = raid_service.request_confirmation(payload.action, payload.payload, payload.ttl_seconds or 3600)
+        return ConfirmResponse(**res)
+    except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+class ExecuteConfirmRequest(BaseModel):
+    token: str
+
+
+@router.post("/raid/confirm/execute", response_model=RaidActionResponse)
+async def execute_raid_confirmation(
+    payload: ExecuteConfirmRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Execute a previously requested confirmation token (one-time).
+    """
+    try:
+        resp = raid_service.execute_confirmation(payload.token)
+        return resp
+    except KeyError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc

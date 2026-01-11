@@ -34,6 +34,20 @@ HttpClient::HttpClient(const std::string& baseUrl)
         Logger::critical("Failed to initialize libcurl");
         throw std::runtime_error("Failed to initialize libcurl");
     }
+    // Ensure local requests bypass any system proxy settings (important on Windows)
+    // so that calls to 127.0.0.1 or localhost do not try to use an external proxy.
+    try {
+        const char* noProxy = "127.0.0.1;localhost";
+        curl_easy_setopt(curl_, CURLOPT_NOPROXY, noProxy);
+    } catch (...) {
+        // Non-fatal: continue without nopxy if setting fails
+    }
+    // Disable any proxy explicitly for this handle. Verbose logging
+    // is controlled by `verbose_` and set per-request when enabled.
+    try {
+        curl_easy_setopt(curl_, CURLOPT_PROXY, "");
+    } catch (...) {
+    }
 }
 
 HttpClient::~HttpClient() {
@@ -155,6 +169,12 @@ bool HttpClient::uploadFile(const std::string& localPath, const std::string& rem
             Logger::error("Failed to create upload handle");
             return false;
         }
+        // Bypass proxy for local addresses to avoid proxy interference
+        curl_easy_setopt(uploadCurl, CURLOPT_NOPROXY, "127.0.0.1;localhost");
+        curl_easy_setopt(uploadCurl, CURLOPT_PROXY, "");
+        if (verbose_) {
+            curl_easy_setopt(uploadCurl, CURLOPT_VERBOSE, 1L);
+        }
         
         struct curl_slist* headers = nullptr;
         headers = curl_slist_append(headers, "Content-Type: application/octet-stream");
@@ -228,6 +248,14 @@ bool HttpClient::downloadFile(const std::string& remotePath, const std::string& 
             Logger::error("Failed to create download handle");
             return false;
         }
+        // Bypass proxy for local addresses to avoid proxy interference
+        curl_easy_setopt(downloadCurl, CURLOPT_NOPROXY, "127.0.0.1;localhost");
+        curl_easy_setopt(downloadCurl, CURLOPT_PROXY, "");
+        if (verbose_) {
+            curl_easy_setopt(downloadCurl, CURLOPT_VERBOSE, 1L);
+        }
+        // Bypass proxy for local addresses to avoid proxy interference
+        curl_easy_setopt(downloadCurl, CURLOPT_NOPROXY, "127.0.0.1;localhost");
         
         struct curl_slist* headers = nullptr;
         std::string authHeader = "Authorization: Bearer " + authToken_;
@@ -368,6 +396,7 @@ std::string HttpClient::performRequest(const std::string& url, const std::string
     }
     
     curl_easy_setopt(curl_, CURLOPT_URL, url.c_str());
+    Logger::debug("HTTP request: {} {}", method, url);
     curl_easy_setopt(curl_, CURLOPT_HTTPHEADER, headers);
     curl_easy_setopt(curl_, CURLOPT_WRITEFUNCTION, writeCallback);
     curl_easy_setopt(curl_, CURLOPT_WRITEDATA, &callbackData);
@@ -489,6 +518,8 @@ bool HttpClient::downloadFileRange(
             Logger::error("Failed to create download handle");
             return false;
         }
+        // Bypass proxy for local addresses to avoid proxy interference
+        curl_easy_setopt(downloadCurl, CURLOPT_NOPROXY, "127.0.0.1;localhost");
         
         struct curl_slist* headers = nullptr;
         std::string authHeader = "Authorization: Bearer " + authToken_;
@@ -542,6 +573,18 @@ bool HttpClient::downloadFileRange(
         Logger::error("Exception during download range: {}", e.what());
         return false;
     }
+}
+
+// Simple GET helper
+std::string HttpClient::get(const std::string& path) {
+    // path may be absolute (full URL) or relative path starting with '/'
+    std::string url;
+    if (path.rfind("http://", 0) == 0 || path.rfind("https://", 0) == 0) {
+        url = path;
+    } else {
+        url = baseUrl_ + path;
+    }
+    return performRequest(url, "GET");
 }
 
 // Download with progress callback

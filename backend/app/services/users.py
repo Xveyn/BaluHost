@@ -181,7 +181,7 @@ def update_user_password(user_id: int | str, new_password: str, db: Optional[Ses
 def serialize_user(user: User) -> UserPublic:
     """Convert database User model to UserPublic schema."""
     return UserPublic(
-        id=str(user.id),  # Convert to string for backward compatibility
+        id=user.id,  # Keep as int - matches UserPublic schema
         username=user.username,
         email=user.email or "",
         role=user.role,

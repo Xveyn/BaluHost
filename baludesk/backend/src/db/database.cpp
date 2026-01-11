@@ -110,6 +110,53 @@ bool Database::runMigrations() {
     executeQuery("CREATE INDEX IF NOT EXISTS idx_file_sync_status ON file_metadata(sync_status);");
     executeQuery("CREATE INDEX IF NOT EXISTS idx_conflict_resolved ON conflicts(resolved_at);");
     
+    // Create remote_server_profiles table
+    std::string createRemoteServerProfilesTable = R"(
+        CREATE TABLE IF NOT EXISTS remote_server_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            owner TEXT,
+            name TEXT NOT NULL,
+            ssh_host TEXT NOT NULL,
+            ssh_port INTEGER NOT NULL DEFAULT 22,
+            ssh_username TEXT NOT NULL,
+            ssh_private_key TEXT NOT NULL,
+            vpn_profile_id INTEGER,
+            power_on_command TEXT,
+            last_used TEXT,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+            FOREIGN KEY (vpn_profile_id) REFERENCES vpn_profiles(id) ON DELETE SET NULL
+        );
+    )";
+    
+    if (!executeQuery(createRemoteServerProfilesTable)) {
+        return false;
+    }
+    
+    // Create vpn_profiles table
+    std::string createVPNProfilesTable = R"(
+        CREATE TABLE IF NOT EXISTS vpn_profiles (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL UNIQUE,
+            vpn_type TEXT NOT NULL,
+            description TEXT,
+            config_content TEXT NOT NULL,
+            certificate TEXT,
+            private_key TEXT,
+            auto_connect INTEGER NOT NULL DEFAULT 0,
+            created_at TEXT NOT NULL DEFAULT (datetime('now')),
+            updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+        );
+    )";
+    
+    if (!executeQuery(createVPNProfilesTable)) {
+        return false;
+    }
+    
+    // Create indexes
+    executeQuery("CREATE INDEX IF NOT EXISTS idx_remote_server_ssh_host ON remote_server_profiles(ssh_host);");
+    executeQuery("CREATE INDEX IF NOT EXISTS idx_vpn_type ON vpn_profiles(vpn_type);");
+    
     Logger::info("Database migrations completed");
     return true;
 }
@@ -554,6 +601,348 @@ bool Database::resolveConflict(const std::string& conflictId, const std::string&
     }
     
     return true;
+}
+
+// ============================================================================
+// Remote Server Profiles
+// ============================================================================
+
+bool Database::addRemoteServerProfile(const RemoteServerProfile& profile) {
+    Logger::info("Adding remote server profile: {}", profile.name);
+    
+    const char* sql = R"(
+        INSERT INTO remote_server_profiles (owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?);
+    )";
+    
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_text(stmt, 1, profile.owner.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, profile.name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, profile.sshHost.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 4, profile.sshPort);
+    sqlite3_bind_text(stmt, 5, profile.sshUsername.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 6, profile.sshPrivateKey.c_str(), -1, SQLITE_TRANSIENT);
+    if (profile.vpnProfileId > 0) {
+        sqlite3_bind_int(stmt, 7, profile.vpnProfileId);
+    } else {
+        sqlite3_bind_null(stmt, 7);
+    }
+    sqlite3_bind_text(stmt, 8, profile.powerOnCommand.c_str(), -1, SQLITE_TRANSIENT);
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to add remote server profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    Logger::info("Remote server profile added successfully");
+    return true;
+}
+
+bool Database::updateRemoteServerProfile(const RemoteServerProfile& profile) {
+    Logger::info("Updating remote server profile: {}", profile.name);
+    
+    const char* sql = R"(
+        UPDATE remote_server_profiles
+        SET ssh_host = ?, ssh_port = ?, ssh_username = ?, ssh_private_key = ?, vpn_profile_id = ?, power_on_command = ?, updated_at = datetime('now')
+        WHERE id = ?;
+    )";
+    
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_text(stmt, 1, profile.sshHost.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 2, profile.sshPort);
+    sqlite3_bind_text(stmt, 3, profile.sshUsername.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, profile.sshPrivateKey.c_str(), -1, SQLITE_TRANSIENT);
+    if (profile.vpnProfileId > 0) {
+        sqlite3_bind_int(stmt, 5, profile.vpnProfileId);
+    } else {
+        sqlite3_bind_null(stmt, 5);
+    }
+    sqlite3_bind_text(stmt, 6, profile.powerOnCommand.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 7, profile.id);
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to update remote server profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
+bool Database::deleteRemoteServerProfile(int id) {
+    Logger::info("Deleting remote server profile: {}", id);
+    
+    const char* sql = "DELETE FROM remote_server_profiles WHERE id = ?;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_int(stmt, 1, id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to delete remote server profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
+bool Database::clearAllRemoteServerProfiles() {
+    Logger::info("Clearing all remote server profiles");
+    
+    const char* sql = "DELETE FROM remote_server_profiles;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to clear remote server profiles: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
+RemoteServerProfile Database::getRemoteServerProfile(int id) {
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles WHERE id = ?;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    RemoteServerProfile profile{};
+    if (stmt) {
+        sqlite3_bind_int(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+            }
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profile;
+}
+
+std::vector<RemoteServerProfile> Database::getRemoteServerProfiles(const std::string& owner) {
+    std::vector<RemoteServerProfile> profiles;
+    
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles WHERE owner = ? ORDER BY name;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    if (stmt) {
+        sqlite3_bind_text(stmt, 1, owner.c_str(), -1, SQLITE_TRANSIENT);
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            RemoteServerProfile profile;
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+            }
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+            profiles.push_back(profile);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profiles;
+}
+
+std::vector<RemoteServerProfile> Database::getRemoteServerProfiles() {
+    std::vector<RemoteServerProfile> profiles;
+    
+    const char* sql = "SELECT id, owner, name, ssh_host, ssh_port, ssh_username, ssh_private_key, vpn_profile_id, power_on_command, last_used, created_at, updated_at FROM remote_server_profiles ORDER BY name;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    if (stmt) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            RemoteServerProfile profile;
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.owner = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.sshHost = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.sshPort = sqlite3_column_int(stmt, 4);
+            profile.sshUsername = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.sshPrivateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.vpnProfileId = sqlite3_column_int(stmt, 7);
+            profile.powerOnCommand = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            if (sqlite3_column_text(stmt, 9)) {
+                profile.lastUsed = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+            }
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 10));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 11));
+            profiles.push_back(profile);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profiles;
+}
+
+
+// ============================================================================
+// VPN Profiles
+// ============================================================================
+
+bool Database::addVPNProfile(const VPNProfile& profile) {
+    Logger::info("Adding VPN profile: {}", profile.name);
+    
+    const char* sql = R"(
+        INSERT INTO vpn_profiles (name, vpn_type, description, config_content, certificate, private_key, auto_connect)
+        VALUES (?, ?, ?, ?, ?, ?, ?);
+    )";
+    
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_text(stmt, 1, profile.name.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, profile.vpnType.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, profile.description.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, profile.configContent.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, profile.certificate.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 6, profile.privateKey.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 7, profile.autoConnect ? 1 : 0);
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to add VPN profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    Logger::info("VPN profile added successfully");
+    return true;
+}
+
+bool Database::updateVPNProfile(const VPNProfile& profile) {
+    Logger::info("Updating VPN profile: {}", profile.name);
+    
+    const char* sql = R"(
+        UPDATE vpn_profiles
+        SET vpn_type = ?, description = ?, config_content = ?, certificate = ?, private_key = ?, auto_connect = ?, updated_at = datetime('now')
+        WHERE id = ?;
+    )";
+    
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_text(stmt, 1, profile.vpnType.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, profile.description.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, profile.configContent.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, profile.certificate.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 5, profile.privateKey.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int(stmt, 6, profile.autoConnect ? 1 : 0);
+    sqlite3_bind_int(stmt, 7, profile.id);
+    
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to update VPN profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
+bool Database::deleteVPNProfile(int id) {
+    Logger::info("Deleting VPN profile: {}", id);
+    
+    const char* sql = "DELETE FROM vpn_profiles WHERE id = ?;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+    
+    sqlite3_bind_int(stmt, 1, id);
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to delete VPN profile: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+    
+    return true;
+}
+
+VPNProfile Database::getVPNProfile(int id) {
+    const char* sql = "SELECT id, name, vpn_type, description, config_content, certificate, private_key, auto_connect, created_at, updated_at FROM vpn_profiles WHERE id = ?;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    VPNProfile profile{};
+    if (stmt) {
+        sqlite3_bind_int(stmt, 1, id);
+        if (sqlite3_step(stmt) == SQLITE_ROW) {
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.vpnType = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.description = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.configContent = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+            profile.certificate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.privateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.autoConnect = sqlite3_column_int(stmt, 7) != 0;
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profile;
+}
+
+std::vector<VPNProfile> Database::getVPNProfiles() {
+    std::vector<VPNProfile> profiles;
+    
+    const char* sql = "SELECT id, name, vpn_type, description, config_content, certificate, private_key, auto_connect, created_at, updated_at FROM vpn_profiles ORDER BY name;";
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    
+    if (stmt) {
+        while (sqlite3_step(stmt) == SQLITE_ROW) {
+            VPNProfile profile;
+            profile.id = sqlite3_column_int(stmt, 0);
+            profile.name = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+            profile.vpnType = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+            profile.description = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+            profile.configContent = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+            profile.certificate = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+            profile.privateKey = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            profile.autoConnect = sqlite3_column_int(stmt, 7) != 0;
+            profile.createdAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 8));
+            profile.updatedAt = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 9));
+            profiles.push_back(profile);
+        }
+        sqlite3_finalize(stmt);
+    }
+    
+    return profiles;
 }
 
 // ============================================================================

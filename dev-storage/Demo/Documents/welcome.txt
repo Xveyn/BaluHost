@@ -1,0 +1,3 @@
+Welcome to Baluhost Dev Mode!
+
+These files are for testing the interface only.

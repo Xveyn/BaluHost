@@ -1,0 +1,13 @@
+# Development / optional requirements for backend
+# Install dev tools:
+# pip install -e .[dev]
+
+# Optional scheduler extra (APScheduler) for production scheduler support
+# Install via pip extras from the repository root:
+# pip install -e .[scheduler]
+apscheduler>=3.10.0,<4.0.0
+
+# Optional testing tools (also available via the 'dev' extra in pyproject)
+pytest>=7.4.0,<8.0.0
+pytest-asyncio>=0.23.0,<0.24.0
+httpx>=0.27.0,<0.28.0

@@ -198,6 +198,17 @@ app/
     disk_monitor.py      # Disk I/O Monitoring
     raid.py              # RAID Management
     smart.py             # SMART Disk Health
+    
+  ## RAID settings (CI and production safety)
+
+  Two environment settings control RAID backend selection and safety:
+
+  - `RAID_FORCE_DEV_BACKEND`: when set to `1` forces the use of the development (simulated) RAID backend even on Linux. Useful for CI runners without `mdadm` or for safe unit tests.
+  - `RAID_ASSUME_CLEAN_BY_DEFAULT`: when set to `1`, `mdadm --create` will include `--assume-clean`. WARNING: this is dangerous in production and should remain `0` except in isolated test VMs.
+
+  For full details and self-hosted runner instructions, see: `docs/RAID_CI_AND_SETTINGS.md`.
+
+  Also consider adding `backend/.env.example` to your repo root; it contains recommended entries for these variables.
     network_discovery.py # mDNS/Bonjour Service
 
 ## API Endpoints

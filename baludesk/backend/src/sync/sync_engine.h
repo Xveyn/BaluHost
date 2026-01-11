@@ -112,6 +112,9 @@ public:
     void setFileChangeCallback(FileChangeCallback callback);
     void setErrorCallback(ErrorCallback callback);
 
+    // Database access for IPC
+    Database* getDatabase() const { return database_.get(); }
+
 private:
     // Internal sync loop
     void syncLoop();

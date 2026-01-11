@@ -7,7 +7,7 @@ import shutil
 import subprocess
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Dict, List, Optional, Protocol
+from typing import Dict, List, Optional, Protocol, TYPE_CHECKING, cast
 
 from app.core.config import settings
 from app.schemas.system import (
@@ -26,6 +26,19 @@ from app.schemas.system import (
 )
 
 logger = logging.getLogger(__name__)
+import datetime
+import json
+import uuid
+import time
+
+# Type-only import for annotations; runtime import uses `_APScheduler`.
+if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _APScheduler
+except Exception:  # pragma: no cover - scheduler optional
+    _APScheduler = None
 
 
 class RaidBackend(Protocol):
@@ -223,9 +236,13 @@ def _parse_mdstat(content: str) -> Dict[str, MdstatInfo]:
 
         info = arrays[current]
         if info.blocks is None:
-            match = re.search(r"(\d+)\s+blocks", line)
+            # Accept numbers with optional commas (e.g. "2,096,128 blocks")
+            match = re.search(r"([\d,]+)\s+blocks", line)
             if match:
-                info.blocks = int(match.group(1))
+                try:
+                    info.blocks = int(match.group(1).replace(",", ""))
+                except ValueError:  # pragma: no cover - defensive fallback
+                    info.blocks = None
 
         lowered = line.lower()
         if info.resync_progress is None and any(
@@ -237,6 +254,17 @@ def _parse_mdstat(content: str) -> Dict[str, MdstatInfo]:
                     info.resync_progress = float(progress_match.group(1))
                 except ValueError:  # pragma: no cover - defensive conversion
                     info.resync_progress = None
+            # If no explicit percentage is present, try to infer progress from a fraction like (259212/2096128).
+            if info.resync_progress is None:
+                frac_match = re.search(r"\(([\d,]+)\/([\d,]+)\)", line)
+                if frac_match:
+                    try:
+                        num = int(frac_match.group(1).replace(",", ""))
+                        den = int(frac_match.group(2).replace(",", ""))
+                        if den > 0:
+                            info.resync_progress = (num / den) * 100.0
+                    except ValueError:  # pragma: no cover - defensive
+                        pass
 
     return arrays
 
@@ -674,12 +702,19 @@ class MdadmRaidBackend:
         # Try to parse the mdadm detail output
         size_text = _extract_detail_value(detail, "Array Size")
         if size_text:
-            blocks_match = re.search(r"(\d+)\s+blocks", size_text)
+            # Accept numbers with optional commas (e.g. "2,096,128 blocks")
+            blocks_match = re.search(r"([\d,]+)\s+blocks", size_text)
             if blocks_match:
-                return int(blocks_match.group(1)) * 1024
-            byte_match = re.search(r"(\d+)\s+bytes", size_text)
+                try:
+                    return int(blocks_match.group(1).replace(",", "")) * 1024
+                except ValueError:  # pragma: no cover - defensive fallback
+                    pass
+            byte_match = re.search(r"([\d,]+)\s+bytes", size_text)
             if byte_match:
-                return int(byte_match.group(1))
+                try:
+                    return int(byte_match.group(1).replace(",", ""))
+                except ValueError:  # pragma: no cover - defensive fallback
+                    pass
 
         if self._lsblk_available:
             result = self._run(
@@ -722,20 +757,37 @@ class MdadmRaidBackend:
             line = raw_line.strip()
             if not line:
                 continue
-            if line.startswith("Number"):
+
+            # Detect common header markers in various languages (e.g. 'Number', 'Nummer')
+            low = line.lower()
+            if low.startswith("number") or low.startswith("nummer") or low.startswith("numéro"):
                 in_table = True
                 continue
+
+            # If header is absent, detect rows starting with an index number (headerless output)
             if not in_table:
-                continue
-            if line.startswith("unused devices"):
+                if re.match(r"^\s*\d+\s+", raw_line):
+                    in_table = True
+                    # fallthrough to parse this row
+                else:
+                    continue
+
+            if low.startswith("unused devices"):
                 break
 
             parts = line.split()
-            if len(parts) < 6:
+            if len(parts) < 2:
                 continue
 
             device_path = parts[-1]
-            state_tokens = parts[4:-1]
+
+            # Typical mdadm table has several leading numeric columns; state tokens often live
+            # in columns 5..N-1. Fall back to a best-effort slice if the strict indices are not present.
+            if len(parts) >= 6:
+                state_tokens = parts[4:-1]
+            else:
+                state_tokens = parts[1:-1]
+
             state_text = " ".join(state_tokens)
             devices.append(RaidDevice(name=Path(device_path).name, state=_map_device_state(state_text)))
 
@@ -956,8 +1008,9 @@ class MdadmRaidBackend:
         for spare in payload.spare_devices:
             cmd.append(self._normalize_device(spare))
         
-        # Assume clean (skip initial resync)
-        cmd.append("--assume-clean")
+        # Optionally assume clean (skip initial resync) only when explicitly allowed
+        if getattr(settings, "raid_assume_clean_by_default", False):
+            cmd.append("--assume-clean")
         
         logger.info("Creating RAID array %s with command: %s", payload.name, " ".join(cmd))
         self._run(cmd, timeout=300)
@@ -991,10 +1044,22 @@ class MdadmRaidBackend:
 
 
 def _select_backend() -> RaidBackend:
-    if settings.is_dev_mode or platform.system().lower() != "linux":
-        logger.debug("Using development RAID backend")
+    # Respect explicit override in settings first (useful for tests or CI)
+    if getattr(settings, "raid_force_dev_backend", False):
+        logger.debug("Using development RAID backend (forced by settings)")
         return DevRaidBackend()
 
+    # Non-Linux hosts cannot use mdadm -> fall back to dev backend
+    if platform.system().lower() != "linux":
+        logger.debug("Non-Linux host detected; using development RAID backend")
+        return DevRaidBackend()
+
+    # If nas_mode explicitly requests dev, use dev backend
+    if getattr(settings, "is_dev_mode", False):
+        logger.debug("Using development RAID backend (nas_mode=dev)")
+        return DevRaidBackend()
+
+    # Otherwise prefer the mdadm backend when available
     if MdadmRaidBackend.is_supported():
         logger.info("Using mdadm RAID backend")
         return MdadmRaidBackend()
@@ -1005,23 +1070,82 @@ def _select_backend() -> RaidBackend:
 _backend = _select_backend()
 
 
+def _payload_to_dict(payload: object) -> object:
+    try:
+        # Pydantic v2
+        return payload.model_dump()  # type: ignore[attr-defined]
+    except Exception:
+        try:
+            return payload.dict()  # type: ignore[attr-defined]
+        except Exception:
+            return str(payload)
+
+
+def _audit_event(action: str, payload: object | None = None, dry_run: bool = False) -> None:
+    """Append a compact audit record to the configured audit file (best-effort).
+
+    The function never raises; failures are logged only.
+    """
+    record = {
+        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "action": action,
+        "dry_run": bool(dry_run),
+        "payload": _payload_to_dict(payload) if payload is not None else None,
+    }
+    logger.info("RAID audit: %s", json.dumps(record, default=str))
+    audit_path = getattr(settings, "raid_audit_log", None)
+    if not audit_path:
+        return
+    try:
+        p = Path(audit_path)
+        p.parent.mkdir(parents=True, exist_ok=True)
+        with p.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(record, default=str) + "\n")
+    except Exception as exc:  # pragma: no cover - best-effort logging
+        logger.debug("Failed to write RAID audit record to %s: %s", audit_path, exc)
+
+
 def get_status() -> RaidStatusResponse:
     return _backend.get_status()
 
 
 def simulate_failure(payload: RaidSimulationRequest) -> RaidActionResponse:
+    _audit_event("simulate_failure", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.degrade(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.degrade(payload)
 
 
 def simulate_rebuild(payload: RaidSimulationRequest) -> RaidActionResponse:
+    _audit_event("simulate_rebuild", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.rebuild(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.rebuild(payload)
 
 
 def finalize_rebuild(payload: RaidSimulationRequest) -> RaidActionResponse:
+    _audit_event("finalize_rebuild", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.finalize(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.finalize(payload)
 
 
 def configure_array(payload: RaidOptionsRequest) -> RaidActionResponse:
+    _audit_event("configure_array", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.configure(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.configure(payload)
 
 
@@ -1030,14 +1154,32 @@ def get_available_disks() -> AvailableDisksResponse:
 
 
 def format_disk(payload: FormatDiskRequest) -> RaidActionResponse:
+    _audit_event("format_disk", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.format_disk(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.format_disk(payload)
 
 
 def create_array(payload: CreateArrayRequest) -> RaidActionResponse:
+    _audit_event("create_array", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.create_array(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.create_array(payload)
 
 
 def delete_array(payload: DeleteArrayRequest) -> RaidActionResponse:
+    _audit_event("delete_array", payload, dry_run=getattr(settings, "raid_dry_run", False))
+    if getattr(settings, "raid_dry_run", False) and not isinstance(_backend, DevRaidBackend):
+        dev = DevRaidBackend()
+        resp = dev.delete_array(payload)
+        resp.message = "[DRY-RUN] " + resp.message
+        return resp
     return _backend.delete_array(payload)
 
 
@@ -1046,3 +1188,147 @@ def add_mock_disk(letter: str, size_gb: int, name: str, purpose: str) -> RaidAct
     if not isinstance(_backend, DevRaidBackend):
         raise RuntimeError("Mock disk management is only available in dev mode")
     return _backend.add_mock_disk(letter, size_gb, name, purpose)
+
+
+# Two-step confirmation store for destructive operations
+_confirmations: Dict[str, Dict] = {}
+
+
+def request_confirmation(action: str, payload: object, ttl_seconds: int = 3600) -> dict:
+    """Create a one-time confirmation token for a destructive RAID action.
+
+    Returns a dict with `token` and `expires_at` (unix timestamp).
+    """
+    token = uuid.uuid4().hex
+    expires_at = int(time.time()) + int(ttl_seconds)
+    _confirmations[token] = {
+        "action": action,
+        "payload": _payload_to_dict(payload),
+        "expires_at": expires_at,
+    }
+    logger.info("RAID confirmation requested: %s token=%s expires_at=%s", action, token, expires_at)
+    _audit_event("request_confirmation", {"action": action, "token": token}, dry_run=False)
+    return {"token": token, "expires_at": expires_at}
+
+
+def execute_confirmation(token: str) -> RaidActionResponse:
+    """Execute a previously requested confirmation token.
+
+    Raises KeyError if token invalid or expired, or RuntimeError on action failure.
+    """
+    entry = _confirmations.get(token)
+    if not entry:
+        raise KeyError("Invalid confirmation token")
+    if int(time.time()) > int(entry.get("expires_at", 0)):
+        del _confirmations[token]
+        raise KeyError("Confirmation token expired")
+
+    action = entry["action"]
+    payload = entry["payload"]
+
+    # Remove token to make it one-time
+    del _confirmations[token]
+
+    # Dispatch supported destructive actions
+    try:
+        if action == "delete_array":
+            req = DeleteArrayRequest(**payload)
+            resp = delete_array(req)
+        elif action == "format_disk":
+            req = FormatDiskRequest(**payload)
+            resp = format_disk(req)
+        elif action == "create_array":
+            req = CreateArrayRequest(**payload)
+            resp = create_array(req)
+        else:
+            raise RuntimeError(f"Unsupported confirmed action: {action}")
+    except Exception as exc:
+        logger.exception("Failed to execute confirmed action %s: %s", action, exc)
+        _audit_event("execute_confirmation_failed", {"action": action, "error": str(exc)}, dry_run=False)
+        raise
+
+    _audit_event("execute_confirmation", {"action": action, "token": token}, dry_run=False)
+    return resp
+
+
+# Scheduler for periodic RAID scrubs
+_scrub_scheduler: Optional["BackgroundScheduler"] = None
+
+
+def _perform_scrub_job() -> None:
+    try:
+        logger.info("RAID scrub job: starting automatic scrub")
+        scrub_now(None)
+        logger.info("RAID scrub job: completed")
+    except Exception as exc:  # pragma: no cover - runtime safety
+        logger.exception("RAID scrub job failed: %s", exc)
+
+
+def scrub_now(array: str | None = None) -> RaidActionResponse:
+    """Trigger an immediate scrub/check on a specific array or all arrays.
+
+    When `array` is None, all known arrays will be triggered.
+    """
+    # Build payload(s) using RaidOptionsRequest
+    if array:
+        payload = RaidOptionsRequest(array=array, trigger_scrub=True)
+        return _backend.configure(payload)
+
+    # Trigger scrub for all arrays
+    status = None
+    try:
+        status = _backend.get_status()
+    except Exception:
+        # If get_status fails (e.g., no arrays), raise a clear error
+        raise RuntimeError("Unable to determine RAID arrays for scrubbing")
+
+    messages: list[str] = []
+    for arr in status.arrays:
+        try:
+            payload = RaidOptionsRequest(array=arr.name, trigger_scrub=True)
+            resp = _backend.configure(payload)
+            messages.append(resp.message)
+        except Exception as exc:
+            logger.warning("Failed to trigger scrub on %s: %s", arr.name, exc)
+            messages.append(f"{arr.name}: error: {exc}")
+
+    return RaidActionResponse(message="; ".join(messages))
+
+
+def start_scrub_scheduler() -> None:
+    global _scrub_scheduler
+    if not getattr(settings, "raid_scrub_enabled", False):
+        logger.debug("RAID scrub scheduler disabled by settings")
+        return
+    if _APScheduler is None:
+        logger.warning("APScheduler not available; RAID scrub scheduler skipped")
+        return
+    if _scrub_scheduler is not None:
+        logger.debug("RAID scrub scheduler already running")
+        return
+
+    # Create scheduler (narrow type for the static analyzer)
+    scheduler: "BackgroundScheduler" = _APScheduler()
+    _scrub_scheduler = scheduler
+    interval_hours = max(1, int(getattr(settings, "raid_scrub_interval_hours", 168)))
+    scheduler.add_job(
+        func=_perform_scrub_job,
+        trigger="interval",
+        hours=interval_hours,
+        id="raid_scrub",
+        name="Periodic RAID scrub",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("RAID scrub scheduler started (every %d hours)", interval_hours)
+
+
+def stop_scrub_scheduler() -> None:
+    global _scrub_scheduler
+    if _scrub_scheduler is None:
+        return
+    try:
+        _scrub_scheduler.shutdown(wait=False)
+    except Exception:
+        logger.debug("Error while shutting down RAID scrub scheduler")
+    _scrub_scheduler = None

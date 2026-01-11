@@ -14,10 +14,17 @@ static size_t WriteCallback(void* contents, size_t size, size_t nmemb, void* use
 
 // CURL write callback for binary data
 static size_t WriteBinaryCallback(void* contents, size_t size, size_t nmemb, void* userp) {
-    auto* vec = (std::vector<uint8_t>*)userp;
-    auto* data = (uint8_t*)contents;
-    vec->insert(vec->end(), data, data + (size * nmemb));
-    return size * nmemb;
+    auto* vec = reinterpret_cast<std::vector<uint8_t>*>(userp);
+    if (!vec) return 0;
+    const auto* data = reinterpret_cast<const uint8_t*>(contents);
+    size_t total = size * nmemb;
+    try {
+        vec->reserve(vec->size() + total);
+        vec->insert(vec->end(), data, data + total);
+    } catch (...) {
+        return 0;
+    }
+    return total;
 }
 
 BaluhostClient::BaluhostClient(const std::string& baseUrl)
@@ -252,12 +259,22 @@ std::optional<nlohmann::json> BaluhostClient::makeRequest(
     curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteCallback);
     curl_easy_setopt(curl, CURLOPT_WRITEDATA, &response_string);
     
-    // Enable verbose logging for debugging
-    curl_easy_setopt(curl, CURLOPT_VERBOSE, 1L);
+    // Verbose logging disabled by default
+    curl_easy_setopt(curl, CURLOPT_VERBOSE, 0L);
     
-    // Disable SSL verification for localhost development
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
-    curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    // Check if URL starts with https:// to determine SSL usage
+    bool useSSL = (url.find("https://") == 0);
+    
+    if (useSSL) {
+        // For HTTPS: Disable SSL verification for development (self-signed certs)
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+    } else {
+        // For HTTP: Explicitly disable SSL to prevent Windows Schannel from auto-enabling it
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYPEER, 0L);
+        curl_easy_setopt(curl, CURLOPT_SSL_VERIFYHOST, 0L);
+        curl_easy_setopt(curl, CURLOPT_USE_SSL, CURLUSESSL_NONE);
+    }
     
     // Set user agent
     curl_easy_setopt(curl, CURLOPT_USERAGENT, "BaluDesk/1.0");
@@ -437,8 +454,10 @@ FileItem BaluhostClient::parseFileItem(const nlohmann::json& json) {
     item.created_at = json.value("created_at", "");
     item.updated_at = json.value("updated_at", "");
     
-    if (json.contains("mount_id")) {
+    if (json.contains("mount_id") && !json["mount_id"].is_null()) {
         item.mount_id = json["mount_id"].get<int>();
+    } else {
+        item.mount_id = 0;
     }
     
     return item;

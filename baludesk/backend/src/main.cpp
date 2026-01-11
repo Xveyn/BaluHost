@@ -68,6 +68,11 @@ int main(int argc, char* argv[]) {
             return 1;
         }
 
+        // Start the sync engine loop so it can emit status updates
+        if (!syncEngine.isRunning()) {
+            syncEngine.start();
+        }
+
         Logger::info("BaluDesk Backend initialized successfully");
         Logger::info("Server URL: " + config.getServerUrl());
         Logger::info("Listening for IPC commands on stdin/stdout");
