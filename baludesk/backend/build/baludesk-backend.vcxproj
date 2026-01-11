@@ -438,6 +438,7 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\sync_engine.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\sha256.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\conflict_resolver.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp" />

@@ -7,6 +7,7 @@ from unittest.mock import patch, MagicMock
 
 from app.models import ServerProfile, VPNProfile, VPNType
 from app.main import app
+from app.core.config import settings
 from app.services.vpn_encryption import VPNEncryption
 
 
@@ -15,8 +16,8 @@ def client_with_user(db_session, client):
     """Get test client and login as test user."""
     # Login first
     response = client.post(
-        "/auth/login",
-        json={"username": "testuser", "password": "Test@1234"}
+        f"{settings.api_prefix}/auth/login",
+        json={"username": "testuser", "password": "testpass123"}
     )
     assert response.status_code == 200
     token = response.json()["access_token"]

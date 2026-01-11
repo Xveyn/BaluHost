@@ -4,6 +4,9 @@
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\file_watcher_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\change_detector_hash_test.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\sync_engine_retry_test.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
@@ -14,6 +17,12 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\sha256.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_windows.cpp">

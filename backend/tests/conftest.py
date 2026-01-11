@@ -7,10 +7,13 @@ This module provides shared test fixtures including:
 - User authentication helpers
 """
 import os
-from typing import Generator
+from typing import Generator, AsyncGenerator, cast
 
 import pytest
+import pytest_asyncio
 from fastapi.testclient import TestClient
+from httpx import AsyncClient
+from uuid import uuid4
 import tempfile
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session, sessionmaker
@@ -27,6 +30,65 @@ _tmp_storage = tempfile.mkdtemp(prefix="baluhost_test_storage_")
 os.environ.setdefault("NAS_STORAGE_PATH", _tmp_storage)
 os.environ.setdefault("NAS_TEMP_PATH", tempfile.mkdtemp(prefix="baluhost_test_tmp_"))
 os.environ.setdefault("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix="baluhost_test_backups_"))
+# By default disable strict rate limits during tests to avoid flakiness.
+# Individual tests that need to assert rate-limit behavior should opt-in
+# by setting `ENABLE_RATE_LIMITS_IN_TESTS=1` in their own fixture or runtime.
+# Default to '0' so most tests don't hit real rate limits concurrently.
+os.environ.setdefault("ENABLE_RATE_LIMITS_IN_TESTS", "0")
+
+# Ensure any TestClient created anywhere in the test suite has a unique
+# per-test header to avoid sharing the same rate-limit bucket.
+try:
+    _orig_testclient_init = TestClient.__init__
+
+    def _init_with_test_header(self, *args, **kwargs):
+        _orig_testclient_init(self, *args, **kwargs)
+        try:
+            self.headers.setdefault("X-Test-Client", str(uuid4()))
+        except Exception:
+            pass
+
+    TestClient.__init__ = _init_with_test_header
+except Exception:
+    pass
+try:
+    _orig_asyncclient_init = AsyncClient.__init__
+
+    def _async_init_with_test_header(self, *args, **kwargs):
+        _orig_asyncclient_init(self, *args, **kwargs)
+        try:
+            self.headers.setdefault("X-Test-Client", str(uuid4()))
+        except Exception:
+            pass
+
+    AsyncClient.__init__ = _async_init_with_test_header
+except Exception:
+    pass
+
+
+def pytest_runtest_setup(item):
+    """Pytest hook: enable strict rate limits only for rate-limiting tests.
+
+    This avoids enforcing strict per-user limits for performance/integration
+    tests while still allowing the dedicated rate-limiting test module to
+    run with real limits.
+    """
+    try:
+        # Enable limits only for the rate limiting test module
+        if "test_rate_limiting.py" in str(item.fspath):
+            os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = "1"
+        else:
+            os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = "0"
+    except Exception:
+        pass
+# Ensure a Fernet key is available for VPN/SSH encryption during tests
+try:
+    from cryptography.fernet import Fernet
+    os.environ.setdefault("VPN_ENCRYPTION_KEY", Fernet.generate_key().decode())
+except Exception:
+    # If cryptography isn't available in the environment, set a placeholder
+    # (most tests will not exercise encryption if placeholder fails later).
+    os.environ.setdefault("VPN_ENCRYPTION_KEY", "")
 
 from app.main import app
 from app.core.config import settings
@@ -84,6 +146,16 @@ def db_session() -> Generator[Session, None, None]:
 
 
 @pytest.fixture(scope="function")
+def db(db_session: Session) -> Generator[Session, None, None]:
+    """
+    Backwards-compatible alias for tests expecting a `db` fixture name.
+
+    Returns the same Session instance as `db_session`.
+    """
+    yield db_session
+
+
+@pytest.fixture(scope="function")
 def client(db_session: Session) -> Generator[TestClient, None, None]:
     """
     Create a test client with database session override.
@@ -110,6 +182,17 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
                 email=settings.admin_email,
                 password=settings.admin_password,
                 role=settings.admin_role,
+            ),
+            db=db_session,
+        )
+    # Ensure a regular test user exists for tests that login as `testuser`
+    if not user_service.get_user_by_username("testuser", db=db_session):
+        user_service.create_user(
+            UserCreate(
+                username="testuser",
+                email="test@example.com",
+                password="testpass123",
+                role="user",
             ),
             db=db_session,
         )
@@ -141,10 +224,33 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
         pass
 
     with TestClient(app) as test_client:
+        # Assign a unique per-test header so rate limiting buckets are separated
+        test_client.headers.setdefault("X-Test-Client", str(uuid4()))
         yield test_client
     
     # Clean up dependency overrides
     app.dependency_overrides.clear()
+
+
+@pytest_asyncio.fixture
+async def async_client(db_session: Session) -> AsyncGenerator[AsyncClient, None]:
+    """Async test client for endpoints tested with async httpx AsyncClient."""
+    def override_get_db():
+        try:
+            yield db_session
+        finally:
+            pass
+
+    app.dependency_overrides[get_db] = override_get_db
+    async with AsyncClient(app=app, base_url="http://testserver", headers={"X-Test-Client": str(uuid4())}) as ac:
+        yield ac
+    app.dependency_overrides.clear()
+
+
+@pytest.fixture
+def auth_headers(user_headers: dict) -> dict:
+    """Backward-compatible alias for tests expecting `auth_headers`."""
+    return user_headers
 
 
 # ============================================================================
@@ -172,6 +278,10 @@ def admin_user(db_session: Session) -> User:
 @pytest.fixture
 def regular_user(db_session: Session) -> User:
     """Create and return regular user for testing."""
+    existing = user_service.get_user_by_username("testuser", db=db_session)
+    if existing:
+        return existing
+
     return user_service.create_user(
         UserCreate(
             username="testuser",
@@ -186,6 +296,10 @@ def regular_user(db_session: Session) -> User:
 @pytest.fixture
 def another_user(db_session: Session) -> User:
     """Create and return another regular user for testing."""
+    existing = user_service.get_user_by_username("anotheruser", db=db_session)
+    if existing:
+        return existing
+
     return user_service.create_user(
         UserCreate(
             username="anotheruser",
@@ -195,6 +309,12 @@ def another_user(db_session: Session) -> User:
         ),
         db=db_session
     )
+
+
+@pytest.fixture
+def test_user(regular_user: User) -> User:
+    """Backward-compatible alias used by some tests expecting `test_user`."""
+    return regular_user
 
 
 # ============================================================================
@@ -249,7 +369,7 @@ def vpn_client_factory(db_session: Session):
             db_session.add(client)
             db_session.commit()
             db_session.refresh(client)
-            return client.id
+            return cast(int, client.id)
 
     return _create
 

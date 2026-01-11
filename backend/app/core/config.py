@@ -46,6 +46,26 @@ class Settings(BaseSettings):
 
     # VPN Configuration
     vpn_encryption_key: str = ""  # Fernet key for encrypting VPN private/preshared keys
+    
+    # RAID backend and safety options
+    # Force using the development (simulated) RAID backend even on Linux.
+    raid_force_dev_backend: bool = False
+    # When creating arrays with mdadm, do not assume clean by default in production.
+    # Set True to add `--assume-clean` when creating arrays (useful for tests/dev only).
+    raid_assume_clean_by_default: bool = False
+    # Dry-run mode: when True, mdadm and other destructive operations are simulated.
+    raid_dry_run: bool = False
+    # Path to append audit log entries for RAID actions (JSON lines). If None, auditing is disabled.
+    raid_audit_log: str | None = None
+    # RAID scrub scheduler options
+    # Enable periodic RAID scrubbing (recommended: weekly)
+    raid_scrub_enabled: bool = False
+    # Interval in hours between automatic scrubs when enabled (default: 168 = 1 week)
+    raid_scrub_interval_hours: int = 168
+    # SMART scan scheduler options
+    smart_scan_enabled: bool = False
+    # Interval in minutes between automatic SMART scans when enabled (default: 60)
+    smart_scan_interval_minutes: int = 60
 
     # Storage paths
     nas_storage_path: str = "./storage"

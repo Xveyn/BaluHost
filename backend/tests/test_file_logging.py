@@ -14,7 +14,7 @@ from app.services import files
 def mock_user():
     """Create a mock user."""
     return UserPublic(
-        id="123",
+        id=123,
         username="testuser",
         email="test@example.com",
         role="user",
@@ -27,7 +27,7 @@ def mock_user():
 def mock_admin():
     """Create a mock admin user."""
     return UserPublic(
-        id="1",
+        id=1,
         username="admin",
         email="admin@example.com",
         role="admin",
@@ -95,7 +95,7 @@ class TestFileOperationLogging:
             test_file.write_text("test content")
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="123"):
+            with patch('app.services.files.get_owner', return_value=123):
                 # Perform deletion
                 files.delete_path("test.txt", mock_user)
             
@@ -122,7 +122,7 @@ class TestFileOperationLogging:
             test_dir.mkdir()
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="123"):
+            with patch('app.services.files.get_owner', return_value=123):
                 # Perform deletion
                 files.delete_path("testdir", mock_user)
             
@@ -163,7 +163,7 @@ class TestFileOperationLogging:
             source.write_text("test")
             
             # Set up metadata
-            with patch('app.services.files.get_owner', return_value="123"):
+            with patch('app.services.files.get_owner', return_value=123):
                 # Perform move
                 files.move_path("source.txt", "target.txt", mock_user)
             

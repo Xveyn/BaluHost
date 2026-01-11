@@ -174,6 +174,17 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             description: 'Arrays & Health',
             icon: navIcon.raid
           },
+                  {
+                    path: '/schedulers',
+                    label: 'Schedulers',
+                    description: 'Manual tests & triggers',
+                    icon: (
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+                        <circle cx="12" cy="12" r="9" stroke="currentColor" />
+                      </svg>
+                    )
+                  },
               {
                 path: '/admin-db',
                 label: 'Database',

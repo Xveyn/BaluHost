@@ -59,6 +59,7 @@ interface SystemInfo {
     free: number;
   };
   uptime: number;
+  serverUptime?: number;
   dev_mode?: boolean;
 }
 
@@ -73,8 +74,32 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     window.electronAPI.onBackendMessage((message: BackendMessage) => {
       console.log('Backend message:', message);
       
+      // Handle different sync event shapes coming from the backend
       if (message.type === 'sync_stats') {
         setSyncStats(message.data);
+      } else if (message.type === 'sync_state_update') {
+        // Live broadcast from SyncEngine
+        setSyncStats(message.data);
+      } else if (message.type === 'sync_state') {
+        // Could be a direct event or legacy response forwarded
+        if ((message as any).success && (message as any).data) {
+          setSyncStats((message as any).data);
+        } else if ((message as any).status) {
+          // Legacy shape
+          const legacy = message as any;
+          const mapped: SyncStats = {
+            status: legacy.status || 'idle',
+            uploadSpeed: legacy.upload_speed ?? legacy.uploadSpeed ?? 0,
+            downloadSpeed: legacy.download_speed ?? legacy.downloadSpeed ?? 0,
+            pendingUploads: legacy.pendingUploads ?? legacy.pending_uploads ?? 0,
+            pendingDownloads: legacy.pendingDownloads ?? legacy.pending_downloads ?? 0,
+            lastSync: legacy.last_sync ?? legacy.lastSync ?? ''
+          };
+          if ((legacy.syncFolderCount ?? legacy.sync_folder_count) !== undefined) {
+            (mapped as any).syncFolderCount = legacy.syncFolderCount ?? legacy.sync_folder_count;
+          }
+          setSyncStats(mapped);
+        }
       }
     });
 
@@ -91,11 +116,30 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
     try {
       // Fetch sync state
       try {
-        const syncResponse = await window.electronAPI.sendBackendCommand({
-          type: 'get_sync_state',
-        });
-        if (syncResponse?.success) {
+        const syncResponse = await window.electronAPI.sendBackendCommand({ type: 'get_sync_state' });
+
+        // New format: { success: true, data: { ... } }
+        if (syncResponse?.success && syncResponse.data) {
           setSyncStats(syncResponse.data);
+        } else if (syncResponse) {
+          // Backwards-compatible handling for legacy response shape
+          // Legacy example: { type: 'sync_state', status: 'idle', upload_speed: 0, download_speed: 0, last_sync: '' }
+          const legacy = syncResponse as any;
+          if (legacy.type === 'sync_state') {
+            const mapped: SyncStats = {
+              status: legacy.status || 'idle',
+              uploadSpeed: legacy.upload_speed ?? legacy.uploadSpeed ?? 0,
+              downloadSpeed: legacy.download_speed ?? legacy.downloadSpeed ?? 0,
+              pendingUploads: legacy.pendingUploads ?? legacy.pending_uploads ?? 0,
+              pendingDownloads: legacy.pendingDownloads ?? legacy.pending_downloads ?? 0,
+              lastSync: legacy.last_sync ?? legacy.lastSync ?? ''
+            };
+            // Optionally include syncFolderCount if present
+            if ((legacy.syncFolderCount ?? legacy.sync_folder_count) !== undefined) {
+              (mapped as any).syncFolderCount = legacy.syncFolderCount ?? legacy.sync_folder_count;
+            }
+            setSyncStats(mapped);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch sync state:', err);
@@ -107,7 +151,49 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           type: 'get_system_info',
         });
         if (sysResponse?.success) {
-          setSystemInfo(sysResponse.data);
+          // Normalize system info fields for frontend expectations
+          const raw = sysResponse.data as any;
+          const normalized: any = { ...raw };
+
+          // CPU frequency mapping: backend may use `frequency` or `frequency_mhz`
+          if (raw?.cpu) {
+            normalized.cpu = {
+              usage: raw.cpu.usage ?? 0,
+              cores: raw.cpu.cores ?? raw.cpu.coreCount ?? 0,
+              frequency_mhz: raw.cpu.frequency_mhz ?? raw.cpu.frequency ?? null,
+              model: raw.cpu.model ?? null,
+            };
+          }
+
+          // Disk mapping: backend may provide `available` or `free`
+          if (raw?.disk) {
+            normalized.disk = {
+              total: raw.disk.total ?? raw.disk.total_bytes ?? 0,
+              used: raw.disk.used ?? (raw.disk.total - (raw.disk.available ?? raw.disk.free ?? 0)) ?? 0,
+              available: raw.disk.available ?? raw.disk.free ?? null,
+            };
+          }
+
+          // Uptime: backend sends seconds; but if it's unexpectedly large assume milliseconds
+          if (typeof raw?.uptime === 'number') {
+            let uptimeSeconds = raw.uptime;
+            if (uptimeSeconds > 1e12) {
+              // milliseconds -> seconds
+              uptimeSeconds = Math.floor(uptimeSeconds / 1000);
+            }
+            normalized.uptime = uptimeSeconds;
+          }
+
+          // serverUptime: if provided, normalize same as uptime (guard against ms values)
+          if (typeof raw?.serverUptime === 'number') {
+            let sUptime = raw.serverUptime;
+            if (sUptime > 1e12) {
+              sUptime = Math.floor(sUptime / 1000);
+            }
+            normalized.serverUptime = sUptime;
+          }
+
+          setSystemInfo(normalized as any);
         } else {
           console.warn('System info response not successful:', sysResponse);
         }
@@ -336,12 +422,16 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
                     <Clock className="h-4 w-4 text-lime-400" />
                   </div>
                 </div>
-                <p className="text-3xl font-bold text-white">
-                  {formatUptime(systemInfo.uptime)}
-                </p>
-                <p className="text-xs text-slate-400">
-                  {(systemInfo.uptime / 86400).toFixed(1)} days
-                </p>
+                {(() => {
+                  const serverU = (systemInfo as any).serverUptime;
+                  const uptimeToShow = (typeof serverU === 'number' && serverU > 0) ? serverU : systemInfo.uptime;
+                  return (
+                    <>
+                      <p className="text-3xl font-bold text-white">{formatUptime(uptimeToShow)}</p>
+                      <p className="text-xs text-slate-400">{(uptimeToShow / 86400).toFixed(1)} days</p>
+                    </>
+                  );
+                })()}
               </div>
             </div>
           </>

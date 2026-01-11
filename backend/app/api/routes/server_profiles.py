@@ -23,7 +23,7 @@ from app.services.vpn_encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/server-profiles", tags=["server-profiles"])
+router = APIRouter(prefix="/server-profiles", tags=["server-profiles"])
 
 
 @router.get("/public", response_model=List[ServerProfileList])

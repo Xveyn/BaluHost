@@ -8,6 +8,15 @@ from app.core.config import settings
 from app.schemas.system import SmartAttribute, SmartDevice, SmartStatusResponse
 
 logger = logging.getLogger(__name__)
+from typing import Optional, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
+
+try:
+    from apscheduler.schedulers.background import BackgroundScheduler as _APScheduler
+except Exception:
+    _APScheduler = None
 
 
 class SmartUnavailableError(RuntimeError):
@@ -41,6 +50,86 @@ def invalidate_smart_cache() -> None:
     global _SMART_CACHE_TIMESTAMP, _SMART_CACHE_DATA
     _SMART_CACHE_TIMESTAMP = None
     _SMART_CACHE_DATA = None
+
+
+# Scheduler for periodic SMART scans
+_smart_scheduler: Optional["BackgroundScheduler"] = None
+
+
+def _perform_smart_scan_job() -> None:
+    try:
+        logger.info("SMART scan job: invalidating cache and performing scan")
+        invalidate_smart_cache()
+        # Warm the cache by calling get_smart_status (will populate from mock or real)
+        get_smart_status()
+        logger.info("SMART scan job: completed")
+    except Exception as exc:
+        logger.exception("SMART scan job failed: %s", exc)
+
+
+def run_smart_self_test(device: str, test_type: str = "short") -> str:
+    """Trigger a SMART self-test on the specified device.
+
+    In dev-mode this is simulated. In production, calls `smartctl -t`.
+    Returns a textual status message.
+    """
+    test_type = test_type.lower()
+    if test_type not in {"short", "long"}:
+        raise ValueError("Invalid test type; expected 'short' or 'long'")
+
+    if settings.is_dev_mode or _get_smartctl_path() is None:
+        logger.info("Dev-mode or smartctl missing: simulating SMART %s test on %s", test_type, device)
+        # Invalidate cache so subsequent reads reflect new state
+        invalidate_smart_cache()
+        return f"Simulated {test_type} SMART test started for {device}"
+
+    smartctl = _get_smartctl_path()
+    import subprocess
+    try:
+        subprocess.run([smartctl, "-t", test_type, device], check=True, capture_output=True, text=True, timeout=10)
+        invalidate_smart_cache()
+        return f"SMART {test_type} test started for {device}"
+    except subprocess.CalledProcessError as exc:
+        logger.error("smartctl -t failed: %s", exc.stderr or exc.stdout)
+        raise RuntimeError(f"Failed to start SMART test for {device}: {exc}") from exc
+
+
+def start_smart_scheduler() -> None:
+    global _smart_scheduler
+    if not getattr(settings, "smart_scan_enabled", False):
+        logger.debug("SMART scheduler disabled by settings")
+        return
+    if _APScheduler is None:
+        logger.warning("APScheduler not available; SMART scheduler skipped")
+        return
+    if _smart_scheduler is not None:
+        logger.debug("SMART scheduler already running")
+        return
+
+    scheduler: "BackgroundScheduler" = _APScheduler()
+    _smart_scheduler = scheduler
+    interval_minutes = max(1, int(getattr(settings, "smart_scan_interval_minutes", 60)))
+    scheduler.add_job(
+        func=_perform_smart_scan_job,
+        trigger="interval",
+        minutes=interval_minutes,
+        id="smart_scan",
+        name="Periodic SMART scan",
+        replace_existing=True,
+    )
+    scheduler.start()
+    logger.info("SMART scheduler started (every %d minutes)", interval_minutes)
+
+
+def stop_smart_scheduler() -> None:
+    global _smart_scheduler
+    if _smart_scheduler is None:
+        return
+    try:
+        _smart_scheduler.shutdown(wait=False)
+    except Exception:
+        logger.debug("Error while shutting down SMART scheduler")
+    _smart_scheduler = None
 
 
 def get_dev_mode_state() -> str:

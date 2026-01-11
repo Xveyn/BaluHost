@@ -3,6 +3,7 @@ F:\Programme (x86)\Baluhost\baludesk\backend\src\stubs.cpp;F:\Programme (x86)\Ba
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\sync_engine.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\sync_engine.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\file_watcher_v2.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\change_detector.obj
+F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\sha256.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\sha256.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\conflict_resolver.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\conflict_resolver.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\api\http_client.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\http_client.obj
 F:\Programme (x86)\Baluhost\baludesk\backend\src\db\database.cpp;F:\Programme (x86)\Baluhost\baludesk\backend\build\baludesk-backend.dir\Release\database.obj

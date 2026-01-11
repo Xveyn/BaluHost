@@ -21,7 +21,7 @@ from app.services.vpn_encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/vpn-profiles", tags=["vpn-profiles"])
+router = APIRouter(prefix="/vpn-profiles", tags=["vpn-profiles"])
 
 
 @router.post("", response_model=VPNProfileResponse, status_code=status.HTTP_201_CREATED)

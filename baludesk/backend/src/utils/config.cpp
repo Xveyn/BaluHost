@@ -9,7 +9,7 @@ using json = nlohmann::json;
 namespace baludesk {
 
 Config::Config() 
-    : serverUrl_("http://localhost:8000"), 
+    : serverUrl_("http://127.0.0.1:8000"), 
       databasePath_("baludesk.db") {
 }
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import tempfile
 import shutil
 from httpx import AsyncClient
+from typing import cast, Any
 from httpx._transports.asgi import ASGITransport
 from fastapi import status
 from app.main import app
@@ -65,15 +66,27 @@ async def async_client():
             def __getattr__(self, name):
                 return getattr(self._inner, name)
 
-            async def delete(self, url, *args, json=None, **kwargs):
+            async def request(self, method: str, url: str, *args: Any, json: Any = None, data: Any = None, files: Any = None, headers: dict | None = None, **kwargs: Any) -> Any:
+                return await self._inner.request(method, url, *args, json=json, data=data, files=files, headers=headers, **kwargs)
+
+            async def post(self, url: str, *args: Any, json: Any = None, data: Any = None, files: Any = None, headers: dict | None = None, **kwargs: Any) -> Any:
+                return await self._inner.post(url, *args, json=json, data=data, files=files, headers=headers, **kwargs)
+
+            async def get(self, url: str, *args: Any, params: Any = None, headers: dict | None = None, **kwargs: Any) -> Any:
+                return await self._inner.get(url, *args, params=params, headers=headers, **kwargs)
+
+            async def delete(self, url: str, *args: Any, json: Any = None, data: Any = None, headers: dict | None = None, **kwargs: Any) -> Any:
                 # Some httpx versions don't accept ``json`` on delete directly
                 # when used with ASGITransport in older environments. Forward
                 # as a request when json is provided to ensure it reaches the app.
                 if json is not None:
-                    return await self._inner.request("DELETE", url, json=json, *args, **kwargs)
-                return await self._inner.delete(url, *args, **kwargs)
+                    return await self._inner.request("DELETE", url, json=json, data=data, headers=headers, *args, **kwargs)
+                return await self._inner.delete(url, *args, headers=headers, **kwargs)
 
-        yield _ClientWrapper(client)
+            async def put(self, url: str, *args: Any, json: Any = None, data: Any = None, files: Any = None, headers: dict | None = None, **kwargs: Any) -> Any:
+                return await self._inner.put(url, *args, json=json, data=data, files=files, headers=headers, **kwargs)
+
+        yield cast(AsyncClient, _ClientWrapper(client))
 
     # Teardown
     db.close()
@@ -107,7 +120,7 @@ class TestSyncIntegration:
     """Integration tests for complete sync workflows."""
     
     @pytest.mark.asyncio
-    async def test_complete_sync_workflow(self, async_client: AsyncClient, test_user_credentials):
+    async def test_complete_sync_workflow(self, async_client: Any, test_user_credentials):
         """Test complete sync workflow: register -> login -> device -> upload -> download."""
         
         # 1. Register user
@@ -228,7 +241,7 @@ class TestSyncIntegration:
         assert not file_exists
     
     @pytest.mark.asyncio
-    async def test_multiple_device_sync(self, async_client: AsyncClient, test_user_credentials):
+    async def test_multiple_device_sync(self, async_client: Any, test_user_credentials):
         """Test sync across multiple devices."""
         
         # Register and login
@@ -285,7 +298,7 @@ class TestSyncIntegration:
         assert "mobile" in device_names
     
     @pytest.mark.asyncio
-    async def test_folder_sync(self, async_client: AsyncClient, test_user_credentials):
+    async def test_folder_sync(self, async_client: Any, test_user_credentials):
         """Test syncing entire folder structure."""
         
         # Setup user
@@ -344,7 +357,7 @@ class TestSyncIntegration:
                 f"File {file_path} not found in sync state"
     
     @pytest.mark.asyncio
-    async def test_conflict_detection(self, async_client: AsyncClient, test_user_credentials):
+    async def test_conflict_detection(self, async_client: Any, test_user_credentials):
         """Test conflict detection when file is modified on multiple devices."""
         
         # Setup
@@ -406,7 +419,7 @@ class TestSyncIntegration:
         assert updated_file["modified_at"] != initial_modified
     
     @pytest.mark.asyncio
-    async def test_sync_with_deletes(self, async_client: AsyncClient, test_user_credentials):
+    async def test_sync_with_deletes(self, async_client: Any, test_user_credentials):
         """Test sync handles file deletions correctly."""
         
         # Setup
@@ -469,7 +482,7 @@ class TestSyncPerformance:
     """Performance tests for sync operations."""
     
     @pytest.mark.asyncio
-    async def test_sync_state_performance(self, async_client: AsyncClient, test_user_credentials):
+    async def test_sync_state_performance(self, async_client: Any, test_user_credentials):
         """Test sync state retrieval performance with many files."""
         
         # Setup
@@ -516,7 +529,7 @@ class TestSyncPerformance:
         assert elapsed < 2.0, f"Sync state retrieval took {elapsed:.2f}s, expected < 2.0s"
     
     @pytest.mark.asyncio
-    async def test_batch_upload_performance(self, async_client: AsyncClient, test_user_credentials):
+    async def test_batch_upload_performance(self, async_client: Any, test_user_credentials):
         """Test performance of uploading multiple files."""
         
         # Setup

@@ -209,6 +209,11 @@ class VCLService:
             )
         )
         self.db.flush()
+        # Refresh the SQLAlchemy object so in-memory attributes reflect DB update
+        try:
+            self.db.refresh(blob)
+        except Exception:
+            pass
     
     def decrement_blob_reference(self, blob: VersionBlob):
         """

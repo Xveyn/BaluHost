@@ -172,6 +172,14 @@ class RaidStatusResponse(BaseModel):
     speed_limits: RaidSpeedLimits | None = None
 
 
+class SystemHealthResponse(BaseModel):
+    status: str
+    system: SystemInfo
+    smart: SmartStatusResponse | None = None
+    raid: RaidStatusResponse | None = None
+    disk_io: dict | None = None
+
+
 class RaidSimulationRequest(BaseModel):
     array: str
     device: str | None = None

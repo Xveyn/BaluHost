@@ -74,6 +74,9 @@ public:
     void setTimeout(long timeoutSeconds);
     void setVerbose(bool verbose);
 
+    // Convenience GET helper returning raw response body
+    std::string get(const std::string& path);
+
 private:
     std::string performRequest(const std::string& url, const std::string& method,
                                const std::string& body = "");

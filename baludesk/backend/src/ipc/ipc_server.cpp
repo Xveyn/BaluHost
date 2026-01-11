@@ -15,6 +15,32 @@ IpcServer::IpcServer(SyncEngine* engine) : engine_(engine) {}
 
 bool IpcServer::start() {
     Logger::info("IPC Server started, listening on stdin");
+
+    // Register for sync status updates to broadcast to frontend
+    if (engine_) {
+        engine_->setStatusCallback([this](const SyncStats& state) {
+            try {
+                std::string status_str = "idle";
+                if (state.status == SyncStatus::SYNCING) status_str = "syncing";
+                else if (state.status == SyncStatus::PAUSED) status_str = "paused";
+                else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
+
+                json data = {
+                    {"status", status_str},
+                    {"uploadSpeed", state.uploadSpeed},
+                    {"downloadSpeed", state.downloadSpeed},
+                    {"pendingUploads", state.pendingUploads},
+                    {"pendingDownloads", state.pendingDownloads},
+                    {"lastSync", state.lastSync}
+                };
+
+                broadcastEvent("sync_state_update", data);
+            } catch (const std::exception& e) {
+                Logger::error("Failed to broadcast sync state: {}", e.what());
+            }
+        });
+    }
+
     return true;
 }
 
@@ -181,7 +207,7 @@ void IpcServer::handleAddSyncFolder(const json& message, int requestId) {
     }
 }
 
-void IpcServer::handleRemoveSyncFolder(const json& message) {
+void IpcServer::handleRemoveSyncFolder(const json& message, int requestId) {
     try {
         if (!message.contains("payload") || !message["payload"].contains("folder_id")) {
             sendError("Missing folder_id");
@@ -196,15 +222,15 @@ void IpcServer::handleRemoveSyncFolder(const json& message) {
             {"success", success},
             {"folder_id", folderId}
         };
-        sendResponse(response);
+        sendResponse(response, requestId);
         
     } catch (const std::exception& e) {
         Logger::error("handleRemoveSyncFolder error: {}", e.what());
-        sendError(e.what());
+        sendError(e.what(), requestId);
     }
 }
 
-void IpcServer::handlePauseSync(const json& message) {
+void IpcServer::handlePauseSync(const json& message, int requestId) {
     try {
         if (!message.contains("payload") || !message["payload"].contains("folder_id")) {
             sendError("Missing folder_id");
@@ -218,15 +244,15 @@ void IpcServer::handlePauseSync(const json& message) {
             {"type", "sync_paused"},
             {"folder_id", folderId}
         };
-        sendResponse(response);
+        sendResponse(response, requestId);
         
     } catch (const std::exception& e) {
         Logger::error("handlePauseSync error: {}", e.what());
-        sendError(e.what());
+        sendError(e.what(), requestId);
     }
 }
 
-void IpcServer::handleResumeSync(const json& message) {
+void IpcServer::handleResumeSync(const json& message, int requestId) {
     try {
         if (!message.contains("payload") || !message["payload"].contains("folder_id")) {
             sendError("Missing folder_id");
@@ -240,15 +266,15 @@ void IpcServer::handleResumeSync(const json& message) {
             {"type", "sync_resumed"},
             {"folder_id", folderId}
         };
-        sendResponse(response);
+        sendResponse(response, requestId);
         
     } catch (const std::exception& e) {
         Logger::error("handleResumeSync error: {}", e.what());
-        sendError(e.what());
+        sendError(e.what(), requestId);
     }
 }
 
-void IpcServer::handleGetSyncState() {
+void IpcServer::handleGetSyncState(int requestId) {
     try {
         auto state = engine_->getSyncState();
         
@@ -257,22 +283,33 @@ void IpcServer::handleGetSyncState() {
         else if (state.status == SyncStatus::PAUSED) status_str = "paused";
         else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
         
+        // Build a consistent response structure matching other endpoints
+        auto folders = engine_->getSyncFolders();
+        json data = {
+            {"status", status_str},
+            {"uploadSpeed", state.uploadSpeed},
+            {"downloadSpeed", state.downloadSpeed},
+            {"pendingUploads", state.pendingUploads},
+            {"pendingDownloads", state.pendingDownloads},
+            {"lastSync", state.lastSync},
+            {"syncFolderCount", static_cast<int>(folders.size())}
+        };
+
         json response = {
             {"type", "sync_state"},
-            {"status", status_str},
-            {"upload_speed", state.uploadSpeed},
-            {"download_speed", state.downloadSpeed},
-            {"last_sync", state.lastSync}
+            {"success", true},
+            {"data", data}
         };
-        sendResponse(response);
+
+        sendResponse(response, requestId);
         
     } catch (const std::exception& e) {
         Logger::error("handleGetSyncState error: {}", e.what());
-        sendError(e.what());
+        sendError(e.what(), requestId);
     }
 }
 
-void IpcServer::handleGetFolders() {
+void IpcServer::handleGetFolders(int requestId) {
     try {
         auto folders = engine_->getSyncFolders();
         
@@ -298,11 +335,11 @@ void IpcServer::handleGetFolders() {
             {"type", "folders_list"},
             {"folders", folderArray}
         };
-        sendResponse(response);
+        sendResponse(response, requestId);
         
     } catch (const std::exception& e) {
         Logger::error("handleGetFolders error: {}", e.what());
-        sendError(e.what());
+        sendError(e.what(), requestId);
     }
 }
 

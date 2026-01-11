@@ -1,5 +1,5 @@
 {
-  "tests": 30,
+  "tests": 31,
   "name": "AllTests",
   "testsuites": [
     {
@@ -50,6 +50,17 @@
           "name": "StopAll",
           "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\file_watcher_test.cpp",
           "line": 264
+        }
+      ]
+    },
+    {
+      "name": "ChangeDetectorHashTest",
+      "tests": 1,
+      "testsuite": [
+        {
+          "name": "ComputesSHA256ForFile",
+          "file": "F:\\Programme (x86)\\Baluhost\\baludesk\\backend\\tests\\change_detector_hash_test.cpp",
+          "line": 9
         }
       ]
     },

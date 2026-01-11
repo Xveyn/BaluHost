@@ -94,3 +94,27 @@ export async function toggleSmartMode(): Promise<SmartModeResponse> {
 
   return await response.json();
 }
+
+export interface SmartTestPayload {
+  device?: string;
+  type?: string;
+}
+
+export async function runSmartTest(payload: SmartTestPayload = {}): Promise<{ message: string }> {
+  const token = getToken();
+  const response = await fetch(buildApiUrl('/api/system/smart/test'), {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(payload)
+  });
+
+  if (!response.ok) {
+    const error = await response.text();
+    throw new Error(error || 'SMART-Test konnte nicht gestartet werden');
+  }
+
+  return await response.json();
+}

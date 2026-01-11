@@ -27,7 +27,8 @@ struct SystemInfo {
     CpuInfo cpu;
     MemoryInfo memory;
     DiskInfo disk;
-    uint64_t uptime;       // System uptime in seconds
+    uint64_t uptime;       // System uptime in seconds (host)
+    uint64_t serverUptime; // Server (Python backend) uptime in seconds, if available
 };
 
 class SystemInfoCollector {
@@ -61,6 +62,11 @@ private:
      * @param path Directory path to check (default: C:\)
      */
     static DiskInfo getDiskInfo(const std::string& path = "C:\\");
+    /**
+     * Get aggregated disk information across all fixed drives (Windows)
+     * Sums total/used/available for all DRIVE_FIXED volumes.
+     */
+    static DiskInfo getAggregateDiskInfo();
     
     /**
      * Get system uptime in seconds

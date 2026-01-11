@@ -84,14 +84,17 @@ function startBackend() {
     // app.getAppPath() = /baluhost/baludesk/frontend
     // We need to go to /baluhost/baludesk/backend/build/Release
     const repoRoot = path.resolve(app.getAppPath(), '..', '..');
-    backendPath = path.join(
-      repoRoot,
-      'baludesk',
-      'backend',
-      'build',
-      'Release',
-      'baludesk-backend.exe'
-    );
+    const debugPath = path.join(repoRoot, 'baludesk', 'backend', 'build', 'Debug', 'baludesk-backend.exe');
+    const releasePath = path.join(repoRoot, 'baludesk', 'backend', 'build', 'Release', 'baludesk-backend.exe');
+
+    // Prefer Debug build when available during development to match local builds
+    if (fs.existsSync(debugPath)) {
+      backendPath = debugPath;
+      console.log('[Backend] Using debug backend at:', backendPath);
+    } else {
+      backendPath = releasePath;
+      console.log('[Backend] Using release backend at:', backendPath);
+    }
   } else {
     // Production mode: backend is in the installation directory
     backendPath = path.join(app.getAppPath(), 'backend', 'baludesk-backend.exe');

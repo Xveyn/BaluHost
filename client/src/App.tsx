@@ -6,6 +6,8 @@ import FileManager from './pages/FileManager';
 import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
 import RaidManagement from './pages/RaidManagement';
+import AdminHealth from './pages/AdminHealth';
+import SchedulerControls from './pages/SchedulerControls';
 import Logging from './pages/Logging';
 import ApiCenterPage from './pages/ApiCenterPage';
 import SharesPage from './pages/SharesPage';
@@ -179,6 +181,30 @@ function App() {
               </Layout>
             ) : (
               <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/schedulers"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SchedulerControls />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/health"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <AdminHealth />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
             )
           }
         />

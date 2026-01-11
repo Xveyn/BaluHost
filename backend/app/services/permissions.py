@@ -18,7 +18,13 @@ def ensure_owner_or_privileged(user: UserPublic, owner_id: str | None) -> None:
             return
         raise PermissionDeniedError("Operation not permitted")
 
-    if owner_id == user.id:
+    # Normalize owner_id to int when possible for reliable comparisons
+    try:
+        owner_int = int(owner_id)
+    except Exception:
+        owner_int = None
+
+    if owner_int is not None and owner_int == user.id:
         return
 
     if is_privileged(user):
@@ -30,6 +36,11 @@ def ensure_owner_or_privileged(user: UserPublic, owner_id: str | None) -> None:
 def can_view(user: UserPublic, owner_id: str | None) -> bool:
     if owner_id is None:
         return True
-    if owner_id == user.id:
+    try:
+        owner_int = int(owner_id)
+    except Exception:
+        owner_int = None
+
+    if owner_int is not None and owner_int == user.id:
         return True
     return is_privileged(user)

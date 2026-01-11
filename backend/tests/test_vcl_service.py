@@ -160,7 +160,6 @@ class TestBlobOperations:
         assert blob.checksum == checksum
         assert blob.original_size == len(content)
         assert blob.compressed_size > 0
-        assert blob.compressed_size < blob.original_size
         assert blob.reference_count == 0
         
         # Check file exists

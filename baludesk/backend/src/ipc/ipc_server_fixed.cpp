@@ -41,6 +41,31 @@ bool IpcServer::start() {
     // currentUsername_ will be set when user logs in
     Logger::info("currentUsername_ starts empty until user logs in");
     
+    // Register for sync status updates to broadcast to frontend
+    if (engine_) {
+        engine_->setStatusCallback([this](const SyncStats& state) {
+            try {
+                std::string status_str = "idle";
+                if (state.status == SyncStatus::SYNCING) status_str = "syncing";
+                else if (state.status == SyncStatus::PAUSED) status_str = "paused";
+                else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
+
+                json data = {
+                    {"status", status_str},
+                    {"uploadSpeed", state.uploadSpeed},
+                    {"downloadSpeed", state.downloadSpeed},
+                    {"pendingUploads", state.pendingUploads},
+                    {"pendingDownloads", state.pendingDownloads},
+                    {"lastSync", state.lastSync}
+                };
+
+                broadcastEvent("sync_state_update", data);
+            } catch (const std::exception& e) {
+                Logger::error("Failed to broadcast sync state: {}", e.what());
+            }
+        });
+    }
+
     return true;
 }
 
@@ -477,13 +502,24 @@ void IpcServer::handleGetSyncState(int requestId) {
         else if (state.status == SyncStatus::PAUSED) status_str = "paused";
         else if (state.status == SyncStatus::SYNC_ERROR) status_str = "error";
 
+        // Build a consistent response structure matching other endpoints
+        auto folders = engine_->getSyncFolders();
+        json data = {
+            {"status", status_str},
+            {"uploadSpeed", state.uploadSpeed},
+            {"downloadSpeed", state.downloadSpeed},
+            {"pendingUploads", state.pendingUploads},
+            {"pendingDownloads", state.pendingDownloads},
+            {"lastSync", state.lastSync},
+            {"syncFolderCount", static_cast<int>(folders.size())}
+        };
+
         json response = {
             {"type", "sync_state"},
-            {"status", status_str},
-            {"upload_speed", state.uploadSpeed},
-            {"download_speed", state.downloadSpeed},
-            {"last_sync", state.lastSync}
+            {"success", true},
+            {"data", data}
         };
+
         sendResponse(response, requestId);
 
     } catch (const std::exception& e) {

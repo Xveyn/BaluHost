@@ -470,10 +470,13 @@ if %errorlevel% neq 0 goto :VCEnd</Command>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\file_watcher_test.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\change_detector_hash_test.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\sync_engine_retry_test.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\tests\sync_engine_performance_test.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\logger.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_v2.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\change_detector.cpp" />
+    <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\utils\sha256.cpp" />
     <ClCompile Include="F:\Programme (x86)\Baluhost\baludesk\backend\src\sync\file_watcher_windows.cpp" />
     <Natvis Include="F:\Programme (x86)\Baluhost\baludesk\backend\build\_deps\json-src\nlohmann_json.natvis">
     </Natvis>

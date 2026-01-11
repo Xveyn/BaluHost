@@ -17,6 +17,11 @@ jobs:
     env:
       # Force use of DevRaidBackend so tests run without mdadm on any runner
       RAID_FORCE_DEV_BACKEND: '1'
+      # Ensure tests run in dev-mode and avoid destructive mdadm flags
+      NAS_MODE: 'dev'
+      RAID_ASSUME_CLEAN_BY_DEFAULT: '0'
+      # Keep rate-limits relaxed for CI by default
+      ENABLE_RATE_LIMITS_IN_TESTS: '0'
     steps:
       - uses: actions/checkout@v4
       - name: Setup Python

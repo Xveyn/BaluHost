@@ -8,8 +8,8 @@
     "dev:vite": "vite",
     "dev:electron": "wait-on http://localhost:5173 && electron .",
     "compile": "tsc -p tsconfig.main.json",
-    "build": "npm run compile && vite build && electron-builder",
-    "build:dir": "npm run compile && vite build && electron-builder --dir",
+    "build": "vite build && npm run compile && electron-builder",
+    "build:dir": "vite build && npm run compile && electron-builder --dir",
     "lint": "eslint .",
     "preview": "vite preview",
     "postinstall": "electron-builder install-app-deps"
