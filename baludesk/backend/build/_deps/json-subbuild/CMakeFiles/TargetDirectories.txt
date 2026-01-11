@@ -1,3 +1,0 @@
-F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/json-populate.dir
-F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/ALL_BUILD.dir
-F:/Programme (x86)/Baluhost/baludesk/backend/build/_deps/json-subbuild/CMakeFiles/ZERO_CHECK.dir

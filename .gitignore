@@ -51,3 +51,21 @@ baluhost.db
 *.db
 *.db-wal
 *.db-shm
+
+# Build artifacts (do not commit)
+baludesk/backend/build/
+baludesk/backend/build/**
+
+# C++ build artifacts and temporary files
+*.exe
+*.pdb
+*.obj
+*.ilk
+*.tlog
+
+# Client test artifacts
+client/test-results/
+client/e2e-*.png
+
+# Temporary frontend files
+baludesk/frontend/tmp_asar_list.txt

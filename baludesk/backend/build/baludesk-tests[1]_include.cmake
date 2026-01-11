@@ -1,5 +1,0 @@
-if(EXISTS "F:/Programme (x86)/Baluhost/baludesk/backend/build/baludesk-tests[1]_tests.cmake")
-  include("F:/Programme (x86)/Baluhost/baludesk/backend/build/baludesk-tests[1]_tests.cmake")
-else()
-  add_test(baludesk-tests_NOT_BUILT baludesk-tests_NOT_BUILT)
-endif()
