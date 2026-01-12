@@ -11,6 +11,8 @@ from baluhost_tui.screens.login import LoginScreen
 from baluhost_tui.screens.dashboard import DashboardScreen
 from baluhost_tui.screens.users import UserManagementScreen
 from baluhost_tui.screens.logs import AuditLogViewerScreen
+from baluhost_tui.screens.files import FileBrowserScreen
+from baluhost_tui.screens.raid import RaidControlScreen
 
 
 class WelcomeScreen(Static):
@@ -72,9 +74,10 @@ class BaluHostApp(App):
         Binding("u", "users", "Users"),
         Binding("f", "files", "Files"),
         Binding("l", "logs", "Logs"),
+        Binding("R", "raid", "RAID Controls"),
     ]
     
-    def __init__(self, mode: str = 'auto', server: str = 'http://localhost:8000'):
+    def __init__(self, mode: str = 'auto', server: str = 'http://localhost:8000', token: str | None = None):
         """Initialize app.
         
         Args:
@@ -84,6 +87,7 @@ class BaluHostApp(App):
         super().__init__()
         self.mode = mode
         self.server = server
+        self.token = token
         self.title = "BaluHost NAS TUI"
         self.sub_title = f"Mode: {mode}"
         self.current_user = None  # Will be set after login
@@ -122,11 +126,19 @@ class BaluHostApp(App):
         self.push_screen(UserManagementScreen())
     
     def action_files(self) -> None:
-        """Show file browser (TODO: implement)."""
+        """Show file browser."""
         if not self.current_user:
             self.notify("Please login first", severity="error")
             return
-        self.notify("File Browser - Coming soon!", severity="information")
+        # start at storage root
+        self.push_screen(FileBrowserScreen(start_path='/', mode=self.mode, server=self.server, token=self.token))
+
+    def action_raid(self) -> None:
+        """Show RAID controls screen."""
+        if not self.current_user:
+            self.notify("Please login first", severity="error")
+            return
+        self.push_screen(RaidControlScreen())
     
     def action_logs(self) -> None:
         """Show audit logs."""

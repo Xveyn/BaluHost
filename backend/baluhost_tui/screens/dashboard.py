@@ -17,6 +17,9 @@ from app.services.raid import get_status as get_raid_status
 from app.services.users import list_users
 from app.services.audit_logger_db import get_audit_logger_db
 from app.core.config import settings
+from baluhost_tui.screens.users import UserManagementScreen
+from baluhost_tui.screens.files import FileBrowserScreen
+from baluhost_tui.screens.logs import AuditLogViewerScreen
 
 
 def get_current_telemetry():
@@ -387,12 +390,22 @@ class DashboardScreen(Screen):
     
     def action_users_screen(self) -> None:
         """Navigate to users screen."""
-        self.notify("User management - Coming soon!", severity="information")
+        try:
+            self.app.push_screen(UserManagementScreen())
+        except Exception as exc:
+            self.notify(f"Failed to open Users screen: {exc}", severity="error")
     
     def action_files_screen(self) -> None:
         """Navigate to files screen."""
-        self.notify("File browser - Coming soon!", severity="information")
+        try:
+            # start at storage root
+            self.app.push_screen(FileBrowserScreen(start_path='/', mode=self.app.mode, server=self.app.server, token=getattr(self.app, 'token', None)))
+        except Exception as exc:
+            self.notify(f"Failed to open File Browser: {exc}", severity="error")
     
     def action_logs_screen(self) -> None:
         """Navigate to logs screen."""
-        self.notify("Audit logs - Coming soon!", severity="information")
+        try:
+            self.app.push_screen(AuditLogViewerScreen())
+        except Exception as exc:
+            self.notify(f"Failed to open Audit Logs: {exc}", severity="error")

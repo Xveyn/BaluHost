@@ -5,7 +5,7 @@ prioritizing deletion of low-priority, old versions while
 preserving high-priority and recent versions.
 """
 from typing import List, Tuple, Optional, TYPE_CHECKING
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from sqlalchemy import and_, or_, func
 from sqlalchemy.orm import Session
 
@@ -142,7 +142,7 @@ class VCLPriorityMode:
         
         # Filter by age
         if min_age_hours > 0:
-            cutoff_date = datetime.utcnow() - timedelta(hours=min_age_hours)
+            cutoff_date = datetime.now(timezone.utc) - timedelta(hours=min_age_hours)
             query = query.filter(FileVersion.created_at < cutoff_date)
         
         # Order by deletion priority
@@ -230,7 +230,7 @@ class VCLPriorityMode:
             self.db.execute(
                 update(VCLStats).
                 where(VCLStats.id == 1).
-                values(last_priority_mode_at=datetime.utcnow())
+                values(last_priority_mode_at=datetime.now(timezone.utc))
             )
             self.db.commit()
         
@@ -400,7 +400,7 @@ class VCLPriorityMode:
             Dict with all cleanup results
         """
         results = {
-            'started_at': datetime.utcnow().isoformat(),
+            'started_at': datetime.now(timezone.utc).isoformat(),
             'user_id': user_id,
             'dry_run': dry_run
         }
@@ -441,7 +441,7 @@ class VCLPriorityMode:
             blob_results['deleted_blobs']
         )
         
-        results['completed_at'] = datetime.utcnow().isoformat()
+        results['completed_at'] = datetime.now(timezone.utc).isoformat()
         
         return results
     
@@ -468,7 +468,7 @@ class VCLPriorityMode:
         )
         
         results = {
-            'started_at': datetime.utcnow().isoformat(),
+            'started_at': datetime.now(timezone.utc).isoformat(),
             'dry_run': dry_run,
             'users_processed': 0,
             'total_freed_bytes': 0,
@@ -493,7 +493,7 @@ class VCLPriorityMode:
         results['total_freed_bytes'] += blob_cleanup['freed_bytes']
         results['total_deleted_blobs'] += blob_cleanup['deleted_blobs']
         
-        results['completed_at'] = datetime.utcnow().isoformat()
+        results['completed_at'] = datetime.now(timezone.utc).isoformat()
         
         return results
 

@@ -1,6 +1,6 @@
 """Service for scheduled automatic syncs."""
 
-from datetime import datetime, time, timedelta
+from datetime import datetime, time, timedelta, timezone
 from typing import Optional, Callable
 from sqlalchemy.orm import Session
 import asyncio
@@ -119,7 +119,7 @@ class SyncSchedulerService:
         Check and run all due syncs.
         This should be called periodically by a background task.
         """
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         due_schedules = self.db.query(SyncSchedule).filter(
             SyncSchedule.is_active == True,
@@ -139,7 +139,7 @@ class SyncSchedulerService:
     
     def _calculate_next_run(self, schedule: SyncSchedule):
         """Calculate next run time for a schedule."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         if schedule.schedule_type == "daily":
             hour, minute = map(int, schedule.time_of_day.split(":"))

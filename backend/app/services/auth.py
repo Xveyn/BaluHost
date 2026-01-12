@@ -7,6 +7,7 @@ import jwt
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.core import security  # ✅ Security Fix #3: Use consolidated security module
 from app.models.user import User
 from app.schemas.auth import TokenPayload
 from app.services import users as user_service
@@ -30,30 +31,34 @@ def authenticate_user(username: str, password: str, db: Optional[Session] = None
 
 
 def create_access_token(user: User, expires_minutes: Optional[int] = None) -> str:
-    """Create JWT access token for user."""
-    expire_delta = timedelta(minutes=expires_minutes or settings.token_expire_minutes)
-    expire_at = datetime.now(tz=timezone.utc) + expire_delta
-    payload = {
-        "sub": str(user.id),  # Convert to string for consistency
-        "username": user.username,
-        "role": user.role,
-        "exp": expire_at,
-    }
-    return jwt.encode(payload, settings.token_secret, algorithm=settings.token_algorithm)
+    """
+    Create JWT access token for user.
+
+    ✅ Security Fix #3: This now delegates to app.core.security.create_access_token()
+    which uses settings.SECRET_KEY instead of settings.token_secret.
+    Both auth systems now use the same secret key.
+    """
+    expires_delta = timedelta(minutes=expires_minutes or settings.token_expire_minutes)
+    # Delegate to security module (which uses settings.SECRET_KEY)
+    return security.create_access_token(user, expires_delta=expires_delta)
 
 
 def decode_token(token: str) -> TokenPayload:
+    """
+    Decode JWT token and return TokenPayload.
+
+    ✅ Security Fix #3: This now delegates to app.core.security.decode_token()
+    which uses settings.SECRET_KEY instead of settings.token_secret.
+    """
     try:
-        decoded = jwt.decode(
-            token,
-            settings.token_secret,
-            algorithms=[settings.token_algorithm],
-        )
+        # Delegate to security module (which uses settings.SECRET_KEY)
+        decoded = security.decode_token(token, token_type="access")
+
         # Log successful decode at debug level (non-sensitive fields only)
-        logger.debug("[AUTH] Token decoded: sub=%s, role=%s", decoded.get("sub"), decoded.get("role"))
-    except jwt.PyJWTError as exc:  # pragma: no cover - small wrapper
+        logger.debug("Token decoded: sub=%s, role=%s", decoded.get("sub"), decoded.get("role"))
+    except jwt.PyJWTError as exc:
         # Log the exception to help debugging token validation issues
-        logger.exception("[AUTH] Failed to decode token: %s", exc)
+        logger.exception("Failed to decode token: %s", exc)
         raise InvalidTokenError("Failed to decode token") from exc
 
     exp = decoded.get("exp")

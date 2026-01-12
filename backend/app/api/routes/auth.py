@@ -95,9 +95,11 @@ async def read_current_user(current_user: UserPublic = Depends(deps.get_current_
 
 
 @router.post("/change-password")
+@limiter.limit(get_limit("auth_password_change"))  # ✅ Security Fix #5
 async def change_password(
     payload: dict,
     request: Request,
+    response: Response,
     current_user = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ) -> dict[str, str]:
@@ -144,33 +146,53 @@ async def logout() -> dict[str, str]:
 
 
 @router.post("/refresh", response_model=TokenResponse)
+@limiter.limit(get_limit("auth_refresh"))  # ✅ Security Fix #5
 async def refresh_token(
     payload: dict,
     request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ) -> TokenResponse:
     """
     Refresh access token using a refresh token (for mobile clients).
-    
+
     Mobile clients receive a long-lived refresh token (30 days) during registration.
     This endpoint allows them to obtain new access tokens without re-authentication.
+
+    ✅ Security Fix #6: Now checks if refresh token has been revoked.
     """
+    from app.services.token_service import token_service
+
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
-    
+
     refresh_token_str = payload.get("refresh_token")
     if not refresh_token_str:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Missing refresh_token"
         )
-    
-    # Verify refresh token (currently using same JWT verification)
-    # In production, refresh tokens should be stored separately with revocation support
+
+    # Verify refresh token
     try:
         token_data = auth_service.decode_token(refresh_token_str)
         user_id = token_data.sub  # TokenPayload is a Pydantic model, use attribute access
-        
+
+        # ✅ Security Fix #6: Check if token has been revoked
+        jti = getattr(token_data, 'jti', None)
+        if jti and token_service.is_token_revoked(db, jti):
+            audit_logger.log_security_event(
+                action="refresh_token_revoked",
+                user=f"user_id:{user_id}",
+                error_message="Refresh token has been revoked",
+                ip_address=ip_address,
+                db=db
+            )
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token has been revoked"
+            )
+
         # Get user from database
         user_record = user_service.get_user(int(user_id), db=db)
         if not user_record:
@@ -185,7 +207,7 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="Invalid refresh token"
             )
-        
+
         # Check if user is active
         if not getattr(user_record, "is_active", True):
             audit_logger.log_security_event(
@@ -199,10 +221,14 @@ async def refresh_token(
                 status_code=status.HTTP_401_UNAUTHORIZED,
                 detail="User account is inactive"
             )
-        
+
+        # ✅ Security Fix #6: Update token usage timestamp
+        if jti:
+            token_service.update_token_usage(db, jti, ip_address=ip_address)
+
         # Generate new access token
         new_access_token = auth_service.create_access_token(user_record)
-        
+
         # Log successful token refresh
         audit_logger.log_security_event(
             action="token_refreshed",
@@ -211,10 +237,10 @@ async def refresh_token(
             ip_address=ip_address,
             db=db
         )
-        
+
         user_public = user_service.serialize_user(user_record)
         return TokenResponse(access_token=new_access_token, user=user_public)
-        
+
     except HTTPException:
         raise
     except Exception as e:

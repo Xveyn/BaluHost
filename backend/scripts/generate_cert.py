@@ -3,7 +3,7 @@ from cryptography import x509
 from cryptography.x509.oid import NameOID
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import sys
 import ipaddress
 
@@ -31,9 +31,9 @@ def main():
     ).serial_number(
         x509.random_serial_number()
     ).not_valid_before(
-        datetime.utcnow()
+        datetime.now(timezone.utc)
     ).not_valid_after(
-        datetime.utcnow() + timedelta(days=365)
+        datetime.now(timezone.utc) + timedelta(days=365)
     ).add_extension(
         x509.SubjectAlternativeName([
             x509.DNSName("localhost"),

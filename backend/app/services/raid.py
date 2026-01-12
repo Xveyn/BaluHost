@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 from dataclasses import dataclass, field
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Protocol, TYPE_CHECKING, cast
 
@@ -1087,7 +1088,7 @@ def _audit_event(action: str, payload: object | None = None, dry_run: bool = Fal
     The function never raises; failures are logged only.
     """
     record = {
-        "timestamp": datetime.datetime.utcnow().isoformat() + "Z",
+        "timestamp": datetime.datetime.now(timezone.utc).isoformat() + "Z",
         "action": action,
         "dry_run": bool(dry_run),
         "payload": _payload_to_dict(payload) if payload is not None else None,

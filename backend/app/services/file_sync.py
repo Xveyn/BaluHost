@@ -1,7 +1,7 @@
 """File sync service for local network synchronization."""
 
 import hashlib
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -39,7 +39,7 @@ class FileSyncService:
         
         if sync_state:
             sync_state.device_name = device_name
-            sync_state.last_sync = datetime.utcnow()
+            sync_state.last_sync = datetime.now(timezone.utc)
             self.db.commit()
             return sync_state
         
@@ -150,7 +150,7 @@ class FileSyncService:
                             "server_modified_at": sync_meta.server_modified_at.isoformat()
                         })
         
-        sync_state.last_sync = datetime.utcnow()
+        sync_state.last_sync = datetime.now(timezone.utc)
         sync_state.last_change_token = self._generate_change_token()
         self.db.commit()
         

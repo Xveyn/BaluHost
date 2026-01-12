@@ -313,8 +313,8 @@ async def start_remote_server(
         
         if success:
             # Update last_used
-            from datetime import datetime
-            profile.last_used = datetime.utcnow()
+            from datetime import datetime, timezone
+            profile.last_used = datetime.now(timezone.utc)
             db.commit()
             
             logger.info(f"Server {profile_id} started by user {current_user.id}")

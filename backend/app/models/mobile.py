@@ -47,11 +47,11 @@ class MobileRegistrationToken(Base):
     __tablename__ = "mobile_registration_tokens"
 
     token = Column(String, primary_key=True)
-    user_id = Column(String, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)  # Fixed: Changed from String to Integer
     expires_at = Column(DateTime, nullable=False)
     used = Column(Boolean, default=False, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    
+
     # Relationships
     user = relationship("User")
 

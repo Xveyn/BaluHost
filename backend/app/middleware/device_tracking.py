@@ -1,6 +1,6 @@
 """Middleware to track mobile device activity and update last_seen timestamps."""
 
-from datetime import datetime
+from datetime import datetime, timezone
 from fastapi import Request
 from sqlalchemy.orm import Session
 from starlette.middleware.base import BaseHTTPMiddleware
@@ -33,7 +33,7 @@ class DeviceTrackingMiddleware(BaseHTTPMiddleware):
                     ).first()
                     
                     if device:
-                        device.last_seen = datetime.utcnow()
+                        device.last_seen = datetime.now(timezone.utc)
                         db.commit()
                         try:
                             print(f"[DeviceTracking] Updated last_seen for device {device_id} -> {device.last_seen.isoformat()}")

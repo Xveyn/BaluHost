@@ -58,8 +58,8 @@ async def register_device(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid registration token")
     if token_record.used:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration token already used")
-    from datetime import datetime
-    if token_record.expires_at < datetime.utcnow():
+    from datetime import datetime, timezone
+    if token_record.expires_at < datetime.now(timezone.utc):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Registration token expired")
     if str(token_record.user_id) != str(current_user.id):
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Registration token does not belong to the current user")

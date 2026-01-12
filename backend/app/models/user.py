@@ -45,6 +45,9 @@ class User(Base):
     vpn_profiles: Mapped[List["VPNProfile"]] = relationship(
         "VPNProfile", back_populates="user", cascade="all, delete-orphan"
     )
+    refresh_tokens: Mapped[List["RefreshToken"]] = relationship(
+        "RefreshToken", back_populates="user", cascade="all, delete-orphan"
+    )
     
     def __repr__(self) -> str:
         return f"<User(id={self.id}, username='{self.username}', role='{self.role}')>"

@@ -3,7 +3,7 @@
 import hashlib
 from pathlib import Path
 from uuid import uuid4
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, BinaryIO
 from sqlalchemy.orm import Session
 
@@ -57,7 +57,7 @@ class ProgressiveSyncService:
             self.db.flush()
         
         # Create upload session
-        expires_at = datetime.utcnow() + timedelta(days=self.chunk_cleanup_days)
+        expires_at = datetime.now(timezone.utc) + timedelta(days=self.chunk_cleanup_days)
         upload = ChunkedUpload(
             upload_id=upload_id,
             file_metadata_id=file_metadata.id,
@@ -252,7 +252,7 @@ class ProgressiveSyncService:
     
     def cleanup_expired_uploads(self):
         """Clean up old incomplete uploads."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         expired = self.db.query(ChunkedUpload).filter(
             ChunkedUpload.expires_at < now,
             ChunkedUpload.is_completed == False

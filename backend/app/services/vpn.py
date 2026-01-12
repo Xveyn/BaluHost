@@ -4,7 +4,7 @@ import secrets
 import base64
 import subprocess
 from typing import Optional
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 from sqlalchemy.orm import Session
@@ -149,7 +149,7 @@ class VPNService:
             preshared_key=preshared_key,
             assigned_ip=client_ip,
             is_active=True,
-            created_at=datetime.utcnow(),
+            created_at=datetime.now(timezone.utc),
             last_handshake=None,
         )
         db.add(client)
@@ -226,7 +226,7 @@ PersistentKeepalive = 25
         """Update the last handshake timestamp for a client."""
         client = VPNService.get_client_by_id(db, client_id)
         if client:
-            client.last_handshake = datetime.utcnow()
+            client.last_handshake = datetime.now(timezone.utc)
             db.commit()
     
     @staticmethod
@@ -336,8 +336,8 @@ PersistentKeepalive = 25
             persistent_keepalive=parsed.get('persistent_keepalive', 25),
             is_active=True,
             uploaded_by_user_id=user_id,
-            created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc),
+            updated_at=datetime.now(timezone.utc)
         )
         
         db.add(config)

@@ -30,6 +30,7 @@ from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
+from app.middleware.security_headers import SecurityHeadersMiddleware
 
 logger = logging.getLogger(__name__)
 
@@ -185,6 +186,10 @@ def create_app() -> FastAPI:
         return JSONResponse(status_code=422, content={"detail": exc.errors()})
 
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+
+    # ✅ Security Fix #2: Add security headers to all responses
+    # Adds: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, HSTS
+    app.add_middleware(SecurityHeadersMiddleware)
 
     # Add local-only enforcement middleware (Option B security)
     if settings.enforce_local_only:

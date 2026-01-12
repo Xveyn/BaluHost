@@ -1,7 +1,7 @@
 from app.core.database import SessionLocal
 from app.models.sync_state import SyncState, SyncMetadata
 from app.models.file_metadata import FileMetadata
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 def main():
@@ -32,7 +32,7 @@ def main():
             print(f'Found existing FileMetadata id={fm.id} path={fm.path}')
 
         # Create a SyncMetadata row for this sync_state + file
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         sm = SyncMetadata(
             file_metadata_id=fm.id,
             sync_state_id=sync_state.id,

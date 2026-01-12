@@ -11,7 +11,7 @@ Note: This is a test runner for local development only.
 """
 import sqlite3
 from pathlib import Path
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 import uuid
 
 DB = Path(__file__).resolve().parents[1] / 'baluhost.db'
@@ -20,7 +20,7 @@ con = sqlite3.connect(str(DB))
 con.row_factory = sqlite3.Row
 cur = con.cursor()
 
-now = datetime.utcnow()
+now = datetime.now(timezone.utc)
 now_iso = now.isoformat(sep=' ')
 
 # Find due schedules
@@ -93,7 +93,7 @@ for s in due:
 
     # compute next_run_at
     def compute_next_run(rt_type, time_of_day, day_of_week, day_of_month):
-        now_local = datetime.utcnow()
+        now_local = datetime.now(timezone.utc)
         if rt_type == 'daily':
             hour, minute = map(int, (time_of_day or '02:00').split(':'))
             next_run = now_local.replace(hour=hour, minute=minute, second=0, microsecond=0)

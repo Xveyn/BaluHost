@@ -1,4 +1,7 @@
+from datetime import datetime, timezone
 from typing import Optional
+import logging
+
 from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.orm import Session
@@ -11,6 +14,8 @@ from app.services import auth as auth_service
 from app.services import users as user_service
 from app.services.audit_logger_db import get_audit_logger_db
 
+logger = logging.getLogger(__name__)
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False)
 
 
@@ -21,7 +26,7 @@ async def get_current_user(
     audit_logger = get_audit_logger_db()
     
     if not token:
-        print("[AUTH] Kein Token im Request!")
+        logger.debug("No authentication token in request")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No authentication token provided",
@@ -30,9 +35,9 @@ async def get_current_user(
     
     try:
         payload: TokenPayload = auth_service.decode_token(token)
-        print(f"[AUTH] Token-Payload: sub={payload.sub}, role={getattr(payload, 'role', None)}")
+        logger.debug(f"Token decoded: sub={payload.sub}, role={getattr(payload, 'role', None)}")
     except auth_service.InvalidTokenError as exc:
-        print("[AUTH] Token ungültig oder abgelaufen!")
+        logger.warning("Invalid or expired authentication token")
         audit_logger.log_security_event(
             action="invalid_token",
             user="unknown",
@@ -46,7 +51,7 @@ async def get_current_user(
         ) from exc
 
     user = user_service.get_user(payload.sub, db=db)
-    print(f"[AUTH] User aus DB: {user}")
+    logger.debug(f"Retrieved user from database: {user.username if user else 'None'}")
     if not user:
         audit_logger.log_security_event(
             action="deleted_user_access",
@@ -55,7 +60,7 @@ async def get_current_user(
             error_message="User no longer exists",
             db=db
         )
-        print("[AUTH] User existiert nicht mehr!")
+        logger.warning(f"User {payload.sub} no longer exists in database")
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="User no longer exists",
@@ -86,7 +91,7 @@ async def get_current_admin(
     user: UserPublic = Depends(get_current_user),
     db: Session = Depends(get_db)
 ) -> UserPublic:
-    print(f"[AUTH] get_current_admin: user={user.username}, role={user.role}")
+    logger.debug(f"Admin check for user={user.username}, role={user.role}")
     if user.role != "admin":
         audit_logger = get_audit_logger_db()
         audit_logger.log_authorization_failure(
@@ -95,12 +100,12 @@ async def get_current_admin(
             required_permission="admin",
             db=db
         )
-        print("[AUTH] Admin-Check fehlgeschlagen!")
+        logger.warning(f"Admin access denied for user {user.username} (role={user.role})")
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Insufficient permissions: Admin required",
         )
-    print("[AUTH] Admin-Zugriff gewährt!")
+    logger.debug(f"Admin access granted for user {user.username}")
     return user
 
 
@@ -161,7 +166,7 @@ async def verify_mobile_device_token(
         )
     
     # Check if device token has expired
-    if device.expires_at and device.expires_at < datetime.utcnow():
+    if device.expires_at and device.expires_at < datetime.now(timezone.utc):
         audit_logger = get_audit_logger_db()
         audit_logger.log_security_event(
             action="expired_device_token",

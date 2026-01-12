@@ -26,6 +26,9 @@ from app.schemas.mobile import (
     SyncFolderCreate,
 )
 from app.services import auth as auth_service
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class MobileService:
@@ -87,7 +90,7 @@ class MobileService:
                     vpn_config_base64 = vpn_response.config_base64
             except Exception as e:
                 # VPN generation failed, continue without VPN
-                print(f"Warning: VPN config generation failed: {e}")
+                logger.warning(f"VPN config generation failed: {e}")
         
         # Generate QR code with registration data
         import json
@@ -320,19 +323,19 @@ class MobileService:
     @staticmethod
     def delete_device(db: Session, device_id: str, user_id: int) -> bool:
         """Delete a mobile device."""
-        print(f"[DELETE] Trying to delete device_id={device_id} for user_id={user_id}")
+        logger.debug(f"Attempting to delete device_id={device_id} for user_id={user_id}")
         device = MobileService.get_device(db, device_id, user_id)
         if not device:
-            print(f"[DELETE] Device not found!")
+            logger.warning(f"Device not found: device_id={device_id}, user_id={user_id}")
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Device not found"
             )
-        
-        print(f"[DELETE] Deleting device: {device.device_name}")
+
+        logger.info(f"Deleting device: {device.device_name} (id={device_id})")
         db.delete(device)
         db.commit()
-        print(f"[DELETE] Device deleted successfully")
+        logger.info(f"Device deleted successfully: {device.device_name}")
         return True
     
     @staticmethod

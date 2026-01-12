@@ -1,5 +1,5 @@
 """File share database model for user-to-user file sharing."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import String, DateTime, Integer, Boolean, ForeignKey, UniqueConstraint
@@ -50,7 +50,7 @@ class FileShare(Base):
         """Check if the share has expired."""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
     
     def is_accessible(self) -> bool:
         """Check if the share is currently accessible."""

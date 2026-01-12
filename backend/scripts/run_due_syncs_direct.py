@@ -4,7 +4,7 @@ This runner calls the service's `_execute_sync` for each due schedule and
 updates schedule timestamps similar to the background worker.
 """
 import asyncio
-from datetime import datetime
+from datetime import datetime, timezone
 
 from app.core.database import SessionLocal
 from app.models.sync_progress import SyncSchedule
@@ -15,7 +15,7 @@ def main():
     db = SessionLocal()
     svc = SyncSchedulerService(db)
 
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     due = db.query(SyncSchedule).filter(
         SyncSchedule.is_active == True,
         SyncSchedule.next_run_at <= now

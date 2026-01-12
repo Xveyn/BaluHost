@@ -6,10 +6,13 @@ Handles:
 - Refresh token generation (long TTL)
 - Token verification and decoding
 - Token rotation
+
+✅ Security Fix #6: Adds JTI (JWT ID) to refresh tokens for revocation support.
 """
 
 from datetime import datetime, timedelta, timezone
 import jwt
+import uuid
 from app.core.config import settings
 from app.models.user import User
 
@@ -17,79 +20,93 @@ from app.models.user import User
 def create_access_token(user: User | dict, expires_delta: timedelta | None = None) -> str:
     """
     Create a JWT access token with short TTL (15 minutes default).
-    
+
     Args:
         user: User object or dict with user data (must have 'id' field)
         expires_delta: Optional custom expiration time
-        
+
     Returns:
         Encoded JWT token string
     """
     if isinstance(user, dict):
         user_id = user.get("id") or user.get("sub")
+        username = user.get("username")
+        role = user.get("role")
     else:
         user_id = user.id
-        
+        username = user.username
+        role = user.role
+
     if expires_delta is None:
         expires_delta = timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
-    
+
     now = datetime.now(timezone.utc)
     expire = now + expires_delta
-    
+
     payload = {
         "sub": str(user_id),
+        "username": username,  # ✅ Security Fix #3: Add username to token
+        "role": role,  # ✅ Security Fix #3: Add role to token
         "type": "access",  # Token type claim - prevents token confusion attacks
         "exp": expire,
         "iat": now,
     }
-    
+
     encoded_jwt = jwt.encode(
         payload,
-        settings.SECRET_KEY,
+        settings.SECRET_KEY,  # ✅ Security Fix #3: Use single SECRET_KEY
         algorithm="HS256"
     )
-    
+
     return encoded_jwt
 
 
-def create_refresh_token(user: User | dict, expires_delta: timedelta | None = None) -> str:
+def create_refresh_token(user: User | dict, expires_delta: timedelta | None = None, jti: str | None = None) -> tuple[str, str]:
     """
     Create a JWT refresh token with long TTL (7 days default).
-    
+
     Used to obtain new access tokens without re-authenticating.
-    
+
+    ✅ Security Fix #6: Now includes JTI (JWT ID) for token revocation support.
+
     Args:
         user: User object or dict with user data (must have 'id' field)
         expires_delta: Optional custom expiration time
-        
+        jti: Optional JWT ID (generated if not provided)
+
     Returns:
-        Encoded JWT token string
+        Tuple of (encoded JWT token string, JTI)
     """
     if isinstance(user, dict):
         user_id = user.get("id") or user.get("sub")
     else:
         user_id = user.id
-        
+
     if expires_delta is None:
         expires_delta = timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
-    
+
+    # Generate unique JWT ID for revocation support
+    if jti is None:
+        jti = str(uuid.uuid4())
+
     now = datetime.now(timezone.utc)
     expire = now + expires_delta
-    
+
     payload = {
         "sub": str(user_id),
+        "jti": jti,  # ✅ Security Fix #6: Add JWT ID for revocation
         "type": "refresh",  # Token type claim - prevents token confusion attacks
         "exp": expire,
         "iat": now,
     }
-    
+
     encoded_jwt = jwt.encode(
         payload,
         settings.SECRET_KEY,
         algorithm="HS256"
     )
-    
-    return encoded_jwt
+
+    return encoded_jwt, jti
 
 
 def decode_token(token: str, token_type: str = "access") -> dict:

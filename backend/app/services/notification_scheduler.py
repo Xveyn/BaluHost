@@ -1,13 +1,17 @@
 """Notification scheduler for device expiration warnings."""
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Tuple
+import logging
+
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.mobile import MobileDevice, ExpirationNotification
 from app.services.firebase_service import FirebaseService
 from app.core.config import get_settings
+
+logger = logging.getLogger(__name__)
 
 
 class NotificationScheduler:
@@ -33,7 +37,7 @@ class NotificationScheduler:
         Returns:
             dict: Statistics about notifications sent
         """
-        print(f"\n[NotificationScheduler] Starting expiration check at {datetime.utcnow()}")
+        logger.info(f"[NotificationScheduler] Starting expiration check at {datetime.now(timezone.utc)}")
         
         stats = {
             "checked": 0,
@@ -52,9 +56,9 @@ class NotificationScheduler:
             ).all()
             
             stats["checked"] = len(devices)
-            print(f"[NotificationScheduler] Found {len(devices)} devices to check")
+            logger.info(f"[NotificationScheduler] Found {len(devices)} devices to check")
             
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             for device in devices:
                 try:
@@ -81,7 +85,7 @@ class NotificationScheduler:
                             
                             if result["success"]:
                                 stats["sent"] += 1
-                                print(f"[NotificationScheduler] ✅ Sent {warning_type} warning to {device.device_name}")
+                                logger.info(f"[NotificationScheduler] ✅ Sent {warning_type} warning to {device.device_name}")
                             else:
                                 stats["failed"] += 1
                                 stats["errors"].append({
@@ -89,11 +93,11 @@ class NotificationScheduler:
                                     "warning": warning_type,
                                     "error": result.get("error")
                                 })
-                                print(f"[NotificationScheduler] ❌ Failed to send {warning_type} to {device.device_name}: {result.get('error')}")
+                                logger.info(f"[NotificationScheduler] ❌ Failed to send {warning_type} to {device.device_name}: {result.get('error')}")
                         else:
                             stats["skipped"] += 1
                             if reason:
-                                print(f"[NotificationScheduler] ⏭️ Skipped {warning_type} for {device.device_name}: {reason}")
+                                logger.info(f"[NotificationScheduler] ⏭️ Skipped {warning_type} for {device.device_name}: {reason}")
                 
                 except Exception as e:
                     stats["failed"] += 1
@@ -101,12 +105,12 @@ class NotificationScheduler:
                         "device": device.device_name,
                         "error": str(e)
                     })
-                    print(f"[NotificationScheduler] ❌ Error processing device {device.device_name}: {e}")
+                    logger.info(f"[NotificationScheduler] ❌ Error processing device {device.device_name}: {e}")
             
-            print(f"[NotificationScheduler] ✅ Completed: {stats['sent']} sent, {stats['skipped']} skipped, {stats['failed']} failed")
+            logger.info(f"[NotificationScheduler] ✅ Completed: {stats['sent']} sent, {stats['skipped']} skipped, {stats['failed']} failed")
             
         except Exception as e:
-            print(f"[NotificationScheduler] ❌ Critical error: {e}")
+            logger.info(f"[NotificationScheduler] ❌ Critical error: {e}")
             stats["errors"].append({"error": f"Critical: {str(e)}"})
         
         return stats
@@ -187,7 +191,7 @@ class NotificationScheduler:
         notification = ExpirationNotification(
             device_id=device.id,
             notification_type=warning_type,
-            sent_at=datetime.utcnow(),
+            sent_at=datetime.now(timezone.utc),
             success=result["success"],
             fcm_message_id=result.get("message_id"),
             error_message=result.get("error"),
@@ -204,25 +208,25 @@ class NotificationScheduler:
         Run periodic check (called by APScheduler).
         Creates its own database session.
         """
-        print(f"\n{'='*60}")
-        print(f"[NotificationScheduler] Periodic check triggered")
-        print(f"{'='*60}")
+        logger.info("="*60)
+        logger.info(f"[NotificationScheduler] Periodic check triggered")
+        logger.info("="*60)
         
         db = SessionLocal()
         try:
             stats = cls.check_and_send_warnings(db)
             
             # Log summary
-            print(f"\n[NotificationScheduler] Summary:")
-            print(f"  - Devices checked: {stats['checked']}")
-            print(f"  - Notifications sent: {stats['sent']}")
-            print(f"  - Skipped: {stats['skipped']}")
-            print(f"  - Failed: {stats['failed']}")
+            logger.info("[NotificationScheduler] Summary:")
+            logger.info(f"  - Devices checked: {stats['checked']}")
+            logger.info(f"  - Notifications sent: {stats['sent']}")
+            logger.info(f"  - Skipped: {stats['skipped']}")
+            logger.info(f"  - Failed: {stats['failed']}")
             
             if stats['errors']:
-                print(f"\n[NotificationScheduler] Errors:")
+                logger.warning("[NotificationScheduler] Errors:")
                 for error in stats['errors']:
-                    print(f"  - {error}")
+                    logger.warning(f"  - {error}")
             
         finally:
             db.close()

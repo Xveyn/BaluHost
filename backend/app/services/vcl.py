@@ -7,7 +7,7 @@ import gzip
 import shutil
 from pathlib import Path
 from typing import Optional, Tuple, List
-from datetime import datetime
+from datetime import datetime, timezone
 from sqlalchemy.orm import Session
 from sqlalchemy import func, select, update
 
@@ -189,7 +189,7 @@ class VCLService:
             original_size=len(content),
             compressed_size=compressed_size,
             reference_count=0,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         
         self.db.add(blob)
@@ -205,7 +205,7 @@ class VCLService:
             where(VersionBlob.id == blob.id).
             values(
                 reference_count=VersionBlob.reference_count + 1,
-                last_accessed=datetime.utcnow()
+                last_accessed=datetime.now(timezone.utc)
             )
         )
         self.db.flush()
@@ -393,7 +393,7 @@ class VCLService:
             comment=comment,
             was_cached=was_cached,
             cache_duration=cache_duration,
-            created_at=datetime.utcnow()
+            created_at=datetime.now(timezone.utc)
         )
         
         self.db.add(version)

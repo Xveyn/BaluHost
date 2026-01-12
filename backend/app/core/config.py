@@ -108,6 +108,44 @@ class Settings(BaseSettings):
                 self.nas_quota_bytes = None
         return self
 
+    @field_validator("SECRET_KEY")
+    @classmethod
+    def validate_secret_key(cls, v: str, info) -> str:
+        """✅ Security Fix #1: Ensure SECRET_KEY is not using default value (production only)."""
+        # Only enforce in production mode
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+
+        if not (is_dev or is_test):
+            if v == "change-me-in-prod":
+                raise ValueError(
+                    "SECRET_KEY cannot use default value in production! "
+                    "Generate a secure secret: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+            if len(v) < 32:
+                raise ValueError("SECRET_KEY must be at least 32 characters for security")
+        return v
+
+    @field_validator("token_secret")
+    @classmethod
+    def validate_token_secret(cls, v: str, info) -> str:
+        """✅ Security Fix #1: Ensure token_secret is not using default value (production only)."""
+        # Only enforce in production mode
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+
+        if not (is_dev or is_test):
+            if v == "change-me-in-prod":
+                raise ValueError(
+                    "token_secret cannot use default value in production! "
+                    "Generate a secure secret: python -c 'import secrets; print(secrets.token_urlsafe(32))'"
+                )
+            if len(v) < 32:
+                raise ValueError("token_secret must be at least 32 characters for security")
+        return v
+
     @field_validator("cors_origins", mode="before")
     def assemble_cors_origins(cls, value: list[str] | str) -> list[str]:
         if isinstance(value, str) and not value.startswith("["):

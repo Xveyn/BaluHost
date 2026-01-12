@@ -231,11 +231,25 @@ POST /api/auth/refresh     - Refresh access token (mobile)
 #### Token Refresh (Mobile Support):
 - **Purpose:** Allow mobile clients to refresh expired access tokens without re-authentication
 - **Flow:**
-  1. Mobile registration returns 30-day refresh token
+  1. Mobile registration returns 30-day refresh token with unique JTI
   2. App stores refresh token in secure storage (Keychain)
   3. When access token expires, call `/api/auth/refresh` with refresh token
-  4. Receive new access token
-- **Security:** Refresh tokens validated via JWT, audit logging for all refresh attempts
+  4. Backend checks revocation status before issuing new access token
+  5. Receive new access token (if not revoked)
+
+#### Refresh Token Revocation (Security Feature):
+- **Database Model:** `RefreshToken` stores all issued refresh tokens with metadata
+- **JTI (JWT ID):** Each refresh token has a unique identifier for tracking
+- **Token Storage:**
+  - Token stored as SHA-256 hash (not plaintext)
+  - Device ID, IP address, and user agent tracked
+  - Revocation status and reason logged
+- **Revocation Methods:**
+  - `revoke_token(jti)` - Revoke specific token
+  - `revoke_all_user_tokens(user_id)` - Revoke all user tokens (e.g., password change)
+  - `revoke_device_tokens(device_id)` - Revoke device-specific tokens
+- **Security:** Compromised tokens can be immediately revoked, preventing unauthorized access
+- **Service:** `app/services/token_service.py`
 
 ---
 

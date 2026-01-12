@@ -7,6 +7,8 @@ from contextlib import contextmanager
 
 import httpx
 from sqlalchemy.orm import Session
+import logging
+import os
 
 # Add parent directory to path for local imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -68,11 +70,36 @@ class BaluHostContext:
             headers = {}
             if self.token:
                 headers['Authorization'] = f'Bearer {self.token}'
-            
+
+            # Setup optional HTTP logging when BALUHOST_TUI_DEBUG=1 or debug token present
+            enable_debug = os.environ.get('BALUHOST_TUI_DEBUG') == '1'
+            logger = logging.getLogger('baluhost_tui.http')
+            if enable_debug:
+                logger.setLevel(logging.DEBUG)
+                if not logger.handlers:
+                    handler = logging.StreamHandler()
+                    handler.setFormatter(logging.Formatter('[%(levelname)s] %(message)s'))
+                    logger.addHandler(handler)
+
+            event_hooks = {}
+            if enable_debug or self.token:
+                def _log_request(request: httpx.Request) -> None:
+                    logger.debug(f"HTTP REQUEST -> {request.method} {request.url} headers={dict(request.headers)}")
+
+                def _log_response(response: httpx.Response) -> None:
+                    try:
+                        req = response.request
+                        logger.debug(f"HTTP RESPONSE <- {response.status_code} for {req.method} {req.url}")
+                    except Exception:
+                        logger.debug(f"HTTP RESPONSE <- {response.status_code}")
+
+                event_hooks = {"request": [_log_request], "response": [_log_response]}
+
             self._api_client = httpx.Client(
                 base_url=self.server,
                 headers=headers,
-                timeout=30.0
+                timeout=30.0,
+                event_hooks=event_hooks if event_hooks else None,
             )
         
         return self._api_client

@@ -10,7 +10,7 @@ Tests cover:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import patch
 from sqlalchemy import create_engine
 from sqlalchemy.orm import Session
@@ -115,8 +115,8 @@ class TestJWTRefreshTokens:
         expired_token = jwt.encode(
             {
                 "sub": user_id,
-                "exp": datetime.utcnow() - timedelta(hours=1),  # Expired
-                "iat": datetime.utcnow(),
+                "exp": datetime.now(timezone.utc) - timedelta(hours=1),  # Expired
+                "iat": datetime.now(timezone.utc),
                 "type": "refresh"
             },
             settings.SECRET_KEY,
@@ -142,7 +142,7 @@ class TestJWTRefreshTokens:
         token = jwt.encode(
             {
                 "sub": "user123",
-                "exp": datetime.utcnow() + timedelta(hours=1),
+                "exp": datetime.now(timezone.utc) + timedelta(hours=1),
                 "type": "refresh"
             },
             valid_key,
@@ -252,7 +252,7 @@ class TestJWTSecurityMechanisms:
         )
         
         # Calculate TTL
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         exp_time = datetime.utcfromtimestamp(decoded["exp"])
         ttl_minutes = (exp_time - now).total_seconds() / 60
         

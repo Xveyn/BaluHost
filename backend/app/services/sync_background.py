@@ -2,7 +2,7 @@
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
@@ -66,7 +66,7 @@ class SyncBackgroundScheduler:
         """Check for due syncs and execute them."""
         db = SessionLocal()
         try:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             
             due_schedules = db.query(SyncSchedule).filter(
                 SyncSchedule.is_active == True,
@@ -122,7 +122,7 @@ class SyncBackgroundScheduler:
             )
             
             # Update schedule
-            schedule.last_run_at = datetime.utcnow()
+            schedule.last_run_at = datetime.now(timezone.utc)
             self._calculate_next_run(schedule)
             db.commit()
             
@@ -155,7 +155,7 @@ class SyncBackgroundScheduler:
     def _calculate_next_run(self, schedule: SyncSchedule):
         """Calculate next run time (same as in sync_scheduler.py)."""
         from datetime import timedelta
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         if schedule.schedule_type == "daily":
             hour, minute = map(int, schedule.time_of_day.split(":"))

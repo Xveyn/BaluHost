@@ -59,6 +59,8 @@ RATE_LIMITS = {
     # Authentication endpoints - strict limits to prevent brute force
     "auth_login": "5/minute",
     "auth_register": "3/minute",
+    "auth_password_change": "5/minute",  # ✅ Security Fix #5
+    "auth_refresh": "10/minute",  # ✅ Security Fix #5
     
     # File operations - moderate limits
     "file_upload": "20/minute",

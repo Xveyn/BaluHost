@@ -1,5 +1,5 @@
 """Service for file sharing functionality."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Tuple
 from passlib.context import CryptContext
 from sqlalchemy import select, func, and_, or_
@@ -76,7 +76,7 @@ class ShareService:
         stmt = select(ShareLink).where(ShareLink.owner_id == owner_id)
         
         if not include_expired:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             stmt = stmt.where(
                 or_(
                     ShareLink.expires_at.is_(None),
@@ -141,7 +141,7 @@ class ShareService:
     def increment_download_count(db: Session, share_link: ShareLink) -> None:
         """Increment download count and update last access time."""
         share_link.download_count += 1
-        share_link.last_accessed_at = datetime.utcnow()
+        share_link.last_accessed_at = datetime.now(timezone.utc)
         db.commit()
     
     # ===========================
@@ -272,7 +272,7 @@ class ShareService:
         
         if share and share.is_accessible():
             # Update last access time
-            share.last_accessed_at = datetime.utcnow()
+            share.last_accessed_at = datetime.now(timezone.utc)
             db.commit()
             return share
         
@@ -281,7 +281,7 @@ class ShareService:
     @staticmethod
     def get_share_statistics(db: Session, user_id: int) -> ShareStatistics:
         """Get sharing statistics for a user."""
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         
         # Share links stats
         total_links = db.execute(

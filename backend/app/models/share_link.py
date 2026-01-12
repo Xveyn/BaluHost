@@ -1,5 +1,5 @@
 """Share link database model for public file sharing."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import secrets
 
@@ -56,7 +56,7 @@ class ShareLink(Base):
         """Check if the share link has expired."""
         if self.expires_at is None:
             return False
-        return datetime.utcnow() > self.expires_at
+        return datetime.now(timezone.utc) > self.expires_at
     
     def is_download_limit_reached(self) -> bool:
         """Check if the download limit has been reached."""

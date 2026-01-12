@@ -1,6 +1,6 @@
 import sqlite3
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, timezone
 
 DB = Path(__file__).resolve().parents[1] / 'baluhost.db'
 print('Using DB:', DB)
@@ -38,7 +38,7 @@ else:
     print('Inserted FileMetadata id=', fm_id)
 
 # Insert a SyncMetadata row
-now = datetime.utcnow().isoformat(sep=' ')
+now = datetime.now(timezone.utc).isoformat(sep=' ')
 content_hash = 'deadbeef'*8
 file_size = 123
 is_deleted = 0
