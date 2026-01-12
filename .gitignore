@@ -69,3 +69,16 @@ client/e2e-*.png
 
 # Temporary frontend files
 baludesk/frontend/tmp_asar_list.txt
+
+# Local postgres env with secrets
+.env.postgres
+.env.postgres.generated
+.env.postgres.example
+
+# Temporary cli artifacts from assistant/debug
+tmpclaude-*
+backend/tmpclaude-*
+backend/app/services/tmpclaude-*
+
+# Reserve device names on Windows that cause git errors
+backend/nul
