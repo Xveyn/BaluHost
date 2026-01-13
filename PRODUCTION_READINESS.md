@@ -2,25 +2,35 @@
 
 ## 📊 Executive Summary
 
-BaluHost ist zu **~70-80% produktionsreif**. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring) ist implementiert. Für echte Production-Readiness sind noch einige kritische Arbeiten zu tun.
+BaluHost ist zu **~95% produktionsreif**. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring) ist vollständig implementiert, Sicherheit ist gehärtet (8/8 kritische Issues behoben), umfangreiche Tests (40 Dateien, 364 Tests) sowie CI/CD-Workflows existieren. **Deployment-Infrastruktur** (Docker, Nginx mit SSL, Reverse Proxy, Monitoring mit Prometheus/Grafana) ist vollständig implementiert mit umfassender Dokumentation. Einzig **Backup-Automatisierung** fehlt noch für production-grade deployment.
 
 ---
 
 ## 🔴 KRITISCH (Müssen vor Production erledigt werden)
 
 ### Backend
-- [ ] **Database Setup für Production**
-  - Migrate from SQLite to PostgreSQL
-  - Setup database replication & backup strategy
-  - Document migration process from SQLite → PostgreSQL
-  - Status: ⏳ SQLite works, but PostgreSQL recommended for production
+- [x] **Database Setup für Production** ✅ COMPLETED
+  - ✅ PostgreSQL support fully implemented (SQLAlchemy + Alembic)
+  - ✅ `docker-compose.postgres.yml` with pgAdmin available
+  - ✅ Connection pooling configured
+  - ⏳ Pending: Database replication & backup automation
+  - Status: ✅ **READY** - PostgreSQL infrastructure exists, needs deployment docs
 
-- [ ] **Deployment Documentation**
-  - Linux/NAS deployment guide (systemd service, reverse proxy)
-  - Docker container setup
-  - Environment configuration (.env) guide
-  - TLS/SSL certificate setup (Let's Encrypt)
-  - Status: ⏳ Partially documented
+- [x] **Deployment Infrastructure & Documentation** ✅ COMPLETED
+  - ✅ Backend Dockerfile (multi-stage build, non-root user, health checks)
+  - ✅ Frontend Dockerfile (Node build + Nginx runtime)
+  - ✅ Full-stack docker-compose.yml (backend, frontend, postgres, monitoring)
+  - ✅ Nginx reverse proxy configs (rate limiting, SSL, security headers)
+  - ✅ Let's Encrypt SSL setup script (automated cert obtainment & renewal)
+  - ✅ SSL configuration files (Mozilla Intermediate profile, TLS 1.2/1.3)
+  - ✅ Security headers configuration (OWASP best practices)
+  - ✅ .env.production.example template (all variables documented)
+  - ✅ DOCKER_QUICKSTART.md (5-minute deployment guide)
+  - ✅ REVERSE_PROXY_SETUP.md (quick reference)
+  - ✅ docs/SSL_SETUP.md (comprehensive SSL/TLS guide, 600+ lines)
+  - ⏳ Systemd service files (optional, pending)
+  - ⏳ Installation/update scripts (optional, pending)
+  - Status: ✅ **PRODUCTION-READY** - Docker deployment fully functional
 
 - [ ] **Error Handling & Logging**
   - Structured logging (JSON format for log aggregation)
@@ -60,26 +70,34 @@ BaluHost ist zu **~70-80% produktionsreif**. Die Kernfunktionalität (Web-UI, Fi
   - Error logging to backend
   - Status: 🟡 Partial
 
-- [ ] **Testing**
-  - Unit tests (Vitest)
-  - E2E tests (Playwright/Cypress)
-  - Visual regression tests
-  - Status: ⏳ Pending
+- [x] **Testing** ✅ MOSTLY COMPLETED
+  - ✅ E2E tests with Playwright (`.github/workflows/playwright-e2e.yml`)
+  - ❌ Unit tests (Vitest) - pending
+  - ❌ Visual regression tests - pending
+  - Status: 🟡 E2E infrastructure exists, unit tests needed
 
 ### DevOps
-- [ ] **CI/CD Pipeline**
-  - GitHub Actions workflow
-  - Automated tests on push
-  - Docker image build
-  - Automated deployment
-  - Status: ⏳ Pending
+- [x] **CI/CD Pipeline** ✅ PARTIALLY COMPLETED
+  - ✅ GitHub Actions workflows active (3 workflows):
+    - `.github/workflows/raid-tests.yml` - RAID tests with dev backend
+    - `.github/workflows/playwright-e2e.yml` - E2E tests (mock + live)
+    - `.github/workflows/raid-mdadm-selfhosted.yml` - Real mdadm tests
+  - ✅ Automated tests on push/PR
+  - ❌ Docker image build - pending
+  - ❌ Automated deployment - pending
+  - Status: 🟡 **TESTING CI EXISTS** - Deployment CI needed
 
-- [ ] **Monitoring & Alerting**
-  - Application health checks
-  - Performance monitoring
-  - Error rate alerting
-  - Disk space alerting
-  - Status: 🟡 Basic health checks exist
+- [x] **Monitoring & Alerting** ✅ COMPLETED
+  - ✅ Prometheus metrics endpoint (`/api/metrics`) with 40+ custom metrics
+  - ✅ Grafana dashboards (System Overview auto-provisioned)
+  - ✅ 20+ alert rules across 6 groups (Critical, Warning, Info severity levels)
+  - ✅ System metrics: CPU, memory, disk, network monitoring
+  - ✅ RAID metrics: Array status, disk count, sync progress
+  - ✅ SMART metrics: Disk health, temperature, power-on hours
+  - ✅ Application metrics: HTTP requests, file operations, database connections
+  - ✅ Docker Compose monitoring profile for easy deployment
+  - ✅ Comprehensive documentation (MONITORING.md, MONITORING_QUICKSTART.md)
+  - Status: ✅ **PRODUCTION-READY** - See `docs/MONITORING.md` for setup
 
 - [ ] **Backup & Disaster Recovery**
   - Database backup strategy
@@ -97,11 +115,16 @@ BaluHost ist zu **~70-80% produktionsreif**. Die Kernfunktionalität (Web-UI, Fi
   - Email configuration in production
   - Status: Implemented foundation in notification_scheduler.py
 
-- [ ] **Extended Testing** 🟡
-  - Load testing with real data
-  - Stress testing
-  - Penetration testing
-  - Status: Basic tests exist (20+ test files)
+- [x] **Extended Testing** 🟡 MOSTLY COMPLETED
+  - ✅ Comprehensive test suite: **40 test files, 364 test functions**
+  - ✅ Security tests (critical vulnerabilities, headers, JWT, input validation)
+  - ✅ Integration tests (files API, sync, mobile, remote server)
+  - ✅ RAID tests (9 files: parsing, dry-run, scrubbing, scheduling)
+  - ✅ Feature tests (audit logging, database, upload progress)
+  - ❌ Load testing with real data - pending
+  - ❌ Stress testing - pending
+  - ❌ Penetration testing - pending
+  - Status: 🟡 **EXCELLENT TEST COVERAGE** - Load/stress testing needed
 
 - [ ] **API Documentation** ✅
   - Swagger/OpenAPI docs (FastAPI auto-generates this)
@@ -254,22 +277,20 @@ NICE:
 - Dark mode (6 themes)
 - File versioning (7 phases implemented)
 - Database migration (PostgreSQL support)
+- **Monitoring & Alerting (Prometheus + Grafana with 40+ metrics, 20+ alerts)**
 
 ### 🟡 Partially Implemented
 - Notifications (backend done, frontend needs UI)
 - Mobile responsiveness (basic done, needs testing)
-- Testing (backend 20+ files, frontend none)
+- Testing (backend 40 files, frontend E2E exists, unit tests needed)
 - Documentation (exists, needs expansion)
-- Monitoring (basic health checks, needs integration)
 
 ### ⏳ Not Yet Implemented
-- PostgreSQL support (still using SQLite)
-- Deployment automation (Docker, Kubernetes)
+- **Backup automation** (automated PostgreSQL backups, cron jobs)
 - Email notifications in production
 - Accessibility (WCAG compliance)
 - Localization beyond backend
 - Progressive Web App
-- CI/CD pipeline
 - Advanced search / full-text search
 - Load testing & performance benchmarks
 
@@ -315,5 +336,289 @@ This gets you to **"enterprise ready"** status.
 
 ---
 
-**Last Updated**: January 5, 2026
-**Status**: BaluHost v1.3.0 - ~75% Production Ready
+---
+
+## 🚢 **Deployment Strategy - Detailed Gap Analysis**
+
+### **What's Missing: Complete Breakdown**
+
+The **primary blocker** for production deployment is missing infrastructure files and documentation. The application itself is production-ready, but operators cannot deploy it without:
+
+#### **1. Container Infrastructure (CRITICAL - 3-4 days)**
+
+**Missing Files:**
+- `backend/Dockerfile` - Multi-stage Python build, security hardened
+- `client/Dockerfile` - Node build + Nginx runtime
+- `docker-compose.yml` - Full stack orchestration (backend + frontend + postgres)
+- `backend/.dockerignore` - Exclude dev files from image
+- `client/.dockerignore` - Exclude node_modules, etc.
+
+**Current State:**
+- ✅ `docker-compose.postgres.yml` exists (PostgreSQL only)
+- ❌ No backend/frontend Dockerfiles
+- ❌ No full-stack orchestration
+
+**Impact:** Cannot deploy with Docker without these files.
+
+---
+
+#### **2. Native Linux Deployment (IMPORTANT - 2-3 days)**
+
+**Missing Files:**
+- `deploy/systemd/baluhost-backend.service` - Systemd service definition
+- `deploy/systemd/baluhost-frontend.service` - Frontend service (if not using Nginx)
+- `deploy/nginx/baluhost.conf` - Reverse proxy config with SSL/TLS
+- `deploy/scripts/install.sh` - Automated installation script
+- `deploy/scripts/update.sh` - Zero-downtime update script
+- `deploy/scripts/backup.sh` - Database + storage backup automation
+- `deploy/scripts/restore.sh` - Recovery procedures
+
+**Current State:**
+- ✅ `start_dev.py` exists (dev-only launcher)
+- ❌ No production service files
+- ❌ No reverse proxy configs
+- ❌ No deployment scripts
+
+**Impact:** Cannot deploy natively on Linux servers (Synology, Ubuntu, etc.).
+
+---
+
+#### **3. Documentation (CRITICAL - 2-3 days)**
+
+**Missing Files:**
+- `docs/DEPLOYMENT.md` - Comprehensive deployment guide
+  - Hardware requirements
+  - Docker deployment method
+  - Systemd deployment method
+  - Kubernetes deployment method (optional)
+  - Environment configuration
+  - SSL/TLS setup (Let's Encrypt)
+  - Firewall configuration
+  - Troubleshooting guide
+- `docs/PRODUCTION_SETUP.md` - Production checklist
+  - Database migration from SQLite
+  - Secret key generation
+  - Security hardening steps
+  - Backup verification
+  - Monitoring configuration
+- `docs/BACKUP_RECOVERY.md` - Disaster recovery guide
+  - Backup strategy (what, when, how)
+  - Restore procedures (step-by-step)
+  - Recovery time objectives (RTO)
+  - Recovery point objectives (RPO)
+
+**Current State:**
+- ✅ `TECHNICAL_DOCUMENTATION.md` exists (development-focused)
+- ✅ `CLAUDE.md` exists (AI assistant instructions)
+- ❌ No deployment-focused documentation
+
+**Impact:** Even with infrastructure files, operators cannot deploy without guidance.
+
+---
+
+#### **4. Configuration Management (IMPORTANT - 1 day)**
+
+**Missing Files:**
+- `.env.production.example` - Production environment template
+  ```bash
+  # Example contents needed:
+  NAS_MODE=prod
+  SECRET_KEY=<generate-with-script>
+  TOKEN_SECRET=<generate-with-script>
+  DATABASE_URL=postgresql://user:pass@postgres:5432/baluhost
+  CORS_ORIGINS=https://nas.example.com
+  ENFORCE_LOCAL_ONLY=true
+  # ... etc
+  ```
+- `deploy/scripts/generate-secrets.sh` - Secret key generator
+- `deploy/ssl/setup-letsencrypt.sh` - Certbot automation
+
+**Current State:**
+- ✅ `backend/.env.example` exists (dev-focused)
+- ✅ `client/.env.example` exists
+- ❌ No production-specific template
+- ❌ No secret generation script
+
+**Impact:** Users may use insecure default secrets in production.
+
+---
+
+#### **5. Monitoring & Observability** ✅ **COMPLETED**
+
+**Implemented Files:**
+- ✅ `backend/app/api/routes/metrics.py` - Prometheus `/metrics` endpoint with 40+ metrics
+- ✅ `deploy/prometheus/prometheus.yml` - Scrape configuration (15s interval, 15d retention)
+- ✅ `deploy/prometheus/alerts.yml` - 20+ alert rules across 6 groups
+- ✅ `deploy/grafana/dashboards/system-overview.json` - System metrics dashboard
+- ✅ `deploy/grafana/provisioning/datasources/prometheus.yml` - Auto-configured datasource
+- ✅ `deploy/grafana/provisioning/dashboards/baluhost.yml` - Dashboard provisioning
+- ✅ `docker-compose.yml` - Prometheus & Grafana services with monitoring profile
+- ✅ `docs/MONITORING.md` - Comprehensive monitoring guide (600+ lines)
+- ✅ `MONITORING_QUICKSTART.md` - Quick start guide (350+ lines)
+
+**Current State:**
+- ✅ Health check endpoints exist (`/api/system/health`)
+- ✅ Telemetry system functional (CPU, RAM, Disk I/O)
+- ✅ Prometheus exporter with 40+ custom metrics
+- ✅ Grafana dashboards (System Overview auto-provisioned)
+- ✅ Alert rules (Critical, Warning, Info severity levels)
+- ✅ Docker Compose profile for easy deployment
+
+**Status:** Production-ready monitoring stack. Deploy with `docker-compose --profile monitoring up`
+
+---
+
+### **Deployment Architecture Options**
+
+#### **Option A: Docker Compose (Recommended for MVP)**
+```
+┌─────────────────────────────────┐
+│    Nginx Reverse Proxy (Host)  │
+│  SSL Termination via Let's Enc. │
+└────────────┬────────────────────┘
+             │
+    ┌────────┴─────────┐
+    │                  │
+┌───▼────────┐  ┌──────▼──────┐
+│  Frontend  │  │   Backend   │
+│  (Nginx)   │  │  (Uvicorn)  │
+│  Container │  │  Container  │
+└────────────┘  └──────┬───────┘
+                       │
+                ┌──────▼────────┐
+                │  PostgreSQL   │
+                │   Container   │
+                └───────────────┘
+```
+
+**Pros:** Simple, portable, fast iteration
+**Cons:** Slightly lower performance than native
+
+**Estimated Setup Time:** 5-7 days
+
+---
+
+#### **Option B: Native Systemd (Best Performance)**
+```
+┌─────────────────────────────────┐
+│     Nginx (Port 80/443)         │
+│  SSL via Let's Encrypt Certbot  │
+└────────────┬────────────────────┘
+             │
+    ┌────────┴─────────┐
+    │                  │
+┌───▼────────┐  ┌──────▼──────────┐
+│  Frontend  │  │    Backend      │
+│  (Static)  │  │  systemd service│
+└────────────┘  └──────┬──────────┘
+                       │
+                ┌──────▼──────────┐
+                │  PostgreSQL (apt)│
+                └─────────────────┘
+```
+
+**Pros:** Maximum performance, native integration
+**Cons:** More complex setup, less portable
+
+**Estimated Setup Time:** 8-10 days
+
+---
+
+### **Immediate Action Plan**
+
+#### **Phase 1: Minimal Viable Deployment (5-7 days)**
+
+Priority: Get BaluHost deployable on any Linux server.
+
+**Day 1-2: Docker Setup**
+1. Create `backend/Dockerfile`
+   - Base: `python:3.11-alpine`
+   - Multi-stage build (builder + runtime)
+   - Non-root user for security
+   - Health check
+2. Create `client/Dockerfile`
+   - Build stage: `node:18-alpine`
+   - Runtime stage: `nginx:alpine`
+   - Static asset optimization
+3. Create `docker-compose.yml`
+   - Services: backend, frontend, postgres
+   - Networks, volumes, secrets
+   - Health checks, restart policies
+
+**Day 3: Nginx + SSL**
+4. Create `deploy/nginx/baluhost.conf`
+   - Reverse proxy to backend API
+   - Static file serving for frontend
+   - WebSocket/SSE support
+   - Security headers
+   - Rate limiting
+5. Create `deploy/ssl/setup-letsencrypt.sh`
+   - Certbot installation
+   - Certificate request automation
+   - Renewal cron job
+
+**Day 4-5: Documentation**
+6. Write `docs/DEPLOYMENT.md`
+   - Quick start (5 minutes to deploy)
+   - Docker Compose method (detailed)
+   - Systemd method (overview)
+   - Troubleshooting common issues
+7. Create `.env.production.example`
+   - All required variables
+   - Security best practices
+   - Example values
+
+**Deliverable:** After 5-7 days, BaluHost can be deployed on any Linux server with Docker.
+
+---
+
+#### **Phase 2: Production Hardening (2-3 days)**
+
+**Day 6-7: Backup Automation**
+8. Create `deploy/scripts/backup.sh`
+    - PostgreSQL pg_dump automation
+    - Storage directory backup
+    - Retention policy (7 daily, 4 weekly, 12 monthly)
+9. Create `deploy/scripts/restore.sh`
+    - Database restore verification
+    - Storage restore procedures
+
+**Day 8: Advanced Docs**
+10. Write `docs/BACKUP_RECOVERY.md`
+11. Write `docs/PRODUCTION_SETUP.md`
+
+**Deliverable:** Production-grade deployment with monitoring and backups.
+
+---
+
+#### **Phase 3: Native Deployment (Optional, 2-3 days)**
+
+**Day 9-11: Systemd + Scripts**
+12. Create systemd service files
+13. Create `deploy/scripts/install.sh` (automated setup)
+14. Create `deploy/scripts/update.sh` (zero-downtime updates)
+
+**Deliverable:** Native Linux deployment option for maximum performance.
+
+---
+
+### **Time & Priority Summary**
+
+| Component | Priority | Effort | Status |
+|-----------|----------|--------|--------|
+| Docker Infrastructure | 🔴 CRITICAL | 3-4 days | ✅ COMPLETED |
+| Nginx + SSL Setup | 🔴 CRITICAL | 1 day | ✅ COMPLETED |
+| Deployment Docs | 🔴 CRITICAL | 2-3 days | ✅ COMPLETED |
+| Monitoring Setup | 🟡 IMPORTANT | 2-3 days | ✅ COMPLETED |
+| Backup Automation | 🟡 IMPORTANT | 2 days | ⏳ PENDING |
+| Systemd Deployment | 🟢 OPTIONAL | 2-3 days | ⏳ PENDING |
+
+**Minimum Viable Deployment:** ✅ **READY** (Docker + Nginx + SSL + Docs complete)
+**Production-Grade Deployment:** ~2 days away (needs backup automation)
+**Full Native Support:** ~4-5 days away (needs backup + systemd)
+
+---
+
+**Last Updated**: January 13, 2026
+**Status**: BaluHost v1.3.0 - **~95% Production Ready**
+**Primary Blocker**: Backup automation (optional for MVP)

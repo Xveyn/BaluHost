@@ -1,0 +1,290 @@
+# ===================================
+# Prometheus Alert Rules for BaluHost
+# ===================================
+# Defines alert conditions for critical system events
+#
+# Alert severity levels:
+# - critical: immediate action required
+# - warning: requires attention
+# - info: informational only
+# ===================================
+
+groups:
+  # ===================================
+  # System Resource Alerts
+  # ===================================
+  - name: system_resources
+    interval: 30s
+    rules:
+      # High CPU usage
+      - alert: HighCPUUsage
+        expr: baluhost_cpu_usage_percent > 85
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High CPU usage detected"
+          description: "CPU usage is above 85% for more than 5 minutes (current: {{ $value }}%)"
+
+      # Critical CPU usage
+      - alert: CriticalCPUUsage
+        expr: baluhost_cpu_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "CRITICAL: CPU usage extremely high"
+          description: "CPU usage is above 95% for more than 2 minutes (current: {{ $value }}%)"
+
+      # High memory usage
+      - alert: HighMemoryUsage
+        expr: baluhost_memory_usage_percent > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: system
+        annotations:
+          summary: "High memory usage detected"
+          description: "Memory usage is above 80% for more than 5 minutes (current: {{ $value }}%)"
+
+      # Critical memory usage
+      - alert: CriticalMemoryUsage
+        expr: baluhost_memory_usage_percent > 95
+        for: 2m
+        labels:
+          severity: critical
+          component: system
+        annotations:
+          summary: "CRITICAL: Memory almost exhausted"
+          description: "Memory usage is above 95% for more than 2 minutes (current: {{ $value }}%)"
+
+  # ===================================
+  # Disk Space Alerts
+  # ===================================
+  - name: disk_space
+    interval: 1m
+    rules:
+      # Low disk space warning
+      - alert: LowDiskSpace
+        expr: baluhost_disk_usage_percent > 75
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Disk space running low"
+          description: "Disk {{ $labels.path }} usage is above 75% (current: {{ $value }}%)"
+
+      # Critical disk space
+      - alert: CriticalDiskSpace
+        expr: baluhost_disk_usage_percent > 90
+        for: 5m
+        labels:
+          severity: critical
+          component: storage
+        annotations:
+          summary: "CRITICAL: Disk space critically low"
+          description: "Disk {{ $labels.path }} usage is above 90% (current: {{ $value }}%)"
+
+      # Disk will be full soon
+      - alert: DiskWillBeFull
+        expr: predict_linear(baluhost_disk_free_bytes[1h], 4 * 3600) < 0
+        for: 10m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "Disk will be full in ~4 hours"
+          description: "Based on current growth rate, disk {{ $labels.path }} will be full in approximately 4 hours"
+
+  # ===================================
+  # RAID Alerts
+  # ===================================
+  - name: raid_health
+    interval: 1m
+    rules:
+      # RAID array degraded
+      - alert: RAIDArrayDegraded
+        expr: baluhost_raid_array_status{status!="active"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: raid
+        annotations:
+          summary: "RAID array is degraded"
+          description: "RAID array {{ $labels.device }} ({{ $labels.level }}) is in {{ $labels.status }} state"
+
+      # RAID disk missing
+      - alert: RAIDDiskMissing
+        expr: baluhost_raid_disk_count{type="active"} < baluhost_raid_disk_count{type="total"}
+        for: 2m
+        labels:
+          severity: critical
+          component: raid
+        annotations:
+          summary: "RAID disk missing or failed"
+          description: "RAID array {{ $labels.device }} has {{ $value }} active disks out of {{ baluhost_raid_disk_count{type='total'} }} total"
+
+      # RAID resync in progress
+      - alert: RAIDResyncInProgress
+        expr: baluhost_raid_sync_progress_percent > 0 and baluhost_raid_sync_progress_percent < 100
+        for: 5m
+        labels:
+          severity: info
+          component: raid
+        annotations:
+          summary: "RAID resync in progress"
+          description: "RAID array {{ $labels.device }} is resyncing ({{ $value }}% complete)"
+
+  # ===================================
+  # SMART Disk Health Alerts
+  # ===================================
+  - name: disk_health
+    interval: 5m
+    rules:
+      # Disk failing
+      - alert: DiskFailing
+        expr: baluhost_disk_smart_health == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: disk
+        annotations:
+          summary: "SMART: Disk is failing"
+          description: "Disk {{ $labels.device }} (serial: {{ $labels.serial }}) is reporting SMART failures"
+
+      # Disk temperature high
+      - alert: DiskTemperatureHigh
+        expr: baluhost_disk_temperature_celsius > 55
+        for: 10m
+        labels:
+          severity: warning
+          component: disk
+        annotations:
+          summary: "Disk temperature is high"
+          description: "Disk {{ $labels.device }} temperature is above 55°C (current: {{ $value }}°C)"
+
+      # Disk temperature critical
+      - alert: DiskTemperatureCritical
+        expr: baluhost_disk_temperature_celsius > 65
+        for: 5m
+        labels:
+          severity: critical
+          component: disk
+        annotations:
+          summary: "CRITICAL: Disk temperature extremely high"
+          description: "Disk {{ $labels.device }} temperature is above 65°C (current: {{ $value }}°C) - risk of data loss"
+
+  # ===================================
+  # Application Alerts
+  # ===================================
+  - name: application
+    interval: 1m
+    rules:
+      # Backend down
+      - alert: BackendDown
+        expr: up{job="baluhost-backend"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          component: application
+        annotations:
+          summary: "BaluHost backend is down"
+          description: "The BaluHost backend service is not responding"
+
+      # High error rate
+      - alert: HighErrorRate
+        expr: rate(baluhost_http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          component: application
+        annotations:
+          summary: "High HTTP error rate detected"
+          description: "More than 5% of requests are returning 5xx errors"
+
+      # Application restart
+      - alert: ApplicationRestarted
+        expr: baluhost_app_uptime_seconds < 300
+        for: 1m
+        labels:
+          severity: info
+          component: application
+        annotations:
+          summary: "Application recently restarted"
+          description: "BaluHost application uptime is less than 5 minutes ({{ $value }}s)"
+
+  # ===================================
+  # Database Alerts
+  # ===================================
+  - name: database
+    interval: 1m
+    rules:
+      # High database connections
+      - alert: HighDatabaseConnections
+        expr: baluhost_database_connections > 80
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "High number of database connections"
+          description: "Database has {{ $value }} active connections"
+
+      # Slow database queries
+      - alert: SlowDatabaseQueries
+        expr: rate(baluhost_database_query_duration_seconds_sum[5m]) / rate(baluhost_database_query_duration_seconds_count[5m]) > 1
+        for: 5m
+        labels:
+          severity: warning
+          component: database
+        annotations:
+          summary: "Database queries are slow"
+          description: "Average database query time is above 1 second"
+
+  # ===================================
+  # Storage Quota Alerts
+  # ===================================
+  - name: storage_quota
+    interval: 5m
+    rules:
+      # User approaching quota
+      - alert: UserApproachingQuota
+        expr: (baluhost_storage_used_bytes / baluhost_storage_quota_bytes) > 0.9
+        for: 10m
+        labels:
+          severity: info
+          component: storage
+        annotations:
+          summary: "User approaching storage quota"
+          description: "User {{ $labels.user }} has used {{ $value | humanizePercentage }} of their quota"
+
+      # User over quota
+      - alert: UserOverQuota
+        expr: baluhost_storage_used_bytes > baluhost_storage_quota_bytes
+        for: 1m
+        labels:
+          severity: warning
+          component: storage
+        annotations:
+          summary: "User over storage quota"
+          description: "User {{ $labels.user }} has exceeded their storage quota"
+
+  # ===================================
+  # Network Alerts (Optional)
+  # ===================================
+  - name: network
+    interval: 1m
+    rules:
+      # High network traffic
+      - alert: HighNetworkTraffic
+        expr: rate(baluhost_network_received_bytes_total[5m]) > 100000000  # 100 MB/s
+        for: 10m
+        labels:
+          severity: info
+          component: network
+        annotations:
+          summary: "High network traffic detected"
+          description: "Interface {{ $labels.interface }} is receiving {{ $value | humanize }}B/s"

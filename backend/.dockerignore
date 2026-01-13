@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# Development databases and storage
+baluhost.db
+baluhost.db-*
+*.sqlite
+*.sqlite3
+dev-storage/
+dev-tmp/
+dev-backups/
+dev-certs/
+
+# Storage directories (will be mounted as volumes)
+storage/
+tmp/
+backups/
+logs/
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+docs/
+
+# CI/CD
+.github/
+
+# Environment files (will be provided at runtime)
+.env
+.env.*
+!.env.example
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# Scripts (not needed in production container)
+scripts/dev_check.py
+scripts/reset_dev_storage.py
+scripts/benchmark_telemetry.py

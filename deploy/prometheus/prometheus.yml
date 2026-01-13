@@ -1,0 +1,115 @@
+# ===================================
+# Prometheus Configuration for BaluHost
+# ===================================
+# Scrapes metrics from BaluHost backend and system exporters
+#
+# Default scrape interval: 15s
+# Default evaluation interval: 15s
+# Retention: 15 days (configurable via --storage.tsdb.retention.time)
+# ===================================
+
+global:
+  # How frequently to scrape targets
+  scrape_interval: 15s
+
+  # How frequently to evaluate rules
+  evaluation_interval: 15s
+
+  # Attach these labels to any time series or alerts
+  external_labels:
+    monitor: 'baluhost-monitor'
+    environment: 'production'
+
+# Alertmanager configuration (optional)
+alerting:
+  alertmanagers:
+    - static_configs:
+        - targets:
+            # Uncomment if using Alertmanager
+            # - 'alertmanager:9093'
+
+# Load rules once and periodically evaluate them
+rule_files:
+  - 'alerts.yml'
+  # - 'recording_rules.yml'  # Add if you need recording rules
+
+# Scrape configurations
+scrape_configs:
+  # ===================================
+  # Prometheus self-monitoring
+  # ===================================
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+        labels:
+          instance: 'prometheus'
+
+  # ===================================
+  # BaluHost Backend Metrics
+  # ===================================
+  - job_name: 'baluhost-backend'
+    scrape_interval: 15s
+    scrape_timeout: 10s
+    metrics_path: '/api/metrics'
+
+    static_configs:
+      - targets: ['backend:8000']  # For Docker Compose
+        labels:
+          service: 'baluhost-backend'
+          component: 'api'
+
+    # Alternative for native deployment:
+    # - targets: ['localhost:8000']
+
+  # ===================================
+  # Node Exporter (System Metrics)
+  # ===================================
+  # Uncomment if using node_exporter for detailed system metrics
+  # - job_name: 'node-exporter'
+  #   static_configs:
+  #     - targets: ['node-exporter:9100']
+  #       labels:
+  #         instance: 'baluhost-server'
+
+  # ===================================
+  # PostgreSQL Exporter
+  # ===================================
+  # Uncomment if using postgres_exporter
+  # - job_name: 'postgres-exporter'
+  #   static_configs:
+  #     - targets: ['postgres-exporter:9187']
+  #       labels:
+  #         database: 'baluhost'
+
+  # ===================================
+  # Nginx Exporter
+  # ===================================
+  # Uncomment if using nginx-prometheus-exporter
+  # - job_name: 'nginx-exporter'
+  #   static_configs:
+  #     - targets: ['nginx-exporter:9113']
+
+  # ===================================
+  # cAdvisor (Container Metrics)
+  # ===================================
+  # Uncomment if using cAdvisor for container monitoring
+  # - job_name: 'cadvisor'
+  #   scrape_interval: 30s
+  #   static_configs:
+  #     - targets: ['cadvisor:8080']
+
+# ===================================
+# Remote Write (Optional)
+# ===================================
+# Configure if sending metrics to remote Prometheus/Thanos/Cortex
+# remote_write:
+#   - url: 'https://remote-prometheus-server/api/v1/write'
+#     basic_auth:
+#       username: 'user'
+#       password: 'pass'
+
+# ===================================
+# Remote Read (Optional)
+# ===================================
+# remote_read:
+#   - url: 'https://remote-prometheus-server/api/v1/read'

@@ -5,7 +5,7 @@
 | Priority | Area | Task | Status | Notes |
 |----------|------|------|--------|-------|
 | 🔴 High | Backend | Update telemetry/logging to surface unauthorized access attempts | ✅ Done | Security event logging implemented |
-| 🔴 High | Backend | SQLite/PostgreSQL anbinden und Mock-Daten ablösen | ✅ Done | Database Models & Session Management |
+| 🔴 High | Backend | SQLite/PostgreSQL anbinden und Mock-Daten ablösen | ✅ Done | Database Models & Session Management, PostgreSQL fully supported with docker-compose.postgres.yml |
 | 🔴 High | Backend | Database Sessions in API Routes injizieren | ✅ Done | auth.py, users.py, files.py migriert |
 | 🔴 High | Backend | File Metadata Service auf Database migrieren | ✅ Done | file_metadata_db.py Service erstellt |
 | 🔴 High | Backend | Alembic Migrations Setup | ✅ Done | Schema Versionierung konfiguriert |
@@ -55,9 +55,9 @@
 | 🟢 Low | Backend | Media-Server Integration (DLNA/Plex API) | ⏳ Pending | Media Streaming |
 | 🟢 Low | Backend | Video-Transcoding Service | ⏳ Pending | Media Processing |
 | 🟢 Low | Backend | Datei-Versionierung mit Diff-Ansicht | ⏳ Pending | Advanced Versioning |
-| 🟢 Low | Backend | Containerization (Docker / Docker Compose) | ⏳ Pending | Deployment |
+| 🔴 High | Backend | Containerization (Docker / Docker Compose) | ⏳ Pending | CRITICAL BLOCKER - Needs backend/client Dockerfiles + full-stack docker-compose.yml |
 | 🟢 Low | Backend | Kubernetes Deployment-Manifest | ⏳ Pending | Orchestration |
-| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | ⏳ Pending | Automation |
+| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | 🟡 Partial | 3 workflows active: raid-tests.yml, playwright-e2e.yml, raid-mdadm-selfhosted.yml - Deployment CI pending |
 | 🟢 Low | Backend | API-Versionierung (v1, v2) | ⏳ Pending | API Evolution |
 | 🟢 Low | Backend | GraphQL-Alternative zu REST | ⏳ Pending | API Alternative |
 | 🟢 Low | Backend | Webhooks für externe Integrationen | ⏳ Pending | Integration |
@@ -79,13 +79,13 @@
 | 📝 Docs | Documentation | LICENSE hinzugefügt (MIT) | ✅ Done | Open Source |
 | 📝 Docs | Documentation | SECURITY.md erstellt | ✅ Done | Security Policy |
 | 📝 Docs | Documentation | Screenshots für README.md erstellen | ⏳ Pending | Visual Documentation |
-| 📝 Docs | Documentation | Deployment-Guide für Production | ⏳ Pending | Linux/NAS |
+| 🔴 High | Documentation | Deployment-Guide für Production | ⏳ Pending | CRITICAL BLOCKER - Needs docs/DEPLOYMENT.md, docs/PRODUCTION_SETUP.md, docs/BACKUP_RECOVERY.md |
 | 📝 Docs | Documentation | Video-Tutorials aufnehmen | ⏳ Pending | Video Content |
 | 📝 Docs | Documentation | Code-Kommentare standardisieren | ⏳ Pending | Docstrings, JSDoc |
 | 📝 Docs | Documentation | Changelog.md für Versionshistorie | ⏳ Pending | Version Tracking |
 | 📝 Docs | Documentation | Badges aktualisieren | ⏳ Pending | Test-Coverage, Build |
-| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 20+ test files including integration, security, upload progress, sync tests |
-| 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | 🟡 Partial | Core services tested, coverage can be expanded |
+| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 40 test files, 364 test functions including integration, security, RAID, upload progress, sync tests |
+| 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
 | 🧪 Test | Backend Testing | Load Testing (Performance unter Last) | ⏳ Pending | Performance |
 | 🧪 Test | Backend Testing | Security Testing (Penetration Tests) | ⏳ Pending | Security |
 | 🧪 Test | Frontend Testing | Unit Tests mit Vitest | ⏳ Pending | Component Testing |

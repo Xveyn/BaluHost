@@ -1,0 +1,19 @@
+# ===================================
+# Grafana Dashboard Provisioning
+# ===================================
+# Automatically loads BaluHost dashboards
+# ===================================
+
+apiVersion: 1
+
+providers:
+  - name: 'BaluHost Dashboards'
+    orgId: 1
+    folder: 'BaluHost'
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    allowUiUpdates: true
+    options:
+      path: /etc/grafana/provisioning/dashboards
+      foldersFromFilesStructure: false
