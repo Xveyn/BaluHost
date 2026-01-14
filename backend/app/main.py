@@ -28,6 +28,7 @@ from app.services import smart as smart_service
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
+from app.services.backup_scheduler import BackupScheduler
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -38,6 +39,8 @@ logger = logging.getLogger(__name__)
 _discovery_service = None
 # APScheduler instance for notifications
 _notification_scheduler = None
+# APScheduler instance for backups
+_backup_scheduler = None
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
@@ -103,6 +106,30 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
             logger.warning(f"Notification scheduler could not start: {e}")
     else:
         logger.info("⏭️  Notification scheduler skipped (Firebase not configured)")
+
+    # Start backup scheduler (if enabled in settings)
+    if settings.backup_auto_enabled:
+        try:
+            from apscheduler.schedulers.background import BackgroundScheduler
+            global _backup_scheduler
+            _backup_scheduler = BackgroundScheduler()
+
+            _backup_scheduler.add_job(
+                func=BackupScheduler.run_periodic_backup,
+                trigger="interval",
+                hours=settings.backup_auto_interval_hours,
+                id="automated_backup",
+                name=f"Automated {settings.backup_auto_type} backup",
+                replace_existing=True
+            )
+
+            _backup_scheduler.start()
+            logger.info(f"✅ Backup scheduler started (running every {settings.backup_auto_interval_hours}h, type: {settings.backup_auto_type})")
+        except Exception as e:
+            logger.warning(f"Backup scheduler could not start: {e}")
+    else:
+        logger.info("⏭️  Backup scheduler disabled (enable with BACKUP_AUTO_ENABLED=true)")
+
     # Start RAID scrub scheduler (if enabled in settings)
     try:
         raid_service.start_scrub_scheduler()
@@ -145,6 +172,11 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
         if _notification_scheduler:
             _notification_scheduler.shutdown()
             logger.info("Notification scheduler stopped")
+
+        # Stop backup scheduler
+        if _backup_scheduler:
+            _backup_scheduler.shutdown()
+            logger.info("Backup scheduler stopped")
         # Stop RAID scrub scheduler
         try:
             raid_service.stop_scrub_scheduler()
@@ -158,6 +190,10 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
 
 
 def create_app() -> FastAPI:
+    # Configure structured logging before any other setup
+    from app.core.logging_config import setup_logging
+    setup_logging()
+
     app = FastAPI(
         title=settings.app_name,
         version=__version__,

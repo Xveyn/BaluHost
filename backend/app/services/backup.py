@@ -3,11 +3,13 @@
 """Backup service for creating and restoring system backups."""
 import os
 import shutil
+import subprocess
 import tarfile
 import tempfile
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Optional
+from urllib.parse import urlparse
 
 from sqlalchemy.orm import Session
 
@@ -98,34 +100,50 @@ class BackupService:
 
                 # Copy database
                 if backup_data.includes_database:
-                    db_path = self._get_database_path()
-                    if db_path.exists():
-                        db_backup_dir = temp_path / "database"
-                        db_backup_dir.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(db_path, db_backup_dir / "baluhost.db")
+                    db_type, db_path = self._get_database_info()
+                    db_backup_dir = temp_path / "database"
+                    db_backup_dir.mkdir(parents=True, exist_ok=True)
+
+                    if db_type == "sqlite":
+                        # SQLite: Copy database file
+                        if db_path and db_path.exists():
+                            shutil.copy2(db_path, db_backup_dir / "baluhost.db")
+                            logger.log_event(
+                                event_type="BACKUP",
+                                action="copy_database",
+                                user=creator_username,
+                                resource=filename,
+                                success=True,
+                                details={"step": "database_copied", "db_type": "sqlite", "db_path": str(db_path)},
+                                db=self.db
+                            )
+                            # Also backup WAL files if they exist (SQLite)
+                            for ext in ["-wal", "-shm"]:
+                                wal_path = Path(str(db_path) + ext)
+                                if wal_path.exists():
+                                    shutil.copy2(wal_path, db_backup_dir / f"baluhost.db{ext}")
+                                    logger.log_event(
+                                        event_type="BACKUP",
+                                        action="copy_wal",
+                                        user=creator_username,
+                                        resource=filename,
+                                        success=True,
+                                        details={"step": "wal_copied", "wal_path": str(wal_path)},
+                                        db=self.db
+                                    )
+
+                    elif db_type == "postgresql":
+                        # PostgreSQL: Use pg_dump
+                        self._backup_postgres_database(db_backup_dir)
                         logger.log_event(
                             event_type="BACKUP",
-                            action="copy_database",
+                            action="pg_dump_database",
                             user=creator_username,
                             resource=filename,
                             success=True,
-                            details={"step": "database_copied", "db_path": str(db_path)},
+                            details={"step": "database_dumped", "db_type": "postgresql"},
                             db=self.db
                         )
-                        # Also backup WAL files if they exist (SQLite)
-                        for ext in ["-wal", "-shm"]:
-                            wal_path = Path(str(db_path) + ext)
-                            if wal_path.exists():
-                                shutil.copy2(wal_path, db_backup_dir / f"baluhost.db{ext}")
-                                logger.log_event(
-                                    event_type="BACKUP",
-                                    action="copy_wal",
-                                    user=creator_username,
-                                    resource=filename,
-                                    success=True,
-                                    details={"step": "wal_copied", "wal_path": str(wal_path)},
-                                    db=self.db
-                                )
 
                 # Copy files
                 if backup_data.includes_files:
@@ -368,19 +386,33 @@ class BackupService:
                 
                 # Restore database
                 if restore_database and backup.includes_database:
-                    db_backup = backup_root / "database" / "baluhost.db"
-                    if db_backup.exists():
-                        db_path = self._get_database_path()
-                        # Close all connections
-                        engine.dispose()
-                        # Copy database
-                        shutil.copy2(db_backup, db_path)
-                        
-                        # Restore WAL files if they exist
-                        for ext in ["-wal", "-shm"]:
-                            wal_backup = backup_root / "database" / f"baluhost.db{ext}"
-                            if wal_backup.exists():
-                                shutil.copy2(wal_backup, Path(str(db_path) + ext))
+                    db_type, db_path = self._get_database_info()
+
+                    # Close all connections before restore
+                    engine.dispose()
+
+                    if db_type == "sqlite":
+                        # SQLite: Restore database file
+                        db_backup = backup_root / "database" / "baluhost.db"
+                        if db_backup.exists() and db_path:
+                            shutil.copy2(db_backup, db_path)
+
+                            # Restore WAL files if they exist
+                            for ext in ["-wal", "-shm"]:
+                                wal_backup = backup_root / "database" / f"baluhost.db{ext}"
+                                if wal_backup.exists():
+                                    shutil.copy2(wal_backup, Path(str(db_path) + ext))
+
+                    elif db_type == "postgresql":
+                        # PostgreSQL: Restore from pg_dump file
+                        pg_backup = backup_root / "database" / "postgres_backup.sql.gz"
+                        if not pg_backup.exists():
+                            pg_backup = backup_root / "database" / "postgres_backup.sql"
+
+                        if pg_backup.exists():
+                            self._restore_postgres_database(pg_backup)
+                        else:
+                            raise FileNotFoundError("PostgreSQL backup file not found in backup archive")
                 
                 # Restore files
                 if restore_files and backup.includes_files:
@@ -467,12 +499,173 @@ class BackupService:
         filepath = Path(backup.filepath)
         return filepath if filepath.exists() else None
     
-    def _get_database_path(self) -> Path:
-        """Get path to SQLite database file."""
+    def _backup_postgres_database(self, backup_dir: Path) -> None:
+        """
+        Backup PostgreSQL database using pg_dump.
+
+        Args:
+            backup_dir: Directory to store the backup file
+        """
+        # Parse DATABASE_URL
+        parsed_url = urlparse(DATABASE_URL)
+
+        # Extract connection parameters
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or 5432
+        database = parsed_url.path.lstrip('/')
+        username = parsed_url.username
+        password = parsed_url.password
+
+        # Output file
+        backup_file = backup_dir / "postgres_backup.sql"
+
+        # Build pg_dump command
+        pg_dump_cmd = [
+            "pg_dump",
+            "-h", host,
+            "-p", str(port),
+            "-U", username,
+            "-d", database,
+            "-F", "p",  # Plain text format
+            "--no-owner",  # Don't output commands to set ownership
+            "--no-acl",  # Don't output commands to set access privileges
+            "-f", str(backup_file)
+        ]
+
+        # Set PGPASSWORD environment variable for authentication
+        env = os.environ.copy()
+        if password:
+            env["PGPASSWORD"] = password
+
+        try:
+            # Execute pg_dump with 5 minute timeout
+            result = subprocess.run(
+                pg_dump_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=300,  # 5 minutes
+                check=True
+            )
+
+            # Compress the backup file
+            import gzip
+            compressed_file = backup_dir / "postgres_backup.sql.gz"
+            with open(backup_file, 'rb') as f_in:
+                with gzip.open(compressed_file, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+
+            # Remove uncompressed file
+            backup_file.unlink()
+
+            logger.info(f"PostgreSQL database backed up successfully to {compressed_file}")
+
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("PostgreSQL backup timed out after 5 minutes")
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            raise RuntimeError(f"PostgreSQL backup failed: {error_msg}")
+        except FileNotFoundError:
+            raise RuntimeError(
+                "pg_dump command not found. Please ensure PostgreSQL client tools are installed. "
+                "Ubuntu/Debian: apt-get install postgresql-client, "
+                "RHEL/CentOS: yum install postgresql, "
+                "macOS: brew install postgresql"
+            )
+
+    def _restore_postgres_database(self, backup_file: Path) -> None:
+        """
+        Restore PostgreSQL database from pg_dump backup.
+
+        Args:
+            backup_file: Path to the backup file (.sql or .sql.gz)
+        """
+        # Parse DATABASE_URL
+        parsed_url = urlparse(DATABASE_URL)
+
+        # Extract connection parameters
+        host = parsed_url.hostname or "localhost"
+        port = parsed_url.port or 5432
+        database = parsed_url.path.lstrip('/')
+        username = parsed_url.username
+        password = parsed_url.password
+
+        # Decompress if needed
+        if str(backup_file).endswith('.gz'):
+            import gzip
+            decompressed_file = backup_file.parent / "postgres_backup_temp.sql"
+            with gzip.open(backup_file, 'rb') as f_in:
+                with open(decompressed_file, 'wb') as f_out:
+                    shutil.copyfileobj(f_in, f_out)
+            restore_file = decompressed_file
+        else:
+            restore_file = backup_file
+
+        try:
+            # Build psql command for restore
+            psql_cmd = [
+                "psql",
+                "-h", host,
+                "-p", str(port),
+                "-U", username,
+                "-d", database,
+                "-f", str(restore_file)
+            ]
+
+            # Set PGPASSWORD environment variable
+            env = os.environ.copy()
+            if password:
+                env["PGPASSWORD"] = password
+
+            # Execute psql with 10 minute timeout
+            result = subprocess.run(
+                psql_cmd,
+                env=env,
+                capture_output=True,
+                text=True,
+                timeout=600,  # 10 minutes
+                check=True
+            )
+
+            logger.info("PostgreSQL database restored successfully")
+
+        except subprocess.TimeoutExpired:
+            raise RuntimeError("PostgreSQL restore timed out after 10 minutes")
+        except subprocess.CalledProcessError as e:
+            error_msg = e.stderr if e.stderr else str(e)
+            raise RuntimeError(f"PostgreSQL restore failed: {error_msg}")
+        except FileNotFoundError:
+            raise RuntimeError(
+                "psql command not found. Please ensure PostgreSQL client tools are installed."
+            )
+        finally:
+            # Clean up decompressed temp file if it was created
+            if str(backup_file).endswith('.gz') and restore_file.exists():
+                restore_file.unlink()
+
+    def _get_database_info(self) -> tuple[str, Optional[Path]]:
+        """
+        Get database type and path information.
+
+        Returns:
+            tuple: (database_type, database_path)
+                - database_type: "sqlite" or "postgresql"
+                - database_path: Path to database file (SQLite only, None for PostgreSQL)
+        """
         if DATABASE_URL.startswith("sqlite:///"):
             db_path = DATABASE_URL.replace("sqlite:///", "")
-            return Path(db_path)
-        raise ValueError("Backup only supports SQLite databases")
+            return ("sqlite", Path(db_path))
+        elif DATABASE_URL.startswith("postgresql://") or DATABASE_URL.startswith("postgresql+psycopg2://"):
+            return ("postgresql", None)
+        else:
+            raise ValueError(f"Unsupported database type in URL: {DATABASE_URL}")
+
+    def _get_database_path(self) -> Path:
+        """Get path to SQLite database file (legacy method for compatibility)."""
+        db_type, db_path = self._get_database_info()
+        if db_type == "sqlite":
+            return db_path
+        raise ValueError("_get_database_path() only supports SQLite. Use _get_database_info() instead.")
     
     def _cleanup_old_backups(self) -> None:
         """Remove old backups based on retention policy."""

@@ -7,6 +7,11 @@ class Settings(BaseSettings):
     app_name: str = "Baluhost NAS API"
     debug: bool = True
     environment: str = "development"
+
+    # Logging configuration
+    log_level: str = "INFO"  # DEBUG|INFO|WARNING|ERROR|CRITICAL
+    log_format: str = "text"  # json|text (json recommended for production)
+
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
     api_prefix: str = "/api"
@@ -74,6 +79,14 @@ class Settings(BaseSettings):
     nas_backup_path: str = "./backups"
     nas_backup_retention_days: int = 30
     nas_backup_max_count: int = 10
+
+    # Backup scheduler options
+    # Enable automatic periodic backups (recommended for production)
+    backup_auto_enabled: bool = False
+    # Interval in hours between automatic backups when enabled (default: 24 = daily)
+    backup_auto_interval_hours: int = 24
+    # Type of backup to create automatically (full|incremental|database_only|files_only)
+    backup_auto_type: str = "full"
 
     telemetry_interval_seconds: float = 2.0
     telemetry_history_size: int = 90
