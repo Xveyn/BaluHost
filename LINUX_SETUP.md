@@ -69,7 +69,7 @@ This will start:
 
 **Default Credentials** (dev mode):
 - Username: `admin`
-- Password: `Admin123`
+- Password: `DevMode2024`
 
 Press `Ctrl+C` to stop both servers.
 

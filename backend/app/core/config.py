@@ -43,7 +43,7 @@ class Settings(BaseSettings):
     # Admin seed
     admin_username: str = "admin"
     admin_email: str = "admin@example.com"
-    admin_password: str = "Admin123"  # Must meet password validation (uppercase, lowercase, number)
+    admin_password: str = "DevMode2024"  # Not in blacklist, meets all validation requirements
     admin_role: str = "admin"
 
     # Mobile device registration

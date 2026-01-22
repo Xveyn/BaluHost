@@ -134,7 +134,7 @@ alembic downgrade -1
 - Enabled by default in `start_dev.py`
 - Creates sandbox storage in `backend/dev-storage/` (2x5GB RAID1 simulated)
 - Mock SMART data, RAID arrays, and system metrics
-- Automatic seed data (admin/Admin123, user/User123)
+- Automatic seed data (admin/DevMode2024, user/User123)
 - Windows-compatible (no Linux dependencies required)
 - Mock VPN key generation (no `wg` command needed)
 
