@@ -67,6 +67,10 @@ This will start:
 - **Frontend UI**: http://localhost:5173
 - **API Documentation**: http://localhost:8000/docs
 
+**Default Credentials** (dev mode):
+- Username: `admin`
+- Password: `Admin123`
+
 Press `Ctrl+C` to stop both servers.
 
 ## HTTPS Mode (Optional)

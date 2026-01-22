@@ -16,7 +16,9 @@
       "Bash(\"F:\\\\Programme \\(x86\\)\\\\Baluhost\\\\baludesk\\\\backend\\\\build\\\\Release\\\\baludesk-tests.exe\" --gtest_list_tests)",
       "Bash(python:*)",
       "mcp__ide__getDiagnostics",
-      "Bash(npm run compile:*)"
+      "Bash(npm run compile:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nfix: update default admin password to meet validation requirements\n\nChanged default admin password from \"changeme\" to \"Admin123\"\nto satisfy password validation \\(requires uppercase letter\\).\n\nUpdated:\n- backend/app/core/config.py: admin_password = \"Admin123\"\n- .env.production.example: ADMIN_PASSWORD=Admin123\n- CLAUDE.md: Updated seed data credentials\n- LINUX_SETUP.md: Added default credentials documentation\n\nThis fixes startup error on Linux:\n\"Password must contain at least one uppercase letter\"\n\nCo-Authored-By: Claude Sonnet 4.5 <noreply@anthropic.com>\nEOF\n\\)\")"
     ]
   },
   "enabledPlugins": {
