@@ -130,12 +130,12 @@ def start_process(name: str, cmd: List[str], cwd: Path) -> subprocess.Popen:
             creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
         )
     else:
-        # Linux/Unix: Use process group for proper signal handling
+        # Linux/Unix: Use start_new_session for process group
+        # Note: start_new_session=True calls setsid() internally, no need for preexec_fn
         return subprocess.Popen(
             cmd,
             cwd=cwd,
-            start_new_session=True,  # Create new process group
-            preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+            start_new_session=True
         )
 
 
