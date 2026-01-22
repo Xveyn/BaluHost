@@ -1,7 +1,25 @@
 {
   "permissions": {
     "allow": [
-      "Bash(find:*)"
+      "Bash(find:*)",
+      "Bash(ls:*)",
+      "Bash(cmake --build:*)",
+      "Bash(tee:*)",
+      "Bash(./Release/baludesk-tests.exe:*)",
+      "Bash(cmake:*)",
+      "Bash(.Releasebaludesk-tests.exe --gtest_filter=\"SyncEngineSimpleIntegrationTest.*\")",
+      "Bash(./baludesk-tests.exe:*)",
+      "Bash(\"F:\\\\Programme \\(x86\\)\\\\Baluhost\\\\baludesk\\\\backend\\\\build\\\\Release\\\\baludesk-tests.exe\" --gtest_brief=1)",
+      "Bash(taskkill:*)",
+      "Bash(\"F:\\\\Programme \\(x86\\)\\\\Baluhost\\\\baludesk\\\\backend\\\\build\\\\Release\\\\baludesk-tests.exe\")",
+      "Bash(findstr:*)",
+      "Bash(\"F:\\\\Programme \\(x86\\)\\\\Baluhost\\\\baludesk\\\\backend\\\\build\\\\Release\\\\baludesk-tests.exe\" --gtest_list_tests)",
+      "Bash(python:*)",
+      "mcp__ide__getDiagnostics",
+      "Bash(npm run compile:*)"
     ]
+  },
+  "enabledPlugins": {
+    "feature-dev@claude-plugins-official": true
   }
 }

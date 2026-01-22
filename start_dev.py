@@ -1,10 +1,16 @@
 """Convenience launcher that starts the mocked Python backend and the Vite frontend.
 
 Usage:
-    python start_dev.py
+    Windows: python start_dev.py
+    Linux:   python3 start_dev.py
 
 Press Ctrl+C to stop both processes. The script ensures that the backend virtual
 environment exists and uses it to run Uvicorn. Run it from the repository root.
+
+Platform Support:
+    - Windows: Full support with proper process group handling
+    - Linux/Debian: Full support with python3, process groups via setsid
+    - macOS: Full support with Unix process handling
 """
 
 from __future__ import annotations
@@ -29,12 +35,29 @@ ProcessInfo = Tuple[str, subprocess.Popen]
 
 
 def resolve_backend_python() -> str:
+    """Resolve the Python executable for the backend virtual environment.
+
+    Tries in order:
+    1. Virtual environment Python (platform-specific path)
+    2. python3 in venv (Linux/Debian fallback)
+    3. python in venv (generic fallback)
+    4. Current Python interpreter (sys.executable)
+    """
     if BACKEND_VENV.exists():
         return str(BACKEND_VENV)
-    if BACKEND_VENV.with_name("python").exists():  # Windows fallback
+
+    # Linux/Debian: Try python3 in venv
+    if os.name != "nt":
+        python3_path = BACKEND_DIR / ".venv" / "bin" / "python3"
+        if python3_path.exists():
+            return str(python3_path)
+
+    # Windows fallback
+    if BACKEND_VENV.with_name("python").exists():
         return str(BACKEND_VENV.with_name("python"))
     if BACKEND_VENV.with_name("python.exe").exists():
         return str(BACKEND_VENV.with_name("python.exe"))
+
     # Fallback to current interpreter; user must ensure packages are available
     return sys.executable
 
@@ -92,23 +115,68 @@ def generate_self_signed_cert() -> tuple[Path | None, Path | None]:
 
 
 def start_process(name: str, cmd: List[str], cwd: Path) -> subprocess.Popen:
+    """Start a subprocess with platform-specific process group handling.
+
+    On Linux: Creates new process group for clean subprocess termination
+    On Windows: Uses CREATE_NEW_PROCESS_GROUP flag
+    """
     print(f"[start] {name}: {' '.join(cmd)} (cwd={cwd})")
-    creationflags = subprocess.CREATE_NEW_PROCESS_GROUP if os.name == "nt" else 0
-    return subprocess.Popen(cmd, cwd=cwd, creationflags=creationflags)
+
+    if os.name == "nt":
+        # Windows: Use creation flags
+        return subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP
+        )
+    else:
+        # Linux/Unix: Use process group for proper signal handling
+        return subprocess.Popen(
+            cmd,
+            cwd=cwd,
+            start_new_session=True,  # Create new process group
+            preexec_fn=os.setsid if hasattr(os, 'setsid') else None
+        )
 
 
 def terminate_processes(processes: List[ProcessInfo]) -> None:
+    """Terminate all running processes gracefully, with fallback to kill.
+
+    On Linux: Terminates entire process group to clean up child processes
+    On Windows: Sends CTRL_BREAK_EVENT signal
+    """
     for name, proc in processes:
         if proc.poll() is not None:
             continue
         print(f"[stop] {name}")
         try:
             if os.name == "nt":
+                # Windows: Send CTRL_BREAK_EVENT
                 proc.send_signal(signal.CTRL_BREAK_EVENT)
             else:
-                proc.terminate()
+                # Linux: Terminate entire process group to kill child processes
+                if hasattr(os, 'killpg'):
+                    try:
+                        os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+                    except ProcessLookupError:
+                        # Process already terminated
+                        pass
+                else:
+                    proc.terminate()
+
             proc.wait(timeout=10)
-        except Exception:
+        except subprocess.TimeoutExpired:
+            # Force kill if graceful termination fails
+            print(f"[warning] {name} didn't terminate gracefully, forcing kill")
+            if os.name != "nt" and hasattr(os, 'killpg'):
+                try:
+                    os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+                except ProcessLookupError:
+                    pass
+            else:
+                proc.kill()
+        except Exception as e:
+            print(f"[error] Failed to terminate {name}: {e}")
             proc.kill()
 
 

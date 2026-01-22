@@ -1,7 +1,8 @@
 """API routes for Server Profile management."""
 
+import datetime
 import logging
-from typing import List, Optional
+from typing import List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
@@ -50,15 +51,15 @@ async def list_server_profiles_public(
     profiles = db.query(ServerProfile).all()
     return [
         ServerProfileList(
-            id=p.id,
-            name=p.name,
-            ssh_host=p.ssh_host,
-            ssh_port=p.ssh_port,
-            ssh_username=p.ssh_username,
-            last_used=p.last_used,
-            created_at=p.created_at,
+            id=cast(int, p.id),
+            name=cast(str, p.name),
+            ssh_host=cast(str, p.ssh_host),
+            ssh_port=cast(int,p.ssh_port),
+            ##ssh_username=p.ssh_username,
+            last_used=cast(None, p.last_used),
+            created_at=cast(datetime.datetime, p.created_at),
             # Include owner info for client to filter/display
-            user_id=p.user_id,
+            user_id=cast(int, p.user_id),
         )
         for p in profiles
     ]
@@ -173,9 +174,9 @@ async def update_server_profile(
         if profile_data.ssh_username is not None:
             profile.ssh_username = profile_data.ssh_username  # type: ignore
         if profile_data.ssh_private_key is not None:
-            profile.ssh_key_encrypted = VPNEncryption.encrypt_ssh_private_key(
-                profile_data.ssh_private_key
-            )
+            profile.ssh_key_encrypted.__str__ = VPNEncryption.encrypt_ssh_private_key(profile_data.ssh_private_key).__str__
+            
+            
         if profile_data.vpn_profile_id is not None:
             profile.vpn_profile_id = profile_data.vpn_profile_id  # type: ignore
         if profile_data.power_on_command is not None:
@@ -247,13 +248,13 @@ async def check_ssh_connection(
     
     try:
         # Decrypt SSH key
-        private_key = VPNEncryption.decrypt_ssh_private_key(profile.ssh_key_encrypted)
+        private_key = VPNEncryption.decrypt_ssh_private_key(cast(str, profile.ssh_key_encrypted))
         
         # Test connection
         success, error = SSHService.test_connection(
-            profile.ssh_host,
-            profile.ssh_port,
-            profile.ssh_username,
+            cast(str, profile.ssh_host),
+            cast(int, profile.ssh_port),
+            cast(str, profile.ssh_username),
             private_key,
         )
         
@@ -300,13 +301,13 @@ async def start_remote_server(
     
     try:
         # Decrypt SSH key
-        private_key = VPNEncryption.decrypt_ssh_private_key(profile.ssh_key_encrypted)
+        private_key = VPNEncryption.decrypt_ssh_private_key(cast(str,profile.ssh_key_encrypted))
         
         # Start server
         success, message = SSHService.start_server(
-            profile.ssh_host,
-            profile.ssh_port,
-            profile.ssh_username,
+            cast(str,profile.ssh_host),
+            cast(int, profile.ssh_port),
+            cast(str,profile.ssh_username),
             private_key,
             profile.power_on_command,
         )

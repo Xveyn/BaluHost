@@ -8,6 +8,7 @@ import FileExplorer from './pages/FileExplorer';
 import Conflicts from './pages/Conflicts';
 import { RemoteServersPage } from './pages/RemoteServers';
 import SettingsPanel from './components/SettingsPanel';
+import ActivityLog from './components/ActivityLog';
 import MainLayout from './components/MainLayout';
 
 interface User {
@@ -162,6 +163,19 @@ export default function App() {
             user ? (
               <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
                 <SettingsPanel onClose={() => window.history.back()} />
+              </MainLayout>
+            ) : (
+              <Navigate to="/login" replace />
+            )
+          }
+        />
+
+        <Route
+          path="/activity-log"
+          element={
+            user ? (
+              <MainLayout user={user} onLogout={handleLogout} conflictCount={conflictCount}>
+                <ActivityLog onClose={() => window.history.back()} />
               </MainLayout>
             ) : (
               <Navigate to="/login" replace />

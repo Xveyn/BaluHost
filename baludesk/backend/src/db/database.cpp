@@ -156,7 +156,31 @@ bool Database::runMigrations() {
     // Create indexes
     executeQuery("CREATE INDEX IF NOT EXISTS idx_remote_server_ssh_host ON remote_server_profiles(ssh_host);");
     executeQuery("CREATE INDEX IF NOT EXISTS idx_vpn_type ON vpn_profiles(vpn_type);");
-    
+
+    // Create activity_logs table
+    std::string createActivityLogsTable = R"(
+        CREATE TABLE IF NOT EXISTS activity_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+            activity_type TEXT NOT NULL,
+            file_path TEXT NOT NULL,
+            folder_id TEXT,
+            details TEXT,
+            file_size INTEGER DEFAULT 0,
+            status TEXT NOT NULL DEFAULT 'success',
+            FOREIGN KEY (folder_id) REFERENCES sync_folders(id) ON DELETE SET NULL
+        );
+    )";
+
+    if (!executeQuery(createActivityLogsTable)) {
+        return false;
+    }
+
+    // Create indexes for activity logs
+    executeQuery("CREATE INDEX IF NOT EXISTS idx_activity_timestamp ON activity_logs(timestamp DESC);");
+    executeQuery("CREATE INDEX IF NOT EXISTS idx_activity_type ON activity_logs(activity_type);");
+    executeQuery("CREATE INDEX IF NOT EXISTS idx_activity_status ON activity_logs(status);");
+
     Logger::info("Database migrations completed");
     return true;
 }
@@ -943,6 +967,108 @@ std::vector<VPNProfile> Database::getVPNProfiles() {
     }
     
     return profiles;
+}
+
+// ============================================================================
+// Utilities
+// ============================================================================
+
+// ============================================================================
+// Activity Logs
+// ============================================================================
+
+bool Database::logActivity(const std::string& activityType, const std::string& filePath,
+                          const std::string& folderId, const std::string& details,
+                          int64_t fileSize, const std::string& status) {
+    const char* sql = R"(
+        INSERT INTO activity_logs (activity_type, file_path, folder_id, details, file_size, status)
+        VALUES (?, ?, ?, ?, ?, ?);
+    )";
+
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return false;
+
+    sqlite3_bind_text(stmt, 1, activityType.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 2, filePath.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 3, folderId.empty() ? nullptr : folderId.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(stmt, 4, details.empty() ? nullptr : details.c_str(), -1, SQLITE_TRANSIENT);
+    sqlite3_bind_int64(stmt, 5, fileSize);
+    sqlite3_bind_text(stmt, 6, status.c_str(), -1, SQLITE_TRANSIENT);
+
+    int rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+
+    if (rc != SQLITE_DONE) {
+        Logger::error("Failed to log activity: {}", sqlite3_errmsg(db_));
+        return false;
+    }
+
+    return true;
+}
+
+std::vector<ActivityLog> Database::getActivityLogs(int limit, const std::string& activityType,
+                                                   const std::string& startDate, const std::string& endDate) {
+    std::vector<ActivityLog> logs;
+
+    std::string sql = "SELECT id, timestamp, activity_type, file_path, folder_id, details, file_size, status "
+                     "FROM activity_logs WHERE 1=1";
+
+    if (!activityType.empty()) {
+        sql += " AND activity_type = '" + activityType + "'";
+    }
+
+    if (!startDate.empty()) {
+        sql += " AND timestamp >= '" + startDate + "'";
+    }
+
+    if (!endDate.empty()) {
+        sql += " AND timestamp <= '" + endDate + "'";
+    }
+
+    sql += " ORDER BY timestamp DESC LIMIT " + std::to_string(limit) + ";";
+
+    sqlite3_stmt* stmt = prepareStatement(sql);
+    if (!stmt) return logs;
+
+    while (sqlite3_step(stmt) == SQLITE_ROW) {
+        ActivityLog log;
+        log.id = sqlite3_column_int(stmt, 0);
+        log.timestamp = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        log.activityType = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        log.filePath = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+
+        const char* folderId = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 4));
+        log.folderId = folderId ? folderId : "";
+
+        const char* details = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+        log.details = details ? details : "";
+
+        log.fileSize = sqlite3_column_int64(stmt, 6);
+        log.status = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 7));
+
+        logs.push_back(log);
+    }
+
+    sqlite3_finalize(stmt);
+    return logs;
+}
+
+bool Database::clearActivityLogs(const std::string& beforeDate) {
+    std::string sql = "DELETE FROM activity_logs";
+
+    if (!beforeDate.empty()) {
+        sql += " WHERE timestamp < '" + beforeDate + "'";
+    }
+
+    sql += ";";
+
+    if (!executeQuery(sql)) {
+        Logger::error("Failed to clear activity logs");
+        return false;
+    }
+
+    Logger::info("Activity logs cleared");
+    return true;
 }
 
 // ============================================================================

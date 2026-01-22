@@ -1,18 +1,18 @@
-import { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, safeStorage, IpcMainInvokeEvent } from 'electron';
-import { spawn, ChildProcessWithoutNullStreams } from 'child_process';
-import * as path from 'path';
-import * as fs from 'fs';
-import * as http from 'http';
-import type { IncomingMessage, ServerResponse } from 'http';
+const { app, BrowserWindow, ipcMain, Tray, Menu, nativeImage, dialog, safeStorage } = require('electron');
+const { spawn } = require('child_process');
+const path = require('path');
+const fs = require('fs');
+const http = require('http');
+const { pathToFileURL } = require('url');
 
 // HTTP Server für packaged app (statt file:// URLs für React Router Kompatibilität)
-let mainWindow: BrowserWindow | null = null;
-let appServer: http.Server | null = null;
+let mainWindow = null;
+let appServer = null;
 
-function startAppServer(distPath: string): Promise<string> {
+function startAppServer(distPath) {
   return new Promise((resolve) => {
-    const server = http.createServer((req: IncomingMessage, res: ServerResponse) => {
-      let filePath = path.join(distPath, req.url === '/' ? 'index.html' : (req.url || 'index.html'));
+    const server = http.createServer((req, res) => {
+      let filePath = path.join(distPath, req.url === '/' ? 'index.html' : req.url);
       
       // Security: prevent directory traversal
       if (!filePath.startsWith(distPath)) {
@@ -21,11 +21,11 @@ function startAppServer(distPath: string): Promise<string> {
         return;
       }
       
-      fs.readFile(filePath, (err: NodeJS.ErrnoException | null, content: Buffer) => {
+      fs.readFile(filePath, (err, content) => {
         if (err) {
           // For SPA: serve index.html for all non-existent routes
           if (path.extname(filePath) === '') {
-            fs.readFile(path.join(distPath, 'index.html'), (_err: NodeJS.ErrnoException | null, content: Buffer) => {
+            fs.readFile(path.join(distPath, 'index.html'), (err, content) => {
               res.writeHead(200, { 'Content-Type': 'text/html' });
               res.end(content);
             });
@@ -35,7 +35,7 @@ function startAppServer(distPath: string): Promise<string> {
           }
         } else {
           const ext = path.extname(filePath);
-          const contentTypeMap: { [key: string]: string } = {
+          const contentType = {
             '.html': 'text/html',
             '.js': 'application/javascript',
             '.css': 'text/css',
@@ -47,8 +47,7 @@ function startAppServer(distPath: string): Promise<string> {
             '.woff': 'font/woff',
             '.woff2': 'font/woff2',
             '.ttf': 'font/ttf',
-          };
-          const contentType = contentTypeMap[ext] || 'text/plain';
+          }[ext] || 'text/plain';
           
           res.writeHead(200, { 
             'Content-Type': contentType,
@@ -60,23 +59,19 @@ function startAppServer(distPath: string): Promise<string> {
     });
 
     server.listen(0, 'localhost', () => {
-      const address = server.address();
-      if (!address || typeof address === 'string') {
-        throw new Error('Failed to get server address');
-      }
-      const port = address.port;
+      const port = server.address().port;
       console.log('[AppServer] Listening on http://localhost:' + port);
       appServer = server;
       resolve('http://localhost:' + port);
     });
   });
 }
-let backendProcess: ChildProcessWithoutNullStreams | null = null;
-let tray: Tray | null = null;
+let backendProcess = null;
+let tray = null;
 let isQuitting = false;
 
 // Backend Process Management
-function startBackend(): void {
+function startBackend() {
   // Check if dist/index.html exists to determine if we're packaged
   // This must be consistent with createWindow() logic!
   const indexPath = path.join(app.getAppPath(), 'dist', 'index.html');
@@ -120,8 +115,8 @@ function startBackend(): void {
 
   if (backendProcess.stdout) {
     let buffer = '';
-
-    backendProcess.stdout.on('data', (data: Buffer) => {
+    
+    backendProcess.stdout.on('data', (data) => {
       buffer += data.toString();
       
       // Try to parse complete JSON messages (line-delimited)
@@ -168,25 +163,25 @@ function startBackend(): void {
   }
 
   if (backendProcess.stderr) {
-    backendProcess.stderr.on('data', (data: Buffer) => {
+    backendProcess.stderr.on('data', (data) => {
       console.error('[Backend Error]:', data.toString());
     });
   }
 
-  backendProcess.on('close', (code: number | null) => {
+  backendProcess.on('close', (code) => {
     console.log(`Backend process exited with code ${code}`);
     backendProcess = null;
   });
 }
 
-function stopBackend(): void {
+function stopBackend() {
   if (backendProcess) {
     backendProcess.kill();
     backendProcess = null;
   }
 }
 
-function sendToBackend(message: any): void {
+function sendToBackend(message) {
   if (backendProcess && backendProcess.stdin) {
     const jsonMsg = JSON.stringify(message) + '\n';
     backendProcess.stdin.write(jsonMsg);
@@ -194,7 +189,7 @@ function sendToBackend(message: any): void {
 }
 
 // Window Management
-function createWindow(): void {
+function createWindow() {
   // Load window icon
   let iconPath = path.join(__dirname, '../../public/icon.png');
   let windowIcon;
@@ -245,9 +240,7 @@ function createWindow(): void {
     console.log('[Main] Loading from packaged app, starting HTTP server...');
     startAppServer(distPath).then((url) => {
       console.log('[Main] Loading from server:', url);
-      if (mainWindow) {
-        mainWindow.loadURL(url);
-      }
+      mainWindow.loadURL(url);
     });
   }
 
@@ -256,7 +249,7 @@ function createWindow(): void {
   });
 
   // Minimize to tray instead of close
-  mainWindow.on('close', (event: Electron.Event) => {
+  mainWindow.on('close', (event) => {
     if (!isQuitting) {
       event.preventDefault();
       mainWindow?.hide();
@@ -265,7 +258,7 @@ function createWindow(): void {
 }
 
 // System Tray
-function createTray(): void {
+function createTray() {
   // Try to use the tray-specific icon, fallback to main icon
   let iconPath = path.join(__dirname, '../../public/icon-tray.png');
   if (!fs.existsSync(iconPath)) {
@@ -308,10 +301,10 @@ function createTray(): void {
 }
 
 // IPC Handlers
-const pendingRequests = new Map<number, (value: any) => void>();
+const pendingRequests = new Map();
 let requestId = 0;
 
-ipcMain.handle('backend-command', async (_event: IpcMainInvokeEvent, command: any) => {
+ipcMain.handle('backend-command', async (_event, command) => {
   console.log('[IPC] Backend command:', command);
 
   if (!backendProcess) {
@@ -331,7 +324,7 @@ ipcMain.handle('backend-command', async (_event: IpcMainInvokeEvent, command: an
     }, 10000);
 
     // Store resolver with timeout cleanup
-    const wrappedResolve = (value: any) => {
+    const wrappedResolve = (value) => {
       clearTimeout(timeout);
       resolve(value);
     };
@@ -344,7 +337,7 @@ ipcMain.handle('backend-command', async (_event: IpcMainInvokeEvent, command: an
 
 // IPC Message Handler for Remote Servers feature
 // This handles request/response of IPC messages with the backend
-ipcMain.handle('ipc-message', async (_event: IpcMainInvokeEvent, message: any) => {
+ipcMain.handle('ipc-message', async (_event, message) => {
   console.log('[IPC Main] Received message from renderer:', message);
   
   if (!backendProcess) {
@@ -372,7 +365,7 @@ ipcMain.handle('ipc-message', async (_event: IpcMainInvokeEvent, message: any) =
     }, 30000); // 30 second timeout
 
     // Store the resolver with timeout cleanup
-    const resolver = (response: any) => {
+    const resolver = (response) => {
       clearTimeout(timeoutId);
       console.log('[IPC Main] Got response, resolving:', response);
       // Make sure response has the requestId
@@ -394,9 +387,6 @@ ipcMain.handle('get-app-version', () => {
 
 // Dialog handlers
 ipcMain.handle('dialog:openFile', async () => {
-  if (!mainWindow) {
-    return null;
-  }
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openFile'],
     filters: [
@@ -412,9 +402,6 @@ ipcMain.handle('dialog:openFile', async () => {
 });
 
 ipcMain.handle('dialog:openFolder', async () => {
-  if (!mainWindow) {
-    return null;
-  }
   const result = await dialog.showOpenDialog(mainWindow, {
     properties: ['openDirectory']
   });
@@ -426,10 +413,7 @@ ipcMain.handle('dialog:openFolder', async () => {
   return result.filePaths[0] || null;
 });
 
-ipcMain.handle('dialog:saveFile', async (_event: IpcMainInvokeEvent, defaultName: string) => {
-  if (!mainWindow) {
-    return null;
-  }
+ipcMain.handle('dialog:saveFile', async (_event, defaultName) => {
   const result = await dialog.showSaveDialog(mainWindow, {
     defaultPath: defaultName,
     filters: [
@@ -459,7 +443,7 @@ ipcMain.handle('settings:get', async () => {
     }, 5000);
 
     // Register handler with timeout cleanup
-    const wrappedResolve = (value: any) => {
+    const wrappedResolve = (value) => {
       clearTimeout(timeout);
       resolve(value);
     };
@@ -474,7 +458,7 @@ ipcMain.handle('settings:get', async () => {
   });
 });
 
-ipcMain.handle('settings:update', async (_event: IpcMainInvokeEvent, settings: any) => {
+ipcMain.handle('settings:update', async (_event, settings) => {
   console.log('[IPC] Updating settings:', settings);
   const id = requestId++;
 
@@ -488,7 +472,7 @@ ipcMain.handle('settings:update', async (_event: IpcMainInvokeEvent, settings: a
     }, 5000);
 
     // Register handler with timeout cleanup
-    const wrappedResolve = (value: any) => {
+    const wrappedResolve = (value) => {
       clearTimeout(timeout);
       resolve(value);
     };
@@ -522,7 +506,7 @@ ipcMain.handle('user:getInfo', async () => {
     }, 5000);
 
     // Register handler with timeout cleanup
-    const wrappedResolve = (value: any) => {
+    const wrappedResolve = (value) => {
       clearTimeout(timeout);
       // Extract user data from settings response
       if (value && value.data) {
@@ -556,10 +540,10 @@ ipcMain.handle('user:getInfo', async () => {
 
 // Store for encrypted data - uses file-based persistence
 const STORAGE_FILE = path.join(app.getPath('userData'), 'secure-storage.json');
-let secureStore: { [key: string]: string } = {};
+let secureStore = {};
 
 // Load secure storage from disk
-async function loadSecureStore(): Promise<void> {
+async function loadSecureStore() {
   try {
     if (fs.existsSync(STORAGE_FILE)) {
       const data = fs.readFileSync(STORAGE_FILE, 'utf-8');
@@ -576,7 +560,7 @@ async function loadSecureStore(): Promise<void> {
 }
 
 // Save secure storage to disk
-async function saveSecureStore(): Promise<void> {
+async function saveSecureStore() {
   try {
     const dir = path.dirname(STORAGE_FILE);
     if (!fs.existsSync(dir)) {
@@ -591,7 +575,7 @@ async function saveSecureStore(): Promise<void> {
 }
 
 // Check if safeStorage is available (requires Electron 13+)
-function isSafeStorageAvailable(): boolean {
+function isSafeStorageAvailable() {
   try {
     return safeStorage && typeof safeStorage.isEncryptionAvailable === 'function' 
       && safeStorage.isEncryptionAvailable();
@@ -602,7 +586,7 @@ function isSafeStorageAvailable(): boolean {
 }
 
 // Set item in secure storage
-ipcMain.handle('safeStorage:set', async (_event: IpcMainInvokeEvent, key: string, value: string) => {
+ipcMain.handle('safeStorage:set', async (_event, key, value) => {
   try {
     console.log('[SafeStorage] Setting item:', key);
     
@@ -634,7 +618,7 @@ ipcMain.handle('safeStorage:set', async (_event: IpcMainInvokeEvent, key: string
 });
 
 // Get item from secure storage
-ipcMain.handle('safeStorage:get', async (_event: IpcMainInvokeEvent, key: string) => {
+ipcMain.handle('safeStorage:get', async (_event, key) => {
   try {
     console.log('[SafeStorage] Getting item:', key);
     
@@ -667,7 +651,7 @@ ipcMain.handle('safeStorage:get', async (_event: IpcMainInvokeEvent, key: string
 });
 
 // Delete item from secure storage
-ipcMain.handle('safeStorage:delete', async (_event: IpcMainInvokeEvent, key: string) => {
+ipcMain.handle('safeStorage:delete', async (_event, key) => {
   try {
     console.log('[SafeStorage] Deleting item:', key);
     
@@ -685,7 +669,7 @@ ipcMain.handle('safeStorage:delete', async (_event: IpcMainInvokeEvent, key: str
 });
 
 // Check if item exists in secure storage
-ipcMain.handle('safeStorage:has', async (_event: IpcMainInvokeEvent, key: string) => {
+ipcMain.handle('safeStorage:has', async (_event, key) => {
   try {
     console.log('[SafeStorage] Checking if item exists:', key);
     

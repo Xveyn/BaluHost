@@ -239,6 +239,226 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               </div>
             </SettingsGroup>
 
+            {/* Smart Sync Group */}
+            <SettingsGroup
+              title="Smart Sync"
+              icon={<Zap className="h-5 w-5" />}
+              expanded={expandedGroup === 'sync-smart'}
+              onToggle={() =>
+                setExpandedGroup(expandedGroup === 'sync-smart' ? null : 'sync-smart')
+              }
+            >
+              <div className="space-y-4">
+                <ToggleSetting
+                  label="Enable Smart Sync"
+                  description="Automatically pause sync when battery or CPU usage is too high"
+                  checked={settings.smartSyncEnabled}
+                  onChange={(value) => updateSetting('smartSyncEnabled', value)}
+                />
+
+                {settings.smartSyncEnabled && (
+                  <div className="ml-4 space-y-4 border-l-2 border-blue-300 dark:border-blue-700 pl-4">
+                    <SliderSetting
+                      label="Battery Threshold"
+                      description="Pause sync when battery drops below this level"
+                      value={settings.smartSyncBatteryThreshold}
+                      onChange={(value) => updateSetting('smartSyncBatteryThreshold', value)}
+                      min={0}
+                      max={100}
+                      step={5}
+                      unit="%"
+                      preset={(
+                        <>
+                          <button
+                            onClick={() => updateSetting('smartSyncBatteryThreshold', 10)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            Low (10%)
+                          </button>
+                          <button
+                            onClick={() => updateSetting('smartSyncBatteryThreshold', 20)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            Normal (20%)
+                          </button>
+                          <button
+                            onClick={() => updateSetting('smartSyncBatteryThreshold', 50)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            High (50%)
+                          </button>
+                        </>
+                      )}
+                    />
+
+                    <SliderSetting
+                      label="CPU Threshold"
+                      description="Pause sync when CPU usage exceeds this level"
+                      value={settings.smartSyncCpuThreshold}
+                      onChange={(value) => updateSetting('smartSyncCpuThreshold', value)}
+                      min={0}
+                      max={100}
+                      step={5}
+                      unit="%"
+                      preset={(
+                        <>
+                          <button
+                            onClick={() => updateSetting('smartSyncCpuThreshold', 50)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            Low (50%)
+                          </button>
+                          <button
+                            onClick={() => updateSetting('smartSyncCpuThreshold', 80)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            Normal (80%)
+                          </button>
+                          <button
+                            onClick={() => updateSetting('smartSyncCpuThreshold', 90)}
+                            className="text-xs px-2 py-1 rounded bg-orange-100 dark:bg-orange-900 text-orange-700 dark:text-orange-200"
+                          >
+                            High (90%)
+                          </button>
+                        </>
+                      )}
+                    />
+                  </div>
+                )}
+              </div>
+            </SettingsGroup>
+
+            {/* Sync Filters Group */}
+            <SettingsGroup
+              title="Sync Filters"
+              icon={<Shield className="h-5 w-5" />}
+              expanded={expandedGroup === 'sync-filters'}
+              onToggle={() =>
+                setExpandedGroup(expandedGroup === 'sync-filters' ? null : 'sync-filters')
+              }
+            >
+              <div className="space-y-4">
+                <div>
+                  <label className="font-medium text-gray-900 dark:text-white block mb-2">
+                    Ignore Patterns
+                  </label>
+                  <p className="text-xs text-gray-600 dark:text-gray-400 mb-2">
+                    Files and folders matching these patterns will not be synced (comma-separated)
+                  </p>
+                  <input
+                    type="text"
+                    value={settings.ignorePatterns.join(', ')}
+                    onChange={(e) => updateSetting('ignorePatterns', e.target.value.split(',').map(p => p.trim()).filter(p => p))}
+                    className="w-full px-4 py-2 bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded-lg text-gray-900 dark:text-white focus:outline-none focus:border-blue-500 transition font-mono text-sm"
+                    placeholder=".git, node_modules, *.tmp"
+                  />
+                  <div className="flex gap-2 mt-2">
+                    <button
+                      onClick={() => updateSetting('ignorePatterns', ['.git', 'node_modules', '*.tmp', '.DS_Store', 'Thumbs.db'])}
+                      className="text-xs px-2 py-1 rounded bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300"
+                    >
+                      Reset to Defaults
+                    </button>
+                  </div>
+                </div>
+
+                <SliderSetting
+                  label="Max File Size"
+                  description="Skip files larger than this size (0 = no limit)"
+                  value={settings.maxFileSizeMb}
+                  onChange={(value) => updateSetting('maxFileSizeMb', value)}
+                  min={0}
+                  max={10000}
+                  step={100}
+                  unit="MB"
+                  preset={(
+                    <>
+                      <button
+                        onClick={() => updateSetting('maxFileSizeMb', 0)}
+                        className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200"
+                      >
+                        Unlimited
+                      </button>
+                      <button
+                        onClick={() => updateSetting('maxFileSizeMb', 500)}
+                        className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200"
+                      >
+                        500 MB
+                      </button>
+                      <button
+                        onClick={() => updateSetting('maxFileSizeMb', 1000)}
+                        className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200"
+                      >
+                        1 GB
+                      </button>
+                      <button
+                        onClick={() => updateSetting('maxFileSizeMb', 5000)}
+                        className="text-xs px-2 py-1 rounded bg-green-100 dark:bg-green-900 text-green-700 dark:text-green-200"
+                      >
+                        5 GB
+                      </button>
+                    </>
+                  )}
+                />
+              </div>
+            </SettingsGroup>
+
+            {/* Network Settings Group */}
+            <SettingsGroup
+              title="Network Settings"
+              icon={<Wifi className="h-5 w-5" />}
+              expanded={expandedGroup === 'sync-network'}
+              onToggle={() =>
+                setExpandedGroup(expandedGroup === 'sync-network' ? null : 'sync-network')
+              }
+            >
+              <div className="space-y-4">
+                <SliderSetting
+                  label="Connection Timeout"
+                  description="How long to wait for server responses before timing out"
+                  value={settings.networkTimeoutSeconds}
+                  onChange={(value) => updateSetting('networkTimeoutSeconds', value)}
+                  min={5}
+                  max={300}
+                  step={5}
+                  unit="seconds"
+                  preset={(
+                    <>
+                      <button
+                        onClick={() => updateSetting('networkTimeoutSeconds', 10)}
+                        className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200"
+                      >
+                        Fast (10s)
+                      </button>
+                      <button
+                        onClick={() => updateSetting('networkTimeoutSeconds', 30)}
+                        className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200"
+                      >
+                        Normal (30s)
+                      </button>
+                      <button
+                        onClick={() => updateSetting('networkTimeoutSeconds', 60)}
+                        className="text-xs px-2 py-1 rounded bg-blue-100 dark:bg-blue-900 text-blue-700 dark:text-blue-200"
+                      >
+                        Slow (60s)
+                      </button>
+                    </>
+                  )}
+                />
+
+                <SliderSetting
+                  label="Retry Attempts"
+                  description="How many times to retry failed uploads/downloads"
+                  value={settings.retryAttempts}
+                  onChange={(value) => updateSetting('retryAttempts', value)}
+                  min={0}
+                  max={10}
+                  step={1}
+                  unit="attempts"
+                />
+              </div>
+            </SettingsGroup>
+
             {/* Conflict Resolution Group */}
             <SettingsGroup
               title="Conflict Resolution"
@@ -290,6 +510,17 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
                     { value: 'system', label: '⚙️ System default' },
                   ]}
                 />
+
+                <SelectSetting
+                  label="Language"
+                  description="Choose your preferred language"
+                  value={settings.language}
+                  onChange={(value) => updateSetting('language', value)}
+                  options={[
+                    { value: 'en', label: '🇬🇧 English' },
+                    { value: 'de', label: '🇩🇪 Deutsch' },
+                  ]}
+                />
               </div>
             </SettingsGroup>
 
@@ -303,6 +534,13 @@ export default function SettingsPanel({ onClose }: SettingsPanelProps) {
               }
             >
               <div className="space-y-4">
+                <ToggleSetting
+                  label="Auto-start on system boot"
+                  description="Automatically launch BaluDesk when your computer starts"
+                  checked={settings.autoStartOnBoot}
+                  onChange={(value) => updateSetting('autoStartOnBoot', value)}
+                />
+
                 <ToggleSetting
                   label="Start application minimized"
                   description="Launch the app in the system tray"

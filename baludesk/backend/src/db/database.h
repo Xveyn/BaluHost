@@ -56,6 +56,17 @@ struct VPNProfile {
     std::string updatedAt;
 };
 
+struct ActivityLog {
+    int id;
+    std::string timestamp;
+    std::string activityType;  // upload, download, delete, conflict, error
+    std::string filePath;
+    std::string folderId;
+    std::string details;  // JSON or text details
+    int64_t fileSize;  // bytes
+    std::string status;  // success, failed, pending
+};
+
 /**
  * Database - SQLite database for local metadata
  * 
@@ -105,6 +116,13 @@ public:
     bool deleteVPNProfile(int id);
     VPNProfile getVPNProfile(int id);
     std::vector<VPNProfile> getVPNProfiles();
+
+    // Activity Logs
+    bool logActivity(const std::string& activityType, const std::string& filePath, const std::string& folderId,
+                    const std::string& details, int64_t fileSize, const std::string& status);
+    std::vector<ActivityLog> getActivityLogs(int limit = 100, const std::string& activityType = "",
+                                            const std::string& startDate = "", const std::string& endDate = "");
+    bool clearActivityLogs(const std::string& beforeDate = "");
 
     // Utilities
     std::string generateId();

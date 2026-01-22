@@ -46,10 +46,10 @@ public:
     bool isAuthenticated() const;
 
     // File operations
-    std::vector<RemoteFile> listFiles(const std::string& path);
-    bool uploadFile(const std::string& localPath, const std::string& remotePath);
-    bool downloadFile(const std::string& remotePath, const std::string& localPath);
-    bool deleteFile(const std::string& remotePath);
+    virtual std::vector<RemoteFile> listFiles(const std::string& path);
+    virtual bool uploadFile(const std::string& localPath, const std::string& remotePath);
+    virtual bool downloadFile(const std::string& remotePath, const std::string& localPath);
+    virtual bool deleteFile(const std::string& remotePath);
     
     // Advanced download with resume support
     bool downloadFileRange(

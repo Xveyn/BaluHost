@@ -19,8 +19,8 @@ def seed_dev_data() -> None:
 
     # Seed demo users (besides admin) - Always re-seed users since they're in-memory
     demo_users = [
-        UserCreate(username="alex", email="alex@example.com", password="demo123", role="user"),
-        UserCreate(username="maria", email="maria@example.com", password="demo123", role="user"),
+        UserCreate(username="alex", email="alex@example.com", password="Demo1234", role="user"),
+        UserCreate(username="maria", email="maria@example.com", password="Demo1234", role="user"),
     ]
 
     for user in demo_users:

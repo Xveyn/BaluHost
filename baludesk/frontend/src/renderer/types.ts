@@ -87,14 +87,28 @@ export interface AppSettings {
 
   // Sync Behavior
   autoStartSync: boolean;
+  autoStartOnBoot: boolean;  // OS-level auto-start
   syncInterval: number;  // seconds
   maxConcurrentTransfers: number;
   bandwidthLimitMbps: number;  // 0 = unlimited
   conflictResolution: 'ask' | 'local' | 'remote' | 'newer';
 
+  // Network Settings
+  networkTimeoutSeconds: number;
+  retryAttempts: number;
+
+  // Smart Sync
+  smartSyncEnabled: boolean;
+  smartSyncBatteryThreshold: number;  // percentage (0-100)
+  smartSyncCpuThreshold: number;  // percentage (0-100)
+
+  // Sync Filters
+  ignorePatterns: string[];  // e.g., [".git", "node_modules", "*.tmp"]
+  maxFileSizeMb: number;  // 0 = unlimited
+
   // UI Preferences
   theme: 'dark' | 'light' | 'system';
-  language: string;
+  language: string;  // 'en' | 'de'
   startMinimized: boolean;
   showNotifications: boolean;
   notifyOnSyncComplete: boolean;

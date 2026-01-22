@@ -332,7 +332,7 @@ const FileExplorer: React.FC = () => {
       </div>
 
       {/* File List */}
-      <div className="flex-1 overflow-auto px-6 py-4">
+      <div className="flex-1 overflow-y-auto px-6 py-4">
         {error && (
           <div className="bg-red-500/10 border border-red-500/30 text-red-400 px-4 py-3 rounded-lg mb-4 backdrop-blur-sm">
             {error}
@@ -345,8 +345,9 @@ const FileExplorer: React.FC = () => {
             <p className="text-slate-400">Loading files...</p>
           </div>
         ) : (
-          <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm overflow-hidden">
-            <table className="w-full">
+          <div className="rounded-xl border border-white/10 bg-white/5 backdrop-blur-sm">
+            <div className="max-h-full overflow-x-auto">
+              <table className="w-full">
               <thead className="bg-white/5 border-b border-white/10">
                 <tr>
                   <th className="px-6 py-4 text-left text-xs font-semibold text-slate-300 uppercase tracking-wider">
@@ -467,6 +468,7 @@ const FileExplorer: React.FC = () => {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         )}
       </div>

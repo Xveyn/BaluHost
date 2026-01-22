@@ -1,4 +1,4 @@
-import { Cloud, Activity, Files, FolderSync, AlertCircle, LogOut, Settings as SettingsIcon, Server } from 'lucide-react';
+import { Cloud, Activity, Files, FolderSync, AlertCircle, LogOut, Settings as SettingsIcon, Server, FileText } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import toast from 'react-hot-toast';
 
@@ -52,6 +52,12 @@ export default function MainLayout({ user, onLogout, children, conflictCount = 0
       label: 'Remote Servers',
       path: '/remote-servers',
       icon: <Server className="h-4 w-4" />,
+    },
+    {
+      id: 'activity-log',
+      label: 'Activity Log',
+      path: '/activity-log',
+      icon: <FileText className="h-4 w-4" />,
     },
   ];
 

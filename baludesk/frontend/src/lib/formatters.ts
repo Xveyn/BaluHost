@@ -80,3 +80,30 @@ export const formatTime = (dateString: string): string => {
     return dateString;
   }
 };
+
+/**
+ * Format Unix timestamp (seconds or milliseconds) to localized date/time
+ */
+export const formatTimestamp = (timestamp: string | number): string => {
+  if (!timestamp) return 'Never';
+
+  try {
+    // Convert to number if it's a string
+    const ts = typeof timestamp === 'string' ? parseInt(timestamp, 10) : timestamp;
+
+    if (Number.isNaN(ts) || ts === 0) return 'Never';
+
+    // Check if it's in seconds (< year 2100 in milliseconds)
+    // Unix timestamps in seconds are ~10 digits, in ms are ~13 digits
+    const tsInMs = ts < 10000000000 ? ts * 1000 : ts;
+
+    const date = new Date(tsInMs);
+
+    // Check if date is valid
+    if (Number.isNaN(date.getTime())) return 'Invalid date';
+
+    return date.toLocaleString();
+  } catch {
+    return String(timestamp);
+  }
+};

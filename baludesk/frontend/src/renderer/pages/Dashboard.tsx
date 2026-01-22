@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Activity, FolderSync, TrendingUp, TrendingDown, Cpu, HardDrive, Clock, Zap } from 'lucide-react';
-import toast from 'react-hot-toast';
-import { formatBytes, formatUptime } from '../../lib/formatters';
+import { formatBytes, formatUptime, formatTimestamp } from '../../lib/formatters';
 import { getMemoryPercent, getDiskPercent } from '../../lib/calculations';
 import { BackendMessage } from '../../lib/types';
 
@@ -63,7 +62,7 @@ interface SystemInfo {
   dev_mode?: boolean;
 }
 
-export default function Dashboard({ user, onLogout }: DashboardProps) {
+export default function Dashboard({ user: _user, onLogout: _onLogout }: DashboardProps) {
   const [syncStats, setSyncStats] = useState<SyncStats | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [raidStatus, setRaidStatus] = useState<RaidStatus | null>(null);
@@ -169,7 +168,7 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           if (raw?.disk) {
             normalized.disk = {
               total: raw.disk.total ?? raw.disk.total_bytes ?? 0,
-              used: raw.disk.used ?? (raw.disk.total - (raw.disk.available ?? raw.disk.free ?? 0)) ?? 0,
+              used: raw.disk.used ?? (raw.disk.total - (raw.disk.available ?? raw.disk.free ?? 0)),
               available: raw.disk.available ?? raw.disk.free ?? null,
             };
           }
@@ -237,7 +236,9 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
           </div>
           <span>Dashboard</span>
         </h1>
-        <p className="mt-2 text-slate-400">Monitor your sync status and activity</p>
+        <p className="mt-2 text-slate-400">
+          Monitor your sync status and activity • Last sync: {syncStats?.lastSync ? formatTimestamp(syncStats.lastSync) : 'Never'}
+        </p>
       </div>
 
       {/* Sync Status Cards */}
@@ -522,13 +523,6 @@ export default function Dashboard({ user, onLogout }: DashboardProps) {
         </div>
       )}
 
-      {/* Last Sync Info */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/30 p-4">
-        <p className="text-sm text-slate-400">
-          <span className="font-medium text-slate-300">Last sync:</span>{' '}
-          {syncStats?.lastSync || 'Never'}
-        </p>
-      </div>
     </div>
   );
 }

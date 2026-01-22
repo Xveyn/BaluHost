@@ -77,6 +77,7 @@ set(SOURCES
     src/utils/system_info.cpp
     src/utils/raid_info.cpp
     src/utils/settings_manager.cpp
+    src/utils/credential_store.cpp
     src/baluhost_client.cpp
 )
 
@@ -126,8 +127,28 @@ target_link_libraries(baludesk-backend
 )
 
 # Platform-specific libraries
-if(APPLE)
-    target_link_libraries(baludesk-backend PRIVATE "-framework CoreServices")
+if(WIN32)
+    # Windows Credential Manager (wincred.h requires Advapi32)
+    target_link_libraries(baludesk-backend PRIVATE Advapi32)
+    message(STATUS "Windows Credential Manager support enabled")
+elseif(APPLE)
+    # macOS Keychain Services + FSEvents
+    target_link_libraries(baludesk-backend PRIVATE "-framework CoreServices" "-framework Security")
+    message(STATUS "macOS Keychain Services support enabled")
+elseif(UNIX AND NOT APPLE)
+    # Linux libsecret (GNOME Keyring / KWallet)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(LIBSECRET libsecret-1)
+
+    if(LIBSECRET_FOUND)
+        target_include_directories(baludesk-backend PRIVATE ${LIBSECRET_INCLUDE_DIRS})
+        target_link_libraries(baludesk-backend PRIVATE ${LIBSECRET_LIBRARIES})
+        message(STATUS "Linux libsecret support enabled")
+    else()
+        message(WARNING "libsecret not found - credential storage will not work on Linux")
+        message(WARNING "Install with: sudo apt install libsecret-1-dev (Debian/Ubuntu)")
+        message(WARNING "           or: sudo dnf install libsecret-devel (Fedora/RHEL)")
+    endif()
 endif()
 
 # Installation
@@ -161,16 +182,29 @@ if(BUILD_TESTS)
         tests/change_detector_hash_test.cpp
         tests/sync_engine_retry_test.cpp
         tests/sync_engine_performance_test.cpp
+        tests/credential_store_test.cpp
+        tests/memory_leak_test.cpp
+        tests/sync_engine_simple_integration_test.cpp  # NEW: Simple integration tests (15 tests)
+        tests/database_test.cpp  # NEW: Comprehensive database tests (30 tests)
+        tests/conflict_resolver_test.cpp  # NEW: ConflictResolver tests (18 tests)
         # Note: sync_engine_integration_test.cpp requires full build context with
         # mocked HttpClient and Database - see comments in sync_engine_integration_test.cpp
         # tests/sync_engine_integration_test.cpp
+        # Note: sync_engine_full_integration_test.cpp requires dependency injection
+        # for mock objects - deferred to future refactoring
+        # tests/sync_engine_full_integration_test.cpp
     )
     
-    # Common sources needed by tests (exclude main.cpp, DB, HTTP)
+    # Common sources needed by tests (exclude main.cpp)
     set(TEST_COMMON_SOURCES
         src/utils/logger.cpp
+        src/utils/credential_store.cpp
         src/sync/file_watcher_v2.cpp
         src/sync/change_detector.cpp
+        src/sync/sync_engine.cpp
+        src/sync/conflict_resolver.cpp
+        src/api/http_client.cpp
+        src/db/database.cpp
         src/utils/sha256.cpp
     )
     
@@ -198,8 +232,8 @@ if(BUILD_TESTS)
     if(CURL_FOUND)
         list(APPEND TEST_LINK_LIBS CURL::libcurl)
     endif()
-    
-    if(official-sqlite3_FOUND)
+
+    if(unofficial-sqlite3_FOUND)
         list(APPEND TEST_LINK_LIBS unofficial::sqlite3::sqlite3)
     elseif(SQLite3_FOUND)
         list(APPEND TEST_LINK_LIBS SQLite3::SQLite3)
@@ -211,8 +245,18 @@ if(BUILD_TESTS)
     )
     
     # Platform-specific libraries for tests
-    if(APPLE)
-        target_link_libraries(baludesk-tests PRIVATE "-framework CoreServices")
+    if(WIN32)
+        # Windows Credential Manager
+        target_link_libraries(baludesk-tests PRIVATE Advapi32)
+    elseif(APPLE)
+        # macOS Keychain Services + FSEvents
+        target_link_libraries(baludesk-tests PRIVATE "-framework CoreServices" "-framework Security")
+    elseif(UNIX AND NOT APPLE)
+        # Linux libsecret
+        if(LIBSECRET_FOUND)
+            target_include_directories(baludesk-tests PRIVATE ${LIBSECRET_INCLUDE_DIRS})
+            target_link_libraries(baludesk-tests PRIVATE ${LIBSECRET_LIBRARIES})
+        endif()
     endif()
     
     # Discover tests
