@@ -1,9 +1,11 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi, History } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi, History, Zap, BarChart3 } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import BackupSettings from '../components/BackupSettings';
 import VpnManagement from '../components/VpnManagement';
 import VCLSettings from '../components/vcl/VCLSettings';
+import TapoDeviceSettings from '../components/TapoDeviceSettings';
+import EnergyMonitor from '../components/EnergyMonitor';
 
 interface UserProfile {
   id: number;
@@ -40,7 +42,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn' | 'vcl'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn' | 'vcl' | 'power' | 'energy'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -272,7 +274,9 @@ export default function SettingsPage() {
             ...(profile?.role === 'admin' ? [
               { id: 'backup', label: 'Backup', icon: Database },
               { id: 'vpn', label: 'VPN', icon: Wifi },
-              { id: 'vcl', label: 'Version Control', icon: History }
+              { id: 'vcl', label: 'Version Control', icon: History },
+              { id: 'power', label: 'Devices', icon: Zap },
+              { id: 'energy', label: 'Energy Monitor', icon: BarChart3 }
             ] : [])
           ].map(tab => (
             <button
@@ -527,6 +531,16 @@ export default function SettingsPage() {
         {/* VCL Tab (Admin only) */}
         {activeTab === 'vcl' && profile?.role === 'admin' && (
           <VCLSettings />
+        )}
+
+        {/* Power Devices Tab (Admin only) */}
+        {activeTab === 'power' && profile?.role === 'admin' && (
+          <TapoDeviceSettings />
+        )}
+
+        {/* Energy Monitor Tab (Admin only) */}
+        {activeTab === 'energy' && profile?.role === 'admin' && (
+          <EnergyMonitor />
         )}
 
         {/* Storage Tab */}

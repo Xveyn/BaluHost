@@ -28,6 +28,22 @@ from app.schemas.vcl import (
     UserQuotaInfo,
     AdminVCLOverview,
 )
+from app.schemas.tapo import (
+    TapoDeviceCreate,
+    TapoDeviceUpdate,
+    TapoDeviceResponse,
+    PowerSample,
+    PowerHistory,
+    PowerMonitoringResponse,
+    CurrentPowerResponse,
+)
+from app.schemas.energy import (
+    PowerSampleSchema,
+    EnergyPeriodStats,
+    HourlySample,
+    EnergyDashboard,
+    EnergyCostEstimate,
+)
 
 __all__ = [
     "TokenPayload",
@@ -59,4 +75,16 @@ __all__ = [
     "VersionRestoreResponse",
     "UserQuotaInfo",
     "AdminVCLOverview",
+    "TapoDeviceCreate",
+    "TapoDeviceUpdate",
+    "TapoDeviceResponse",
+    "PowerSample",
+    "PowerHistory",
+    "PowerMonitoringResponse",
+    "CurrentPowerResponse",
+    "PowerSampleSchema",
+    "EnergyPeriodStats",
+    "HourlySample",
+    "EnergyDashboard",
+    "EnergyCostEstimate",
 ]

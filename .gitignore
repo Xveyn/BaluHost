@@ -84,3 +84,4 @@ backend/app/services/tmpclaude-*
 backend/nul
 
 /user_input
+test_*

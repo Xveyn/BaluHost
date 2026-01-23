@@ -20,11 +20,12 @@ from slowapi.errors import RateLimitExceeded
 from app import __version__
 from app.api.routes import api_router
 from app.core.config import settings
-from app.core.database import init_db
+from app.core.database import init_db, get_db
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry, sync_background, raid as raid_service
 from app.services import smart as smart_service
+from app.services import power_monitor
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
@@ -68,6 +69,7 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     seed.seed_dev_data()
     await jobs.start_health_monitor()
     await telemetry.start_telemetry_monitor()
+    await power_monitor.start_power_monitor(get_db)
     disk_monitor.start_monitoring()
     await sync_background.start_sync_scheduler()
     logger.info("Sync scheduler started")
@@ -149,6 +151,7 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
             if not skip_init:
                 await jobs.stop_health_monitor()
                 await telemetry.stop_telemetry_monitor()
+                await power_monitor.stop_power_monitor()
                 disk_monitor.stop_monitoring()
                 await sync_background.stop_sync_scheduler()
                 logger.info("Sync scheduler stopped")

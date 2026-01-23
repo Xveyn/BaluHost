@@ -13,6 +13,8 @@ from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
 from app.models.server_profile import ServerProfile
 from app.models.vpn_profile import VPNProfile, VPNType
 from app.models.refresh_token import RefreshToken
+from app.models.tapo_device import TapoDevice
+from app.models.power_sample import PowerSample
 
 __all__ = [
     "Base",
@@ -33,5 +35,7 @@ __all__ = [
     "ServerProfile",
     "VPNProfile",
     "VPNType",
-    "RefreshToken"
+    "RefreshToken",
+    "TapoDevice",
+    "PowerSample"
 ]

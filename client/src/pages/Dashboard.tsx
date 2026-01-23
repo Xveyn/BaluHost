@@ -2,6 +2,7 @@ import { useMemo, useEffect, useState } from 'react';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
+import PowerWidget from '../components/PowerWidget';
 
 interface SystemStats {
   cpuUsage: number;
@@ -384,6 +385,9 @@ export default function Dashboard() {
                 </div>
               );
             })}
+
+            {/* Power Monitoring Widget */}
+            <PowerWidget />
           </div>
 
           <div className="grid grid-cols-1 gap-6">

@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth, files, logging, system, users, upload_progress, shares, backup, sync,
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
-    vcl, server_profiles, vpn_profiles, metrics
+    vcl, server_profiles, vpn_profiles, metrics, tapo, energy
 )
 
 api_router = APIRouter()
@@ -27,5 +27,7 @@ api_router.include_router(rate_limit_config.router, prefix="/admin", tags=["admi
 api_router.include_router(server_profiles.router)
 api_router.include_router(vpn_profiles.router)
 api_router.include_router(metrics.router, tags=["monitoring"])
+api_router.include_router(tapo.router, prefix="/tapo", tags=["power-monitoring"])
+api_router.include_router(energy.router, prefix="/energy", tags=["energy-monitoring"])
 
 __all__ = ["api_router"]
