@@ -230,92 +230,143 @@ PersistentKeepalive = 25
             db.commit()
     
     @staticmethod
-    def parse_fritzbox_config(config_content: str) -> dict:
+    def parse_fritzbox_config(config_content: str, public_endpoint: str = None) -> dict:
         """
         Parse Fritz!Box WireGuard config file.
-        
+
         Args:
             config_content: Raw .conf file content
-            
+
         Returns:
             dict with keys: private_key, address, dns_servers, peer_public_key,
                            preshared_key, allowed_ips, endpoint, persistent_keepalive
         """
+        # Remove BOM if present and normalize line endings
+        config_content = config_content.replace('\r\n', '\n').replace('\r', '\n')
+        if config_content.startswith('\ufeff'):
+            config_content = config_content[1:]
+
         config = {}
         current_section = None
         dns_list = []
-        
-        for line in config_content.split('\n'):
+        debug_lines = []  # Store all parsed lines for debugging
+        listen_port = None  # For server configs
+
+        for line_num, line in enumerate(config_content.split('\n'), 1):
+            original_line = line
             line = line.strip()
-            
+
             if not line or line.startswith('#'):
                 continue
-                
+
             if line.startswith('['):
-                current_section = line
-            elif current_section == '[Interface]':
+                current_section = line.lower()  # Normalize section name
+                debug_lines.append(f"Line {line_num}: Section = {current_section}")
+            elif current_section == '[interface]':
                 if '=' in line:
                     key, value = line.split('=', 1)
-                    key = key.strip()
+                    key = key.strip().lower()  # Case-insensitive key matching
                     value = value.strip()
-                    
-                    if key == 'PrivateKey':
+                    debug_lines.append(f"Line {line_num}: [Interface] {key} = {value[:20]}..." if len(value) > 20 else f"Line {line_num}: [Interface] {key} = {value}")
+
+                    if key == 'privatekey':
                         config['private_key'] = value
-                    elif key == 'Address':
+                    elif key == 'address':
                         config['address'] = value
-                    elif key == 'DNS':
+                    elif key == 'dns':
                         dns_list.append(value)
-            elif current_section == '[Peer]':
+                    elif key == 'listenport':
+                        # This is a server config! Save the port
+                        listen_port = value
+                        debug_lines.append(f"  -> Found ListenPort (server config): {value}")
+            elif current_section == '[peer]':
                 if '=' in line:
                     key, value = line.split('=', 1)
-                    key = key.strip()
+                    key = key.strip().lower()  # Case-insensitive key matching
                     value = value.strip()
-                    
-                    if key == 'PublicKey':
+                    debug_lines.append(f"Line {line_num}: [Peer] {key} = {value}")
+
+                    if key == 'publickey':
                         config['peer_public_key'] = value
-                    elif key == 'PresharedKey':
+                    elif key == 'presharedkey':
                         config['preshared_key'] = value
-                    elif key == 'AllowedIPs':
+                    elif key == 'allowedips':
                         config['allowed_ips'] = value
-                    elif key == 'Endpoint':
-                        config['endpoint'] = value
-                    elif key == 'PersistentKeepalive':
-                        config['persistent_keepalive'] = int(value)
-        
+                    elif key == 'endpoint':
+                        if value:  # Only add if not empty
+                            config['endpoint'] = value
+                            debug_lines.append(f"  -> Endpoint saved: {value}")
+                        else:
+                            debug_lines.append(f"  -> Endpoint EMPTY!")
+                    elif key == 'persistentkeepalive':
+                        try:
+                            config['persistent_keepalive'] = int(value)
+                        except ValueError:
+                            pass  # Ignore invalid keepalive values
+
         # Join DNS servers
         config['dns_servers'] = ','.join(dns_list)
-        
+
+        # Handle server config (has ListenPort but no Endpoint)
+        if 'endpoint' not in config and listen_port:
+            if public_endpoint:
+                # Build endpoint from public address and listen port
+                config['endpoint'] = f"{public_endpoint}:{listen_port}"
+                debug_lines.append(f"Built Endpoint from server config: {config['endpoint']}")
+            else:
+                # Server config without public endpoint - need user to provide it
+                config['listen_port'] = listen_port
+                debug_lines.append(f"Server config detected (ListenPort={listen_port}). Public endpoint needed.")
+
         # Validate required fields
-        required = ['private_key', 'address', 'peer_public_key', 'allowed_ips', 'endpoint']
-        missing = [f for f in required if f not in config]
-        if missing:
-            raise ValueError(f"Missing required fields in config: {', '.join(missing)}")
-        
+        # For server configs, we allow missing endpoint if listen_port is present
+        if 'endpoint' not in config and 'listen_port' not in config:
+            required = ['private_key', 'address', 'peer_public_key', 'allowed_ips']
+            missing = [f for f in required if f not in config]
+            if missing:
+                found_keys = list(config.keys())
+                debug_info = '\n'.join(debug_lines)
+                error_msg = f"Missing required fields: {', '.join(missing)}. Found: {', '.join(found_keys)}.\n\nDebug:\n{debug_info}"
+                raise ValueError(error_msg)
+
+            # Missing endpoint but have other fields
+            found_keys = list(config.keys())
+            debug_info = '\n'.join(debug_lines)
+            error_msg = (
+                f"Server config detected (has ListenPort but no Endpoint). "
+                f"Please provide the public endpoint (DynDNS or IP address).\n\n"
+                f"Found: {', '.join(found_keys)}.\n\nDebug:\n{debug_info}"
+            )
+            raise ValueError(error_msg)
+
         return config
     
     @staticmethod
     def upload_fritzbox_config(
         db: Session,
         config_content: str,
-        user_id: int
+        user_id: int,
+        public_endpoint: str = None
     ):
         """
         Parse and save Fritz!Box WireGuard config.
-        
+
         Args:
             db: Database session
             config_content: Raw .conf file content
             user_id: User ID (admin)
-            
+            public_endpoint: Public endpoint (e.g., "myfritz.net" or "203.0.113.1")
+                            Required for server configs that don't include Endpoint
+
         Returns:
             FritzBoxConfigResponse
         """
         from app.models.vpn import FritzBoxVPNConfig
         from app.services.vpn_encryption import VPNEncryption
         from app.schemas.vpn import FritzBoxConfigResponse
-        
+
         # Parse config
-        parsed = VPNService.parse_fritzbox_config(config_content)
+        parsed = VPNService.parse_fritzbox_config(config_content, public_endpoint)
         
         # Encrypt sensitive keys
         private_key_encrypted = VPNEncryption.encrypt_key(parsed['private_key'])

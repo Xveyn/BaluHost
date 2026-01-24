@@ -71,6 +71,7 @@ class VPNClientUpdate(BaseModel):
 class FritzBoxConfigUpload(BaseModel):
     """Schema for uploading Fritz!Box WireGuard config."""
     config_content: str = Field(..., description="Raw .conf file content")
+    public_endpoint: Optional[str] = Field(None, description="Public endpoint (DynDNS or IP) - required for server configs")
 
 
 class FritzBoxConfigResponse(BaseModel):

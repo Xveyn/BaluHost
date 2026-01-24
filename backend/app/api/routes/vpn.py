@@ -264,7 +264,8 @@ async def upload_fritzbox_config(
         config = VPNService.upload_fritzbox_config(
             db=db,
             config_content=config_data.config_content,
-            user_id=current_user.id
+            user_id=current_user.id,
+            public_endpoint=config_data.public_endpoint
         )
         return config
     except ValueError as e:

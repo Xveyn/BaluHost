@@ -13,6 +13,7 @@ interface FritzBoxConfig {
 export default function VpnManagement() {
   const [config, setConfig] = useState<FritzBoxConfig | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [publicEndpoint, setPublicEndpoint] = useState<string>('');
   const [uploading, setUploading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -65,12 +66,14 @@ export default function VpnManagement() {
 
       // Upload to backend
       await apiClient.post('/api/vpn/fritzbox/upload', {
-        config_content: fileContent
+        config_content: fileContent,
+        public_endpoint: publicEndpoint || undefined
       });
 
       setSuccess('Fritz!Box VPN-Konfiguration erfolgreich hochgeladen!');
       setUploadFile(null);
-      
+      setPublicEndpoint('');
+
       // Reload config
       await loadConfig();
     } catch (err: any) {
@@ -162,6 +165,23 @@ export default function VpnManagement() {
                 Ausgewählt: {uploadFile.name}
               </p>
             )}
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-slate-300 mb-2">
+              Öffentlicher Endpoint <span className="text-slate-500">(optional)</span>
+            </label>
+            <input
+              type="text"
+              value={publicEndpoint}
+              onChange={(e) => setPublicEndpoint(e.target.value)}
+              placeholder="z.B. meinfritz.net oder 203.0.113.1"
+              className="block w-full text-sm rounded-lg border border-slate-700 bg-slate-800 text-slate-100 px-3 py-2 focus:border-sky-500 focus:ring-1 focus:ring-sky-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-slate-400">
+              Nur für Server-Configs notwendig (wenn kein Endpoint in der .conf enthalten ist).
+              Format: DynDNS-Hostname oder IP-Adresse (ohne Port).
+            </p>
           </div>
 
           <button

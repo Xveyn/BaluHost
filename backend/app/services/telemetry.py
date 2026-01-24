@@ -16,6 +16,7 @@ from app.schemas.system import (
     NetworkTelemetrySample,
     TelemetryHistoryResponse,
 )
+from app.services.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 
@@ -75,6 +76,11 @@ def _sample_once() -> None:
         logger.debug("CPU percent unavailable: %s", exc)
         cpu_usage = _latest_cpu_usage if _latest_cpu_usage is not None else 0.0
 
+    # Get CPU sensor data (frequency and temperature)
+    cpu_sensor_data = get_cpu_sensor_data()
+    cpu_frequency = cpu_sensor_data.frequency_mhz
+    cpu_temperature = cpu_sensor_data.temperature_celsius
+
     try:
         virtual_mem = psutil.virtual_memory()
         total_mem = int(virtual_mem.total)
@@ -117,7 +123,12 @@ def _sample_once() -> None:
             download_mbps, upload_mbps = _generate_mock_network_sample()
             _previous_network_totals = None
 
-    cpu_sample = CpuTelemetrySample(timestamp=timestamp_ms, usage=_round(cpu_usage))
+    cpu_sample = CpuTelemetrySample(
+        timestamp=timestamp_ms, 
+        usage=_round(cpu_usage),
+        frequency_mhz=cpu_frequency,
+        temperature_celsius=cpu_temperature
+    )
     memory_sample = MemoryTelemetrySample(
         timestamp=timestamp_ms,
         used=used_mem,

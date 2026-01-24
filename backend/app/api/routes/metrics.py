@@ -29,6 +29,7 @@ from typing import Optional
 from app.api import deps
 from app.core.config import settings
 from app.models.user import User
+from app.services.sensors import get_cpu_sensor_data
 
 # Create router
 router = APIRouter()
@@ -50,6 +51,18 @@ cpu_usage_percent = Gauge(
 cpu_count = Gauge(
     'baluhost_cpu_count',
     'Number of CPU cores',
+    registry=registry
+)
+
+cpu_frequency_mhz = Gauge(
+    'baluhost_cpu_frequency_mhz',
+    'Current CPU frequency in MHz',
+    registry=registry
+)
+
+cpu_temperature_celsius = Gauge(
+    'baluhost_cpu_temperature_celsius', 
+    'CPU temperature in Celsius',
     registry=registry
 )
 
@@ -323,6 +336,13 @@ def collect_system_metrics():
         cpu_percent = psutil.cpu_percent(interval=0.1)
         cpu_usage_percent.set(cpu_percent)
         cpu_count.set(psutil.cpu_count())
+
+        # CPU Sensors (frequency and temperature)
+        cpu_sensor_data = get_cpu_sensor_data()
+        if cpu_sensor_data.frequency_mhz is not None:
+            cpu_frequency_mhz.set(cpu_sensor_data.frequency_mhz)
+        if cpu_sensor_data.temperature_celsius is not None:
+            cpu_temperature_celsius.set(cpu_sensor_data.temperature_celsius)
 
         # Memory
         mem = psutil.virtual_memory()

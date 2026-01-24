@@ -258,6 +258,41 @@ export class LocalApi {
     await clearToken();
     console.log('[LocalApi] Logged out, token cleared');
   }
+
+  /**
+   * Request a backend shutdown (admin only).
+   */
+  async shutdown(): Promise<{ message?: string; initiated_by?: string; eta_seconds?: number }> {
+    // Get token from localStorage (where App.tsx stores it)
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      throw new LocalApiError('No authentication token found', 401);
+    }
+
+    try {
+      return await this.request('/system/shutdown', { method: 'POST' });
+    } catch (err) {
+      // Fallback for dev setup where backend runs on same origin (uvicorn on :8000)
+      // or when the local HTTP proxy is not available. Attempt a same-origin call.
+      try {
+        const res = await fetch(`${API_PREFIX}/system/shutdown`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
+        }
+        return await res.json();
+      } catch (err2) {
+        throw err2;
+      }
+    }
+  }
 }
 
 // Singleton instance

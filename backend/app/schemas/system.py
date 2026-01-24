@@ -7,6 +7,7 @@ class CPUStats(BaseModel):
     usage: float
     cores: int
     frequency_mhz: float | None = None  # Aktuelle CPU-Frequenz in MHz
+    temperature_celsius: float | None = None  # CPU-Temperatur in Celsius
     model: str | None = None  # CPU-Modellname
 
 
@@ -86,6 +87,8 @@ class AggregatedStorageInfo(BaseModel):
 class CpuTelemetrySample(BaseModel):
     timestamp: int
     usage: float
+    frequency_mhz: float | None = None
+    temperature_celsius: float | None = None
 
 
 class MemoryTelemetrySample(BaseModel):

@@ -87,12 +87,14 @@ def create_user(payload: UserCreate, db: Optional[Session] = None) -> User:
     should_close = db is None
     if db is None:
         db = _get_db()
-    
+
     try:
         password_hash = pwd_context.hash(payload.password)
+        # Convert empty string to None for email (database nullable field)
+        email = payload.email if payload.email and payload.email.strip() else None
         user = User(
             username=payload.username,
-            email=payload.email,
+            email=email,
             role=(getattr(payload, "role", None) or "user"),
             hashed_password=password_hash,
         )
@@ -118,8 +120,9 @@ def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] =
 
         if payload.username:
             user.username = payload.username
-        if payload.email:
-            user.email = payload.email
+        if payload.email is not None:
+            # Convert empty string to None for email (database nullable field)
+            user.email = payload.email if payload.email.strip() else None
         if payload.role:
             user.role = payload.role
         if payload.password:
@@ -183,7 +186,7 @@ def serialize_user(user: User) -> UserPublic:
     return UserPublic(
         id=user.id,  # Keep as int - matches UserPublic schema
         username=user.username,
-        email=user.email or "",
+        email=user.email if user.email else None,  # Return None instead of empty string
         role=user.role,
         is_active=user.is_active,
         created_at=user.created_at.isoformat() if user.created_at else "",

@@ -1,76 +1,504 @@
 import { useEffect, useState } from 'react';
-import { listDevices, listSchedules, createSchedule, getPlanForDevice, type Device, type Schedule } from '../lib/mockSyncApi';
+import toast from 'react-hot-toast';
+import {
+  Smartphone,
+  Monitor,
+  Edit2,
+  Trash2,
+  X,
+  Activity,
+  CheckCircle,
+} from 'lucide-react';
+import { getAllDevices, updateMobileDeviceName, updateDesktopDeviceName, deleteMobileDevice, type Device } from '../api/devices';
 
 export default function SyncPrototype() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [schedules, setSchedules] = useState<Schedule[]>([]);
-  const [selectedDevice, setSelectedDevice] = useState('');
-  const [time, setTime] = useState('02:00');
-  const [plan, setPlan] = useState<any | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  // Modal states
+  const [showEditModal, setShowEditModal] = useState(false);
+  const [editingDevice, setEditingDevice] = useState<Device | null>(null);
+  const [newDeviceName, setNewDeviceName] = useState('');
+
+  // Delete confirmation modal
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
 
   useEffect(() => {
-    (async () => {
-      setDevices(await listDevices());
-      setSchedules(await listSchedules());
-    })();
+    loadDevices();
   }, []);
 
-  async function handleCreate() {
-    if (!selectedDevice) return;
-    const s = await createSchedule({ device_id: selectedDevice, schedule_type: 'daily', time_of_day: time });
-    setSchedules((p) => [...p, s]);
-  }
+  const loadDevices = async () => {
+    setLoading(true);
+    setError(null);
 
-  async function fetchPlan(deviceId: string) {
-    const p = await getPlanForDevice(deviceId);
-    setPlan(p);
-  }
+    try {
+      const data = await getAllDevices();
+      setDevices(data);
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to load devices';
+      console.error('Failed to load devices:', err);
+      setError(errorMsg);
+      toast.error(errorMsg);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleEditDevice = (device: Device) => {
+    setEditingDevice(device);
+    setNewDeviceName(device.name);
+    setShowEditModal(true);
+  };
+
+  const handleSaveDeviceName = async () => {
+    if (!editingDevice || !newDeviceName.trim()) {
+      toast.error('Device name cannot be empty');
+      return;
+    }
+
+    try {
+      if (editingDevice.type === 'mobile') {
+        await updateMobileDeviceName(editingDevice.id, newDeviceName);
+      } else {
+        await updateDesktopDeviceName(editingDevice.id, newDeviceName);
+      }
+
+      toast.success('Device name updated successfully');
+      setShowEditModal(false);
+      setEditingDevice(null);
+      setNewDeviceName('');
+      loadDevices();
+    } catch (err) {
+      toast.error('Failed to update device name');
+      console.error(err);
+    }
+  };
+
+  const handleDeleteDevice = (device: Device) => {
+    setDeviceToDelete(device);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDeleteDevice = async () => {
+    if (!deviceToDelete) return;
+
+    try {
+      if (deviceToDelete.type === 'mobile') {
+        await deleteMobileDevice(deviceToDelete.id);
+        toast.success('Device deleted successfully');
+      } else {
+        toast.error('Desktop device deletion not yet implemented');
+        setShowDeleteConfirm(false);
+        setDeviceToDelete(null);
+        return;
+      }
+
+      setShowDeleteConfirm(false);
+      setDeviceToDelete(null);
+      loadDevices();
+    } catch (err) {
+      toast.error('Failed to delete device');
+      console.error(err);
+    }
+  };
+
+  const formatDate = (dateStr: string | null | undefined): string => {
+    if (!dateStr) return 'Never';
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+
+    if (diffMins < 1) return 'Just now';
+    if (diffMins < 60) return `${diffMins}m ago`;
+    const diffHours = Math.floor(diffMins / 60);
+    if (diffHours < 24) return `${diffHours}h ago`;
+    const diffDays = Math.floor(diffHours / 24);
+    if (diffDays < 7) return `${diffDays}d ago`;
+    return date.toLocaleDateString();
+  };
+
+  const getPlatformIcon = (device: Device) => {
+    if (device.type === 'mobile') {
+      return <Smartphone className="h-5 w-5" />;
+    }
+    return <Monitor className="h-5 w-5" />;
+  };
+
+  const getPlatformLabel = (platform: string): string => {
+    const labels: Record<string, string> = {
+      ios: 'iOS',
+      android: 'Android',
+      windows: 'Windows',
+      mac: 'macOS',
+      linux: 'Linux',
+      unknown: 'Desktop',
+    };
+    return labels[platform] || platform;
+  };
+
+  const mobileDevices = devices.filter((d) => d.type === 'mobile');
+  const desktopDevices = devices.filter((d) => d.type === 'desktop');
+
+  const stats = {
+    total: devices.length,
+    mobile: mobileDevices.length,
+    desktop: desktopDevices.length,
+    active: devices.filter((d) => d.is_active).length,
+  };
 
   return (
-    <div className="p-6">
-      <h2 className="text-2xl font-bold mb-4">Sync Prototype (Mock)</h2>
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="p-4 bg-slate-800 rounded">
-          <h3 className="font-semibold mb-2">Devices</h3>
-          <ul className="space-y-2">
-            {devices.map(d => (
-              <li key={d.device_id} className="flex items-center justify-between">
-                <div>
-                  <div className="font-medium">{d.device_name}</div>
-                  <div className="text-sm text-slate-400">{d.device_id} • last sync: {d.last_sync ?? 'never'}</div>
-                </div>
-                <div className="flex gap-2">
-                  <button className="px-2 py-1 bg-sky-600 rounded text-white" onClick={() => { setSelectedDevice(d.device_id); fetchPlan(d.device_id); }}>Get Plan</button>
-                </div>
-              </li>
-            ))}
-          </ul>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Device Management</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            Manage connected mobile and desktop devices
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button
+            onClick={loadDevices}
+            className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
+          >
+            <Activity className="h-4 w-4" />
+            <span>Refresh</span>
+          </button>
+        </div>
+      </div>
+
+      {/* Statistics Cards */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Total Devices</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
+            </div>
+            <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
+          </div>
         </div>
 
-        <div className="p-4 bg-slate-800 rounded">
-          <h3 className="font-semibold mb-2">Create Schedule</h3>
-          <div className="flex gap-2">
-            <select value={selectedDevice} onChange={e => setSelectedDevice(e.target.value)} className="p-2 bg-slate-700 rounded">
-              <option value="">Select device</option>
-              {devices.map(d => <option value={d.device_id} key={d.device_id}>{d.device_name}</option>)}
-            </select>
-            <input type="time" value={time} onChange={e => setTime(e.target.value)} className="p-2 bg-slate-700 rounded" />
-            <button onClick={handleCreate} className="px-3 py-2 bg-emerald-500 rounded text-white">Create</button>
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Mobile</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.mobile}</p>
+            </div>
+            <Smartphone className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
+          </div>
+        </div>
+
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Desktop</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-emerald-400">
+                {stats.desktop}
+              </p>
+            </div>
+            <Monitor className="h-6 w-6 sm:h-8 sm:w-8 text-emerald-500 flex-shrink-0 ml-2" />
+          </div>
+        </div>
+
+        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0 flex-1">
+              <p className="text-xs sm:text-sm text-slate-400 truncate">Active</p>
+              <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
+            </div>
+            <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
+          </div>
+        </div>
+      </div>
+
+      {error && (
+        <div className="card border-red-900/60 bg-red-950/30 p-4">
+          <p className="text-sm text-red-400">
+            <strong>Error:</strong> {error}
+          </p>
+        </div>
+      )}
+
+      {/* Devices List */}
+      {loading ? (
+        <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
+          <p className="text-sm text-slate-500">Loading devices...</p>
+        </div>
+      ) : (
+        <div className="space-y-6">
+          {/* Mobile Devices Section */}
+          <div className="card border-slate-800/60 bg-slate-900/55">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Mobile Devices</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  Smartphones & Tablets ({mobileDevices.length})
+                </h2>
+              </div>
+            </div>
+
+            {mobileDevices.length === 0 ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
+                No mobile devices registered
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {mobileDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-sky-500/30"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/70 text-sky-400 flex-shrink-0">
+                          {getPlatformIcon(device)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-100 truncate">{device.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {getPlatformLabel(device.platform)}
+                            {device.model && ` • ${device.model}`}
+                            {device.username && ` • ${device.username}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <span
+                          className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            device.is_active
+                              ? 'border border-green-500/40 bg-green-500/15 text-green-200'
+                              : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
+                          }`}
+                        >
+                          {device.is_active ? 'Active' : 'Inactive'}
+                        </span>
+
+                        <button
+                          onClick={() => handleEditDevice(device)}
+                          className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
+                          title="Edit device name"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+
+                        <button
+                          onClick={() => handleDeleteDevice(device)}
+                          className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                          title="Delete device"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                      <div>
+                        <p className="text-slate-500">Last Seen</p>
+                        <p className="mt-1 font-medium text-slate-200">
+                          {formatDate(device.last_seen)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Last Sync</p>
+                        <p className="mt-1 font-medium text-slate-200">
+                          {formatDate(device.last_sync)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Registered</p>
+                        <p className="mt-1 font-medium text-slate-200">
+                          {formatDate(device.created_at)}
+                        </p>
+                      </div>
+                      {device.expires_at && (
+                        <div>
+                          <p className="text-slate-500">Expires</p>
+                          <p className="mt-1 font-medium text-slate-200">
+                            {formatDate(device.expires_at)}
+                          </p>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
 
-          <h4 className="mt-4 font-semibold">Schedules</h4>
-          <ul className="mt-2 space-y-2">
-            {schedules.map(s => (
-              <li key={s.schedule_id} className="text-sm">{s.device_id} — {s.schedule_type} @ {s.time_of_day} (next: {s.next_run_at ?? 'N/A'})</li>
-            ))}
-          </ul>
-        </div>
-      </div>
+          {/* Desktop Devices Section */}
+          <div className="card border-slate-800/60 bg-slate-900/55">
+            <div className="mb-4 flex items-center justify-between">
+              <div>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Desktop Devices</p>
+                <h2 className="mt-2 text-xl font-semibold text-white">
+                  BaluDesk Sync Clients ({desktopDevices.length})
+                </h2>
+              </div>
+            </div>
 
-      <div className="mt-6 p-4 bg-slate-800 rounded">
-        <h3 className="font-semibold mb-2">Plan</h3>
-        <pre className="text-sm whitespace-pre-wrap text-slate-200">{plan ? JSON.stringify(plan, null, 2) : 'No plan loaded'}</pre>
-      </div>
+            {desktopDevices.length === 0 ? (
+              <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
+                No desktop sync clients registered
+              </div>
+            ) : (
+              <div className="space-y-3">
+                {desktopDevices.map((device) => (
+                  <div
+                    key={device.id}
+                    className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-emerald-500/30"
+                  >
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="flex items-center gap-3 min-w-0 flex-1">
+                        <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/70 text-emerald-400 flex-shrink-0">
+                          {getPlatformIcon(device)}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <p className="text-sm font-medium text-slate-100 truncate">{device.name}</p>
+                          <p className="text-xs text-slate-500">
+                            {getPlatformLabel(device.platform)}
+                            {device.username && ` • ${device.username}`}
+                          </p>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        <button
+                          onClick={() => handleEditDevice(device)}
+                          className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-emerald-200 transition hover:border-emerald-500/50 hover:bg-emerald-500/20"
+                          title="Edit device name"
+                        >
+                          <Edit2 className="h-4 w-4" />
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
+                      <div>
+                        <p className="text-slate-500">Last Sync</p>
+                        <p className="mt-1 font-medium text-slate-200">
+                          {formatDate(device.last_sync)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Registered</p>
+                        <p className="mt-1 font-medium text-slate-200">
+                          {formatDate(device.created_at)}
+                        </p>
+                      </div>
+                      <div>
+                        <p className="text-slate-500">Status</p>
+                        <p className="mt-1 font-medium text-emerald-300">Active</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Edit Device Name Modal */}
+      {showEditModal && editingDevice && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
+            <div className="mb-3 sm:mb-4 flex items-center justify-between">
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Edit Device Name</h2>
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingDevice(null);
+                  setNewDeviceName('');
+                }}
+                className="rounded-lg p-2 hover:bg-slate-800 touch-manipulation active:scale-95"
+              >
+                <X className="h-5 w-5 text-slate-400" />
+              </button>
+            </div>
+
+            <div className="space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-slate-300 mb-1">
+                  Device Name
+                </label>
+                <input
+                  type="text"
+                  value={newDeviceName}
+                  onChange={(e) => setNewDeviceName(e.target.value)}
+                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
+                  placeholder="Enter device name"
+                />
+              </div>
+
+              <div className="text-xs text-slate-500">
+                <p>Type: {editingDevice.type === 'mobile' ? 'Mobile' : 'Desktop'}</p>
+                <p>Platform: {getPlatformLabel(editingDevice.platform)}</p>
+              </div>
+            </div>
+
+            <div className="mt-6 flex gap-2">
+              <button
+                onClick={() => {
+                  setShowEditModal(false);
+                  setEditingDevice(null);
+                  setNewDeviceName('');
+                }}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSaveDeviceName}
+                className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
+              >
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Modal */}
+      {showDeleteConfirm && deviceToDelete && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
+            <div className="mb-3 sm:mb-4 flex items-center gap-3">
+              <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
+                <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
+              </div>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">Delete Device</h2>
+            </div>
+
+            <p className="mb-4 sm:mb-6 text-sm text-slate-400">
+              Are you sure you want to delete <strong>{deviceToDelete.name}</strong>? This device
+              will need to re-register to access BaluHost.
+            </p>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => {
+                  setShowDeleteConfirm(false);
+                  setDeviceToDelete(null);
+                }}
+                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={confirmDeleteDevice}
+                className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

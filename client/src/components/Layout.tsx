@@ -1,6 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { type ReactNode, useState } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
+import { localApi } from '../lib/localApi';
 
 interface LayoutProps {
   children: ReactNode;
@@ -96,6 +97,8 @@ const navIcon = {
 export default function Layout({ children, user, onLogout }: LayoutProps) {
   const location = useLocation();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [shutdownPending, setShutdownPending] = useState(false);
+  const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
 
   const navItems = [
     {
@@ -112,8 +115,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     },
     {
       path: '/system',
-      label: 'Disk Monitor',
-      description: 'Activity',
+      label: 'System Monitor',
+      description: 'CPU, RAM, Netzwerk, Disk I/O',
       icon: navIcon.system
     },
     {
@@ -129,15 +132,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       icon: navIcon.shares
     },
     {
-      path: '/sync',
-      label: 'Sync',
-      description: 'File Sync',
-      icon: navIcon.sync
-    },
-    {
-      path: '/mobile-devices',
-      label: 'Mobile Apps',
-      description: 'Device Registration',
+      path: '/sync-prototype',
+      label: 'Device Management',
+      description: 'Mobile & Desktop',
       icon: navIcon.mobile
     },
     {
@@ -341,6 +338,21 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         </aside>
 
         <div className="flex flex-1 flex-col lg:pl-72">
+          {shutdownPending && (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+              <div className="flex flex-col items-center gap-4 rounded-2xl bg-slate-900/90 border border-slate-800 p-6">
+                <div className="h-12 w-12 flex items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
+                  <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
+                    <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v4M12 18v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M2 12h4M18 12h4M4.2 19.8l2.8-2.8M17 7l2.8-2.8" />
+                  </svg>
+                </div>
+                <div className="text-center">
+                  <p className="font-semibold">Shutting down</p>
+                  <p className="text-sm text-slate-100-tertiary">{shutdownMessage}</p>
+                </div>
+              </div>
+            </div>
+          )}
           <header className="fixed top-0 right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10">
             <div className="flex items-center justify-between">
               {/* Mobile Header Left */}
@@ -374,6 +386,45 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                 <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
                   {user.username.charAt(0).toUpperCase()}
                 </div>
+                {user.role === 'admin' && (
+                  <button
+                    onClick={async () => {
+                      const ok = window.confirm('Server herunterfahren? Alle Dienste werden beendet. Fortfahren?');
+                      if (!ok) return;
+                      setShutdownPending(true);
+                      setShutdownMessage('Shutdown gestartet — warte auf Bestätigung...');
+
+                      try {
+                        const res = await localApi.shutdown();
+                        const eta = (res && (res as any).eta_seconds) || 1;
+                        setShutdownMessage(`Shutdown geplant — beendet in ~${eta}s`);
+
+                        // Wait for shutdown to complete, then logout
+                        setTimeout(() => {
+                          setShutdownPending(false);
+                          onLogout();
+                        }, (eta + 1) * 1000);
+                      } catch (err: any) {
+                        console.error('Shutdown API call error (may be expected):', err);
+                        setShutdownMessage('Server wird heruntergefahren...');
+
+                        // Still logout after a short delay
+                        setTimeout(() => {
+                          setShutdownPending(false);
+                          onLogout();
+                        }, 2000);
+                      }
+                    }}
+                    className="rounded-xl border border-rose-600 bg-rose-600/10 px-3 py-2 text-sm font-medium text-rose-400 transition hover:border-rose-500/50 md:px-4"
+                  >
+                    <span className="hidden sm:inline">Shutdown</span>
+                    <span className="sm:hidden">
+                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-4 w-4">
+                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v10M6 12h12" />
+                      </svg>
+                    </span>
+                  </button>
+                )}
                 <button
                   onClick={onLogout}
                   className="rounded-xl border border-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100 md:px-4"

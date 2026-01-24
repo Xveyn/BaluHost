@@ -15,6 +15,15 @@ from app.models.vpn_profile import VPNProfile, VPNType
 from app.models.refresh_token import RefreshToken
 from app.models.tapo_device import TapoDevice
 from app.models.power_sample import PowerSample
+from app.models.monitoring import (
+    MetricType,
+    CpuSample,
+    MemorySample,
+    NetworkSample,
+    DiskIoSample,
+    ProcessSample,
+    MonitoringConfig,
+)
 
 __all__ = [
     "Base",
@@ -37,5 +46,12 @@ __all__ = [
     "VPNType",
     "RefreshToken",
     "TapoDevice",
-    "PowerSample"
+    "PowerSample",
+    "MetricType",
+    "CpuSample",
+    "MemorySample",
+    "NetworkSample",
+    "DiskIoSample",
+    "ProcessSample",
+    "MonitoringConfig",
 ]

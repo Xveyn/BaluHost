@@ -1,4 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request
+import threading
+import os
+import logging
+import signal
 
 from app.api import deps
 from app.schemas.system import (
@@ -26,6 +30,7 @@ from app.services import raid as raid_service
 from app.services import smart as smart_service
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
+from app.services.audit_logger import get_audit_logger
 
 router = APIRouter()
 
@@ -84,6 +89,58 @@ async def get_telemetry_history(
     _: UserPublic = Depends(deps.get_current_user),
 ) -> TelemetryHistoryResponse:
     return telemetry_service.get_history()
+
+
+@router.post("/shutdown")
+async def shutdown_system(
+    user: UserPublic = Depends(deps.get_current_admin),
+) -> dict:
+    """Schedule a graceful application shutdown (admin only).
+
+    This endpoint returns immediately and schedules a short-timer that
+    will exit the process, allowing the response to be delivered to the
+    caller. An audit log entry is written.
+    """
+    audit = get_audit_logger()
+    audit.log_system_event(action="shutdown_initiated", user=user.username, details={"method": "api"}, success=True)
+    logging.getLogger(__name__).info("Shutdown requested via API by user %s", user.username)
+
+    def _perform_exit() -> None:
+        logging.getLogger(__name__).info("Performing graceful shutdown (sending SIGINT to process)")
+        try:
+            current_pid = os.getpid()
+            parent_pid = os.getppid()
+
+            # Try to send SIGTERM to parent process (start_dev.py) first
+            # This ensures both backend and frontend are shut down
+            try:
+                import psutil
+                parent = psutil.Process(parent_pid)
+                parent_name = parent.name().lower()
+
+                # Check if parent is Python (start_dev.py)
+                if 'python' in parent_name:
+                    logging.getLogger(__name__).info(f"Sending SIGTERM to parent process {parent_pid} ({parent_name})")
+                    os.kill(parent_pid, signal.SIGTERM)
+                    return
+            except Exception as e:
+                logging.getLogger(__name__).debug(f"Could not terminate parent: {e}")
+
+            # Fallback: terminate current process
+            os.kill(current_pid, signal.SIGINT)
+        except Exception as e:
+            # Fallback to hard exit if signal fails
+            logging.getLogger(__name__).warning(f"Signal failed: {e}, falling back to os._exit")
+            os._exit(0)
+
+    # Give 1 second for the HTTP response to be delivered and for proxies
+    # to flush. Then trigger shutdown.
+    eta = 1
+    timer = threading.Timer(float(eta), _perform_exit)
+    timer.daemon = True
+    timer.start()
+
+    return {"message": "Shutdown scheduled", "initiated_by": user.username, "eta_seconds": eta}
 
 
 @router.get("/smart/status", response_model=SmartStatusResponse)

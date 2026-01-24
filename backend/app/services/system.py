@@ -22,6 +22,7 @@ from app.schemas.system import (
 )
 from app.services import files as file_service
 from app.services import telemetry as telemetry_service
+from app.services.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 
@@ -184,12 +185,10 @@ def get_system_info() -> SystemInfo:
             cpu_usage = 18.5
         cpu_cores = psutil.cpu_count(logical=True) or 4
         
-        # CPU Frequency
-        try:
-            cpu_freq = psutil.cpu_freq()
-            cpu_frequency = cpu_freq.current if cpu_freq else None
-        except Exception:
-            cpu_frequency = None
+        # CPU Frequency and Temperature from sensor service
+        cpu_sensor_data = get_cpu_sensor_data()
+        cpu_frequency = cpu_sensor_data.frequency_mhz
+        cpu_temperature = cpu_sensor_data.temperature_celsius
 
         # Uptime: Use server uptime (since backend started)
         uptime_seconds = telemetry_service.get_server_uptime()
@@ -199,7 +198,7 @@ def get_system_info() -> SystemInfo:
         ram_speed, ram_type = _get_memory_info()
 
         return SystemInfo(
-            cpu=CPUStats(usage=cpu_usage, cores=cpu_cores, frequency_mhz=cpu_frequency, model=cpu_model),
+            cpu=CPUStats(usage=cpu_usage, cores=cpu_cores, frequency_mhz=cpu_frequency, temperature_celsius=cpu_temperature, model=cpu_model),
             memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
             disk=DiskStats(total=total_storage, used=used_storage, free=free_storage),
             uptime=uptime_seconds,
@@ -209,8 +208,11 @@ def get_system_info() -> SystemInfo:
     try:
         cpu_usage = psutil.cpu_percent(interval=0.1)
         cpu_count = psutil.cpu_count(logical=True) or 1
-        cpu_freq = psutil.cpu_freq()
-        cpu_frequency = cpu_freq.current if cpu_freq else None
+        
+        # Use sensor service for frequency and temperature
+        cpu_sensor_data = get_cpu_sensor_data()
+        cpu_frequency = cpu_sensor_data.frequency_mhz
+        cpu_temperature = cpu_sensor_data.temperature_celsius
 
         virtual_mem = psutil.virtual_memory()
         disk_usage = psutil.disk_usage(settings.nas_storage_path)
@@ -219,6 +221,7 @@ def get_system_info() -> SystemInfo:
         cpu_usage = 12.5
         cpu_count = 4
         cpu_frequency = None
+        cpu_temperature = None
         virtual_mem = psutil._common.svmem(  # type: ignore[attr-defined]
             total=8 * 1024 ** 3,
             available=6 * 1024 ** 3,
@@ -258,7 +261,7 @@ def get_system_info() -> SystemInfo:
     ram_speed, ram_type = _get_memory_info()
 
     return SystemInfo(
-        cpu=CPUStats(usage=effective_cpu_usage, cores=cpu_count, frequency_mhz=cpu_frequency, model=cpu_model),
+        cpu=CPUStats(usage=effective_cpu_usage, cores=cpu_count, frequency_mhz=cpu_frequency, temperature_celsius=cpu_temperature, model=cpu_model),
         memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
         disk=DiskStats(total=disk_usage.total, used=disk_usage.used, free=disk_usage.free),
         uptime=server_uptime,

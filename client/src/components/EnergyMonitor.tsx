@@ -9,7 +9,6 @@ import React, { useState, useEffect } from 'react';
 import {
   Zap,
   TrendingUp,
-  TrendingDown,
   Clock,
   DollarSign,
   AlertCircle,
@@ -20,25 +19,21 @@ import {
 import {
   LineChart,
   Line,
-  BarChart,
-  Bar,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-  Legend
 } from 'recharts';
 import toast from 'react-hot-toast';
 import {
   getEnergyDashboard,
   getEnergyCost,
   getHourlySamples,
-  EnergyDashboard,
-  EnergyCostEstimate,
-  HourlySample
 } from '../api/energy';
-import { listTapoDevices, TapoDevice, getPowerHistory } from '../api/power';
+import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
+import { listTapoDevices, getPowerHistory } from '../api/power';
+import type { TapoDevice } from '../api/power';
 
 type TimeWindow = '10min' | '1hour' | '24hours' | '7days';
 

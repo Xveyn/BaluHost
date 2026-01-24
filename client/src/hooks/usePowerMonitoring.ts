@@ -6,7 +6,8 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
-import { getPowerHistory, PowerMonitoringResponse } from '../api/power';
+import { getPowerHistory } from '../api/power';
+import type { PowerMonitoringResponse } from '../api/power';
 
 const POLL_INTERVAL = 5000; // 5 seconds
 

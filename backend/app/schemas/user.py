@@ -4,7 +4,7 @@ import re
 
 class UserBase(BaseModel):
     username: str
-    email: EmailStr
+    email: EmailStr | None = None
 
 
 class UserCreate(UserBase):
@@ -65,6 +65,7 @@ class UserPublic(UserBase):
     is_active: bool
     created_at: str
     updated_at: str | None = None
+    # email is already inherited as EmailStr | None from UserBase
 
 
 class UsersResponse(BaseModel):

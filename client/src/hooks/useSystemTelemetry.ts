@@ -6,6 +6,7 @@ interface CpuInfo {
   cores: number;
   frequency_mhz?: number | null;
   model?: string | null;
+  temperature_celsius?: number | null;
 }
 
 interface MemoryInfo {

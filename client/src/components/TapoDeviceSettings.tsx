@@ -11,9 +11,8 @@ import {
   listTapoDevices,
   createTapoDevice,
   deleteTapoDevice,
-  TapoDevice,
-  TapoDeviceCreate,
 } from '../api/power';
+import type { TapoDevice, TapoDeviceCreate } from '../api/power';
 
 const TapoDeviceSettings: React.FC = () => {
   const [devices, setDevices] = useState<TapoDevice[]>([]);

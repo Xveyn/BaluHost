@@ -612,14 +612,16 @@ DELETE /api/users/{id}      - Delete user (Admin)
 
 ### 8. System Monitoring & Telemetry
 
-**Services:** `app/services/system.py`, `app/services/telemetry.py`, `app/services/disk_monitor.py`  
-**API Route:** `app/api/routes/system.py`  
+**Services:** `app/services/system.py`, `app/services/telemetry.py`, `app/services/sensors.py`, `app/services/disk_monitor.py`  
+**API Route:** `app/api/routes/system.py`, `app/api/routes/metrics.py` (Prometheus)  
 **Schemas:** `app/schemas/system.py`
 
 #### Implemented Features:
 
 ##### 8.1 System Info
 - CPU usage (psutil)
+- **CPU frequency** (MHz, psutil + sysfs fallback)
+- **CPU temperature** (°C, psutil sensors + hwmon fallback)
 - RAM usage (Total, Used, Free)
 - Network statistics (Sent/Received)
 - Uptime & operating system info
@@ -628,9 +630,42 @@ DELETE /api/users/{id}      - Delete user (Admin)
 - **Background Task** collects metrics every N seconds
 - Configurable: `TELEMETRY_INTERVAL_SECONDS` (Default: 3s)
 - History size: `TELEMETRY_HISTORY_SIZE` (Default: 60 Samples)
-- Metrics: CPU%, RAM%, Network TX/RX
+- Metrics: CPU%, **CPU frequency (MHz)**, **CPU temperature (°C)**, RAM%, Network TX/RX
 
-##### 8.3 Disk I/O Monitor
+##### 8.3 CPU Sensor Service (`sensors.py`)
+- **Primary Method:** psutil (cross-platform)
+- **Linux Fallback:** sysfs (`/sys/devices/system/cpu/cpufreq/`, `/sys/class/hwmon/`)
+- **Temperature Sources:** hwmon sensors (coretemp, k10temp, cpu_thermal)
+- **Frequency Sources:** cpufreq scaling, /proc/cpuinfo
+- **Graceful Degradation:** Warning-level logging for missing sensors, continues with available data
+
+##### 8.4 Prometheus Metrics
+- **CPU Metrics:** `baluhost_cpu_usage_percent`, `baluhost_cpu_frequency_mhz`, `baluhost_cpu_temperature_celsius`
+- **Memory Metrics:** `baluhost_memory_*_bytes`, `baluhost_memory_usage_percent`
+- **Disk Metrics:** I/O, SMART health, temperatures
+- **RAID Metrics:** Array status, sync progress
+- **Application Metrics:** HTTP requests, database stats, user activity
+
+##### 8.5 Hardware Requirements & Setup
+**Linux Systems (Recommended):**
+```bash
+# Install lm-sensors for enhanced temperature monitoring
+sudo apt update && sudo apt install lm-sensors
+
+# Detect and load sensor modules (run once)
+sudo sensors-detect
+# Follow prompts and accept recommended modules
+
+# Test sensors
+sensors
+```
+
+**Fallback Operation:**
+- Without lm-sensors: Uses psutil-only (may have limited temperature data)
+- In containers/VMs: Falls back to available system interfaces
+- Dev-mode: Includes sensor diagnostics in logs
+
+##### 8.6 Disk I/O Monitor
 - **Real-time monitoring** of all physical disks
 - Sampling: 1 second
 - History: 120 samples (2 minutes)
@@ -642,12 +677,12 @@ DELETE /api/users/{id}      - Delete user (Admin)
   - Linux: `sda`, `sdb`, `nvme0n1`, ...
 - **Audit Logging:** Automatic summary every 60 seconds
 
-##### 8.4 Storage Info
+##### 8.7 Storage Info
 - Total storage & usage
 - Available storage
 - Quota information
 
-##### 8.5 Process List
+##### 8.8 Process List
 - Top N processes by CPU/RAM
 - PID, Name, CPU%, Memory%
 

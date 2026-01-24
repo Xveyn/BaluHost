@@ -139,23 +139,27 @@ export default function UserManagement() {
     if (!token) return;
 
     // Pflichtfelder validieren
-    if (!formData.username || !formData.email || !formData.password) {
+    if (!formData.username || !formData.password) {
       toast.error('Bitte alle Pflichtfelder ausfüllen!');
       return;
     }
-    // Email Format grob prüfen
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email)) {
+    // Email Format grob prüfen (nur wenn ausgefüllt)
+    if (formData.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email)) {
       toast.error('Bitte eine gültige E-Mail-Adresse eingeben!');
       return;
     }
 
     // Request-Body zusammenbauen
-    const payload = {
+    const payload: any = {
       username: formData.username,
-      email: formData.email,
       password: formData.password,
       role: formData.role || 'user'
     };
+
+    // Email nur hinzufügen wenn ausgefüllt
+    if (formData.email) {
+      payload.email = formData.email;
+    }
 
     try {
       const response = await fetch(buildApiUrl('/api/users/'), {
@@ -709,14 +713,14 @@ export default function UserManagement() {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Email
+                  Email <span className="text-slate-500">(optional)</span>
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter email"
+                  placeholder="Enter email (optional)"
                 />
               </div>
 

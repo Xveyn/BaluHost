@@ -23,6 +23,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, List, Tuple
+from typing import Iterable
 
 ROOT_DIR = Path(__file__).resolve().parent
 BACKEND_DIR = ROOT_DIR / "backend"
@@ -183,6 +184,78 @@ def terminate_processes(processes: List[ProcessInfo]) -> None:
 def main() -> int:
     processes: List[ProcessInfo] = []
     backend_python = resolve_backend_python()
+
+    # On Linux, attempt to detect and terminate lingering frontend/backend
+    # processes that could interfere with a clean dev start.
+    def kill_conflicting_processes(patterns: Iterable[str], grace_seconds: int = 5) -> None:
+        """Attempt to gracefully terminate processes matching any of the
+        provided patterns (applies only on POSIX systems).
+
+        Uses `pkill -f`/`pgrep -f` when available; otherwise falls back to
+        sending signals via os.kill. After `grace_seconds` forces SIGKILL
+        for any remaining matches.
+        """
+        if os.name == "nt":
+            return
+
+        pgrep = shutil.which("pgrep")
+        pkill = shutil.which("pkill")
+
+        def _run_pgrep(pattern: str) -> List[int]:
+            if not pgrep:
+                return []
+            try:
+                res = subprocess.run([pgrep, "-f", pattern], capture_output=True, text=True)
+                if res.returncode != 0 or not res.stdout:
+                    return []
+                return [int(x) for x in res.stdout.split() if x.strip()]
+            except Exception:
+                return []
+
+        for pat in patterns:
+            try:
+                print(f"[info] Checking for existing processes matching: {pat}")
+                if pkill:
+                    # Try graceful terminate via pkill
+                    subprocess.run([pkill, "-f", "-TERM", pat], check=False)
+                else:
+                    for pid in _run_pgrep(pat):
+                        try:
+                            os.kill(pid, signal.SIGTERM)
+                        except Exception:
+                            pass
+            except Exception as e:
+                print(f"[debug] Error while attempting to terminate pattern {pat}: {e}")
+
+        # Wait a short grace period and force kill remaining matching processes
+        time.sleep(grace_seconds)
+
+        for pat in patterns:
+            try:
+                remaining = _run_pgrep(pat)
+                if not remaining and pkill:
+                    # pkill -0 can be used to detect, but we already checked
+                    pass
+                if remaining:
+                    print(f"[warning] Forcing kill for remaining processes matching: {pat}")
+                    if pkill:
+                        subprocess.run([pkill, "-f", "-KILL", pat], check=False)
+                    else:
+                        for pid in remaining:
+                            try:
+                                os.kill(pid, signal.SIGKILL)
+                            except Exception:
+                                pass
+            except Exception as e:
+                print(f"[debug] Error while forcing kill for pattern {pat}: {e}")
+
+    # Only run the kill step on POSIX/Linux to avoid Windows side effects
+    if os.name != "nt":
+        kill_patterns = ["uvicorn", "vite", "npm run dev", "node .*vite", "node .*@vite"]
+        try:
+            kill_conflicting_processes(kill_patterns, grace_seconds=3)
+        except Exception as e:
+            print(f"[warning] Failed to clean up existing processes: {e}")
 
     exit_codes: Dict[str, int] = {}
 

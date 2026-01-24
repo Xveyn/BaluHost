@@ -709,6 +709,11 @@ async def custom_swagger_ui_html():
         </style>
     </head>
     <body>
+        <div style="max-width:900px;margin:20px auto;padding:10px 20px;color:#cbd5e1;">
+            <h2 style="color:#e2e8f0;margin-bottom:8px;">Operational Notes</h2>
+            <p style="color:#94a3b8;margin-top:0;">This API exposes administrative operations such as a controlled <strong>/api/system/shutdown</strong> endpoint (admin-only). Calling shutdown schedules a graceful application stop and returns an ETA in seconds so clients can display a shutdown notice.</p>
+            <p style="color:#94a3b8;margin-top:6px;">Energy-monitoring endpoints provide per-device power metrics (e.g. for Tapo smart plugs). Use the <code>/api/energy/*</code> endpoints to retrieve dashboard, hourly samples and cost estimates. Live power is collected by the power monitor service.</p>
+        </div>
         <div id="swagger-ui"></div>
         <script src="https://cdn.jsdelivr.net/npm/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
         <script>

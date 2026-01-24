@@ -15,7 +15,7 @@ import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
 import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
-import SyncPrototype from './pages/SyncPrototype';
+import DeviceManagement from './pages/DeviceManagement';
 import MobileDevicesPage from './pages/MobileDevicesPage';
 import { RemoteServersPage } from './pages/RemoteServersPage';
 import Layout from './components/Layout';
@@ -32,11 +32,79 @@ interface User {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [backendReady, setBackendReady] = useState(false);
+  const [backendCheckAttempts, setBackendCheckAttempts] = useState(0);
 
+  // Check if backend is ready before showing login
   useEffect(() => {
+    let isMounted = true;
+    let timeoutId: ReturnType<typeof setTimeout>;
+    let attemptCount = 0;
+    const MAX_ATTEMPTS = 40; // Max 40 attempts = 80 seconds
+    const RETRY_INTERVAL = 2000; // 2 seconds between attempts
+
+    const checkBackendHealth = async () => {
+      // Stop if max attempts reached
+      if (attemptCount >= MAX_ATTEMPTS) {
+        console.error('Backend did not respond after', MAX_ATTEMPTS, 'attempts');
+        if (isMounted) {
+          setBackendReady(true); // Show login anyway after timeout
+        }
+        return;
+      }
+
+      attemptCount++;
+      if (isMounted) {
+        setBackendCheckAttempts(attemptCount);
+      }
+
+      try {
+        // Try health endpoint with short timeout
+        const controller = new AbortController();
+        const timeoutMs = 2000;
+        const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+        const response = await fetch(buildApiUrl('/api/health'), {
+          signal: controller.signal,
+          headers: {
+            'Accept': 'application/json'
+          }
+        });
+
+        clearTimeout(timeout);
+
+        if (response.ok && isMounted) {
+          console.log(`Backend is ready (attempt ${attemptCount}/${MAX_ATTEMPTS})`);
+          setBackendReady(true);
+          return;
+        }
+      } catch (err) {
+        // Backend not ready yet
+        console.log(`Backend check attempt ${attemptCount}/${MAX_ATTEMPTS}: not ready yet`);
+      }
+
+      // Schedule next check if we haven't reached max attempts
+      if (isMounted && attemptCount < MAX_ATTEMPTS) {
+        timeoutId = setTimeout(checkBackendHealth, RETRY_INTERVAL);
+      }
+    };
+
+    // Start the first check immediately
+    checkBackendHealth();
+
+    return () => {
+      isMounted = false;
+      if (timeoutId) clearTimeout(timeoutId);
+    };
+  }, []); // Empty dependency array - only run once on mount
+
+  // Once backend is ready, verify token
+  useEffect(() => {
+    if (!backendReady) return;
+
     const token = localStorage.getItem('token');
     console.log('App init - token exists:', !!token);
-    
+
     if (token) {
       console.log('Verifying token with /api/auth/me');
       fetch(buildApiUrl('/api/auth/me'), {
@@ -71,7 +139,7 @@ function App() {
       console.log('No token found, showing login');
       setLoading(false);
     }
-  }, []);
+  }, [backendReady]);
 
   const handleLogin = (userData: User, token: string) => {
     console.log('Login successful - User:', userData);
@@ -96,6 +164,24 @@ function App() {
       }, 450);
       return () => clearInterval(timer);
     }, []);
+
+    const getMessage = () => {
+      if (!backendReady) {
+        if (backendCheckAttempts === 0) {
+          return 'Connecting to backend';
+        } else if (backendCheckAttempts < 5) {
+          return 'Backend starting';
+        } else if (backendCheckAttempts < 10) {
+          return 'Waiting for backend services';
+        } else if (backendCheckAttempts < 40) {
+          return 'Backend initialization in progress';
+        } else {
+          return 'Backend timeout - trying anyway';
+        }
+      }
+      return 'Loading system insights';
+    };
+
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
         <div className="pointer-events-none absolute inset-0">
@@ -106,14 +192,43 @@ function App() {
           <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-indigo-500 to-violet-600 text-xl font-semibold">
             BH
           </div>
-            <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BalùHost</p>
-            <p className="text-lg font-medium text-white">Loading system insights{dots}</p>
+          <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BalùHost</p>
+          <p className="text-lg font-medium text-white">{getMessage()}{dots}</p>
+          {!backendReady && backendCheckAttempts < 40 && (
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-amber-400 animate-pulse" />
+                <span className="text-xs text-slate-400">
+                  Attempt {backendCheckAttempts + 1}/40
+                </span>
+              </div>
+              {backendCheckAttempts > 10 && backendCheckAttempts < 40 && (
+                <p className="text-xs text-slate-500 mt-2 max-w-xs text-center">
+                  Backend is taking longer than usual. Please ensure the server is running.
+                </p>
+              )}
+            </div>
+          )}
+          {!backendReady && backendCheckAttempts >= 40 && (
+            <div className="mt-2 flex flex-col items-center gap-2">
+              <div className="flex items-center gap-2">
+                <div className="h-2 w-2 rounded-full bg-rose-400" />
+                <span className="text-xs text-rose-400">
+                  Backend did not respond
+                </span>
+              </div>
+              <p className="text-xs text-slate-500 mt-2 max-w-xs text-center">
+                Proceeding to login anyway. If login fails, check if the backend is running.
+              </p>
+            </div>
+          )}
         </div>
       </div>
     );
   };
 
-  if (loading) return <LoadingScreen />;
+  // Show loading screen if backend is not ready or if we're still verifying the token
+  if (!backendReady || loading) return <LoadingScreen />;
 
   return (
     <Router>
@@ -273,7 +388,7 @@ function App() {
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
-                <SyncPrototype />
+                <DeviceManagement />
               </Layout>
             ) : (
               <Navigate to="/login" />

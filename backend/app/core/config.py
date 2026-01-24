@@ -91,6 +91,13 @@ class Settings(BaseSettings):
     telemetry_interval_seconds: float = 2.0
     telemetry_history_size: int = 90
 
+    # System monitoring configuration
+    monitoring_sample_interval: float = 5.0  # Seconds between samples
+    monitoring_buffer_size: int = 120  # In-memory buffer size (10 min at 5s)
+    monitoring_db_persist_interval: int = 12  # Persist to DB every N samples (1 min at 5s)
+    monitoring_default_retention_hours: int = 168  # 7 days default retention
+    monitoring_cleanup_interval_hours: int = 6  # Run cleanup every N hours
+
     # Database configuration
     database_url: str | None = None
     database_type: str = "sqlite"

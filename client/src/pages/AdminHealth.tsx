@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import { buildApiUrl } from '../lib/api';
 
 export default function AdminHealth() {

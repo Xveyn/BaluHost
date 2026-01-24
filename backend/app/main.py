@@ -26,6 +26,7 @@ from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry, sync_background, raid as raid_service
 from app.services import smart as smart_service
 from app.services import power_monitor
+from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
@@ -71,6 +72,8 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     await telemetry.start_telemetry_monitor()
     await power_monitor.start_power_monitor(get_db)
     disk_monitor.start_monitoring()
+    await start_monitoring(get_db)
+    logger.info("System monitoring started")
     await sync_background.start_sync_scheduler()
     logger.info("Sync scheduler started")
     
@@ -153,6 +156,8 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
                 await telemetry.stop_telemetry_monitor()
                 await power_monitor.stop_power_monitor()
                 disk_monitor.stop_monitoring()
+                await stop_monitoring()
+                logger.info("System monitoring stopped")
                 await sync_background.stop_sync_scheduler()
                 logger.info("Sync scheduler stopped")
         except Exception:
@@ -221,8 +226,28 @@ def create_app() -> FastAPI:
                     return JSONResponse(status_code=400, content={"detail": msg})
         except Exception:
             pass
+
+        # Convert errors to JSON-serializable format (fixes Python 3.13 compatibility)
+        serializable_errors = []
+        try:
+            errors = exc.errors()
+            for error in errors:
+                serializable_error = {}
+                for key, value in error.items():
+                    # Convert non-serializable objects (like ValueError) to strings
+                    if isinstance(value, (str, int, float, bool, type(None))):
+                        serializable_error[key] = value
+                    elif isinstance(value, (list, tuple)):
+                        serializable_error[key] = [str(v) if not isinstance(v, (str, int, float, bool, type(None))) else v for v in value]
+                    else:
+                        serializable_error[key] = str(value)
+                serializable_errors.append(serializable_error)
+        except Exception:
+            # Fallback: convert entire error to string
+            serializable_errors = [{"msg": str(exc)}]
+
         # Default behavior: return standard 422 response body
-        return JSONResponse(status_code=422, content={"detail": exc.errors()})
+        return JSONResponse(status_code=422, content={"detail": serializable_errors})
 
     app.add_exception_handler(RequestValidationError, _validation_exception_handler)
 

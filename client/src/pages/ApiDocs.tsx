@@ -278,6 +278,60 @@ const apiSections: ApiSection[] = [
     icon: <Activity className="w-5 h-5" />,
     endpoints: [
       {
+        method: 'POST',
+        path: '/api/system/shutdown',
+        description: 'Schedule a graceful application shutdown (admin only). Returns ETA in seconds',
+        requiresAuth: true,
+        response: `{
+  "message": "Shutdown scheduled",
+  "initiated_by": "admin",
+  "eta_seconds": 3
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/system/info',
+        description: 'Get system information and status',
+        requiresAuth: true
+      }
+    ]
+  },
+  {
+    title: 'Energy / Power Monitor',
+    icon: <Shield className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/energy/dashboard/{device_id}',
+        description: 'Get energy dashboard for a device (e.g. smart plug)',
+        requiresAuth: true,
+        response: `{
+  "device_id": 1,
+  "device_name": "Tapo Plug",
+  "current_watts": 4.2,
+  "is_online": true,
+  "hourly_samples": [ { "hour": "2026-01-24T01:00:00Z", "avg_watts": 3.5 } ]
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/energy/hourly/{device_id}?hours=24',
+        description: 'Hourly averaged power samples for the given device (useful for charting)',
+        requiresAuth: true
+      },
+      {
+        method: 'GET',
+        path: '/api/energy/cost/{device_id}?period=today&cost_per_kwh=0.40',
+        description: 'Estimate cost for given period',
+        requiresAuth: true
+      }
+    ]
+  },
+  {
+    title: 'System',
+    icon: <Activity className="w-5 h-5" />,
+    endpoints: [
+      {
         method: 'GET',
         path: '/api/system/info',
         description: 'Get System Info',

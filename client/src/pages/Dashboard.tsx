@@ -213,6 +213,11 @@ export default function Dashboard() {
       : null;
   }, [systemInfo]);
 
+  const cpuTemperature = useMemo(() => {
+    const t = systemInfo?.cpu?.temperature_celsius;
+    return typeof t === 'number' ? `${t.toFixed(1)}°C` : null;
+  }, [systemInfo]);
+
   const cpuModel = useMemo(() => {
     return systemInfo?.cpu?.model || null;
   }, [systemInfo]);
@@ -234,15 +239,15 @@ export default function Dashboard() {
   const quickStats = [
     {
       id: 'cpu',
-      title: 'CPU Usage',
+      title: 'CPU',
       value: `${systemStats.cpuUsage.toFixed(1)}%`,
-      meta: cpuModel 
+      meta: cpuModel
         ? cpuModel
-        : (cpuFrequency 
-          ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}`
-          : `${systemStats.cpuCores || 0} cores active`),
-      submeta: cpuModel && cpuFrequency 
-        ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}`
+        : (cpuFrequency
+          ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}${cpuTemperature ? ` • ${cpuTemperature}` : ''}`
+          : `${systemStats.cpuCores || 0} cores active${cpuTemperature ? ` • ${cpuTemperature}` : ''}`),
+      submeta: cpuModel && cpuFrequency
+        ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}${cpuTemperature ? ` • ${cpuTemperature}` : ''}`
         : undefined,
       delta: formatDelta(cpuDelta),
       accent: 'from-violet-500 to-fuchsia-500',
