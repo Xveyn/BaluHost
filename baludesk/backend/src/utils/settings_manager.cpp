@@ -2,6 +2,16 @@
 #include "logger.h"
 #include <fstream>
 #include <filesystem>
+#include <chrono>
+#include <cstdlib>
+#include <ctime>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <objbase.h>
+#else
+#include <unistd.h>
+#endif
 
 namespace baludesk {
 
@@ -43,14 +53,14 @@ void SettingsManager::initializeDefaults() {
         {"serverPort", 8000},
         {"username", ""},
         {"rememberPassword", false},
-        
+
         // Sync Behavior
         {"autoStartSync", true},
         {"syncInterval", 60},
         {"maxConcurrentTransfers", 4},
         {"bandwidthLimitMbps", 0},
         {"conflictResolution", "ask"},
-        
+
         // UI Preferences
         {"theme", "dark"},
         {"language", "en"},
@@ -58,10 +68,15 @@ void SettingsManager::initializeDefaults() {
         {"showNotifications", true},
         {"notifyOnSyncComplete", true},
         {"notifyOnErrors", true},
-        
+
         // Advanced
         {"enableDebugLogging", false},
-        {"chunkSizeMb", 10}
+        {"chunkSizeMb", 10},
+
+        // Device Registration
+        {"deviceId", ""},
+        {"deviceName", ""},
+        {"deviceRegistered", false}
     };
 }
 
@@ -184,6 +199,122 @@ bool SettingsManager::isDebugLoggingEnabled() const {
 
 int SettingsManager::getChunkSizeMb() const {
     return settings_.value("chunkSizeMb", 10);
+}
+
+// Device Registration
+std::string SettingsManager::getDeviceId() {
+    std::string deviceId = settings_.value("deviceId", "");
+
+    // Generate and save if not exists
+    if (deviceId.empty()) {
+        deviceId = generateDeviceId();
+        settings_["deviceId"] = deviceId;
+        saveSettings();
+        Logger::info("Generated new device ID: {}", deviceId);
+    }
+
+    return deviceId;
+}
+
+std::string SettingsManager::getDeviceName() const {
+    std::string name = settings_.value("deviceName", "");
+
+    // Return hostname as fallback if name not set
+    if (name.empty()) {
+        return const_cast<SettingsManager*>(this)->getSystemHostname();
+    }
+
+    return name;
+}
+
+void SettingsManager::setDeviceName(const std::string& name) {
+    settings_["deviceName"] = name;
+    saveSettings();
+    Logger::info("Device name updated: {}", name);
+}
+
+bool SettingsManager::isDeviceRegistered() const {
+    return settings_.value("deviceRegistered", false);
+}
+
+void SettingsManager::setDeviceRegistered(bool registered) {
+    settings_["deviceRegistered"] = registered;
+    saveSettings();
+    Logger::info("Device registration status: {}", registered ? "registered" : "unregistered");
+}
+
+std::string SettingsManager::generateDeviceId() {
+    // Generate UUID v4 using platform-specific methods
+    std::string uuid;
+
+    #ifdef _WIN32
+    // Windows: Use CoCreateGuid
+    #include <objbase.h>
+    GUID guid;
+    if (CoCreateGuid(&guid) == S_OK) {
+        char buffer[40];
+        snprintf(buffer, sizeof(buffer),
+                "%08lx-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
+                guid.Data1, guid.Data2, guid.Data3,
+                guid.Data4[0], guid.Data4[1], guid.Data4[2], guid.Data4[3],
+                guid.Data4[4], guid.Data4[5], guid.Data4[6], guid.Data4[7]);
+        uuid = buffer;
+    }
+    #else
+    // Linux/macOS: Read from /proc/sys/kernel/random/uuid or use uuidgen
+    std::ifstream uuidFile("/proc/sys/kernel/random/uuid");
+    if (uuidFile.is_open()) {
+        std::getline(uuidFile, uuid);
+        uuidFile.close();
+    } else {
+        // Fallback: Try uuidgen command
+        FILE* pipe = popen("uuidgen", "r");
+        if (pipe) {
+            char buffer[40];
+            if (fgets(buffer, sizeof(buffer), pipe)) {
+                uuid = buffer;
+                // Remove newline
+                if (!uuid.empty() && uuid.back() == '\n') {
+                    uuid.pop_back();
+                }
+            }
+            pclose(pipe);
+        }
+    }
+    #endif
+
+    // Fallback to timestamp-based UUID if platform methods fail
+    if (uuid.empty()) {
+        auto now = std::chrono::system_clock::now();
+        auto ms = std::chrono::duration_cast<std::chrono::milliseconds>(now.time_since_epoch()).count();
+
+        // Simple pseudo-UUID format
+        char buffer[40];
+        snprintf(buffer, sizeof(buffer),
+                "baludesk-%016llx-%04x",
+                (unsigned long long)ms,
+                rand() % 0xFFFF);
+        uuid = buffer;
+    }
+
+    return uuid;
+}
+
+std::string SettingsManager::getSystemHostname() {
+    char hostname[256] = {0};
+
+    #ifdef _WIN32
+    DWORD size = sizeof(hostname);
+    if (GetComputerNameA(hostname, &size)) {
+        return std::string(hostname);
+    }
+    #else
+    if (gethostname(hostname, sizeof(hostname)) == 0) {
+        return std::string(hostname);
+    }
+    #endif
+
+    return "BaluDesk-Device";
 }
 
 }  // namespace baludesk

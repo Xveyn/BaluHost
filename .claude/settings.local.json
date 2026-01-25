@@ -29,7 +29,19 @@
       "Bash(npm run build:*)",
       "Bash(source:*)",
       "Bash(.venv/bin/alembic revision:*)",
-      "Bash(.venv/bin/alembic upgrade:*)"
+      "Bash(.venv/bin/alembic upgrade:*)",
+      "Bash(python3:*)",
+      "Bash(npx tsc:*)",
+      "Bash(./node_modules/.bin/tsc:*)",
+      "Bash(sudo -n true:*)",
+      "Bash(echo:*)",
+      "Bash(grep:*)",
+      "Bash(wc:*)",
+      "Bash(.venv/bin/alembic current:*)",
+      "Bash(.venv/bin/python3:*)",
+      "Bash(alembic upgrade:*)",
+      "Bash(./.venv/bin/alembic upgrade:*)",
+      "Bash(./.venv/bin/alembic:*)"
     ]
   },
   "enabledPlugins": {

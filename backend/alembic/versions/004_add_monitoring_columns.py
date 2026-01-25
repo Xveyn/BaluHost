@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 # revision identifiers
 revision = '004_monitoring_columns'
-down_revision = '003_add_monitoring_tables'
+down_revision = '003_monitoring'
 branch_labels = None
 depends_on = None
 

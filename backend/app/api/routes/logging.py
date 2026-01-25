@@ -166,7 +166,7 @@ async def get_file_access_logs(
 ) -> Dict[str, Any]:
     """
     Get file access logs from database.
-    
+
     Args:
         limit: Maximum number of logs to return (default: 100)
         days: Number of days to look back (default: 1)
@@ -174,15 +174,10 @@ async def get_file_access_logs(
         user: Filter by username (optional)
         current_user: Current authenticated user
         db: Database session
-    
+
     Returns:
         File access log entries
     """
-    # In dev mode return generated mock logs for deterministic UI
-    if settings.is_dev_mode:
-        mock_logs = _generate_mock_file_access_logs(days=days, limit=limit)
-        return {"dev_mode": True, "total": len(mock_logs), "logs": mock_logs}
-
     # Get audit logs from database
     audit = get_audit_logger_db()
     logs = audit.get_logs(
@@ -194,7 +189,12 @@ async def get_file_access_logs(
         db=db
     )
 
-    return {"dev_mode": False, "total": len(logs), "logs": logs}
+    # In dev mode, if no real logs exist, return mock data
+    if settings.is_dev_mode and len(logs) == 0:
+        mock_logs = _generate_mock_file_access_logs(days=days, limit=limit)
+        return {"dev_mode": True, "total": len(mock_logs), "logs": mock_logs}
+
+    return {"dev_mode": settings.is_dev_mode, "total": len(logs), "logs": logs}
 
 
 @router.get("/stats")
@@ -205,17 +205,21 @@ async def get_logging_stats(
 ) -> Dict[str, Any]:
     """
     Get logging statistics and summary from database.
-    
+
     Args:
         days: Number of days to analyze (default: 7)
         current_user: Current authenticated user
         db: Database session
-    
+
     Returns:
         Statistics about disk I/O and file access
     """
-    # Dev mode: return mock statistics including mock disk I/O summary
-    if settings.is_dev_mode:
+    # Get audit logs from database
+    audit = get_audit_logger_db()
+    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
+
+    # If no real logs exist in dev mode, return mock statistics
+    if settings.is_dev_mode and len(logs) == 0:
         mock_logs = _generate_mock_file_access_logs(days=days, limit=100)
         total_ops = len(mock_logs)
         by_action = {}
@@ -245,11 +249,7 @@ async def get_logging_stats(
             "disk_io": disk_io,
         }
 
-    # Get audit logs from database
-    audit = get_audit_logger_db()
-    logs = audit.get_logs(limit=10000, event_type="FILE_ACCESS", days=days, db=db)
-
-    # Calculate statistics
+    # Calculate statistics from real logs
     total_ops = len(logs)
     by_action = {}
     by_user = {}
@@ -268,7 +268,7 @@ async def get_logging_stats(
     success_rate = success_count / total_ops if total_ops > 0 else 1.0
 
     return {
-        "dev_mode": False,
+        "dev_mode": settings.is_dev_mode,
         "period_days": days,
         "file_access": {
             "total_operations": total_ops,

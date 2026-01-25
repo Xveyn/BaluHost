@@ -11,7 +11,7 @@ Stores historical system metrics for long-term analysis and statistics:
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, Enum as SQLEnum
+from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
 import enum
 
@@ -47,6 +47,7 @@ class CpuSample(Base):
     thread_count = Column(Integer, nullable=True)
     p_core_count = Column(Integer, nullable=True)  # Intel Performance cores
     e_core_count = Column(Integer, nullable=True)  # Intel Efficiency cores
+    thread_usages = Column(JSON, nullable=True)  # Per-thread CPU usage percentages (stored as JSON array)
 
     def __repr__(self) -> str:
         return f"<CpuSample(usage={self.usage_percent}%, timestamp={self.timestamp})>"

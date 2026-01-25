@@ -107,6 +107,49 @@ bool HttpClient::isAuthenticated() const {
     return !authToken_.empty();
 }
 
+bool HttpClient::registerDevice(const std::string& deviceId, const std::string& deviceName) {
+    Logger::info("Registering desktop device: {} ({})", deviceName, deviceId);
+
+    if (!isAuthenticated()) {
+        Logger::error("Cannot register device: Not authenticated");
+        return false;
+    }
+
+    try {
+        json requestBody = {
+            {"device_id", deviceId},
+            {"device_name", deviceName}
+        };
+
+        std::string response = performRequest(
+            baseUrl_ + "/api/sync/register-desktop",
+            "POST",
+            requestBody.dump()
+        );
+
+        auto responseJson = json::parse(response);
+
+        if (responseJson.contains("device_id")) {
+            std::string status = responseJson.value("status", "");
+            if (status == "registered") {
+                Logger::info("Device registered successfully");
+            } else if (status == "already_registered") {
+                Logger::info("Device already registered (re-registration successful)");
+            } else {
+                Logger::info("Device registration response: {}", status);
+            }
+            return true;
+        }
+
+        Logger::error("Device registration failed: No device_id in response");
+        return false;
+
+    } catch (const std::exception& e) {
+        Logger::error("Device registration failed: {}", e.what());
+        return false;
+    }
+}
+
 // ============================================================================
 // File Operations
 // ============================================================================

@@ -52,16 +52,10 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
             timestamp = datetime.utcnow()
             timestamp_seconds = time.time()
 
-            if settings.is_dev_mode:
-                # Generate mock data in dev mode
-                download_mbps, upload_mbps = self._generate_mock_data()
-                bytes_received = None
-                bytes_sent = None
-            else:
-                # Calculate real network speeds
-                download_mbps, upload_mbps, bytes_received, bytes_sent = self._calculate_speeds(
-                    timestamp_seconds
-                )
+            # Always try to collect real network data
+            download_mbps, upload_mbps, bytes_received, bytes_sent = self._calculate_speeds(
+                timestamp_seconds
+            )
 
             return NetworkSampleSchema(
                 timestamp=timestamp,
@@ -104,10 +98,16 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
                     upload_mbps = max(0.0, (tx_diff * 8) / (elapsed * 1_000_000))
 
                     self._previous_counters = (timestamp_seconds, rx_bytes, tx_bytes)
+            else:
+                # No network counters available, fall back to mock data in dev mode
+                if settings.is_dev_mode:
+                    download_mbps, upload_mbps = self._generate_mock_data()
+                self._previous_counters = None
         except Exception as e:
             logger.debug(f"Network counters unavailable: {e}")
-            # Fall back to mock data
-            download_mbps, upload_mbps = self._generate_mock_data()
+            # Only use mock data in dev mode when real data fails
+            if settings.is_dev_mode:
+                download_mbps, upload_mbps = self._generate_mock_data()
             self._previous_counters = None
 
         return download_mbps, upload_mbps, bytes_received, bytes_sent

@@ -250,8 +250,8 @@ const apiSections: ApiSection[] = [
 
 const methodColors: Record<string, string> = {
   GET: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  POST: 'bg-green-500/20 text-green-400 border-green-500/30',
-  PUT: 'bg-orange-500/20 text-orange-400 border-orange-500/30',
+  POST: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
+  PUT: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
   DELETE: 'bg-red-500/20 text-red-400 border-red-500/30'
 };
 
@@ -277,69 +277,69 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
   };
 
   return (
-    <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-4 hover:border-white/20 transition-all">
-      <div 
-        className="flex items-center justify-between cursor-pointer"
+    <div className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-3 sm:p-4 hover:border-slate-600/50 transition-all">
+      <div
+        className="flex items-center justify-between cursor-pointer touch-manipulation"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <div className="flex items-center gap-3 flex-1 flex-wrap">
-          <span className={`px-3 py-1 rounded-lg text-xs font-bold border ${methodColors[endpoint.method]}`}>
+        <div className="flex items-center gap-2 sm:gap-3 flex-1 flex-wrap min-w-0">
+          <span className={`px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold border flex-shrink-0 ${methodColors[endpoint.method]}`}>
             {endpoint.method}
           </span>
-          <code className="text-cyan-400 font-mono text-sm">{endpoint.path}</code>
-          <span className="text-gray-400 text-sm hidden md:inline">{endpoint.description}</span>
+          <code className="text-cyan-400 font-mono text-xs sm:text-sm truncate">{endpoint.path}</code>
+          <span className="text-slate-400 text-xs sm:text-sm hidden lg:inline truncate">{endpoint.description}</span>
           {endpoint.requiresAuth && (
-            <span title="Requires authentication"><Shield className="w-4 h-4 text-amber-400" /></span>
+            <span title="Requires authentication" className="flex-shrink-0"><Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /></span>
           )}
           {rateLimit && (
-            <span 
-              className={`px-2 py-0.5 rounded text-xs font-mono ${
-                rateLimit.enabled 
-                  ? 'bg-green-500/20 text-green-400' 
-                  : 'bg-gray-500/20 text-gray-500'
+            <span
+              className={`px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs font-mono flex-shrink-0 ${
+                rateLimit.enabled
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-slate-500/20 text-slate-500'
               }`}
               title={`Rate limit: ${rateLimit.limit_string}`}
             >
-              <Zap className="w-3 h-3 inline mr-1" />
-              {rateLimit.limit_string}
+              <Zap className="w-2.5 h-2.5 sm:w-3 sm:h-3 inline mr-0.5 sm:mr-1" />
+              <span className="hidden sm:inline">{rateLimit.limit_string}</span>
             </span>
           )}
         </div>
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-1 sm:gap-2 flex-shrink-0 ml-2">
           {isAdmin && rateLimit && onEditRateLimit && (
             <button
               onClick={(e) => {
                 e.stopPropagation();
                 onEditRateLimit(rateLimit);
               }}
-              className="p-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors"
+              className="p-2 sm:p-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors touch-manipulation active:scale-95 min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
               title="Edit rate limit"
             >
               <Settings className="w-4 h-4" />
             </button>
           )}
           {isOpen ? (
-            <ChevronDown className="w-5 h-5 text-gray-400" />
+            <ChevronDown className="w-5 h-5 text-slate-400" />
           ) : (
-            <ChevronRight className="w-5 h-5 text-gray-400" />
+            <ChevronRight className="w-5 h-5 text-slate-400" />
           )}
         </div>
       </div>
 
       {isOpen && (
-        <div className="mt-4 space-y-4 border-t border-white/10 pt-4">
-          <p className="text-gray-300 text-sm md:hidden">{endpoint.description}</p>
-          
+        <div className="mt-3 sm:mt-4 space-y-3 sm:space-y-4 border-t border-slate-700/50 pt-3 sm:pt-4">
+          <p className="text-slate-300 text-xs sm:text-sm lg:hidden">{endpoint.description}</p>
+
           {endpoint.params && endpoint.params.length > 0 && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Parameters</h4>
-              <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">Parameters</h4>
+              <div className="space-y-1.5 sm:space-y-2">
                 {endpoint.params.map((param, idx) => (
-                  <div key={idx} className="flex items-start gap-3 text-sm flex-wrap">
+                  <div key={idx} className="flex items-start gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
                     <code className="text-cyan-400 font-mono">{param.name}</code>
-                    <span className="text-gray-500">({param.type})</span>
-                    {param.required && <span className="text-red-400 text-xs">required</span>}
-                    <span className="text-gray-400">{param.description}</span>
+                    <span className="text-slate-500">({param.type})</span>
+                    {param.required && <span className="text-red-400 text-[10px] sm:text-xs">required</span>}
+                    <span className="text-slate-400 w-full sm:w-auto">{param.description}</span>
                   </div>
                 ))}
               </div>
@@ -348,14 +348,14 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
 
           {endpoint.body && endpoint.body.length > 0 && (
             <div>
-              <h4 className="text-sm font-semibold text-gray-300 mb-2">Request Body</h4>
-              <div className="space-y-2">
+              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">Request Body</h4>
+              <div className="space-y-1.5 sm:space-y-2">
                 {endpoint.body.map((field, idx) => (
-                  <div key={idx} className="flex items-start gap-3 text-sm flex-wrap">
+                  <div key={idx} className="flex items-start gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
                     <code className="text-violet-400 font-mono">{field.field}</code>
-                    <span className="text-gray-500">({field.type})</span>
-                    {field.required && <span className="text-red-400 text-xs">required</span>}
-                    <span className="text-gray-400">{field.description}</span>
+                    <span className="text-slate-500">({field.type})</span>
+                    {field.required && <span className="text-red-400 text-[10px] sm:text-xs">required</span>}
+                    <span className="text-slate-400 w-full sm:w-auto">{field.description}</span>
                   </div>
                 ))}
               </div>
@@ -365,19 +365,19 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
           {endpoint.response && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-sm font-semibold text-gray-300">Response</h4>
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-300">Response</h4>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
                     copyToClipboard(endpoint.response!);
                   }}
-                  className="text-gray-400 hover:text-cyan-400 transition-colors p-1"
+                  className="text-slate-400 hover:text-cyan-400 transition-colors p-2 -mr-2 touch-manipulation active:scale-95 min-w-[36px] min-h-[36px] flex items-center justify-center"
                 >
-                  {copied ? <Check className="w-4 h-4 text-green-400" /> : <Copy className="w-4 h-4" />}
+                  {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <pre className="bg-black/30 border border-white/10 rounded-lg p-3 text-xs overflow-x-auto">
-                <code className="text-gray-300">{endpoint.response}</code>
+              <pre className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-2 sm:p-3 text-[10px] sm:text-xs overflow-x-auto">
+                <code className="text-slate-300">{endpoint.response}</code>
               </pre>
             </div>
           )}
@@ -416,68 +416,68 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={onClose} />
-      <div className="relative bg-slate-900 border border-white/10 rounded-xl p-6 w-full max-w-md shadow-2xl">
-        <h3 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
+      <div className="relative bg-slate-900 border border-slate-700/50 rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[100vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
+        <h3 className="text-lg sm:text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Zap className="w-5 h-5 text-yellow-400" />
           Edit Rate Limit
         </h3>
         
         <div className="space-y-4">
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Endpoint</label>
-            <code className="block w-full px-3 py-2 bg-black/30 border border-white/10 rounded-lg text-cyan-400">
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Endpoint</label>
+            <code className="block w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-cyan-400 text-xs sm:text-sm truncate">
               {config.endpoint_type}
             </code>
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Rate Limit</label>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Rate Limit</label>
             <input
               type="text"
               value={form.limit_string}
               onChange={(e) => setForm({ ...form, limit_string: e.target.value })}
-              className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-white focus:border-cyan-500 focus:outline-none text-sm min-h-[44px]"
               placeholder="5/minute"
             />
-            <p className="text-xs text-gray-500 mt-1">Format: number/unit (e.g., 5/minute, 100/hour)</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-1">Format: number/unit (e.g., 5/minute, 100/hour)</p>
           </div>
-          
+
           <div>
-            <label className="block text-sm font-medium text-gray-300 mb-1">Description</label>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Description</label>
             <input
               type="text"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full px-3 py-2 bg-black/30 border border-white/20 rounded-lg text-white focus:border-cyan-500 focus:outline-none"
+              className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-white focus:border-cyan-500 focus:outline-none text-sm min-h-[44px]"
               placeholder="Rate limit description"
             />
           </div>
-          
-          <div className="flex items-center gap-3">
+
+          <div className="flex items-center gap-3 min-h-[44px]">
             <input
               type="checkbox"
               id="enabled"
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-              className="w-4 h-4 rounded"
+              className="w-5 h-5 rounded"
             />
-            <label htmlFor="enabled" className="text-sm text-gray-300">Enabled</label>
+            <label htmlFor="enabled" className="text-sm text-slate-300">Enabled</label>
           </div>
         </div>
-        
-        <div className="flex justify-end gap-3 mt-6">
+
+        <div className="flex flex-col-reverse sm:flex-row justify-end gap-2 sm:gap-3 mt-6">
           <button
             onClick={onClose}
-            className="px-4 py-2 bg-gray-700 hover:bg-gray-600 text-white rounded-lg transition-colors"
+            className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors touch-manipulation active:scale-95 min-h-[44px]"
           >
             Cancel
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
-            className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50"
+            className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 touch-manipulation active:scale-95 min-h-[44px]"
           >
             {saving ? 'Saving...' : 'Save Changes'}
           </button>
@@ -660,43 +660,43 @@ export default function ApiCenterPage() {
   }, {} as Record<string, RateLimitConfig[]>);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
       {/* Header */}
-      <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-3">
-            <Code className="w-8 h-8 text-cyan-400" />
+          <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-2 sm:gap-3">
+            <Code className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" />
             API Center
           </h1>
-          <p className="text-gray-400 mt-1">
-            REST API Documentation {isAdmin && '& Rate Limit Configuration'}
+          <p className="text-slate-400 text-xs sm:text-sm mt-1">
+            REST API <span className="hidden sm:inline">Documentation</span> {isAdmin && <span className="hidden sm:inline">& Rate Limits</span>}
           </p>
         </div>
-        
+
         {/* Tab Buttons */}
         {isAdmin && (
-          <div className="flex gap-2 bg-white/5 p-1 rounded-lg">
+          <div className="flex gap-1 sm:gap-2 bg-slate-800/40 p-1 rounded-lg">
             <button
               onClick={() => setActiveTab('docs')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'docs' 
-                  ? 'bg-cyan-600 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/10'
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 sm:gap-2 touch-manipulation active:scale-95 min-h-[40px] ${
+                activeTab === 'docs'
+                  ? 'bg-cyan-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              API Docs
+              <span className="hidden sm:inline">API </span>Docs
             </button>
             <button
               onClick={() => setActiveTab('limits')}
-              className={`px-4 py-2 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                activeTab === 'limits' 
-                  ? 'bg-yellow-600 text-white' 
-                  : 'text-gray-400 hover:text-white hover:bg-white/10'
+              className={`px-3 sm:px-4 py-2 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 sm:gap-2 touch-manipulation active:scale-95 min-h-[40px] ${
+                activeTab === 'limits'
+                  ? 'bg-yellow-600 text-white'
+                  : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
               }`}
             >
               <Zap className="w-4 h-4" />
-              Rate Limits
+              <span className="hidden sm:inline">Rate </span>Limits
             </button>
           </div>
         )}
@@ -706,17 +706,17 @@ export default function ApiCenterPage() {
       {activeTab === 'docs' && (
         <>
           {/* Base URL Info */}
-          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-4">
-            <div className="flex items-start gap-3">
-              <Code className="w-5 h-5 text-cyan-400 mt-0.5" />
-              <div>
-                <h3 className="font-semibold text-white mb-1">Base URL</h3>
-                <code className="text-sm text-cyan-400 bg-black/30 px-3 py-1 rounded">
+          <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 sm:p-4">
+            <div className="flex items-start gap-2 sm:gap-3">
+              <Code className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 mt-0.5 flex-shrink-0" />
+              <div className="min-w-0">
+                <h3 className="font-semibold text-white text-sm sm:text-base mb-1">Base URL</h3>
+                <code className="text-xs sm:text-sm text-cyan-400 bg-slate-900/60 px-2 sm:px-3 py-1 rounded block overflow-x-auto">
                   http://localhost:8000
                 </code>
-                <p className="text-sm text-gray-400 mt-2">
-                  All authenticated endpoints require: 
-                  <code className="text-xs text-gray-300 bg-black/30 px-2 py-0.5 rounded ml-2">
+                <p className="text-xs sm:text-sm text-slate-400 mt-2">
+                  <span className="hidden sm:inline">All authenticated endpoints require: </span>
+                  <code className="text-[10px] sm:text-xs text-slate-300 bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded sm:ml-2 block sm:inline mt-1 sm:mt-0 overflow-x-auto">
                     Authorization: Bearer {"<token>"}
                   </code>
                 </p>
@@ -725,13 +725,13 @@ export default function ApiCenterPage() {
           </div>
 
           {/* Section Filter */}
-          <div className="flex gap-2 flex-wrap">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 sm:pb-0">
             <button
               onClick={() => setSelectedSection(null)}
-              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all ${
-                !selectedSection 
-                  ? 'bg-cyan-600 text-white' 
-                  : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+              className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
+                !selectedSection
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
               }`}
             >
               All
@@ -740,14 +740,14 @@ export default function ApiCenterPage() {
               <button
                 key={section.title}
                 onClick={() => setSelectedSection(section.title)}
-                className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center gap-2 ${
-                  selectedSection === section.title 
-                    ? 'bg-cyan-600 text-white' 
-                    : 'bg-white/5 text-gray-400 hover:bg-white/10 hover:text-white'
+                className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 sm:gap-2 touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
+                  selectedSection === section.title
+                    ? 'bg-cyan-600 text-white'
+                    : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
                 }`}
               >
                 {section.icon}
-                {section.title}
+                <span className="hidden sm:inline">{section.title}</span>
               </button>
             ))}
           </div>
@@ -755,17 +755,17 @@ export default function ApiCenterPage() {
           {/* API Sections */}
           {filteredSections.map((section) => (
             <div key={section.title}>
-              <div className="flex items-center gap-3 mb-4">
-                <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
+              <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                <div className="p-1.5 sm:p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
                   {section.icon}
                 </div>
-                <h2 className="text-xl font-bold text-white">{section.title}</h2>
+                <h2 className="text-lg sm:text-xl font-bold text-white">{section.title}</h2>
               </div>
-              <div className="space-y-3">
+              <div className="space-y-2 sm:space-y-3">
                 {section.endpoints.map((endpoint, idx) => (
-                  <EndpointCard 
-                    key={idx} 
-                    endpoint={endpoint} 
+                  <EndpointCard
+                    key={idx}
+                    endpoint={endpoint}
                     rateLimits={rateLimits}
                     isAdmin={isAdmin}
                     onEditRateLimit={setEditingConfig}
@@ -781,87 +781,87 @@ export default function ApiCenterPage() {
       {activeTab === 'limits' && isAdmin && (
         <>
           {/* Actions */}
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-2 sm:gap-3">
             <button
               onClick={handleSeedDefaults}
-              className="px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 text-xs sm:text-sm touch-manipulation active:scale-95 min-h-[40px]"
             >
-              🌱 Seed Defaults
+              🌱 <span className="hidden sm:inline">Seed </span>Defaults
             </button>
             <button
               onClick={loadRateLimits}
-              className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg transition-colors flex items-center gap-2"
+              className="px-3 sm:px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-colors flex items-center gap-2 text-xs sm:text-sm touch-manipulation active:scale-95 min-h-[40px]"
             >
               <RefreshCw className="w-4 h-4" />
-              Refresh
+              <span className="hidden sm:inline">Refresh</span>
             </button>
           </div>
 
           {/* Info Box */}
-          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-4">
-            <h3 className="text-yellow-400 font-semibold mb-2 flex items-center gap-2">
-              <Zap className="w-5 h-5" />
+          <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 sm:p-4">
+            <h3 className="text-yellow-400 font-semibold text-sm sm:text-base mb-2 flex items-center gap-2">
+              <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
               Rate Limit Protection
             </h3>
-            <p className="text-gray-300 text-sm">
-              Rate limits protect your API from abuse. Format: <code className="bg-black/30 px-2 py-1 rounded">number/unit</code> 
-              {' '}(e.g., <code className="bg-black/30 px-2 py-1 rounded">5/minute</code>, <code className="bg-black/30 px-2 py-1 rounded">100/hour</code>)
+            <p className="text-slate-300 text-xs sm:text-sm">
+              <span className="hidden sm:inline">Rate limits protect your API from abuse. </span>Format: <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">number/unit</code>
+              {' '}(e.g., <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">5/min</code>)
             </p>
           </div>
 
           {/* Rate Limits by Category */}
           {loading ? (
-            <div className="text-gray-400">Loading rate limits...</div>
+            <div className="text-slate-400 text-sm">Loading rate limits...</div>
           ) : Object.keys(groupedRateLimits).length === 0 ? (
-            <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-12 text-center">
-              <p className="text-gray-400 mb-4">No rate limit configurations found</p>
+            <div className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-8 sm:p-12 text-center">
+              <p className="text-slate-400 text-sm mb-4">No rate limit configurations found</p>
               <button
                 onClick={handleSeedDefaults}
-                className="px-6 py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors"
+                className="px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm touch-manipulation active:scale-95 min-h-[44px]"
               >
-                🌱 Seed Default Configurations
+                🌱 Seed Defaults
               </button>
             </div>
           ) : (
             Object.entries(groupedRateLimits).map(([category, configs]) => (
               <div key={category}>
-                <div className="flex items-center gap-3 mb-4">
-                  <div className="p-2 bg-yellow-500/20 rounded-lg text-yellow-400">
-                    <Zap className="w-5 h-5" />
+                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
+                  <div className="p-1.5 sm:p-2 bg-yellow-500/20 rounded-lg text-yellow-400">
+                    <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
                   </div>
-                  <h2 className="text-xl font-bold text-white">{category}</h2>
+                  <h2 className="text-lg sm:text-xl font-bold text-white">{category}</h2>
                 </div>
-                <div className="space-y-3">
+                <div className="space-y-2 sm:space-y-3">
                   {configs.map((config) => (
-                    <div 
-                      key={config.id} 
-                      className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 p-4 hover:border-white/20 transition-all"
+                    <div
+                      key={config.id}
+                      className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-3 sm:p-4 hover:border-slate-600/50 transition-all"
                     >
-                      <div className="flex items-center justify-between gap-4 flex-wrap">
-                        <div className="flex items-center gap-3 flex-1 min-w-0">
-                          <code className="text-cyan-400 font-mono text-sm">{config.endpoint_type}</code>
-                          <span className="text-green-400 font-semibold text-lg">{config.limit_string}</span>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
+                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 min-w-0">
+                          <code className="text-cyan-400 font-mono text-xs sm:text-sm truncate">{config.endpoint_type}</code>
+                          <span className="text-emerald-400 font-semibold text-sm sm:text-lg">{config.limit_string}</span>
                           <button
                             onClick={() => handleToggleEnabled(config)}
-                            className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+                            className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold transition-colors touch-manipulation active:scale-95 min-h-[28px] ${
                               config.enabled
-                                ? 'bg-green-500/20 text-green-400 hover:bg-green-500/30'
-                                : 'bg-gray-500/20 text-gray-400 hover:bg-gray-500/30'
+                                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'
                             }`}
                           >
-                            {config.enabled ? '✓ Enabled' : '✗ Disabled'}
+                            {config.enabled ? '✓' : '✗'}<span className="hidden sm:inline"> {config.enabled ? 'Enabled' : 'Disabled'}</span>
                           </button>
                         </div>
                         <button
                           onClick={() => setEditingConfig(config)}
-                          className="px-3 py-1.5 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-sm transition-colors flex items-center gap-2"
+                          className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 touch-manipulation active:scale-95 min-h-[40px] self-end sm:self-auto"
                         >
                           <Settings className="w-4 h-4" />
-                          Edit
+                          <span className="hidden sm:inline">Edit</span>
                         </button>
                       </div>
                       {config.description && (
-                        <p className="text-gray-400 text-sm mt-2">{config.description}</p>
+                        <p className="text-slate-400 text-xs sm:text-sm mt-2">{config.description}</p>
                       )}
                     </div>
                   ))}

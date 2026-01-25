@@ -26,6 +26,8 @@ from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry, sync_background, raid as raid_service
 from app.services import smart as smart_service
 from app.services import power_monitor
+from app.services import power_manager
+from app.services import fan_control
 from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
@@ -74,6 +76,23 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     disk_monitor.start_monitoring()
     await start_monitoring(get_db)
     logger.info("System monitoring started")
+
+    # Start CPU power management (if enabled)
+    if settings.power_management_enabled:
+        try:
+            await power_manager.start_power_manager()
+            logger.info("CPU power management started")
+        except Exception as e:
+            logger.warning(f"CPU power management could not start: {e}")
+
+    # Start fan control (if enabled)
+    if settings.fan_control_enabled:
+        try:
+            await fan_control.start_fan_control()
+            logger.info("Fan control started")
+        except Exception as e:
+            logger.warning(f"Fan control could not start: {e}")
+
     await sync_background.start_sync_scheduler()
     logger.info("Sync scheduler started")
     
@@ -160,6 +179,18 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
                 logger.info("System monitoring stopped")
                 await sync_background.stop_sync_scheduler()
                 logger.info("Sync scheduler stopped")
+                # Stop CPU power management
+                try:
+                    await power_manager.stop_power_manager()
+                    logger.info("CPU power management stopped")
+                except Exception:
+                    logger.debug("Error stopping CPU power management")
+                # Stop fan control
+                try:
+                    await fan_control.stop_fan_control()
+                    logger.info("Fan control stopped")
+                except Exception:
+                    logger.debug("Error stopping fan control")
         except Exception:
             logger.debug("Error while stopping background services")
 

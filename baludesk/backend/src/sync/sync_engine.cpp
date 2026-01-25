@@ -5,6 +5,7 @@
 #include "sync/conflict_resolver.h"
 #include "sync/change_detector.h"
 #include "utils/logger.h"
+#include "utils/settings_manager.h"
 #include <chrono>
 #include <thread>
 #include <filesystem>
@@ -120,7 +121,7 @@ bool SyncEngine::isRunning() const {
 
 bool SyncEngine::login(const std::string& username, const std::string& password) {
     Logger::info("Attempting login for user: " + username);
-    
+
     if (!httpClient_) {
         Logger::error("HTTP client not initialized");
         return false;
@@ -129,6 +130,30 @@ bool SyncEngine::login(const std::string& username, const std::string& password)
     if (httpClient_->login(username, password)) {
         authenticated_ = true;
         Logger::info("Login successful");
+
+        // Auto-register desktop device after successful login
+        auto& settings = SettingsManager::getInstance();
+
+        // Only register if not already registered
+        if (!settings.isDeviceRegistered()) {
+            Logger::info("Registering desktop device with backend...");
+
+            std::string deviceId = settings.getDeviceId();
+            std::string deviceName = settings.getDeviceName();
+
+            Logger::debug("Device ID: {}, Device Name: {}", deviceId, deviceName);
+
+            if (httpClient_->registerDevice(deviceId, deviceName)) {
+                settings.setDeviceRegistered(true);
+                Logger::info("Desktop device registered successfully");
+            } else {
+                Logger::warn("Failed to register desktop device (non-fatal)");
+                // Don't fail login if device registration fails
+            }
+        } else {
+            Logger::debug("Device already registered, skipping registration");
+        }
+
         return true;
     }
 

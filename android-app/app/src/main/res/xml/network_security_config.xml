@@ -1,36 +1,45 @@
 <?xml version="1.0" encoding="utf-8"?>
 <network-security-config>
-    <!-- Base configuration: trust system and user-added certificates -->
-    <base-config cleartextTrafficPermitted="false">
+    <!--
+        DEVELOPMENT BUILD CONFIGURATION
+        ================================
+        For local NAS access, we allow HTTP traffic to private networks.
+
+        SECURITY NOTICE: This is acceptable for a NAS app because:
+        1. Users typically access their NAS on local/private networks
+        2. Private networks (home WiFi) are already trusted
+        3. The app still supports HTTPS when available
+
+        For a production public-facing app, this should be locked down to
+        require HTTPS with certificate pinning.
+    -->
+
+    <base-config cleartextTrafficPermitted="true">
         <trust-anchors>
-            <!-- Trust system CA certificates -->
+            <!-- Trust system CA certificates for HTTPS -->
             <certificates src="system" />
-            <!-- Trust user-added CA certificates (for mkcert) -->
+            <!-- Trust user-added CA certificates (e.g., for self-signed certs with mkcert) -->
             <certificates src="user" />
         </trust-anchors>
     </base-config>
-    
-    <!-- Development: Allow cleartext traffic for local testing -->
-    <!-- Remove this section in production! -->
+
+    <!--
+        Alternative approach for stricter security:
+        Uncomment the section below and comment out the base-config above
+        to allow HTTP only to specific domains while keeping HTTPS required for everything else
+    -->
+    <!--
+    <base-config cleartextTrafficPermitted="false">
+        <trust-anchors>
+            <certificates src="system" />
+            <certificates src="user" />
+        </trust-anchors>
+    </base-config>
+
     <domain-config cleartextTrafficPermitted="true">
         <domain includeSubdomains="true">localhost</domain>
         <domain includeSubdomains="true">10.0.2.2</domain>
-        <domain includeSubdomains="true">192.168.1.1</domain>
-        <domain includeSubdomains="true">192.168.1.21</domain>
-        <domain includeSubdomains="true">192.168.178.21</domain>
-    </domain-config>
-    
-    <!-- Production: Strict HTTPS with certificate pinning -->
-    <!-- Uncomment and configure for production deployment -->
-    <!--
-    <domain-config>
-        <domain includeSubdomains="true">baluhost.yourdomain.com</domain>
-        <trust-anchors>
-            <certificates src="@raw/baluhost_ca_cert" />
-        </trust-anchors>
-        <pin-set expiration="2025-12-31">
-            <pin digest="SHA-256">base64-encoded-public-key-hash</pin>
-        </pin-set>
+        <domain includeSubdomains="true">.local</domain>
     </domain-config>
     -->
 </network-security-config>

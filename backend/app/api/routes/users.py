@@ -11,6 +11,7 @@ from app.core.database import get_db
 from app.schemas.user import UserCreate, UserPublic, UserUpdate, UsersResponse
 from app.services import users as user_service
 from app.models.user import User
+from app.services.audit_logger_db import get_audit_logger_db
 
 router = APIRouter()
 
@@ -73,13 +74,34 @@ async def list_users(
 @router.post("/", response_model=UserPublic, status_code=status.HTTP_201_CREATED)
 async def create_user(
     payload: UserCreate,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> UserPublic:
+    audit_logger = get_audit_logger_db()
+
     if user_service.get_user_by_username(payload.username, db=db):
+        audit_logger.log_user_management(
+            action="user_create_failed",
+            admin_user=current_admin.username,
+            target_user=payload.username,
+            details={"reason": "username_already_exists"},
+            success=False,
+            error_message="Username already exists",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Username already exists")
 
     record = user_service.create_user(payload, db=db)
+
+    audit_logger.log_user_management(
+        action="user_created",
+        admin_user=current_admin.username,
+        target_user=payload.username,
+        details={"role": payload.role, "email": payload.email},
+        success=True,
+        db=db
+    )
+
     return user_service.serialize_user(record)
 
 
@@ -87,42 +109,114 @@ async def create_user(
 async def update_user(
     user_id: str,
     payload: UserUpdate,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> UserPublic:
-    record = user_service.update_user(user_id, payload, db=db)
-    if not record:
+    audit_logger = get_audit_logger_db()
+
+    # Get old user data for comparison
+    old_user = user_service.get_user(user_id, db=db)
+    if not old_user:
+        audit_logger.log_user_management(
+            action="user_update_failed",
+            admin_user=current_admin.username,
+            target_user=user_id,
+            success=False,
+            error_message="User not found",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    record = user_service.update_user(user_id, payload, db=db)
+
+    # Log changes
+    details = {}
+    if payload.role and payload.role != old_user.role:
+        details["role_changed"] = f"{old_user.role} -> {payload.role}"
+    if payload.email and payload.email != old_user.email:
+        details["email_changed"] = True
+    if payload.password:
+        details["password_changed"] = True
+
+    audit_logger.log_user_management(
+        action="user_updated",
+        admin_user=current_admin.username,
+        target_user=old_user.username,
+        details=details,
+        success=True,
+        db=db
+    )
+
     return user_service.serialize_user(record)
 
 
 @router.delete("/{user_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 async def delete_user(
     user_id: str,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> None:
-    deleted = user_service.delete_user(user_id, db=db)
-    if not deleted:
+    audit_logger = get_audit_logger_db()
+
+    # Get user info before deletion
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        audit_logger.log_user_management(
+            action="user_delete_failed",
+            admin_user=current_admin.username,
+            target_user=user_id,
+            success=False,
+            error_message="User not found",
+            db=db
+        )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    username = user.username
+    deleted = user_service.delete_user(user_id, db=db)
+
+    audit_logger.log_user_management(
+        action="user_deleted",
+        admin_user=current_admin.username,
+        target_user=username,
+        details={"user_id": user_id},
+        success=True,
+        db=db
+    )
 
 
 @router.post("/bulk-delete", response_model=dict, status_code=status.HTTP_200_OK)
 async def bulk_delete_users(
     user_ids: list[str],
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> dict:
     """Delete multiple users at once."""
+    audit_logger = get_audit_logger_db()
     deleted_count = 0
     failed_ids = []
-    
+    deleted_usernames = []
+
     for user_id in user_ids:
-        if user_service.delete_user(user_id, db=db):
+        user = user_service.get_user(user_id, db=db)
+        if user and user_service.delete_user(user_id, db=db):
             deleted_count += 1
+            deleted_usernames.append(user.username)
         else:
             failed_ids.append(user_id)
-    
+
+    audit_logger.log_user_management(
+        action="user_bulk_delete",
+        admin_user=current_admin.username,
+        target_user=f"{deleted_count} users",
+        details={
+            "deleted_count": deleted_count,
+            "failed_count": len(failed_ids),
+            "deleted_users": deleted_usernames
+        },
+        success=True,
+        db=db
+    )
+
     return {
         "deleted": deleted_count,
         "failed": len(failed_ids),
@@ -133,18 +227,33 @@ async def bulk_delete_users(
 @router.patch("/{user_id}/toggle-active", response_model=UserPublic)
 async def toggle_user_active(
     user_id: str,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> UserPublic:
     """Toggle user active status."""
+    audit_logger = get_audit_logger_db()
+
     user = user_service.get_user(user_id, db=db)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-    
+
+    old_status = user.is_active
     user.is_active = not user.is_active
     db.commit()
     db.refresh(user)
-    
+
+    audit_logger.log_user_management(
+        action="user_status_toggled",
+        admin_user=current_admin.username,
+        target_user=user.username,
+        details={
+            "old_status": "active" if old_status else "inactive",
+            "new_status": "active" if user.is_active else "inactive"
+        },
+        success=True,
+        db=db
+    )
+
     return user_service.serialize_user(user)
 
 

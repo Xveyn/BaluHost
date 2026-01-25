@@ -37,6 +37,7 @@ export interface MetricChartProps {
   showArea?: boolean;
   loading?: boolean;
   emptyMessage?: string;
+  compact?: boolean; // Compact mode for mini-charts (no axes, no legend)
 }
 
 const formatTime = (timestamp: string | number): string => {
@@ -57,6 +58,7 @@ export default function MetricChart({
   showArea = false,
   loading = false,
   emptyMessage = 'Keine Daten verfügbar',
+  compact = false,
 }: MetricChartProps) {
   // Format data with time labels
   const chartData = data.map((point) => ({
@@ -103,20 +105,24 @@ export default function MetricChart({
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ChartComponent data={chartData}>
-        <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+        {!compact && <CartesianGrid strokeDasharray="3 3" stroke="#334155" />}
         <XAxis
           dataKey="time"
-          stroke="#94a3b8"
-          tick={{ fill: '#94a3b8', fontSize: 12 }}
-          tickLine={{ stroke: '#334155' }}
+          stroke={compact ? 'transparent' : '#94a3b8'}
+          tick={compact ? false : { fill: '#94a3b8', fontSize: 12 }}
+          tickLine={compact ? false : { stroke: '#334155' }}
+          axisLine={!compact}
+          hide={compact}
         />
         <YAxis
-          stroke="#94a3b8"
-          tick={{ fill: '#94a3b8', fontSize: 12 }}
-          tickLine={{ stroke: '#334155' }}
+          stroke={compact ? 'transparent' : '#94a3b8'}
+          tick={compact ? false : { fill: '#94a3b8', fontSize: 12 }}
+          tickLine={compact ? false : { stroke: '#334155' }}
+          axisLine={!compact}
           domain={yAxisDomain}
+          hide={compact}
           label={
-            yAxisLabel
+            !compact && yAxisLabel
               ? {
                   value: yAxisLabel,
                   angle: -90,
@@ -126,16 +132,18 @@ export default function MetricChart({
               : undefined
           }
         />
-        <Tooltip
-          contentStyle={{
-            backgroundColor: '#1e293b',
-            border: '1px solid #334155',
-            borderRadius: '8px',
-            color: '#f1f5f9',
-          }}
-          labelStyle={{ color: '#94a3b8' }}
-        />
-        <Legend wrapperStyle={{ color: '#94a3b8' }} iconType="line" />
+        {!compact && (
+          <Tooltip
+            contentStyle={{
+              backgroundColor: '#1e293b',
+              border: '1px solid #334155',
+              borderRadius: '8px',
+              color: '#f1f5f9',
+            }}
+            labelStyle={{ color: '#94a3b8' }}
+          />
+        )}
+        {!compact && <Legend wrapperStyle={{ color: '#94a3b8' }} iconType="line" />}
         {lines.map((line) =>
           showArea ? (
             <Area
@@ -144,7 +152,7 @@ export default function MetricChart({
               dataKey={line.dataKey}
               stroke={line.color}
               fill={line.color}
-              fillOpacity={0.1}
+              fillOpacity={compact ? 0.2 : 0.1}
               strokeWidth={line.strokeWidth || 2}
               name={line.name}
               dot={false}

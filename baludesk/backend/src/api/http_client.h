@@ -45,6 +45,9 @@ public:
     void clearAuthToken();
     bool isAuthenticated() const;
 
+    // Device Registration
+    bool registerDevice(const std::string& deviceId, const std::string& deviceName);
+
     // File operations
     virtual std::vector<RemoteFile> listFiles(const std::string& path);
     virtual bool uploadFile(const std::string& localPath, const std::string& remotePath);

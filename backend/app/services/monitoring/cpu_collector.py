@@ -160,6 +160,15 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             # Get CPU usage
             usage = psutil.cpu_percent(interval=None)
 
+            # Get per-thread CPU usage
+            try:
+                thread_usages = psutil.cpu_percent(interval=None, percpu=True)
+                # Round to 2 decimal places for consistency
+                thread_usages = [round(u, 2) for u in thread_usages]
+            except Exception as exc:
+                logger.debug(f"Per-thread CPU unavailable: {exc}")
+                thread_usages = None
+
             # Get CPU sensor data (frequency and temperature)
             sensor_data = get_cpu_sensor_data()
 
@@ -179,6 +188,7 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
                 thread_count=thread_count,
                 p_core_count=p_cores,
                 e_core_count=e_cores,
+                thread_usages=thread_usages,
             )
         except Exception as e:
             logger.error(f"Failed to collect CPU sample: {e}")
@@ -199,6 +209,7 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             "thread_count": sample.thread_count,
             "p_core_count": sample.p_core_count,
             "e_core_count": sample.e_core_count,
+            "thread_usages": sample.thread_usages,
         }
 
     def db_to_sample(self, db_record: CpuSample) -> CpuSampleSchema:
@@ -212,4 +223,5 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             thread_count=db_record.thread_count,
             p_core_count=db_record.p_core_count,
             e_core_count=db_record.e_core_count,
+            thread_usages=db_record.thread_usages,
         )

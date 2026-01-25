@@ -44,6 +44,7 @@ class CpuSampleSchema(BaseModel):
     thread_count: Optional[int] = None
     p_core_count: Optional[int] = None  # Intel Performance cores
     e_core_count: Optional[int] = None  # Intel Efficiency cores
+    thread_usages: Optional[List[float]] = None  # Per-thread CPU usage percentages
 
     class Config:
         from_attributes = True
@@ -133,6 +134,7 @@ class CurrentCpuResponse(BaseModel):
     thread_count: Optional[int] = None
     p_core_count: Optional[int] = None  # Intel Performance cores
     e_core_count: Optional[int] = None  # Intel Efficiency cores
+    thread_usages: Optional[List[float]] = None  # Per-thread CPU usage percentages
 
 
 class CurrentMemoryResponse(BaseModel):

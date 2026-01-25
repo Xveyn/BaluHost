@@ -1,18 +1,20 @@
 import { buildApiUrl } from '../lib/api';
 
-const fetchWithAuth = async (url: string): Promise<any> => {
+const fetchWithAuth = async (url: string, options?: RequestInit): Promise<any> => {
   const token = localStorage.getItem('token');
   const response = await fetch(buildApiUrl(url), {
+    ...options,
     headers: {
       'Authorization': `Bearer ${token}`,
       'Content-Type': 'application/json',
+      ...options?.headers,
     },
   });
-  
+
   if (!response.ok) {
     throw new Error(`HTTP error! status: ${response.status}`);
   }
-  
+
   return response.json();
 };
 
@@ -71,6 +73,12 @@ export interface LoggingStats {
   };
 }
 
+export interface AuditLoggingStatus {
+  enabled: boolean;
+  can_toggle: boolean;
+  dev_mode: boolean;
+}
+
 export const loggingApi = {
   async getDiskIOLogs(hours: number = 24): Promise<DiskIOData> {
     return fetchWithAuth(`/api/logging/disk-io?hours=${hours}`);
@@ -93,5 +101,16 @@ export const loggingApi = {
 
   async getLoggingStats(days: number = 7): Promise<LoggingStats> {
     return fetchWithAuth(`/api/logging/stats?days=${days}`);
+  },
+
+  async getAuditLoggingStatus(): Promise<AuditLoggingStatus> {
+    return fetchWithAuth('/api/system/audit-logging');
+  },
+
+  async toggleAuditLogging(enabled: boolean): Promise<AuditLoggingStatus> {
+    return fetchWithAuth('/api/system/audit-logging', {
+      method: 'POST',
+      body: JSON.stringify({ enabled }),
+    });
   },
 };

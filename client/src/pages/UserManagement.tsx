@@ -536,145 +536,231 @@ export default function UserManagement() {
         </div>
       )}
 
-      {/* Desktop Users Table */}
+      {/* Users List */}
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
           <p className="text-sm text-slate-500">Loading users...</p>
         </div>
       ) : (
-        <div className="hidden lg:block card border-slate-800/60 bg-slate-900/55">
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-slate-800/60">
-              <thead>
-                <tr className="text-left text-xs uppercase tracking-[0.25em] text-slate-500">
-                  <th className="px-6 py-4">
-                    <input
-                      type="checkbox"
-                      checked={selectedUsers.size === users.length && users.length > 0}
-                      onChange={toggleAllUsers}
-                      className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
-                    />
-                  </th>
-                  <th className="px-6 py-4">
-                    <button 
-                      onClick={() => handleSort('username')}
-                      className="flex items-center gap-1 hover:text-slate-300"
-                    >
-                      Username
-                      {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
-                    </button>
-                  </th>
-                  <th className="px-6 py-4">Email</th>
-                  <th className="px-6 py-4">
-                    <button 
-                      onClick={() => handleSort('role')}
-                      className="flex items-center gap-1 hover:text-slate-300"
-                    >
-                      Role
-                      {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
-                    </button>
-                  </th>
-                  <th className="px-6 py-4">Status</th>
-                  <th className="px-6 py-4">
-                    <button 
-                      onClick={() => handleSort('created_at')}
-                      className="flex items-center gap-1 hover:text-slate-300"
-                    >
-                      Created
-                      {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
-                    </button>
-                  </th>
-                  <th className="px-6 py-4">Actions</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-800/60">
-                {users.length === 0 ? (
-                  <tr>
-                    <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
-                      No users found
-                    </td>
+        <>
+          {/* Desktop Users Table */}
+          <div className="hidden lg:block card border-slate-800/60 bg-slate-900/55">
+            <div className="overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-800/60">
+                <thead>
+                  <tr className="text-left text-xs uppercase tracking-[0.25em] text-slate-500">
+                    <th className="px-6 py-4">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.size === users.length && users.length > 0}
+                        onChange={toggleAllUsers}
+                        className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                      />
+                    </th>
+                    <th className="px-6 py-4">
+                      <button
+                        onClick={() => handleSort('username')}
+                        className="flex items-center gap-1 hover:text-slate-300"
+                      >
+                        Username
+                        {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
+                      </button>
+                    </th>
+                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">
+                      <button
+                        onClick={() => handleSort('role')}
+                        className="flex items-center gap-1 hover:text-slate-300"
+                      >
+                        Role
+                        {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
+                      </button>
+                    </th>
+                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">
+                      <button
+                        onClick={() => handleSort('created_at')}
+                        className="flex items-center gap-1 hover:text-slate-300"
+                      >
+                        Created
+                        {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
+                      </button>
+                    </th>
+                    <th className="px-6 py-4">Actions</th>
                   </tr>
-                ) : (
-                  users.map((user) => (
-                    <tr key={user.id} className="group transition hover:bg-slate-900/70">
-                      <td className="px-6 py-4">
-                        <input
-                          type="checkbox"
-                          checked={selectedUsers.has(user.id)}
-                          onChange={() => toggleUserSelection(user.id)}
-                          className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
-                        />
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-200">
-                        <div className="flex items-center gap-3">
-                          <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-sm font-semibold text-slate-300">
-                            {user.username.charAt(0).toUpperCase()}
-                          </span>
-                          <span className="font-medium group-hover:text-white">{user.username}</span>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400">
-                        {user.email}
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                          user.role === 'admin'
-                            ? 'border border-sky-500/40 bg-sky-500/15 text-sky-200'
-                            : 'border border-slate-700/70 bg-slate-900/70 text-slate-300'
-                        }`}>
-                          {user.role}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          onClick={() => handleToggleActive(user.id)}
-                          className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
-                            user.is_active
-                              ? 'border border-green-500/40 bg-green-500/15 text-green-200 hover:bg-green-500/25'
-                              : 'border border-slate-700/70 bg-slate-900/70 text-slate-400 hover:bg-slate-800/70'
-                          }`}
-                        >
-                          {user.is_active ? (
-                            <>
-                              <CheckCircle className="h-3 w-3" />
-                              Active
-                            </>
-                          ) : (
-                            <>
-                              <XCircle className="h-3 w-3" />
-                              Inactive
-                            </>
-                          )}
-                        </button>
-                      </td>
-                      <td className="px-6 py-4 text-sm text-slate-400">
-                        {new Date(user.created_at).toLocaleDateString()}
-                      </td>
-                      <td className="px-6 py-4 text-sm">
-                        <div className="flex items-center gap-2">
-                          <button 
-                            onClick={() => openEditModal(user)}
-                            className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
-                            title="Edit user"
-                          >
-                            <Edit className="h-4 w-4" />
-                          </button>
-                          <button 
-                            onClick={() => openDeleteConfirm(user.id)}
-                            className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                            title="Delete user"
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </button>
-                        </div>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {users.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
+                        No users found
                       </td>
                     </tr>
-                  ))
-                )}
-              </tbody>
-            </table>
+                  ) : (
+                    users.map((user) => (
+                      <tr key={user.id} className="group transition hover:bg-slate-900/70">
+                        <td className="px-6 py-4">
+                          <input
+                            type="checkbox"
+                            checked={selectedUsers.has(user.id)}
+                            onChange={() => toggleUserSelection(user.id)}
+                            className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
+                          />
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-200">
+                          <div className="flex items-center gap-3">
+                            <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-sm font-semibold text-slate-300">
+                              {user.username.charAt(0).toUpperCase()}
+                            </span>
+                            <span className="font-medium group-hover:text-white">{user.username}</span>
+                          </div>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-400">
+                          {user.email}
+                        </td>
+                        <td className="px-6 py-4">
+                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
+                            user.role === 'admin'
+                              ? 'border border-sky-500/40 bg-sky-500/15 text-sky-200'
+                              : 'border border-slate-700/70 bg-slate-900/70 text-slate-300'
+                          }`}>
+                            {user.role}
+                          </span>
+                        </td>
+                        <td className="px-6 py-4">
+                          <button
+                            onClick={() => handleToggleActive(user.id)}
+                            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
+                              user.is_active
+                                ? 'border border-green-500/40 bg-green-500/15 text-green-200 hover:bg-green-500/25'
+                                : 'border border-slate-700/70 bg-slate-900/70 text-slate-400 hover:bg-slate-800/70'
+                            }`}
+                          >
+                            {user.is_active ? (
+                              <>
+                                <CheckCircle className="h-3 w-3" />
+                                Active
+                              </>
+                            ) : (
+                              <>
+                                <XCircle className="h-3 w-3" />
+                                Inactive
+                              </>
+                            )}
+                          </button>
+                        </td>
+                        <td className="px-6 py-4 text-sm text-slate-400">
+                          {new Date(user.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="px-6 py-4 text-sm">
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => openEditModal(user)}
+                              className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
+                              title="Edit user"
+                            >
+                              <Edit className="h-4 w-4" />
+                            </button>
+                            <button
+                              onClick={() => openDeleteConfirm(user.id)}
+                              className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                              title="Delete user"
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+
+          {/* Mobile Users Card View */}
+          <div className="lg:hidden space-y-3">
+            {users.length === 0 ? (
+              <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
+                <p className="text-sm text-slate-500">No users found</p>
+              </div>
+            ) : (
+              users.map((user) => (
+                <div
+                  key={user.id}
+                  className="card border-slate-800/60 bg-slate-900/55 p-4"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <input
+                        type="checkbox"
+                        checked={selectedUsers.has(user.id)}
+                        onChange={() => toggleUserSelection(user.id)}
+                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500 flex-shrink-0"
+                      />
+                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-base font-semibold text-slate-300 flex-shrink-0">
+                        {user.username.charAt(0).toUpperCase()}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="font-medium text-white truncate">{user.username}</p>
+                        <p className="text-xs text-slate-400 truncate">{user.email || 'No email'}</p>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <button
+                        onClick={() => openEditModal(user)}
+                        className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
+                        title="Edit user"
+                      >
+                        <Edit className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => openDeleteConfirm(user.id)}
+                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
+                        title="Delete user"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 flex flex-wrap items-center gap-2">
+                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
+                      user.role === 'admin'
+                        ? 'border border-sky-500/40 bg-sky-500/15 text-sky-200'
+                        : 'border border-slate-700/70 bg-slate-900/70 text-slate-300'
+                    }`}>
+                      {user.role}
+                    </span>
+                    <button
+                      onClick={() => handleToggleActive(user.id)}
+                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition touch-manipulation active:scale-95 ${
+                        user.is_active
+                          ? 'border border-green-500/40 bg-green-500/15 text-green-200'
+                          : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
+                      }`}
+                    >
+                      {user.is_active ? (
+                        <>
+                          <CheckCircle className="h-3 w-3" />
+                          Active
+                        </>
+                      ) : (
+                        <>
+                          <XCircle className="h-3 w-3" />
+                          Inactive
+                        </>
+                      )}
+                    </button>
+                    <span className="text-xs text-slate-500">
+                      Created {new Date(user.created_at).toLocaleDateString()}
+                    </span>
+                  </div>
+                </div>
+              ))
+            )}
+          </div>
+        </>
       )}
 
       {/* User Create/Edit Modal */}

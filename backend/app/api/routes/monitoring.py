@@ -75,6 +75,7 @@ async def get_cpu_current(
         thread_count=sample.thread_count,
         p_core_count=sample.p_core_count,
         e_core_count=sample.e_core_count,
+        thread_usages=sample.thread_usages,
     )
 
 

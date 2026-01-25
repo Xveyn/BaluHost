@@ -25,6 +25,7 @@ export interface CpuSample {
   thread_count?: number;
   p_core_count?: number;  // Intel Performance cores
   e_core_count?: number;  // Intel Efficiency cores
+  thread_usages?: number[];  // Per-thread CPU usage percentages
 }
 
 export interface MemorySample {
@@ -76,6 +77,7 @@ export interface CurrentCpuResponse {
   thread_count?: number;
   p_core_count?: number;  // Intel Performance cores
   e_core_count?: number;  // Intel Efficiency cores
+  thread_usages?: number[];  // Per-thread CPU usage percentages
 }
 
 export interface CurrentMemoryResponse {
