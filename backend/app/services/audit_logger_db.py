@@ -438,6 +438,101 @@ class AuditLoggerDB:
             if should_close:
                 db.close()
     
+    def log_user_management(
+        self,
+        action: str,
+        admin_user: str,
+        target_user: str,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> Optional[AuditLog]:
+        """Log user management operations (create, update, delete, role changes)."""
+        return self.log_event(
+            event_type="USER_MANAGEMENT",
+            user=admin_user,
+            action=action,
+            resource=target_user,
+            details=details,
+            success=success,
+            error_message=error_message,
+            db=db
+        )
+
+    def log_raid_operation(
+        self,
+        action: str,
+        user: str,
+        raid_array: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> Optional[AuditLog]:
+        """Log RAID array operations (create, delete, manage)."""
+        return self.log_event(
+            event_type="RAID_OPERATION",
+            user=user,
+            action=action,
+            resource=raid_array,
+            details=details,
+            success=success,
+            error_message=error_message,
+            db=db
+        )
+
+    def log_vpn_operation(
+        self,
+        action: str,
+        user: str,
+        vpn_client: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> Optional[AuditLog]:
+        """Log VPN configuration operations (add client, remove client, config changes)."""
+        return self.log_event(
+            event_type="VPN_OPERATION",
+            user=user,
+            action=action,
+            resource=vpn_client,
+            details=details,
+            success=success,
+            error_message=error_message,
+            db=db
+        )
+
+    def log_system_config_change(
+        self,
+        action: str,
+        user: str,
+        config_key: str,
+        old_value: Optional[Any] = None,
+        new_value: Optional[Any] = None,
+        success: bool = True,
+        error_message: Optional[str] = None,
+        db: Optional[Session] = None
+    ) -> Optional[AuditLog]:
+        """Log system configuration changes."""
+        details = {}
+        if old_value is not None:
+            details["old_value"] = str(old_value)
+        if new_value is not None:
+            details["new_value"] = str(new_value)
+
+        return self.log_event(
+            event_type="SYSTEM_CONFIG",
+            user=user,
+            action=action,
+            resource=config_key,
+            details=details,
+            success=success,
+            error_message=error_message,
+            db=db
+        )
+
     def _audit_log_to_dict(self, log: AuditLog) -> Dict[str, Any]:
         """Convert AuditLog model to dictionary."""
         details = {}
@@ -446,7 +541,7 @@ class AuditLoggerDB:
                 details = json.loads(log.details)
             except json.JSONDecodeError:
                 details = {"raw": log.details}
-        
+
         result = {
             "id": log.id,
             "timestamp": log.timestamp.isoformat(),
@@ -457,14 +552,14 @@ class AuditLoggerDB:
             "success": log.success,
             "details": details
         }
-        
+
         if log.error_message:
             result["error"] = log.error_message
         if log.ip_address:
             result["ip_address"] = log.ip_address
         if log.user_agent:
             result["user_agent"] = log.user_agent
-        
+
         return result
 
 

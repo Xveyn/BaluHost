@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { 
-  getShareLinkInfo, 
-  accessShareLink, 
-  type ShareLinkInfo, 
-  type ShareLinkAccessResponse 
+import {
+  getShareLinkInfo,
+  accessShareLink,
+  type ShareLinkInfo,
+  type ShareLinkAccessResponse
 } from '../api/shares';
 import { apiClient } from '../lib/api';
 import { Download, Lock, Eye, FileIcon, Calendar, AlertCircle } from 'lucide-react';
@@ -12,7 +12,7 @@ import { Download, Lock, Eye, FileIcon, Calendar, AlertCircle } from 'lucide-rea
 export default function PublicSharePage() {
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
-  
+
   const [info, setInfo] = useState<ShareLinkInfo | null>(null);
   const [accessData, setAccessData] = useState<ShareLinkAccessResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -29,14 +29,14 @@ export default function PublicSharePage() {
 
   const loadShareInfo = async () => {
     if (!token) return;
-    
+
     setLoading(true);
     setError(null);
-    
+
     try {
       const data = await getShareLinkInfo(token);
       setInfo(data);
-      
+
       if (!data.is_accessible) {
         if (data.is_expired) {
           setError('This share link has expired');
@@ -59,9 +59,9 @@ export default function PublicSharePage() {
 
   const handleAccess = async (pwd?: string) => {
     if (!token) return;
-    
+
     setError(null);
-    
+
     try {
       const data = await accessShareLink(token, { password: pwd || password });
       setAccessData(data);
@@ -83,10 +83,10 @@ export default function PublicSharePage() {
 
   const handleDownload = async () => {
     if (!accessData || !token) return;
-    
+
     setDownloading(true);
     setError(null);
-    
+
     try {
       const response = await apiClient.get(`/files/download/${accessData.file_id}`, {
         responseType: 'blob',
@@ -127,10 +127,10 @@ export default function PublicSharePage() {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center">
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-          <p className="text-gray-600">Loading share...</p>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
+          <p className="text-slate-400">Loading share...</p>
         </div>
       </div>
     );
@@ -138,14 +138,14 @@ export default function PublicSharePage() {
 
   if (error && !info) {
     return (
-      <div className="min-h-screen bg-gray-50 flex items-center justify-center p-4">
-        <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full text-center">
-          <AlertCircle className="w-16 h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-2xl font-bold text-gray-900 mb-2">Access Denied</h1>
-          <p className="text-gray-600 mb-6">{error}</p>
+      <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-900/80 p-6 sm:p-8 max-w-md w-full text-center">
+          <AlertCircle className="w-12 sm:w-16 h-12 sm:h-16 text-red-500 mx-auto mb-4" />
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">Access Denied</h1>
+          <p className="text-slate-400 mb-6 text-sm sm:text-base">{error}</p>
           <button
             onClick={() => navigate('/')}
-            className="px-6 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700"
+            className="min-h-[44px] px-6 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium touch-manipulation active:scale-95 transition-all"
           >
             Go to Home
           </button>
@@ -155,51 +155,51 @@ export default function PublicSharePage() {
   }
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4">
+    <div className="min-h-screen bg-slate-950 py-8 sm:py-12 px-4">
       <div className="max-w-2xl mx-auto">
-        <div className="bg-white rounded-lg shadow-lg overflow-hidden">
+        <div className="rounded-xl border border-slate-800/60 bg-slate-900/80 overflow-hidden shadow-xl">
           {/* Header */}
-          <div className="bg-gradient-to-r from-blue-600 to-blue-700 p-6 text-white">
-            <h1 className="text-2xl font-bold mb-2">Shared File</h1>
-            <p className="text-blue-100">Someone has shared a file with you</p>
+          <div className="bg-gradient-to-r from-sky-600 to-sky-700 p-4 sm:p-6 text-white">
+            <h1 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">Shared File</h1>
+            <p className="text-sky-100 text-sm sm:text-base">Someone has shared a file with you</p>
           </div>
 
           {/* Content */}
-          <div className="p-6">
+          <div className="p-4 sm:p-6">
             {passwordRequired && !accessData ? (
               // Password Form
               <div>
                 <div className="text-center mb-6">
-                  <Lock className="w-16 h-16 text-blue-600 mx-auto mb-4" />
-                  <h2 className="text-xl font-semibold mb-2">Password Required</h2>
-                  <p className="text-gray-600">
+                  <Lock className="w-12 sm:w-16 h-12 sm:h-16 text-sky-500 mx-auto mb-4" />
+                  <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">Password Required</h2>
+                  <p className="text-slate-400 text-sm sm:text-base">
                     This share is password protected. Please enter the password to access it.
                   </p>
                 </div>
 
                 <form onSubmit={handlePasswordSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium mb-2">Password</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       placeholder="Enter password"
-                      className="w-full px-4 py-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                      className="w-full px-4 py-3 min-h-[44px] bg-slate-800/60 border border-slate-700/50 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                       required
                       autoFocus
                     />
                   </div>
 
                   {error && (
-                    <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">
+                    <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm">
                       {error}
                     </div>
                   )}
 
                   <button
                     type="submit"
-                    className="w-full px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium"
+                    className="w-full min-h-[44px] px-4 py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium touch-manipulation active:scale-95 transition-all"
                   >
                     Access File
                   </button>
@@ -207,16 +207,16 @@ export default function PublicSharePage() {
 
                 {/* File Info Preview */}
                 {info && (
-                  <div className="mt-6 pt-6 border-t">
-                    <div className="flex items-center justify-between text-sm text-gray-600">
+                  <div className="mt-6 pt-6 border-t border-slate-700/50">
+                    <div className="flex items-center justify-between text-sm text-slate-400">
                       <span className="flex items-center">
                         <FileIcon className="w-4 h-4 mr-2" />
-                        {info.file_name}
+                        <span className="truncate max-w-[200px]">{info.file_name}</span>
                       </span>
                       <span>{formatFileSize(info.file_size)}</span>
                     </div>
                     {info.expires_at && (
-                      <div className="flex items-center text-sm text-gray-500 mt-2">
+                      <div className="flex items-center text-sm text-slate-500 mt-2">
                         <Calendar className="w-4 h-4 mr-2" />
                         Expires: {formatDate(info.expires_at)}
                       </div>
@@ -228,15 +228,15 @@ export default function PublicSharePage() {
               // File Access View
               <div>
                 {/* File Info */}
-                <div className="bg-gray-50 rounded-lg p-6 mb-6">
-                  <div className="flex items-start justify-between mb-4">
+                <div className="bg-slate-800/40 rounded-lg p-4 sm:p-6 mb-6">
+                  <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-4 mb-4">
                     <div className="flex items-start">
-                      <FileIcon className="w-12 h-12 text-blue-600 mr-4 flex-shrink-0" />
-                      <div>
-                        <h2 className="text-xl font-semibold text-gray-900 mb-1">
+                      <FileIcon className="w-10 sm:w-12 h-10 sm:h-12 text-sky-500 mr-3 sm:mr-4 flex-shrink-0" />
+                      <div className="min-w-0">
+                        <h2 className="text-lg sm:text-xl font-semibold text-white mb-1 break-words">
                           {accessData.file_name}
                         </h2>
-                        <p className="text-gray-600">
+                        <p className="text-slate-400 text-sm">
                           {formatFileSize(accessData.file_size)}
                         </p>
                       </div>
@@ -244,13 +244,13 @@ export default function PublicSharePage() {
                   </div>
 
                   {accessData.description && (
-                    <div className="mt-4 p-3 bg-white rounded border">
-                      <p className="text-sm text-gray-700">{accessData.description}</p>
+                    <div className="mt-4 p-3 bg-slate-900/60 rounded-lg border border-slate-700/50">
+                      <p className="text-sm text-slate-300">{accessData.description}</p>
                     </div>
                   )}
 
                   {info?.expires_at && (
-                    <div className="flex items-center text-sm text-gray-500 mt-4">
+                    <div className="flex items-center text-sm text-slate-500 mt-4">
                       <Calendar className="w-4 h-4 mr-2" />
                       Expires: {formatDate(info.expires_at)}
                     </div>
@@ -258,16 +258,16 @@ export default function PublicSharePage() {
                 </div>
 
                 {error && (
-                  <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm mb-4">
+                  <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm mb-4">
                     {error}
                   </div>
                 )}
 
                 {/* Actions */}
-                <div className="flex gap-3">
+                <div className="flex flex-col sm:flex-row gap-3">
                   {accessData.allow_preview && (
                     <button
-                      className="flex-1 px-4 py-3 bg-gray-100 text-gray-700 rounded-lg hover:bg-gray-200 font-medium flex items-center justify-center"
+                      className="flex-1 min-h-[44px] px-4 py-3 bg-slate-700/60 text-slate-200 rounded-lg hover:bg-slate-700 font-medium flex items-center justify-center touch-manipulation active:scale-95 transition-all"
                       onClick={() => {/* TODO: Implement preview */}}
                     >
                       <Eye className="w-5 h-5 mr-2" />
@@ -278,7 +278,7 @@ export default function PublicSharePage() {
                     <button
                       onClick={handleDownload}
                       disabled={downloading}
-                      className="flex-1 px-4 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 font-medium flex items-center justify-center disabled:opacity-50"
+                      className="flex-1 min-h-[44px] px-4 py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium flex items-center justify-center disabled:opacity-50 touch-manipulation active:scale-95 transition-all"
                     >
                       <Download className="w-5 h-5 mr-2" />
                       {downloading ? 'Downloading...' : 'Download'}
@@ -287,7 +287,7 @@ export default function PublicSharePage() {
                 </div>
 
                 {!accessData.allow_download && !accessData.allow_preview && (
-                  <p className="text-center text-gray-500 mt-4">
+                  <p className="text-center text-slate-500 mt-4 text-sm">
                     This file cannot be downloaded or previewed.
                   </p>
                 )}
@@ -297,7 +297,7 @@ export default function PublicSharePage() {
         </div>
 
         {/* Footer */}
-        <div className="text-center mt-6 text-gray-500 text-sm">
+        <div className="text-center mt-6 text-slate-500 text-xs sm:text-sm">
           <p>Powered by BaluHost NAS Manager</p>
         </div>
       </div>

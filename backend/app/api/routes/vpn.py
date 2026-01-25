@@ -19,6 +19,7 @@ from app.schemas.vpn import (
     FritzBoxConfigSummary,
 )
 from app.services.vpn import VPNService
+from app.services.audit_logger_db import get_audit_logger_db
 
 router = APIRouter(prefix="/vpn", tags=["vpn"])
 
@@ -32,9 +33,11 @@ async def generate_vpn_config(
 ):
     """
     Generate WireGuard VPN configuration for mobile device.
-    
+
     Returns configuration file and QR code data for easy setup.
     """
+    audit_logger = get_audit_logger_db()
+
     try:
         config = VPNService.create_client_config(
             db=db,
@@ -42,8 +45,29 @@ async def generate_vpn_config(
             device_name=config_data.device_name,
             server_public_endpoint=config_data.server_public_endpoint,
         )
+
+        audit_logger.log_vpn_operation(
+            action="vpn_client_created",
+            user=current_user.username,
+            vpn_client=config_data.device_name,
+            details={
+                "server_endpoint": config_data.server_public_endpoint
+            },
+            success=True,
+            db=db
+        )
+
         return config
     except RuntimeError as e:
+        audit_logger.log_vpn_operation(
+            action="vpn_client_create_failed",
+            user=current_user.username,
+            vpn_client=config_data.device_name,
+            details={"error": str(e)},
+            success=False,
+            error_message=str(e),
+            db=db
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
@@ -98,28 +122,46 @@ async def update_vpn_client(
     """
     Update VPN client settings (name, active status).
     """
+    audit_logger = get_audit_logger_db()
+
     client = VPNService.get_client_by_id(db, client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN client not found"
         )
-    
+
     # Check ownership
     if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to update this VPN client"
         )
-    
+
+    old_device_name = client.device_name
+    old_is_active = client.is_active
+
     # Update fields
+    changes = {}
     if update_data.device_name is not None:
         client.device_name = update_data.device_name
+        changes["device_name"] = f"{old_device_name} -> {update_data.device_name}"
     if update_data.is_active is not None:
         client.is_active = update_data.is_active
-    
+        changes["is_active"] = f"{old_is_active} -> {update_data.is_active}"
+
     db.commit()
     db.refresh(client)
+
+    audit_logger.log_vpn_operation(
+        action="vpn_client_updated",
+        user=current_user.username,
+        vpn_client=client.device_name,
+        details=changes,
+        success=True,
+        db=db
+    )
+
     return client
 
 
@@ -132,26 +174,47 @@ async def delete_vpn_client(
     """
     Delete a VPN client configuration.
     """
+    audit_logger = get_audit_logger_db()
+
     client = VPNService.get_client_by_id(db, client_id)
     if not client:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN client not found"
         )
-    
+
     # Check ownership
     if str(client.user_id) != str(current_user.id) and current_user.role != "admin":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Not authorized to delete this VPN client"
         )
-    
+
+    device_name = client.device_name
     success = VPNService.delete_client(db, client_id)
+
     if not success:
+        audit_logger.log_vpn_operation(
+            action="vpn_client_delete_failed",
+            user=current_user.username,
+            vpn_client=device_name,
+            success=False,
+            error_message="Failed to delete VPN client",
+            db=db
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete VPN client"
         )
+
+    audit_logger.log_vpn_operation(
+        action="vpn_client_deleted",
+        user=current_user.username,
+        vpn_client=device_name,
+        details={"client_id": client_id},
+        success=True,
+        db=db
+    )
 
 
 @router.post("/clients/{client_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)

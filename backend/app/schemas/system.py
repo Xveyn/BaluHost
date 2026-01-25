@@ -234,3 +234,13 @@ class CreateArrayRequest(BaseModel):
 class DeleteArrayRequest(BaseModel):
     array: str
     force: bool = False
+
+
+class AuditLoggingStatus(BaseModel):
+    enabled: bool
+    can_toggle: bool  # True if in dev mode (can be toggled)
+    dev_mode: bool
+
+
+class AuditLoggingToggle(BaseModel):
+    enabled: bool

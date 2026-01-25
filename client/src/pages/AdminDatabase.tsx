@@ -96,72 +96,72 @@ export default function AdminDatabase() {
     <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-900 to-black">
       <div className="max-w-[1800px] mx-auto p-4 sm:p-6 lg:p-8">
         {/* Header */}
-        <div className="mb-8">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent mb-3">
+        <div className="mb-6 sm:mb-8">
+          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent mb-2 sm:mb-3">
             Database Management
           </h1>
-          <p className="text-slate-400 text-lg">Control database access and view table schemas</p>
+          <p className="text-slate-400 text-sm sm:text-lg">Control database access and view table schemas</p>
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+        <div className="grid grid-cols-2 gap-3 sm:gap-6 lg:grid-cols-3 mb-6 sm:mb-8">
           {/* Total Tables Card */}
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-blue-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 overflow-hidden">
+          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:border-blue-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-blue-500/10 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm font-medium mb-2">Total Tables</p>
-                <p className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                <p className="text-slate-400 text-xs sm:text-sm font-medium mb-1 sm:mb-2">Total Tables</p>
+                <p className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                   {tables.length}
                 </p>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                <Database className="w-7 h-7 text-blue-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                <Database className="w-5 h-5 sm:w-7 sm:h-7 text-blue-400" />
               </div>
             </div>
           </div>
 
           {/* Selected Table Card */}
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-emerald-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/10 overflow-hidden">
+          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:border-emerald-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-emerald-500/10 overflow-hidden">
             <div className="absolute inset-0 bg-gradient-to-br from-emerald-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div className="flex-1 min-w-0">
-                <p className="text-slate-400 text-sm font-medium mb-2">Selected Table</p>
-                <p className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent truncate">
+                <p className="text-slate-400 text-xs sm:text-sm font-medium mb-1 sm:mb-2">Selected Table</p>
+                <p className="text-lg sm:text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent truncate">
                   {selected || 'None'}
                 </p>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 flex-shrink-0 ml-4">
-                <Table className="w-7 h-7 text-emerald-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300 flex-shrink-0 ml-2 sm:ml-4">
+                <Table className="w-5 h-5 sm:w-7 sm:h-7 text-emerald-400" />
               </div>
             </div>
           </div>
 
           {/* Total Rows Card */}
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-2xl p-6 hover:border-purple-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 overflow-hidden">
+          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl p-4 sm:p-6 hover:border-purple-500/50 transition-all duration-300 hover:shadow-2xl hover:shadow-purple-500/10 overflow-hidden col-span-2 lg:col-span-1">
             <div className="absolute inset-0 bg-gradient-to-br from-purple-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
             <div className="relative flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm font-medium mb-2">Total Rows</p>
-                <p className="text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                <p className="text-slate-400 text-xs sm:text-sm font-medium mb-1 sm:mb-2">Total Rows</p>
+                <p className="text-2xl sm:text-4xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                   {!selected ? '—' : total !== null ? total.toLocaleString() : '0'}
                 </p>
               </div>
-              <div className="w-14 h-14 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                <RefreshCw className="w-7 h-7 text-purple-400" />
+              <div className="w-10 h-10 sm:w-14 sm:h-14 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg sm:rounded-xl flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                <RefreshCw className="w-5 h-5 sm:w-7 sm:h-7 text-purple-400" />
               </div>
             </div>
           </div>
         </div>
 
         {/* Table Selector Pills */}
-        <div className="mb-6">
-          <div className="flex flex-wrap gap-3">
+        <div className="mb-4 sm:mb-6">
+          <div className="flex flex-wrap gap-2 sm:gap-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 sm:pb-0">
             {tables.map((t) => (
               <button
                 key={t}
                 onClick={() => { setSelected(t); setPage(1) }}
-                className={`relative px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-300 ${
+                className={`relative px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold transition-all duration-300 touch-manipulation active:scale-95 whitespace-nowrap min-h-[44px] ${
                   selected === t
                     ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30 scale-105'
                     : 'bg-slate-800/40 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-slate-600/50 hover:text-white'
@@ -174,26 +174,26 @@ export default function AdminDatabase() {
         </div>
 
         {/* Main Content Card */}
-        <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-2xl overflow-hidden shadow-2xl">
+        <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl">
           <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
-          
+
           {/* Card Header */}
-          <div className="relative px-6 py-5 border-b border-slate-700/50 bg-slate-800/30">
-            <div className="flex items-center justify-between flex-wrap gap-4">
+          <div className="relative px-4 sm:px-6 py-4 sm:py-5 border-b border-slate-700/50 bg-slate-800/30">
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
               <div>
-                <h2 className="text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
+                <h2 className="text-xl sm:text-2xl font-bold bg-gradient-to-r from-white to-slate-300 bg-clip-text text-transparent">
                   {selected ?? 'Database View'}
                 </h2>
-                <p className="text-sm text-slate-400 mt-1">Select a table to view schema and rows</p>
+                <p className="text-xs sm:text-sm text-slate-400 mt-1">Select a table to view schema and rows</p>
               </div>
-              
-              <div className="flex items-center gap-3">
+
+              <div className="flex flex-wrap items-center gap-2 sm:gap-3">
                 {/* Pagination */}
                 {selected && (
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-1 sm:gap-2">
                     <button
                       onClick={() => setPage(Math.max(1, page - 1))}
-                      className={`p-2.5 rounded-xl border transition-all duration-200 ${
+                      className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-200 touch-manipulation active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center ${
                         page <= 1
                           ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
                           : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:border-blue-500/50 hover:text-white'
@@ -202,12 +202,12 @@ export default function AdminDatabase() {
                     >
                       <ChevronLeft className="w-5 h-5" />
                     </button>
-                    <div className="text-sm text-slate-300 font-medium min-w-[100px] text-center px-3">
-                      Page {page}{totalPages ? ` / ${totalPages}` : ''}
+                    <div className="text-xs sm:text-sm text-slate-300 font-medium min-w-[70px] sm:min-w-[100px] text-center px-2 sm:px-3">
+                      {page}{totalPages ? ` / ${totalPages}` : ''}
                     </div>
                     <button
                       onClick={() => setPage(page + 1)}
-                      className={`p-2.5 rounded-xl border transition-all duration-200 ${
+                      className={`p-2 sm:p-2.5 rounded-lg sm:rounded-xl border transition-all duration-200 touch-manipulation active:scale-95 min-h-[44px] min-w-[44px] flex items-center justify-center ${
                         totalPages !== null && page >= (totalPages ?? 1)
                           ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
                           : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:border-blue-500/50 hover:text-white'
@@ -222,7 +222,7 @@ export default function AdminDatabase() {
                 {/* Export Button */}
                 <button
                   disabled={!selected || rows.length === 0}
-                  className={`inline-flex items-center gap-2 px-5 py-2.5 rounded-xl text-sm font-semibold transition-all duration-200 ${
+                  className={`inline-flex items-center gap-2 px-3 sm:px-5 py-2 sm:py-2.5 rounded-lg sm:rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200 touch-manipulation active:scale-95 min-h-[44px] ${
                     selected && rows.length
                       ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white hover:from-blue-600 hover:to-blue-700 shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 hover:scale-105'
                       : 'bg-slate-700/40 text-slate-500 cursor-not-allowed border border-slate-700/50'
@@ -243,14 +243,14 @@ export default function AdminDatabase() {
                   }}
                 >
                   <Download className="w-4 h-4" />
-                  Export CSV
+                  <span className="hidden sm:inline">Export</span> CSV
                 </button>
               </div>
             </div>
           </div>
 
           {/* Card Body */}
-          <div className="relative p-6">
+          <div className="relative p-4 sm:p-6">
             {!selected && (
               <div className="text-center py-20">
                 <div className="relative inline-block">

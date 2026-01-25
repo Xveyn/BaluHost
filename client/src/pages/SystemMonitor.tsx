@@ -108,16 +108,16 @@ interface StatCardProps {
 
 function StatCard({ label, value, unit, color, icon }: StatCardProps) {
   return (
-    <div className={`card border-slate-800/60 bg-gradient-to-br from-${color}-500/10 to-transparent p-5`}>
+    <div className={`card border-slate-800/60 bg-gradient-to-br from-${color}-500/10 to-transparent p-3 sm:p-5`}>
       <div className="flex items-center justify-between">
-        <div>
-          <p className="text-xs font-medium uppercase tracking-wider text-slate-400">{label}</p>
-          <p className="mt-2 text-2xl font-semibold text-white">
+        <div className="min-w-0 flex-1">
+          <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-400 truncate">{label}</p>
+          <p className="mt-1 sm:mt-2 text-lg sm:text-2xl font-semibold text-white">
             {value}
-            {unit && <span className="ml-1 text-lg text-slate-400">{unit}</span>}
+            {unit && <span className="ml-1 text-sm sm:text-lg text-slate-400">{unit}</span>}
           </p>
         </div>
-        <div className={`rounded-full bg-${color}-500/20 p-3`}>{icon}</div>
+        <div className={`rounded-full bg-${color}-500/20 p-2 sm:p-3 flex-shrink-0 ml-2`}>{icon}</div>
       </div>
     </div>
   );
@@ -174,60 +174,60 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Current Stats */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label="CPU-Auslastung"
           value={current?.usage_percent?.toFixed(1) ?? '0'}
           unit="%"
           color="blue"
-          icon={<span className="text-blue-400 text-xl">%</span>}
+          icon={<span className="text-blue-400 text-base sm:text-xl">%</span>}
         />
         <StatCard
           label="Frequenz"
           value={current?.frequency_mhz ? (current.frequency_mhz / 1000).toFixed(2) : '-'}
           unit="GHz"
           color="purple"
-          icon={<span className="text-purple-400 text-xl">~</span>}
+          icon={<span className="text-purple-400 text-base sm:text-xl">~</span>}
         />
         <StatCard
           label="Temperatur"
           value={current?.temperature_celsius?.toFixed(1) ?? '-'}
           unit="°C"
           color="orange"
-          icon={<span className="text-orange-400 text-xl">🌡</span>}
+          icon={<span className="text-orange-400 text-base sm:text-xl">🌡</span>}
         />
         {/* Cores & Threads Card */}
-        <div className="card border-slate-800/60 bg-gradient-to-br from-green-500/10 to-transparent p-5">
+        <div className="card border-slate-800/60 bg-gradient-to-br from-green-500/10 to-transparent p-3 sm:p-5">
           <div className="flex items-center justify-between">
-            <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-slate-400">Prozessor</p>
-              <p className="mt-2 text-xl font-semibold text-white">
+            <div className="min-w-0 flex-1">
+              <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-400">Prozessor</p>
+              <p className="mt-1 sm:mt-2 text-base sm:text-xl font-semibold text-white truncate">
                 {coreInfo?.main ?? '-'}
               </p>
               {coreInfo?.detail && (
-                <p className={`mt-1 text-sm ${coreInfo.isHybrid ? 'text-cyan-400' : 'text-slate-400'}`}>
+                <p className={`mt-0.5 sm:mt-1 text-xs sm:text-sm truncate ${coreInfo.isHybrid ? 'text-cyan-400' : 'text-slate-400'}`}>
                   {coreInfo.detail}
                 </p>
               )}
             </div>
-            <div className="rounded-full bg-green-500/20 p-3">
-              <span className="text-green-400 text-xl">#</span>
+            <div className="rounded-full bg-green-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
+              <span className="text-green-400 text-base sm:text-xl">#</span>
             </div>
           </div>
         </div>
       </div>
 
       {/* Usage Chart */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-white">CPU-Auslastung</h3>
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">CPU-Auslastung</h3>
         <MetricChart
           data={usageChartData}
           lines={[{ dataKey: 'usage', name: 'Auslastung (%)', color: '#3b82f6' }]}
           yAxisLabel="%"
           yAxisDomain={[0, 100]}
-          height={300}
+          height={250}
           loading={loading}
           showArea
         />
@@ -235,14 +235,14 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
 
       {/* Temperature Chart - only show if data available */}
       {hasTemperatureData && (
-        <div className="card border-slate-800/60 bg-slate-900/55 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">CPU-Temperatur</h3>
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">CPU-Temperatur</h3>
           <MetricChart
             data={temperatureChartData}
             lines={[{ dataKey: 'temperature', name: 'Temperatur (°C)', color: '#f97316' }]}
             yAxisLabel="°C"
             yAxisDomain={[0, 'auto']}
-            height={300}
+            height={250}
             loading={loading}
             showArea
           />
@@ -276,45 +276,45 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Current Stats */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-5">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
         <StatCard
           label="Belegt"
           value={current ? formatBytes(current.used_bytes) : '-'}
           color="purple"
-          icon={<span className="text-purple-400 text-xl">📊</span>}
+          icon={<span className="text-purple-400 text-base sm:text-xl">📊</span>}
         />
         <StatCard
           label="Gesamt"
           value={current ? formatBytes(current.total_bytes) : '-'}
           color="blue"
-          icon={<span className="text-blue-400 text-xl">Σ</span>}
+          icon={<span className="text-blue-400 text-base sm:text-xl">Σ</span>}
         />
         <StatCard
           label="Verfügbar"
           value={current?.available_bytes ? formatBytes(current.available_bytes) : '-'}
           color="green"
-          icon={<span className="text-green-400 text-xl">✓</span>}
+          icon={<span className="text-green-400 text-base sm:text-xl">✓</span>}
         />
         <StatCard
           label="Auslastung"
           value={current?.percent?.toFixed(1) ?? '0'}
           unit="%"
           color="orange"
-          icon={<span className="text-orange-400 text-xl">%</span>}
+          icon={<span className="text-orange-400 text-base sm:text-xl">%</span>}
         />
         <StatCard
           label="BaluHost"
           value={current?.baluhost_memory_bytes ? formatBytes(current.baluhost_memory_bytes) : '-'}
           color="cyan"
-          icon={<span className="text-cyan-400 text-xl">🏠</span>}
+          icon={<span className="text-cyan-400 text-base sm:text-xl">🏠</span>}
         />
       </div>
 
       {/* Chart - Absolute values in GB */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-white">RAM-Verlauf (absolut)</h3>
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">RAM-Verlauf (absolut)</h3>
         <MetricChart
           data={chartData}
           lines={[
@@ -325,7 +325,7 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
           ]}
           yAxisLabel="GB"
           yAxisDomain={[0, Math.ceil(totalGb)]}
-          height={350}
+          height={300}
           loading={loading}
           showArea
         />
@@ -351,28 +351,28 @@ function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Current Stats */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5">
         <StatCard
           label="Download"
           value={current?.download_mbps?.toFixed(2) ?? '0'}
           unit="Mbit/s"
           color="blue"
-          icon={<span className="text-blue-400 text-xl">↓</span>}
+          icon={<span className="text-blue-400 text-base sm:text-xl">↓</span>}
         />
         <StatCard
           label="Upload"
           value={current?.upload_mbps?.toFixed(2) ?? '0'}
           unit="Mbit/s"
           color="green"
-          icon={<span className="text-green-400 text-xl">↑</span>}
+          icon={<span className="text-green-400 text-base sm:text-xl">↑</span>}
         />
       </div>
 
       {/* Chart */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-6">
-        <h3 className="mb-4 text-lg font-semibold text-white">Netzwerk-Verlauf</h3>
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">Netzwerk-Verlauf</h3>
         <MetricChart
           data={chartData}
           lines={[
@@ -380,7 +380,7 @@ function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
             { dataKey: 'upload', name: 'Upload (Mbit/s)', color: '#10b981' },
           ]}
           yAxisLabel="Mbit/s"
-          height={350}
+          height={300}
           loading={loading}
         />
       </div>
@@ -419,81 +419,83 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Disk Selector */}
       {availableDisks.length > 0 && (
-        <div className="flex flex-wrap gap-3">
-          {availableDisks.map((disk) => (
-            <button
-              key={disk}
-              onClick={() => setSelectedDisk(disk)}
-              className={`rounded-lg border px-4 py-2 text-sm font-medium transition-all ${
-                selectedDisk === disk
-                  ? 'border-blue-500 bg-blue-500/10 text-blue-400'
-                  : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:bg-slate-800'
-              }`}
-            >
-              {disk}
-            </button>
-          ))}
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+          <div className="flex gap-2 sm:gap-3 sm:flex-wrap min-w-max sm:min-w-0">
+            {availableDisks.map((disk) => (
+              <button
+                key={disk}
+                onClick={() => setSelectedDisk(disk)}
+                className={`whitespace-nowrap rounded-lg border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
+                  selectedDisk === disk
+                    ? 'border-blue-500 bg-blue-500/10 text-blue-400'
+                    : 'border-slate-700 bg-slate-800/50 text-slate-400 hover:border-slate-600 hover:bg-slate-800'
+                }`}
+              >
+                {disk}
+              </button>
+            ))}
+          </div>
         </div>
       )}
 
       {/* Current Stats */}
       {selectedDisk && (
-        <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-6">
+        <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-6">
           <StatCard
             label="Lesen"
             value={currentDisk?.read_mbps?.toFixed(2) ?? '0'}
             unit="MB/s"
             color="blue"
-            icon={<span className="text-blue-400 text-xl">📖</span>}
+            icon={<span className="text-blue-400 text-base sm:text-xl">📖</span>}
           />
           <StatCard
             label="Schreiben"
             value={currentDisk?.write_mbps?.toFixed(2) ?? '0'}
             unit="MB/s"
             color="green"
-            icon={<span className="text-green-400 text-xl">✏️</span>}
+            icon={<span className="text-green-400 text-base sm:text-xl">✏️</span>}
           />
           <StatCard
             label="Lese-IOPS"
             value={currentDisk?.read_iops?.toFixed(0) ?? '0'}
             color="purple"
-            icon={<span className="text-purple-400 text-xl">⚡</span>}
+            icon={<span className="text-purple-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
             label="Schreib-IOPS"
             value={currentDisk?.write_iops?.toFixed(0) ?? '0'}
             color="orange"
-            icon={<span className="text-orange-400 text-xl">⚡</span>}
+            icon={<span className="text-orange-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
             label="Antwortzeit"
             value={currentDisk?.avg_response_ms?.toFixed(2) ?? '-'}
             unit="ms"
             color="cyan"
-            icon={<span className="text-cyan-400 text-xl">⏱</span>}
+            icon={<span className="text-cyan-400 text-base sm:text-xl">⏱</span>}
           />
           <StatCard
             label="Aktive Zeit"
             value={currentDisk?.active_time_percent?.toFixed(1) ?? '-'}
             unit="%"
             color="teal"
-            icon={<span className="text-teal-400 text-xl">📊</span>}
+            icon={<span className="text-teal-400 text-base sm:text-xl">📊</span>}
           />
         </div>
       )}
 
       {/* Chart */}
       {selectedDisk && (
-        <div className="card border-slate-800/60 bg-slate-900/55 p-6">
-          <div className="mb-4 flex items-center justify-between">
-            <h3 className="text-lg font-semibold text-white">{selectedDisk} - Verlauf</h3>
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+          <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
+            <h3 className="text-base sm:text-lg font-semibold text-white">{selectedDisk} - Verlauf</h3>
             <div className="flex gap-2">
               <button
                 onClick={() => setViewMode('throughput')}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                className={`flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
                   viewMode === 'throughput'
                     ? 'bg-blue-500/20 text-blue-400'
                     : 'text-slate-400 hover:bg-slate-800'
@@ -503,7 +505,7 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
               </button>
               <button
                 onClick={() => setViewMode('iops')}
-                className={`rounded-lg px-3 py-1.5 text-sm font-medium transition-all ${
+                className={`flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
                   viewMode === 'iops'
                     ? 'bg-blue-500/20 text-blue-400'
                     : 'text-slate-400 hover:bg-slate-800'
@@ -528,16 +530,16 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
               },
             ]}
             yAxisLabel={viewMode === 'throughput' ? 'MB/s' : 'IOPS'}
-            height={350}
+            height={300}
             loading={loading}
           />
         </div>
       )}
 
       {availableDisks.length === 0 && !loading && (
-        <div className="text-center py-12 text-slate-400">
+        <div className="text-center py-8 sm:py-12 text-slate-400">
           <p>Keine Festplatten erkannt</p>
-          <p className="text-sm text-slate-500 mt-1">Warte auf erste Messung...</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">Warte auf erste Messung...</p>
         </div>
       )}
     </div>
@@ -608,65 +610,65 @@ function PowerTab() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Total Power */}
-      <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div className="grid grid-cols-2 gap-3 sm:gap-5">
         <StatCard
           label="Gesamtverbrauch"
           value={powerData.total_current_power.toFixed(1)}
           unit="W"
           color="yellow"
-          icon={<span className="text-yellow-400 text-xl">⚡</span>}
+          icon={<span className="text-yellow-400 text-base sm:text-xl">⚡</span>}
         />
         <StatCard
           label="Geräte"
           value={powerData.devices.length}
           color="blue"
-          icon={<span className="text-blue-400 text-xl">#</span>}
+          icon={<span className="text-blue-400 text-base sm:text-xl">#</span>}
         />
       </div>
 
       {/* Per-device stats */}
       {powerData.devices.map((device) => (
-        <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-6">
-          <h3 className="mb-4 text-lg font-semibold text-white">{device.device_name}</h3>
-          <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+        <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             <div>
-              <p className="text-xs text-slate-400">Leistung</p>
-              <p className="text-xl font-semibold text-white">
-                {device.latest_sample?.watts?.toFixed(1) ?? '-'} W
+              <p className="text-[10px] sm:text-xs text-slate-400">Leistung</p>
+              <p className="text-lg sm:text-xl font-semibold text-white">
+                {device.latest_sample?.watts?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Spannung</p>
-              <p className="text-xl font-semibold text-white">
-                {device.latest_sample?.voltage?.toFixed(1) ?? '-'} V
+              <p className="text-[10px] sm:text-xs text-slate-400">Spannung</p>
+              <p className="text-lg sm:text-xl font-semibold text-white">
+                {device.latest_sample?.voltage?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Strom</p>
-              <p className="text-xl font-semibold text-white">
-                {device.latest_sample?.current?.toFixed(3) ?? '-'} A
+              <p className="text-[10px] sm:text-xs text-slate-400">Strom</p>
+              <p className="text-lg sm:text-xl font-semibold text-white">
+                {device.latest_sample?.current?.toFixed(3) ?? '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
               </p>
             </div>
             <div>
-              <p className="text-xs text-slate-400">Heute</p>
-              <p className="text-xl font-semibold text-white">
-                {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} kWh
+              <p className="text-[10px] sm:text-xs text-slate-400">Heute</p>
+              <p className="text-lg sm:text-xl font-semibold text-white">
+                {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
               </p>
             </div>
           </div>
 
           {/* Mini chart for this device */}
           {device.samples.length > 0 && (
-            <div className="mt-4">
+            <div className="mt-3 sm:mt-4">
               <MetricChart
                 data={device.samples.map((s) => ({
                   time: formatTimestamp(s.timestamp),
                   watts: s.watts,
                 }))}
                 lines={[{ dataKey: 'watts', name: 'Leistung (W)', color: '#eab308' }]}
-                height={200}
+                height={180}
                 showArea
               />
             </div>
@@ -685,16 +687,16 @@ export default function SystemMonitor() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex flex-wrap items-center justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">System Monitor</h1>
-          <p className="mt-1 text-sm text-slate-400">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">System Monitor</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
             Echtzeit-Überwachung von CPU, RAM, Netzwerk, Festplatten und Stromverbrauch
           </p>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 sm:gap-4">
           <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
-          <div className="rounded-full border border-slate-800 bg-slate-900/70 px-4 py-2 text-xs text-slate-400 shadow-inner">
+          <div className="rounded-full border border-slate-800 bg-slate-900/70 px-3 sm:px-4 py-1.5 sm:py-2 text-xs text-slate-400 shadow-inner">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 inline-block mr-2" />
             Live
           </div>
@@ -702,21 +704,24 @@ export default function SystemMonitor() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex flex-wrap gap-2 border-b border-slate-800 pb-3">
-        {TABS.map((tab) => (
-          <button
-            key={tab.id}
-            onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium transition-all ${
-              activeTab === tab.id
-                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
-            }`}
-          >
-            {tab.icon}
-            {tab.label}
-          </button>
-        ))}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
+        <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+          {TABS.map((tab) => (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                activeTab === tab.id
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+              }`}
+            >
+              {tab.icon}
+              <span className="hidden sm:inline">{tab.label}</span>
+              <span className="sm:hidden">{tab.label.slice(0, 3)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}

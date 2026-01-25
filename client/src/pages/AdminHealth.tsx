@@ -28,24 +28,24 @@ export default function AdminHealth() {
 
   return (
     <div>
-      <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">System Health</h1>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <h1 className="text-2xl sm:text-3xl font-semibold text-white">System Health</h1>
         <div>
           <button
             onClick={fetchHealth}
-            className="rounded-md bg-sky-500 px-3 py-2 text-sm font-medium text-white"
+            className="min-h-[44px] rounded-md bg-sky-500 px-4 py-2.5 text-sm font-medium text-white touch-manipulation active:scale-95 transition-transform"
           >
             {loading ? 'Refreshing…' : 'Refresh'}
           </button>
         </div>
       </div>
 
-      {error && <div className="mt-4 text-red-400">{error}</div>}
+      {error && <div className="mt-4 text-red-400 text-sm">{error}</div>}
 
       <div className="mt-4 space-y-4">
         {health ? (
-          <div className="rounded-md border border-slate-800 bg-slate-900/60 p-4">
-            <pre className="whitespace-pre-wrap text-sm">{JSON.stringify(health, null, 2)}</pre>
+          <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-3 sm:p-4">
+            <pre className="whitespace-pre-wrap text-xs sm:text-sm overflow-x-auto">{JSON.stringify(health, null, 2)}</pre>
           </div>
         ) : (
           <div className="text-sm text-slate-400">No data yet.</div>

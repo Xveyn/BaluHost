@@ -1,28 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import {
-  LineChart,
-  Line,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  Legend,
-  ResponsiveContainer,
-} from 'recharts';
 import { loggingApi } from '../api/logging';
-import type { DiskIOData, FileAccessLogsResponse } from '../api/logging';
+import type { AuditLoggingStatus, FileAccessLogsResponse } from '../api/logging';
+import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
+import toast from 'react-hot-toast';
 
 const Logging: React.FC = () => {
-  const [diskIOData, setDiskIOData] = useState<DiskIOData | null>(null);
   const [fileAccessLogs, setFileAccessLogs] = useState<FileAccessLogsResponse | null>(
     null
   );
-  const [selectedDisk, setSelectedDisk] = useState<string>('');
+  const [auditStatus, setAuditStatus] = useState<AuditLoggingStatus | null>(null);
   const [timeRange, setTimeRange] = useState<number>(24);
   const [actionFilter, setActionFilter] = useState<string>('');
   const [userFilter, setUserFilter] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [togglingAudit, setTogglingAudit] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -33,28 +25,43 @@ const Logging: React.FC = () => {
       setLoading(true);
       setError(null);
 
-      const [diskData, logsData] = await Promise.all([
-        loggingApi.getDiskIOLogs(timeRange),
+      const [logsData, statusData] = await Promise.all([
         loggingApi.getFileAccessLogs({
           limit: 100,
           days: Math.ceil(timeRange / 24),
           action: actionFilter || undefined,
           user: userFilter || undefined,
         }),
+        loggingApi.getAuditLoggingStatus().catch(() => null), // Fail silently if not admin
       ]);
 
-      setDiskIOData(diskData);
       setFileAccessLogs(logsData);
-
-      // Select first disk if none selected
-      if (!selectedDisk && Object.keys(diskData.disks).length > 0) {
-        setSelectedDisk(Object.keys(diskData.disks)[0]);
-      }
+      setAuditStatus(statusData);
     } catch (err: any) {
       setError(err.message || 'Failed to load logging data');
       console.error('Error loading logging data:', err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleToggleAuditLogging = async () => {
+    if (!auditStatus) return;
+
+    setTogglingAudit(true);
+    try {
+      const newStatus = await loggingApi.toggleAuditLogging(!auditStatus.enabled);
+      setAuditStatus(newStatus);
+      toast.success(
+        newStatus.enabled
+          ? 'Audit logging enabled'
+          : 'Audit logging disabled'
+      );
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to toggle audit logging');
+      console.error('Error toggling audit logging:', err);
+    } finally {
+      setTogglingAudit(false);
     }
   };
 
@@ -74,75 +81,6 @@ const Logging: React.FC = () => {
     return new Date(timestamp).toLocaleString();
   };
 
-  const formatChartTimestamp = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    
-    // For time ranges > 72 hours (3 days), show only date
-    if (timeRange > 72) {
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      return `${day}.${month}`;
-    }
-    
-    // For time ranges > 24 hours but <= 72 hours, show date + time
-    if (timeRange > 24) {
-      const month = (date.getMonth() + 1).toString().padStart(2, '0');
-      const day = date.getDate().toString().padStart(2, '0');
-      const hours = date.getHours().toString().padStart(2, '0');
-      return `${day}.${month} ${hours}h`;
-    }
-    
-    // For time ranges <= 24 hours, show only time
-    return `${date.getHours().toString().padStart(2, '0')}:${date
-      .getMinutes()
-      .toString()
-      .padStart(2, '0')}`;
-  };
-  
-  const formatTooltipTimestamp = (timestamp: number): string => {
-    const date = new Date(timestamp);
-    const month = (date.getMonth() + 1).toString().padStart(2, '0');
-    const day = date.getDate().toString().padStart(2, '0');
-    const hours = date.getHours().toString().padStart(2, '0');
-    const minutes = date.getMinutes().toString().padStart(2, '0');
-    return `${day}.${month}.${date.getFullYear()} ${hours}:${minutes}`;
-  };
-
-  // Prepare chart data for selected disk
-  const getChartData = () => {
-    if (!diskIOData || !selectedDisk) return [];
-
-    const samples = diskIOData.disks[selectedDisk] || [];
-
-    // Sample data for display (show every Nth point based on time range)
-    const sampleRate = Math.max(1, Math.floor(samples.length / 100));
-
-    return samples
-      .filter((_, index) => index % sampleRate === 0)
-      .map((sample) => ({
-        time: formatChartTimestamp(sample.timestamp),
-        timestamp: sample.timestamp,
-        Read: sample.readMbps,
-        Write: sample.writeMbps,
-      }));
-  };
-
-  const getIOPSChartData = () => {
-    if (!diskIOData || !selectedDisk) return [];
-
-    const samples = diskIOData.disks[selectedDisk] || [];
-    const sampleRate = Math.max(1, Math.floor(samples.length / 100));
-
-    return samples
-      .filter((_, index) => index % sampleRate === 0)
-      .map((sample) => ({
-        time: formatChartTimestamp(sample.timestamp),
-        timestamp: sample.timestamp,
-        'Read IOPS': sample.readIops,
-        'Write IOPS': sample.writeIops,
-      }));
-  };
-
   const availableActions = Array.from(
     new Set(fileAccessLogs?.logs.map((log) => log.action) || [])
   ).sort();
@@ -151,19 +89,32 @@ const Logging: React.FC = () => {
     new Set(fileAccessLogs?.logs.map((log) => log.user) || [])
   ).sort();
 
+  const getActionBadgeClass = (action: string) => {
+    if (action === 'read' || action === 'download') {
+      return 'border border-green-500/40 bg-green-500/15 text-green-300';
+    }
+    if (action === 'write' || action === 'upload' || action === 'create') {
+      return 'border border-yellow-500/40 bg-yellow-500/15 text-yellow-300';
+    }
+    if (action === 'delete') {
+      return 'border border-rose-500/40 bg-rose-500/15 text-rose-300';
+    }
+    return 'border border-slate-700/70 bg-slate-900/70 text-slate-300';
+  };
+
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-gray-400">Loading logging data...</div>
+        <div className="text-slate-400">Loading logging data...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="bg-red-900/20 border border-red-500 text-red-400 px-4 py-3 rounded">
-        <p className="font-bold">Error</p>
-        <p>{error}</p>
+      <div className="card border-red-900/60 bg-red-950/30 p-4">
+        <p className="font-bold text-red-400">Error</p>
+        <p className="text-red-300">{error}</p>
       </div>
     );
   }
@@ -171,23 +122,46 @@ const Logging: React.FC = () => {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex justify-between items-center">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Logging</h1>
-          <p className="text-gray-400 mt-1">
-            System activity logs and disk I/O monitoring
-            {diskIOData?.dev_mode && (
-              <span className="ml-2 text-yellow-400 text-sm">
-                (Dev Mode - Mock Data)
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Logging</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">
+            System activity and audit logs
+            {auditStatus && (
+              <span className={`ml-2 text-xs ${auditStatus.enabled ? 'text-green-400' : 'text-yellow-400'}`}>
+                ({auditStatus.enabled ? 'Logging Enabled' : 'Logging Disabled'})
               </span>
             )}
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          {auditStatus?.can_toggle && (
+            <button
+              onClick={handleToggleAuditLogging}
+              disabled={togglingAudit}
+              className={`flex items-center gap-2 px-3 sm:px-4 py-2 rounded-lg border text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
+                auditStatus.enabled
+                  ? 'border-green-500/40 bg-green-500/10 text-green-300 hover:bg-green-500/20'
+                  : 'border-yellow-500/40 bg-yellow-500/10 text-yellow-300 hover:bg-yellow-500/20'
+              } ${togglingAudit ? 'opacity-50 cursor-not-allowed' : ''}`}
+            >
+              <Power className="h-4 w-4" />
+              <span className="hidden sm:inline">
+                {togglingAudit
+                  ? 'Toggling...'
+                  : auditStatus.enabled
+                  ? 'Disable Logging'
+                  : 'Enable Logging'}
+              </span>
+              <span className="sm:hidden">
+                {auditStatus.enabled ? 'Off' : 'On'}
+              </span>
+            </button>
+          )}
           <select
             value={timeRange}
             onChange={(e) => setTimeRange(Number(e.target.value))}
-            className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
+            className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           >
             <option value={1}>Last 1 hour</option>
             <option value={6}>Last 6 hours</option>
@@ -197,154 +171,26 @@ const Logging: React.FC = () => {
           </select>
           <button
             onClick={loadData}
-            className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded transition-colors"
+            className="btn btn-primary flex items-center gap-2 justify-center touch-manipulation active:scale-95"
           >
-            Refresh
+            <RefreshCw className="h-4 w-4" />
+            <span className="hidden sm:inline">Refresh</span>
           </button>
         </div>
       </div>
 
-      {/* Disk I/O Charts */}
-      <div className="bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-white">Disk I/O Activity</h2>
-          {diskIOData && Object.keys(diskIOData.disks).length > 1 && (
-            <select
-              value={selectedDisk}
-              onChange={(e) => setSelectedDisk(e.target.value)}
-              className="bg-gray-700 text-white px-4 py-2 rounded border border-gray-600 focus:border-blue-500 focus:outline-none"
-            >
-              {Object.keys(diskIOData.disks).map((disk) => (
-                <option key={disk} value={disk}>
-                  {disk}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
-        {/* Throughput Chart */}
-        <div className="mb-8">
-          <h3 className="text-lg font-medium text-gray-300 mb-3">
-            Disk Throughput (MB/s)
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart 
-              data={getChartData()}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis 
-                dataKey="time" 
-                stroke="#9CA3AF"
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis 
-                stroke="#9CA3AF"
-                label={{ value: 'MB/s', angle: -90, position: 'insideLeft', style: { fill: '#9CA3AF' } }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
-                  borderRadius: '0.375rem',
-                }}
-                labelStyle={{ color: '#F3F4F6' }}
-                labelFormatter={(value, payload) => {
-                  if (payload && payload.length > 0) {
-                    return formatTooltipTimestamp(payload[0].payload.timestamp);
-                  }
-                  return value;
-                }}
-                formatter={(value: number) => [`${value} MB/s`, '']}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="Read"
-                stroke="#3B82F6"
-                strokeWidth={2}
-                dot={false}
-                name="Read"
-              />
-              <Line
-                type="monotone"
-                dataKey="Write"
-                stroke="#10B981"
-                strokeWidth={2}
-                dot={false}
-                name="Write"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        {/* IOPS Chart */}
-        <div>
-          <h3 className="text-lg font-medium text-gray-300 mb-3">
-            Disk Operations (IOPS)
-          </h3>
-          <ResponsiveContainer width="100%" height={300}>
-            <LineChart 
-              data={getIOPSChartData()}
-              margin={{ top: 5, right: 30, left: 20, bottom: 5 }}
-            >
-              <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-              <XAxis 
-                dataKey="time" 
-                stroke="#9CA3AF"
-                tick={{ fontSize: 12 }}
-              />
-              <YAxis 
-                stroke="#9CA3AF"
-                label={{ value: 'IOPS', angle: -90, position: 'insideLeft', style: { fill: '#9CA3AF' } }}
-              />
-              <Tooltip
-                contentStyle={{
-                  backgroundColor: '#1F2937',
-                  border: '1px solid #374151',
-                  borderRadius: '0.375rem',
-                }}
-                labelStyle={{ color: '#F3F4F6' }}
-                labelFormatter={(value, payload) => {
-                  if (payload && payload.length > 0) {
-                    return formatTooltipTimestamp(payload[0].payload.timestamp);
-                  }
-                  return value;
-                }}
-                formatter={(value: number) => [`${value} IOPS`, '']}
-              />
-              <Legend />
-              <Line
-                type="monotone"
-                dataKey="Read IOPS"
-                stroke="#8B5CF6"
-                strokeWidth={2}
-                dot={false}
-                name="Read IOPS"
-              />
-              <Line
-                type="monotone"
-                dataKey="Write IOPS"
-                stroke="#F59E0B"
-                strokeWidth={2}
-                dot={false}
-                name="Write IOPS"
-              />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-      </div>
-
       {/* File Access Logs */}
-      <div className="bg-gray-800 rounded-lg shadow p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-semibold text-white">File Access Logs</h2>
-          <div className="flex gap-2">
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        <div className="flex flex-col gap-3 mb-4">
+          <div className="flex items-center gap-2">
+            <FileText className="h-5 w-5 text-slate-400" />
+            <h2 className="text-lg sm:text-xl font-semibold text-white">File Access Logs</h2>
+          </div>
+          <div className="flex flex-col sm:flex-row gap-2">
             <select
               value={actionFilter}
               onChange={(e) => setActionFilter(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
               <option value="">All Actions</option>
               {availableActions.map((action) => (
@@ -356,7 +202,7 @@ const Logging: React.FC = () => {
             <select
               value={userFilter}
               onChange={(e) => setUserFilter(e.target.value)}
-              className="bg-gray-700 text-white px-3 py-1 rounded border border-gray-600 focus:border-blue-500 focus:outline-none text-sm"
+              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
               <option value="">All Users</option>
               {availableUsers.map((user) => (
@@ -369,108 +215,123 @@ const Logging: React.FC = () => {
         </div>
 
         {fileAccessLogs && fileAccessLogs.logs.length > 0 ? (
-          <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-700">
-              <thead>
-                <tr className="text-left text-xs font-medium text-gray-400 uppercase tracking-wider">
-                  <th className="px-4 py-3">Timestamp</th>
-                  <th className="px-4 py-3">User</th>
-                  <th className="px-4 py-3">Action</th>
-                  <th className="px-4 py-3">File</th>
-                  <th className="px-4 py-3">Size</th>
-                  <th className="px-4 py-3">Duration</th>
-                  <th className="px-4 py-3">Status</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-700">
-                {fileAccessLogs.logs.map((log, index) => (
-                  <tr
-                    key={index}
-                    className="text-sm text-gray-300 hover:bg-gray-700/50"
-                  >
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatTimestamp(log.timestamp)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-900/50 text-blue-300">
+          <>
+            {/* Desktop Table */}
+            <div className="hidden lg:block overflow-x-auto">
+              <table className="min-w-full divide-y divide-slate-800/60">
+                <thead>
+                  <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
+                    <th className="px-4 py-3">Timestamp</th>
+                    <th className="px-4 py-3">User</th>
+                    <th className="px-4 py-3">Action</th>
+                    <th className="px-4 py-3">File</th>
+                    <th className="px-4 py-3">Size</th>
+                    <th className="px-4 py-3">Duration</th>
+                    <th className="px-4 py-3">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-800/60">
+                  {fileAccessLogs.logs.map((log, index) => (
+                    <tr
+                      key={index}
+                      className="text-sm text-slate-300 hover:bg-slate-800/50 transition"
+                    >
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-400">
+                        {formatTimestamp(log.timestamp)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium border border-sky-500/40 bg-sky-500/15 text-sky-300">
+                          {log.user}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        <span className={`inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium ${getActionBadgeClass(log.action)}`}>
+                          {log.action}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3 max-w-xs truncate" title={log.resource}>
+                        {log.resource}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {formatBytes(log.details?.size_bytes)}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {log.details?.duration_ms
+                          ? `${log.details.duration_ms}ms`
+                          : '-'}
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap">
+                        {log.success ? (
+                          <span className="inline-flex items-center text-green-400">
+                            <CheckCircle className="h-4 w-4 mr-1" />
+                            Success
+                          </span>
+                        ) : (
+                          <span
+                            className="inline-flex items-center text-red-400"
+                            title={log.error}
+                          >
+                            <XCircle className="h-4 w-4 mr-1" />
+                            Failed
+                          </span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card View */}
+            <div className="lg:hidden space-y-3">
+              {fileAccessLogs.logs.map((log, index) => (
+                <div
+                  key={index}
+                  className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
+                >
+                  <div className="flex items-start justify-between gap-2 mb-3">
+                    <div className="flex items-center gap-2 flex-wrap">
+                      <span className="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium border border-sky-500/40 bg-sky-500/15 text-sky-300">
                         {log.user}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      <span
-                        className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${
-                          log.action === 'read' || log.action === 'download'
-                            ? 'bg-green-900/50 text-green-300'
-                            : log.action === 'write' ||
-                              log.action === 'upload' ||
-                              log.action === 'create'
-                            ? 'bg-yellow-900/50 text-yellow-300'
-                            : log.action === 'delete'
-                            ? 'bg-red-900/50 text-red-300'
-                            : 'bg-gray-700 text-gray-300'
-                        }`}
-                      >
+                      <span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${getActionBadgeClass(log.action)}`}>
                         {log.action}
                       </span>
-                    </td>
-                    <td className="px-4 py-3 max-w-xs truncate" title={log.resource}>
-                      {log.resource}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {formatBytes(log.details?.size_bytes)}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {log.details?.duration_ms
-                        ? `${log.details.duration_ms}ms`
-                        : '-'}
-                    </td>
-                    <td className="px-4 py-3 whitespace-nowrap">
-                      {log.success ? (
-                        <span className="inline-flex items-center text-green-400">
-                          <svg
-                            className="w-4 h-4 mr-1"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Success
-                        </span>
-                      ) : (
-                        <span
-                          className="inline-flex items-center text-red-400"
-                          title={log.error}
-                        >
-                          <svg
-                            className="w-4 h-4 mr-1"
-                            fill="currentColor"
-                            viewBox="0 0 20 20"
-                          >
-                            <path
-                              fillRule="evenodd"
-                              d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.707 7.293a1 1 0 00-1.414 1.414L8.586 10l-1.293 1.293a1 1 0 101.414 1.414L10 11.414l1.293 1.293a1 1 0 001.414-1.414L11.414 10l1.293-1.293a1 1 0 00-1.414-1.414L10 8.586 8.707 7.293z"
-                              clipRule="evenodd"
-                            />
-                          </svg>
-                          Failed
-                        </span>
-                      )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                    </div>
+                    {log.success ? (
+                      <CheckCircle className="h-5 w-5 text-green-400 flex-shrink-0" />
+                    ) : (
+                      <XCircle className="h-5 w-5 text-red-400 flex-shrink-0" />
+                    )}
+                  </div>
+
+                  <p className="text-sm text-slate-200 break-all mb-2" title={log.resource}>
+                    {log.resource}
+                  </p>
+
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
+                    <span>{formatTimestamp(log.timestamp)}</span>
+                    {log.details?.size_bytes && (
+                      <span>{formatBytes(log.details.size_bytes)}</span>
+                    )}
+                    {log.details?.duration_ms && (
+                      <span>{log.details.duration_ms}ms</span>
+                    )}
+                  </div>
+
+                  {!log.success && log.error && (
+                    <p className="mt-2 text-xs text-red-400">{log.error}</p>
+                  )}
+                </div>
+              ))}
+            </div>
+          </>
         ) : (
-          <div className="text-center py-8 text-gray-400">No file access logs found</div>
+          <div className="text-center py-8 text-slate-400">No file access logs found</div>
         )}
 
         {fileAccessLogs && fileAccessLogs.total > fileAccessLogs.logs.length && (
-          <div className="mt-4 text-center text-sm text-gray-400">
+          <div className="mt-4 text-center text-sm text-slate-400">
             Showing {fileAccessLogs.logs.length} of {fileAccessLogs.total} logs
           </div>
         )}

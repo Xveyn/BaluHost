@@ -32,6 +32,13 @@ public:
     bool isDebugLoggingEnabled() const;
     int getChunkSizeMb() const;
 
+    // Device Registration
+    std::string getDeviceId();
+    std::string getDeviceName() const;
+    void setDeviceName(const std::string& name);
+    bool isDeviceRegistered() const;
+    void setDeviceRegistered(bool registered);
+
 private:
     SettingsManager();
     ~SettingsManager() = default;
@@ -48,6 +55,12 @@ private:
     
     // Validate settings structure
     bool validateSettings(const nlohmann::json& settings);
+
+    // Generate a UUID v4 for device ID
+    std::string generateDeviceId();
+
+    // Get system hostname for default device name
+    std::string getSystemHostname();
 };
 
 }  // namespace baludesk

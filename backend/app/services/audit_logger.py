@@ -14,11 +14,20 @@ logger = logging.getLogger(__name__)
 
 class AuditLogger:
     """Central audit logging service."""
-    
+
     def __init__(self):
-        self._enabled = not settings.is_dev_mode
+        self._enabled = settings.audit_logging_enabled
         self._audit_log_dir = Path(settings.nas_temp_path).expanduser().resolve() / "audit"
         self._setup_audit_log()
+
+    def enable(self) -> None:
+        """Enable audit logging."""
+        self._enabled = True
+        self._setup_audit_log()
+
+    def disable(self) -> None:
+        """Disable audit logging."""
+        self._enabled = False
     
     def _get_daily_log_file(self) -> Path:
         """Get the log file path for the current day."""
@@ -199,7 +208,7 @@ class AuditLogger:
             details["required_permission"] = required_permission
         if ip_address:
             details["ip_address"] = ip_address
-        
+
         self.log_security_event(
             action=action,
             user=user or "anonymous",
@@ -208,7 +217,94 @@ class AuditLogger:
             success=False,
             error_message="Permission denied"
         )
-    
+
+    def log_user_management(
+        self,
+        action: str,
+        admin_user: str,
+        target_user: str,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log user management operations (create, update, delete, role changes)."""
+        self.log_event(
+            event_type="USER_MANAGEMENT",
+            user=admin_user,
+            action=action,
+            resource=target_user,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+
+    def log_raid_operation(
+        self,
+        action: str,
+        user: str,
+        raid_array: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log RAID array operations (create, delete, manage)."""
+        self.log_event(
+            event_type="RAID_OPERATION",
+            user=user,
+            action=action,
+            resource=raid_array,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+
+    def log_vpn_operation(
+        self,
+        action: str,
+        user: str,
+        vpn_client: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        success: bool = True,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log VPN configuration operations (add client, remove client, config changes)."""
+        self.log_event(
+            event_type="VPN_OPERATION",
+            user=user,
+            action=action,
+            resource=vpn_client,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+
+    def log_system_config_change(
+        self,
+        action: str,
+        user: str,
+        config_key: str,
+        old_value: Optional[Any] = None,
+        new_value: Optional[Any] = None,
+        success: bool = True,
+        error_message: Optional[str] = None
+    ) -> None:
+        """Log system configuration changes."""
+        details = {}
+        if old_value is not None:
+            details["old_value"] = str(old_value)
+        if new_value is not None:
+            details["new_value"] = str(new_value)
+
+        self.log_event(
+            event_type="SYSTEM_CONFIG",
+            user=user,
+            action=action,
+            resource=config_key,
+            details=details,
+            success=success,
+            error_message=error_message
+        )
+
     def is_enabled(self) -> bool:
         """Check if audit logging is enabled."""
         return self._enabled

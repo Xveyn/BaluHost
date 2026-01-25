@@ -11,15 +11,15 @@ import {
   type SharedWithMe,
   type ShareStatistics
 } from '../api/shares';
-import { Link2, Users, Share2, Trash2, Copy, ExternalLink, CheckCircle, Edit, Search, Filter, QrCode } from 'lucide-react';
+import { Link2, Users, Share2, Trash2, Copy, ExternalLink, CheckCircle, Edit, Search, Filter, QrCode, Calendar, Download } from 'lucide-react';
 import CreateShareLinkModal from '../components/CreateShareLinkModal';
 import CreateFileShareModal from '../components/CreateFileShareModal';
 import EditShareLinkModal from '../components/EditShareLinkModal';
 import EditFileShareModal from '../components/EditFileShareModal';
 
 export default function SharesPage() {
-    // User list for modal
-    const [users, setUsers] = useState<any[]>([]);
+  // User list for modal
+  const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'links' | 'shares' | 'shared-with-me'>('links');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [fileShares, setFileShares] = useState<FileShare[]>([]);
@@ -29,11 +29,11 @@ export default function SharesPage() {
   const [showCreateLinkModal, setShowCreateLinkModal] = useState(false);
   const [showCreateShareModal, setShowCreateShareModal] = useState(false);
   const [copiedToken, setCopiedToken] = useState<string | null>(null);
-  
+
   // Edit modals
   const [editingLink, setEditingLink] = useState<ShareLink | null>(null);
   const [editingShare, setEditingShare] = useState<FileShare | null>(null);
-  
+
   // Filter and search
   const [searchQuery, setSearchQuery] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'expired'>('all');
@@ -87,7 +87,7 @@ export default function SharesPage() {
 
   const handleDeleteShareLink = async (linkId: number) => {
     if (!confirm('Are you sure you want to delete this share link?')) return;
-    
+
     try {
       await deleteShareLink(linkId);
       await loadData();
@@ -99,7 +99,7 @@ export default function SharesPage() {
 
   const handleDeleteFileShare = async (shareId: number) => {
     if (!confirm('Are you sure you want to revoke this file share?')) return;
-    
+
     try {
       await deleteFileShare(shareId);
       await loadData();
@@ -133,7 +133,7 @@ export default function SharesPage() {
     // Status filter
     if (statusFilter === 'active' && (link.is_expired || !link.is_accessible)) return false;
     if (statusFilter === 'expired' && !link.is_expired) return false;
-    
+
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -142,7 +142,7 @@ export default function SharesPage() {
         link.description?.toLowerCase().includes(query)
       );
     }
-    
+
     return true;
   }) : [];
 
@@ -150,7 +150,7 @@ export default function SharesPage() {
     // Status filter
     if (statusFilter === 'active' && share.is_expired) return false;
     if (statusFilter === 'expired' && !share.is_expired) return false;
-    
+
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -159,7 +159,7 @@ export default function SharesPage() {
         share.shared_with_username?.toLowerCase().includes(query)
       );
     }
-    
+
     return true;
   }) : [];
 
@@ -167,7 +167,7 @@ export default function SharesPage() {
     // Status filter
     if (statusFilter === 'active' && item.is_expired) return false;
     if (statusFilter === 'expired' && !item.is_expired) return false;
-    
+
     // Search filter
     if (searchQuery) {
       const query = searchQuery.toLowerCase();
@@ -176,7 +176,7 @@ export default function SharesPage() {
         item.owner_username.toLowerCase().includes(query)
       );
     }
-    
+
     return true;
   }) : [];
 
@@ -186,62 +186,63 @@ export default function SharesPage() {
   };
 
   return (
-    <div className="p-6 max-w-7xl mx-auto">
-      <div className="mb-8">
-        <h1 className="text-3xl font-bold mb-2 bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
-          File Sharing
-        </h1>
-        <p className="text-gray-600">Manage public share links and user file shares</p>
+    <div className="space-y-6">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">File Sharing</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">Manage public share links and user file shares</p>
+        </div>
       </div>
 
       {/* Statistics Cards */}
       {statistics && (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
-          <div className="bg-white/5 backdrop-blur-sm p-5 rounded-xl border border-white/10 hover:bg-white/10 transition-all">
+        <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-blue-400 uppercase tracking-wide mb-1">Active Share Links</p>
-                <p className="text-3xl font-bold text-white">{statistics.active_share_links}</p>
-                <p className="text-xs text-gray-400 mt-1">of {statistics.total_share_links} total</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-slate-400 truncate">Active Links</p>
+                <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.active_share_links}</p>
+                <p className="text-xs text-slate-500 mt-0.5">of {statistics.total_share_links} total</p>
               </div>
-              <div className="bg-blue-500/20 p-3 rounded-lg">
-                <Link2 className="w-6 h-6 text-blue-400" />
+              <div className="rounded-lg bg-sky-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
+                <Link2 className="h-5 w-5 sm:h-6 sm:w-6 text-sky-400" />
               </div>
             </div>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-5 rounded-xl border border-white/10 hover:bg-white/10 transition-all">
+          <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-green-400 uppercase tracking-wide mb-1">Total Downloads</p>
-                <p className="text-3xl font-bold text-white">{statistics.total_downloads}</p>
-                <p className="text-xs text-gray-400 mt-1">all time</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-slate-400 truncate">Downloads</p>
+                <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.total_downloads}</p>
+                <p className="text-xs text-slate-500 mt-0.5">all time</p>
               </div>
-              <div className="bg-green-500/20 p-3 rounded-lg">
-                <ExternalLink className="w-6 h-6 text-green-400" />
+              <div className="rounded-lg bg-green-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
+                <Download className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
               </div>
             </div>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-5 rounded-xl border border-white/10 hover:bg-white/10 transition-all">
+          <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-purple-400 uppercase tracking-wide mb-1">Active File Shares</p>
-                <p className="text-3xl font-bold text-white">{statistics.active_file_shares}</p>
-                <p className="text-xs text-gray-400 mt-1">of {statistics.total_file_shares} total</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-slate-400 truncate">User Shares</p>
+                <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.active_file_shares}</p>
+                <p className="text-xs text-slate-500 mt-0.5">of {statistics.total_file_shares} total</p>
               </div>
-              <div className="bg-purple-500/20 p-3 rounded-lg">
-                <Users className="w-6 h-6 text-purple-400" />
+              <div className="rounded-lg bg-purple-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
+                <Users className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
               </div>
             </div>
           </div>
-          <div className="bg-white/5 backdrop-blur-sm p-5 rounded-xl border border-white/10 hover:bg-white/10 transition-all">
+          <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-medium text-orange-400 uppercase tracking-wide mb-1">Shared With Me</p>
-                <p className="text-3xl font-bold text-white">{statistics.files_shared_with_me}</p>
-                <p className="text-xs text-gray-400 mt-1">files accessible</p>
+              <div className="min-w-0 flex-1">
+                <p className="text-xs sm:text-sm text-slate-400 truncate">Shared With Me</p>
+                <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.files_shared_with_me}</p>
+                <p className="text-xs text-slate-500 mt-0.5">files accessible</p>
               </div>
-              <div className="bg-orange-500/20 p-3 rounded-lg">
-                <Share2 className="w-6 h-6 text-orange-400" />
+              <div className="rounded-lg bg-orange-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
+                <Share2 className="h-5 w-5 sm:h-6 sm:w-6 text-orange-400" />
               </div>
             </div>
           </div>
@@ -249,82 +250,87 @@ export default function SharesPage() {
       )}
 
       {/* Tabs */}
-      <div className="bg-white/5 backdrop-blur-sm rounded-xl border border-white/10 mb-6 overflow-hidden">
-        <div className="flex">
-          <button
-            onClick={() => setActiveTab('links')}
-            className={`flex-1 px-6 py-4 font-medium transition-all relative ${
-              activeTab === 'links'
-                ? 'text-blue-400 bg-white/5'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Link2 className="w-5 h-5" />
-              <span>Public Share Links</span>
-            </div>
-            {activeTab === 'links' && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('shares')}
-            className={`flex-1 px-6 py-4 font-medium transition-all relative ${
-              activeTab === 'shares'
-                ? 'text-blue-400 bg-white/5'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Users className="w-5 h-5" />
-              <span>User Shares</span>
-            </div>
-            {activeTab === 'shares' && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
-            )}
-          </button>
-          <button
-            onClick={() => setActiveTab('shared-with-me')}
-            className={`flex-1 px-6 py-4 font-medium transition-all relative ${
-              activeTab === 'shared-with-me'
-                ? 'text-blue-400 bg-white/5'
-                : 'text-gray-400 hover:text-gray-200 hover:bg-white/5'
-            }`}
-          >
-            <div className="flex items-center justify-center gap-2">
-              <Share2 className="w-5 h-5" />
-              <span>Shared With Me</span>
-            </div>
-            {activeTab === 'shared-with-me' && (
-              <div className="absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r from-blue-500 to-blue-600" />
-            )}
-          </button>
+      <div className="card border-slate-800/60 bg-slate-900/55 overflow-hidden">
+        <div className="overflow-x-auto border-b border-slate-800/60">
+          <div className="flex min-w-max">
+            <button
+              onClick={() => setActiveTab('links')}
+              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+                activeTab === 'links'
+                  ? 'text-sky-400 bg-slate-800/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Link2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Public Share Links</span>
+                <span className="sm:hidden">Links</span>
+              </div>
+              {activeTab === 'links' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('shares')}
+              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+                activeTab === 'shares'
+                  ? 'text-sky-400 bg-slate-800/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">User Shares</span>
+                <span className="sm:hidden">Shares</span>
+              </div>
+              {activeTab === 'shares' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('shared-with-me')}
+              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+                activeTab === 'shared-with-me'
+                  ? 'text-sky-400 bg-slate-800/30'
+                  : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
+              }`}
+            >
+              <div className="flex items-center justify-center gap-2">
+                <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span className="hidden sm:inline">Shared With Me</span>
+                <span className="sm:hidden">Received</span>
+              </div>
+              {activeTab === 'shared-with-me' && (
+                <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
+              )}
+            </button>
+          </div>
         </div>
 
-        <div className="p-6">
+        <div className="p-4 sm:p-6">
           {/* Search and Filter Bar */}
-          <div className="mb-6 space-y-3">
-            <div className="flex gap-3">
+          <div className="mb-4 sm:mb-6 space-y-3">
+            <div className="flex flex-col sm:flex-row gap-2 sm:gap-3">
               {/* Search */}
               <div className="flex-1 relative">
-                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400" />
+                <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-slate-400" />
                 <input
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by file name or description..."
-                  className="w-full pl-11 pr-4 py-3 bg-white/5 backdrop-blur-sm border border-white/10 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-white placeholder-gray-400"
+                  placeholder="Search by file name..."
+                  className="w-full pl-10 sm:pl-11 pr-4 py-2.5 sm:py-3 border border-slate-700 bg-slate-900/70 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all text-slate-200 placeholder-slate-500 text-sm sm:text-base"
                 />
               </div>
 
               {/* Filter Toggle */}
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`px-5 py-3 border rounded-xl hover:bg-white/10 flex items-center gap-2 font-medium transition-all ${
-                  showFilters ? 'bg-blue-500/20 border-blue-500/50 text-blue-400' : 'border-white/10 text-gray-300'
+                className={`px-4 sm:px-5 py-2.5 sm:py-3 border rounded-xl flex items-center justify-center gap-2 font-medium transition-all touch-manipulation active:scale-95 text-sm sm:text-base ${
+                  showFilters ? 'bg-sky-500/20 border-sky-500/50 text-sky-400' : 'border-slate-700 text-slate-300 hover:bg-slate-800/50'
                 }`}
               >
-                <Filter className="w-5 h-5" />
+                <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
                 <span>Filters</span>
               </button>
 
@@ -332,325 +338,511 @@ export default function SharesPage() {
               {activeTab === 'links' && (
                 <button
                   onClick={() => setShowCreateLinkModal(true)}
-                  className="px-5 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all font-medium flex items-center gap-2"
+                  className="btn btn-primary flex items-center justify-center gap-2 touch-manipulation active:scale-95"
                 >
-                  <Link2 className="w-5 h-5" />
-                  <span>Create Link</span>
+                  <Link2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Create Link</span>
+                  <span className="sm:hidden">Create</span>
                 </button>
               )}
               {activeTab === 'shares' && (
                 <button
                   onClick={() => setShowCreateShareModal(true)}
-                  className="px-5 py-3 bg-gradient-to-r from-purple-600 to-purple-700 text-white rounded-xl hover:from-purple-700 hover:to-purple-800 shadow-lg hover:shadow-xl transition-all font-medium flex items-center gap-2"
+                  className="btn btn-primary flex items-center justify-center gap-2 touch-manipulation active:scale-95"
                 >
-                  <Users className="w-5 h-5" />
-                  <span>Share with User</span>
+                  <Users className="w-4 h-4 sm:w-5 sm:h-5" />
+                  <span className="hidden sm:inline">Share with User</span>
+                  <span className="sm:hidden">Share</span>
                 </button>
               )}
             </div>
 
             {/* Filter Options */}
             {showFilters && (
-              <div className="flex gap-3 p-4 bg-white/5 backdrop-blur-sm rounded-xl border border-white/10">
-                <span className="text-sm font-semibold text-gray-300 flex items-center">
+              <div className="flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
+                <span className="text-xs sm:text-sm font-semibold text-slate-300 flex items-center mr-2">
                   Status:
                 </span>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    value="all"
-                    checked={statusFilter === 'all'}
-                    onChange={(e) => setStatusFilter(e.target.value as any)}
-                    className="mr-2 w-4 h-4 text-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-300">All</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    value="active"
-                    checked={statusFilter === 'active'}
-                    onChange={(e) => setStatusFilter(e.target.value as any)}
-                    className="mr-2 w-4 h-4 text-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-300">Active</span>
-                </label>
-                <label className="flex items-center cursor-pointer">
-                  <input
-                    type="radio"
-                    value="expired"
-                    checked={statusFilter === 'expired'}
-                    onChange={(e) => setStatusFilter(e.target.value as any)}
-                    className="mr-2 w-4 h-4 text-blue-500"
-                  />
-                  <span className="text-sm font-medium text-gray-300">Expired</span>
-                </label>
+                {(['all', 'active', 'expired'] as const).map((status) => (
+                  <label key={status} className="flex items-center cursor-pointer">
+                    <input
+                      type="radio"
+                      value={status}
+                      checked={statusFilter === status}
+                      onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
+                      className="mr-1.5 sm:mr-2 w-4 h-4 text-sky-500"
+                    />
+                    <span className="text-xs sm:text-sm font-medium text-slate-300 capitalize">{status}</span>
+                  </label>
+                ))}
               </div>
             )}
           </div>
 
           {loading ? (
-            <div className="flex flex-col items-center justify-center py-16">
-              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-              <p className="text-gray-600 font-medium">Loading shares...</p>
+            <div className="flex flex-col items-center justify-center py-12 sm:py-16">
+              <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-sky-500 mb-4"></div>
+              <p className="text-slate-400 font-medium text-sm sm:text-base">Loading shares...</p>
             </div>
           ) : (
             <>
-              {/* Share Links Table */}
+              {/* Share Links Tab */}
               {activeTab === 'links' && (
-                <div className="overflow-x-auto rounded-lg">
+                <>
                   {filteredShareLinks.length === 0 ? (
-                    <div className="text-center py-16">
-                      <Link2 className="w-16 h-16 text-gray-600 mx-auto mb-4" />
-                      <h3 className="text-lg font-semibold text-gray-300 mb-2">
+                    <div className="text-center py-12 sm:py-16">
+                      <Link2 className="w-12 h-12 sm:w-16 sm:h-16 text-slate-600 mx-auto mb-4" />
+                      <h3 className="text-base sm:text-lg font-semibold text-slate-300 mb-2">
                         {shareLinks.length === 0 ? 'No share links yet' : 'No matching share links found'}
                       </h3>
-                      <p className="text-gray-500 mb-6">
-                        {shareLinks.length === 0 
-                          ? 'Create your first public share link to get started' 
+                      <p className="text-slate-500 mb-6 text-sm sm:text-base">
+                        {shareLinks.length === 0
+                          ? 'Create your first public share link to get started'
                           : 'Try adjusting your search or filters'}
                       </p>
                       {shareLinks.length === 0 && (
                         <button
                           onClick={() => setShowCreateLinkModal(true)}
-                          className="px-6 py-3 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-xl hover:from-blue-700 hover:to-blue-800 shadow-lg hover:shadow-xl transition-all font-medium"
+                          className="btn btn-primary touch-manipulation active:scale-95"
                         >
                           Create Your First Link
                         </button>
                       )}
                     </div>
                   ) : (
-                    <table className="min-w-full">
-                      <thead className="bg-white/5 backdrop-blur-sm border-b border-white/10">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">File</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Status</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Downloads</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Expires</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Created</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
+                    <>
+                      {/* Desktop Table */}
+                      <div className="hidden lg:block overflow-x-auto rounded-lg">
+                        <table className="min-w-full">
+                          <thead className="bg-slate-800/30 border-b border-slate-700/50">
+                            <tr>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">File</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Downloads</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Expires</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Created</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {filteredShareLinks.map((link) => (
+                              <tr key={link.id} className={`hover:bg-slate-800/30 transition-colors ${link.is_expired ? 'opacity-60' : ''}`}>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="font-semibold text-white">{link.file_name}</div>
+                                  <div className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                                    {formatFileSize(link.file_size)}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {link.is_expired ? (
+                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-red-500/40 bg-red-500/15 text-red-300">
+                                        Expired
+                                      </span>
+                                    ) : link.is_accessible ? (
+                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-green-500/40 bg-green-500/15 text-green-300">
+                                        Active
+                                      </span>
+                                    ) : (
+                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-yellow-500/40 bg-yellow-500/15 text-yellow-300">
+                                        Limited
+                                      </span>
+                                    )}
+                                    {link.has_password && (
+                                      <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-sky-500/40 bg-sky-500/15 text-sky-300">
+                                        Protected
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {link.download_count}
+                                  {link.max_downloads && ` / ${link.max_downloads}`}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(link.expires_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(link.created_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex space-x-1.5">
+                                    <button
+                                      onClick={() => copyShareLink(link.token)}
+                                      className="p-2 rounded-lg border border-sky-500/30 bg-sky-500/10 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
+                                      title="Copy link"
+                                    >
+                                      {copiedToken === link.token ? (
+                                        <CheckCircle className="w-4 h-4 sm:w-5 sm:h-5" />
+                                      ) : (
+                                        <Copy className="w-4 h-4 sm:w-5 sm:h-5" />
+                                      )}
+                                    </button>
+                                    <button
+                                      onClick={() => generateQRCode(link.token)}
+                                      className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-200 transition hover:border-purple-500/50 hover:bg-purple-500/20"
+                                      title="Generate QR Code"
+                                    >
+                                      <QrCode className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => setEditingLink(link)}
+                                      className="p-2 rounded-lg border border-green-500/30 bg-green-500/10 text-green-200 transition hover:border-green-500/50 hover:bg-green-500/20"
+                                      title="Edit"
+                                    >
+                                      <Edit className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteShareLink(link.id)}
+                                      className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                                      title="Delete"
+                                    >
+                                      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="lg:hidden space-y-3">
                         {filteredShareLinks.map((link) => (
-                          <tr key={link.id} className={`hover:bg-white/5 transition-colors ${link.is_expired ? 'opacity-60' : ''}`}>
-                            <td className="px-6 py-4">
-                              <div className="font-semibold text-white">{link.file_name}</div>
-                              <div className="text-sm text-gray-400 mt-0.5">
-                                {formatFileSize(link.file_size)}
+                          <div
+                            key={link.id}
+                            className={`rounded-xl border border-slate-800/60 bg-slate-950/70 p-4 ${link.is_expired ? 'opacity-60' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-white truncate">{link.file_name}</p>
+                                <p className="text-xs text-slate-400">{formatFileSize(link.file_size)}</p>
                               </div>
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex flex-wrap gap-1.5">
+                              <div className="flex flex-wrap gap-1 flex-shrink-0">
                                 {link.is_expired ? (
-                                  <span className="px-3 py-1 bg-red-100 text-red-700 rounded-full text-xs font-semibold">
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold border border-red-500/40 bg-red-500/15 text-red-300">
                                     Expired
                                   </span>
                                 ) : link.is_accessible ? (
-                                  <span className="px-3 py-1 bg-green-100 text-green-700 rounded-full text-xs font-semibold">
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold border border-green-500/40 bg-green-500/15 text-green-300">
                                     Active
                                   </span>
                                 ) : (
-                                  <span className="px-3 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-semibold">
+                                  <span className="px-2 py-0.5 rounded-full text-xs font-semibold border border-yellow-500/40 bg-yellow-500/15 text-yellow-300">
                                     Limited
                                   </span>
                                 )}
-                                {link.has_password && (
-                                  <span className="px-3 py-1 bg-blue-100 text-blue-700 rounded-full text-xs font-semibold">
-                                    🔒 Protected
-                                  </span>
-                                )}
                               </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {link.download_count}
-                              {link.max_downloads && ` / ${link.max_downloads}`}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {formatDate(link.expires_at)}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {formatDate(link.created_at)}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex space-x-1.5">
-                                <button
-                                  onClick={() => copyShareLink(link.token)}
-                                  className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg transition-colors"
-                                  title="Copy link"
-                                >
-                                  {copiedToken === link.token ? (
-                                    <CheckCircle className="w-5 h-5" />
-                                  ) : (
-                                    <Copy className="w-5 h-5" />
-                                  )}
-                                </button>
-                                <button
-                                  onClick={() => generateQRCode(link.token)}
-                                  className="p-2 text-purple-600 hover:bg-purple-50 rounded-lg transition-colors"
-                                  title="Generate QR Code"
-                                >
-                                  <QrCode className="w-5 h-5" />
-                                </button>
-                                <button
-                                  onClick={() => setEditingLink(link)}
-                                  className="p-2 text-green-600 hover:bg-green-50 rounded-lg transition-colors"
-                                  title="Edit"
-                                >
-                                  <Edit className="w-5 h-5" />
-                                </button>
-                                <button
-                                  onClick={() => handleDeleteShareLink(link.id)}
-                                  className="p-2 text-red-600 hover:bg-red-50 rounded-lg transition-colors"
-                                  title="Delete"
-                                >
-                                  <Trash2 className="w-5 h-5" />
-                                </button>
-                              </div>
-                            </td>
-                          </tr>
+                            </div>
+
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400 mb-3">
+                              <span className="flex items-center gap-1">
+                                <Download className="h-3 w-3" />
+                                {link.download_count}{link.max_downloads && ` / ${link.max_downloads}`}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Expires: {formatDate(link.expires_at)}
+                              </span>
+                              {link.has_password && (
+                                <span className="text-sky-400">Password protected</span>
+                              )}
+                            </div>
+
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={() => copyShareLink(link.token)}
+                                className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-sky-500/30 bg-sky-500/10 px-3 py-2 text-xs sm:text-sm font-medium text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
+                              >
+                                {copiedToken === link.token ? <CheckCircle className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
+                                {copiedToken === link.token ? 'Copied!' : 'Copy'}
+                              </button>
+                              <button
+                                onClick={() => generateQRCode(link.token)}
+                                className="p-2 rounded-lg border border-purple-500/30 bg-purple-500/10 text-purple-200 transition hover:border-purple-500/50 hover:bg-purple-500/20 touch-manipulation active:scale-95"
+                                title="QR Code"
+                              >
+                                <QrCode className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => setEditingLink(link)}
+                                className="p-2 rounded-lg border border-green-500/30 bg-green-500/10 text-green-200 transition hover:border-green-500/50 hover:bg-green-500/20 touch-manipulation active:scale-95"
+                                title="Edit"
+                              >
+                                <Edit className="w-4 h-4" />
+                              </button>
+                              <button
+                                onClick={() => handleDeleteShareLink(link.id)}
+                                className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
+                                title="Delete"
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </button>
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </>
                   )}
-                </div>
+                </>
               )}
 
-              {/* File Shares Table */}
+              {/* File Shares Tab */}
               {activeTab === 'shares' && (
-                <div className="overflow-x-auto">
+                <>
                   {filteredFileShares.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">
+                    <p className="text-slate-500 text-center py-8">
                       {fileShares.length === 0 ? 'No file shares yet' : 'No matching file shares found'}
                     </p>
                   ) : (
-                    <table className="min-w-full">
-                      <thead className="bg-white/5 backdrop-blur-sm border-b border-white/10">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">File</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Shared With</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Permissions</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Expires</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
+                    <>
+                      {/* Desktop Table */}
+                      <div className="hidden lg:block overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-slate-800/30 border-b border-slate-700/50">
+                            <tr>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">File</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Shared With</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Expires</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {filteredFileShares.map((share) => (
+                              <tr key={share.id} className="hover:bg-slate-800/30 transition-colors">
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="font-semibold text-white">{share.file_name}</div>
+                                  <div className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                                    {formatFileSize(share.file_size)}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-300 font-medium">{share.shared_with_username}</td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex space-x-1">
+                                    {share.can_read && (
+                                      <span className="px-2.5 py-1 border border-sky-500/40 bg-sky-500/15 text-sky-300 rounded-full text-xs font-semibold">
+                                        Read
+                                      </span>
+                                    )}
+                                    {share.can_write && (
+                                      <span className="px-2.5 py-1 border border-green-500/40 bg-green-500/15 text-green-300 rounded-full text-xs font-semibold">
+                                        Write
+                                      </span>
+                                    )}
+                                    {share.can_delete && (
+                                      <span className="px-2.5 py-1 border border-rose-500/40 bg-rose-500/15 text-rose-300 rounded-full text-xs font-semibold">
+                                        Delete
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(share.expires_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex space-x-1">
+                                    <button
+                                      onClick={() => setEditingShare(share)}
+                                      className="p-2 rounded-lg border border-green-500/30 bg-green-500/10 text-green-200 transition hover:border-green-500/50 hover:bg-green-500/20"
+                                      title="Edit permissions"
+                                    >
+                                      <Edit className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                    <button
+                                      onClick={() => handleDeleteFileShare(share.id)}
+                                      className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                                      title="Revoke"
+                                    >
+                                      <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                                    </button>
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="lg:hidden space-y-3">
                         {filteredFileShares.map((share) => (
-                          <tr key={share.id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-semibold text-white">{share.file_name}</div>
-                              <div className="text-sm text-gray-400 mt-0.5">
-                                {formatFileSize(share.file_size)}
+                          <div
+                            key={share.id}
+                            className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div className="min-w-0 flex-1">
+                                <p className="font-semibold text-white truncate">{share.file_name}</p>
+                                <p className="text-xs text-slate-400">{formatFileSize(share.file_size)}</p>
                               </div>
-                            </td>
-                            <td className="px-6 py-4 text-gray-300 font-medium">{share.shared_with_username}</td>
-                            <td className="px-6 py-4">
-                              <div className="flex space-x-1">
-                                {share.can_read && (
-                                  <span className="px-2.5 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-semibold">
-                                    Read
-                                  </span>
-                                )}
-                                {share.can_write && (
-                                  <span className="px-2.5 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold">
-                                    Write
-                                  </span>
-                                )}
-                                {share.can_delete && (
-                                  <span className="px-2.5 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-semibold">
-                                    Delete
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {formatDate(share.expires_at)}
-                            </td>
-                            <td className="px-6 py-4">
-                              <div className="flex space-x-1">
+                              <div className="flex gap-1 flex-shrink-0">
                                 <button
                                   onClick={() => setEditingShare(share)}
-                                  className="p-2 text-green-400 hover:bg-green-500/20 rounded-lg transition-colors"
-                                  title="Edit permissions"
+                                  className="p-2 rounded-lg border border-green-500/30 bg-green-500/10 text-green-200 transition touch-manipulation active:scale-95"
+                                  title="Edit"
                                 >
-                                  <Edit className="w-5 h-5" />
+                                  <Edit className="w-4 h-4" />
                                 </button>
                                 <button
                                   onClick={() => handleDeleteFileShare(share.id)}
-                                  className="p-2 text-red-400 hover:bg-red-500/20 rounded-lg transition-colors"
+                                  className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition touch-manipulation active:scale-95"
                                   title="Revoke"
                                 >
-                                  <Trash2 className="w-5 h-5" />
+                                  <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
-                            </td>
-                          </tr>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-2">
+                              <Users className="h-3 w-3 text-slate-400" />
+                              <span className="text-sm text-slate-300">{share.shared_with_username}</span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              {share.can_read && (
+                                <span className="px-2 py-0.5 border border-sky-500/40 bg-sky-500/15 text-sky-300 rounded-full text-xs font-semibold">
+                                  Read
+                                </span>
+                              )}
+                              {share.can_write && (
+                                <span className="px-2 py-0.5 border border-green-500/40 bg-green-500/15 text-green-300 rounded-full text-xs font-semibold">
+                                  Write
+                                </span>
+                              )}
+                              {share.can_delete && (
+                                <span className="px-2 py-0.5 border border-rose-500/40 bg-rose-500/15 text-rose-300 rounded-full text-xs font-semibold">
+                                  Delete
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="text-xs text-slate-400 flex items-center gap-1">
+                              <Calendar className="h-3 w-3" />
+                              Expires: {formatDate(share.expires_at)}
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </>
                   )}
-                </div>
+                </>
               )}
 
-              {/* Shared With Me Table */}
+              {/* Shared With Me Tab */}
               {activeTab === 'shared-with-me' && (
-                <div className="overflow-x-auto">
+                <>
                   {filteredSharedWithMe.length === 0 ? (
-                    <p className="text-gray-500 text-center py-8">
+                    <p className="text-slate-500 text-center py-8">
                       {sharedWithMe.length === 0 ? 'No files shared with you' : 'No matching shared files found'}
                     </p>
                   ) : (
-                    <table className="min-w-full">
-                      <thead className="bg-white/5 backdrop-blur-sm border-b border-white/10">
-                        <tr>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">File</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Owner</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Permissions</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Shared</th>
-                          <th className="px-6 py-4 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">Expires</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/5">
+                    <>
+                      {/* Desktop Table */}
+                      <div className="hidden lg:block overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-slate-800/30 border-b border-slate-700/50">
+                            <tr>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">File</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Owner</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Permissions</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Shared</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Expires</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {filteredSharedWithMe.map((item) => (
+                              <tr key={item.share_id} className="hover:bg-slate-800/30 transition-colors">
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="font-semibold text-white">{item.file_name}</div>
+                                  <div className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                                    {formatFileSize(item.file_size)}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-300 font-medium">{item.owner_username}</td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex space-x-1">
+                                    {item.can_read && (
+                                      <span className="px-2.5 py-1 border border-sky-500/40 bg-sky-500/15 text-sky-300 rounded-full text-xs font-semibold">
+                                        Read
+                                      </span>
+                                    )}
+                                    {item.can_write && (
+                                      <span className="px-2.5 py-1 border border-green-500/40 bg-green-500/15 text-green-300 rounded-full text-xs font-semibold">
+                                        Write
+                                      </span>
+                                    )}
+                                    {item.can_delete && (
+                                      <span className="px-2.5 py-1 border border-rose-500/40 bg-rose-500/15 text-rose-300 rounded-full text-xs font-semibold">
+                                        Delete
+                                      </span>
+                                    )}
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(item.shared_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(item.expires_at)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="lg:hidden space-y-3">
                         {filteredSharedWithMe.map((item) => (
-                          <tr key={item.share_id} className="hover:bg-white/5 transition-colors">
-                            <td className="px-6 py-4">
-                              <div className="font-semibold text-white">{item.file_name}</div>
-                              <div className="text-sm text-gray-400 mt-0.5">
-                                {formatFileSize(item.file_size)}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-gray-300 font-medium">{item.owner_username}</td>
-                            <td className="px-6 py-4">
-                              <div className="flex space-x-1">
-                                {item.can_read && (
-                                  <span className="px-2.5 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-semibold">
-                                    Read
-                                  </span>
-                                )}
-                                {item.can_write && (
-                                  <span className="px-2.5 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold">
-                                    Write
-                                  </span>
-                                )}
-                                {item.can_delete && (
-                                  <span className="px-2.5 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-semibold">
-                                    Delete
-                                  </span>
-                                )}
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {formatDate(item.shared_at)}
-                            </td>
-                            <td className="px-6 py-4 text-sm text-gray-300 font-medium">
-                              {formatDate(item.expires_at)}
-                            </td>
-                          </tr>
+                          <div
+                            key={item.share_id}
+                            className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
+                          >
+                            <div className="mb-2">
+                              <p className="font-semibold text-white truncate">{item.file_name}</p>
+                              <p className="text-xs text-slate-400">{formatFileSize(item.file_size)}</p>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-2">
+                              <Users className="h-3 w-3 text-slate-400" />
+                              <span className="text-sm text-slate-300">From: {item.owner_username}</span>
+                            </div>
+
+                            <div className="flex flex-wrap items-center gap-2 mb-2">
+                              {item.can_read && (
+                                <span className="px-2 py-0.5 border border-sky-500/40 bg-sky-500/15 text-sky-300 rounded-full text-xs font-semibold">
+                                  Read
+                                </span>
+                              )}
+                              {item.can_write && (
+                                <span className="px-2 py-0.5 border border-green-500/40 bg-green-500/15 text-green-300 rounded-full text-xs font-semibold">
+                                  Write
+                                </span>
+                              )}
+                              {item.can_delete && (
+                                <span className="px-2 py-0.5 border border-rose-500/40 bg-rose-500/15 text-rose-300 rounded-full text-xs font-semibold">
+                                  Delete
+                                </span>
+                              )}
+                            </div>
+
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Shared: {formatDate(item.shared_at)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                Expires: {formatDate(item.expires_at)}
+                              </span>
+                            </div>
+                          </div>
                         ))}
-                      </tbody>
-                    </table>
+                      </div>
+                    </>
                   )}
-                </div>
+                </>
               )}
             </>
           )}

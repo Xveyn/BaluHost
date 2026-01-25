@@ -11,6 +11,7 @@ class Settings(BaseSettings):
     # Logging configuration
     log_level: str = "INFO"  # DEBUG|INFO|WARNING|ERROR|CRITICAL
     log_format: str = "text"  # json|text (json recommended for production)
+    audit_logging_enabled: bool = False  # Enable audit logging (auto-enabled in production)
 
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
@@ -98,6 +99,24 @@ class Settings(BaseSettings):
     monitoring_default_retention_hours: int = 168  # 7 days default retention
     monitoring_cleanup_interval_hours: int = 6  # Run cleanup every N hours
 
+    # Power management configuration (CPU frequency scaling)
+    power_management_enabled: bool = True  # Enable/disable power management
+    power_force_dev_backend: bool = False  # Force dev backend even on Linux
+    power_default_profile: str = "idle"  # Default profile on startup
+    power_auto_scaling_enabled: bool = True  # Auto-scale based on CPU usage
+    power_profile_cooldown_seconds: int = 60  # Cooldown before downgrade allowed
+    power_cpu_surge_threshold: float = 80.0  # CPU % to trigger SURGE
+    power_cpu_medium_threshold: float = 50.0  # CPU % to trigger MEDIUM
+    power_cpu_low_threshold: float = 20.0  # CPU % to trigger LOW
+
+    # Fan control configuration (PWM fan management)
+    fan_control_enabled: bool = True  # Enable/disable fan control
+    fan_force_dev_backend: bool = False  # Force dev backend even on Linux
+    fan_min_pwm_percent: int = 30  # Global minimum PWM (safety, 0-100)
+    fan_emergency_temp_celsius: float = 85.0  # Emergency temperature threshold
+    fan_sample_interval_seconds: float = 5.0  # Monitoring interval
+    fan_curve_interpolation: str = "linear"  # Curve interpolation method
+
     # Database configuration
     database_url: str | None = None
     database_type: str = "sqlite"
@@ -124,6 +143,9 @@ class Settings(BaseSettings):
             if self.nas_backup_path == "./backups":
                 self.nas_backup_path = "./dev-backups"
         else:
+            # Production mode: enable audit logging by default
+            if not self.audit_logging_enabled:
+                self.audit_logging_enabled = True
             if self.nas_quota_bytes == 5 * 1024 * 1024 * 1024:
                 self.nas_quota_bytes = None
         return self

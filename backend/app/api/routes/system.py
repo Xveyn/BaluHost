@@ -6,6 +6,8 @@ import signal
 
 from app.api import deps
 from app.schemas.system import (
+    AuditLoggingStatus,
+    AuditLoggingToggle,
     AvailableDisksResponse,
     CreateArrayRequest,
     DeleteArrayRequest,
@@ -28,6 +30,7 @@ from app.schemas.user import UserPublic
 from app.services import disk_monitor
 from app.services import raid as raid_service
 from app.services import smart as smart_service
+from app.services.audit_logger_db import get_audit_logger_db
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
 from app.services.audit_logger import get_audit_logger
@@ -300,28 +303,88 @@ async def format_disk(
 @router.post("/raid/create-array", response_model=RaidActionResponse)
 async def create_array(
     payload: CreateArrayRequest,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
     """Create a new RAID array."""
+    audit_logger = get_audit_logger_db()
+
     try:
-        return raid_service.create_array(payload)
+        result = raid_service.create_array(payload)
+
+        audit_logger.log_raid_operation(
+            action="raid_array_created",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={
+                "raid_level": payload.raid_level,
+                "devices": payload.devices,
+                "mount_point": payload.mount_point
+            },
+            success=True
+        )
+
+        return result
     except ValueError as exc:
+        audit_logger.log_raid_operation(
+            action="raid_array_create_failed",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc)
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
+        audit_logger.log_raid_operation(
+            action="raid_array_create_failed",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc)
+        )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
 @router.post("/raid/delete-array", response_model=RaidActionResponse)
 async def delete_array(
     payload: DeleteArrayRequest,
-    _: UserPublic = Depends(deps.get_current_admin),
+    current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
     """Delete a RAID array."""
+    audit_logger = get_audit_logger_db()
+
     try:
-        return raid_service.delete_array(payload)
+        result = raid_service.delete_array(payload)
+
+        audit_logger.log_raid_operation(
+            action="raid_array_deleted",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={"force": payload.force if hasattr(payload, 'force') else False},
+            success=True
+        )
+
+        return result
     except ValueError as exc:
+        audit_logger.log_raid_operation(
+            action="raid_array_delete_failed",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc)
+        )
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except RuntimeError as exc:
+        audit_logger.log_raid_operation(
+            action="raid_array_delete_failed",
+            user=current_admin.username,
+            raid_array=payload.name,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc)
+        )
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 
@@ -472,3 +535,63 @@ async def execute_raid_confirmation(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.get("/audit-logging", response_model=AuditLoggingStatus)
+async def get_audit_logging_status(
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> AuditLoggingStatus:
+    """Get audit logging status (admin only)."""
+    from app.core.config import settings
+    audit_logger = get_audit_logger_db()
+
+    return AuditLoggingStatus(
+        enabled=audit_logger.is_enabled(),
+        can_toggle=settings.is_dev_mode,
+        dev_mode=settings.is_dev_mode
+    )
+
+
+@router.post("/audit-logging", response_model=AuditLoggingStatus)
+async def toggle_audit_logging(
+    payload: AuditLoggingToggle,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+) -> AuditLoggingStatus:
+    """Toggle audit logging (admin only, dev mode only)."""
+    from app.core.config import settings
+    audit_logger = get_audit_logger_db()
+
+    # Only allow toggling in dev mode
+    if not settings.is_dev_mode:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Audit logging can only be toggled in development mode"
+        )
+
+    # Toggle the audit logger
+    if payload.enabled:
+        audit_logger.enable()
+        audit_logger.log_system_config_change(
+            action="audit_logging_enabled",
+            user=current_admin.username,
+            config_key="audit_logging",
+            old_value=False,
+            new_value=True,
+            success=True
+        )
+    else:
+        audit_logger.log_system_config_change(
+            action="audit_logging_disabled",
+            user=current_admin.username,
+            config_key="audit_logging",
+            old_value=True,
+            new_value=False,
+            success=True
+        )
+        audit_logger.disable()
+
+    return AuditLoggingStatus(
+        enabled=audit_logger.is_enabled(),
+        can_toggle=settings.is_dev_mode,
+        dev_mode=settings.is_dev_mode
+    )

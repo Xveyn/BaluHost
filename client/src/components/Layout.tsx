@@ -120,6 +120,27 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       icon: navIcon.system
     },
     {
+      path: '/power',
+      label: 'Power Management',
+      description: 'CPU-Frequenz & Energie',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
+        </svg>
+      )
+    },
+    {
+      path: '/fan-control',
+      label: 'Fan Control',
+      description: 'PWM-Lüftersteuerung',
+      icon: (
+        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12" />
+        </svg>
+      )
+    },
+    {
       path: '/logging',
       label: 'Logging',
       description: 'Activity Logs',

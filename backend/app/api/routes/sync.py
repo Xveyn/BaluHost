@@ -2,6 +2,7 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
+import logging
 
 from app import api
 from app.api import deps
@@ -20,6 +21,8 @@ from app.schemas.sync import (
     ResolveConflictResponse,
     FileHistoryResponse
 )
+
+Logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/sync", tags=["sync"])
 
@@ -82,6 +85,54 @@ async def register_device(
     }
 
 
+@router.post("/register-desktop")
+async def register_desktop_device(
+    request: RegisterDeviceRequest,
+    current_user: User = Depends(deps.get_current_user),
+    db: Session = Depends(deps.get_db),
+    sync_service: FileSyncService = Depends(get_sync_service)
+):
+    """
+    Register a desktop device for synchronization.
+
+    Desktop-only registration endpoint that does not require a registration token,
+    as the user is already authenticated via JWT. This simplifies the desktop client
+    registration flow compared to the mobile QR-code-based registration.
+    """
+    # Check if device already registered
+    from app.models.sync_state import SyncState
+    existing_device = db.query(SyncState).filter(
+        SyncState.device_id == request.device_id,
+        SyncState.user_id == current_user.id
+    ).first()
+
+    if existing_device:
+        # Device already registered, return existing info
+        Logger.info(f"Desktop device {request.device_id} already registered for user {current_user.username}")
+        return {
+            "device_id": existing_device.device_id,
+            "device_name": existing_device.device_name,
+            "status": "already_registered",
+            "change_token": existing_device.last_change_token
+        }
+
+    # Register new device
+    sync_state = sync_service.register_device(
+        user_id=current_user.id,
+        device_id=request.device_id,
+        device_name=request.device_name or request.device_id
+    )
+
+    Logger.info(f"Registered desktop device {request.device_id} for user {current_user.username}")
+
+    return {
+        "device_id": sync_state.device_id,
+        "device_name": sync_state.device_name,
+        "status": "registered",
+        "change_token": sync_state.last_change_token
+    }
+
+
 @router.get("/status/{device_id}", response_model=SyncStatusResponse)
 async def get_sync_status(
     device_id: str,
@@ -90,13 +141,13 @@ async def get_sync_status(
 ):
     """Get sync status for a device."""
     sync_status = sync_service.get_sync_status(current_user.id, device_id)
-    
+
     if sync_status.get("status") == "not_registered":
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not registered"
         )
-    
+
     return sync_status
 
 

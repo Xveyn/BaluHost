@@ -24,6 +24,13 @@ from app.models.monitoring import (
     ProcessSample,
     MonitoringConfig,
 )
+from app.models.power import (
+    PowerProfileLog,
+    PowerDemandLog,
+    PowerProfileConfig as PowerProfileConfigModel,
+    PowerAutoScalingConfig,
+)
+from app.models.fans import FanConfig, FanSample
 
 __all__ = [
     "Base",
@@ -54,4 +61,10 @@ __all__ = [
     "DiskIoSample",
     "ProcessSample",
     "MonitoringConfig",
+    "PowerProfileLog",
+    "PowerDemandLog",
+    "PowerProfileConfigModel",
+    "PowerAutoScalingConfig",
+    "FanConfig",
+    "FanSample",
 ]

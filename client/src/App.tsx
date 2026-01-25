@@ -18,6 +18,8 @@ import SyncSettings from './components/SyncSettings';
 import DeviceManagement from './pages/DeviceManagement';
 import MobileDevicesPage from './pages/MobileDevicesPage';
 import { RemoteServersPage } from './pages/RemoteServersPage';
+import PowerManagement from './pages/PowerManagement';
+import FanControl from './pages/FanControl';
 import Layout from './components/Layout';
 import { buildApiUrl } from './lib/api';
 import './App.css';
@@ -329,6 +331,30 @@ function App() {
             user ? (
               <Layout user={user} onLogout={handleLogout}>
                 <SystemMonitor />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/power"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <PowerManagement />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/fan-control"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <FanControl />
               </Layout>
             ) : (
               <Navigate to="/login" />

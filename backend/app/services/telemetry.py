@@ -97,31 +97,35 @@ def _sample_once() -> None:
             used_mem = 3 * 1024 ** 3
             percent_mem = _round((used_mem / total_mem) * 100)
 
-    if settings.is_dev_mode:
-        download_mbps, upload_mbps = _generate_mock_network_sample()
-        _previous_network_totals = None
-    else:
-        download_mbps = 0.0
-        upload_mbps = 0.0
-        try:
-            counters = psutil.net_io_counters()
-            if counters is not None:
-                rx_bytes = int(counters.bytes_recv)
-                tx_bytes = int(counters.bytes_sent)
-                if _previous_network_totals is None:
-                    _previous_network_totals = (timestamp_seconds, rx_bytes, tx_bytes)
-                else:
-                    last_time, last_rx, last_tx = _previous_network_totals
-                    elapsed = max(timestamp_seconds - last_time, 1e-3)
-                    rx_diff = rx_bytes - last_rx
-                    tx_diff = tx_bytes - last_tx
-                    download_mbps = max(0.0, (rx_diff * 8) / (elapsed * 1_000_000))
-                    upload_mbps = max(0.0, (tx_diff * 8) / (elapsed * 1_000_000))
-                    _previous_network_totals = (timestamp_seconds, rx_bytes, tx_bytes)
-        except Exception as exc:  # pragma: no cover - networking edge cases
-            logger.debug("Network counters unavailable: %s", exc)
-            download_mbps, upload_mbps = _generate_mock_network_sample()
+    # Always try to get real network data from psutil
+    download_mbps = 0.0
+    upload_mbps = 0.0
+    try:
+        counters = psutil.net_io_counters()
+        if counters is not None:
+            rx_bytes = int(counters.bytes_recv)
+            tx_bytes = int(counters.bytes_sent)
+            if _previous_network_totals is None:
+                _previous_network_totals = (timestamp_seconds, rx_bytes, tx_bytes)
+            else:
+                last_time, last_rx, last_tx = _previous_network_totals
+                elapsed = max(timestamp_seconds - last_time, 1e-3)
+                rx_diff = rx_bytes - last_rx
+                tx_diff = tx_bytes - last_tx
+                download_mbps = max(0.0, _round((rx_diff * 8) / (elapsed * 1_000_000)))
+                upload_mbps = max(0.0, _round((tx_diff * 8) / (elapsed * 1_000_000)))
+                _previous_network_totals = (timestamp_seconds, rx_bytes, tx_bytes)
+        else:
+            # No network counters available, fall back to mock data
+            if settings.is_dev_mode:
+                download_mbps, upload_mbps = _generate_mock_network_sample()
             _previous_network_totals = None
+    except Exception as exc:  # pragma: no cover - networking edge cases
+        logger.debug("Network counters unavailable: %s", exc)
+        # Only use mock data in dev mode when real data fails
+        if settings.is_dev_mode:
+            download_mbps, upload_mbps = _generate_mock_network_sample()
+        _previous_network_totals = None
 
     cpu_sample = CpuTelemetrySample(
         timestamp=timestamp_ms, 
