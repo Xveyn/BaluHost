@@ -14,9 +14,10 @@ logger = logging.getLogger(__name__)
 class NetworkDiscoveryService:
     """Publishes BaluHost service via mDNS/Bonjour for automatic discovery."""
     
-    def __init__(self, port: int = 8000, webdav_port: int = 8080):
+    def __init__(self, port: int = 8000, webdav_port: int = 8080, hostname: str = None):
         self.port = port
         self.webdav_port = webdav_port
+        self.hostname = hostname or "baluhost"  # Default to "baluhost"
         self.zeroconf: Optional[Zeroconf] = None
         self.service_info: Optional[ServiceInfo] = None
         self.webdav_service_info: Optional[ServiceInfo] = None
@@ -37,14 +38,16 @@ class NetworkDiscoveryService:
     def start(self):
         """Start broadcasting the service via mDNS."""
         try:
-            hostname = socket.gethostname()
+            # Use configured hostname instead of system hostname
+            hostname = self.hostname
+            system_hostname = socket.gethostname()
             local_ip = self.get_local_ip()
-            
+
             # Initialize Zeroconf
             self.zeroconf = Zeroconf()
-            
+
             # Register BaluHost API Service
-            service_name = f"BaluHost on {hostname}._baluhost._tcp.local."
+            service_name = f"BaluHost on {system_hostname}._baluhost._tcp.local."
             self.service_info = ServiceInfo(
                 "_baluhost._tcp.local.",
                 service_name,
@@ -52,16 +55,16 @@ class NetworkDiscoveryService:
                 port=self.port,
                 properties={
                     'version': '1.0.0',
-                    'hostname': hostname,
+                    'hostname': hostname,  # Use configured hostname in properties
                     'api': f'https://{local_ip}:{self.port}',
                     'webdav': f'http://{local_ip}:{self.webdav_port}/webdav',
                     'description': 'BaluHost - Private Cloud Storage'
                 },
-                server=f"{hostname}.local."
+                server=f"{hostname}.local."  # Use configured hostname for mDNS resolution
             )
-            
+
             # Register WebDAV Service (for compatibility with native clients)
-            webdav_service_name = f"BaluHost WebDAV on {hostname}._webdav._tcp.local."
+            webdav_service_name = f"BaluHost WebDAV on {system_hostname}._webdav._tcp.local."
             self.webdav_service_info = ServiceInfo(
                 "_webdav._tcp.local.",
                 webdav_service_name,
@@ -71,7 +74,7 @@ class NetworkDiscoveryService:
                     'path': '/webdav',
                     'txtvers': '1'
                 },
-                server=f"{hostname}.local."
+                server=f"{hostname}.local."  # Use configured hostname for mDNS resolution
             )
             
             # Register both services

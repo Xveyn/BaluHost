@@ -1,0 +1,39 @@
+<?xml version="1.0" standalone='no'?>
+<!DOCTYPE service-group SYSTEM "avahi-service.dtd">
+<!--
+  BaluHost Avahi Service Definition
+  Publishes HTTP/HTTPS services for automatic network discovery
+
+  This file should be installed to: /etc/avahi/services/baluhost.service
+
+  Usage:
+    sudo cp baluhost.service /etc/avahi/services/
+    sudo systemctl restart avahi-daemon
+-->
+<service-group>
+  <!-- Service name with hostname wildcard -->
+  <name replace-wildcards="yes">BaluHost on %h</name>
+
+  <!-- HTTP Service (Port 80) -->
+  <service>
+    <type>_http._tcp</type>
+    <port>80</port>
+    <txt-record>path=/</txt-record>
+    <txt-record>version=1.3.0</txt-record>
+    <txt-record>app=BaluHost</txt-record>
+  </service>
+
+  <!-- HTTPS Service (Port 443) -->
+  <service>
+    <type>_https._tcp</type>
+    <port>443</port>
+    <txt-record>path=/</txt-record>
+    <txt-record>version=1.3.0</txt-record>
+    <txt-record>app=BaluHost</txt-record>
+  </service>
+
+  <!--
+    Note: BaluHost also publishes custom _baluhost._tcp service via Python
+    This file is for standard HTTP/HTTPS discovery by browsers and clients
+  -->
+</service-group>

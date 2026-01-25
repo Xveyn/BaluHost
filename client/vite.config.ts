@@ -8,6 +8,11 @@ export default defineConfig({
   plugins: [react()],
   server: {
     host: '0.0.0.0',  // Expose to network
+    allowedHosts: [
+      'baluhost.local',
+      'baluhost',
+      '.local',  // Allow all .local domains
+    ],
     https: (() => {
       const keyPath = path.resolve(__dirname, '../dev-certs/key.pem')
       const certPath = path.resolve(__dirname, '../dev-certs/cert.pem')

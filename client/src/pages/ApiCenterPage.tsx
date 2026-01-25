@@ -1,10 +1,10 @@
 import { useState, useEffect } from 'react';
-import { 
-  Code, 
-  Lock, 
-  FileText, 
-  Terminal, 
-  Activity, 
+import {
+  Code,
+  Lock,
+  FileText,
+  Terminal,
+  Activity,
   Shield,
   ChevronDown,
   ChevronRight,
@@ -13,7 +13,14 @@ import {
   Zap,
   Settings,
   BookOpen,
-  RefreshCw
+  RefreshCw,
+  Users,
+  Smartphone,
+  Database,
+  HardDrive,
+  Wifi,
+  Power,
+  Cloud
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
@@ -240,6 +247,487 @@ const apiSections: ApiSection[] = [
         requiresAuth: true,
         response: `{
   "logs": [{ "timestamp": "...", "user": "admin", "action": "download" }]
+}`
+      }
+    ]
+  },
+  {
+    title: 'Users',
+    icon: <Users className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/users',
+        description: 'List all users with filtering',
+        requiresAuth: true,
+        params: [
+          { name: 'search', type: 'string', required: false, description: 'Search by username or email' },
+          { name: 'role', type: 'string', required: false, description: 'Filter by role' },
+          { name: 'is_active', type: 'boolean', required: false, description: 'Filter by active status' }
+        ],
+        response: `{
+  "users": [...],
+  "total": 10,
+  "active": 8,
+  "inactive": 2,
+  "admins": 2
+}`
+      },
+      {
+        method: 'POST',
+        path: '/api/users',
+        description: 'Create new user (Admin only)',
+        requiresAuth: true,
+        rateLimit: 'user_create',
+        body: [
+          { field: 'username', type: 'string', required: true, description: 'Username' },
+          { field: 'email', type: 'string', required: true, description: 'Email address' },
+          { field: 'password', type: 'string', required: true, description: 'Password' },
+          { field: 'role', type: 'string', required: true, description: 'User role (user/admin)' }
+        ],
+        response: `{
+  "id": 3,
+  "username": "newuser",
+  "email": "user@example.com",
+  "role": "user"
+}`
+      },
+      {
+        method: 'PUT',
+        path: '/api/users/{user_id}',
+        description: 'Update user (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'user_id', type: 'string', required: true, description: 'User ID' }
+        ],
+        body: [
+          { field: 'email', type: 'string', required: false, description: 'New email' },
+          { field: 'role', type: 'string', required: false, description: 'New role' },
+          { field: 'password', type: 'string', required: false, description: 'New password' }
+        ]
+      },
+      {
+        method: 'DELETE',
+        path: '/api/users/{user_id}',
+        description: 'Delete user (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'user_id', type: 'string', required: true, description: 'User ID to delete' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/users/{user_id}/avatar',
+        description: 'Upload user avatar',
+        requiresAuth: true,
+        params: [
+          { name: 'user_id', type: 'string', required: true, description: 'User ID' }
+        ],
+        body: [
+          { field: 'avatar', type: 'file', required: true, description: 'Avatar image (JPEG, PNG, GIF, WebP)' }
+        ]
+      }
+    ]
+  },
+  {
+    title: 'VPN',
+    icon: <Wifi className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/vpn/generate-config',
+        description: 'Generate WireGuard VPN configuration',
+        requiresAuth: true,
+        body: [
+          { field: 'device_name', type: 'string', required: true, description: 'Device name for VPN client' },
+          { field: 'server_public_endpoint', type: 'string', required: true, description: 'Server endpoint (IP:port)' }
+        ],
+        response: `{
+  "config_file": "...",
+  "qr_code_data": "..."
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/vpn/clients',
+        description: 'List all VPN clients for current user',
+        requiresAuth: true,
+        response: `{
+  "clients": [
+    { "id": 1, "device_name": "iPhone", "is_active": true }
+  ]
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/vpn/clients/{client_id}',
+        description: 'Get VPN client details',
+        requiresAuth: true,
+        params: [
+          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+        ]
+      },
+      {
+        method: 'PATCH',
+        path: '/api/vpn/clients/{client_id}',
+        description: 'Update VPN client settings',
+        requiresAuth: true,
+        params: [
+          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+        ],
+        body: [
+          { field: 'device_name', type: 'string', required: false, description: 'New device name' },
+          { field: 'is_active', type: 'boolean', required: false, description: 'Active status' }
+        ]
+      },
+      {
+        method: 'DELETE',
+        path: '/api/vpn/clients/{client_id}',
+        description: 'Delete VPN client configuration',
+        requiresAuth: true,
+        params: [
+          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/vpn/fritzbox/upload',
+        description: 'Upload Fritz!Box VPN config (Admin only)',
+        requiresAuth: true,
+        body: [
+          { field: 'config_content', type: 'string', required: true, description: 'WireGuard .conf file content' },
+          { field: 'public_endpoint', type: 'string', required: true, description: 'Fritz!Box public endpoint' }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/vpn/fritzbox/qr',
+        description: 'Get Fritz!Box config as QR code',
+        requiresAuth: true,
+        response: `{ "config_base64": "..." }`
+      }
+    ]
+  },
+  {
+    title: 'Mobile',
+    icon: <Smartphone className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/mobile/token/generate',
+        description: 'Generate QR code for mobile device registration',
+        requiresAuth: true,
+        params: [
+          { name: 'include_vpn', type: 'boolean', required: false, description: 'Include VPN config in QR code' },
+          { name: 'device_name', type: 'string', required: false, description: 'Device name (default: iOS Device)' },
+          { name: 'token_validity_days', type: 'integer', required: false, description: 'Token validity (30-180 days)' }
+        ],
+        response: `{
+  "token": "...",
+  "qr_code_data": "...",
+  "expires_at": "..."
+}`
+      },
+      {
+        method: 'POST',
+        path: '/api/mobile/register',
+        description: 'Register mobile device using token',
+        body: [
+          { field: 'registration_token', type: 'string', required: true, description: 'Token from QR code' },
+          { field: 'device_name', type: 'string', required: true, description: 'Device name' },
+          { field: 'platform', type: 'string', required: true, description: 'Platform (ios/android)' }
+        ],
+        response: `{
+  "access_token": "...",
+  "device_id": "...",
+  "user": {...}
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/mobile/devices',
+        description: 'List registered mobile devices',
+        requiresAuth: true,
+        response: `{
+  "devices": [
+    { "id": "...", "device_name": "iPhone", "platform": "ios", "is_active": true }
+  ]
+}`
+      },
+      {
+        method: 'DELETE',
+        path: '/api/mobile/devices/{device_id}',
+        description: 'Unregister mobile device',
+        requiresAuth: true,
+        params: [
+          { name: 'device_id', type: 'string', required: true, description: 'Device ID' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/mobile/devices/{device_id}/push-token',
+        description: 'Register FCM push notification token',
+        requiresAuth: true,
+        params: [
+          { name: 'device_id', type: 'string', required: true, description: 'Device ID' }
+        ],
+        body: [
+          { field: 'push_token', type: 'string', required: true, description: 'Firebase Cloud Messaging token' }
+        ]
+      }
+    ]
+  },
+  {
+    title: 'Backup',
+    icon: <Database className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/backup',
+        description: 'Create system backup (Admin only)',
+        requiresAuth: true,
+        body: [
+          { field: 'includes_database', type: 'boolean', required: false, description: 'Include database' },
+          { field: 'includes_files', type: 'boolean', required: false, description: 'Include files' },
+          { field: 'includes_config', type: 'boolean', required: false, description: 'Include configuration' },
+          { field: 'description', type: 'string', required: false, description: 'Backup description' }
+        ],
+        response: `{
+  "id": 1,
+  "filename": "backup_2025-01-25.tar.gz",
+  "size_bytes": 1048576,
+  "created_at": "..."
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/backup',
+        description: 'List all backups (Admin only)',
+        requiresAuth: true,
+        response: `{
+  "backups": [...],
+  "total_size_bytes": 5242880,
+  "total_size_mb": 5.0
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/backup/{backup_id}',
+        description: 'Get backup details (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+        ]
+      },
+      {
+        method: 'DELETE',
+        path: '/api/backup/{backup_id}',
+        description: 'Delete backup (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/backup/{backup_id}/restore',
+        description: 'Restore from backup (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+        ],
+        body: [
+          { field: 'confirm', type: 'boolean', required: true, description: 'Must be true to proceed' },
+          { field: 'restore_database', type: 'boolean', required: false, description: 'Restore database' },
+          { field: 'restore_files', type: 'boolean', required: false, description: 'Restore files' },
+          { field: 'restore_config', type: 'boolean', required: false, description: 'Restore config' }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/backup/{backup_id}/download',
+        description: 'Download backup file (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+        ],
+        response: 'Binary backup file (tar.gz)'
+      }
+    ]
+  },
+  {
+    title: 'Power Management',
+    icon: <Power className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/power/status',
+        description: 'Get current power management status',
+        requiresAuth: true,
+        response: `{
+  "current_profile": "balanced",
+  "cpu_frequency_mhz": 2400,
+  "active_demands": [],
+  "auto_scaling_enabled": true
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/power/profiles',
+        description: 'Get all available power profiles',
+        requiresAuth: true,
+        response: `{
+  "profiles": [
+    { "name": "power-save", "governor": "powersave", "epp": "power" },
+    { "name": "balanced", "governor": "schedutil", "epp": "balance_performance" },
+    { "name": "performance", "governor": "performance", "epp": "performance" }
+  ],
+  "current_profile": "balanced"
+}`
+      },
+      {
+        method: 'POST',
+        path: '/api/power/profile',
+        description: 'Set power profile (Admin only)',
+        requiresAuth: true,
+        body: [
+          { field: 'profile', type: 'string', required: true, description: 'Profile name (power-save/balanced/performance)' },
+          { field: 'reason', type: 'string', required: false, description: 'Reason for change' },
+          { field: 'duration_seconds', type: 'integer', required: false, description: 'Override duration' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/power/demand/register',
+        description: 'Register power demand',
+        requiresAuth: true,
+        body: [
+          { field: 'source', type: 'string', required: true, description: 'Demand source identifier' },
+          { field: 'priority', type: 'integer', required: true, description: 'Priority (1-10)' },
+          { field: 'description', type: 'string', required: false, description: 'Demand description' }
+        ]
+      },
+      {
+        method: 'POST',
+        path: '/api/power/demand/unregister',
+        description: 'Unregister power demand',
+        requiresAuth: true,
+        body: [
+          { field: 'source', type: 'string', required: true, description: 'Demand source identifier' }
+        ]
+      }
+    ]
+  },
+  {
+    title: 'Tapo Devices',
+    icon: <Cloud className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/tapo/devices',
+        description: 'Add Tapo power monitoring device (Admin only)',
+        requiresAuth: true,
+        body: [
+          { field: 'name', type: 'string', required: true, description: 'Device name' },
+          { field: 'device_type', type: 'string', required: true, description: 'Device type (e.g., P115)' },
+          { field: 'ip_address', type: 'string', required: true, description: 'Device IP address' },
+          { field: 'email', type: 'string', required: true, description: 'Tapo account email' },
+          { field: 'password', type: 'string', required: true, description: 'Tapo account password' },
+          { field: 'is_monitoring', type: 'boolean', required: false, description: 'Enable monitoring' }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/tapo/devices',
+        description: 'List all Tapo devices (Admin only)',
+        requiresAuth: true,
+        response: `{
+  "devices": [
+    { "id": 1, "name": "Server Power", "device_type": "P115", "is_active": true }
+  ]
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/tapo/devices/{device_id}/current-power',
+        description: 'Get current power consumption',
+        requiresAuth: true,
+        params: [
+          { name: 'device_id', type: 'integer', required: true, description: 'Device ID' }
+        ],
+        response: `{
+  "current_power_w": 45.2,
+  "voltage_v": 230.1,
+  "current_a": 0.196,
+  "timestamp": "..."
+}`
+      },
+      {
+        method: 'DELETE',
+        path: '/api/tapo/devices/{device_id}',
+        description: 'Remove Tapo device (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'device_id', type: 'integer', required: true, description: 'Device ID' }
+        ]
+      }
+    ]
+  },
+  {
+    title: 'RAID & Disks',
+    icon: <HardDrive className="w-5 h-5" />,
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/system/raid/status',
+        description: 'Get RAID array status',
+        requiresAuth: true,
+        response: `{
+  "arrays": [
+    { "name": "md0", "level": "raid1", "state": "active", "devices": [...] }
+  ]
+}`
+      },
+      {
+        method: 'POST',
+        path: '/api/system/raid/create',
+        description: 'Create RAID array (Admin only)',
+        requiresAuth: true,
+        body: [
+          { field: 'name', type: 'string', required: true, description: 'Array name (e.g., md0)' },
+          { field: 'level', type: 'string', required: true, description: 'RAID level (0, 1, 5, 6, 10)' },
+          { field: 'devices', type: 'array', required: true, description: 'Device paths' }
+        ]
+      },
+      {
+        method: 'DELETE',
+        path: '/api/system/raid/{array_name}',
+        description: 'Delete RAID array (Admin only)',
+        requiresAuth: true,
+        params: [
+          { name: 'array_name', type: 'string', required: true, description: 'Array name' }
+        ]
+      },
+      {
+        method: 'GET',
+        path: '/api/system/smart',
+        description: 'Get SMART disk health data',
+        requiresAuth: true,
+        response: `{
+  "disks": [
+    { "device": "/dev/sda", "model": "...", "health": "PASSED", "temp": 35 }
+  ]
+}`
+      },
+      {
+        method: 'GET',
+        path: '/api/system/available-disks',
+        description: 'Get available disks for RAID',
+        requiresAuth: true,
+        response: `{
+  "disks": [
+    { "path": "/dev/sda", "size_gb": 500, "model": "..." }
+  ]
 }`
       }
     ]
@@ -500,6 +988,21 @@ export default function ApiCenterPage() {
 
   const isAdmin = user?.role === 'admin';
 
+  // Dynamically determine API base URL based on current location
+  const getApiBaseUrl = (): string => {
+    const hostname = window.location.hostname;
+    const isDev = import.meta.env.DEV;
+
+    // In development, backend runs on port 3001
+    // In production, backend typically runs on port 8000
+    const port = isDev ? 3001 : 8000;
+    const protocol = window.location.protocol; // http: or https:
+
+    return `${protocol}//${hostname}:${port}`;
+  };
+
+  const apiBaseUrl = getApiBaseUrl();
+
   // Load current user
   useEffect(() => {
     const fetchUser = async () => {
@@ -709,11 +1212,23 @@ export default function ApiCenterPage() {
           <div className="bg-cyan-500/10 border border-cyan-500/30 rounded-xl p-3 sm:p-4">
             <div className="flex items-start gap-2 sm:gap-3">
               <Code className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 mt-0.5 flex-shrink-0" />
-              <div className="min-w-0">
+              <div className="min-w-0 flex-1">
                 <h3 className="font-semibold text-white text-sm sm:text-base mb-1">Base URL</h3>
-                <code className="text-xs sm:text-sm text-cyan-400 bg-slate-900/60 px-2 sm:px-3 py-1 rounded block overflow-x-auto">
-                  http://localhost:8000
-                </code>
+                <div className="flex items-center gap-2">
+                  <code className="text-xs sm:text-sm text-cyan-400 bg-slate-900/60 px-2 sm:px-3 py-1 rounded block overflow-x-auto flex-1">
+                    {apiBaseUrl}
+                  </code>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(apiBaseUrl);
+                      toast.success('Base URL copied!');
+                    }}
+                    className="p-2 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 touch-manipulation active:scale-95"
+                    title="Copy Base URL"
+                  >
+                    <Copy className="w-4 h-4 text-slate-300" />
+                  </button>
+                </div>
                 <p className="text-xs sm:text-sm text-slate-400 mt-2">
                   <span className="hidden sm:inline">All authenticated endpoints require: </span>
                   <code className="text-[10px] sm:text-xs text-slate-300 bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded sm:ml-2 block sm:inline mt-1 sm:mt-0 overflow-x-auto">

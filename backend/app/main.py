@@ -99,7 +99,10 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
     # Start network discovery (mDNS/Bonjour)
     try:
         port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
-        _discovery_service = NetworkDiscoveryService(port=port)
+        _discovery_service = NetworkDiscoveryService(
+            port=port,
+            hostname=settings.mdns_hostname
+        )
         _discovery_service.start()
     except Exception as e:
         logger.warning(f"Network discovery could not start: {e}")

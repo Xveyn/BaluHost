@@ -56,7 +56,100 @@ Das Skript wird:
 
 ---
 
-## 💻 Schritt 2: Netzlaufwerk einbinden (Windows)
+## 🏷️ Schritt 2: Hostname einrichten (optional, aber empfohlen!)
+
+Anstatt sich IP-Adressen zu merken, können Sie BaluHost über den Namen `baluhost.local` erreichen!
+
+### Warum ist das nützlich?
+- ✅ Einfacher zu merken: `http://baluhost.local` statt `http://192.168.1.100:5173`
+- ✅ Funktioniert auch wenn sich die IP-Adresse ändert
+- ✅ Professioneller und benutzerfreundlicher
+
+### Voraussetzungen
+- **Linux-Server** (für Avahi mDNS-Unterstützung)
+- **Oder:** Manuelle hosts-Datei-Konfiguration auf jedem Client
+
+### Server-seitige Einrichtung (Linux)
+
+Wenn Ihr BaluHost-Server auf Linux läuft, führen Sie das Setup-Script aus:
+
+```bash
+# Als root/sudo ausführen
+cd deploy/scripts
+sudo ./setup-hostname.sh
+```
+
+Das Script wird:
+- ✅ Avahi mDNS installieren und konfigurieren
+- ✅ Hostname `baluhost.local` im Netzwerk publizieren
+- ✅ Optional Nginx Reverse Proxy einrichten
+- ✅ Konfiguration testen und Zugriffsinformationen anzeigen
+
+**Fertig!** Nach wenigen Sekunden ist BaluHost über `baluhost.local` erreichbar.
+
+### Client-seitige Einrichtung
+
+Je nach Betriebssystem sind unterschiedliche Schritte nötig:
+
+#### Mac/Linux Clients
+**Funktioniert automatisch!** Keine weitere Konfiguration nötig.
+
+```bash
+# Test
+ping baluhost.local
+```
+
+#### Windows Clients
+
+**Option 1: Bonjour installieren** (empfohlen)
+1. [Bonjour Print Services](https://support.apple.com/kb/DL999) herunterladen
+2. Installieren und PC neu starten
+3. Fertig! `ping baluhost.local` sollte jetzt funktionieren
+
+**Option 2: Hosts-Datei** (einfache Alternative)
+1. Notepad als Administrator öffnen
+2. Datei öffnen: `C:\Windows\System32\drivers\etc\hosts`
+3. Folgende Zeile hinzufügen:
+   ```
+   192.168.1.100  baluhost baluhost.local
+   ```
+   (Ihre Server-IP einsetzen!)
+4. Speichern und schließen
+
+#### Smartphones
+- **iOS**: Funktioniert automatisch (native Bonjour-Unterstützung)
+- **Android**: Ab Version 5.0 meist unterstützt, ansonsten IP-Adresse verwenden
+
+### Zugriff mit Hostname
+
+Nach der Einrichtung können Sie BaluHost so erreichen:
+
+```
+# Web-Interface
+http://baluhost.local
+
+# Mit Nginx Reverse Proxy (empfohlen)
+http://baluhost.local        → Frontend
+http://baluhost.local/api/   → Backend API
+
+# Ohne Reverse Proxy
+http://baluhost.local:5173   → Frontend
+http://baluhost.local:8000   → Backend API
+http://baluhost.local:8080   → WebDAV
+```
+
+### Netzlaufwerk mit Hostname
+
+```powershell
+# Statt IP-Adresse:
+net use Z: \\baluhost.local@8080\webdav /user:admin /persistent:yes
+```
+
+**Detaillierte Anleitung:** Siehe [CLIENT_MDNS_SETUP.md](./CLIENT_MDNS_SETUP.md)
+
+---
+
+## 💻 Schritt 3: Netzlaufwerk einbinden (Windows)
 
 ### Option A: Explorer GUI (einfach)
 
@@ -88,7 +181,7 @@ Ihr Netzlaufwerk `Z:` ist jetzt verfügbar wie eine externe Festplatte!
 
 ---
 
-## 📱 Schritt 3: Desktop Sync Client einrichten
+## 📱 Schritt 4: Desktop Sync Client einrichten
 
 Der Sync Client synchronisiert automatisch ausgewählte Ordner - genau wie OneDrive!
 
@@ -125,22 +218,33 @@ Um den Client beim Windows-Start automatisch zu öffnen:
 
 ---
 
-## 🌐 Schritt 4: Web-Interface nutzen
+## 🌐 Schritt 5: Web-Interface nutzen
 
 ### Vom Server-PC:
 ```
-https://localhost:5173
+http://localhost:5173
 ```
 
 ### Von anderen Geräten im Netzwerk:
+
+**Mit Hostname** (wenn konfiguriert):
 ```
-https://192.168.1.100:5173
+http://baluhost.local
+```
+
+**Mit IP-Adresse**:
+```
+http://192.168.1.100:5173
 ```
 (Ersetzen Sie `192.168.1.100` mit der IP Ihres Servers)
 
 ### API-Dokumentation:
 ```
-https://192.168.1.100:8000/docs
+http://baluhost.local:8000/docs
+```
+oder
+```
+http://192.168.1.100:8000/docs
 ```
 
 Hier können Sie:
@@ -155,18 +259,23 @@ Hier können Sie:
 ## 📱 Zugriff von anderen Geräten
 
 ### Windows PC (gleiche Schritte wie oben)
-- Netzlaufwerk: `\\192.168.1.100@8080\webdav`
+- Netzlaufwerk: `\\baluhost.local@8080\webdav` (mit Hostname)
+- Oder: `\\192.168.1.100@8080\webdav` (mit IP)
 - Sync Client installieren
 
 ### Mac
 1. **Finder** → **Gehe zu** → **Mit Server verbinden**
-2. Server-Adresse: `http://192.168.1.100:8080/webdav`
-3. Anmeldung: `admin` + Passwort
+2. Server-Adresse: `http://baluhost.local:8080/webdav` (mit Hostname)
+3. Oder: `http://192.168.1.100:8080/webdav` (mit IP)
+4. Anmeldung: `admin` + Passwort
 
 ### Linux
 ```bash
-# WebDAV mounten
+# WebDAV mounten (mit Hostname)
 sudo apt-get install davfs2
+sudo mount -t davfs http://baluhost.local:8080/webdav /mnt/baluhost
+
+# Oder mit IP-Adresse
 sudo mount -t davfs http://192.168.1.100:8080/webdav /mnt/baluhost
 ```
 
@@ -273,6 +382,7 @@ Wenn Ihr PC eine neue IP bekommt (DHCP):
 
 ## 📚 Weiterführende Dokumentation
 
+- **Hostname Setup (mDNS)**: `docs/CLIENT_MDNS_SETUP.md` - Detaillierte Anleitung für baluhost.local
 - **API Reference**: `docs/API_REFERENCE.md`
 - **Technische Dokumentation**: `TECHNICAL_DOCUMENTATION.md`
 - **RAID Setup**: `docs/RAID_SETUP_WIZARD.md`
