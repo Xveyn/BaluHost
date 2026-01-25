@@ -39,6 +39,11 @@ public:
     bool isDeviceRegistered() const;
     void setDeviceRegistered(bool registered);
 
+    // Dev Mode (for mock vs real server data)
+    std::string getDevMode() const;
+    void setDevMode(const std::string& mode);
+    bool isDevModeMock() const;
+
 private:
     SettingsManager();
     ~SettingsManager() = default;

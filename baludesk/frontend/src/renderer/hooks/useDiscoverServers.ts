@@ -6,6 +6,7 @@ export interface DiscoveredServer {
   ipAddress: string;
   port: number;
   sshPort: number;
+  username?: string;
   description?: string;
   discoveredAt: string;
 }

@@ -40,7 +40,14 @@ private:
     
     // RAID info handler
     void handleGetRaidStatus(int requestId = -1);
-    
+
+    // Dev mode settings
+    void handleGetDevMode(int requestId = -1);
+    void handleSetDevMode(const nlohmann::json& message, int requestId = -1);
+
+    // Power monitoring handler
+    void handleGetPowerMonitoring(int requestId = -1);
+
     // File operation handlers
     void handleListFiles(const nlohmann::json& message, int requestId = -1);
     void handleGetMountpoints(int requestId = -1);

@@ -76,7 +76,10 @@ void SettingsManager::initializeDefaults() {
         // Device Registration
         {"deviceId", ""},
         {"deviceName", ""},
-        {"deviceRegistered", false}
+        {"deviceRegistered", false},
+
+        // Developer Mode
+        {"devMode", "prod"}  // Default to production mode (server data)
     };
 }
 
@@ -315,6 +318,26 @@ std::string SettingsManager::getSystemHostname() {
     #endif
 
     return "BaluDesk-Device";
+}
+
+// Dev Mode Methods
+std::string SettingsManager::getDevMode() const {
+    return settings_.value("devMode", "prod");
+}
+
+void SettingsManager::setDevMode(const std::string& mode) {
+    if (mode != "prod" && mode != "mock") {
+        Logger::warn("Invalid dev mode: {}, using 'prod'", mode);
+        settings_["devMode"] = "prod";
+    } else {
+        settings_["devMode"] = mode;
+    }
+    saveSettings();
+    Logger::info("Dev mode set to: {}", mode);
+}
+
+bool SettingsManager::isDevModeMock() const {
+    return getDevMode() == "mock";
 }
 
 }  // namespace baludesk

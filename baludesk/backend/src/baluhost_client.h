@@ -62,12 +62,24 @@ public:
     bool setPermission(int fileId, const std::string& username, bool canView, bool canEdit, bool canDelete);
     bool removePermission(int fileId, const std::string& username);
 
+    // System Information (from BaluHost server)
+    std::optional<nlohmann::json> getSystemInfo();
+    std::optional<nlohmann::json> getRaidStatus();
+    std::optional<nlohmann::json> getPowerMonitoring();
+
     // Error handling
     std::string getLastError() const;
+
+    // Get server URL
+    std::string getBaseUrl() const;
+
+    // Get authenticated username
+    std::string getUsername() const;
 
 private:
     std::string baseUrl_;
     std::string authToken_;
+    std::string username_;
     std::string lastError_;
 
     // HTTP request helpers

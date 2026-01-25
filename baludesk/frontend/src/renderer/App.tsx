@@ -23,15 +23,10 @@ export default function App() {
   const [conflictCount, setConflictCount] = useState(0);
 
   useEffect(() => {
-    // Check for stored session
-    const storedUser = localStorage.getItem('baludesk_user');
-    if (storedUser) {
-      try {
-        setUser(JSON.parse(storedUser));
-      } catch (e) {
-        localStorage.removeItem('baludesk_user');
-      }
-    }
+    // Always require login on startup for security
+    // Clear any stored session to force authentication
+    localStorage.removeItem('baludesk_user');
+    setUser(null);
     setLoading(false);
   }, []);
 
@@ -56,7 +51,7 @@ export default function App() {
 
   const handleLogin = (userData: User) => {
     setUser(userData);
-    localStorage.setItem('baludesk_user', JSON.stringify(userData));
+    // Don't persist to localStorage - require login on each startup
   };
 
   const handleLogout = () => {

@@ -115,6 +115,9 @@ public:
     // Database access for IPC
     Database* getDatabase() const { return database_.get(); }
 
+    // HttpClient access for IPC (to fetch server system info)
+    HttpClient* getHttpClient() const { return httpClient_.get(); }
+
 private:
     // Internal sync loop
     void syncLoop();

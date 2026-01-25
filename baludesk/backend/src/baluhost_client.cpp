@@ -49,7 +49,8 @@ bool BaluhostClient::login(const std::string& username, const std::string& passw
 
     if (response->contains("access_token")) {
         authToken_ = (*response)["access_token"].get<std::string>();
-        spdlog::info("BaluHost authentication successful");
+        username_ = username;  // Store username
+        spdlog::info("BaluHost authentication successful for user: {}", username);
         return true;
     }
 
@@ -493,6 +494,27 @@ Permission BaluhostClient::parsePermission(const nlohmann::json& json) {
     perm.can_edit = json.value("can_edit", false);
     perm.can_delete = json.value("can_delete", false);
     return perm;
+}
+
+// System Information
+std::optional<nlohmann::json> BaluhostClient::getSystemInfo() {
+    return makeRequest("GET", "/api/system/info");
+}
+
+std::optional<nlohmann::json> BaluhostClient::getRaidStatus() {
+    return makeRequest("GET", "/api/system/raid/status");
+}
+
+std::optional<nlohmann::json> BaluhostClient::getPowerMonitoring() {
+    return makeRequest("GET", "/api/tapo/power/history");
+}
+
+std::string BaluhostClient::getBaseUrl() const {
+    return baseUrl_;
+}
+
+std::string BaluhostClient::getUsername() const {
+    return username_;
 }
 
 } // namespace baludesk

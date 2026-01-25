@@ -77,6 +77,7 @@ set(SOURCES
     src/utils/system_info.cpp
     src/utils/raid_info.cpp
     src/utils/settings_manager.cpp
+    src/utils/mock_data_provider.cpp
     src/utils/credential_store.cpp
     src/baluhost_client.cpp
 )
@@ -199,6 +200,7 @@ if(BUILD_TESTS)
     set(TEST_COMMON_SOURCES
         src/utils/logger.cpp
         src/utils/credential_store.cpp
+        src/utils/settings_manager.cpp
         src/sync/file_watcher_v2.cpp
         src/sync/change_detector.cpp
         src/sync/sync_engine.cpp

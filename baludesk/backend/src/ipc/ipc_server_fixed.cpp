@@ -7,6 +7,9 @@
 #include "../utils/system_info.h"
 #include "../utils/raid_info.h"
 #include "../utils/settings_manager.h"
+#include "../utils/mock_data_provider.h"
+#include "../utils/mock_data_provider.h"
+#include "../api/http_client.h"
 #include "../baluhost_client.h"
 #include <nlohmann/json.hpp>
 #include <curl/curl.h>
@@ -134,6 +137,15 @@ void IpcServer::processMessages() {
             }
             else if (type == "get_raid_status") {
                 handleGetRaidStatus(requestId);
+            }
+            else if (type == "get_dev_mode") {
+                handleGetDevMode(requestId);
+            }
+            else if (type == "set_dev_mode") {
+                handleSetDevMode(message, requestId);
+            }
+            else if (type == "get_power_monitoring") {
+                handleGetPowerMonitoring(requestId);
             }
             else if (type == "list_files") {
                 handleListFiles(message, requestId);
@@ -965,8 +977,57 @@ void IpcServer::handleRemovePermission(const json& message, int requestId) {
 
 void IpcServer::handleGetSystemInfo(int requestId) {
     try {
-        auto sysInfo = SystemInfoCollector::getSystemInfo();
+        auto& settings = SettingsManager::getInstance();
+        std::string devMode = settings.getDevMode();
 
+        Logger::debug("Getting system info (dev-mode: {})", devMode);
+
+        SystemInfo sysInfo;
+
+        if (devMode == "mock") {
+            // Mock mode: Return test data
+            sysInfo = MockDataProvider::getMockSystemInfo();
+            Logger::debug("Using mock system info");
+        } else {
+            // Production mode: Fetch from BaluHost server using baluhostClient_
+            if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+                sendError("Not authenticated with BaluHost server", requestId);
+                Logger::warn("Cannot fetch system info: not authenticated");
+                return;
+            }
+
+            try {
+                auto response = baluhostClient_->getSystemInfo();
+                if (!response) {
+                    sendError("Failed to fetch system info from server", requestId);
+                    Logger::error("Error fetching system info: no response");
+                    return;
+                }
+
+                auto& json = *response;
+
+                // Parse server response (with null-safety)
+                sysInfo.cpu.usage = json["cpu"]["usage"].is_null() ? 0.0 : json["cpu"]["usage"].get<double>();
+                sysInfo.cpu.cores = json["cpu"]["cores"].is_null() ? 0 : json["cpu"]["cores"].get<uint32_t>();
+                sysInfo.cpu.frequency = json["cpu"]["frequency_mhz"].is_null() ? 0 : json["cpu"]["frequency_mhz"].get<uint32_t>();
+                sysInfo.memory.total = json["memory"]["total"].is_null() ? 0 : json["memory"]["total"].get<uint64_t>();
+                sysInfo.memory.used = json["memory"]["used"].is_null() ? 0 : json["memory"]["used"].get<uint64_t>();
+                sysInfo.memory.available = json["memory"]["available"].is_null() ? 0 : json["memory"]["available"].get<uint64_t>();
+                sysInfo.disk.total = json["disk"]["total"].is_null() ? 0 : json["disk"]["total"].get<uint64_t>();
+                sysInfo.disk.used = json["disk"]["used"].is_null() ? 0 : json["disk"]["used"].get<uint64_t>();
+                sysInfo.disk.available = json["disk"]["available"].is_null() ? 0 : json["disk"]["available"].get<uint64_t>();
+                sysInfo.uptime = json["uptime"].is_null() ? 0 : json["uptime"].get<uint64_t>();
+                sysInfo.serverUptime = json["uptime"].is_null() ? 0 : json["uptime"].get<uint64_t>();
+
+                Logger::debug("Fetched system info from BaluHost server");
+            } catch (const std::exception& e) {
+                sendError(std::string("Failed to fetch system info from server: ") + e.what(), requestId);
+                Logger::error("Error fetching system info from server: {}", e.what());
+                return;
+            }
+        }
+
+        // Build response (maintain backward-compatible structure)
         json response = {
             {"type", "system_info"},
             {"success", true},
@@ -986,13 +1047,15 @@ void IpcServer::handleGetSystemInfo(int requestId) {
                     {"used", sysInfo.disk.used},
                     {"available", sysInfo.disk.available}
                 }},
-                {"uptime", sysInfo.uptime}
+                {"uptime", sysInfo.uptime},
+                {"serverUptime", sysInfo.serverUptime},
+                {"dev_mode", devMode == "mock"}
             }}
         };
-        
+
         sendResponse(response, requestId);
         Logger::debug("System info sent to frontend");
-        
+
     } catch (const std::exception& e) {
         sendError(std::string("Failed to get system info: ") + e.what(), requestId);
         Logger::error("Error in handleGetSystemInfo: {}", e.what());
@@ -1001,17 +1064,76 @@ void IpcServer::handleGetSystemInfo(int requestId) {
 
 void IpcServer::handleGetRaidStatus(int requestId) {
     try {
-        auto raidStatus = RaidInfoCollector::getRaidStatus();
+        auto& settings = SettingsManager::getInstance();
+        std::string devMode = settings.getDevMode();
 
+        Logger::debug("Getting RAID status (dev-mode: {})", devMode);
+
+        RaidStatus raidStatus;
+
+        if (devMode == "mock") {
+            // Mock mode: Return test data
+            raidStatus = MockDataProvider::getMockRaidStatus();
+            Logger::debug("Using mock RAID status");
+        } else {
+            // Production mode: Fetch from BaluHost server using baluhostClient_
+            if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+                sendError("Not authenticated with BaluHost server", requestId);
+                Logger::warn("Cannot fetch RAID status: not authenticated");
+                return;
+            }
+
+            try {
+                auto response = baluhostClient_->getRaidStatus();
+                if (!response) {
+                    sendError("Failed to fetch RAID status from server", requestId);
+                    Logger::error("Error fetching RAID status: no response");
+                    return;
+                }
+
+                auto& json = *response;
+                raidStatus.dev_mode = json.value("dev_mode", false);
+
+                if (json.contains("arrays") && json["arrays"].is_array()) {
+                    for (const auto& arrayJson : json["arrays"]) {
+                        RaidArray array;
+                        array.name = arrayJson.value("name", "");
+                        array.level = arrayJson.value("level", "");
+                        array.status = arrayJson.value("status", "");
+                        array.size_bytes = arrayJson.value("size_bytes", 0LL);
+                        array.resync_progress = arrayJson.value("resync_progress", 0.0);
+
+                        if (arrayJson.contains("devices") && arrayJson["devices"].is_array()) {
+                            for (const auto& devJson : arrayJson["devices"]) {
+                                RaidDevice device;
+                                device.name = devJson.value("name", "");
+                                device.state = devJson.value("state", "");
+                                array.devices.push_back(device);
+                            }
+                        }
+                        raidStatus.arrays.push_back(array);
+                    }
+                }
+
+                Logger::debug("Fetched RAID status from BaluHost server ({} arrays)",
+                             raidStatus.arrays.size());
+            } catch (const std::exception& e) {
+                sendError(std::string("Failed to fetch RAID status from server: ") + e.what(), requestId);
+                Logger::error("Error fetching RAID status from server: {}", e.what());
+                return;
+            }
+        }
+
+        // Build response (maintain backward-compatible structure)
         json response = {
             {"type", "raid_status"},
             {"success", true},
             {"data", raidStatus.toJson()}
         };
-        
+
         sendResponse(response, requestId);
         Logger::debug("RAID status sent to frontend");
-        
+
     } catch (const std::exception& e) {
         sendError(std::string("Failed to get RAID status: ") + e.what(), requestId);
         Logger::error("Error in handleGetRaidStatus: {}", e.what());
@@ -1730,19 +1852,55 @@ void IpcServer::handleDiscoverNetworkServers(int requestId) {
         
         std::string discoveryMethod = "none";
         
-        // Check if localhost BaluHost server is running
+        // Check if BaluHost server is running (from authenticated connection)
         if (baluhostClient_ && baluhostClient_->isAuthenticated()) {
-            // User is authenticated, so we know localhost:8000 is running
+            // User is authenticated, extract actual server info from baseUrl
+            std::string baseUrl = baluhostClient_->getBaseUrl();
+            std::string username = baluhostClient_->getUsername();
+
+            // Parse URL to extract hostname/IP and port
+            std::string hostname = "localhost";
+            std::string ipAddress = "127.0.0.1";
+            int port = 8000;
+
+            // Simple URL parsing: http://hostname:port or https://hostname:port
+            size_t protoEnd = baseUrl.find("://");
+            if (protoEnd != std::string::npos) {
+                std::string hostPart = baseUrl.substr(protoEnd + 3);
+                size_t portStart = hostPart.find(":");
+                if (portStart != std::string::npos) {
+                    hostname = hostPart.substr(0, portStart);
+                    std::string portStr = hostPart.substr(portStart + 1);
+                    // Remove trailing slashes if any
+                    size_t slashPos = portStr.find("/");
+                    if (slashPos != std::string::npos) {
+                        portStr = portStr.substr(0, slashPos);
+                    }
+                    port = std::stoi(portStr);
+                } else {
+                    hostname = hostPart;
+                    // Remove trailing slashes
+                    size_t slashPos = hostname.find("/");
+                    if (slashPos != std::string::npos) {
+                        hostname = hostname.substr(0, slashPos);
+                    }
+                }
+            }
+
+            // Use hostname as IP if it looks like an IP address, otherwise keep both
+            ipAddress = hostname;
+
             json localServer = json::object();
-            localServer["hostname"] = "localhost";
-            localServer["ipAddress"] = "127.0.0.1";
-            localServer["port"] = 8000;
+            localServer["hostname"] = hostname;
+            localServer["ipAddress"] = ipAddress;
+            localServer["port"] = port;
             localServer["sshPort"] = 22;
-            localServer["description"] = "Local BaluHost Server";
+            localServer["username"] = username;  // Add authenticated username
+            localServer["description"] = "Connected BaluHost Server";
             localServer["discoveredAt"] = timestamp;
             servers.push_back(localServer);
             discoveryMethod = "authenticated";
-            Logger::info("Discovered local BaluHost server (authenticated)");
+            Logger::info("Discovered BaluHost server from authenticated connection: {}:{} (user: {})", hostname, port, username);
         } else {
             // Try to detect localhost server via HTTP probe
             try {
@@ -1851,6 +2009,154 @@ void IpcServer::handleCheckServerHealth(const json& message, int requestId) {
     } catch (const std::exception& e) {
         sendError(std::string("Failed to check server health: ") + e.what(), requestId);
         Logger::error("Error in handleCheckServerHealth: {}", e.what());
+    }
+}
+
+// ============================================================================
+// Dev Mode Handlers
+// ============================================================================
+
+void IpcServer::handleGetDevMode(int requestId) {
+    try {
+        auto& settings = SettingsManager::getInstance();
+        std::string devMode = settings.getDevMode();
+
+        json response = {
+            {"type", "dev_mode_response"},
+            {"success", true},
+            {"data", {
+                {"devMode", devMode}
+            }}
+        };
+
+        sendResponse(response, requestId);
+        Logger::debug("Dev mode sent to frontend: {}", devMode);
+
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get dev mode: ") + e.what(), requestId);
+        Logger::error("Error in handleGetDevMode: {}", e.what());
+    }
+}
+
+void IpcServer::handleSetDevMode(const nlohmann::json& message, int requestId) {
+    try {
+        if (!message.contains("data") || !message["data"].contains("devMode")) {
+            sendError("Missing devMode in request", requestId);
+            return;
+        }
+
+        std::string newMode = message["data"]["devMode"];
+
+        if (newMode != "prod" && newMode != "mock") {
+            sendError("Invalid dev mode. Must be 'prod' or 'mock'", requestId);
+            return;
+        }
+
+        auto& settings = SettingsManager::getInstance();
+        settings.setDevMode(newMode);
+
+        json response = {
+            {"type", "dev_mode_set"},
+            {"success", true},
+            {"data", {
+                {"devMode", newMode}
+            }}
+        };
+
+        sendResponse(response, requestId);
+        Logger::info("Dev mode set to: {}", newMode);
+
+        // Broadcast event to all listeners
+        broadcastEvent("dev_mode_changed", {{"devMode", newMode}});
+
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to set dev mode: ") + e.what(), requestId);
+        Logger::error("Error in handleSetDevMode: {}", e.what());
+    }
+}
+
+void IpcServer::handleGetPowerMonitoring(int requestId) {
+    try {
+        auto& settings = SettingsManager::getInstance();
+        std::string devMode = settings.getDevMode();
+
+        Logger::debug("Getting power monitoring (dev-mode: {})", devMode);
+
+        PowerMonitoring powerData;
+
+        if (devMode == "mock") {
+            // Mock mode: Return test data
+            powerData = MockDataProvider::getMockPowerMonitoring();
+            Logger::debug("Using mock power data");
+        } else {
+            // Production mode: Fetch from BaluHost server
+            if (!baluhostClient_ || !baluhostClient_->isAuthenticated()) {
+                sendError("Not authenticated with BaluHost server", requestId);
+                Logger::warn("Cannot fetch power data: not authenticated");
+                return;
+            }
+
+            try {
+                auto response = baluhostClient_->getPowerMonitoring();
+                if (!response) {
+                    sendError("Failed to fetch power monitoring from server", requestId);
+                    Logger::error("Error fetching power data: no response");
+                    return;
+                }
+
+                auto& json = *response;
+
+                // Parse server response
+                // Total current power
+                powerData.currentPower = json.value("total_current_power", 0.0);
+
+                // Sum energy_today from all devices
+                double totalEnergyToday = 0.0;
+                int deviceCount = 0;
+                if (json.contains("devices") && json["devices"].is_array()) {
+                    deviceCount = static_cast<int>(json["devices"].size());
+                    for (const auto& device : json["devices"]) {
+                        if (device.contains("latest_sample") && !device["latest_sample"].is_null()) {
+                            double energy = device["latest_sample"].value("energy_today", 0.0);
+                            totalEnergyToday += energy;
+                        }
+                    }
+                }
+
+                // Calculate trend (optional, simplified - server doesn't provide this directly)
+                powerData.trendDelta = 0.0;
+                powerData.energyToday = totalEnergyToday;
+                powerData.deviceCount = deviceCount;
+                powerData.maxPower = 150.0;  // Reasonable default
+
+                Logger::debug("Fetched power monitoring from BaluHost server");
+            } catch (const std::exception& e) {
+                sendError(std::string("Failed to fetch power monitoring from server: ") + e.what(), requestId);
+                Logger::error("Error fetching power monitoring from server: {}", e.what());
+                return;
+            }
+        }
+
+        // Build response
+        json response = {
+            {"type", "power_monitoring"},
+            {"success", true},
+            {"data", {
+                {"currentPower", powerData.currentPower},
+                {"energyToday", powerData.energyToday},
+                {"trendDelta", powerData.trendDelta},
+                {"deviceCount", powerData.deviceCount},
+                {"maxPower", powerData.maxPower},
+                {"dev_mode", devMode == "mock"}
+            }}
+        };
+
+        sendResponse(response, requestId);
+        Logger::debug("Power monitoring sent to frontend");
+
+    } catch (const std::exception& e) {
+        sendError(std::string("Failed to get power monitoring: ") + e.what(), requestId);
+        Logger::error("Error in handleGetPowerMonitoring: {}", e.what());
     }
 }
 

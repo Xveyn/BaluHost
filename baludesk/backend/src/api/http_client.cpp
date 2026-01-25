@@ -1,5 +1,6 @@
 #include "http_client.h"
 #include "../utils/logger.h"
+#include "../utils/raid_info.h"
 #include <fstream>
 #include <sstream>
 #include <curl/curl.h>
@@ -699,6 +700,78 @@ bool HttpClient::downloadFileWithProgress(
     } catch (const std::exception& e) {
         Logger::error("Exception during download with progress: {}", e.what());
         return false;
+    }
+}
+
+// ============================================================================
+// System Info from BaluHost Server
+// ============================================================================
+
+SystemInfoFromServer HttpClient::getSystemInfoFromServer() {
+    Logger::debug("Fetching system info from BaluHost server");
+
+    try {
+        std::string response = get("/api/system/info");
+        auto json = nlohmann::json::parse(response);
+
+        SystemInfoFromServer info;
+        info.cpuUsage = json["cpu"]["usage"].get<double>();
+        info.cpuCores = json["cpu"]["cores"].get<uint32_t>();
+        info.cpuFrequency = json["cpu"]["frequency_mhz"].get<uint32_t>();
+        info.memoryTotal = json["memory"]["total"].get<uint64_t>();
+        info.memoryUsed = json["memory"]["used"].get<uint64_t>();
+        info.memoryAvailable = json["memory"]["available"].get<uint64_t>();
+        info.diskTotal = json["disk"]["total"].get<uint64_t>();
+        info.diskUsed = json["disk"]["used"].get<uint64_t>();
+        info.diskAvailable = json["disk"]["available"].get<uint64_t>();
+        info.uptime = json["uptime"].get<uint64_t>();
+
+        Logger::debug("System info fetched successfully from server");
+        return info;
+    } catch (const std::exception& e) {
+        Logger::error("Failed to fetch system info from server: {}", e.what());
+        throw;
+    }
+}
+
+RaidStatusFromServer HttpClient::getRaidStatusFromServer() {
+    Logger::debug("Fetching RAID status from BaluHost server");
+
+    try {
+        std::string response = get("/api/system/raid/status");
+        auto json = nlohmann::json::parse(response);
+
+        RaidStatusFromServer status;
+        status.devMode = json.value("dev_mode", false);
+
+        if (json.contains("arrays") && json["arrays"].is_array()) {
+            for (const auto& arrayJson : json["arrays"]) {
+                RaidArray array;
+                array.name = arrayJson.value("name", "");
+                array.level = arrayJson.value("level", "");
+                array.status = arrayJson.value("status", "");
+                array.size_bytes = arrayJson.value("size_bytes", 0LL);
+                array.resync_progress = arrayJson.value("resync_progress", 0.0);
+
+                if (arrayJson.contains("devices") && arrayJson["devices"].is_array()) {
+                    for (const auto& devJson : arrayJson["devices"]) {
+                        RaidDevice device;
+                        device.name = devJson.value("name", "");
+                        device.state = devJson.value("state", "");
+                        array.devices.push_back(device);
+                    }
+                }
+
+                status.arrays.push_back(array);
+            }
+        }
+
+        Logger::debug("RAID status fetched successfully from server ({} arrays)",
+                     status.arrays.size());
+        return status;
+    } catch (const std::exception& e) {
+        Logger::error("Failed to fetch RAID status from server: {}", e.what());
+        throw;
     }
 }
 

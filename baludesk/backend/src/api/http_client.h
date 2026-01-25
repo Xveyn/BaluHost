@@ -30,6 +30,36 @@ struct DownloadProgress {
 };
 
 /**
+ * SystemInfoFromServer - System metrics from BaluHost server
+ */
+struct SystemInfoFromServer {
+    double cpuUsage;
+    uint32_t cpuCores;
+    uint32_t cpuFrequency;
+    uint64_t memoryTotal;
+    uint64_t memoryUsed;
+    uint64_t memoryAvailable;
+    uint64_t diskTotal;
+    uint64_t diskUsed;
+    uint64_t diskAvailable;
+    uint64_t uptime;
+};
+
+/**
+ * Forward declare RaidArray from raid_info.h
+ * (included in .cpp to avoid circular dependencies)
+ */
+struct RaidArray;
+
+/**
+ * RaidStatusFromServer - RAID status from BaluHost server
+ */
+struct RaidStatusFromServer {
+    std::vector<RaidArray> arrays;
+    bool devMode;
+};
+
+/**
  * HttpClient - REST API client for BaluHost NAS
  * 
  * Handles all HTTP communication using libcurl
@@ -72,6 +102,10 @@ public:
 
     // Sync operations
     std::vector<RemoteChange> getChangesSince(const std::string& timestamp);
+
+    // System information from BaluHost server
+    SystemInfoFromServer getSystemInfoFromServer();
+    RaidStatusFromServer getRaidStatusFromServer();
 
     // Configuration
     void setTimeout(long timeoutSeconds);

@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { Activity, FolderSync, TrendingUp, TrendingDown, Cpu, HardDrive, Clock, Zap } from 'lucide-react';
+import { Activity, FolderSync, TrendingUp, TrendingDown, Cpu, HardDrive, Clock, Zap, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { formatBytes, formatUptime, formatTimestamp } from '../../lib/formatters';
 import { getMemoryPercent, getDiskPercent } from '../../lib/calculations';
 import { BackendMessage } from '../../lib/types';
+import { PowerCard } from '../components/PowerCard';
 
 interface DashboardProps {
   user: { username: string; serverUrl?: string };
@@ -67,6 +68,14 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [raidStatus, setRaidStatus] = useState<RaidStatus | null>(null);
   const [loading, setLoading] = useState(false);
+  const [devMode, setDevMode] = useState<'prod' | 'mock'>('prod');
+
+  // Helper: Format transfer speed
+  const formatSpeed = (bytesPerSecond: number): string => {
+    if (bytesPerSecond < 1024) return `${bytesPerSecond.toFixed(0)} B/s`;
+    if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(1)} KB/s`;
+    return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`;
+  };
 
   useEffect(() => {
     // Listen to backend messages
@@ -109,6 +118,41 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
       window.electronAPI.removeBackendListener();
     };
   }, []);
+
+  // Fetch dev mode setting on mount
+  useEffect(() => {
+    const fetchDevMode = async () => {
+      try {
+        const response = await window.electronAPI.sendBackendCommand({
+          type: 'get_dev_mode'
+        });
+        if (response?.success && response.data?.devMode) {
+          setDevMode(response.data.devMode);
+        }
+      } catch (err) {
+        console.error('Failed to fetch dev mode:', err);
+      }
+    };
+    fetchDevMode();
+  }, []);
+
+  // Toggle dev mode and refresh data
+  const handleDevModeToggle = async (newMode: 'prod' | 'mock') => {
+    try {
+      const response = await window.electronAPI.sendBackendCommand({
+        type: 'set_dev_mode',
+        data: { devMode: newMode }
+      });
+
+      if (response?.success) {
+        setDevMode(newMode);
+        // Refresh data immediately after mode switch
+        fetchData();
+      }
+    } catch (err) {
+      console.error('Failed to toggle dev mode:', err);
+    }
+  };
 
   const fetchData = async () => {
     setLoading(true);
@@ -229,81 +273,123 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
   return (
     <div className="space-y-6">
       {/* Page Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white flex items-center space-x-3">
-          <div className="rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 p-3">
-            <Activity className="h-6 w-6 text-white" />
-          </div>
-          <span>Dashboard</span>
-        </h1>
-        <p className="mt-2 text-slate-400">
-          Monitor your sync status and activity • Last sync: {syncStats?.lastSync ? formatTimestamp(syncStats.lastSync) : 'Never'}
-        </p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-white flex items-center space-x-3">
+            <div className="rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 p-3">
+              <Activity className="h-6 w-6 text-white" />
+            </div>
+            <span>Dashboard</span>
+          </h1>
+          <p className="mt-2 text-slate-400">
+            Monitor your sync status and activity • Last sync: {syncStats?.lastSync ? formatTimestamp(syncStats.lastSync) : 'Never'}
+          </p>
+        </div>
+
+        {/* Dev-Mode Toggle */}
+        <div className="flex items-center space-x-2">
+          <span className="text-xs text-slate-400">Data Source:</span>
+          <button
+            onClick={() => handleDevModeToggle('prod')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              devMode === 'prod'
+                ? 'bg-blue-600 text-white shadow-lg shadow-blue-500/30'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            Server
+          </button>
+          <button
+            onClick={() => handleDevModeToggle('mock')}
+            className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
+              devMode === 'mock'
+                ? 'bg-amber-600 text-white shadow-lg shadow-amber-500/30'
+                : 'bg-white/5 text-slate-400 hover:bg-white/10'
+            }`}
+          >
+            Mock
+          </button>
+        </div>
       </div>
 
-      {/* Sync Status Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
-        {/* Status Card */}
-        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-blue-500/10 to-blue-600/10 p-6 backdrop-blur-sm transition-all hover:border-blue-500/30 hover:shadow-lg hover:shadow-blue-500/20">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-400">Sync Status</p>
-              <div className="rounded-lg bg-blue-500/20 p-2">
-                <Activity className="h-4 w-4 text-blue-400" />
-              </div>
-            </div>
-            <p className="text-3xl font-bold text-white">
-              {syncStats?.status || 'Idle'}
+      {/* Dev-Mode Indikator */}
+      {devMode === 'mock' && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-3">
+          <div className="flex items-center space-x-2">
+            <span className="text-amber-400">⚠️</span>
+            <p className="text-sm text-amber-200">
+              Mock data mode active. Dashboard shows test data (8 cores, 45% CPU, 16GB RAM, 1TB disk).
             </p>
           </div>
         </div>
+      )}
 
-        {/* Upload Queue Card */}
-        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-emerald-500/10 to-emerald-600/10 p-6 backdrop-blur-sm transition-all hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20">
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-400">Upload Queue</p>
-              <div className="rounded-lg bg-emerald-500/20 p-2">
-                <TrendingUp className="h-4 w-4 text-emerald-400" />
-              </div>
+      {/* Sync Overview */}
+      <div className="grid gap-6 md:grid-cols-2">
+        {/* Sync Activity Card (Combined Upload + Download) */}
+        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-emerald-500/10 via-purple-500/10 to-purple-600/10 p-4 backdrop-blur-sm transition-all hover:border-emerald-500/30 hover:shadow-lg hover:shadow-emerald-500/20">
+          <div className="flex items-center space-x-2 mb-3">
+            <div className="rounded-lg bg-gradient-to-br from-emerald-500/20 to-purple-500/20 p-1.5">
+              <ArrowUpDown className="h-4 w-4 text-emerald-400" />
             </div>
-            <p className="text-3xl font-bold text-white">
-              {syncStats?.pendingUploads || 0}
-            </p>
-            {syncStats?.uploadSpeed && (
-              <p className="text-xs text-slate-400">
-                {(syncStats.uploadSpeed / 1024 / 1024).toFixed(2)} MB/s
-              </p>
-            )}
+            <h3 className="text-sm font-medium text-slate-300">Sync Activity</h3>
           </div>
-        </div>
 
-        {/* Download Queue Card */}
-        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-purple-500/10 to-purple-600/10 p-6 backdrop-blur-sm transition-all hover:border-purple-500/30 hover:shadow-lg hover:shadow-purple-500/20">
-          <div className="space-y-3">
+          <div className="space-y-2">
+            {/* Upload Section */}
             <div className="flex items-center justify-between">
-              <p className="text-sm font-medium text-slate-400">Download Queue</p>
-              <div className="rounded-lg bg-purple-500/20 p-2">
-                <TrendingDown className="h-4 w-4 text-purple-400" />
+              <div className="flex items-center space-x-2">
+                <ArrowUp className="h-4 w-4 text-emerald-400" />
+                <span className="text-xs text-slate-400">Uploads</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-semibold text-white">
+                  {syncStats?.pendingUploads || 0}
+                </span>
+                {syncStats?.uploadSpeed && syncStats.uploadSpeed > 0 && (
+                  <span className="text-xs text-emerald-400">
+                    {formatSpeed(syncStats.uploadSpeed)}
+                  </span>
+                )}
               </div>
             </div>
-            <p className="text-3xl font-bold text-white">
-              {syncStats?.pendingDownloads || 0}
-            </p>
-            {syncStats?.downloadSpeed && (
-              <p className="text-xs text-slate-400">
-                {(syncStats.downloadSpeed / 1024 / 1024).toFixed(2)} MB/s
-              </p>
-            )}
+
+            {/* Download Section */}
+            <div className="flex items-center justify-between">
+              <div className="flex items-center space-x-2">
+                <ArrowDown className="h-4 w-4 text-purple-400" />
+                <span className="text-xs text-slate-400">Downloads</span>
+              </div>
+              <div className="flex items-center space-x-2">
+                <span className="text-sm font-semibold text-white">
+                  {syncStats?.pendingDownloads || 0}
+                </span>
+                {syncStats?.downloadSpeed && syncStats.downloadSpeed > 0 && (
+                  <span className="text-xs text-purple-400">
+                    {formatSpeed(syncStats.downloadSpeed)}
+                  </span>
+                )}
+              </div>
+            </div>
+
+            {/* Total Pending */}
+            <div className="mt-2 pt-2 border-t border-white/10">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-slate-400">Total Pending</span>
+                <span className="text-lg font-bold text-white">
+                  {(syncStats?.pendingUploads || 0) + (syncStats?.pendingDownloads || 0)}
+                </span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* Sync Folders Card */}
-        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/10 to-orange-600/10 p-6 backdrop-blur-sm transition-all hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-500/20">
-          <div className="space-y-3">
+        <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-orange-500/10 to-orange-600/10 p-4 backdrop-blur-sm transition-all hover:border-orange-500/30 hover:shadow-lg hover:shadow-orange-500/20">
+          <div className="space-y-2">
             <div className="flex items-center justify-between">
               <p className="text-sm font-medium text-slate-400">Sync Folders</p>
-              <div className="rounded-lg bg-orange-500/20 p-2">
+              <div className="rounded-lg bg-orange-500/20 p-1.5">
                 <FolderSync className="h-4 w-4 text-orange-400" />
               </div>
             </div>
@@ -314,12 +400,14 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
         </div>
       </div>
 
-      {/* System Metrics Cards */}
-      <div className="grid gap-6 md:grid-cols-4">
-        {loading ? (
-          // Skeleton loading state
-          <>
-            {[...Array(4)].map((_, i) => (
+      {/* System Metrics */}
+      <div className="space-y-6">
+        {/* Row 1: CPU, RAM, Disk */}
+        <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-3">
+          {loading ? (
+            // Skeleton loading state
+            <>
+              {[...Array(3)].map((_, i) => (
               <div
                 key={i}
                 className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
@@ -338,11 +426,11 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
           // Data loaded successfully
           <>
             {/* CPU Card */}
-            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-cyan-500/10 to-cyan-600/10 p-6 backdrop-blur-sm transition-all hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20">
-              <div className="space-y-3">
+            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-cyan-500/10 to-cyan-600/10 p-4 backdrop-blur-sm transition-all hover:border-cyan-500/30 hover:shadow-lg hover:shadow-cyan-500/20">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-400">CPU</p>
-                  <div className="rounded-lg bg-cyan-500/20 p-2">
+                  <div className="rounded-lg bg-cyan-500/20 p-1.5">
                     <Cpu className="h-4 w-4 text-cyan-400" />
                   </div>
                 </div>
@@ -363,11 +451,11 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
             </div>
 
             {/* Memory Card */}
-            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-pink-500/10 to-pink-600/10 p-6 backdrop-blur-sm transition-all hover:border-pink-500/30 hover:shadow-lg hover:shadow-pink-500/20">
-              <div className="space-y-3">
+            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-pink-500/10 to-pink-600/10 p-4 backdrop-blur-sm transition-all hover:border-pink-500/30 hover:shadow-lg hover:shadow-pink-500/20">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-400">RAM</p>
-                  <div className="rounded-lg bg-pink-500/20 p-2">
+                  <div className="rounded-lg bg-pink-500/20 p-1.5">
                     <div className="h-4 w-4 bg-pink-400 rounded" />
                   </div>
                 </div>
@@ -389,11 +477,11 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
             </div>
 
             {/* Disk Card */}
-            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-amber-500/10 to-amber-600/10 p-6 backdrop-blur-sm transition-all hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20">
-              <div className="space-y-3">
+            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-amber-500/10 to-amber-600/10 p-4 backdrop-blur-sm transition-all hover:border-amber-500/30 hover:shadow-lg hover:shadow-amber-500/20">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-400">Disk</p>
-                  <div className="rounded-lg bg-amber-500/20 p-2">
+                  <div className="rounded-lg bg-amber-500/20 p-1.5">
                     <HardDrive className="h-4 w-4 text-amber-400" />
                   </div>
                 </div>
@@ -413,13 +501,44 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
                 </div>
               </div>
             </div>
+          </>
+        ) : (
+          // Error state
+          <div className="col-span-full rounded-xl border border-red-500/30 bg-red-500/10 p-6">
+            <p className="text-sm text-red-400">
+              Unable to load system information. Please try refreshing.
+            </p>
+          </div>
+        )}
+        </div>
 
-            {/* Uptime Card */}
-            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-lime-500/10 to-lime-600/10 p-6 backdrop-blur-sm transition-all hover:border-lime-500/30 hover:shadow-lg hover:shadow-lime-500/20">
-              <div className="space-y-3">
+        {/* Row 2: Uptime, Power */}
+        <div className="grid gap-6 md:grid-cols-2">
+          {loading ? (
+            <>
+              {[...Array(2)].map((_, i) => (
+                <div
+                  key={i}
+                  className="rounded-xl border border-white/10 bg-white/5 p-6 backdrop-blur-sm"
+                >
+                  <div className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <div className="h-4 w-20 bg-slate-700 rounded animate-pulse" />
+                      <div className="h-8 w-8 bg-slate-700 rounded animate-pulse" />
+                    </div>
+                    <div className="h-8 w-16 bg-slate-700 rounded animate-pulse" />
+                  </div>
+                </div>
+              ))}
+            </>
+          ) : systemInfo ? (
+            <>
+              {/* Uptime Card */}
+            <div className="group relative overflow-hidden rounded-xl border border-white/10 bg-gradient-to-br from-lime-500/10 to-lime-600/10 p-4 backdrop-blur-sm transition-all hover:border-lime-500/30 hover:shadow-lg hover:shadow-lime-500/20">
+              <div className="space-y-2">
                 <div className="flex items-center justify-between">
                   <p className="text-sm font-medium text-slate-400">Uptime</p>
-                  <div className="rounded-lg bg-lime-500/20 p-2">
+                  <div className="rounded-lg bg-lime-500/20 p-1.5">
                     <Clock className="h-4 w-4 text-lime-400" />
                   </div>
                 </div>
@@ -435,15 +554,19 @@ export default function Dashboard({ user: _user, onLogout: _onLogout }: Dashboar
                 })()}
               </div>
             </div>
-          </>
-        ) : (
-          // Error state
-          <div className="col-span-4 rounded-xl border border-red-500/30 bg-red-500/10 p-6">
-            <p className="text-sm text-red-400">
-              Unable to load system information. Please try refreshing.
-            </p>
-          </div>
-        )}
+
+              {/* Power Card */}
+              <PowerCard />
+            </>
+          ) : (
+            // Error state
+            <div className="col-span-full rounded-xl border border-red-500/30 bg-red-500/10 p-6">
+              <p className="text-sm text-red-400">
+                Unable to load system information. Please try refreshing.
+              </p>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* RAID Status Section */}

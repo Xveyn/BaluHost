@@ -93,12 +93,12 @@ export function RemoteServersPage() {
       name: server.hostname,
       sshHost: server.ipAddress,
       sshPort: server.sshPort,
-      sshUsername: 'admin', // BaluHost default username
+      sshUsername: server.username || 'admin', // Use authenticated username if available
       sshPrivateKey: '',
       vpnProfileId: undefined,
       powerOnCommand: '',
     };
-    
+
     await serverProfiles.addProfile(newProfile);
     setServerFormMode('view');
   };
