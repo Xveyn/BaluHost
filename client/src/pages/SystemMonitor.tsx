@@ -126,6 +126,7 @@ function StatCard({ label, value, unit, color, icon }: StatCardProps) {
 // CPU Tab Component
 function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   const { current, history, loading, error } = useCpuMonitoring({ historyDuration: timeRange });
+  const [viewMode, setViewMode] = useState<'overall' | 'per-thread'>('overall');
 
   const usageChartData = useMemo(() => {
     return history.map((s) => ({
@@ -133,6 +134,57 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       usage: s.usage_percent,
     }));
   }, [history]);
+
+  // Generate individual chart data for each thread (Task Manager style)
+  const individualThreadCharts = useMemo(() => {
+    if (viewMode !== 'per-thread' || !current?.thread_usages) return [];
+
+    const pCores = current.p_core_count ?? 0;
+    const eCores = current.e_core_count ?? 0;
+    const totalThreads = current.thread_usages.length;
+    const pThreadCount = pCores * 2; // P-cores have hyperthreading
+
+    return current.thread_usages.map((currentUsage, idx) => {
+      // Determine thread type
+      let threadType: 'P' | 'E' | 'normal' = 'normal';
+      let color = '#3b82f6'; // Default blue
+
+      if (pCores > 0 || eCores > 0) {
+        // Hybrid CPU
+        if (idx < pThreadCount) {
+          threadType = 'P';
+          color = `hsl(${210 + (idx % 4) * 10}, 75%, ${60 + (idx % 3) * 8}%)`; // Blue spectrum
+        } else {
+          threadType = 'E';
+          color = `hsl(${140 + (idx % 4) * 15}, 70%, ${55 + (idx % 3) * 8}%)`; // Green spectrum
+        }
+      } else {
+        // Normal CPU - use rainbow spectrum
+        const hue = (idx / totalThreads) * 360;
+        color = `hsl(${hue}, 70%, 60%)`;
+      }
+
+      // Create chart data for this specific thread
+      const chartData = history.map((sample) => ({
+        time: formatTimestamp(sample.timestamp),
+        usage: sample.thread_usages?.[idx] ?? 0,
+      }));
+
+      return {
+        threadIndex: idx,
+        threadType,
+        color,
+        currentUsage,
+        chartData,
+        label: threadType === 'normal'
+          ? `CPU ${idx}`
+          : `${threadType === 'P' ? 'P-Core' : 'E-Core'} ${idx}`,
+      };
+    });
+  }, [history, viewMode, current]);
+
+  // Check if this is a hybrid CPU
+  const isHybridCpu = (current?.p_core_count ?? 0) > 0 || (current?.e_core_count ?? 0) > 0;
 
   const temperatureChartData = useMemo(() => {
     return history
@@ -152,6 +204,13 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
     const threads = current.thread_count ?? cores;
     const pCores = current.p_core_count;
     const eCores = current.e_core_count;
+
+    // Debug: Log thread_usages to console
+    if (current.thread_usages) {
+      console.log('[CPU Monitor] Thread usages received:', current.thread_usages.length, 'threads');
+    } else {
+      console.log('[CPU Monitor] No thread_usages data received from backend');
+    }
 
     // If we have P/E core info (Intel hybrid)
     if (pCores !== null && pCores !== undefined && eCores !== null && eCores !== undefined) {
@@ -219,19 +278,170 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
         </div>
       </div>
 
-      {/* Usage Chart */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">CPU-Auslastung</h3>
-        <MetricChart
-          data={usageChartData}
-          lines={[{ dataKey: 'usage', name: 'Auslastung (%)', color: '#3b82f6' }]}
-          yAxisLabel="%"
-          yAxisDomain={[0, 100]}
-          height={250}
-          loading={loading}
-          showArea
-        />
+      {/* Usage Chart - Toggle Buttons */}
+      <div className="flex items-center justify-between">
+        <h3 className="text-base sm:text-lg font-semibold text-white">
+          {viewMode === 'overall' ? 'CPU-Auslastung' : 'CPU-Auslastung (Per Thread)'}
+        </h3>
+        {current?.thread_usages && current.thread_usages.length > 0 && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => setViewMode('overall')}
+              className={`flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
+                viewMode === 'overall'
+                  ? 'bg-blue-500/20 text-blue-400'
+                  : 'text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              Gesamt
+            </button>
+            <button
+              onClick={() => setViewMode('per-thread')}
+              className={`flex-1 sm:flex-initial rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
+                viewMode === 'per-thread'
+                  ? 'bg-blue-500/20 text-blue-400'
+                  : 'text-slate-400 hover:bg-slate-800'
+              }`}
+            >
+              Per Thread
+            </button>
+          </div>
+        )}
       </div>
+
+      {/* Overall CPU Chart */}
+      {viewMode === 'overall' && (
+        <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+          <MetricChart
+            data={usageChartData}
+            lines={[{ dataKey: 'usage', name: 'Auslastung (%)', color: '#3b82f6' }]}
+            yAxisLabel="%"
+            yAxisDomain={[0, 100]}
+            height={250}
+            loading={loading}
+            showArea
+          />
+        </div>
+      )}
+
+      {/* Per-Thread Charts - Task Manager Style Grid */}
+      {viewMode === 'per-thread' && individualThreadCharts.length > 0 && (
+        <>
+          {/* P-Cores Section (for hybrid CPUs) */}
+          {isHybridCpu && individualThreadCharts.some(t => t.threadType === 'P') && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-blue-500"></div>
+                <h4 className="text-sm sm:text-base font-semibold text-white">
+                  P-Cores (Performance) - {current?.p_core_count} Kerne / {(current?.p_core_count ?? 0) * 2} Threads
+                </h4>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                {individualThreadCharts
+                  .filter(thread => thread.threadType === 'P')
+                  .map((thread) => (
+                    <div
+                      key={thread.threadIndex}
+                      className="card border-slate-800/60 bg-gradient-to-br from-blue-500/5 to-transparent p-3"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-300">{thread.label}</span>
+                        <span className="text-xs font-bold text-blue-400">
+                          {thread.currentUsage.toFixed(0)}%
+                        </span>
+                      </div>
+                      <MetricChart
+                        data={thread.chartData}
+                        lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
+                        yAxisDomain={[0, 100]}
+                        height={80}
+                        loading={loading}
+                        showArea
+                        compact
+                      />
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* E-Cores Section (for hybrid CPUs) */}
+          {isHybridCpu && individualThreadCharts.some(t => t.threadType === 'E') && (
+            <div className="space-y-3">
+              <div className="flex items-center gap-2">
+                <div className="h-3 w-3 rounded-full bg-green-500"></div>
+                <h4 className="text-sm sm:text-base font-semibold text-white">
+                  E-Cores (Efficiency) - {current?.e_core_count} Kerne / {current?.e_core_count} Threads
+                </h4>
+              </div>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                {individualThreadCharts
+                  .filter(thread => thread.threadType === 'E')
+                  .map((thread) => (
+                    <div
+                      key={thread.threadIndex}
+                      className="card border-slate-800/60 bg-gradient-to-br from-green-500/5 to-transparent p-3"
+                    >
+                      <div className="flex items-center justify-between mb-2">
+                        <span className="text-xs font-medium text-slate-300">{thread.label}</span>
+                        <span className="text-xs font-bold text-green-400">
+                          {thread.currentUsage.toFixed(0)}%
+                        </span>
+                      </div>
+                      <MetricChart
+                        data={thread.chartData}
+                        lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
+                        yAxisDomain={[0, 100]}
+                        height={80}
+                        loading={loading}
+                        showArea
+                        compact
+                      />
+                    </div>
+                  ))}
+              </div>
+            </div>
+          )}
+
+          {/* All Threads Section (for non-hybrid CPUs) */}
+          {!isHybridCpu && (
+            <div className="space-y-3">
+              <h4 className="text-sm sm:text-base font-semibold text-white">
+                Logische Prozessoren ({individualThreadCharts.length})
+              </h4>
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+                {individualThreadCharts.map((thread) => (
+                  <div
+                    key={thread.threadIndex}
+                    className="card border-slate-800/60 bg-slate-900/55 p-3"
+                    style={{
+                      background: `linear-gradient(to bottom right, ${thread.color}08, transparent)`,
+                    }}
+                  >
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-xs font-medium text-slate-300">{thread.label}</span>
+                      <span
+                        className="text-xs font-bold"
+                        style={{ color: thread.color }}
+                      >
+                        {thread.currentUsage.toFixed(0)}%
+                      </span>
+                    </div>
+                    <MetricChart
+                      data={thread.chartData}
+                      lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
+                      yAxisDomain={[0, 100]}
+                      height={80}
+                      loading={loading}
+                      showArea
+                    />
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
 
       {/* Temperature Chart - only show if data available */}
       {hasTemperatureData && (
