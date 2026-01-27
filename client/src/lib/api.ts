@@ -188,3 +188,37 @@ export async function getAdminTableRows(
   return res.data;
 }
 
+// --- Database Health & Info ---
+export interface DatabaseHealthResponse {
+  is_healthy: boolean;
+  connection_status: string;
+  database_type: string;
+  integrity_check?: string;
+  pool_size?: number;
+  pool_checked_in?: number;
+  pool_checked_out?: number;
+  pool_overflow?: number;
+}
+
+export interface TableSizeInfo {
+  table_name: string;
+  row_count: number;
+  estimated_size_bytes: number;
+}
+
+export interface DatabaseInfoResponse {
+  database_type: string;
+  total_size_bytes: number;
+  tables: TableSizeInfo[];
+}
+
+export async function getDatabaseHealth(): Promise<DatabaseHealthResponse> {
+  const res = await apiClient.get('/api/admin/db/health');
+  return res.data;
+}
+
+export async function getDatabaseInfo(): Promise<DatabaseInfoResponse> {
+  const res = await apiClient.get('/api/admin/db/info');
+  return res.data;
+}
+

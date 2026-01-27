@@ -1,7 +1,8 @@
 from typing import List, Optional, Dict, Any
 import re
+import os
 
-from sqlalchemy import inspect, select, Table, MetaData
+from sqlalchemy import inspect, select, Table, MetaData, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -142,3 +143,105 @@ class AdminDBService:
             rows.append(row)
 
         return {"table": table_name, "page": page, "page_size": page_size, "rows": rows, "total": total}
+
+    @classmethod
+    def get_database_health(cls, db: Session) -> Dict[str, Any]:
+        """Check database health status.
+
+        Returns connection status, integrity info (SQLite), or pool status (PostgreSQL).
+        """
+        db_url = str(database.engine.url)
+        is_sqlite = db_url.startswith("sqlite")
+        is_postgres = db_url.startswith("postgresql")
+
+        result = {
+            "is_healthy": False,
+            "connection_status": "unknown",
+            "database_type": "sqlite" if is_sqlite else "postgresql" if is_postgres else "unknown",
+        }
+
+        try:
+            # Test connection with a simple query
+            db.execute(text("SELECT 1"))
+            result["connection_status"] = "connected"
+            result["is_healthy"] = True
+
+            if is_sqlite:
+                # SQLite: Run integrity check (quick mode)
+                try:
+                    integrity_result = db.execute(text("PRAGMA integrity_check(1)")).scalar()
+                    result["integrity_check"] = integrity_result if integrity_result else "ok"
+                    if result["integrity_check"] != "ok":
+                        result["is_healthy"] = False
+                except Exception as e:
+                    result["integrity_check"] = f"error: {str(e)}"
+
+            elif is_postgres:
+                # PostgreSQL: Get connection pool status
+                try:
+                    pool = database.engine.pool
+                    result["pool_size"] = pool.size()
+                    result["pool_checked_in"] = pool.checkedin()
+                    result["pool_checked_out"] = pool.checkedout()
+                    result["pool_overflow"] = pool.overflow()
+                except Exception:
+                    # Pool stats not available
+                    pass
+
+        except Exception as e:
+            result["connection_status"] = f"error: {str(e)}"
+            result["is_healthy"] = False
+
+        return result
+
+    @classmethod
+    def get_database_info(cls, db: Session) -> Dict[str, Any]:
+        """Get database size information for all tables.
+
+        Returns total size and per-table size estimates.
+        """
+        db_url = str(database.engine.url)
+        is_sqlite = db_url.startswith("sqlite")
+
+        inspector = inspect(database.engine)
+        all_tables = inspector.get_table_names()
+
+        tables_info = []
+        total_size = 0
+
+        for table_name in sorted(all_tables):
+            try:
+                # Get row count
+                metadata = MetaData()
+                table = Table(table_name, metadata, autoload_with=database.engine)
+                from sqlalchemy import func
+                count_stmt = select(func.count()).select_from(table)
+                row_count = db.execute(count_stmt).scalar() or 0
+
+                # Estimate size (rough approximation: ~100 bytes per row average)
+                estimated_size = row_count * 100
+
+                tables_info.append({
+                    "table_name": table_name,
+                    "row_count": row_count,
+                    "estimated_size_bytes": estimated_size,
+                })
+                total_size += estimated_size
+            except Exception:
+                # Skip tables we can't inspect
+                continue
+
+        # For SQLite, try to get actual file size
+        if is_sqlite:
+            try:
+                db_path = db_url.replace("sqlite:///", "")
+                if os.path.exists(db_path):
+                    total_size = os.path.getsize(db_path)
+            except Exception:
+                pass
+
+        return {
+            "database_type": "sqlite" if is_sqlite else "postgresql",
+            "total_size_bytes": total_size,
+            "tables": tables_info,
+        }

@@ -11,6 +11,8 @@ from app.schemas.admin_db import (
     AdminTablesResponse,
     AdminTableSchemaResponse,
     AdminTableRowsResponse,
+    DatabaseHealthResponse,
+    DatabaseInfoResponse,
 )
 from app.services.admin_db import AdminDBService
 
@@ -59,3 +61,29 @@ def table_rows(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
 
     return result
+
+
+@router.get("/admin/db/health", response_model=DatabaseHealthResponse, tags=["admin"])
+def database_health(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_admin),
+) -> DatabaseHealthResponse:
+    """Check database health status (admin only).
+
+    Returns connection status, integrity check (SQLite), or pool status (PostgreSQL).
+    """
+    result = AdminDBService.get_database_health(db)
+    return DatabaseHealthResponse(**result)
+
+
+@router.get("/admin/db/info", response_model=DatabaseInfoResponse, tags=["admin"])
+def database_info(
+    db: Session = Depends(deps.get_db),
+    current_user=Depends(deps.get_current_admin),
+) -> DatabaseInfoResponse:
+    """Get database storage information (admin only).
+
+    Returns total size and per-table size estimates.
+    """
+    result = AdminDBService.get_database_info(db)
+    return DatabaseInfoResponse(**result)

@@ -24,3 +24,30 @@ class AdminTableRowsResponse(BaseModel):
     page_size: int
     rows: List[dict]
     total: Optional[int]
+
+
+# Database Info (Storage Analysis)
+class TableSizeInfo(BaseModel):
+    table_name: str
+    row_count: int
+    estimated_size_bytes: int
+
+
+class DatabaseInfoResponse(BaseModel):
+    database_type: str  # "sqlite" | "postgresql"
+    total_size_bytes: int
+    tables: List[TableSizeInfo]
+
+
+# Database Health (Maintenance Tools)
+class DatabaseHealthResponse(BaseModel):
+    is_healthy: bool
+    connection_status: str
+    database_type: str
+    # SQLite specific
+    integrity_check: Optional[str] = None
+    # PostgreSQL specific
+    pool_size: Optional[int] = None
+    pool_checked_in: Optional[int] = None
+    pool_checked_out: Optional[int] = None
+    pool_overflow: Optional[int] = None
