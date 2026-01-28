@@ -34,6 +34,7 @@ import {
 import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
 import { listTapoDevices, getPowerHistory } from '../api/power';
 import type { TapoDevice } from '../api/power';
+import { parseUtcTimestamp } from '../lib/dateUtils';
 
 type TimeWindow = '10min' | '1hour' | '24hours' | '7days';
 
@@ -121,7 +122,7 @@ const EnergyMonitor: React.FC = () => {
             const deviceHistory = powerHistory.devices.find(d => d.device_id === selectedDeviceId);
             if (deviceHistory && deviceHistory.samples.length > 0) {
               data = deviceHistory.samples.map(sample => ({
-                time: new Date(sample.timestamp).toLocaleTimeString('de-DE', {
+                time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
                   hour: '2-digit',
                   minute: '2-digit',
                   second: '2-digit'
@@ -136,7 +137,7 @@ const EnergyMonitor: React.FC = () => {
             // Use hourly samples from DB (last hour)
             const hourSamples = await getHourlySamples(selectedDeviceId, 1);
             data = hourSamples.map(sample => ({
-              time: new Date(sample.timestamp).toLocaleTimeString('de-DE', {
+              time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
                 hour: '2-digit',
                 minute: '2-digit'
               }),
@@ -149,7 +150,7 @@ const EnergyMonitor: React.FC = () => {
             // Use hourly samples from DB (last 24 hours)
             const daySamples = await getHourlySamples(selectedDeviceId, 24);
             data = daySamples.map(sample => ({
-              time: new Date(sample.timestamp).toLocaleTimeString('de-DE', {
+              time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
                 hour: '2-digit',
                 minute: '2-digit'
               }),
@@ -162,7 +163,7 @@ const EnergyMonitor: React.FC = () => {
             // Use hourly samples from DB (last 7 days = 168 hours)
             const weekSamples = await getHourlySamples(selectedDeviceId, 168);
             data = weekSamples.map(sample => ({
-              time: new Date(sample.timestamp).toLocaleDateString('de-DE', {
+              time: parseUtcTimestamp(sample.timestamp).toLocaleDateString('de-DE', {
                 month: 'short',
                 day: 'numeric',
                 hour: '2-digit'

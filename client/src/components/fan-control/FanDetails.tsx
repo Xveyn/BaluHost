@@ -1,7 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { TrendingUp, Table, LineChart as LineChartIcon } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { FanInfo, FanCurvePoint } from '../../api/fan-control';
+import type { FanInfo, FanCurvePoint } from '../../api/fan-control';
+import { CURVE_PRESETS, updateFanConfig } from '../../api/fan-control';
 import FanCurveChart from './FanCurveChart';
 
 interface FanDetailsProps {
@@ -9,22 +10,40 @@ interface FanDetailsProps {
   onCurveUpdate: (fanId: string, points: FanCurvePoint[]) => void;
   isReadOnly: boolean;
   onEditingChange?: (isEditing: boolean) => void;
+  onConfigUpdate?: () => void;
 }
 
-export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange }: FanDetailsProps) {
+export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate }: FanDetailsProps) {
   const [curvePoints, setCurvePoints] = useState<FanCurvePoint[]>(fan.curve_points);
-  const [editingCurve, setEditingCurve] = useState(false);
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
+  const [hysteresis, setHysteresis] = useState<number>(fan.hysteresis_celsius ?? 3.0);
+  const [isUpdatingHysteresis, setIsUpdatingHysteresis] = useState(false);
+
+  // Editing is always enabled when not read-only (FanControl-style)
+  const canEdit = !isReadOnly;
+
+  // Check if curve has been modified (compare with original)
+  const hasUnsavedChanges = useMemo(() => {
+    if (curvePoints.length !== fan.curve_points.length) return true;
+    const sortedCurrent = [...curvePoints].sort((a, b) => a.temp - b.temp);
+    const sortedOriginal = [...fan.curve_points].sort((a, b) => a.temp - b.temp);
+    return sortedCurrent.some((p, i) =>
+      p.temp !== sortedOriginal[i].temp || p.pwm !== sortedOriginal[i].pwm
+    );
+  }, [curvePoints, fan.curve_points]);
 
   useEffect(() => {
     setCurvePoints(fan.curve_points);
-    setEditingCurve(false); // Reset editing state on fan change
   }, [fan.fan_id, fan.curve_points]);
 
-  // Notify parent when editing state changes
   useEffect(() => {
-    onEditingChange?.(editingCurve);
-  }, [editingCurve, onEditingChange]);
+    setHysteresis(fan.hysteresis_celsius ?? 3.0);
+  }, [fan.fan_id, fan.hysteresis_celsius]);
+
+  // Notify parent when there are unsaved changes (to pause auto-refresh)
+  useEffect(() => {
+    onEditingChange?.(hasUnsavedChanges);
+  }, [hasUnsavedChanges, onEditingChange]);
 
   const validateCurvePoints = (points: FanCurvePoint[]): { valid: boolean; error?: string } => {
     if (points.length < 2) {
@@ -55,12 +74,15 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const handleSaveCurve = () => {
     const validation = validateCurvePoints(curvePoints);
     if (!validation.valid) {
-      toast.error(validation.error);
+      toast.error(validation.error || 'Invalid curve configuration');
       return;
     }
 
     onCurveUpdate(fan.fan_id, curvePoints);
-    setEditingCurve(false);
+  };
+
+  const handleDiscardChanges = () => {
+    setCurvePoints(fan.curve_points);
   };
 
   const handleAddPoint = () => {
@@ -82,12 +104,74 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
     setCurvePoints(updated);
   };
 
+  const handleApplyPreset = (preset: keyof typeof CURVE_PRESETS) => {
+    const presetPoints = CURVE_PRESETS[preset];
+    if (presetPoints) {
+      setCurvePoints([...presetPoints]);
+      toast.success(`Applied ${preset} preset - click Save to confirm`);
+    }
+  };
+
+  const handleHysteresisChange = async (value: number) => {
+    setHysteresis(value);
+  };
+
+  const handleHysteresisSave = async () => {
+    if (isReadOnly) return;
+
+    setIsUpdatingHysteresis(true);
+    try {
+      await updateFanConfig(fan.fan_id, { hysteresis_celsius: hysteresis });
+      toast.success(`Hysteresis set to ${hysteresis}°C`);
+      onConfigUpdate?.();
+    } catch {
+      toast.error('Failed to update hysteresis');
+      setHysteresis(fan.hysteresis_celsius ?? 3.0);
+    } finally {
+      setIsUpdatingHysteresis(false);
+    }
+  };
+
+  const hysteresisChanged = hysteresis !== (fan.hysteresis_celsius ?? 3.0);
+
   return (
     <div className="card">
-      <h2 className="text-xl font-bold text-white mb-4 flex items-center gap-2">
-        <TrendingUp className="w-6 h-6 text-sky-400" />
-        {fan.name} - Temperature Curve
-      </h2>
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+        <h2 className="text-xl font-bold text-white flex items-center gap-2">
+          <TrendingUp className="w-6 h-6 text-sky-400" />
+          {fan.name} - Temperature Curve
+        </h2>
+
+        {/* Preset Buttons */}
+        {!isReadOnly && (
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleApplyPreset('silent')}
+              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+              title="Low fan speeds, prioritizes quiet operation"
+            >
+              <Volume2 className="w-4 h-4" />
+              Silent
+            </button>
+            <button
+              onClick={() => handleApplyPreset('balanced')}
+              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+              title="Balance between noise and cooling"
+            >
+              <Gauge className="w-4 h-4" />
+              Balanced
+            </button>
+            <button
+              onClick={() => handleApplyPreset('performance')}
+              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+              title="Maximum cooling, higher fan speeds"
+            >
+              <Zap className="w-4 h-4" />
+              Performance
+            </button>
+          </div>
+        )}
+      </div>
 
       {/* Curve Editor */}
       <div className="mb-4">
@@ -122,25 +206,14 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               </button>
             </div>
 
-            {/* Edit/Save Buttons */}
-            {!editingCurve ? (
-              <button
-                onClick={() => setEditingCurve(true)}
-                disabled={isReadOnly}
-                className="px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 shadow-lg shadow-sky-500/30 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
-              >
-                Edit Curve
-              </button>
-            ) : (
+            {/* Save/Discard Buttons - only shown when there are unsaved changes */}
+            {hasUnsavedChanges && !isReadOnly && (
               <div className="flex gap-2">
                 <button
-                  onClick={() => {
-                    setCurvePoints(fan.curve_points);
-                    setEditingCurve(false);
-                  }}
+                  onClick={handleDiscardChanges}
                   className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm"
                 >
-                  Cancel
+                  Discard
                 </button>
                 <button
                   onClick={handleSaveCurve}
@@ -164,7 +237,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               minPWM={fan.min_pwm_percent}
               maxPWM={fan.max_pwm_percent}
               emergencyTemp={fan.emergency_temp_celsius}
-              isEditing={editingCurve}
+              isEditing={canEdit}
               isReadOnly={isReadOnly}
             />
           </div>
@@ -179,7 +252,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                   <tr>
                     <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">Temperature (°C)</th>
                     <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">PWM (%)</th>
-                    {editingCurve && <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">Actions</th>}
+                    {canEdit && <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">Actions</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -188,7 +261,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                     .map((point, index) => (
                       <tr key={index} className="border-t border-slate-700">
                         <td className="px-4 py-2">
-                          {editingCurve ? (
+                          {canEdit ? (
                             <input
                               type="number"
                               value={point.temp}
@@ -202,7 +275,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                           )}
                         </td>
                         <td className="px-4 py-2">
-                          {editingCurve ? (
+                          {canEdit ? (
                             <input
                               type="number"
                               value={point.pwm}
@@ -215,7 +288,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                             <span className="text-slate-300">{point.pwm}%</span>
                           )}
                         </td>
-                        {editingCurve && (
+                        {canEdit && (
                           <td className="px-4 py-2">
                             <button
                               onClick={() => handleRemovePoint(index)}
@@ -232,7 +305,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               </table>
             </div>
 
-            {editingCurve && curvePoints.length < 10 && (
+            {canEdit && curvePoints.length < 10 && (
               <button
                 onClick={handleAddPoint}
                 className="mt-3 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 shadow-lg shadow-sky-500/30 text-sm"
@@ -245,7 +318,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       </div>
 
       {/* Fan Stats */}
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-slate-700">
+      <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-slate-700">
         <div>
           <p className="text-xs text-slate-400">Min PWM</p>
           <p className="text-lg font-bold text-white">{fan.min_pwm_percent}%</p>
@@ -261,6 +334,42 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
         <div>
           <p className="text-xs text-slate-400">Sensor ID</p>
           <p className="text-sm font-mono text-slate-300">{fan.temp_sensor_id || '—'}</p>
+        </div>
+        <div>
+          <p className="text-xs text-slate-400 flex items-center gap-1">
+            Hysteresis
+            <span
+              className="cursor-help"
+              title="Temperature deadband to prevent fan oscillation. Fan speed only decreases after temperature drops by this amount."
+            >
+              <Info className="w-3 h-3 text-slate-500" />
+            </span>
+          </p>
+          {canEdit ? (
+            <div className="flex items-center gap-2">
+              <input
+                type="number"
+                value={hysteresis}
+                onChange={(e) => handleHysteresisChange(parseFloat(e.target.value) || 0)}
+                onBlur={handleHysteresisSave}
+                onKeyDown={(e) => e.key === 'Enter' && handleHysteresisSave()}
+                className="w-16 px-2 py-1 text-sm border border-slate-600 rounded bg-slate-800 text-white"
+                min={0}
+                max={15}
+                step={0.5}
+                disabled={isUpdatingHysteresis}
+              />
+              <span className="text-sm text-slate-400">°C</span>
+              {hysteresisChanged && !isUpdatingHysteresis && (
+                <span className="text-xs text-amber-400">unsaved</span>
+              )}
+              {isUpdatingHysteresis && (
+                <span className="text-xs text-sky-400">saving...</span>
+              )}
+            </div>
+          ) : (
+            <p className="text-lg font-bold text-white">{fan.hysteresis_celsius ?? 3.0}°C</p>
+          )}
         </div>
       </div>
     </div>

@@ -12,7 +12,7 @@ BaluHost is a full-stack NAS management platform with multiple components:
 - **Mobile Apps**: Native Android (Kotlin), iOS implementation guide available
 - **Legacy**: Express/TypeScript backend in `server/` (deprecated, do not modify)
 
-**Current Production Status**: ~75% production-ready. Core features implemented, but needs PostgreSQL migration, security hardening, and deployment setup.
+**Current Production Status**: ~99% production-ready, deployed in production (Jan 2026). PostgreSQL, security hardening, and deployment complete.
 
 ## Architecture
 
@@ -26,7 +26,7 @@ backend/
 │   ├── models/            # SQLAlchemy ORM models
 │   └── core/config.py     # Configuration
 ├── baluhost_tui/          # Terminal UI application
-├── tests/                 # Pytest tests (20+ files)
+├── tests/                 # Pytest tests (40+ files, 364 test functions)
 └── pyproject.toml         # Dependencies
 ```
 
@@ -43,6 +43,13 @@ backend/
 - `backup.py` - Backup/restore functionality
 - `sync.py` - Desktop sync client coordination
 - `mobile.py` - Mobile device registration with QR code pairing
+- `power_manager.py` - CPU frequency scaling (AMD Ryzen & Intel support)
+- `power_monitor.py` - CPU power-state monitoring
+- `fan_control.py` - PWM fan control with temperature curves
+- `service_status.py` - Service health monitoring for admin dashboard
+- `network_discovery.py` - mDNS/Bonjour for local network discovery
+- `admin_db.py` - Secure read-only database inspection
+- `monitoring/orchestrator.py` - Unified monitoring system with collectors
 
 ### Frontend (React + TypeScript)
 ```
@@ -53,7 +60,15 @@ client/
 │   │   ├── FileManager.tsx
 │   │   ├── RaidManagement.tsx
 │   │   ├── SystemMonitor.tsx
-│   │   └── SettingsPage.tsx
+│   │   ├── SettingsPage.tsx
+│   │   ├── PowerManagement.tsx
+│   │   ├── FanControl.tsx
+│   │   ├── AdminDatabase.tsx
+│   │   ├── AdminHealth.tsx
+│   │   ├── ApiCenterPage.tsx
+│   │   ├── Logging.tsx
+│   │   ├── MobileDevicesPage.tsx
+│   │   └── RemoteServersPage.tsx
 │   ├── components/        # Reusable components
 │   ├── api/               # API client modules
 │   ├── lib/api.ts         # Base API client (axios)
@@ -65,7 +80,7 @@ client/
 
 ### Database
 - **Dev**: SQLite (`backend/baluhost.db`)
-- **Production**: PostgreSQL (recommended, migration pending)
+- **Production**: PostgreSQL 17.7 (deployed, migration complete)
 - **ORM**: SQLAlchemy 2.0+ with Alembic migrations
 
 ## Common Development Commands
@@ -250,12 +265,13 @@ export const FileItem: React.FC<FileItemProps> = ({ file, onDelete }) => {
 - **Integration tests**: Test API endpoints with test database
 - **Fixtures**: Use pytest fixtures for database, auth tokens
 - **Test database**: Separate SQLite database for tests
+- **Coverage**: 40+ test files, 364 test functions
 - Run with: `python -m pytest -v`
 
-### Frontend Tests (Planned)
-- Unit tests with Vitest
-- E2E tests with Playwright
-- Visual regression tests
+### Frontend Tests
+- Unit tests with Vitest (configured)
+- E2E tests with Playwright (configured)
+- Visual regression tests (planned)
 
 ## Database Schema
 
@@ -268,6 +284,23 @@ Key tables:
 - `audit_logs` - Security audit trail
 - `backups` - Backup metadata
 - `sync_folders` - Sync configuration
+
+**Monitoring tables:**
+- `cpu_samples` - CPU usage, frequency, temperature, per-thread usage
+- `memory_samples` - RAM usage
+- `network_samples` - Network throughput
+- `disk_io_samples` - Disk I/O IOPS
+- `process_samples` - BaluHost process tracking
+- `monitoring_config` - Retention policies
+
+**Power management tables:**
+- `power_profile_config` - CPU frequency profiles
+- `power_sample` - Power consumption
+- `power_profile_log` - Profile change history
+
+**Fan control tables:**
+- `fan_config` - Fan configuration (mode, curves, limits)
+- `fan_sample` - Historical RPM/PWM values
 
 ## API Structure
 
@@ -282,6 +315,13 @@ All API routes are prefixed with `/api`:
 - `/api/sync/*` - Desktop sync
 - `/api/mobile/*` - Mobile device management
 - `/api/vpn/*` - VPN configuration
+- `/api/monitoring/*` - Real-time metrics (CPU, Memory, Network, Disk I/O)
+- `/api/power/*` - Power profiles & CPU frequency
+- `/api/fans/*` - Fan control & temperature curves
+- `/api/admin/*` - Admin dashboard services
+- `/api/admin-db/*` - Database inspection
+- `/api/energy/*` - Energy consumption statistics
+- `/api/tapo/*` - TP-Link Tapo smart plug integration
 
 API documentation available at: `http://localhost:3001/docs` (Swagger UI with custom BaluHost styling)
 
@@ -298,6 +338,12 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 - JWT tokens expire after 12 hours (configurable)
 - Audit logging for sensitive operations
 - Rate limiting implemented via slowapi
+
+### Middleware
+- `error_counter.py` - Tracks 4xx/5xx errors for admin metrics
+- `security_headers.py` - CSP, X-Frame-Options, HSTS
+- `device_tracking.py` - Mobile device last_seen tracking
+- `local_only.py` - Enforces local-network-only access for sensitive endpoints
 
 ### Performance
 - Telemetry: 3s interval (prod), 2s (dev)
@@ -330,19 +376,25 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 - Both use QR code pairing with VPN config embedded
 - 30-day refresh tokens for mobile sessions
 
-## Production Readiness Gaps
+## Production Status
 
-**Critical (must fix before production)**:
-1. Migrate to PostgreSQL (currently using SQLite)
-2. Security audit (OWASP top 10, penetration testing)
-3. Structured logging (JSON format for log aggregation)
-4. Deployment documentation (Docker, systemd, reverse proxy)
+**Deployed**: January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM)
 
-**Important (should fix)**:
-1. Frontend E2E tests (Playwright)
-2. Load testing (locust, k6)
-3. CI/CD pipeline (GitHub Actions)
-4. Backup & disaster recovery strategy
+**Completed:**
+- PostgreSQL 17.7 migration
+- Security hardening (OWASP, rate limiting, security headers)
+- Structured JSON logging
+- Systemd deployment with 4 Uvicorn workers
+- Nginx reverse proxy with rate limiting
+- 40+ test files, 364 test functions
+- CI/CD pipeline (GitHub Actions)
+- Comprehensive monitoring (Prometheus/Grafana ready)
+
+**Optional/Future:**
+- SSL/HTTPS (currently HTTP on port 80)
+- Email notifications
+- PWA support
+- Localization (i18n)
 
 See `PRODUCTION_READINESS.md` for complete checklist.
 
@@ -367,6 +419,11 @@ See `PRODUCTION_READINESS.md` for complete checklist.
 **Database models**: `backend/app/models/`
 **API schemas**: `backend/app/schemas/`
 **Tests**: `backend/tests/`
+**Fan control**: `backend/app/services/fan_control.py`
+**Power management**: `backend/app/services/power_manager.py`
+**Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
+**Service status**: `backend/app/services/service_status.py`
+**Network discovery**: `backend/app/services/network_discovery.py`
 
 ## Development Tips
 
@@ -388,13 +445,39 @@ See `PRODUCTION_READINESS.md` for complete checklist.
 
 ## Git Workflow
 
-- **Main branch**: `tui` (current working branch)
-- **No main branch configured**: Set up main/master for PR targets
-- Recent commits focus on TUI implementation and RAID safety features
+- **Main branch**: `main` (production deployments)
+- **Development branch**: `development` (active development)
+- Features branch off from `development`, PRs merge to `main`
+
+## Production Deployment
+
+### Systemd Services
+- `baluhost-backend.service` - FastAPI/Uvicorn (4 workers, port 8000)
+- `baluhost-frontend.service` - Optional (Nginx serves static files)
+
+### Production Commands
+```bash
+# Start/Stop Services
+sudo systemctl start baluhost-backend
+sudo systemctl stop baluhost-backend
+sudo systemctl status baluhost-backend
+
+# View Logs
+sudo journalctl -u baluhost-backend -f
+
+# Production Launcher (Alternative)
+python start_prod.py    # Start backend + optional frontend
+python kill_prod.py     # Stop all BaluHost processes
+```
+
+### Configuration
+- **Environment**: `.env.production` (auto-generated secrets)
+- **Nginx**: `/etc/nginx/sites-available/baluhost`
+- **Database**: PostgreSQL on localhost:5432
 
 ## Contact & Support
 
 - **Issues**: GitHub Issues (repository URL needed)
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.3.0 (as of Dec 2025)
+- **Version**: 1.4.0 (as of Jan 2026)

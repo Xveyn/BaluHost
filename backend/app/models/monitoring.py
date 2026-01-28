@@ -11,7 +11,7 @@ Stores historical system metrics for long-term analysis and statistics:
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, Float, DateTime, String, Boolean, Enum as SQLEnum, JSON
+from sqlalchemy import Column, Integer, BigInteger, Float, DateTime, String, Boolean, Enum as SQLEnum, JSON
 from sqlalchemy.orm import relationship
 import enum
 
@@ -65,12 +65,12 @@ class MemorySample(Base):
     id = Column(Integer, primary_key=True, index=True)
     timestamp = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
 
-    # Memory metrics (in bytes)
-    used_bytes = Column(Integer, nullable=False)
-    total_bytes = Column(Integer, nullable=False)
+    # Memory metrics (in bytes) - BigInteger for values > 2GB
+    used_bytes = Column(BigInteger, nullable=False)
+    total_bytes = Column(BigInteger, nullable=False)
     percent = Column(Float, nullable=False)
-    available_bytes = Column(Integer, nullable=True)
-    baluhost_memory_bytes = Column(Integer, nullable=True)  # BaluHost process memory
+    available_bytes = Column(BigInteger, nullable=True)
+    baluhost_memory_bytes = Column(BigInteger, nullable=True)  # BaluHost process memory
 
     def __repr__(self) -> str:
         return f"<MemorySample(percent={self.percent}%, timestamp={self.timestamp})>"
@@ -92,9 +92,9 @@ class NetworkSample(Base):
     download_mbps = Column(Float, nullable=False)
     upload_mbps = Column(Float, nullable=False)
 
-    # Optional: bytes sent/received totals
-    bytes_sent = Column(Integer, nullable=True)
-    bytes_received = Column(Integer, nullable=True)
+    # Optional: bytes sent/received totals - BigInteger for large values
+    bytes_sent = Column(BigInteger, nullable=True)
+    bytes_received = Column(BigInteger, nullable=True)
 
     def __repr__(self) -> str:
         return f"<NetworkSample(down={self.download_mbps}Mbps, up={self.upload_mbps}Mbps, timestamp={self.timestamp})>"

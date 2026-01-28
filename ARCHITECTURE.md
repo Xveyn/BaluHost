@@ -1,5 +1,9 @@
 # BaluHost - Architecture Documentation
 
+**Version:** 1.4.0
+**Last Updated:** 28. Januar 2026
+**Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
+
 ## 📐 System Overview
 
 BaluHost is a modern, full-stack NAS management application designed for self-hosted file storage and system monitoring. The architecture follows a clear separation of concerns with a React frontend, FastAPI backend, and simulated/real hardware integration.
@@ -39,7 +43,14 @@ BaluHost is a modern, full-stack NAS management application designed for self-ho
 │  │  ├─ SMART Service       (Disk Health)              │   │
 │  │  ├─ Telemetry Service   (System Metrics)           │   │
 │  │  ├─ Audit Logger        (Activity Tracking)        │   │
-│  │  └─ Permissions Service (Access Control)           │   │
+│  │  ├─ Permissions Service (Access Control)           │   │
+│  │  ├─ Power Manager       (CPU Frequency Scaling)    │   │
+│  │  ├─ Fan Control         (PWM, Temperature Curves)  │   │
+│  │  ├─ Monitoring Orch.    (Unified Collectors)       │   │
+│  │  ├─ Service Status      (Health Monitoring)        │   │
+│  │  ├─ Admin DB            (Database Inspection)      │   │
+│  │  ├─ Energy Stats        (Tapo Integration)         │   │
+│  │  └─ Network Discovery   (mDNS/Bonjour)             │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                                ↕
@@ -507,17 +518,51 @@ WebSocket Connection
 
 ## 📊 Monitoring & Observability
 
-### Current Metrics
-- System telemetry (CPU, RAM, Disk, Network)
-- RAID status monitoring
-- SMART disk health
-- Audit logs (file operations)
+### Production Monitoring Stack (ACTIVE)
+- **Prometheus metrics endpoint** (`/api/metrics`) with 40+ custom metrics
+- **Grafana dashboards** for system visualization
+- **20+ alert rules** across 6 severity groups
+- **Structured JSON logging** for log aggregation
+- **Per-thread CPU monitoring** (Task Manager-style)
 
-### Future Monitoring
-- Application metrics (Prometheus)
-- Error tracking (Sentry)
-- Performance monitoring (APM)
-- Log aggregation (ELK stack)
+### Monitoring Orchestrator
+The unified monitoring system uses a collector pattern:
+```
+┌─────────────────────────────────────────────────────────────┐
+│                  Monitoring Orchestrator                     │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Collectors                                           │  │
+│  │  ├─ CPUCollector      (usage, freq, temp, threads)   │  │
+│  │  ├─ MemoryCollector   (RAM, swap, available)         │  │
+│  │  ├─ NetworkCollector  (throughput, packets)          │  │
+│  │  ├─ DiskIOCollector   (IOPS, throughput)             │  │
+│  │  └─ ProcessCollector  (BaluHost process tracking)    │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Database Persistence (with retention policies)       │  │
+│  │  - cpu_samples, memory_samples, network_samples       │  │
+│  │  - disk_io_samples, process_samples                   │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Power & Hardware Monitoring
+- **Power Management**: CPU frequency scaling (AMD Ryzen & Intel)
+- **Fan Control**: PWM control with temperature curves
+- **Energy Monitoring**: Tapo smart plug integration (P115/P110)
+- **Service Status**: Health dashboard for all services
+
+### Metrics Categories
+| Category | Metrics | Endpoint |
+|----------|---------|----------|
+| System | CPU, memory, disk, network | `/api/metrics` |
+| RAID | Array status, sync progress | `/api/system/raid/status` |
+| SMART | Disk health, temperature | `/api/system/smart/status` |
+| Application | HTTP requests, DB connections | `/api/metrics` |
+| Power | CPU frequency, consumption | `/api/power/status` |
+| Fans | RPM, PWM, temperature | `/api/fans/status` |
+| Energy | Watts, kWh, cost | `/api/energy/status` |
 
 ## 🎓 Learning Path for Contributors
 
@@ -557,6 +602,46 @@ If you have questions about the architecture:
 
 ---
 
-**Last Updated:** November 2025  
-**Version:** 0.1.0  
-**Maintainer:** BaluHost Team
+## 🔌 Production Deployment Architecture
+
+### Current Production Setup (ACTIVE)
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Nginx Reverse Proxy                       │
+│                    (Port 80, HTTP)                           │
+│  - Rate limiting (100 req/s API, 10 req/s auth)             │
+│  - Security headers (CSP, X-Frame-Options, HSTS)            │
+│  - Static file serving (/var/www/baluhost/)                 │
+│  - WebSocket/SSE support                                     │
+└───────────────────────┬─────────────────────────────────────┘
+                        │
+          ┌─────────────┴─────────────┐
+          │                           │
+┌─────────▼─────────┐   ┌─────────────▼─────────────┐
+│  Static Files     │   │    FastAPI Backend        │
+│  (Vite Build)     │   │    (4 Uvicorn Workers)    │
+│  /var/www/baluhost│   │    systemd managed        │
+└───────────────────┘   └─────────────┬─────────────┘
+                                      │
+                        ┌─────────────▼─────────────┐
+                        │   PostgreSQL 17.7         │
+                        │   (Production Database)   │
+                        └───────────────────────────┘
+```
+
+### Systemd Services
+- `baluhost-backend.service` - 4 Uvicorn workers, port 8000
+- Auto-restart on failure
+- Graceful shutdown handling
+
+### Environment
+- **Server**: Debian 13, Ryzen 5 5600GT, 16GB RAM, 250GB NVMe
+- **Database**: PostgreSQL 17.7 with connection pooling
+- **Logging**: Structured JSON (python-json-logger)
+
+---
+
+**Last Updated:** 28. Januar 2026
+**Version:** 1.4.0
+**Maintainer:** Xveyn
+**Status:** ✅ DEPLOYED IN PRODUCTION

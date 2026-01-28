@@ -29,6 +29,7 @@ import {
   type PowerProfile,
   type AutoScalingConfig,
 } from '../api/power-management';
+import { AdminBadge } from '../components/ui/AdminBadge';
 
 const REFRESH_INTERVAL_MS = 5000;
 
@@ -479,7 +480,7 @@ export default function PowerManagement() {
             <button
               onClick={handleSwitchBackend}
               disabled={busy}
-              className={`rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm transition-colors touch-manipulation active:scale-95 min-h-[36px] ${
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 sm:px-3 py-1.5 text-xs sm:text-sm transition-colors touch-manipulation active:scale-95 min-h-[36px] ${
                 status.is_using_linux_backend
                   ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
                   : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
@@ -487,6 +488,7 @@ export default function PowerManagement() {
               title={status.is_using_linux_backend ? 'Zu Dev-Backend wechseln' : 'Zu Linux-Backend wechseln'}
             >
               {status.is_using_linux_backend ? '→ Dev' : '→ Linux'}
+              <AdminBadge />
             </button>
           )}
           <button
@@ -597,7 +599,10 @@ export default function PowerManagement() {
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (
         <div className="card border-slate-700/50 p-4 sm:p-6">
-          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">Auto-Scaling Konfiguration</h2>
+          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white flex items-center gap-2">
+            Auto-Scaling Konfiguration
+            <AdminBadge />
+          </h2>
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
               <p className="text-[10px] sm:text-sm text-slate-400">SURGE</p>

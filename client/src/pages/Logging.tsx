@@ -3,6 +3,7 @@ import { loggingApi } from '../api/logging';
 import type { AuditLoggingStatus, FileAccessLogsResponse } from '../api/logging';
 import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { formatDateTime } from '../lib/dateUtils';
 
 const Logging: React.FC = () => {
   const [fileAccessLogs, setFileAccessLogs] = useState<FileAccessLogsResponse | null>(
@@ -77,9 +78,8 @@ const Logging: React.FC = () => {
     return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
-  const formatTimestamp = (timestamp: string): string => {
-    return new Date(timestamp).toLocaleString();
-  };
+  // Use centralized UTC timestamp formatting
+  const formatTimestamp = formatDateTime;
 
   const availableActions = Array.from(
     new Set(fileAccessLogs?.logs.map((log) => log.action) || [])

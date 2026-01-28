@@ -334,3 +334,27 @@ async def stop_monitoring() -> None:
     """Stop the global monitoring orchestrator."""
     orchestrator = get_monitoring_orchestrator()
     await orchestrator.stop()
+
+
+def get_status() -> dict:
+    """
+    Get monitoring orchestrator service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    orchestrator = get_monitoring_orchestrator()
+
+    return {
+        "is_running": orchestrator._is_running,
+        "started_at": None,  # Not tracked separately
+        "uptime_seconds": None,
+        "sample_count": orchestrator._sample_count,
+        "error_count": 0,  # Not tracked separately
+        "last_error": None,
+        "last_error_at": None,
+        "interval_seconds": orchestrator.sample_interval,
+        "buffer_size": orchestrator.buffer_size,
+        "persist_interval": orchestrator.persist_interval,
+        "last_cleanup": orchestrator._last_cleanup.isoformat() if orchestrator._last_cleanup else None,
+    }

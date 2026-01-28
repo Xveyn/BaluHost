@@ -30,6 +30,11 @@ _disk_io_history: Dict[str, List[Dict]] = defaultdict(list)
 _previous_disk_io: Optional[Dict] = None
 _monitor_task: Optional[asyncio.Task] = None
 _lock = Lock()
+_started_at: Optional[float] = None
+_sample_count: int = 0
+_error_count: int = 0
+_last_error: Optional[str] = None
+_last_error_time: Optional[float] = None
 
 
 class DiskIOSample:
@@ -59,8 +64,9 @@ def _round(value: float) -> float:
 
 def _sample_disk_io() -> None:
     """Sample disk I/O statistics for all physical disks."""
-    global _previous_disk_io
-    
+    global _previous_disk_io, _sample_count, _error_count, _last_error, _last_error_time
+
+    _sample_count += 1
     timestamp_seconds = time.time()
     timestamp_ms = int(timestamp_seconds * 1000)
     
@@ -138,6 +144,9 @@ def _sample_disk_io() -> None:
         }
         
     except Exception as exc:
+        _error_count += 1
+        _last_error = str(exc)
+        _last_error_time = time.time()
         logger.error(f"Error sampling disk I/O: {exc}")
         audit = get_audit_logger()
         audit.log_disk_monitor(
@@ -260,14 +269,15 @@ async def _monitor_loop() -> None:
 
 def start_monitoring() -> None:
     """Start the disk I/O monitoring background task."""
-    global _monitor_task
+    global _monitor_task, _started_at
     audit = get_audit_logger()
-    
+
     if _monitor_task is not None:
         logger.warning("Disk I/O monitor already running")
         return
-    
+
     try:
+        _started_at = time.time()
         loop = asyncio.get_event_loop()
         _monitor_task = loop.create_task(_monitor_loop())
         logger.info("Disk I/O monitoring task started")
@@ -313,3 +323,38 @@ def get_latest_disk_io() -> Dict[str, Optional[Dict]]:
             disk: samples[-1] if samples else None
             for disk, samples in _disk_io_history.items()
         }
+
+
+def get_status() -> dict:
+    """
+    Get disk I/O monitor service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    from datetime import datetime
+
+    is_running = _monitor_task is not None and not _monitor_task.done()
+
+    started_at = None
+    uptime_seconds = None
+    if _started_at is not None:
+        started_at = datetime.utcfromtimestamp(_started_at)
+        uptime_seconds = time.time() - _started_at
+
+    last_error_at = None
+    if _last_error_time is not None:
+        last_error_at = datetime.utcfromtimestamp(_last_error_time)
+
+    return {
+        "is_running": is_running,
+        "started_at": started_at,
+        "uptime_seconds": uptime_seconds,
+        "sample_count": _sample_count,
+        "error_count": _error_count,
+        "last_error": _last_error,
+        "last_error_at": last_error_at,
+        "interval_seconds": _SAMPLE_INTERVAL_SECONDS,
+        "buffer_size": _MAX_SAMPLES,
+        "disks_monitored": len(get_available_disks()),
+    }

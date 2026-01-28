@@ -4,6 +4,7 @@ import { apiClient } from '../lib/api';
 import BackupSettings from '../components/BackupSettings';
 import VpnManagement from '../components/VpnManagement';
 import VCLSettings from '../components/vcl/VCLSettings';
+import { AdminBadge } from '../components/ui/AdminBadge';
 
 interface UserProfile {
   id: number;
@@ -270,9 +271,9 @@ export default function SettingsPage() {
             { id: 'storage', label: 'Storage', icon: HardDrive },
             { id: 'activity', label: 'Activity', icon: Activity },
             ...(profile?.role === 'admin' ? [
-              { id: 'backup', label: 'Backup', icon: Database },
-              { id: 'vpn', label: 'VPN', icon: Wifi },
-              { id: 'vcl', label: 'Version Control', icon: History }
+              { id: 'backup', label: 'Backup', icon: Database, adminOnly: true },
+              { id: 'vpn', label: 'VPN', icon: Wifi, adminOnly: true },
+              { id: 'vcl', label: 'Version Control', icon: History, adminOnly: true }
             ] : [])
           ].map(tab => (
             <button
@@ -286,6 +287,7 @@ export default function SettingsPage() {
             >
               <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="text-xs sm:text-sm">{tab.label}</span>
+              {'adminOnly' in tab && tab.adminOnly && <AdminBadge />}
             </button>
           ))}
         </div>

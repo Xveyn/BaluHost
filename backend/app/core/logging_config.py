@@ -59,6 +59,8 @@ def setup_logging() -> None:
     logging.getLogger("watchfiles").setLevel(logging.WARNING)
     logging.getLogger("httpx").setLevel(logging.WARNING)
     logging.getLogger("httpcore").setLevel(logging.WARNING)
+    # Suppress plugp100 Tapo library internal errors (device queries still work despite these logs)
+    logging.getLogger("plugp100").setLevel(logging.WARNING)
 
     # Log startup configuration
     logger = logging.getLogger(__name__)

@@ -12,7 +12,6 @@ import {
   Check,
   Users,
   Share2,
-  HardDrive,
   Smartphone,
   Wifi,
   Zap,

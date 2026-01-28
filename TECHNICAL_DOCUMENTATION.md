@@ -6,9 +6,10 @@ BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Pyth
 
 Version & Datum
 -
-- **Version:** 1.3.0
-- **Last Updated:** 20. Dezember 2025
+- **Version:** 1.4.0
+- **Last Updated:** 28. Januar 2026
 - **Maintainer:** Xveyn
+- **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
 Technologie-Überblick
 -
@@ -1032,7 +1033,352 @@ CREATE TABLE shares (
 
 ---
 
-### 15. Dev-Mode Simulation
+### 15. Power Management System
+
+**Service:** `app/services/power_manager.py`, `app/services/power_monitor.py`
+**API Route:** `app/api/routes/monitoring.py`
+**Models:** `app/models/monitoring.py`
+
+#### Implemented Features:
+- **CPU Frequency Scaling**
+  - AMD Ryzen & Intel processor support
+  - 4 Power Profiles: IDLE, LOW, MEDIUM, SURGE
+  - Automatic scaling based on system demand
+  - Manual profile override
+
+- **Power Profiles**
+  - IDLE: Minimum frequency, maximum power savings
+  - LOW: Balanced efficiency for light workloads
+  - MEDIUM: Standard performance
+  - SURGE: Maximum frequency for heavy workloads
+
+- **Power Monitoring**
+  - Real-time CPU frequency tracking
+  - Power consumption estimation
+  - Profile change history logging
+  - Temperature-based throttling
+
+#### API Endpoints:
+```
+GET  /api/power/status          - Current power state
+GET  /api/power/profiles        - Available profiles
+POST /api/power/profile         - Set power profile
+GET  /api/power/history         - Profile change history
+```
+
+#### Database Tables:
+```sql
+CREATE TABLE power_profile_config (
+    id INTEGER PRIMARY KEY,
+    profile_name VARCHAR(50) NOT NULL,
+    min_freq_mhz INTEGER,
+    max_freq_mhz INTEGER,
+    governor VARCHAR(50),
+    is_active BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE power_sample (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    cpu_freq_mhz INTEGER,
+    power_watts FLOAT,
+    temperature_celsius FLOAT,
+    profile_name VARCHAR(50)
+);
+
+CREATE TABLE power_profile_log (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    old_profile VARCHAR(50),
+    new_profile VARCHAR(50),
+    reason VARCHAR(255),
+    user_id INTEGER
+);
+```
+
+---
+
+### 16. Fan Control System
+
+**Service:** `app/services/fan_control.py`
+**API Route:** `app/api/routes/monitoring.py`
+**Models:** `app/models/monitoring.py`
+
+#### Implemented Features:
+- **PWM Fan Control**
+  - Direct PWM control for connected fans
+  - RPM monitoring and feedback
+  - Multiple fan support
+
+- **Operating Modes**
+  - `auto`: Temperature-based automatic control
+  - `manual`: User-defined PWM values
+  - `emergency`: Maximum speed on critical temperature
+
+- **Temperature Curves**
+  - Customizable temperature-to-PWM mapping
+  - Curve editor in frontend
+  - Hysteresis to prevent rapid changes
+
+- **Safety Features**
+  - Minimum PWM floor (fans never stop completely)
+  - Emergency override on critical temperature
+  - Fallback to maximum speed on sensor failure
+
+#### API Endpoints:
+```
+GET  /api/fans/status           - All fans status
+GET  /api/fans/{fan_id}         - Single fan details
+POST /api/fans/{fan_id}/mode    - Set fan mode
+POST /api/fans/{fan_id}/pwm     - Set manual PWM (manual mode)
+GET  /api/fans/{fan_id}/curve   - Get temperature curve
+POST /api/fans/{fan_id}/curve   - Set temperature curve
+GET  /api/fans/history          - Fan history data
+```
+
+#### Database Tables:
+```sql
+CREATE TABLE fan_config (
+    id INTEGER PRIMARY KEY,
+    fan_id VARCHAR(50) UNIQUE NOT NULL,
+    name VARCHAR(100),
+    mode VARCHAR(20) DEFAULT 'auto',
+    manual_pwm INTEGER,
+    min_pwm INTEGER DEFAULT 20,
+    max_pwm INTEGER DEFAULT 100,
+    curve_points JSON,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+
+CREATE TABLE fan_sample (
+    id INTEGER PRIMARY KEY,
+    fan_id VARCHAR(50) NOT NULL,
+    timestamp TIMESTAMP NOT NULL,
+    rpm INTEGER,
+    pwm INTEGER,
+    temperature_celsius FLOAT
+);
+```
+
+---
+
+### 17. Monitoring Orchestrator
+
+**Service:** `app/services/monitoring/orchestrator.py`
+**Collectors:** CPU, Memory, Network, Disk I/O, Process
+
+#### Implemented Features:
+- **Unified Monitoring System**
+  - Central orchestrator for all collectors
+  - Configurable collection intervals
+  - Database persistence with retention policies
+
+- **Collectors**
+  - `CPUCollector`: Usage, frequency, temperature, per-thread stats
+  - `MemoryCollector`: RAM usage, swap, available memory
+  - `NetworkCollector`: Interface throughput, packet counts
+  - `DiskIOCollector`: Read/write IOPS, throughput
+  - `ProcessCollector`: BaluHost process tracking
+
+- **Retention Policies**
+  - Configurable data retention per metric type
+  - Automatic cleanup of old samples
+  - Database optimization
+
+#### Database Tables:
+```sql
+CREATE TABLE monitoring_config (
+    id INTEGER PRIMARY KEY,
+    metric_type VARCHAR(50) UNIQUE NOT NULL,
+    retention_hours INTEGER DEFAULT 168,
+    collection_interval_seconds INTEGER DEFAULT 3,
+    enabled BOOLEAN DEFAULT TRUE
+);
+
+CREATE TABLE cpu_samples (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    usage_percent FLOAT,
+    frequency_mhz INTEGER,
+    temperature_celsius FLOAT,
+    per_thread_usage JSON
+);
+
+CREATE TABLE memory_samples (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    total_bytes BIGINT,
+    used_bytes BIGINT,
+    available_bytes BIGINT,
+    usage_percent FLOAT
+);
+
+CREATE TABLE network_samples (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    interface VARCHAR(50),
+    bytes_sent BIGINT,
+    bytes_recv BIGINT,
+    packets_sent BIGINT,
+    packets_recv BIGINT
+);
+
+CREATE TABLE disk_io_samples (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    device VARCHAR(50),
+    read_bytes BIGINT,
+    write_bytes BIGINT,
+    read_iops INTEGER,
+    write_iops INTEGER
+);
+
+CREATE TABLE process_samples (
+    id INTEGER PRIMARY KEY,
+    timestamp TIMESTAMP NOT NULL,
+    pid INTEGER,
+    name VARCHAR(255),
+    cpu_percent FLOAT,
+    memory_percent FLOAT
+);
+```
+
+---
+
+### 18. Service Status Monitoring
+
+**Service:** `app/services/service_status.py`
+**API Route:** `app/api/routes/service_status.py`
+**Schemas:** `app/schemas/service_status.py`
+
+#### Implemented Features:
+- **Service Health Dashboard**
+  - Real-time health status for all services
+  - Service registry with metadata
+  - Restart/stop/start capabilities (admin only)
+
+- **Health Checks**
+  - Database connectivity
+  - Background job status
+  - Disk space availability
+  - Memory usage thresholds
+
+- **Service Registry**
+  - Automatic service discovery
+  - Health endpoint aggregation
+  - Dependency tracking
+
+#### API Endpoints:
+```
+GET  /api/services/status       - All services status
+GET  /api/services/{name}       - Single service details
+POST /api/services/{name}/restart - Restart service (admin)
+POST /api/services/{name}/stop    - Stop service (admin)
+POST /api/services/{name}/start   - Start service (admin)
+GET  /api/services/health       - Aggregated health check
+```
+
+---
+
+### 19. Admin Database Inspection
+
+**Service:** `app/services/admin_db.py`
+**API Route:** `app/api/routes/admin_db.py`
+
+#### Implemented Features:
+- **Read-Only Database Browser**
+  - Whitelist-based table access
+  - Sensitive data redaction
+  - Query result pagination
+
+- **Security Features**
+  - Admin-only access
+  - Read-only operations (no modifications)
+  - Automatic PII redaction
+  - Audit logging of all queries
+
+- **UI Components**
+  - Table browser with stats
+  - Storage usage visualization
+  - Query history
+  - Maintenance tools
+
+#### API Endpoints:
+```
+GET  /api/admin-db/tables         - List available tables
+GET  /api/admin-db/tables/{name}  - Table data (paginated)
+GET  /api/admin-db/stats          - Database statistics
+GET  /api/admin-db/storage        - Storage breakdown
+```
+
+---
+
+### 20. Energy Monitoring (Tapo Integration)
+
+**Service:** `app/services/energy_stats.py`
+**API Route:** `app/api/routes/monitoring.py`
+
+#### Implemented Features:
+- **Tapo Smart Plug Integration**
+  - P115/P110 device support
+  - Real-time power consumption
+  - Energy usage history
+
+- **Energy Statistics**
+  - kWh calculations
+  - Cost estimates (configurable rates)
+  - Daily/weekly/monthly summaries
+
+- **Device Management**
+  - Multiple plug support
+  - Device naming
+  - On/off control
+
+#### API Endpoints:
+```
+GET  /api/energy/status           - Current power consumption
+GET  /api/energy/history          - Energy usage history
+GET  /api/energy/stats            - Usage statistics
+GET  /api/tapo/devices            - List Tapo devices
+POST /api/tapo/devices/{id}/power - Toggle device power
+```
+
+---
+
+### 21. Network Discovery (mDNS/Bonjour)
+
+**Service:** `app/services/network_discovery.py`
+**API Route:** `app/api/routes/system.py`
+
+#### Implemented Features:
+- **mDNS/Bonjour Broadcasting**
+  - Automatic service announcement
+  - Local network discovery
+  - Zero-configuration networking
+
+- **Service Types**
+  - `_http._tcp` - Web interface
+  - `_baluhost._tcp` - BaluHost API
+  - `_webdav._tcp` - WebDAV access
+
+- **Device Discovery**
+  - Find other BaluHost instances
+  - Network topology mapping
+  - Service availability checks
+
+#### API Endpoints:
+```
+GET  /api/discovery/services      - Discovered services
+GET  /api/discovery/status        - mDNS status
+POST /api/discovery/scan          - Trigger network scan
+```
+
+---
+
+### 22. Dev-Mode Simulation
 
 **Configuration:** `app/core/config.py`  
 **Services:** All services with Dev-Mode support
@@ -1409,6 +1755,14 @@ Baluhost/
 │   │   │   ├── sync_background.py  # Background sync
 │   │   │   ├── mobile.py           # Mobile support
 │   │   │   ├── network_discovery.py # mDNS/Bonjour
+│   │   │   ├── power_manager.py      # CPU frequency scaling
+│   │   │   ├── power_monitor.py      # Power consumption tracking
+│   │   │   ├── fan_control.py        # PWM fan control
+│   │   │   ├── service_status.py     # Service health monitoring
+│   │   │   ├── admin_db.py           # Database inspection
+│   │   │   ├── energy_stats.py       # Energy monitoring
+│   │   │   ├── monitoring/
+│   │   │   │   └── orchestrator.py   # Unified monitoring
 │   │   │   ├── jobs.py
 │   │   │   └── seed.py
 │   │   └── main.py               # FastAPI App
@@ -1443,7 +1797,12 @@ Baluhost/
 │   │   │   ├── RaidManagement.tsx
 │   │   │   ├── SystemMonitor.tsx
 │   │   │   ├── Logging.tsx
-│   │   │   └── SettingsPage.tsx   # User settings & preferences
+│   │   │   ├── SettingsPage.tsx      # User settings & preferences
+│   │   │   ├── PowerManagement.tsx   # Power profiles & CPU control
+│   │   │   ├── FanControl.tsx        # Fan control & curves
+│   │   │   ├── AdminDatabase.tsx     # Database browser
+│   │   │   ├── AdminHealth.tsx       # Service status dashboard
+│   │   │   └── ApiCenterPage.tsx     # API documentation center
 │   │   ├── contexts/
 │   │   │   └── ThemeContext.tsx    # Theme management (prepared for future use)
 │   │   ├── App.tsx
@@ -1661,6 +2020,7 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** 20. Dezember 2025  
-**Version:** 1.3.0  
+**Last Updated:** 28. Januar 2026
+**Version:** 1.4.0
 **Maintainer:** Xveyn
+**Status:** ✅ DEPLOYED IN PRODUCTION

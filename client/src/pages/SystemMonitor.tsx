@@ -12,6 +12,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { MetricChart, TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
+import { formatTimestamp } from '../lib/dateUtils';
 import {
   useCpuMonitoring,
   useMemoryMonitoring,
@@ -20,13 +21,27 @@ import {
 } from '../hooks/useMonitoring';
 import { getPowerHistory } from '../api/power';
 import type { PowerMonitoringResponse } from '../api/power';
+import { ServicesTab } from '../components/services';
+import { AdminBadge } from '../components/ui/AdminBadge';
 
-type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power';
+interface User {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+}
+
+interface SystemMonitorProps {
+  user: User;
+}
+
+type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services';
 
 interface TabConfig {
   id: TabType;
   label: string;
   icon: React.ReactNode;
+  adminOnly?: boolean;
 }
 
 const TABS: TabConfig[] = [
@@ -80,6 +95,17 @@ const TABS: TabConfig[] = [
       </svg>
     ),
   },
+  {
+    id: 'services',
+    label: 'Services',
+    adminOnly: true,
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <rect x="2" y="3" width="20" height="14" rx="2" />
+        <path d="M8 21h8M12 17v4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
 ];
 
 // Format bytes to human readable
@@ -91,11 +117,7 @@ const formatBytes = (bytes: number): string => {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 };
 
-// Format timestamp for chart
-const formatTimestamp = (ts: string): string => {
-  const date = new Date(ts);
-  return date.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-};
+// formatTimestamp is imported from ../lib/dateUtils
 
 // StatCard component
 interface StatCardProps {
@@ -129,10 +151,12 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   const [viewMode, setViewMode] = useState<'overall' | 'per-thread'>('overall');
 
   const usageChartData = useMemo(() => {
-    return history.map((s) => ({
-      time: formatTimestamp(s.timestamp),
-      usage: s.usage_percent,
-    }));
+    return history
+      .filter((s) => s.usage_percent !== undefined && s.usage_percent >= 0)
+      .map((s) => ({
+        time: formatTimestamp(s.timestamp),
+        usage: s.usage_percent,
+      }));
   }, [history]);
 
   // Generate individual chart data for each thread (Task Manager style)
@@ -469,14 +493,17 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
   // Calculate total RAM in GB for chart domain
   const totalGb = current ? current.total_bytes / (1024 * 1024 * 1024) : 16;
 
+  // Filter out samples with invalid data and convert to GB
   const chartData = useMemo(() => {
-    return history.map((s) => ({
-      time: formatTimestamp(s.timestamp),
-      usedGb: s.used_bytes / (1024 * 1024 * 1024),
-      baluhostGb: s.baluhost_memory_bytes
-        ? s.baluhost_memory_bytes / (1024 * 1024 * 1024)
-        : null,
-    }));
+    return history
+      .filter((s) => s.used_bytes > 0 && s.total_bytes > 0) // Only valid samples
+      .map((s) => ({
+        time: formatTimestamp(s.timestamp),
+        usedGb: s.used_bytes / (1024 * 1024 * 1024),
+        baluhostGb: s.baluhost_memory_bytes && s.baluhost_memory_bytes > 0
+          ? s.baluhost_memory_bytes / (1024 * 1024 * 1024)
+          : null,
+      }));
   }, [history]);
 
   const hasBaluhostData = chartData.some((d) => d.baluhostGb !== null);
@@ -548,12 +575,15 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
 function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
   const { current, history, loading, error } = useNetworkMonitoring({ historyDuration: timeRange });
 
+  // Filter and map network data - only include valid samples
   const chartData = useMemo(() => {
-    return history.map((s) => ({
-      time: formatTimestamp(s.timestamp),
-      download: s.download_mbps,
-      upload: s.upload_mbps,
-    }));
+    return history
+      .filter((s) => s.download_mbps !== undefined && s.upload_mbps !== undefined)
+      .map((s) => ({
+        time: formatTimestamp(s.timestamp),
+        download: s.download_mbps,
+        upload: s.upload_mbps,
+      }));
   }, [history]);
 
   if (error) {
@@ -615,11 +645,13 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
 
   const chartData = useMemo(() => {
     if (!selectedDisk || !history[selectedDisk]) return [];
-    return history[selectedDisk].map((s) => ({
-      time: formatTimestamp(s.timestamp),
-      read: viewMode === 'throughput' ? s.read_mbps : s.read_iops,
-      write: viewMode === 'throughput' ? s.write_mbps : s.write_iops,
-    }));
+    return history[selectedDisk]
+      .filter((s) => s.read_mbps !== undefined && s.write_mbps !== undefined)
+      .map((s) => ({
+        time: formatTimestamp(s.timestamp),
+        read: viewMode === 'throughput' ? s.read_mbps : s.read_iops,
+        write: viewMode === 'throughput' ? s.write_mbps : s.write_iops,
+      }));
   }, [selectedDisk, history, viewMode]);
 
   const currentDisk = selectedDisk ? disks[selectedDisk] : null;
@@ -783,6 +815,29 @@ function PowerTab() {
     return () => clearInterval(interval);
   }, [fetchPower]);
 
+  // Calculate cumulative energy consumption from samples
+  const calculateCumulativeEnergy = useCallback((samples: { timestamp: string; watts: number }[]) => {
+    if (samples.length < 2) return 0;
+
+    let totalWh = 0;
+    for (let i = 1; i < samples.length; i++) {
+      const prevTime = new Date(samples[i - 1].timestamp).getTime();
+      const currTime = new Date(samples[i].timestamp).getTime();
+      const hours = (currTime - prevTime) / (1000 * 60 * 60);
+      const avgWatts = (samples[i - 1].watts + samples[i].watts) / 2;
+      totalWh += avgWatts * hours;
+    }
+    return totalWh / 1000; // Convert Wh to kWh
+  }, []);
+
+  // Calculate total cumulative energy across all devices
+  const totalCumulativeEnergy = useMemo(() => {
+    if (!powerData) return 0;
+    return powerData.devices.reduce((sum, device) => {
+      return sum + calculateCumulativeEnergy(device.samples);
+    }, 0);
+  }, [powerData, calculateCumulativeEnergy]);
+
   if (loading) {
     return (
       <div className="flex items-center justify-center py-12">
@@ -821,14 +876,28 @@ function PowerTab() {
 
   return (
     <div className="space-y-4 sm:space-y-6">
-      {/* Total Power */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5">
+      {/* Total Power Stats */}
+      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
-          label="Gesamtverbrauch"
+          label="Aktuelle Leistung"
           value={powerData.total_current_power.toFixed(1)}
           unit="W"
           color="yellow"
           icon={<span className="text-yellow-400 text-base sm:text-xl">⚡</span>}
+        />
+        <StatCard
+          label="Kumuliert (Sitzung)"
+          value={totalCumulativeEnergy.toFixed(4)}
+          unit="kWh"
+          color="orange"
+          icon={<span className="text-orange-400 text-base sm:text-xl">Σ</span>}
+        />
+        <StatCard
+          label="Heute gesamt"
+          value={powerData.devices.reduce((sum, d) => sum + (d.latest_sample?.energy_today ?? 0), 0).toFixed(2)}
+          unit="kWh"
+          color="green"
+          icon={<span className="text-green-400 text-base sm:text-xl">📊</span>}
         />
         <StatCard
           label="Geräte"
@@ -839,60 +908,77 @@ function PowerTab() {
       </div>
 
       {/* Per-device stats */}
-      {powerData.devices.map((device) => (
-        <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-            <div>
-              <p className="text-[10px] sm:text-xs text-slate-400">Leistung</p>
-              <p className="text-lg sm:text-xl font-semibold text-white">
-                {device.latest_sample?.watts?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] sm:text-xs text-slate-400">Spannung</p>
-              <p className="text-lg sm:text-xl font-semibold text-white">
-                {device.latest_sample?.voltage?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] sm:text-xs text-slate-400">Strom</p>
-              <p className="text-lg sm:text-xl font-semibold text-white">
-                {device.latest_sample?.current?.toFixed(3) ?? '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
-              </p>
-            </div>
-            <div>
-              <p className="text-[10px] sm:text-xs text-slate-400">Heute</p>
-              <p className="text-lg sm:text-xl font-semibold text-white">
-                {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
-              </p>
-            </div>
-          </div>
+      {powerData.devices.map((device) => {
+        const deviceCumulativeEnergy = calculateCumulativeEnergy(device.samples);
 
-          {/* Mini chart for this device */}
-          {device.samples.length > 0 && (
-            <div className="mt-3 sm:mt-4">
-              <MetricChart
-                data={device.samples.map((s) => ({
-                  time: formatTimestamp(s.timestamp),
-                  watts: s.watts,
-                }))}
-                lines={[{ dataKey: 'watts', name: 'Leistung (W)', color: '#eab308' }]}
-                height={180}
-                showArea
-              />
+        return (
+          <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+            <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
+            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-400">Leistung</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
+                  {device.latest_sample?.watts?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-400">Spannung</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
+                  {device.latest_sample?.voltage?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-400">Strom</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
+                  {device.latest_sample?.current?.toFixed(3) ?? '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-400">Heute</p>
+                <p className="text-lg sm:text-xl font-semibold text-white">
+                  {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
+                </p>
+              </div>
+              <div>
+                <p className="text-[10px] sm:text-xs text-slate-400">Kumuliert (Sitzung)</p>
+                <p className="text-lg sm:text-xl font-semibold text-orange-400">
+                  {deviceCumulativeEnergy.toFixed(4)} <span className="text-sm sm:text-base text-slate-400">kWh</span>
+                </p>
+              </div>
             </div>
-          )}
-        </div>
-      ))}
+
+            {/* Mini chart for this device */}
+            {device.samples.length > 0 && (
+              <div className="mt-3 sm:mt-4">
+                <MetricChart
+                  data={device.samples.map((s) => ({
+                    time: formatTimestamp(s.timestamp),
+                    watts: s.watts,
+                  }))}
+                  lines={[{ dataKey: 'watts', name: 'Leistung (W)', color: '#eab308' }]}
+                  height={180}
+                  showArea
+                />
+              </div>
+            )}
+          </div>
+        );
+      })}
     </div>
   );
 }
 
 // Main Component
-export default function SystemMonitor() {
+export default function SystemMonitor({ user }: SystemMonitorProps) {
   const [activeTab, setActiveTab] = useState<TabType>('cpu');
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
+
+  const isAdmin = user?.role === 'admin';
+
+  // Filter tabs based on admin status
+  const visibleTabs = useMemo(() => {
+    return TABS.filter(tab => !tab.adminOnly || isAdmin);
+  }, [isAdmin]);
 
   return (
     <div className="space-y-6">
@@ -916,7 +1002,7 @@ export default function SystemMonitor() {
       {/* Tab Navigation */}
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
         <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
-          {TABS.map((tab) => (
+          {visibleTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id)}
@@ -929,6 +1015,7 @@ export default function SystemMonitor() {
               {tab.icon}
               <span className="hidden sm:inline">{tab.label}</span>
               <span className="sm:hidden">{tab.label.slice(0, 3)}</span>
+              {tab.adminOnly && <AdminBadge />}
             </button>
           ))}
         </div>
@@ -941,6 +1028,7 @@ export default function SystemMonitor() {
         {activeTab === 'network' && <NetworkTab timeRange={timeRange} />}
         {activeTab === 'disk-io' && <DiskIoTab timeRange={timeRange} />}
         {activeTab === 'power' && <PowerTab />}
+        {activeTab === 'services' && <ServicesTab isAdmin={isAdmin} />}
       </div>
     </div>
   );

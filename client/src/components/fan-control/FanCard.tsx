@@ -1,5 +1,6 @@
-import React, { useState, useEffect, useRef } from 'react';
-import { FanInfo, FanMode } from '../../api/fan-control';
+import { useState, useEffect, useRef } from 'react';
+import { FanMode } from '../../api/fan-control';
+import type { FanInfo } from '../../api/fan-control';
 
 interface FanCardProps {
   fan: FanInfo;
@@ -21,7 +22,7 @@ export default function FanCard({
   isLoading
 }: FanCardProps) {
   const [localPWM, setLocalPWM] = useState(fan.pwm_percent);
-  const debouncedPWMUpdate = useRef<NodeJS.Timeout | null>(null);
+  const debouncedPWMUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     setLocalPWM(fan.pwm_percent);

@@ -98,6 +98,10 @@ async def get_cpu_history(
         start = datetime.utcnow() - duration
         samples = orchestrator.cpu_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
+        # Fallback to memory buffer if database is empty
+        if not samples:
+            samples = orchestrator.cpu_collector.get_history_memory(limit)
+            source_str = "memory (fallback)"
 
     return CpuHistoryResponse(
         samples=samples,
@@ -148,6 +152,10 @@ async def get_memory_history(
         start = datetime.utcnow() - duration
         samples = orchestrator.memory_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
+        # Fallback to memory buffer if database is empty
+        if not samples:
+            samples = orchestrator.memory_collector.get_history_memory(limit)
+            source_str = "memory (fallback)"
 
     return MemoryHistoryResponse(
         samples=samples,
@@ -195,6 +203,10 @@ async def get_network_history(
         start = datetime.utcnow() - duration
         samples = orchestrator.network_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
+        # Fallback to memory buffer if database is empty
+        if not samples:
+            samples = orchestrator.network_collector.get_history_memory(limit)
+            source_str = "memory (fallback)"
 
     return NetworkHistoryResponse(
         samples=samples,
@@ -240,15 +252,23 @@ async def get_disk_io_history(
         start = datetime.utcnow() - duration
         samples = orchestrator.disk_io_collector.get_history_db(db, start=start, limit=limit)
 
-        # Group by disk name
-        disks = {}
-        for sample in samples:
-            if disk_name and sample.disk_name != disk_name:
-                continue
-            if sample.disk_name not in disks:
-                disks[sample.disk_name] = []
-            disks[sample.disk_name].append(sample)
-        source_str = "database"
+        # Fallback to memory buffer if database query returned no results at all
+        if not samples:
+            if disk_name:
+                disks = {disk_name: orchestrator.disk_io_collector.get_disk_history(disk_name)}
+            else:
+                disks = orchestrator.disk_io_collector.get_all_disk_histories()
+            source_str = "memory (fallback)"
+        else:
+            # Group by disk name
+            disks = {}
+            for sample in samples:
+                if disk_name and sample.disk_name != disk_name:
+                    continue
+                if sample.disk_name not in disks:
+                    disks[sample.disk_name] = []
+                disks[sample.disk_name].append(sample)
+            source_str = "database"
 
     total_samples = sum(len(s) for s in disks.values())
 
@@ -296,13 +316,21 @@ async def get_processes_history(
         start = datetime.utcnow() - duration
         samples = orchestrator.process_tracker.get_history_db(db, process_name=process_name, start=start)
 
-        # Group by process name
-        processes = {}
-        for sample in samples:
-            if sample.process_name not in processes:
-                processes[sample.process_name] = []
-            processes[sample.process_name].append(sample)
-        source_str = "database"
+        # Fallback to memory buffer if database query returned no results at all
+        if not samples:
+            if process_name:
+                processes = {process_name: orchestrator.process_tracker.get_process_history(process_name)}
+            else:
+                processes = orchestrator.process_tracker.get_all_histories()
+            source_str = "memory (fallback)"
+        else:
+            # Group by process name
+            processes = {}
+            for sample in samples:
+                if sample.process_name not in processes:
+                    processes[sample.process_name] = []
+                processes[sample.process_name].append(sample)
+            source_str = "database"
 
     total_samples = sum(len(s) for s in processes.values())
 

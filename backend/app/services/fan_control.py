@@ -40,6 +40,15 @@ class FanData:
     temp_sensor_id: Optional[str]
     curve_points: List[FanCurvePoint]
     is_active: bool
+    hysteresis_celsius: float = 3.0
+
+
+@dataclass
+class HysteresisState:
+    """State for hysteresis tracking per fan."""
+    last_pwm: int
+    last_pwm_temp: float
+    last_update: float
 
 
 class FanControlBackend(ABC):
@@ -464,6 +473,7 @@ class FanControlService:
         self._sample_buffer: deque = deque(maxlen=120)  # 10 minutes at 5s interval
         self._is_running = False
         self._use_linux_backend = False
+        self._hysteresis_state: Dict[str, HysteresisState] = {}  # Track hysteresis per fan
 
         FanControlService._instance = self
 
@@ -616,10 +626,20 @@ class FanControlService:
                         if temperature >= config.emergency_temp_celsius:
                             target_pwm = 100
                             mode = FanMode.EMERGENCY
+                            # Clear hysteresis state on emergency
+                            if fan.fan_id in self._hysteresis_state:
+                                del self._hysteresis_state[fan.fan_id]
                         else:
-                            # Apply curve
+                            # Apply curve with hysteresis
                             curve_points = json.loads(config.curve_json) if config.curve_json else []
-                            target_pwm = self._calculate_pwm_from_curve(temperature, curve_points)
+                            hysteresis = getattr(config, 'hysteresis_celsius', 3.0)
+                            target_pwm = self._calculate_pwm_with_hysteresis(
+                                fan.fan_id,
+                                temperature,
+                                curve_points,
+                                hysteresis,
+                                fan.pwm_percent
+                            )
 
                 # Apply minimum PWM
                 target_pwm = max(config.min_pwm_percent, min(config.max_pwm_percent, target_pwm))
@@ -670,6 +690,62 @@ class FanControlService:
                 return int(pwm)
 
         return 50  # Fallback
+
+    def _calculate_pwm_with_hysteresis(
+        self,
+        fan_id: str,
+        temperature: float,
+        curve_points: List[dict],
+        hysteresis: float,
+        current_pwm: int
+    ) -> int:
+        """
+        Calculate PWM with hysteresis to prevent oscillation.
+
+        Args:
+            fan_id: Fan identifier for state tracking
+            temperature: Current temperature
+            curve_points: Fan curve definition
+            hysteresis: Hysteresis value in Celsius
+            current_pwm: Current PWM percentage
+
+        Returns:
+            Target PWM percentage with hysteresis applied
+        """
+        target_pwm = self._calculate_pwm_from_curve(temperature, curve_points)
+        current_time = time.time()
+
+        # Get or initialize hysteresis state
+        if fan_id not in self._hysteresis_state:
+            self._hysteresis_state[fan_id] = HysteresisState(
+                last_pwm=current_pwm,
+                last_pwm_temp=temperature,
+                last_update=current_time
+            )
+            return target_pwm
+
+        state = self._hysteresis_state[fan_id]
+
+        if target_pwm > state.last_pwm:
+            # Temperature rising - respond immediately for safety
+            state.last_pwm = target_pwm
+            state.last_pwm_temp = temperature
+            state.last_update = current_time
+            return target_pwm
+
+        elif target_pwm < state.last_pwm:
+            # Temperature falling - only reduce PWM if temp dropped by hysteresis amount
+            if temperature <= (state.last_pwm_temp - hysteresis):
+                state.last_pwm = target_pwm
+                state.last_pwm_temp = temperature
+                state.last_update = current_time
+                return target_pwm
+            else:
+                # Keep current PWM (within hysteresis deadband)
+                return state.last_pwm
+
+        # PWM unchanged
+        return state.last_pwm
 
     async def _persist_samples(self):
         """Persist buffered samples to database."""
@@ -725,6 +801,7 @@ class FanControlService:
                         "emergency_temp_celsius": config.emergency_temp_celsius,
                         "temp_sensor_id": config.temp_sensor_id,
                         "curve_points": curve_points,
+                        "hysteresis_celsius": getattr(config, 'hysteresis_celsius', 3.0),
                     })
 
         # Determine permission status
@@ -863,6 +940,92 @@ class FanControlService:
             logger.info("Switched to dev fan control backend")
             return True, False
 
+    async def apply_preset(self, fan_id: str, preset_name: str) -> Tuple[bool, List[FanCurvePoint]]:
+        """
+        Apply a preset curve to a fan.
+
+        Args:
+            fan_id: Fan identifier
+            preset_name: Preset name (silent, balanced, performance)
+
+        Returns:
+            (success, curve_points)
+        """
+        from app.schemas.fans import CURVE_PRESETS
+
+        if preset_name not in CURVE_PRESETS:
+            logger.warning(f"Unknown preset: {preset_name}")
+            return False, []
+
+        preset_points = CURVE_PRESETS[preset_name]
+        curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in preset_points]
+
+        success = await self.update_fan_curve(fan_id, curve_points)
+        if success:
+            # Clear hysteresis state when curve changes
+            if fan_id in self._hysteresis_state:
+                del self._hysteresis_state[fan_id]
+            logger.info(f"Applied {preset_name} preset to {fan_id}")
+
+        return success, curve_points
+
+    async def update_fan_config(
+        self,
+        fan_id: str,
+        hysteresis_celsius: Optional[float] = None,
+        min_pwm_percent: Optional[int] = None,
+        max_pwm_percent: Optional[int] = None,
+        emergency_temp_celsius: Optional[float] = None
+    ) -> Optional[Dict]:
+        """
+        Update fan configuration.
+
+        Args:
+            fan_id: Fan identifier
+            hysteresis_celsius: Temperature hysteresis (0-15°C)
+            min_pwm_percent: Minimum PWM percentage
+            max_pwm_percent: Maximum PWM percentage
+            emergency_temp_celsius: Emergency temperature threshold
+
+        Returns:
+            Updated configuration dict or None if fan not found
+        """
+        with self.db_session_factory() as db:
+            config = db.execute(
+                select(FanConfig).where(FanConfig.fan_id == fan_id)
+            ).scalar_one_or_none()
+
+            if not config:
+                return None
+
+            # Update provided values
+            if hysteresis_celsius is not None:
+                config.hysteresis_celsius = hysteresis_celsius
+                # Clear hysteresis state when hysteresis value changes
+                if fan_id in self._hysteresis_state:
+                    del self._hysteresis_state[fan_id]
+
+            if min_pwm_percent is not None:
+                config.min_pwm_percent = min_pwm_percent
+
+            if max_pwm_percent is not None:
+                config.max_pwm_percent = max_pwm_percent
+
+            if emergency_temp_celsius is not None:
+                config.emergency_temp_celsius = emergency_temp_celsius
+
+            db.commit()
+
+            logger.info(f"Updated config for {fan_id}: hysteresis={config.hysteresis_celsius}°C")
+
+            return {
+                "fan_id": fan_id,
+                "hysteresis_celsius": config.hysteresis_celsius,
+                "min_pwm_percent": config.min_pwm_percent,
+                "max_pwm_percent": config.max_pwm_percent,
+                "emergency_temp_celsius": config.emergency_temp_celsius,
+            }
+
 
 # Import for count function
 from sqlalchemy import func
@@ -895,3 +1058,44 @@ async def stop_fan_control() -> None:
     if _fan_control_service is not None:
         await _fan_control_service.stop()
         _fan_control_service = None
+
+
+def get_service_status() -> dict:
+    """
+    Get fan control service status for admin dashboard.
+
+    Returns:
+        Dict with service status information
+    """
+    from app.core.config import get_settings
+
+    settings = get_settings()
+
+    if _fan_control_service is None:
+        return {
+            "is_running": False,
+            "started_at": None,
+            "uptime_seconds": None,
+            "sample_count": 0,
+            "error_count": 0,
+            "last_error": None,
+            "last_error_at": None,
+            "interval_seconds": settings.fan_sample_interval_seconds,
+            "config_enabled": settings.fan_control_enabled,
+        }
+
+    service = _fan_control_service
+    is_running = service._is_running and service._monitoring_task is not None
+
+    return {
+        "is_running": is_running,
+        "started_at": None,  # Not tracked by fan control service
+        "uptime_seconds": None,
+        "sample_count": len(service._sample_buffer),
+        "error_count": 0,  # Not tracked separately
+        "last_error": None,
+        "last_error_at": None,
+        "interval_seconds": service.config.fan_sample_interval_seconds,
+        "config_enabled": service.config.fan_control_enabled,
+        "backend_type": "linux" if service._use_linux_backend else "dev",
+    }

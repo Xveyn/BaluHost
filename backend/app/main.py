@@ -36,6 +36,13 @@ from app.services.backup_scheduler import BackupScheduler
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
+from app.middleware.error_counter import ErrorCounterMiddleware
+from app.services.service_status import (
+    set_server_start_time,
+    register_service,
+    get_service_status_collector,
+)
+from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +52,132 @@ _discovery_service = None
 _notification_scheduler = None
 # APScheduler instance for backups
 _backup_scheduler = None
+
+
+def _register_services() -> None:
+    """Register all background services with the service status collector."""
+
+    # Telemetry Monitor
+    register_service(
+        name="telemetry_monitor",
+        display_name="Telemetry Monitor",
+        get_status_fn=telemetry.get_status,
+        stop_fn=telemetry.stop_telemetry_monitor,
+        start_fn=telemetry.start_telemetry_monitor,
+    )
+
+    # Disk I/O Monitor
+    register_service(
+        name="disk_io_monitor",
+        display_name="Disk I/O Monitor",
+        get_status_fn=disk_monitor.get_status,
+        stop_fn=disk_monitor.stop_monitoring,
+        start_fn=disk_monitor.start_monitoring,
+    )
+
+    # Power Monitor
+    register_service(
+        name="power_monitor",
+        display_name="Power Monitor",
+        get_status_fn=power_monitor.get_status,
+        stop_fn=power_monitor.stop_power_monitor,
+        start_fn=lambda: power_monitor.start_power_monitor(get_db),
+    )
+
+    # Monitoring Orchestrator
+    register_service(
+        name="monitoring_orchestrator",
+        display_name="Monitoring Orchestrator",
+        get_status_fn=orchestrator_get_status,
+        stop_fn=stop_monitoring,
+        start_fn=lambda: start_monitoring(get_db),
+    )
+
+    # Power Manager
+    register_service(
+        name="power_manager",
+        display_name="CPU Power Manager",
+        get_status_fn=power_manager.get_status,
+        stop_fn=power_manager.stop_power_manager,
+        start_fn=power_manager.start_power_manager,
+        config_enabled_fn=lambda: settings.power_management_enabled,
+    )
+
+    # Fan Control
+    register_service(
+        name="fan_control",
+        display_name="Fan Control",
+        get_status_fn=fan_control.get_service_status,
+        stop_fn=fan_control.stop_fan_control,
+        start_fn=fan_control.start_fan_control,
+        config_enabled_fn=lambda: settings.fan_control_enabled,
+    )
+
+    # Sync Scheduler
+    register_service(
+        name="sync_scheduler",
+        display_name="Sync Scheduler",
+        get_status_fn=sync_background.get_status,
+        stop_fn=sync_background.stop_sync_scheduler,
+        start_fn=sync_background.start_sync_scheduler,
+    )
+
+    # Network Discovery
+    def _get_network_discovery_status():
+        if _discovery_service is None:
+            return {"is_running": False}
+        return _discovery_service.get_status()
+
+    register_service(
+        name="network_discovery",
+        display_name="Network Discovery (mDNS)",
+        get_status_fn=_get_network_discovery_status,
+        stop_fn=lambda: _discovery_service.stop() if _discovery_service else None,
+        start_fn=lambda: _discovery_service.start() if _discovery_service else None,
+    )
+
+    # Notification Scheduler
+    def _get_notification_scheduler_status():
+        is_running = _notification_scheduler is not None and _notification_scheduler.running
+        return {
+            "is_running": is_running,
+            "interval_seconds": 3600,  # 1 hour
+            "config_enabled": FirebaseService.is_available(),
+        }
+
+    register_service(
+        name="notification_scheduler",
+        display_name="Notification Scheduler",
+        get_status_fn=_get_notification_scheduler_status,
+        config_enabled_fn=FirebaseService.is_available,
+    )
+
+    # Backup Scheduler
+    def _get_backup_scheduler_status():
+        is_running = _backup_scheduler is not None and _backup_scheduler.running
+        return {
+            "is_running": is_running,
+            "interval_seconds": settings.backup_auto_interval_hours * 3600 if settings.backup_auto_enabled else None,
+            "config_enabled": settings.backup_auto_enabled,
+        }
+
+    register_service(
+        name="backup_scheduler",
+        display_name="Backup Scheduler",
+        get_status_fn=_get_backup_scheduler_status,
+        config_enabled_fn=lambda: settings.backup_auto_enabled,
+    )
+
+    # Health Monitor
+    register_service(
+        name="health_monitor",
+        display_name="Health Monitor",
+        get_status_fn=jobs.get_status,
+        stop_fn=jobs.stop_health_monitor,
+        start_fn=jobs.start_health_monitor,
+        config_enabled_fn=lambda: not settings.is_dev_mode,
+    )
+
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
@@ -167,7 +300,20 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
         smart_service.start_smart_scheduler()
     except Exception as e:
         logger.warning(f"SMART scheduler could not start: {e}")
-    
+
+    # Set server start time for uptime tracking
+    set_server_start_time()
+
+    # Register all services with the service status collector
+    _register_services()
+
+    # Set DB engine for pool monitoring
+    from app.core.database import engine
+    collector = get_service_status_collector()
+    collector.set_db_engine(engine)
+
+    logger.info("Service status collector initialized")
+
     try:
         yield
     finally:
@@ -288,6 +434,9 @@ def create_app() -> FastAPI:
     # ✅ Security Fix #2: Add security headers to all responses
     # Adds: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, HSTS
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Add error counter middleware for admin metrics
+    app.add_middleware(ErrorCounterMiddleware)
 
     # Add local-only enforcement middleware (Option B security)
     if settings.enforce_local_only:

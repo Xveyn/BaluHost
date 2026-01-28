@@ -1,16 +1,16 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
 import {
-  LineChart,
+  ComposedChart,
   Line,
+  Scatter,
   XAxis,
   YAxis,
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
   ReferenceLine,
-  Dot,
 } from 'recharts';
-import { FanCurvePoint } from '../../api/fan-control';
+import type { FanCurvePoint } from '../../api/fan-control';
 
 interface FanCurveChartProps {
   points: FanCurvePoint[];
@@ -20,8 +20,10 @@ interface FanCurveChartProps {
   minPWM: number;
   maxPWM: number;
   emergencyTemp: number;
-  isEditing: boolean;
+  isEditing?: boolean; // Kept for API compatibility, not used (FanControl-style always editable)
   isReadOnly: boolean;
+  minPoints?: number; // Minimum number of points allowed (default: 2)
+  maxPoints?: number; // Maximum number of points allowed (default: 10)
 }
 
 interface ChartDataPoint extends FanCurvePoint {
@@ -37,13 +39,18 @@ export default function FanCurveChart({
   minPWM,
   maxPWM,
   emergencyTemp,
-  isEditing,
+  // isEditing - Kept in interface for API compatibility, but not used (FanControl-style always editable)
   isReadOnly,
+  minPoints = 2,
+  maxPoints = 10,
 }: FanCurveChartProps) {
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [localPoints, setLocalPoints] = useState<FanCurvePoint[]>(points);
   const chartRef = useRef<HTMLDivElement>(null);
   const localPointsRef = useRef<FanCurvePoint[]>(localPoints);
+
+  // Editing is always enabled when not read-only (FanControl-style behavior)
+  const canEdit = !isReadOnly;
 
   // Update local points when external points change (but not while dragging)
   useEffect(() => {
@@ -66,20 +73,25 @@ export default function FanCurveChart({
   // Sort points for display
   const sortedPoints = [...pointsWithIndices].sort((a, b) => a.temp - b.temp);
 
-  // Prepare chart data with additional info
+  // Prepare chart data - ONLY curve points, NOT the current operating point
+  // The current operating point should be rendered separately, not as part of the line
   const chartData: ChartDataPoint[] = sortedPoints.map(point => ({
     ...point,
     isCurrentPoint: false,
   }));
 
-  // Add current operating point if available
-  if (currentTemp !== null) {
-    chartData.push({
-      temp: currentTemp,
-      pwm: currentPWM,
-      isCurrentPoint: true,
-    });
-  }
+  // Handle right-click to remove a point
+  const handleRemovePoint = useCallback((index: number) => {
+    if (!canEdit || localPoints.length <= minPoints) return;
+
+    // Get the original index from sorted points
+    const originalIndex = sortedPoints[index]?.originalIndex;
+    if (originalIndex === undefined) return;
+
+    const updatedPoints = localPoints.filter((_, i) => i !== originalIndex);
+    setLocalPoints(updatedPoints);
+    onPointsChange(updatedPoints);
+  }, [canEdit, localPoints, minPoints, onPointsChange, sortedPoints]);
 
   // Custom dot component for draggable points
   const CustomDot = (props: any) => {
@@ -89,7 +101,7 @@ export default function FanCurveChart({
     if (payload.isCurrentPoint) return null;
 
     const isHovered = draggingIndex === index;
-    const radius = isHovered ? 8 : 6;
+    const radius = isHovered ? 10 : 7;
     const fill = isHovered ? '#38bdf8' : '#0ea5e9'; // sky-400 / sky-500
 
     return (
@@ -101,11 +113,16 @@ export default function FanCurveChart({
         stroke="#1e293b"
         strokeWidth={2}
         style={{
-          cursor: isEditing && !isReadOnly ? 'grab' : 'default',
-          transition: 'all 0.2s ease',
+          cursor: canEdit ? 'grab' : 'default',
+          transition: 'r 0.15s ease',
         }}
         onMouseDown={(e) => handleMouseDown(e, index)}
         onTouchStart={(e) => handleTouchStart(e, index)}
+        onContextMenu={(e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          handleRemovePoint(index);
+        }}
       />
     );
   };
@@ -113,27 +130,26 @@ export default function FanCurveChart({
   const updatePointPosition = useCallback((clientX: number, clientY: number, index: number) => {
     if (!chartRef.current) return;
 
-    const chartElement = chartRef.current.querySelector('.recharts-wrapper');
-    if (!chartElement) return;
+    // Find the actual plot area (cartesian grid)
+    const cartesianGrid = chartRef.current.querySelector('.recharts-cartesian-grid');
+    if (!cartesianGrid) return;
 
-    const rect = chartElement.getBoundingClientRect();
+    const rect = cartesianGrid.getBoundingClientRect();
 
-    // Calculate relative position
+    // Calculate relative position within the plot area
     const x = clientX - rect.left;
     const y = clientY - rect.top;
 
-    // Get chart dimensions (accounting for margins)
-    const chartWidth = rect.width - 70; // Left margin ~50px, right margin ~20px
-    const chartHeight = rect.height - 60; // Top margin ~5px, bottom margin ~55px
-    const offsetX = 50;
-    const offsetY = 5;
+    // The plot area rect gives us the exact dimensions
+    const chartWidth = rect.width;
+    const chartHeight = rect.height;
 
     // Calculate temperature and PWM from position
     const tempRange = emergencyTemp + 10 - 0; // 0 to emergencyTemp + 10
     const pwmRange = 100 - 0; // 0 to 100
 
-    const newTemp = Math.round(((x - offsetX) / chartWidth) * tempRange);
-    const newPWM = Math.round(100 - ((y - offsetY) / chartHeight) * pwmRange);
+    const newTemp = Math.round((x / chartWidth) * tempRange);
+    const newPWM = Math.round(100 - (y / chartHeight) * pwmRange);
 
     // Clamp values
     const clampedTemp = Math.max(0, Math.min(emergencyTemp + 10, newTemp));
@@ -155,7 +171,7 @@ export default function FanCurveChart({
   }, [sortedPoints, localPoints, minPWM, maxPWM, emergencyTemp]);
 
   const handleMouseDown = (e: React.MouseEvent, index: number) => {
-    if (!isEditing || isReadOnly) return;
+    if (!canEdit) return;
     e.preventDefault();
     setDraggingIndex(index);
 
@@ -176,7 +192,7 @@ export default function FanCurveChart({
   };
 
   const handleTouchStart = (e: React.TouchEvent, index: number) => {
-    if (!isEditing || isReadOnly) return;
+    if (!canEdit) return;
     e.preventDefault();
     setDraggingIndex(index);
 
@@ -197,6 +213,53 @@ export default function FanCurveChart({
     document.addEventListener('touchend', handleTouchEnd);
   };
 
+  // Handle click on chart to add new point (FanControl-style)
+  const handleChartClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    if (!canEdit || localPoints.length >= maxPoints) return;
+
+    // Only add point if clicking on the chart area, not on existing points
+    const target = e.target as HTMLElement;
+    if (target.tagName === 'circle') return; // Clicked on a point
+
+    if (!chartRef.current) return;
+
+    // Find the actual plot area (cartesian grid)
+    const cartesianGrid = chartRef.current.querySelector('.recharts-cartesian-grid');
+    if (!cartesianGrid) return;
+
+    const rect = cartesianGrid.getBoundingClientRect();
+
+    // Calculate relative position within the plot area
+    const x = e.clientX - rect.left;
+    const y = e.clientY - rect.top;
+
+    // The plot area rect gives us the exact dimensions
+    const chartWidth = rect.width;
+    const chartHeight = rect.height;
+
+    // Check if click is within the chart area (with small tolerance)
+    if (x < -5 || x > chartWidth + 5 || y < -5 || y > chartHeight + 5) {
+      return;
+    }
+
+    // Calculate temperature and PWM from position
+    const tempRange = emergencyTemp + 10 - 0; // 0 to emergencyTemp + 10
+    const pwmRange = 100 - 0; // 0 to 100
+
+    const newTemp = Math.round((x / chartWidth) * tempRange);
+    const newPWM = Math.round(100 - (y / chartHeight) * pwmRange);
+
+    // Clamp values
+    const clampedTemp = Math.max(0, Math.min(emergencyTemp + 10, newTemp));
+    const clampedPWM = Math.max(minPWM, Math.min(maxPWM, newPWM));
+
+    // Add the new point
+    const newPoint: FanCurvePoint = { temp: clampedTemp, pwm: clampedPWM };
+    const updatedPoints = [...localPoints, newPoint];
+    setLocalPoints(updatedPoints);
+    onPointsChange(updatedPoints);
+  }, [canEdit, localPoints, maxPoints, emergencyTemp, minPWM, maxPWM, onPointsChange]);
+
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null;
@@ -215,10 +278,20 @@ export default function FanCurveChart({
     );
   };
 
+  // Data for the current operating point (separate from curve)
+  // Use different key name to avoid Recharts interpreting it as part of the Line
+  const currentPointData = currentTemp !== null ? [{ temp: currentTemp, currentPwm: currentPWM }] : [];
+
   return (
-    <div ref={chartRef} className="w-full">
+    <div
+      ref={chartRef}
+      className="w-full"
+      onClick={handleChartClick}
+      onContextMenu={(e) => e.preventDefault()}
+      style={{ cursor: canEdit ? 'crosshair' : 'default' }}
+    >
       <ResponsiveContainer width="100%" height={400}>
-        <LineChart
+        <ComposedChart
           data={chartData}
           margin={{ top: 5, right: 20, left: 0, bottom: 55 }}
         >
@@ -242,6 +315,7 @@ export default function FanCurveChart({
             }}
             tick={{ fill: '#94a3b8', fontSize: 11 }}
             stroke="#475569"
+            allowDuplicatedCategory={false}
           />
 
           {/* Y Axis - PWM */}
@@ -291,9 +365,9 @@ export default function FanCurveChart({
             />
           )}
 
-          {/* Curve line */}
+          {/* Fan curve line */}
           <Line
-            type="monotone"
+            type="linear"
             dataKey="pwm"
             stroke="#0ea5e9"
             strokeWidth={3}
@@ -302,18 +376,26 @@ export default function FanCurveChart({
             isAnimationActive={false}
           />
 
-          {/* Current operating point */}
+          {/* Current operating point - rendered as separate scatter */}
           {currentTemp !== null && (
-            <Dot
-              cx={0}
-              cy={0}
-              r={5}
+            <Scatter
+              data={currentPointData}
+              dataKey="currentPwm"
               fill="#34d399"
-              stroke="#1e293b"
-              strokeWidth={2}
+              shape={(props: any) => (
+                <circle
+                  cx={props.cx}
+                  cy={props.cy}
+                  r={7}
+                  fill="#34d399"
+                  stroke="#1e293b"
+                  strokeWidth={2}
+                />
+              )}
+              isAnimationActive={false}
             />
           )}
-        </LineChart>
+        </ComposedChart>
       </ResponsiveContainer>
 
       {/* Legend */}
@@ -334,9 +416,11 @@ export default function FanCurveChart({
         </div>
       </div>
 
-      {isEditing && !isReadOnly && (
+      {canEdit && (
         <p className="mt-3 text-xs text-slate-400 italic">
-          Drag points to adjust the curve. Temperature and PWM values will update automatically.
+          <strong>Left-click</strong> on graph to add point • <strong>Drag</strong> points to move • <strong>Right-click</strong> point to remove
+          {localPoints.length <= minPoints && ' (min 2 points)'}
+          {localPoints.length >= maxPoints && ` (max ${maxPoints} points)`}
         </p>
       )}
     </div>

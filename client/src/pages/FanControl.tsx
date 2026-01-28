@@ -3,23 +3,17 @@
  *
  * Manages PWM fan control with manual and automatic modes
  */
-import React, { useState, useMemo, useCallback } from 'react';
+import { useState, useMemo, useCallback, useEffect } from 'react';
 import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import {
-  setFanMode,
-  setFanPWM,
-  updateFanCurve,
-  switchBackend,
-  FanMode,
-  FanCurvePoint,
-} from '../api/fan-control';
+import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
+import type { FanCurvePoint } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
 import { FanCard, FanDetails } from '../components/fan-control';
 
 export default function FanControl() {
   const [isEditingCurve, setIsEditingCurve] = useState(false);
-  const { status, permissionStatus, loading, error, refetch, isReadOnly } = useFanControl({
+  const { status, permissionStatus, loading, refetch, isReadOnly } = useFanControl({
     pauseRefresh: isEditingCurve, // Pause auto-refresh while editing curve
   });
   const [selectedFan, setSelectedFan] = useState<string | null>(null);
@@ -32,7 +26,7 @@ export default function FanControl() {
   }, [status?.fans, selectedFan]);
 
   // Auto-select first fan if none selected
-  React.useEffect(() => {
+  useEffect(() => {
     if (!selectedFan && status?.fans && status.fans.length > 0) {
       setSelectedFan(status.fans[0].fan_id);
     }
@@ -231,6 +225,7 @@ export default function FanControl() {
             onCurveUpdate={handleCurveUpdate}
             isReadOnly={isReadOnly}
             onEditingChange={setIsEditingCurve}
+            onConfigUpdate={refetch}
           />
         </div>
       )}

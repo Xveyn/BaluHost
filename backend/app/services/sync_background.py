@@ -215,3 +215,43 @@ async def stop_sync_scheduler():
     """Stop the background sync scheduler."""
     scheduler = get_scheduler()
     scheduler.stop()
+
+
+def get_status() -> dict:
+    """
+    Get sync scheduler service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    from datetime import datetime as dt
+
+    scheduler = get_scheduler()
+
+    is_running = scheduler.scheduler.running if scheduler.scheduler else False
+
+    # Get job info if running
+    sample_count = 0
+    next_run = None
+    if is_running:
+        try:
+            jobs = scheduler.scheduler.get_jobs()
+            sample_count = len(jobs)
+            for job in jobs:
+                if job.next_run_time:
+                    if next_run is None or job.next_run_time < next_run:
+                        next_run = job.next_run_time
+        except Exception:
+            pass
+
+    return {
+        "is_running": is_running,
+        "started_at": None,  # APScheduler doesn't track start time
+        "uptime_seconds": None,
+        "sample_count": sample_count,  # Number of scheduled jobs
+        "error_count": 0,
+        "last_error": None,
+        "last_error_at": None,
+        "interval_seconds": 300,  # Check every 5 minutes
+        "next_run": next_run.isoformat() if next_run else None,
+    }

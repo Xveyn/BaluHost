@@ -4,16 +4,48 @@
 import { apiClient } from '../lib/api';
 
 // Types
-export enum FanMode {
-  AUTO = 'auto',
-  MANUAL = 'manual',
-  EMERGENCY = 'emergency'
-}
+export const FanMode = {
+  AUTO: 'auto',
+  MANUAL: 'manual',
+  EMERGENCY: 'emergency'
+} as const;
+export type FanMode = typeof FanMode[keyof typeof FanMode];
+
+export const CurvePreset = {
+  SILENT: 'silent',
+  BALANCED: 'balanced',
+  PERFORMANCE: 'performance',
+  CUSTOM: 'custom'
+} as const;
+export type CurvePreset = typeof CurvePreset[keyof typeof CurvePreset];
 
 export interface FanCurvePoint {
   temp: number;
   pwm: number;
 }
+
+// Preset curve definitions for immediate UI use
+export const CURVE_PRESETS: Record<string, FanCurvePoint[]> = {
+  silent: [
+    { temp: 40, pwm: 25 },
+    { temp: 55, pwm: 35 },
+    { temp: 70, pwm: 55 },
+    { temp: 80, pwm: 75 },
+    { temp: 90, pwm: 100 },
+  ],
+  balanced: [
+    { temp: 35, pwm: 30 },
+    { temp: 50, pwm: 50 },
+    { temp: 70, pwm: 80 },
+    { temp: 85, pwm: 100 },
+  ],
+  performance: [
+    { temp: 30, pwm: 40 },
+    { temp: 45, pwm: 60 },
+    { temp: 60, pwm: 85 },
+    { temp: 75, pwm: 100 },
+  ],
+};
 
 export interface FanInfo {
   fan_id: string;
@@ -28,6 +60,7 @@ export interface FanInfo {
   emergency_temp_celsius: number;
   temp_sensor_id: string | null;
   curve_points: FanCurvePoint[];
+  hysteresis_celsius: number;
 }
 
 export interface FanStatusResponse {
@@ -106,6 +139,48 @@ export interface PermissionStatusResponse {
   status: string;
   message: string;
   suggestions: string[];
+}
+
+export interface PresetInfo {
+  name: string;
+  label: string;
+  description: string;
+  curve_points: FanCurvePoint[];
+}
+
+export interface PresetsResponse {
+  presets: PresetInfo[];
+}
+
+export interface ApplyPresetRequest {
+  fan_id: string;
+  preset: CurvePreset;
+}
+
+export interface ApplyPresetResponse {
+  success: boolean;
+  fan_id: string;
+  preset: string;
+  curve_points: FanCurvePoint[];
+  message?: string;
+}
+
+export interface UpdateFanConfigRequest {
+  fan_id: string;
+  hysteresis_celsius?: number;
+  min_pwm_percent?: number;
+  max_pwm_percent?: number;
+  emergency_temp_celsius?: number;
+}
+
+export interface UpdateFanConfigResponse {
+  success: boolean;
+  fan_id: string;
+  hysteresis_celsius: number;
+  min_pwm_percent: number;
+  max_pwm_percent: number;
+  emergency_temp_celsius: number;
+  message?: string;
 }
 
 // API Functions
@@ -195,5 +270,37 @@ export async function switchBackend(
  */
 export async function getPermissionStatus(): Promise<PermissionStatusResponse> {
   const response = await apiClient.get<PermissionStatusResponse>('/api/fans/permissions');
+  return response.data;
+}
+
+/**
+ * Get available curve presets
+ */
+export async function getPresets(): Promise<PresetsResponse> {
+  const response = await apiClient.get<PresetsResponse>('/api/fans/presets');
+  return response.data;
+}
+
+/**
+ * Apply a preset curve to a fan
+ */
+export async function applyPreset(
+  fanId: string,
+  preset: CurvePreset
+): Promise<ApplyPresetResponse> {
+  const request: ApplyPresetRequest = { fan_id: fanId, preset };
+  const response = await apiClient.post<ApplyPresetResponse>('/api/fans/preset', request);
+  return response.data;
+}
+
+/**
+ * Update fan configuration (hysteresis, limits, etc.)
+ */
+export async function updateFanConfig(
+  fanId: string,
+  config: Omit<UpdateFanConfigRequest, 'fan_id'>
+): Promise<UpdateFanConfigResponse> {
+  const request: UpdateFanConfigRequest = { fan_id: fanId, ...config };
+  const response = await apiClient.patch<UpdateFanConfigResponse>('/api/fans/config', request);
   return response.data;
 }

@@ -53,3 +53,25 @@ async def stop_health_monitor() -> None:
     finally:
         _health_task = None
         logger.info("Background health monitor stopped")
+
+
+def get_status() -> dict:
+    """
+    Get health monitor service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    is_running = _health_task is not None and not _health_task.done()
+
+    return {
+        "is_running": is_running,
+        "started_at": None,  # Not tracked
+        "uptime_seconds": None,
+        "sample_count": 0,  # Not tracked
+        "error_count": 0,
+        "last_error": None,
+        "last_error_at": None,
+        "interval_seconds": 300,  # Default 5 minutes
+        "config_enabled": not settings.is_dev_mode,  # Disabled in dev mode
+    }

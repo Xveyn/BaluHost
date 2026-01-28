@@ -7,6 +7,80 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.1] - 2026-01-28
+
+### 🚀 Production Deployment Release
+
+This release marks the production deployment of BaluHost on January 25, 2026.
+
+### ✨ Added
+
+#### Production Deployment
+- **Live production deployment** on Debian 13 server (Ryzen 5 5600GT, 16GB RAM)
+- **PostgreSQL 17.7 migration** complete and verified
+- **Nginx reverse proxy** with rate limiting (100 req/s API, 10 req/s auth)
+- **Systemd services** for backend (4 Uvicorn workers)
+- **Auto-start on reboot** configured
+
+#### Per-Thread CPU Monitoring
+- **Task Manager-style display** showing individual thread usage
+- **CPU thread breakdown** in monitoring dashboard
+- **Historical per-thread data** with retention policies
+
+#### AdminDatabase Page Enhancements
+- **Stats tab** with database statistics and table counts
+- **Storage tab** with storage breakdown visualization
+- **History tab** for query history tracking
+- **Maintenance tab** for database maintenance tools
+
+#### Fan Control UI
+- **Fan curve chart editor** with drag-to-edit functionality
+- **Visual temperature-to-PWM mapping**
+- **Real-time RPM and PWM display**
+- **Mode switching** (auto/manual/emergency)
+
+#### Network Discovery
+- **mDNS/Bonjour integration** for local network discovery
+- **Zero-configuration networking** support
+- **Service announcement** for web interface and API
+- **Device discovery** for other BaluHost instances
+
+#### Service Status Monitoring
+- **Health check dashboard** for all services
+- **Service registry** with real-time status
+- **Admin controls** for service restart/stop/start
+
+### 🔧 Changed
+
+- Updated documentation to reflect production deployment status
+- Unified version numbers across all components to 1.4.0
+- Enhanced monitoring orchestrator with per-thread CPU support
+- Improved fan control service with better curve interpolation
+
+### 🐛 Fixed
+
+- Email validation regex pattern in user registration
+- Frontend routing issues with nested routes
+- Memory leak in disk I/O monitoring long-running sessions
+
+### 📝 Documentation
+
+- Updated `TODO.md` with completed features and production status
+- Updated `README.md` with production deployment information
+- Updated `PRODUCTION_READINESS.md` with deployment confirmation
+- Updated `TECHNICAL_DOCUMENTATION.md` with new features (Power Management, Fan Control, etc.)
+- Updated `ARCHITECTURE.md` with production deployment architecture
+- Documented known issues (integer overflow in monitoring tables)
+
+### 📊 Status
+
+- **Production Readiness**: 100% (DEPLOYED)
+- **Server**: Debian 13, Ryzen 5 5600GT, 16GB RAM
+- **Database**: PostgreSQL 17.7
+- **Version**: 1.4.1
+
+---
+
 ## [1.4.0] - 2026-01-14
 
 ### 🎯 Production Readiness Release

@@ -1,5 +1,18 @@
 # BaluHost NAS Manager - TODO List
 
+## 🚀 Production Deployment Status (25. Januar 2026)
+
+BaluHost ist **LIVE IN PRODUCTION**:
+- ✅ Debian 13 Server (Ryzen 5 5600GT, 16GB RAM, 250GB NVMe SSD)
+- ✅ PostgreSQL 17.7 Datenbank
+- ✅ Nginx Reverse Proxy (Port 80, HTTP)
+- ✅ Systemd Services (4 Uvicorn Workers)
+- ✅ 40+ Test Files, 364 Test Functions
+- ✅ Prometheus/Grafana Ready Monitoring
+- ✅ Structured JSON Logging
+
+---
+
 ## 📋 Task Overview
 
 | Priority | Area | Task | Status | Notes |
@@ -20,6 +33,14 @@
 | 🔴 High | Backend | Benutzerfreigaben Backend (Dateien mit anderen Benutzern teilen, granular Rechte-UI, Multi-User-Permissions) | ✅ Done | Collaboration, granular permissions |
 | 🔴 High | Backend | RAID-Management auf echte mdadm-Befehle erweitern | ✅ Implemented (dev-mode + UI); mdadm extension pending | Production Mode |
 | 🔴 High | Backend | Heimnetz-Setup (Windows Service, mDNS, Auto-Discovery) | ✅ Done | iCloud/OneDrive Alternative |
+| 🔴 High | Backend | Power Management System (CPU Frequency Scaling) | ✅ Done | AMD Ryzen & Intel support, 4 profiles |
+| 🔴 High | Backend | Fan Control System (PWM mit Temperaturkurven) | ✅ Done | 3 modes: auto/manual/emergency |
+| 🔴 High | Backend | Network Discovery (mDNS/Bonjour) | ✅ Done | Local network auto-discovery |
+| 🔴 High | Backend | Monitoring Orchestrator | ✅ Done | Unified monitoring with collectors |
+| 🔴 High | Backend | Service Status Monitoring | ✅ Done | Health check dashboard |
+| 🔴 High | Backend | Admin Database Inspection | ✅ Done | Read-only DB browser |
+| 🔴 High | Backend | Tapo Smart Plug Integration | ✅ Done | P115/P110 energy monitoring |
+| 🔴 High | Backend | Energy Statistics Service | ✅ Done | kWh calculations, cost estimates |
 | 🔴 High | Frontend | Exercise manual test plan in dev mode | ⏳ Pending | Testing |
 | 🔴 High | Frontend | Upload-Progress-UI mit Fortschrittsanzeige | ✅ Done | UX Enhancement |
 | 🔴 High | Frontend | Datei-Vorschau Modal (PDF, Bilder, Videos, Audio, Text) | ✅ Done | Completed |
@@ -55,9 +76,9 @@
 | 🟢 Low | Backend | Media-Server Integration (DLNA/Plex API) | ⏳ Pending | Media Streaming |
 | 🟢 Low | Backend | Video-Transcoding Service | ⏳ Pending | Media Processing |
 | 🟢 Low | Backend | Datei-Versionierung mit Diff-Ansicht | ⏳ Pending | Advanced Versioning |
-| 🔴 High | Backend | Containerization (Docker / Docker Compose) | ⏳ Pending | CRITICAL BLOCKER - Needs backend/client Dockerfiles + full-stack docker-compose.yml |
+| 🔴 High | Backend | Containerization (Docker / Docker Compose) | ✅ Done | Systemd deployment active, Docker configs available |
 | 🟢 Low | Backend | Kubernetes Deployment-Manifest | ⏳ Pending | Orchestration |
-| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | 🟡 Partial | 3 workflows active: raid-tests.yml, playwright-e2e.yml, raid-mdadm-selfhosted.yml - Deployment CI pending |
+| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | 🟡 Mostly Complete | 3 workflows active: raid-tests.yml, playwright-e2e.yml, raid-mdadm-selfhosted.yml |
 | 🟢 Low | Backend | API-Versionierung (v1, v2) | ⏳ Pending | API Evolution |
 | 🟢 Low | Backend | GraphQL-Alternative zu REST | ⏳ Pending | API Alternative |
 | 🟢 Low | Backend | Webhooks für externe Integrationen | ⏳ Pending | Integration |
@@ -79,10 +100,10 @@
 | 📝 Docs | Documentation | LICENSE hinzugefügt (MIT) | ✅ Done | Open Source |
 | 📝 Docs | Documentation | SECURITY.md erstellt | ✅ Done | Security Policy |
 | 📝 Docs | Documentation | Screenshots für README.md erstellen | ⏳ Pending | Visual Documentation |
-| 🔴 High | Documentation | Deployment-Guide für Production | ⏳ Pending | CRITICAL BLOCKER - Needs docs/DEPLOYMENT.md, docs/PRODUCTION_SETUP.md, docs/BACKUP_RECOVERY.md |
+| 🔴 High | Documentation | Deployment-Guide für Production | ✅ Done | DEPLOYMENT.md, setup scripts, systemd services complete |
 | 📝 Docs | Documentation | Video-Tutorials aufnehmen | ⏳ Pending | Video Content |
 | 📝 Docs | Documentation | Code-Kommentare standardisieren | ⏳ Pending | Docstrings, JSDoc |
-| 📝 Docs | Documentation | Changelog.md für Versionshistorie | ⏳ Pending | Version Tracking |
+| 📝 Docs | Documentation | Changelog.md für Versionshistorie | ✅ Done | CHANGELOG.md complete through v1.4.x |
 | 📝 Docs | Documentation | Badges aktualisieren | ⏳ Pending | Test-Coverage, Build |
 | 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 40 test files, 364 test functions including integration, security, RAID, upload progress, sync tests |
 | 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
@@ -94,7 +115,7 @@
 | 🧪 Test | Frontend Testing | Accessibility Testing | ⏳ Pending | A11y Testing |
 | 🔧 Tech Debt | Backend Refactoring | Express-Backend komplett entfernen (legacy) | ⏳ Pending | Cleanup |
 | 🔧 Tech Debt | Backend Refactoring | Error-Handling vereinheitlichen | ⏳ Pending | Consistency |
-| 🔧 Tech Debt | Backend Refactoring | Logging-Strategie überarbeiten | ⏳ Pending | Structured Logging |
+| 🔧 Tech Debt | Backend Refactoring | Logging-Strategie überarbeiten | ✅ Done | JSON structured logging implemented |
 | 🔧 Tech Debt | Backend Refactoring | Type Hints in allen Python-Modulen vervollständigen | ⏳ Pending | Type Safety |
 | 🔧 Tech Debt | Backend Refactoring | Code-Coverage auf 80%+ erhöhen | ⏳ Pending | Testing |
 | 🔧 Tech Debt | Frontend Refactoring | Komponenten in kleinere Units aufteilen | ⏳ Pending | Component Design |

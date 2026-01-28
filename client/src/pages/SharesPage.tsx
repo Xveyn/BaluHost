@@ -11,7 +11,7 @@ import {
   type SharedWithMe,
   type ShareStatistics
 } from '../api/shares';
-import { Link2, Users, Share2, Trash2, Copy, ExternalLink, CheckCircle, Edit, Search, Filter, QrCode, Calendar, Download } from 'lucide-react';
+import { Link2, Users, Share2, Trash2, Copy, CheckCircle, Edit, Search, Filter, QrCode, Calendar, Download } from 'lucide-react';
 import CreateShareLinkModal from '../components/CreateShareLinkModal';
 import CreateFileShareModal from '../components/CreateFileShareModal';
 import EditShareLinkModal from '../components/EditShareLinkModal';

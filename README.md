@@ -88,6 +88,19 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - Settings page with user profile, security, storage, and activity logs
 - Fast loading with Vite HMR
 
+### ⚡ Power & Hardware Management (NEW)
+- **Power Management** - CPU frequency scaling (AMD Ryzen & Intel)
+- **Fan Control** - PWM control with custom temperature curves
+- **Energy Monitoring** - Tapo smart plug integration (P115/P110)
+- **Service Status** - Health monitoring dashboard for all services
+- **Admin Database** - Secure read-only database inspection
+
+### 📊 Advanced Monitoring (NEW)
+- **Per-thread CPU monitoring** - Task Manager-style display
+- **Monitoring Orchestrator** - Unified collector system
+- **Network Discovery** - mDNS/Bonjour auto-discovery
+- **Real-time metrics** - CPU, memory, disk I/O, network
+
 ### 🛠️ Developer-Friendly
 - **Dev Mode** - Full simulation environment (Windows-compatible!)
 - No database required for prototyping
@@ -95,32 +108,23 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - Comprehensive test suite (pytest)
 - Auto-generated API docs (Swagger/ReDoc)
 
-## 🚀 Phase 1 - Production Readiness (2-3 weeks)
+## 🚀 Production Status
 
-BaluHost is currently ~75% production ready. Phase 1 focuses on critical gaps before deployment:
+**✅ DEPLOYED** - January 25, 2026
 
-| Task | Status | Timeline | Details |
-|------|--------|----------|---------|
-| **PostgreSQL Migration** | 🔄 Ready to Start | 4-5 days | Migrate from SQLite to PostgreSQL |
-| **Security Hardening** | 🔄 Ready to Start | 3-4 days | Input validation, file security, OWASP compliance |
-| **Structured Logging** | 🔄 Ready to Start | 3-4 days | JSON logging, health checks, monitoring-ready |
-| **Deployment Docs** | 🔄 Ready to Start | 3-4 days | Docker, Kubernetes, Linux guides, disaster recovery |
+| Component | Status | Details |
+|-----------|--------|---------|
+| **Server** | ✅ Active | Debian 13, Ryzen 5 5600GT, 16GB RAM |
+| **Database** | ✅ PostgreSQL 17.7 | Production database with backup automation |
+| **Proxy** | ✅ Nginx | Port 80, rate limiting, security headers |
+| **Backend** | ✅ Systemd | 4 Uvicorn workers, auto-restart |
+| **Testing** | ✅ 364 Tests | 40+ test files, CI/CD active |
+| **Monitoring** | ✅ Ready | Prometheus/Grafana integration |
 
-👉 **[Start Phase 1 Now](PHASE1_KICKOFF_CHECKLIST.md)** - Everything is prepared!
-
-### Quick Navigation
-- 📋 [Phase 1 Kickoff Checklist](PHASE1_KICKOFF_CHECKLIST.md) - Start here!
-- 📊 [Phase 1 Action Plan](PHASE1_ACTION_PLAN.md) - Detailed task breakdown
+### Documentation
 - 📈 [Production Readiness](PRODUCTION_READINESS.md) - Full status checklist
-- 💾 [Execution Summary](PHASE1_EXECUTION_SUMMARY.md) - What's been prepared
-
-### What's Ready for Phase 1
-- ✅ PostgreSQL setup script & Docker Compose
-- ✅ Comprehensive test framework (TDD approach)
-- ✅ Migration tool with backup & verification
-- ✅ GitHub Issues templates for all 4 tasks
-- ✅ Best practices documentation
-- ✅ Quality gates & success criteria
+- 📋 [Deployment Notes](PRODUCTION_DEPLOYMENT_NOTES.md) - Deployment details
+- 🚀 [Quick Start](PRODUCTION_QUICKSTART.md) - Getting started guide
 
 ---
 
@@ -439,20 +443,22 @@ npm run test:e2e    # E2E Tests (TODO)
 
 See **[TODO.md](TODO.md)** for the complete, prioritized list.
 
-**High Priority:**
-- [ ] Database integration (PostgreSQL/MySQL)
-- [ ] Upload progress UI with WebSocket/SSE
-- [ ] Backup/Restore functionality
+**Completed (v1.4.0):**
+- [x] PostgreSQL integration - Production deployed
+- [x] Upload progress UI with WebSocket/SSE
+- [x] Backup/Restore functionality
+- [x] File preview (Images, PDFs, Videos)
+- [x] Dark Mode (6 themes)
+- [x] Docker/Systemd deployment
+- [x] CI/CD Pipeline (3 workflows)
+- [x] Power Management & Fan Control
+- [x] Monitoring Orchestrator
 
-**Medium Priority:**
-- [ ] File preview (Images, PDFs, Videos)
-- [ ] Dark Mode
+**Pending:**
 - [ ] Email notifications
-
-**Low Priority:**
-- [ ] Docker-Compose setup
-- [ ] CI/CD Pipeline
 - [ ] Internationalization (i18n)
+- [ ] PWA support
+- [ ] SSL/HTTPS (optional for internal network)
 
 ## 🤝 Contributing
 
@@ -485,22 +491,31 @@ _(Coming soon - add screenshots here)_
 
 See [TODO.md](TODO.md) for the complete roadmap.
 
+**Recently Completed:**
+- ✅ File sharing with public links
+- ✅ Upload progress indicators
+- ✅ PostgreSQL production database
+- ✅ Dark mode (6 themes)
+- ✅ Settings page
+- ✅ Batch operations
+- ✅ Power & Fan Management
+- ✅ Energy Monitoring
+
 **Upcoming Features:**
-- 🔜 File sharing with public links
-- 🔜 Upload progress indicators
-- 🔜 Database integration (PostgreSQL/SQLite)
-- 🔜 Dark mode toggle
-- 🔜 Settings page
-- 🔜 Batch operations
-- 🔜 Advanced search
+- 🔜 Email notifications
+- 🔜 Internationalization (i18n)
+- 🔜 PWA support
+- 🔜 Advanced search with full-text
 
 ## 📊 Project Stats
 
-- **Lines of Code:** ~20,000+
-- **Test Coverage:** 80%+ (backend)
-- **API Endpoints:** 60+
-- **React Components:** 30+
-- **Database Tables:** 8+
+- **Version:** 1.4.0
+- **Lines of Code:** ~25,000+
+- **Test Coverage:** 80%+ (backend, 364 test functions)
+- **API Endpoints:** 80+
+- **React Components:** 40+
+- **Database Tables:** 15+
+- **Backend Services:** 18+
 
 ## 🙏 Acknowledgments
 

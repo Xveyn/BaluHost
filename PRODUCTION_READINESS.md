@@ -2,36 +2,65 @@
 
 ## 📊 Executive Summary
 
-BaluHost ist zu **~98% produktionsreif**. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring) ist vollständig implementiert, Sicherheit ist gehärtet (8/8 kritische Issues behoben), umfangreiche Tests (40 Dateien, 364 Tests) sowie CI/CD-Workflows existieren. **Deployment-Infrastruktur** (Docker, Nginx mit SSL, Reverse Proxy, Monitoring mit Prometheus/Grafana) ist vollständig implementiert. **Backup-Automatisierung** mit PostgreSQL-Support und **strukturiertes JSON-Logging** sind nun implementiert. Umfassende Deployment-Dokumentation (DEPLOYMENT.md) ist verfügbar. Verbleibende Optimierungen: print()-Statement-Cleanup (optional) und Frontend Performance-Optimierung.
+**✅ DEPLOYED IN PRODUCTION** (seit 25. Januar 2026)
+
+BaluHost Version 1.4.0 ist **vollständig produktionsreif** und läuft stabil in Production. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring, Power Management, Fan Control) ist vollständig implementiert, Sicherheit ist gehärtet (8/8 kritische Issues behoben), umfangreiche Tests (40 Dateien, 364 Tests) sowie CI/CD-Workflows existieren.
+
+### Production Infrastructure (ACTIVE)
+- ✅ Native Systemd-Deployment (Backend + Frontend Services)
+- ✅ PostgreSQL Production-Datenbank (17.7)
+- ✅ Nginx Reverse Proxy (Port 80, HTTP)
+- ✅ Strukturiertes JSON-Logging
+- ✅ Auto-Start bei Reboot
+- ✅ Power Management (CPU Frequency Scaling)
+- ✅ Fan Control (PWM mit Temperaturkurven)
+- ✅ Monitoring Orchestrator
+- ✅ Service Status Dashboard
+
+**Aktiver Production-Server:** Debian 13, Ryzen 5 5600GT, 16GB RAM, 250GB NVMe SSD
+
+### Optional Enhancements (nicht blockierend)
+- SSL/HTTPS Setup (für öffentlichen Zugang)
+- Monitoring Integer-Overflow-Fix (BIGINT migration)
+- Frontend Performance-Optimierung
+- Email-Benachrichtigungen
 
 ---
 
 ## 🔴 KRITISCH (Müssen vor Production erledigt werden)
 
 ### Backend
-- [x] **Database Setup für Production** ✅ COMPLETED
-  - ✅ PostgreSQL support fully implemented (SQLAlchemy + Alembic)
-  - ✅ `docker-compose.postgres.yml` with pgAdmin available
+- [x] **Database Setup für Production** ✅ DEPLOYED IN PRODUCTION
+  - ✅ PostgreSQL 17.7 running on production server
+  - ✅ Native systemd deployment (no Docker)
   - ✅ Connection pooling configured
   - ✅ Automated backup with pg_dump support implemented
+  - ✅ All tables created and verified
   - ⏳ Pending: Database replication (optional for HA setups)
-  - Status: ✅ **PRODUCTION-READY** - PostgreSQL infrastructure + backups complete
+  - ⚠️ Known Issue: Integer overflow in monitoring tables (memory_samples, network_samples) - needs BIGINT migration
+  - Status: ✅ **DEPLOYED AND RUNNING** - PostgreSQL infrastructure active
 
-- [x] **Deployment Infrastructure & Documentation** ✅ COMPLETED
-  - ✅ Backend Dockerfile (multi-stage build, non-root user, health checks)
-  - ✅ Frontend Dockerfile (Node build + Nginx runtime)
-  - ✅ Full-stack docker-compose.yml (backend, frontend, postgres, monitoring)
-  - ✅ Nginx reverse proxy configs (rate limiting, SSL, security headers)
-  - ✅ Let's Encrypt SSL setup script (automated cert obtainment & renewal)
-  - ✅ SSL configuration files (Mozilla Intermediate profile, TLS 1.2/1.3)
-  - ✅ Security headers configuration (OWASP best practices)
-  - ✅ .env.production.example template (all variables documented, includes backup + logging)
-  - ✅ DOCKER_QUICKSTART.md (5-minute deployment guide)
-  - ✅ REVERSE_PROXY_SETUP.md (quick reference)
-  - ✅ docs/SSL_SETUP.md (comprehensive SSL/TLS guide, 600+ lines)
-  - ✅ docs/DEPLOYMENT.md (comprehensive production deployment guide, troubleshooting, maintenance)
-  - ⏳ Systemd service files (optional, pending)
-  - Status: ✅ **PRODUCTION-READY** - Complete deployment documentation available
+- [x] **Deployment Infrastructure & Documentation** ✅ DEPLOYED IN PRODUCTION
+  - ✅ **Native Systemd Deployment (ACTIVE):**
+    - ✅ `baluhost-backend.service` - 4 Uvicorn workers, port 8000
+    - ✅ `baluhost-frontend.service` - Vite build (disabled, static files via Nginx)
+    - ✅ Services enabled for auto-start on reboot
+    - ✅ Systemd installation script (`deploy/scripts/install-systemd-services.sh`)
+  - ✅ **Nginx Reverse Proxy (ACTIVE):**
+    - ✅ HTTP on port 80 (baluhost-http.conf)
+    - ✅ Static file serving from `/var/www/baluhost/`
+    - ✅ API proxy to backend (rate limiting: 100 req/s)
+    - ✅ Auth endpoint protection (rate limiting: 10 req/s)
+    - ✅ Security headers (X-Frame-Options, X-Content-Type-Options, etc.)
+    - ✅ Gzip compression enabled
+    - ✅ WebSocket/SSE support
+  - ✅ **Production Environment:**
+    - ✅ `.env.production` with secure auto-generated secrets
+    - ✅ PostgreSQL credentials managed securely
+    - ✅ NAS_MODE=prod, LOG_LEVEL=INFO, LOG_FORMAT=json
+  - ✅ Docker configs available (alternative deployment method)
+  - ⏳ SSL/HTTPS setup (optional for internal network)
+  - Status: ✅ **DEPLOYED AND RUNNING** - Native systemd production deployment active
 
 - [x] **Error Handling & Logging** ✅ MOSTLY COMPLETED
   - ✅ Structured JSON logging implemented (python-json-logger)
@@ -635,7 +664,22 @@ Priority: Get BaluHost deployable on any Linux server.
 
 ---
 
-**Last Updated**: January 14, 2026
-**Status**: BaluHost v1.4.0 - **~98% Production Ready**
-**Status**: ✅ **READY FOR PRODUCTION DEPLOYMENT**
-**Remaining**: Optional enhancements (print() cleanup, load testing, PWA)
+**Last Updated**: January 28, 2026
+**Version**: BaluHost v1.4.0
+**Status**: ✅ **DEPLOYED IN PRODUCTION** (seit 25. Januar 2026)
+**Remaining**: Optional enhancements (SSL/HTTPS, PWA, i18n)
+
+---
+
+## ⚠️ Known Issues (nicht blockierend)
+
+### Integer Overflow in Monitoring Tables
+- **Betrifft:** `memory_samples`, `network_samples` Tabellen
+- **Problem:** INTEGER statt BIGINT für große Werte
+- **Auswirkung:** Potenzielle Overflow bei sehr langen Laufzeiten
+- **Lösung:** BIGINT Migration geplant (niedrige Priorität)
+
+### Print Statements in Service Files
+- **Betrifft:** 8 Core-Service-Dateien (~40 Statements)
+- **Auswirkung:** Keine funktionale Auswirkung, nur Cleanup
+- **Status:** Optional, nicht blockierend

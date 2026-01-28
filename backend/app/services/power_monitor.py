@@ -45,6 +45,11 @@ _lock = Lock()
 _db_session_factory = None
 _is_running = False
 _samples_since_db_save = 0  # Counter for DB save interval
+_started_at: Optional[float] = None
+_sample_count: int = 0
+_error_count: int = 0
+_last_error: Optional[str] = None
+_last_error_time: Optional[float] = None
 
 # Plugp100 client cache (avoid repeated auth)
 _client_cache: Dict[int, object] = {}
@@ -159,23 +164,31 @@ async def _sample_device(
 
         # Get energy component
         if not device.has_component(EnergyComponent):
-            logger.error(f"Device '{name}' does not have EnergyComponent")
+            logger.warning(f"Device '{name}' does not have EnergyComponent")
             return None
 
         energy = device.get_component(EnergyComponent)
 
-        # Get power and energy data
+        # Get power and energy data (may be None if device query failed)
         power_info = energy.power_info  # Current power in watts
         energy_info = energy.energy_info  # Today's energy in Wh
 
-        # Extract values
-        # PowerInfo gives current_power in watts
-        current_power = power_info.info.get('current_power', 0)
+        # Validate that we got data
+        if power_info is None and energy_info is None:
+            logger.warning(f"Device '{name}' returned no power data")
+            return None
 
-        # EnergyInfo gives detailed energy data
-        # current_power in mW, today_energy in Wh
-        current_power_mw = energy_info.info.get('current_power', 0)
-        today_energy_wh = energy_info.info.get('today_energy', 0)
+        # Extract values safely
+        current_power = 0
+        current_power_mw = 0
+        today_energy_wh = 0
+
+        if power_info is not None and hasattr(power_info, 'info') and power_info.info:
+            current_power = power_info.info.get('current_power', 0)
+
+        if energy_info is not None and hasattr(energy_info, 'info') and energy_info.info:
+            current_power_mw = energy_info.info.get('current_power', 0)
+            today_energy_wh = energy_info.info.get('today_energy', 0)
 
         # Use the more precise value from energy_info (convert mW to W)
         watts = current_power_mw / 1000.0 if current_power_mw > 0 else float(current_power)
@@ -209,8 +222,31 @@ async def _sample_device(
     except ImportError:
         logger.error("plugp100 library not installed. Install with: pip install plugp100")
         return None
+    except TypeError as e:
+        # Handle plugp100 library bugs (e.g., super() argument error)
+        logger.warning(f"Tapo library error for '{name}' ({ip}): {e}")
+        cache_key = f"{device_id}:{ip}"
+        if cache_key in _client_cache:
+            del _client_cache[cache_key]
+        return None
+    except AttributeError as e:
+        # Handle NoneType errors when device doesn't respond properly
+        logger.warning(f"Incomplete data from Tapo device '{name}' ({ip}): {e}")
+        cache_key = f"{device_id}:{ip}"
+        if cache_key in _client_cache:
+            del _client_cache[cache_key]
+        return None
     except Exception as e:
-        logger.error(f"Error sampling Tapo device '{name}' ({ip}): {e}", exc_info=True)
+        # Log connection/auth errors as warning without full traceback (common in production)
+        error_str = str(e)
+        known_errors = [
+            "Cannot write", "Connection", "Errno", "Forbidden",
+            "handshake", "authentication", "400", "reset by peer"
+        ]
+        if any(err in error_str for err in known_errors):
+            logger.warning(f"Tapo device '{name}' ({ip}) unavailable: {error_str[:100]}")
+        else:
+            logger.error(f"Error sampling Tapo device '{name}' ({ip}): {e}", exc_info=True)
         # Clear cached device on error
         cache_key = f"{device_id}:{ip}"
         if cache_key in _client_cache:
@@ -220,6 +256,10 @@ async def _sample_device(
 
 async def _sample_all_devices() -> None:
     """Sample all active monitoring-enabled devices."""
+    global _sample_count
+
+    _sample_count += 1
+
     if _db_session_factory is None:
         logger.error("Database session factory not initialized")
         return
@@ -316,6 +356,10 @@ async def _sample_all_devices() -> None:
                         logger.error(f"Failed to save sample for device {device.id}: {e}")
 
     except Exception as e:
+        global _error_count, _last_error, _last_error_time
+        _error_count += 1
+        _last_error = str(e)
+        _last_error_time = time.time()
         logger.error(f"Error in power monitoring sampling: {e}", exc_info=True)
     finally:
         db.close()
@@ -356,7 +400,7 @@ async def start_power_monitor(
         db_session_factory: SQLAlchemy session factory for database access
         interval_seconds: Override default sampling interval
     """
-    global _monitor_task, _db_session_factory, _is_running, _SAMPLE_INTERVAL_SECONDS
+    global _monitor_task, _db_session_factory, _is_running, _SAMPLE_INTERVAL_SECONDS, _started_at
 
     if _monitor_task is not None:
         logger.warning("Power monitor already running")
@@ -364,6 +408,7 @@ async def start_power_monitor(
 
     _db_session_factory = db_session_factory
     _is_running = True
+    _started_at = time.time()
 
     if interval_seconds is not None:
         _SAMPLE_INTERVAL_SECONDS = interval_seconds
@@ -483,3 +528,36 @@ def get_current_power(device_id: int, db: Session) -> CurrentPowerResponse:
         timestamp=latest_sample.timestamp,
         is_online=True
     )
+
+
+def get_status() -> dict:
+    """
+    Get power monitor service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    is_running = _monitor_task is not None and not _monitor_task.done() and _is_running
+
+    started_at = None
+    uptime_seconds = None
+    if _started_at is not None:
+        started_at = datetime.utcfromtimestamp(_started_at)
+        uptime_seconds = time.time() - _started_at
+
+    last_error_at = None
+    if _last_error_time is not None:
+        last_error_at = datetime.utcfromtimestamp(_last_error_time)
+
+    return {
+        "is_running": is_running,
+        "started_at": started_at,
+        "uptime_seconds": uptime_seconds,
+        "sample_count": _sample_count,
+        "error_count": _error_count,
+        "last_error": _last_error,
+        "last_error_at": last_error_at,
+        "interval_seconds": _SAMPLE_INTERVAL_SECONDS,
+        "buffer_size": _MAX_SAMPLES,
+        "devices_count": len(_device_histories),
+    }

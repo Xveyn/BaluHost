@@ -24,6 +24,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
+import { AdminBadge } from '../components/ui/AdminBadge';
 
 // ==================== Types ====================
 
@@ -34,7 +35,7 @@ interface User {
 }
 
 interface ApiEndpoint {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
   path: string;
   description: string;
   requiresAuth?: boolean;
@@ -1200,6 +1201,7 @@ export default function ApiCenterPage() {
             >
               <Zap className="w-4 h-4" />
               <span className="hidden sm:inline">Rate </span>Limits
+              <AdminBadge />
             </button>
           </div>
         )}

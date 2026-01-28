@@ -1093,3 +1093,35 @@ async def stop_power_manager() -> None:
     """Stop the power management service."""
     manager = get_power_manager()
     await manager.stop()
+
+
+def get_status() -> dict:
+    """
+    Get power manager service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    manager = get_power_manager()
+
+    is_running = manager._is_running and manager._monitor_task is not None
+
+    started_at = None
+    uptime_seconds = None
+    if manager._last_profile_change is not None:
+        started_at = manager._last_profile_change
+        uptime_seconds = (datetime.utcnow() - manager._last_profile_change).total_seconds()
+
+    return {
+        "is_running": is_running,
+        "started_at": started_at,
+        "uptime_seconds": uptime_seconds,
+        "sample_count": len(manager._history),
+        "error_count": 0,  # Power manager doesn't track errors separately
+        "last_error": None,
+        "last_error_at": None,
+        "interval_seconds": 5.0,  # Check every 5 seconds
+        "current_profile": manager._current_profile.value if manager._current_profile else None,
+        "active_demands": len(manager._demands),
+        "auto_scaling_enabled": manager._auto_scaling_config.enabled if manager._auto_scaling_config else False,
+    }

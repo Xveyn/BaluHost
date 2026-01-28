@@ -24,6 +24,7 @@ class FanConfig(Base):
     emergency_temp_celsius: Mapped[float] = mapped_column(Float, default=85.0, nullable=False)
     temp_sensor_id: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False, index=True)
+    hysteresis_celsius: Mapped[float] = mapped_column(Float, default=3.0, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),

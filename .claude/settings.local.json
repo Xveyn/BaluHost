@@ -41,7 +41,18 @@
       "Bash(.venv/bin/python3:*)",
       "Bash(alembic upgrade:*)",
       "Bash(./.venv/bin/alembic upgrade:*)",
-      "Bash(./.venv/bin/alembic:*)"
+      "Bash(./.venv/bin/alembic:*)",
+      "Bash(chmod:*)",
+      "Bash(systemctl status:*)",
+      "Bash(service postgresql status:*)",
+      "Bash(psql:*)",
+      "Bash(tree:*)",
+      "Bash(xargs -I {} sh -c 'echo \"\"=== {} ===\"\"; head -50 {}')",
+      "Bash(if [ -f \".venv/bin/python\" ])",
+      "Bash(then .venv/bin/python -c \"from app.schemas.fans import CURVE_PRESETS, CurvePreset, ApplyPresetRequest, UpdateFanConfigRequest; print\\(''Schemas OK''\\)\")",
+      "Bash(else echo \"No venv found\")",
+      "Bash(fi)",
+      "Bash(npx eslint:*)"
     ]
   },
   "enabledPlugins": {

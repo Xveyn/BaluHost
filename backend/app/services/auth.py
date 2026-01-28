@@ -57,8 +57,8 @@ def decode_token(token: str) -> TokenPayload:
         # Log successful decode at debug level (non-sensitive fields only)
         logger.debug("Token decoded: sub=%s, role=%s", decoded.get("sub"), decoded.get("role"))
     except jwt.PyJWTError as exc:
-        # Log the exception to help debugging token validation issues
-        logger.exception("Failed to decode token: %s", exc)
+        # Log at warning level without full traceback (common after secret rotation)
+        logger.warning("Token validation failed: %s", type(exc).__name__)
         raise InvalidTokenError("Failed to decode token") from exc
 
     exp = decoded.get("exp")

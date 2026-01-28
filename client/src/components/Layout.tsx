@@ -2,6 +2,7 @@ import { Link, useLocation } from 'react-router-dom';
 import { type ReactNode, useState } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
+import { AdminBadge } from './ui/AdminBadge';
 
 interface LayoutProps {
   children: ReactNode;
@@ -130,17 +131,6 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       )
     },
     {
-      path: '/fan-control',
-      label: 'Fan Control',
-      description: 'PWM-Lüftersteuerung',
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-          <circle cx="12" cy="12" r="3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12" />
-        </svg>
-      )
-    },
-    {
       path: '/logging',
       label: 'Logging',
       description: 'Activity Logs',
@@ -187,38 +177,54 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     ...(user.role === 'admin'
       ? [
           {
+            path: '/fan-control',
+            label: 'Fan Control',
+            description: 'PWM-Lüftersteuerung',
+            adminOnly: true,
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12" />
+              </svg>
+            )
+          },
+          {
             path: '/raid',
             label: 'RAID Control',
             description: 'Arrays & Health',
-            icon: navIcon.raid
+            icon: navIcon.raid,
+            adminOnly: true
           },
-                  {
-                    path: '/schedulers',
-                    label: 'Schedulers',
-                    description: 'Manual tests & triggers',
-                    icon: (
-                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
-                        <circle cx="12" cy="12" r="9" stroke="currentColor" />
-                      </svg>
-                    )
-                  },
-              {
-                path: '/admin-db',
-                label: 'Database',
-                description: 'Inspect DB',
-                icon: (
-                  <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                    <rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" />
-                    <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" />
-                    <path stroke="currentColor" strokeLinecap="round" d="M7 10v4" />
-                  </svg>
-                )
-              },
+          {
+            path: '/schedulers',
+            label: 'Schedulers',
+            description: 'Manual tests & triggers',
+            adminOnly: true,
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+                <circle cx="12" cy="12" r="9" stroke="currentColor" />
+              </svg>
+            )
+          },
+          {
+            path: '/admin-db',
+            label: 'Database',
+            description: 'Inspect DB',
+            adminOnly: true,
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                <rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" />
+                <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" />
+                <path stroke="currentColor" strokeLinecap="round" d="M7 10v4" />
+              </svg>
+            )
+          },
           {
             path: '/users',
             label: 'User Access',
             description: 'Permissions',
+            adminOnly: true,
             icon: navIcon.users
           }
         ]
@@ -267,7 +273,10 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     {item.icon}
                   </span>
                   <div className="flex flex-col">
-                    <span>{item.label}</span>
+                    <span className="flex items-center gap-2">
+                      {item.label}
+                      {'adminOnly' in item && item.adminOnly && <AdminBadge />}
+                    </span>
                     <span className="text-xs text-slate-100-tertiary">{item.description}</span>
                   </div>
                 </Link>
@@ -334,7 +343,10 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                     {item.icon}
                   </span>
                   <div className="flex flex-col">
-                    <span>{item.label}</span>
+                    <span className="flex items-center gap-2">
+                      {item.label}
+                      {'adminOnly' in item && item.adminOnly && <AdminBadge />}
+                    </span>
                     <span className="text-xs text-slate-100-tertiary">{item.description}</span>
                   </div>
                 </Link>

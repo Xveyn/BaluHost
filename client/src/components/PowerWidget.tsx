@@ -7,6 +7,7 @@
 import React from 'react';
 import { Zap } from 'lucide-react';
 import { usePowerMonitoring } from '../hooks/usePowerMonitoring';
+import { parseUtcTimestamp } from '../lib/dateUtils';
 
 const PowerWidget: React.FC = () => {
   const { data, loading, error } = usePowerMonitoring();
@@ -20,7 +21,7 @@ const PowerWidget: React.FC = () => {
 
   // Sort by timestamp and take last samples
   const recentSamples = allSamples
-    .sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime())
+    .sort((a, b) => parseUtcTimestamp(a.timestamp).getTime() - parseUtcTimestamp(b.timestamp).getTime())
     .slice(-30);
 
   // Calculate trend (compare last 5 samples vs previous 5)

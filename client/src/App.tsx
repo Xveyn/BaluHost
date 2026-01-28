@@ -330,7 +330,7 @@ function App() {
           element={
             user ? (
               <Layout user={user} onLogout={handleLogout}>
-                <SystemMonitor />
+                <SystemMonitor user={user} />
               </Layout>
             ) : (
               <Navigate to="/login" />

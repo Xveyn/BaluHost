@@ -26,6 +26,10 @@ _FAST_START_INTERVAL = 0.5  # Abstand zwischen Fast-Start Samples
 _MAX_SAMPLES = int(getattr(settings, "telemetry_history_size", 60))
 
 _SERVER_START_TIME: Optional[float] = None
+_SAMPLE_COUNT: int = 0
+_ERROR_COUNT: int = 0
+_LAST_ERROR: Optional[str] = None
+_LAST_ERROR_TIME: Optional[float] = None
 
 _cpu_history: List[CpuTelemetrySample] = []
 _memory_history: List[MemoryTelemetrySample] = []
@@ -65,8 +69,9 @@ def _generate_mock_network_sample() -> Tuple[float, float]:
 
 
 def _sample_once() -> None:
-    global _latest_cpu_usage, _latest_memory_sample, _previous_network_totals
+    global _latest_cpu_usage, _latest_memory_sample, _previous_network_totals, _SAMPLE_COUNT, _ERROR_COUNT, _LAST_ERROR, _LAST_ERROR_TIME
 
+    _SAMPLE_COUNT += 1
     timestamp_seconds = time.time()
     timestamp_ms = int(timestamp_seconds * 1000)
 
@@ -236,3 +241,37 @@ def get_server_uptime() -> float:
             pass
         return 0.0
     return time.time() - _SERVER_START_TIME
+
+
+def get_status() -> dict:
+    """
+    Get telemetry monitor service status.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    from datetime import datetime
+
+    is_running = _monitor_task is not None and not _monitor_task.done()
+
+    started_at = None
+    uptime_seconds = None
+    if _SERVER_START_TIME is not None:
+        started_at = datetime.utcfromtimestamp(_SERVER_START_TIME)
+        uptime_seconds = time.time() - _SERVER_START_TIME
+
+    last_error_at = None
+    if _LAST_ERROR_TIME is not None:
+        last_error_at = datetime.utcfromtimestamp(_LAST_ERROR_TIME)
+
+    return {
+        "is_running": is_running,
+        "started_at": started_at,
+        "uptime_seconds": uptime_seconds,
+        "sample_count": _SAMPLE_COUNT,
+        "error_count": _ERROR_COUNT,
+        "last_error": _LAST_ERROR,
+        "last_error_at": last_error_at,
+        "interval_seconds": _SAMPLE_INTERVAL_SECONDS,
+        "buffer_size": _MAX_SAMPLES,
+    }

@@ -14,6 +14,7 @@ import {
   Area,
   AreaChart,
 } from 'recharts';
+import { parseUtcTimestamp } from '../../lib/dateUtils';
 
 export interface ChartDataPoint {
   time: string;
@@ -41,7 +42,10 @@ export interface MetricChartProps {
 }
 
 const formatTime = (timestamp: string | number): string => {
-  const date = new Date(timestamp);
+  // Handle both string timestamps (from backend) and numeric (epoch ms)
+  const date = typeof timestamp === 'string'
+    ? parseUtcTimestamp(timestamp)
+    : new Date(timestamp);
   return date.toLocaleTimeString('de-DE', {
     hour: '2-digit',
     minute: '2-digit',

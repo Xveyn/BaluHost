@@ -25,6 +25,15 @@ from app.schemas.fans import (
     SwitchBackendResponse,
     PermissionStatusResponse,
     FanMode,
+    CurvePreset,
+    CURVE_PRESETS,
+    PresetInfo,
+    PresetsResponse,
+    ApplyPresetRequest,
+    ApplyPresetResponse,
+    UpdateFanConfigRequest,
+    UpdateFanConfigResponse,
+    FanCurvePoint,
 )
 from app.services.fan_control import get_fan_control_service, FanControlService
 
@@ -314,3 +323,115 @@ async def get_permission_status(
     except Exception as e:
         logger.error(f"Failed to check permissions: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
+
+
+@router.get("/presets", response_model=PresetsResponse)
+async def get_presets(
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Get available fan curve presets.
+
+    Returns list of predefined curve presets (silent, balanced, performance).
+    """
+    preset_descriptions = {
+        "silent": "Prioritizes quiet operation with lower fan speeds",
+        "balanced": "Balance between noise and cooling performance",
+        "performance": "Maximum cooling with higher fan speeds",
+    }
+
+    preset_labels = {
+        "silent": "Silent",
+        "balanced": "Balanced",
+        "performance": "Performance",
+    }
+
+    presets = []
+    for name, points in CURVE_PRESETS.items():
+        presets.append(PresetInfo(
+            name=name,
+            label=preset_labels.get(name, name.title()),
+            description=preset_descriptions.get(name, ""),
+            curve_points=[FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in points],
+        ))
+
+    return PresetsResponse(presets=presets)
+
+
+@router.post("/preset", response_model=ApplyPresetResponse)
+async def apply_preset(
+    request: ApplyPresetRequest,
+    current_user: User = Depends(get_current_admin),  # Admin only
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Apply a preset curve to a fan.
+
+    Requires admin role.
+    """
+    try:
+        # Can't apply "custom" preset
+        if request.preset == CurvePreset.CUSTOM:
+            raise HTTPException(
+                status_code=400,
+                detail="Cannot apply 'custom' preset - use curve update instead"
+            )
+
+        success, curve_points = await service.apply_preset(request.fan_id, request.preset.value)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+
+        return ApplyPresetResponse(
+            success=True,
+            fan_id=request.fan_id,
+            preset=request.preset.value,
+            curve_points=curve_points,
+            message=f"Applied {request.preset.value} preset",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to apply preset: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to apply preset: {str(e)}")
+
+
+@router.patch("/config", response_model=UpdateFanConfigResponse)
+async def update_fan_config(
+    request: UpdateFanConfigRequest,
+    current_user: User = Depends(get_current_admin),  # Admin only
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Update fan configuration (hysteresis, limits, etc.).
+
+    Requires admin role.
+    """
+    try:
+        result = await service.update_fan_config(
+            fan_id=request.fan_id,
+            hysteresis_celsius=request.hysteresis_celsius,
+            min_pwm_percent=request.min_pwm_percent,
+            max_pwm_percent=request.max_pwm_percent,
+            emergency_temp_celsius=request.emergency_temp_celsius,
+        )
+
+        if result is None:
+            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+
+        return UpdateFanConfigResponse(
+            success=True,
+            fan_id=result["fan_id"],
+            hysteresis_celsius=result["hysteresis_celsius"],
+            min_pwm_percent=result["min_pwm_percent"],
+            max_pwm_percent=result["max_pwm_percent"],
+            emergency_temp_celsius=result["emergency_temp_celsius"],
+            message="Configuration updated",
+        )
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update fan config: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")

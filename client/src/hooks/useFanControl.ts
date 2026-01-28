@@ -1,10 +1,6 @@
 import { useState, useEffect } from 'react';
-import {
-  getFanStatus,
-  getPermissionStatus,
-  FanStatusResponse,
-  PermissionStatusResponse,
-} from '../api/fan-control';
+import { getFanStatus, getPermissionStatus } from '../api/fan-control';
+import type { FanStatusResponse, PermissionStatusResponse } from '../api/fan-control';
 
 interface UseFanControlOptions {
   refreshInterval?: number;
@@ -27,11 +23,10 @@ export function useFanControl(options: UseFanControlOptions = {}): UseFanControl
   const [permissionStatus, setPermissionStatus] = useState<PermissionStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
 
   const loadData = async () => {
     try {
-      setLoading(true);
-
       // Parallel fetch for faster loading
       const [statusData, permData] = await Promise.all([
         getFanStatus(),
@@ -44,22 +39,28 @@ export function useFanControl(options: UseFanControlOptions = {}): UseFanControl
     } catch (err: any) {
       const message = err.response?.data?.detail || err.message || 'Failed to load fan control';
       setError(message);
-    } finally {
-      setLoading(false);
     }
   };
 
+  // Initial load - only once
   useEffect(() => {
-    if (!enabled) return;
+    if (!enabled || hasLoadedOnce) return;
 
-    loadData();
+    setLoading(true);
+    loadData().finally(() => {
+      setLoading(false);
+      setHasLoadedOnce(true);
+    });
+  }, [enabled, hasLoadedOnce]);
 
-    // Only set up auto-refresh if not paused and interval > 0
-    if (refreshInterval > 0 && !pauseRefresh) {
-      const interval = setInterval(loadData, refreshInterval);
-      return () => clearInterval(interval);
-    }
-  }, [enabled, refreshInterval, pauseRefresh]);
+  // Auto-refresh - separate effect, no loading spinner
+  useEffect(() => {
+    if (!enabled || !hasLoadedOnce) return;
+    if (refreshInterval <= 0 || pauseRefresh) return;
+
+    const interval = setInterval(loadData, refreshInterval);
+    return () => clearInterval(interval);
+  }, [enabled, hasLoadedOnce, refreshInterval, pauseRefresh]);
 
   const isReadOnly = permissionStatus?.status === 'readonly';
 

@@ -103,3 +103,27 @@ class NetworkDiscoveryService:
                 logger.info("mDNS service stopped")
             except Exception as e:
                 logger.error(f"Error stopping mDNS service: {e}")
+
+    def get_status(self) -> dict:
+        """
+        Get network discovery service status.
+
+        Returns:
+            Dict with service status information for admin dashboard
+        """
+        is_running = self.zeroconf is not None
+
+        return {
+            "is_running": is_running,
+            "started_at": None,  # No start time tracking
+            "uptime_seconds": None,
+            "sample_count": 2 if is_running else 0,  # Two services registered
+            "error_count": 0,
+            "last_error": None,
+            "last_error_at": None,
+            "interval_seconds": None,  # Continuous broadcast
+            "port": self.port,
+            "webdav_port": self.webdav_port,
+            "hostname": self.hostname,
+            "local_ip": self.get_local_ip() if is_running else None,
+        }
