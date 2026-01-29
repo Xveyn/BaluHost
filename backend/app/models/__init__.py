@@ -31,6 +31,12 @@ from app.models.power import (
     PowerAutoScalingConfig,
 )
 from app.models.fans import FanConfig, FanSample
+from app.models.scheduler_history import (
+    SchedulerExecution,
+    SchedulerConfig,
+    SchedulerStatus,
+    TriggerType,
+)
 
 __all__ = [
     "Base",
@@ -67,4 +73,8 @@ __all__ = [
     "PowerAutoScalingConfig",
     "FanConfig",
     "FanSample",
+    "SchedulerExecution",
+    "SchedulerConfig",
+    "SchedulerStatus",
+    "TriggerType",
 ]

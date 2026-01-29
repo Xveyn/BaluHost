@@ -146,15 +146,30 @@ class CreateSyncScheduleRequest(BaseModel):
     resolve_conflicts: str = "keep_newest"
 
 
+class UpdateSyncScheduleRequest(BaseModel):
+    """Update an existing sync schedule."""
+    schedule_type: Optional[str] = Field(None, description="daily, weekly, monthly, on_change")
+    time_of_day: Optional[str] = Field(None, description="HH:MM format")
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
+    sync_deletions: Optional[bool] = None
+    resolve_conflicts: Optional[str] = None
+    is_active: Optional[bool] = None
+
+
 class SyncScheduleResponse(BaseModel):
     """Sync schedule information."""
     schedule_id: int
     device_id: str
     schedule_type: str
     time_of_day: str
+    day_of_week: Optional[int] = None
+    day_of_month: Optional[int] = None
     next_run_at: Optional[str]
     last_run_at: Optional[str]
     enabled: bool
+    sync_deletions: bool = True
+    resolve_conflicts: str = "keep_newest"
 
 
 class SelectiveSyncFolder(BaseModel):

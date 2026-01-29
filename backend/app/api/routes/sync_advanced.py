@@ -18,6 +18,7 @@ from app.schemas.sync import (
     SetBandwidthLimitRequest,
     BandwidthLimitResponse,
     CreateSyncScheduleRequest,
+    UpdateSyncScheduleRequest,
     SyncScheduleResponse,
     SelectiveSyncRequest,
     SelectiveSyncResponse,
@@ -208,11 +209,37 @@ async def disable_sync_schedule(
 ):
     """Disable a sync schedule."""
     success = scheduler.disable_schedule(schedule_id, current_user.id)
-    
+
     if not success:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
-    
+
     return {"disabled": True, "schedule_id": schedule_id}
+
+
+@router.put("/schedule/{schedule_id}")
+async def update_sync_schedule(
+    schedule_id: int,
+    request: UpdateSyncScheduleRequest,
+    current_user: User = Depends(deps.get_current_user),
+    scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
+):
+    """Update an existing sync schedule."""
+    result = scheduler.update_schedule(
+        schedule_id=schedule_id,
+        user_id=current_user.id,
+        schedule_type=request.schedule_type,
+        time_of_day=request.time_of_day,
+        day_of_week=request.day_of_week,
+        day_of_month=request.day_of_month,
+        sync_deletions=request.sync_deletions,
+        resolve_conflicts=request.resolve_conflicts,
+        is_active=request.is_active,
+    )
+
+    if not result:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
+
+    return result
 
 
 # ============================================================================
