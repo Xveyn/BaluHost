@@ -1,31 +1,28 @@
 package com.baluhost.android.presentation.ui.screens.vpn
 
-import android.content.Context
-import android.net.ConnectivityManager
-import android.net.NetworkCapabilities
 import android.util.Log
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.baluhost.android.data.local.datastore.PreferencesManager
+import com.baluhost.android.domain.network.NetworkStateManager
 import com.baluhost.android.domain.usecase.vpn.ConnectVpnUseCase
 import com.baluhost.android.domain.usecase.vpn.DisconnectVpnUseCase
 import com.baluhost.android.domain.usecase.vpn.FetchVpnConfigUseCase
 import com.baluhost.android.util.Result
 import dagger.hilt.android.lifecycle.HiltViewModel
-import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
 /**
  * ViewModel for VPN Screen.
- * 
+ *
  * Manages VPN connection state and configuration.
+ * Uses NetworkStateManager for VPN status checking without Android Context dependency.
  */
 @HiltViewModel
 class VpnViewModel @Inject constructor(
@@ -33,7 +30,7 @@ class VpnViewModel @Inject constructor(
     private val connectVpnUseCase: ConnectVpnUseCase,
     private val disconnectVpnUseCase: DisconnectVpnUseCase,
     private val preferencesManager: PreferencesManager,
-    @ApplicationContext private val context: Context
+    private val networkStateManager: NetworkStateManager
 ) : ViewModel() {
     
     private val _uiState = MutableStateFlow(VpnUiState())
@@ -144,46 +141,24 @@ class VpnViewModel @Inject constructor(
      * Check current VPN status.
      */
     private fun checkVpnStatus() {
-        viewModelScope.launch {
-            val isVpnActive = isVpnActive()
-            _uiState.value = _uiState.value.copy(isConnected = isVpnActive)
-            Log.d(TAG, "VPN status check: isConnected=$isVpnActive")
-        }
+        val isVpnActive = networkStateManager.isVpnActive()
+        _uiState.value = _uiState.value.copy(isConnected = isVpnActive)
+        Log.d(TAG, "VPN status check: isConnected=$isVpnActive")
     }
-    
+
     /**
-     * Start monitoring VPN status periodically.
+     * Start monitoring VPN status using reactive Flow.
      */
     private fun startVpnStatusMonitoring() {
         viewModelScope.launch {
-            while (isActive) {
-                val isVpnActive = isVpnActive()
+            networkStateManager.observeVpnStatus().collect { isVpnActive ->
                 val currentState = _uiState.value.isConnected
-                
+
                 if (isVpnActive != currentState) {
                     Log.d(TAG, "VPN status changed: $currentState -> $isVpnActive")
                     _uiState.value = _uiState.value.copy(isConnected = isVpnActive)
                 }
-                
-                delay(3000) // Check every 3 seconds
             }
-        }
-    }
-    
-    /**
-     * Check if VPN is currently active.
-     */
-    private fun isVpnActive(): Boolean {
-        return try {
-            val connectivityManager = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
-            val activeNetwork = connectivityManager.activeNetwork ?: return false
-            val networkCapabilities = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return false
-            
-            // Check if the active network is a VPN
-            networkCapabilities.hasTransport(NetworkCapabilities.TRANSPORT_VPN)
-        } catch (e: Exception) {
-            Log.e(TAG, "Error checking VPN status", e)
-            false
         }
     }
     
@@ -217,11 +192,11 @@ class VpnViewModel @Inject constructor(
                     Log.d(TAG, "VPN connection initiated successfully")
                     // Give service time to establish connection
                     delay(2000)
-                    
+
                     // Check actual VPN status after delay
-                    val isVpnActive = isVpnActive()
+                    val isVpnActive = networkStateManager.isVpnActive()
                     Log.d(TAG, "VPN active after connect: $isVpnActive")
-                    
+
                     _uiState.value = _uiState.value.copy(
                         isConnected = isVpnActive,
                         isLoading = false,
