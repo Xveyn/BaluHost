@@ -94,6 +94,8 @@ class SyncSchedulerService:
                 "device_id": s.device_id,
                 "schedule_type": s.schedule_type,
                 "time_of_day": s.time_of_day,
+                "day_of_week": s.day_of_week,
+                "day_of_month": s.day_of_month,
                 "next_run_at": s.next_run_at.isoformat() if s.next_run_at else None,
                 "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None
             }
