@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { ChevronDown, ChevronRight, ChevronLeft, Filter, RefreshCw, Loader2 } from 'lucide-react';
 import type { SchedulerExecution, SchedulerHistoryResponse, SchedulerExecStatus } from '../../api/schedulers';
 import {
-  formatRelativeTime,
   getStatusBadgeClasses,
   getSchedulerIcon,
   parseResultSummary,
