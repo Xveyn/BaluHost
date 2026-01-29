@@ -93,7 +93,10 @@ class BackupScheduler:
         Run periodic backup (called by APScheduler).
         Creates its own database session.
         """
+        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
         settings = get_settings()
+        execution_id = log_scheduler_execution("backup", job_id="backup_periodic")
 
         logger.info("="*60)
         logger.info(f"[BackupScheduler] Periodic backup triggered")
@@ -115,8 +118,22 @@ class BackupScheduler:
                 logger.info(f"  - Backup ID: {stats['backup_id']}")
                 logger.info(f"  - Filename: {stats['filename']}")
                 logger.info(f"  - Size: {stats['size_bytes'] / (1024*1024):.2f} MB")
+                complete_scheduler_execution(
+                    execution_id,
+                    success=True,
+                    result={
+                        "backup_id": stats['backup_id'],
+                        "filename": stats['filename'],
+                        "size_bytes": stats['size_bytes'],
+                        "backup_type": stats['backup_type']
+                    }
+                )
             else:
                 logger.error(f"  - Error: {stats['error']}")
+                complete_scheduler_execution(execution_id, success=False, error=stats['error'])
 
+        except Exception as e:
+            logger.exception(f"[BackupScheduler] Unexpected error: {e}")
+            complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()

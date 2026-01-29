@@ -57,14 +57,26 @@ _smart_scheduler: Optional["BackgroundScheduler"] = None
 
 
 def _perform_smart_scan_job() -> None:
+    from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
+    execution_id = log_scheduler_execution("smart_scan", job_id="smart_scan")
     try:
         logger.info("SMART scan job: invalidating cache and performing scan")
         invalidate_smart_cache()
         # Warm the cache by calling get_smart_status (will populate from mock or real)
-        get_smart_status()
+        status = get_smart_status()
         logger.info("SMART scan job: completed")
+        complete_scheduler_execution(
+            execution_id,
+            success=True,
+            result={
+                "disks_scanned": len(status.disks) if status else 0,
+                "overall_status": status.overall_status if status else "unknown"
+            }
+        )
     except Exception as exc:
         logger.exception("SMART scan job failed: %s", exc)
+        complete_scheduler_execution(execution_id, success=False, error=str(exc))
 
 
 def run_smart_self_test(device: str, test_type: str = "short") -> str:

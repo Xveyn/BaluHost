@@ -64,23 +64,44 @@ class SyncBackgroundScheduler:
     
     async def check_and_run_due_syncs(self):
         """Check for due syncs and execute them."""
+        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
+        execution_id = log_scheduler_execution("sync_check", job_id="sync_check")
         db = SessionLocal()
+        executed_count = 0
+        error_count = 0
+
         try:
             now = datetime.now(timezone.utc)
-            
+
             due_schedules = db.query(SyncSchedule).filter(
                 SyncSchedule.is_active == True,
                 SyncSchedule.next_run_at <= now
             ).all()
-            
+
             self.logger.info(f"Found {len(due_schedules)} due syncs")
-            
+
             for schedule in due_schedules:
                 try:
                     await self.execute_scheduled_sync(schedule, db)
+                    executed_count += 1
                 except Exception as e:
                     self.logger.error(f"Error executing sync {schedule.id}: {e}")
-        
+                    error_count += 1
+
+            complete_scheduler_execution(
+                execution_id,
+                success=True,
+                result={
+                    "due_syncs": len(due_schedules),
+                    "executed": executed_count,
+                    "errors": error_count
+                }
+            )
+
+        except Exception as e:
+            self.logger.exception(f"Error in check_and_run_due_syncs: {e}")
+            complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()
     
@@ -143,12 +164,22 @@ class SyncBackgroundScheduler:
     async def cleanup_expired_uploads(self):
         """Clean up expired chunked uploads."""
         from app.services.progressive_sync import ProgressiveSyncService
-        
+        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
+        execution_id = log_scheduler_execution("upload_cleanup", job_id="cleanup_uploads")
         db = SessionLocal()
         try:
             sync_service = ProgressiveSyncService(db)
-            sync_service.cleanup_expired_uploads()
+            cleaned = sync_service.cleanup_expired_uploads()
             self.logger.info("Expired uploads cleaned up")
+            complete_scheduler_execution(
+                execution_id,
+                success=True,
+                result={"cleaned": cleaned if isinstance(cleaned, int) else True}
+            )
+        except Exception as e:
+            self.logger.exception(f"Error cleaning up expired uploads: {e}")
+            complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()
     

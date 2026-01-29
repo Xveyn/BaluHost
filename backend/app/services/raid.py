@@ -1261,12 +1261,21 @@ _scrub_scheduler: Optional["BackgroundScheduler"] = None
 
 
 def _perform_scrub_job() -> None:
+    from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
+    execution_id = log_scheduler_execution("raid_scrub", job_id="raid_scrub")
     try:
         logger.info("RAID scrub job: starting automatic scrub")
-        scrub_now(None)
+        result = scrub_now(None)
         logger.info("RAID scrub job: completed")
+        complete_scheduler_execution(
+            execution_id,
+            success=True,
+            result={"message": result.message if result else "Scrub completed"}
+        )
     except Exception as exc:  # pragma: no cover - runtime safety
         logger.exception("RAID scrub job failed: %s", exc)
+        complete_scheduler_execution(execution_id, success=False, error=str(exc))
 
 
 def scrub_now(array: str | None = None) -> RaidActionResponse:

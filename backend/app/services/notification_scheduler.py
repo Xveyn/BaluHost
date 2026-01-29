@@ -208,25 +208,43 @@ class NotificationScheduler:
         Run periodic check (called by APScheduler).
         Creates its own database session.
         """
+        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+
+        execution_id = log_scheduler_execution("notification_check", job_id="notification_check")
+
         logger.info("="*60)
         logger.info(f"[NotificationScheduler] Periodic check triggered")
         logger.info("="*60)
-        
+
         db = SessionLocal()
         try:
             stats = cls.check_and_send_warnings(db)
-            
+
             # Log summary
             logger.info("[NotificationScheduler] Summary:")
             logger.info(f"  - Devices checked: {stats['checked']}")
             logger.info(f"  - Notifications sent: {stats['sent']}")
             logger.info(f"  - Skipped: {stats['skipped']}")
             logger.info(f"  - Failed: {stats['failed']}")
-            
+
             if stats['errors']:
                 logger.warning("[NotificationScheduler] Errors:")
                 for error in stats['errors']:
                     logger.warning(f"  - {error}")
-            
+
+            complete_scheduler_execution(
+                execution_id,
+                success=True,
+                result={
+                    "devices_checked": stats['checked'],
+                    "notifications_sent": stats['sent'],
+                    "skipped": stats['skipped'],
+                    "failed": stats['failed']
+                }
+            )
+
+        except Exception as e:
+            logger.exception(f"[NotificationScheduler] Unexpected error: {e}")
+            complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()
