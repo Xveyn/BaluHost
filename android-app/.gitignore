@@ -46,3 +46,62 @@ release/
 
 # Signing files
 .signing/
+
+# Temporary files
+tmpclaude-*
+*.tmp
+*.bak
+*.swp
+*.swo
+*~
+
+# Build logs and reports
+build_*.txt
+build_*.log
+*.log
+STATUS.html
+
+# Test results
+test-results/
+test-reports/
+
+# Lint
+lint-results*.xml
+lint-report.html
+
+# Code coverage
+*.exec
+jacoco.exec
+coverage/
+
+# Profiler
+*.hprof
+profiler-output/
+
+# NDK
+obj/
+*.so
+
+# Crashlytics / Fabric
+com_crashlytics_export_strings.xml
+crashlytics.properties
+crashlytics-build.properties
+fabric.properties
+
+# Firebase debug logs
+firebase-debug.log
+firebase-debug.*.log
+
+# IntelliJ IDEA specific
+*.iws
+*.ipr
+.idea/workspace.xml
+.idea/tasks.xml
+.idea/gradle.xml
+.idea/assetWizardSettings.xml
+.idea/dictionaries
+.idea/libraries
+.idea/caches
+
+# Kotlin
+.kotlin/
