@@ -1,14 +1,16 @@
 import { useState, useCallback } from 'react';
-import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2 } from 'lucide-react';
+import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2, BarChart3 } from 'lucide-react';
 import { useSchedulers, useSchedulerHistory } from '../hooks/useSchedulers';
 import { SchedulerCard } from '../components/scheduler/SchedulerCard';
 import { SchedulerConfigModal } from '../components/scheduler/SchedulerConfigModal';
 import { ExecutionHistoryTable } from '../components/scheduler/ExecutionHistoryTable';
 import { MaintenancePanel } from '../components/scheduler/MaintenancePanel';
+import { SchedulerTimeline } from '../components/scheduler/SchedulerTimeline';
 import type { SchedulerStatus, SchedulerConfigUpdate, SchedulerExecStatus } from '../api/schedulers';
+import { retryExecution } from '../api/schedulers';
 import { toast } from 'react-hot-toast';
 
-type TabId = 'overview' | 'sync' | 'maintenance' | 'history';
+type TabId = 'overview' | 'timeline' | 'sync' | 'maintenance' | 'history';
 
 interface Tab {
   id: TabId;
@@ -18,6 +20,7 @@ interface Tab {
 
 const tabs: Tab[] = [
   { id: 'overview', label: 'Overview', icon: <Clock className="h-4 w-4" /> },
+  { id: 'timeline', label: 'Timeline', icon: <BarChart3 className="h-4 w-4" /> },
   { id: 'sync', label: 'Sync Schedules', icon: <Calendar className="h-4 w-4" /> },
   { id: 'maintenance', label: 'Maintenance', icon: <Wrench className="h-4 w-4" /> },
   { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
@@ -41,7 +44,7 @@ export default function SchedulerDashboard() {
     updateConfig,
   } = useSchedulers({ refreshInterval: 30000 });
 
-  // History hook - only fetch when history tab is active
+  // History hook - fetch when history or timeline tab is active
   const [historyPage, setHistoryPage] = useState(1);
   const [historyStatusFilter, setHistoryStatusFilter] = useState<SchedulerExecStatus | undefined>();
   const {
@@ -51,9 +54,9 @@ export default function SchedulerDashboard() {
     refetch: refetchHistory,
   } = useSchedulerHistory({
     page: historyPage,
-    pageSize: 20,
+    pageSize: 50, // Larger for timeline view
     statusFilter: historyStatusFilter,
-    enabled: activeTab === 'history',
+    enabled: activeTab === 'history' || activeTab === 'timeline',
   });
 
   // Toast wrapper for MaintenancePanel
@@ -113,6 +116,20 @@ export default function SchedulerDashboard() {
     } catch (err: any) {
       toast.error(err.message || 'Failed to save configuration');
       return false;
+    }
+  };
+
+  const handleRetry = async (schedulerName: string) => {
+    try {
+      const result = await retryExecution(schedulerName);
+      if (result.success) {
+        toast.success(`${schedulerName.replace(/_/g, ' ')} retried successfully`);
+        refetchHistory();
+      } else {
+        toast.error(result.message || 'Retry failed');
+      }
+    } catch (err: any) {
+      toast.error(err.message || 'Failed to retry scheduler');
     }
   };
 
@@ -199,6 +216,14 @@ export default function SchedulerDashboard() {
           </div>
         )}
 
+        {/* Timeline Tab */}
+        {activeTab === 'timeline' && (
+          <SchedulerTimeline
+            executions={history?.executions || []}
+            loading={historyLoading}
+          />
+        )}
+
         {/* Sync Schedules Tab */}
         {activeTab === 'sync' && (
           <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6">
@@ -234,6 +259,7 @@ export default function SchedulerDashboard() {
             onPageChange={setHistoryPage}
             onStatusFilterChange={setHistoryStatusFilter}
             onRefresh={refetchHistory}
+            onRetry={handleRetry}
             statusFilter={historyStatusFilter}
           />
         )}

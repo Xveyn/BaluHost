@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { ChevronDown, ChevronRight, ChevronLeft, Filter, RefreshCw, Loader2 } from 'lucide-react';
+import { ChevronDown, ChevronRight, ChevronLeft, Filter, RefreshCw, Loader2, RotateCcw } from 'lucide-react';
 import type { SchedulerExecution, SchedulerHistoryResponse, SchedulerExecStatus } from '../../api/schedulers';
 import {
   getStatusBadgeClasses,
@@ -15,12 +15,31 @@ interface ExecutionHistoryTableProps {
   onPageChange: (page: number) => void;
   onStatusFilterChange: (filter: SchedulerExecStatus | undefined) => void;
   onRefresh: () => void;
+  onRetry?: (schedulerName: string) => Promise<void>;
   statusFilter?: SchedulerExecStatus;
 }
 
-function ExecutionRow({ execution }: { execution: SchedulerExecution }) {
+function ExecutionRow({
+  execution,
+  onRetry,
+}: {
+  execution: SchedulerExecution;
+  onRetry?: (schedulerName: string) => Promise<void>;
+}) {
   const [isExpanded, setIsExpanded] = useState(false);
+  const [isRetrying, setIsRetrying] = useState(false);
   const result = parseResultSummary(execution.result_summary);
+
+  const handleRetry = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (!onRetry || isRetrying) return;
+    setIsRetrying(true);
+    try {
+      await onRetry(execution.scheduler_name);
+    } finally {
+      setIsRetrying(false);
+    }
+  };
 
   return (
     <>
@@ -59,13 +78,27 @@ function ExecutionRow({ execution }: { execution: SchedulerExecution }) {
           </span>
         </td>
         <td className="px-4 py-3">
-          <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${
-            execution.trigger_type === 'manual'
-              ? 'bg-purple-900/50 text-purple-300'
-              : 'bg-slate-800 text-slate-400'
-          }`}>
-            {execution.trigger_type}
-          </span>
+          <div className="flex items-center gap-2">
+            <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs ${
+              execution.trigger_type === 'manual'
+                ? 'bg-purple-900/50 text-purple-300'
+                : 'bg-slate-800 text-slate-400'
+            }`}>
+              {execution.trigger_type}
+            </span>
+            {/* Retry button for failed executions */}
+            {execution.status === 'failed' && onRetry && (
+              <button
+                onClick={handleRetry}
+                disabled={isRetrying}
+                className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
+                title="Retry this scheduler"
+              >
+                <RotateCcw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
+                Retry
+              </button>
+            )}
+          </div>
         </td>
       </tr>
       {isExpanded && (
@@ -123,6 +156,7 @@ export function ExecutionHistoryTable({
   onPageChange,
   onStatusFilterChange,
   onRefresh,
+  onRetry,
   statusFilter,
 }: ExecutionHistoryTableProps) {
   const [filterOpen, setFilterOpen] = useState(false);
@@ -238,7 +272,7 @@ export function ExecutionHistoryTable({
               </tr>
             ) : (
               history?.executions.map((execution) => (
-                <ExecutionRow key={execution.id} execution={execution} />
+                <ExecutionRow key={execution.id} execution={execution} onRetry={onRetry} />
               ))
             )}
           </tbody>

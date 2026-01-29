@@ -324,3 +324,48 @@ export function parseResultSummary(summary: string | null): Record<string, any> 
     return null;
   }
 }
+
+/**
+ * Retry a failed execution by running the same scheduler again
+ */
+export async function retryExecution(schedulerName: string): Promise<RunNowResponse> {
+  return runSchedulerNow(schedulerName, true);
+}
+
+/**
+ * Get timeline data for recent executions (last 24 hours grouped by hour)
+ */
+export interface TimelineEntry {
+  hour: string;
+  executions: SchedulerExecution[];
+  completedCount: number;
+  failedCount: number;
+  runningCount: number;
+}
+
+export function groupExecutionsByHour(executions: SchedulerExecution[]): TimelineEntry[] {
+  const now = new Date();
+  const hours: TimelineEntry[] = [];
+
+  // Create 24 hour buckets
+  for (let i = 23; i >= 0; i--) {
+    const hourDate = new Date(now);
+    hourDate.setHours(now.getHours() - i, 0, 0, 0);
+    const hourStr = hourDate.toISOString().slice(0, 13); // YYYY-MM-DDTHH
+
+    const hourExecs = executions.filter(e => {
+      const execDate = new Date(e.started_at);
+      return execDate.toISOString().slice(0, 13) === hourStr;
+    });
+
+    hours.push({
+      hour: hourDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      executions: hourExecs,
+      completedCount: hourExecs.filter(e => e.status === 'completed').length,
+      failedCount: hourExecs.filter(e => e.status === 'failed').length,
+      runningCount: hourExecs.filter(e => e.status === 'running').length,
+    });
+  }
+
+  return hours;
+}
