@@ -7,6 +7,54 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.4.2] - 2026-01-29
+
+### 🗓️ Unified Scheduler Dashboard
+
+This release introduces a comprehensive scheduler management system for all background jobs.
+
+### ✨ Added
+
+#### Scheduler Dashboard
+- **Unified Scheduler Dashboard** with 5 tabs for complete scheduler management
+- **Timeline view** for visual execution history across all schedulers
+- **Retry mechanism** for failed executions with one-click re-run
+- **Execution history tracking** with status, duration, and error details
+- **Real-time status monitoring** for all 6 system schedulers
+
+#### Managed Schedulers
+- **RAID Scrub** - Data integrity checks (configurable interval, default: weekly)
+- **SMART Scan** - Disk health monitoring (default: hourly)
+- **Auto Backup** - Automated system backups (default: daily)
+- **Sync Check** - Sync schedule trigger checks (every 5 minutes)
+- **Notification Check** - Device expiration warnings (hourly)
+- **Upload Cleanup** - Chunked upload cleanup (daily at 3 AM)
+
+#### New API Endpoints (`/api/schedulers/*`)
+- `GET /api/schedulers` - List all schedulers with status
+- `GET /api/schedulers/{name}` - Get specific scheduler details
+- `POST /api/schedulers/{name}/run-now` - Trigger immediate execution
+- `GET /api/schedulers/{name}/history` - Get execution history
+- `GET /api/schedulers/history/all` - Get combined execution timeline
+- `POST /api/schedulers/{name}/toggle` - Enable/disable scheduler
+
+#### Database Models
+- `SchedulerExecution` - Tracks individual execution runs with timing, status, and error info
+- `SchedulerConfig` - Stores per-scheduler configuration and enabled state
+
+### 🔧 Changed
+
+- Integrated RAID scrub and SMART scan schedulers with service status monitoring
+- Enhanced SyncSettings UI with device dropdown and day pickers
+- Added execution logging to all scheduler services
+
+### 📊 Status
+
+- **Production Readiness**: 100% (DEPLOYED)
+- **Version**: 1.4.2
+
+---
+
 ## [1.4.1] - 2026-01-28
 
 ### 🚀 Production Deployment Release

@@ -1,7 +1,7 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.4.0
-**Last Updated:** 28. Januar 2026
+**Version:** 1.4.2
+**Last Updated:** 29. Januar 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
 ## 📐 System Overview
@@ -553,6 +553,55 @@ The unified monitoring system uses a collector pattern:
 - **Energy Monitoring**: Tapo smart plug integration (P115/P110)
 - **Service Status**: Health dashboard for all services
 
+### Scheduler Architecture
+
+The Scheduler Service provides unified management for all background jobs with execution tracking:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                    Scheduler Service                         │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Managed Schedulers (6)                               │  │
+│  │  ├─ raid_scrub       (RAID integrity, weekly)        │  │
+│  │  ├─ smart_scan       (Disk health, hourly)           │  │
+│  │  ├─ backup           (Auto backup, daily)            │  │
+│  │  ├─ sync_check       (Sync triggers, 5 min)          │  │
+│  │  ├─ notification_check (Device warnings, hourly)     │  │
+│  │  └─ upload_cleanup   (Chunked uploads, daily)        │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Execution Flow                                       │  │
+│  │  1. APScheduler triggers job at interval              │  │
+│  │  2. SchedulerService creates SchedulerExecution       │  │
+│  │  3. Job runs with status tracking (running→complete)  │  │
+│  │  4. Result/error logged to database                   │  │
+│  │  5. Service status integration (RAID/SMART)           │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Database Tables                                      │  │
+│  │  - scheduler_executions (history, timing, errors)    │  │
+│  │  - scheduler_configs (intervals, enabled state)       │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Frontend Dashboard (SchedulerDashboard.tsx)         │  │
+│  │  - Overview tab: Status cards for all schedulers      │  │
+│  │  - Table tab: Run-now, toggle enable/disable          │  │
+│  │  - History tab: Per-scheduler execution logs          │  │
+│  │  - Timeline tab: Visual execution timeline            │  │
+│  │  - Settings tab: Interval configuration               │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+**Key Features:**
+- **Run-Now**: Trigger any scheduler immediately via API/UI
+- **Retry Mechanism**: Re-run failed executions
+- **Timeline View**: Visual history across all schedulers
+- **Service Integration**: RAID scrub and SMART scan update service status
+
 ### Metrics Categories
 | Category | Metrics | Endpoint |
 |----------|---------|----------|
@@ -641,7 +690,7 @@ If you have questions about the architecture:
 
 ---
 
-**Last Updated:** 28. Januar 2026
-**Version:** 1.4.0
+**Last Updated:** 29. Januar 2026
+**Version:** 1.4.2
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION

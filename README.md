@@ -101,6 +101,13 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - **Network Discovery** - mDNS/Bonjour auto-discovery
 - **Real-time metrics** - CPU, memory, disk I/O, network
 
+### 🗓️ Scheduler Dashboard (NEW)
+- **Unified Scheduler Management** - Control all 6 system schedulers
+- **Execution History** - Track runs with timing, status, and errors
+- **Run-Now Functionality** - Trigger any scheduler immediately
+- **Timeline View** - Visual execution history across all schedulers
+- **Retry Mechanism** - Re-run failed executions with one click
+
 ### 🛠️ Developer-Friendly
 - **Dev Mode** - Full simulation environment (Windows-compatible!)
 - No database required for prototyping
@@ -194,6 +201,12 @@ BaluHost is a full-stack NAS management application built with modern web techno
    - `GET /api/logging/disk-io`
    - `GET /api/logging/file-access`
    - `GET /api/logging/stats`
+- **Schedulers** (NEW)
+   - `GET /api/schedulers`
+   - `GET /api/schedulers/{name}`
+   - `POST /api/schedulers/{name}/run-now`
+   - `GET /api/schedulers/{name}/history`
+   - `GET /api/schedulers/history/all`
 
 ## Setup
 
@@ -509,7 +522,7 @@ See [TODO.md](TODO.md) for the complete roadmap.
 
 ## 📊 Project Stats
 
-- **Version:** 1.4.0
+- **Version:** 1.4.2
 - **Lines of Code:** ~25,000+
 - **Test Coverage:** 80%+ (backend, 364 test functions)
 - **API Endpoints:** 80+

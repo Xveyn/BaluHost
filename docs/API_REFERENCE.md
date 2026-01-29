@@ -721,6 +721,199 @@ GET /logging/audit
 
 ---
 
+### Scheduler Management
+
+#### List All Schedulers
+```http
+GET /schedulers
+```
+
+**Headers:** Requires authentication
+
+**Response:** `200 OK`
+```json
+{
+  "schedulers": [
+    {
+      "name": "raid_scrub",
+      "display_name": "RAID Scrub",
+      "description": "Performs RAID array scrub to check data integrity",
+      "is_running": false,
+      "is_enabled": true,
+      "interval_seconds": 604800,
+      "interval_display": "Every 7 days",
+      "last_run": "2026-01-28T03:00:00Z",
+      "last_status": "completed",
+      "next_run": "2026-02-04T03:00:00Z",
+      "execution_count": 5,
+      "error_count": 0
+    }
+  ],
+  "total_running": 0,
+  "total_enabled": 6
+}
+```
+
+#### Get Scheduler Details
+```http
+GET /schedulers/{name}
+```
+
+**Path Parameters:**
+- `name` (required): Scheduler name (raid_scrub, smart_scan, backup, sync_check, notification_check, upload_cleanup)
+
+**Headers:** Requires authentication
+
+**Response:** `200 OK`
+```json
+{
+  "name": "raid_scrub",
+  "display_name": "RAID Scrub",
+  "description": "Performs RAID array scrub to check data integrity and repair errors",
+  "is_running": false,
+  "is_enabled": true,
+  "interval_seconds": 604800,
+  "interval_display": "Every 7 days",
+  "last_run": "2026-01-28T03:00:00Z",
+  "last_status": "completed",
+  "next_run": "2026-02-04T03:00:00Z",
+  "execution_count": 5,
+  "error_count": 0
+}
+```
+
+**Errors:**
+- `404 Not Found` - Scheduler doesn't exist
+
+#### Run Scheduler Now
+```http
+POST /schedulers/{name}/run-now
+```
+
+**Path Parameters:**
+- `name` (required): Scheduler name
+
+**Headers:** Requires admin authentication
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Scheduler raid_scrub started",
+  "execution_id": 123,
+  "started_at": "2026-01-29T12:00:00Z"
+}
+```
+
+**Errors:**
+- `404 Not Found` - Scheduler doesn't exist
+- `409 Conflict` - Scheduler is already running
+- `403 Forbidden` - Not admin
+
+#### Get Scheduler History
+```http
+GET /schedulers/{name}/history
+```
+
+**Path Parameters:**
+- `name` (required): Scheduler name
+
+**Query Parameters:**
+- `limit` (optional): Number of entries (default: 50)
+- `offset` (optional): Pagination offset (default: 0)
+
+**Headers:** Requires authentication
+
+**Response:** `200 OK`
+```json
+{
+  "scheduler_name": "raid_scrub",
+  "executions": [
+    {
+      "id": 123,
+      "started_at": "2026-01-28T03:00:00Z",
+      "ended_at": "2026-01-28T03:45:00Z",
+      "status": "completed",
+      "trigger_type": "scheduled",
+      "duration_seconds": 2700,
+      "error_message": null
+    }
+  ],
+  "total": 5
+}
+```
+
+#### Get All Scheduler History (Timeline)
+```http
+GET /schedulers/history/all
+```
+
+**Query Parameters:**
+- `limit` (optional): Number of entries (default: 100)
+- `hours` (optional): Hours of history to fetch (default: 24)
+
+**Headers:** Requires authentication
+
+**Response:** `200 OK`
+```json
+{
+  "executions": [
+    {
+      "id": 123,
+      "scheduler_name": "raid_scrub",
+      "display_name": "RAID Scrub",
+      "started_at": "2026-01-28T03:00:00Z",
+      "ended_at": "2026-01-28T03:45:00Z",
+      "status": "completed",
+      "trigger_type": "scheduled",
+      "duration_seconds": 2700
+    },
+    {
+      "id": 124,
+      "scheduler_name": "smart_scan",
+      "display_name": "SMART Scan",
+      "started_at": "2026-01-28T04:00:00Z",
+      "ended_at": "2026-01-28T04:02:00Z",
+      "status": "completed",
+      "trigger_type": "scheduled",
+      "duration_seconds": 120
+    }
+  ],
+  "total": 2
+}
+```
+
+#### Toggle Scheduler
+```http
+POST /schedulers/{name}/toggle
+```
+
+**Path Parameters:**
+- `name` (required): Scheduler name
+
+**Headers:** Requires admin authentication
+
+**Request Body:**
+```json
+{
+  "enabled": false
+}
+```
+
+**Response:** `200 OK`
+```json
+{
+  "message": "Scheduler raid_scrub disabled",
+  "scheduler_name": "raid_scrub",
+  "is_enabled": false
+}
+```
+
+**Errors:**
+- `404 Not Found` - Scheduler doesn't exist
+- `403 Forbidden` - Not admin
+
+---
+
 ## 🔄 Response Format
 
 ### Success Response
@@ -858,6 +1051,6 @@ All errors follow this format:
 
 ---
 
-**Last Updated:** November 2025  
-**API Version:** 0.1.0  
+**Last Updated:** January 2026
+**API Version:** 1.4.2
 **Base Path:** `/api`

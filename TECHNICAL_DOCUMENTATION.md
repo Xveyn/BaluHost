@@ -6,8 +6,8 @@ BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Pyth
 
 Version & Datum
 -
-- **Version:** 1.4.0
-- **Last Updated:** 28. Januar 2026
+- **Version:** 1.4.2
+- **Last Updated:** 29. Januar 2026
 - **Maintainer:** Xveyn
 - **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
@@ -911,11 +911,14 @@ GET /api/logging/audit/filter       - Filtered logs
 
 ---
 
-### 12. Background Jobs
+### 12. Background Jobs & Scheduler System
 
-**Service:** `app/services/jobs.py`
+**Services:** `app/services/jobs.py`, `app/services/scheduler_service.py`
+**API Route:** `app/api/routes/schedulers.py`
+**Models:** `app/models/scheduler_history.py`
+**Schemas:** `app/schemas/scheduler.py`
 
-#### Implemented Features:
+#### 12.1 Background Job Framework
 - **Telemetry Collection**
   - Periodic background task
   - Collects CPU, RAM, Network
@@ -929,6 +932,79 @@ GET /api/logging/audit/filter       - Filtered logs
 - **Job Management:**
   - Start/stop background tasks
   - Lifecycle management via FastAPI Lifespan
+
+#### 12.2 Unified Scheduler System
+
+The Scheduler Service provides centralized management for all system background jobs with execution tracking, manual triggers, and configuration.
+
+**Managed Schedulers (6 total):**
+
+| Scheduler | Display Name | Default Interval | Description |
+|-----------|--------------|------------------|-------------|
+| `raid_scrub` | RAID Scrub | Weekly (7 days) | Data integrity checks on RAID arrays |
+| `smart_scan` | SMART Scan | Hourly (60 min) | Disk health monitoring via SMART |
+| `backup` | Auto Backup | Daily (24 hours) | Automated system backups |
+| `sync_check` | Sync Check | 5 minutes | Triggers due sync schedules |
+| `notification_check` | Notification Check | Hourly | Device expiration warnings |
+| `upload_cleanup` | Upload Cleanup | Daily (3 AM) | Cleans expired chunked uploads |
+
+**Features:**
+- **Execution History Tracking** - Records every run with start/end time, status, duration, and error details
+- **Run-Now Functionality** - Trigger any scheduler immediately via API
+- **Enable/Disable Toggle** - Pause schedulers without removing configuration
+- **Timeline View** - Visual execution history across all schedulers
+- **Retry Mechanism** - Re-run failed executions with one click
+- **Service Status Integration** - RAID scrub and SMART scan integrate with service status monitoring
+
+#### API Endpoints:
+```
+GET  /api/schedulers                    - List all schedulers with status
+GET  /api/schedulers/{name}             - Get specific scheduler details
+POST /api/schedulers/{name}/run-now     - Trigger immediate execution
+GET  /api/schedulers/{name}/history     - Get execution history for scheduler
+GET  /api/schedulers/history/all        - Get combined execution timeline
+POST /api/schedulers/{name}/toggle      - Enable/disable scheduler
+```
+
+#### Database Schema:
+
+**SchedulerExecution Table:**
+```sql
+CREATE TABLE scheduler_executions (
+    id INTEGER PRIMARY KEY,
+    scheduler_name VARCHAR(50) NOT NULL,
+    started_at TIMESTAMP NOT NULL,
+    ended_at TIMESTAMP,
+    status VARCHAR(20) NOT NULL,  -- pending, running, completed, failed
+    trigger_type VARCHAR(20),     -- scheduled, manual, retry
+    error_message TEXT,
+    result_data JSON,
+    created_at TIMESTAMP
+);
+```
+
+**SchedulerConfig Table:**
+```sql
+CREATE TABLE scheduler_configs (
+    id INTEGER PRIMARY KEY,
+    scheduler_name VARCHAR(50) UNIQUE NOT NULL,
+    is_enabled BOOLEAN DEFAULT TRUE,
+    interval_seconds INTEGER,
+    last_run_at TIMESTAMP,
+    next_run_at TIMESTAMP,
+    created_at TIMESTAMP,
+    updated_at TIMESTAMP
+);
+```
+
+#### Frontend Components:
+
+- **SchedulerDashboard.tsx** - Main dashboard page with 5 tabs
+- **SchedulerOverview.tsx** - Summary cards for all schedulers
+- **SchedulerTable.tsx** - Detailed table with run-now and toggle actions
+- **SchedulerHistory.tsx** - Per-scheduler execution history
+- **SchedulerTimeline.tsx** - Visual timeline across all schedulers
+- **SchedulerSettings.tsx** - Configuration panel (intervals, enable/disable)
 
 ---
 
@@ -2020,7 +2096,7 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** 28. Januar 2026
-**Version:** 1.4.0
+**Last Updated:** 29. Januar 2026
+**Version:** 1.4.2
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION

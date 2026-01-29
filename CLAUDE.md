@@ -48,6 +48,7 @@ backend/
 - `fan_control.py` - PWM fan control with temperature curves
 - `service_status.py` - Service health monitoring for admin dashboard
 - `network_discovery.py` - mDNS/Bonjour for local network discovery
+- `scheduler_service.py` - Unified scheduler management with execution history
 - `admin_db.py` - Secure read-only database inspection
 - `monitoring/orchestrator.py` - Unified monitoring system with collectors
 
@@ -68,7 +69,8 @@ client/
 │   │   ├── ApiCenterPage.tsx
 │   │   ├── Logging.tsx
 │   │   ├── MobileDevicesPage.tsx
-│   │   └── RemoteServersPage.tsx
+│   │   ├── RemoteServersPage.tsx
+│   │   └── SchedulerDashboard.tsx
 │   ├── components/        # Reusable components
 │   ├── api/               # API client modules
 │   ├── lib/api.ts         # Base API client (axios)
@@ -302,6 +304,10 @@ Key tables:
 - `fan_config` - Fan configuration (mode, curves, limits)
 - `fan_sample` - Historical RPM/PWM values
 
+**Scheduler tables:**
+- `scheduler_executions` - Execution history with timing and status
+- `scheduler_configs` - Per-scheduler configuration and enabled state
+
 ## API Structure
 
 All API routes are prefixed with `/api`:
@@ -322,6 +328,7 @@ All API routes are prefixed with `/api`:
 - `/api/admin-db/*` - Database inspection
 - `/api/energy/*` - Energy consumption statistics
 - `/api/tapo/*` - TP-Link Tapo smart plug integration
+- `/api/schedulers/*` - Scheduler management (status, history, run-now)
 
 API documentation available at: `http://localhost:3001/docs` (Swagger UI with custom BaluHost styling)
 
@@ -424,6 +431,8 @@ See `PRODUCTION_READINESS.md` for complete checklist.
 **Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
 **Service status**: `backend/app/services/service_status.py`
 **Network discovery**: `backend/app/services/network_discovery.py`
+**Scheduler service**: `backend/app/services/scheduler_service.py`
+**Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
 
 ## Development Tips
 
@@ -480,4 +489,4 @@ python kill_prod.py     # Stop all BaluHost processes
 - **Issues**: GitHub Issues (repository URL needed)
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.4.0 (as of Jan 2026)
+- **Version**: 1.4.2 (as of Jan 2026)
