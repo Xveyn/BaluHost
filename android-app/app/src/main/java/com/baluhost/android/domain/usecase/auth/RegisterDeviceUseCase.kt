@@ -9,23 +9,28 @@ import com.baluhost.android.data.remote.dto.RegisterDeviceRequest
 import com.baluhost.android.domain.model.AuthResult
 import com.baluhost.android.domain.model.MobileDevice
 import com.baluhost.android.domain.model.User
+import com.baluhost.android.domain.util.Logger
 import com.baluhost.android.util.Result
 import java.time.Instant
 import javax.inject.Inject
 
 /**
  * Use case for registering a mobile device using QR code token.
- * 
+ *
  * Flow:
  * 1. Parse QR code data (token, server URL, VPN config)
  * 2. Send device registration request with device info
  * 3. Receive access/refresh tokens and user info
  * 4. Save tokens and server URL to preferences
  * 5. Return AuthResult with user and device info
+ *
+ * NOTE: This use case still has Android dependencies (Build, okhttp3, retrofit2)
+ * which should be refactored into separate abstractions in a future update.
  */
 class RegisterDeviceUseCase @Inject constructor(
     private val mobileApi: MobileApi,
-    private val preferencesManager: PreferencesManager
+    private val preferencesManager: PreferencesManager,
+    private val logger: Logger
 ) {
     
     suspend operator fun invoke(
@@ -37,15 +42,15 @@ class RegisterDeviceUseCase @Inject constructor(
             // CRITICAL: Create a new Retrofit instance with the server URL from QR code
             // The injected mobileApi uses BuildConfig.BASE_URL which is wrong for dynamic servers
             val finalUrl = serverUrl.let { if (it.endsWith("/")) it else "$it/" } + "api/"
-            android.util.Log.d("RegisterDevice", "Using server URL: $serverUrl")
-            android.util.Log.d("RegisterDevice", "Final base URL: $finalUrl")
-            
+            logger.debug(TAG, "Using server URL: $serverUrl")
+            logger.debug(TAG, "Final base URL: $finalUrl")
+
             val okHttpClient = okhttp3.OkHttpClient.Builder()
                 .connectTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .readTimeout(30, java.util.concurrent.TimeUnit.SECONDS)
                 .addInterceptor { chain ->
                     val request = chain.request()
-                    android.util.Log.d("RegisterDevice", "Request URL: ${request.url}")
+                    logger.debug(TAG, "Request URL: ${request.url}")
                     chain.proceed(request)
                 }
                 .build()
@@ -108,5 +113,9 @@ class RegisterDeviceUseCase @Inject constructor(
         } catch (e: Exception) {
             Result.Error(Exception("Device registration failed: ${e.message}", e))
         }
+    }
+
+    companion object {
+        private const val TAG = "RegisterDevice"
     }
 }

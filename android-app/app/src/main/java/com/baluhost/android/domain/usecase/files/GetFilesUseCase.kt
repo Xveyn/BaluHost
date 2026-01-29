@@ -2,6 +2,7 @@ package com.baluhost.android.domain.usecase.files
 
 import com.baluhost.android.domain.model.FileItem
 import com.baluhost.android.domain.repository.FilesRepository
+import com.baluhost.android.domain.util.Logger
 import com.baluhost.android.util.Result
 import kotlinx.coroutines.flow.first
 import javax.inject.Inject
@@ -13,9 +14,10 @@ import javax.inject.Inject
  * then refreshes from network in background.
  */
 class GetFilesUseCase @Inject constructor(
-    private val filesRepository: FilesRepository
+    private val filesRepository: FilesRepository,
+    private val logger: Logger
 ) {
-    
+
     suspend operator fun invoke(
         path: String = "",
         forceRefresh: Boolean = false
@@ -28,9 +30,12 @@ class GetFilesUseCase @Inject constructor(
         } catch (e: Exception) {
             // Even on error, return success with empty list to avoid navigation to QR screen
             // The UI will show "Server offline" banner via ServerConnectivityChecker
-            // TODO: Replace android.util.Log with Logger abstraction (see BEST_PRACTICES.md)
-            android.util.Log.w("GetFilesUseCase", "Failed to load files, returning empty list: ${e.message}")
+            logger.warn(TAG, "Failed to load files, returning empty list: ${e.message}")
             Result.Success(emptyList())
         }
+    }
+
+    companion object {
+        private const val TAG = "GetFilesUseCase"
     }
 }

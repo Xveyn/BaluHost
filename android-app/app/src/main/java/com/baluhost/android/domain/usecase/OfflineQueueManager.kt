@@ -1,6 +1,5 @@
 package com.baluhost.android.domain.usecase
 
-import android.util.Log
 import com.baluhost.android.data.network.NetworkMonitor
 import com.baluhost.android.data.network.ServerConnectivityChecker
 import com.baluhost.android.domain.model.OperationStatus
@@ -9,6 +8,7 @@ import com.baluhost.android.domain.model.PendingOperation
 import com.baluhost.android.domain.repository.OfflineQueueRepository
 import com.baluhost.android.domain.usecase.files.DeleteFileUseCase
 import com.baluhost.android.domain.usecase.files.UploadFileUseCase
+import com.baluhost.android.domain.util.Logger
 import com.baluhost.android.util.Result
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.SupervisorJob
@@ -24,7 +24,7 @@ import kotlin.math.pow
 
 /**
  * Manages offline operation queue and automatic retry with exponential backoff.
- * 
+ *
  * Features:
  * - Queue operations when offline
  * - Automatic retry on server reconnect (not just network)
@@ -40,7 +40,8 @@ class OfflineQueueManager @Inject constructor(
     private val uploadFileUseCase: UploadFileUseCase,
     private val deleteFileUseCase: DeleteFileUseCase,
     private val networkMonitor: NetworkMonitor,
-    private val serverConnectivityChecker: ServerConnectivityChecker
+    private val serverConnectivityChecker: ServerConnectivityChecker,
+    private val logger: Logger
 ) {
     companion object {
         private const val TAG = "OfflineQueueManager"
@@ -56,7 +57,7 @@ class OfflineQueueManager @Inject constructor(
         scope.launch {
             serverConnectivityChecker.isServerReachable.collect { isReachable ->
                 if (isReachable) {
-                    Log.d(TAG, "Server connected, retrying pending operations")
+                    logger.debug(TAG, "Server connected, retrying pending operations")
                     retryPendingOperations()
                 }
             }
@@ -84,7 +85,7 @@ class OfflineQueueManager @Inject constructor(
         localFile: File,
         destinationPath: String
     ): Result<Long> {
-        Log.d(TAG, "Queueing upload: ${localFile.name} -> $destinationPath")
+        logger.debug(TAG, "Queueing upload: ${localFile.name} -> $destinationPath")
         return offlineQueueRepository.queueOperation(
             operationType = OperationType.UPLOAD,
             filePath = destinationPath,
@@ -96,7 +97,7 @@ class OfflineQueueManager @Inject constructor(
      * Queue a file delete operation.
      */
     suspend fun queueDelete(filePath: String): Result<Long> {
-        Log.d(TAG, "Queueing delete: $filePath")
+        logger.debug(TAG, "Queueing delete: $filePath")
         return offlineQueueRepository.queueOperation(
             operationType = OperationType.DELETE,
             filePath = filePath
@@ -110,7 +111,7 @@ class OfflineQueueManager @Inject constructor(
         oldPath: String,
         newName: String
     ): Result<Long> {
-        Log.d(TAG, "Queueing rename: $oldPath -> $newName")
+        logger.debug(TAG, "Queueing rename: $oldPath -> $newName")
         return offlineQueueRepository.queueOperation(
             operationType = OperationType.RENAME,
             filePath = oldPath,
@@ -125,7 +126,7 @@ class OfflineQueueManager @Inject constructor(
         sourcePath: String,
         destinationPath: String
     ): Result<Long> {
-        Log.d(TAG, "Queueing move: $sourcePath -> $destinationPath")
+        logger.debug(TAG, "Queueing move: $sourcePath -> $destinationPath")
         return offlineQueueRepository.queueOperation(
             operationType = OperationType.MOVE,
             filePath = sourcePath,
@@ -137,7 +138,7 @@ class OfflineQueueManager @Inject constructor(
      * Queue a folder creation operation.
      */
     suspend fun queueCreateFolder(folderPath: String): Result<Long> {
-        Log.d(TAG, "Queueing folder creation: $folderPath")
+        logger.debug(TAG, "Queueing folder creation: $folderPath")
         return offlineQueueRepository.queueOperation(
             operationType = OperationType.CREATE_FOLDER,
             filePath = folderPath
@@ -150,29 +151,29 @@ class OfflineQueueManager @Inject constructor(
      */
     suspend fun retryPendingOperations() {
         if (!networkMonitor.isCurrentlyOnline() || !serverConnectivityChecker.isCurrentlyReachable()) {
-            Log.d(TAG, "Server not reachable, skipping retry")
+            logger.debug(TAG, "Server not reachable, skipping retry")
             return
         }
         
         val pendingOperations = offlineQueueRepository.getPendingOperations().first()
         
         if (pendingOperations.isEmpty()) {
-            Log.d(TAG, "No pending operations to retry")
+            logger.debug(TAG, "No pending operations to retry")
             return
         }
         
-        Log.d(TAG, "Retrying ${pendingOperations.size} pending operations")
+        logger.debug(TAG, "Retrying ${pendingOperations.size} pending operations")
         
         pendingOperations.forEach { operation ->
             if (operation.retryCount >= MAX_RETRIES) {
-                Log.w(TAG, "Operation ${operation.id} exceeded max retries ($MAX_RETRIES), skipping")
+                logger.warn(TAG, "Operation ${operation.id} exceeded max retries ($MAX_RETRIES), skipping")
                 return@forEach
             }
             
             // Exponential backoff: wait longer between retries
             val delayMs = calculateBackoffDelay(operation.retryCount)
             if (delayMs > 0) {
-                Log.d(TAG, "Waiting ${delayMs}ms before retry (attempt ${operation.retryCount + 1})")
+                logger.debug(TAG, "Waiting ${delayMs}ms before retry (attempt ${operation.retryCount + 1})")
                 delay(delayMs)
             }
             
@@ -195,11 +196,11 @@ class OfflineQueueManager @Inject constructor(
      */
     suspend fun retryOperation(operation: PendingOperation) {
         if (!networkMonitor.isCurrentlyOnline() || !serverConnectivityChecker.isCurrentlyReachable()) {
-            Log.d(TAG, "Server not reachable, cannot retry operation ${operation.id}")
+            logger.debug(TAG, "Server not reachable, cannot retry operation ${operation.id}")
             return
         }
         
-        Log.d(TAG, "Retrying operation ${operation.id}: ${operation.operationType} (attempt ${operation.retryCount + 1}/$MAX_RETRIES)")
+        logger.debug(TAG, "Retrying operation ${operation.id}: ${operation.operationType} (attempt ${operation.retryCount + 1}/$MAX_RETRIES)")
         
         // Update status to RETRYING
         offlineQueueRepository.updateStatus(operation.id, OperationStatus.RETRYING)
@@ -223,16 +224,16 @@ class OfflineQueueManager @Inject constructor(
         
         when (result) {
             is Result.Success -> {
-                Log.d(TAG, "Operation ${operation.id} succeeded after ${operation.retryCount + 1} retries")
+                logger.debug(TAG, "Operation ${operation.id} succeeded after ${operation.retryCount + 1} retries")
                 offlineQueueRepository.markAsCompleted(operation.id)
             }
             is Result.Error -> {
                 val errorMsg = result.exception.message ?: "Unknown error"
-                Log.e(TAG, "Operation ${operation.id} failed (attempt ${operation.retryCount + 1}): $errorMsg")
+                logger.error(TAG, "Operation ${operation.id} failed (attempt ${operation.retryCount + 1}): $errorMsg")
                 
                 // Check if we should retry or mark as permanently failed
                 if (operation.retryCount + 1 >= MAX_RETRIES) {
-                    Log.e(TAG, "Operation ${operation.id} permanently failed after $MAX_RETRIES retries")
+                    logger.error(TAG, "Operation ${operation.id} permanently failed after $MAX_RETRIES retries")
                     offlineQueueRepository.markAsFailed(operation.id, "Max retries exceeded: $errorMsg")
                 } else {
                     // Increment retry count and keep in queue
@@ -273,7 +274,7 @@ class OfflineQueueManager @Inject constructor(
      * Cancel a pending operation.
      */
     suspend fun cancelOperation(operationId: Long): Result<Unit> {
-        Log.d(TAG, "Cancelling operation $operationId")
+        logger.debug(TAG, "Cancelling operation $operationId")
         return offlineQueueRepository.deleteOperation(operationId)
     }
     
@@ -281,7 +282,7 @@ class OfflineQueueManager @Inject constructor(
      * Cleanup old completed operations.
      */
     suspend fun cleanupOldOperations(daysOld: Int = 7): Result<Int> {
-        Log.d(TAG, "Cleaning up operations older than $daysOld days")
+        logger.debug(TAG, "Cleaning up operations older than $daysOld days")
         return offlineQueueRepository.cleanupOldOperations(daysOld)
     }
     
