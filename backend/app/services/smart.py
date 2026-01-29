@@ -144,6 +144,34 @@ def stop_smart_scheduler() -> None:
     _smart_scheduler = None
 
 
+def get_smart_scheduler_status() -> dict:
+    """
+    Get SMART scan scheduler status for service status monitoring.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    is_running = _smart_scheduler is not None and _smart_scheduler.running
+    interval_minutes = max(1, int(getattr(settings, "smart_scan_interval_minutes", 60)))
+
+    # Get next run time if scheduler is running
+    next_run = None
+    if is_running:
+        try:
+            job = _smart_scheduler.get_job("smart_scan")
+            if job and job.next_run_time:
+                next_run = job.next_run_time.isoformat()
+        except Exception:
+            pass
+
+    return {
+        "is_running": is_running,
+        "interval_seconds": interval_minutes * 60,
+        "config_enabled": getattr(settings, "smart_scan_enabled", False),
+        "next_run": next_run,
+    }
+
+
 def get_dev_mode_state() -> str:
     """Gibt den aktuellen Dev-Mode Status zurück: 'mock' oder 'real'."""
     return "mock" if _DEV_USE_MOCK_DATA else "real"

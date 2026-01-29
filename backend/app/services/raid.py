@@ -1346,3 +1346,31 @@ def stop_scrub_scheduler() -> None:
     except Exception:
         logger.debug("Error while shutting down RAID scrub scheduler")
     _scrub_scheduler = None
+
+
+def get_scrub_scheduler_status() -> dict:
+    """
+    Get RAID scrub scheduler status for service status monitoring.
+
+    Returns:
+        Dict with service status information for admin dashboard
+    """
+    is_running = _scrub_scheduler is not None and _scrub_scheduler.running
+    interval_hours = max(1, int(getattr(settings, "raid_scrub_interval_hours", 168)))
+
+    # Get next run time if scheduler is running
+    next_run = None
+    if is_running:
+        try:
+            job = _scrub_scheduler.get_job("raid_scrub")
+            if job and job.next_run_time:
+                next_run = job.next_run_time.isoformat()
+        except Exception:
+            pass
+
+    return {
+        "is_running": is_running,
+        "interval_seconds": interval_hours * 3600,
+        "config_enabled": getattr(settings, "raid_scrub_enabled", False),
+        "next_run": next_run,
+    }

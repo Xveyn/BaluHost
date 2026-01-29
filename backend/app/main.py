@@ -178,6 +178,26 @@ def _register_services() -> None:
         config_enabled_fn=lambda: not settings.is_dev_mode,
     )
 
+    # RAID Scrub Scheduler
+    register_service(
+        name="raid_scrub_scheduler",
+        display_name="RAID Scrub Scheduler",
+        get_status_fn=raid_service.get_scrub_scheduler_status,
+        stop_fn=raid_service.stop_scrub_scheduler,
+        start_fn=raid_service.start_scrub_scheduler,
+        config_enabled_fn=lambda: getattr(settings, "raid_scrub_enabled", False),
+    )
+
+    # SMART Scan Scheduler
+    register_service(
+        name="smart_scan_scheduler",
+        display_name="SMART Scan Scheduler",
+        get_status_fn=smart_service.get_smart_scheduler_status,
+        stop_fn=smart_service.stop_smart_scheduler,
+        start_fn=smart_service.start_smart_scheduler,
+        config_enabled_fn=lambda: getattr(settings, "smart_scan_enabled", False),
+    )
+
 
 @asynccontextmanager
 async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
