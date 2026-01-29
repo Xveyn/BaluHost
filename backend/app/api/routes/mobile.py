@@ -35,57 +35,30 @@ async def generate_registration_token(
 ):
     """
     Generate a QR code token for mobile device registration.
-    
-    **SECURITY: Localhost-only registration**
-    This endpoint can only be accessed from localhost (127.0.0.1, ::1)
-    to prevent remote device hijacking.
-    
-    Only authenticated users can generate tokens.
+
+    Only authenticated users can generate tokens for their own devices.
     Registration token is valid for 5 minutes and can only be used once.
     Device token is valid for token_validity_days (30-180 days).
-    
+
     Parameters:
     - include_vpn: Include WireGuard VPN configuration in QR code
     - device_name: Device name for VPN client registration
     - token_validity_days: Device token validity (30-180 days, default 90)
-    
+
     Raises:
-    - 403: If not accessed from localhost
+    - 401: If not authenticated
     - 400: If token_validity_days is out of range
     """
-    # SECURITY: Validate localhost-only access
-    # Prefer X-Forwarded-For header if present (tests may set it), fall back to connection host
-    xff = request.headers.get("x-forwarded-for")
-    if xff:
-        # XFF may contain multiple addresses, take the first
-        client_host = xff.split(",")[0].strip()
-    else:
-        client_host = request.client.host if request.client else None
-    localhost_ips = ["127.0.0.1", "::1", "localhost"]
-    
-    if client_host not in localhost_ips:
-        # Allow dev mode with local network IPs for testing
-        from app.core.config import get_settings
-        settings = get_settings()
-        
-        # In production or if not explicitly in dev network, reject non-localhost
-        if not (settings.nas_mode == "dev" and client_host and client_host.startswith("192.168.")):
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Mobile device registration is only allowed from localhost for security reasons. "
-                       "Please access BaluHost from http://localhost:8000 or http://127.0.0.1:8000"
-            )
-    
+    from app.core.config import get_settings
+    settings = get_settings()
+
     # Validate token_validity_days range (30 days minimum, 180 days maximum)
     if token_validity_days < 30 or token_validity_days > 180:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="token_validity_days must be between 30 and 180 days"
         )
-    
-    from app.core.config import get_settings
-    settings = get_settings()
-    
+
     # Determine server URL for mobile devices
     if settings.mobile_server_url:
         server_url = settings.mobile_server_url
@@ -108,7 +81,7 @@ async def generate_registration_token(
         server_url = f"http://{local_ip}:8000"
     
     # Debug output
-    print(f"[Mobile Token] Client: {client_host}, Server URL: {server_url}, Token validity: {token_validity_days} days")
+    print(f"[Mobile Token] User: {current_user.username}, Server URL: {server_url}, Token validity: {token_validity_days} days")
     
     return MobileService.generate_registration_token(
         db=db,

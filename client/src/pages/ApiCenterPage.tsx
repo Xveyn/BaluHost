@@ -41,6 +41,7 @@ interface ApiEndpoint {
   requiresAuth?: boolean;
   params?: { name: string; type: string; required: boolean; description: string }[];
   body?: { field: string; type: string; required: boolean; description: string }[];
+  bodyExample?: string;
   response?: string;
   rateLimit?: string;
 }
@@ -78,6 +79,10 @@ const apiSections: ApiSection[] = [
           { field: 'username', type: 'string', required: true, description: 'Username' },
           { field: 'password', type: 'string', required: true, description: 'Password' }
         ],
+        bodyExample: `{
+  "username": "admin",
+  "password": "your_password"
+}`,
         response: `{
   "access_token": "eyJhbGc...",
   "token_type": "bearer",
@@ -94,6 +99,11 @@ const apiSections: ApiSection[] = [
           { field: 'email', type: 'string', required: true, description: 'Email address' },
           { field: 'password', type: 'string', required: true, description: 'Password' }
         ],
+        bodyExample: `{
+  "username": "newuser",
+  "email": "user@example.com",
+  "password": "secure_password123"
+}`,
         response: `{
   "id": 2,
   "username": "newuser",
@@ -141,6 +151,9 @@ const apiSections: ApiSection[] = [
           { field: 'file', type: 'file', required: true, description: 'File to upload' },
           { field: 'path', type: 'string', required: false, description: 'Target directory' }
         ],
+        bodyExample: `// FormData request:
+// file: <binary file data>
+// path: "/documents"`,
         response: `{ "filename": "uploaded.txt", "path": "/uploaded.txt", "size": 2048 }`
       },
       {
@@ -193,6 +206,10 @@ const apiSections: ApiSection[] = [
           { field: 'path', type: 'string', required: true, description: 'Path to share' },
           { field: 'expires_in_hours', type: 'number', required: false, description: 'Expiration hours' }
         ],
+        bodyExample: `{
+  "path": "/documents/report.pdf",
+  "expires_in_hours": 24
+}`,
         response: `{ "token": "abc123", "url": "/share/abc123" }`
       }
     ]
@@ -286,6 +303,12 @@ const apiSections: ApiSection[] = [
           { field: 'password', type: 'string', required: true, description: 'Password' },
           { field: 'role', type: 'string', required: true, description: 'User role (user/admin)' }
         ],
+        bodyExample: `{
+  "username": "newuser",
+  "email": "user@example.com",
+  "password": "secure_password123",
+  "role": "user"
+}`,
         response: `{
   "id": 3,
   "username": "newuser",
@@ -305,7 +328,11 @@ const apiSections: ApiSection[] = [
           { field: 'email', type: 'string', required: false, description: 'New email' },
           { field: 'role', type: 'string', required: false, description: 'New role' },
           { field: 'password', type: 'string', required: false, description: 'New password' }
-        ]
+        ],
+        bodyExample: `{
+  "email": "newemail@example.com",
+  "role": "admin"
+}`
       },
       {
         method: 'DELETE',
@@ -343,6 +370,10 @@ const apiSections: ApiSection[] = [
           { field: 'device_name', type: 'string', required: true, description: 'Device name for VPN client' },
           { field: 'server_public_endpoint', type: 'string', required: true, description: 'Server endpoint (IP:port)' }
         ],
+        bodyExample: `{
+  "device_name": "iPhone-Work",
+  "server_public_endpoint": "vpn.example.com:51820"
+}`,
         response: `{
   "config_file": "...",
   "qr_code_data": "..."
@@ -379,7 +410,11 @@ const apiSections: ApiSection[] = [
         body: [
           { field: 'device_name', type: 'string', required: false, description: 'New device name' },
           { field: 'is_active', type: 'boolean', required: false, description: 'Active status' }
-        ]
+        ],
+        bodyExample: `{
+  "device_name": "iPhone-Personal",
+  "is_active": true
+}`
       },
       {
         method: 'DELETE',
@@ -398,7 +433,11 @@ const apiSections: ApiSection[] = [
         body: [
           { field: 'config_content', type: 'string', required: true, description: 'WireGuard .conf file content' },
           { field: 'public_endpoint', type: 'string', required: true, description: 'Fritz!Box public endpoint' }
-        ]
+        ],
+        bodyExample: `{
+  "config_content": "[Interface]\\nPrivateKey = ...\\n...",
+  "public_endpoint": "myfritz.dyndns.org:51820"
+}`
       },
       {
         method: 'GET',
@@ -438,6 +477,11 @@ const apiSections: ApiSection[] = [
           { field: 'device_name', type: 'string', required: true, description: 'Device name' },
           { field: 'platform', type: 'string', required: true, description: 'Platform (ios/android)' }
         ],
+        bodyExample: `{
+  "registration_token": "abc123xyz...",
+  "device_name": "iPhone 15 Pro",
+  "platform": "ios"
+}`,
         response: `{
   "access_token": "...",
   "device_id": "...",
@@ -474,7 +518,10 @@ const apiSections: ApiSection[] = [
         ],
         body: [
           { field: 'push_token', type: 'string', required: true, description: 'Firebase Cloud Messaging token' }
-        ]
+        ],
+        bodyExample: `{
+  "push_token": "fcm_token_string..."
+}`
       }
     ]
   },
@@ -493,6 +540,12 @@ const apiSections: ApiSection[] = [
           { field: 'includes_config', type: 'boolean', required: false, description: 'Include configuration' },
           { field: 'description', type: 'string', required: false, description: 'Backup description' }
         ],
+        bodyExample: `{
+  "includes_database": true,
+  "includes_files": true,
+  "includes_config": true,
+  "description": "Weekly backup"
+}`,
         response: `{
   "id": 1,
   "filename": "backup_2025-01-25.tar.gz",
@@ -542,7 +595,13 @@ const apiSections: ApiSection[] = [
           { field: 'restore_database', type: 'boolean', required: false, description: 'Restore database' },
           { field: 'restore_files', type: 'boolean', required: false, description: 'Restore files' },
           { field: 'restore_config', type: 'boolean', required: false, description: 'Restore config' }
-        ]
+        ],
+        bodyExample: `{
+  "confirm": true,
+  "restore_database": true,
+  "restore_files": true,
+  "restore_config": false
+}`
       },
       {
         method: 'GET',
@@ -595,7 +654,12 @@ const apiSections: ApiSection[] = [
           { field: 'profile', type: 'string', required: true, description: 'Profile name (power-save/balanced/performance)' },
           { field: 'reason', type: 'string', required: false, description: 'Reason for change' },
           { field: 'duration_seconds', type: 'integer', required: false, description: 'Override duration' }
-        ]
+        ],
+        bodyExample: `{
+  "profile": "performance",
+  "reason": "Heavy workload",
+  "duration_seconds": 3600
+}`
       },
       {
         method: 'POST',
@@ -606,7 +670,12 @@ const apiSections: ApiSection[] = [
           { field: 'source', type: 'string', required: true, description: 'Demand source identifier' },
           { field: 'priority', type: 'integer', required: true, description: 'Priority (1-10)' },
           { field: 'description', type: 'string', required: false, description: 'Demand description' }
-        ]
+        ],
+        bodyExample: `{
+  "source": "video_transcode",
+  "priority": 8,
+  "description": "Video transcoding job"
+}`
       },
       {
         method: 'POST',
@@ -615,7 +684,10 @@ const apiSections: ApiSection[] = [
         requiresAuth: true,
         body: [
           { field: 'source', type: 'string', required: true, description: 'Demand source identifier' }
-        ]
+        ],
+        bodyExample: `{
+  "source": "video_transcode"
+}`
       }
     ]
   },
@@ -635,7 +707,15 @@ const apiSections: ApiSection[] = [
           { field: 'email', type: 'string', required: true, description: 'Tapo account email' },
           { field: 'password', type: 'string', required: true, description: 'Tapo account password' },
           { field: 'is_monitoring', type: 'boolean', required: false, description: 'Enable monitoring' }
-        ]
+        ],
+        bodyExample: `{
+  "name": "Server Power",
+  "device_type": "P115",
+  "ip_address": "192.168.1.50",
+  "email": "user@example.com",
+  "password": "tapo_password",
+  "is_monitoring": true
+}`
       },
       {
         method: 'GET',
@@ -698,7 +778,12 @@ const apiSections: ApiSection[] = [
           { field: 'name', type: 'string', required: true, description: 'Array name (e.g., md0)' },
           { field: 'level', type: 'string', required: true, description: 'RAID level (0, 1, 5, 6, 10)' },
           { field: 'devices', type: 'array', required: true, description: 'Device paths' }
-        ]
+        ],
+        bodyExample: `{
+  "name": "md0",
+  "level": "1",
+  "devices": ["/dev/sda", "/dev/sdb"]
+}`
       },
       {
         method: 'DELETE',
@@ -848,6 +933,25 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
                   </div>
                 ))}
               </div>
+              {endpoint.bodyExample && (
+                <div className="mt-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h5 className="text-xs font-semibold text-slate-400">Example</h5>
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        copyToClipboard(endpoint.bodyExample!);
+                      }}
+                      className="text-slate-400 hover:text-cyan-400 transition-colors p-1 touch-manipulation active:scale-95"
+                    >
+                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
+                    </button>
+                  </div>
+                  <pre className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-2 sm:p-3 text-[10px] sm:text-xs overflow-x-auto">
+                    <code className="text-violet-300">{endpoint.bodyExample}</code>
+                  </pre>
+                </div>
+              )}
             </div>
           )}
 
@@ -1285,7 +1389,7 @@ export default function ApiCenterPage() {
                     endpoint={endpoint}
                     rateLimits={rateLimits}
                     isAdmin={isAdmin}
-                    onEditRateLimit={setEditingConfig}
+                    onEditRateLimit={undefined}
                   />
                 ))}
               </div>
@@ -1341,47 +1445,65 @@ export default function ApiCenterPage() {
             </div>
           ) : (
             Object.entries(groupedRateLimits).map(([category, configs]) => (
-              <div key={category}>
-                <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
-                  <div className="p-1.5 sm:p-2 bg-yellow-500/20 rounded-lg text-yellow-400">
-                    <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
+              <div key={category} className="bg-slate-800/40 backdrop-blur-sm rounded-xl border-2 border-amber-500/40 overflow-hidden">
+                {/* Category Header */}
+                <div className="flex items-center gap-2 sm:gap-3 p-3 sm:p-4 border-b border-amber-500/30 bg-slate-800/60">
+                  <div className="p-1.5 bg-amber-500/20 rounded-lg text-amber-400">
+                    <Zap className="w-4 h-4" />
                   </div>
-                  <h2 className="text-lg sm:text-xl font-bold text-white">{category}</h2>
+                  <h2 className="text-base sm:text-lg font-bold text-white">{category}</h2>
+                  <span className="text-xs text-slate-500">({configs.length})</span>
                 </div>
-                <div className="space-y-2 sm:space-y-3">
-                  {configs.map((config) => (
-                    <div
-                      key={config.id}
-                      className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-3 sm:p-4 hover:border-slate-600/50 transition-all"
-                    >
-                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-                        <div className="flex flex-wrap items-center gap-2 sm:gap-3 flex-1 min-w-0">
-                          <code className="text-cyan-400 font-mono text-xs sm:text-sm truncate">{config.endpoint_type}</code>
-                          <span className="text-emerald-400 font-semibold text-sm sm:text-lg">{config.limit_string}</span>
-                          <button
-                            onClick={() => handleToggleEnabled(config)}
-                            className={`px-2 sm:px-3 py-1 rounded-full text-[10px] sm:text-xs font-semibold transition-colors touch-manipulation active:scale-95 min-h-[28px] ${
-                              config.enabled
-                                ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
-                                : 'bg-slate-500/20 text-slate-400 hover:bg-slate-500/30'
-                            }`}
-                          >
-                            {config.enabled ? '✓' : '✗'}<span className="hidden sm:inline"> {config.enabled ? 'Enabled' : 'Disabled'}</span>
-                          </button>
-                        </div>
-                        <button
-                          onClick={() => setEditingConfig(config)}
-                          className="px-3 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg text-xs sm:text-sm transition-colors flex items-center justify-center gap-2 touch-manipulation active:scale-95 min-h-[40px] self-end sm:self-auto"
+
+                {/* Table */}
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left text-xs text-slate-400 border-b border-slate-700/30">
+                        <th className="px-3 sm:px-4 py-2 font-medium">Endpoint</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium">Limit</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium">Status</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {configs.map((config) => (
+                        <tr
+                          key={config.id}
+                          className="border-b border-slate-700/20 last:border-b-0 hover:bg-slate-700/20 transition-colors"
+                          title={config.description || undefined}
                         >
-                          <Settings className="w-4 h-4" />
-                          <span className="hidden sm:inline">Edit</span>
-                        </button>
-                      </div>
-                      {config.description && (
-                        <p className="text-slate-400 text-xs sm:text-sm mt-2">{config.description}</p>
-                      )}
-                    </div>
-                  ))}
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3">
+                            <code className="text-cyan-400 font-mono text-xs sm:text-sm">{config.endpoint_type}</code>
+                          </td>
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3">
+                            <span className="text-emerald-400 font-semibold text-xs sm:text-sm font-mono">{config.limit_string}</span>
+                          </td>
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3">
+                            <button
+                              onClick={() => handleToggleEnabled(config)}
+                              className={`px-2 py-1 rounded text-[10px] sm:text-xs font-medium transition-colors touch-manipulation active:scale-95 ${
+                                config.enabled
+                                  ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+                                  : 'bg-slate-600/30 text-slate-400 hover:bg-slate-600/50'
+                              }`}
+                            >
+                              {config.enabled ? '✓ Active' : '✗ Off'}
+                            </button>
+                          </td>
+                          <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-right">
+                            <button
+                              onClick={() => setEditingConfig(config)}
+                              className="p-1.5 sm:p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition-colors touch-manipulation active:scale-95"
+                              title="Edit rate limit"
+                            >
+                              <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             ))

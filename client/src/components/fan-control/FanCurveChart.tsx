@@ -93,7 +93,7 @@ export default function FanCurveChart({
     onPointsChange(updatedPoints);
   }, [canEdit, localPoints, minPoints, onPointsChange, sortedPoints]);
 
-  // Custom dot component for draggable points
+  // Custom dot component - events are handled by the overlay
   const CustomDot = (props: any) => {
     const { cx, cy, payload, index } = props;
 
@@ -115,13 +115,7 @@ export default function FanCurveChart({
         style={{
           cursor: canEdit ? 'grab' : 'default',
           transition: 'r 0.15s ease',
-        }}
-        onMouseDown={(e) => handleMouseDown(e, index)}
-        onTouchStart={(e) => handleTouchStart(e, index)}
-        onContextMenu={(e) => {
-          e.preventDefault();
-          e.stopPropagation();
-          handleRemovePoint(index);
+          pointerEvents: 'none', // Events handled by overlay
         }}
       />
     );
@@ -170,96 +164,6 @@ export default function FanCurveChart({
     setLocalPoints(updatedPoints);
   }, [sortedPoints, localPoints, minPWM, maxPWM, emergencyTemp]);
 
-  const handleMouseDown = (e: React.MouseEvent, index: number) => {
-    if (!canEdit) return;
-    e.preventDefault();
-    setDraggingIndex(index);
-
-    const handleMouseMove = (moveEvent: MouseEvent) => {
-      updatePointPosition(moveEvent.clientX, moveEvent.clientY, index);
-    };
-
-    const handleMouseUp = () => {
-      setDraggingIndex(null);
-      // Send final state to parent using ref to get latest value
-      onPointsChange(localPointsRef.current);
-      document.removeEventListener('mousemove', handleMouseMove);
-      document.removeEventListener('mouseup', handleMouseUp);
-    };
-
-    document.addEventListener('mousemove', handleMouseMove);
-    document.addEventListener('mouseup', handleMouseUp);
-  };
-
-  const handleTouchStart = (e: React.TouchEvent, index: number) => {
-    if (!canEdit) return;
-    e.preventDefault();
-    setDraggingIndex(index);
-
-    const handleTouchMove = (moveEvent: TouchEvent) => {
-      const touch = moveEvent.touches[0];
-      updatePointPosition(touch.clientX, touch.clientY, index);
-    };
-
-    const handleTouchEnd = () => {
-      setDraggingIndex(null);
-      // Send final state to parent using ref to get latest value
-      onPointsChange(localPointsRef.current);
-      document.removeEventListener('touchmove', handleTouchMove);
-      document.removeEventListener('touchend', handleTouchEnd);
-    };
-
-    document.addEventListener('touchmove', handleTouchMove);
-    document.addEventListener('touchend', handleTouchEnd);
-  };
-
-  // Handle click on chart to add new point (FanControl-style)
-  const handleChartClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
-    if (!canEdit || localPoints.length >= maxPoints) return;
-
-    // Only add point if clicking on the chart area, not on existing points
-    const target = e.target as HTMLElement;
-    if (target.tagName === 'circle') return; // Clicked on a point
-
-    if (!chartRef.current) return;
-
-    // Find the actual plot area (cartesian grid)
-    const cartesianGrid = chartRef.current.querySelector('.recharts-cartesian-grid');
-    if (!cartesianGrid) return;
-
-    const rect = cartesianGrid.getBoundingClientRect();
-
-    // Calculate relative position within the plot area
-    const x = e.clientX - rect.left;
-    const y = e.clientY - rect.top;
-
-    // The plot area rect gives us the exact dimensions
-    const chartWidth = rect.width;
-    const chartHeight = rect.height;
-
-    // Check if click is within the chart area (with small tolerance)
-    if (x < -5 || x > chartWidth + 5 || y < -5 || y > chartHeight + 5) {
-      return;
-    }
-
-    // Calculate temperature and PWM from position
-    const tempRange = emergencyTemp + 10 - 0; // 0 to emergencyTemp + 10
-    const pwmRange = 100 - 0; // 0 to 100
-
-    const newTemp = Math.round((x / chartWidth) * tempRange);
-    const newPWM = Math.round(100 - (y / chartHeight) * pwmRange);
-
-    // Clamp values
-    const clampedTemp = Math.max(0, Math.min(emergencyTemp + 10, newTemp));
-    const clampedPWM = Math.max(minPWM, Math.min(maxPWM, newPWM));
-
-    // Add the new point
-    const newPoint: FanCurvePoint = { temp: clampedTemp, pwm: clampedPWM };
-    const updatedPoints = [...localPoints, newPoint];
-    setLocalPoints(updatedPoints);
-    onPointsChange(updatedPoints);
-  }, [canEdit, localPoints, maxPoints, emergencyTemp, minPWM, maxPWM, onPointsChange]);
-
   // Custom tooltip
   const CustomTooltip = ({ active, payload }: any) => {
     if (!active || !payload || payload.length === 0) return null;
@@ -282,12 +186,149 @@ export default function FanCurveChart({
   // Use different key name to avoid Recharts interpreting it as part of the Line
   const currentPointData = currentTemp !== null ? [{ temp: currentTemp, currentPwm: currentPWM }] : [];
 
+  // Ref for the overlay to capture events
+  const overlayRef = useRef<HTMLDivElement>(null);
+
+  // Get chart area bounds for coordinate calculations
+  const getChartBounds = useCallback(() => {
+    if (!chartRef.current) return null;
+    const cartesianGrid = chartRef.current.querySelector('.recharts-cartesian-grid');
+    if (!cartesianGrid) return null;
+    return cartesianGrid.getBoundingClientRect();
+  }, []);
+
+  // Convert pixel coordinates to chart values
+  const pixelToValue = useCallback((clientX: number, clientY: number) => {
+    const bounds = getChartBounds();
+    if (!bounds) return null;
+
+    const x = clientX - bounds.left;
+    const y = clientY - bounds.top;
+    const tempRange = emergencyTemp + 10;
+
+    const temp = Math.round((x / bounds.width) * tempRange);
+    const pwm = Math.round(100 - (y / bounds.height) * 100);
+
+    return {
+      temp: Math.max(0, Math.min(emergencyTemp + 10, temp)),
+      pwm: Math.max(minPWM, Math.min(maxPWM, pwm)),
+      inBounds: x >= -5 && x <= bounds.width + 5 && y >= -5 && y <= bounds.height + 5,
+    };
+  }, [emergencyTemp, minPWM, maxPWM, getChartBounds]);
+
+  // Find point near coordinates (for drag/delete)
+  const findPointNear = useCallback((clientX: number, clientY: number): number | null => {
+    const bounds = getChartBounds();
+    if (!bounds) return null;
+
+    const x = clientX - bounds.left;
+    const y = clientY - bounds.top;
+    const tempRange = emergencyTemp + 10;
+    const hitRadius = 15;
+
+    let nearestIndex: number | null = null;
+    let nearestDist = Infinity;
+
+    sortedPoints.forEach((point, index) => {
+      const pointX = (point.temp / tempRange) * bounds.width;
+      const pointY = ((100 - point.pwm) / 100) * bounds.height;
+      const dist = Math.sqrt(Math.pow(x - pointX, 2) + Math.pow(y - pointY, 2));
+
+      if (dist < hitRadius && dist < nearestDist) {
+        nearestDist = dist;
+        nearestIndex = index;
+      }
+    });
+
+    return nearestIndex;
+  }, [sortedPoints, emergencyTemp, getChartBounds]);
+
+  // Overlay mouse down handler
+  const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
+    if (!canEdit) return;
+
+    const pointIndex = findPointNear(e.clientX, e.clientY);
+    if (pointIndex !== null) {
+      // Start dragging
+      e.preventDefault();
+      setDraggingIndex(pointIndex);
+
+      const handleMouseMove = (moveEvent: MouseEvent) => {
+        updatePointPosition(moveEvent.clientX, moveEvent.clientY, pointIndex);
+      };
+
+      const handleMouseUp = () => {
+        setDraggingIndex(null);
+        onPointsChange(localPointsRef.current);
+        document.removeEventListener('mousemove', handleMouseMove);
+        document.removeEventListener('mouseup', handleMouseUp);
+      };
+
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+  }, [canEdit, findPointNear, updatePointPosition, onPointsChange]);
+
+  // Overlay click handler (for adding points)
+  const handleOverlayClick = useCallback((e: React.MouseEvent) => {
+    if (!canEdit || localPoints.length >= maxPoints) return;
+
+    // Don't add if we clicked on a point
+    const pointIndex = findPointNear(e.clientX, e.clientY);
+    if (pointIndex !== null) return;
+
+    const values = pixelToValue(e.clientX, e.clientY);
+    if (!values || !values.inBounds) return;
+
+    const newPoint: FanCurvePoint = { temp: values.temp, pwm: values.pwm };
+    const updatedPoints = [...localPoints, newPoint];
+    setLocalPoints(updatedPoints);
+    onPointsChange(updatedPoints);
+  }, [canEdit, localPoints, maxPoints, findPointNear, pixelToValue, onPointsChange]);
+
+  // Overlay context menu handler (for removing points)
+  const handleOverlayContextMenu = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    if (!canEdit) return;
+
+    const pointIndex = findPointNear(e.clientX, e.clientY);
+    if (pointIndex !== null) {
+      handleRemovePoint(pointIndex);
+    }
+  }, [canEdit, findPointNear, handleRemovePoint]);
+
+  // Overlay touch handler
+  const handleOverlayTouchStart = useCallback((e: React.TouchEvent) => {
+    if (!canEdit) return;
+
+    const touch = e.touches[0];
+    const pointIndex = findPointNear(touch.clientX, touch.clientY);
+
+    if (pointIndex !== null) {
+      e.preventDefault();
+      setDraggingIndex(pointIndex);
+
+      const handleTouchMove = (moveEvent: TouchEvent) => {
+        const moveTouch = moveEvent.touches[0];
+        updatePointPosition(moveTouch.clientX, moveTouch.clientY, pointIndex);
+      };
+
+      const handleTouchEnd = () => {
+        setDraggingIndex(null);
+        onPointsChange(localPointsRef.current);
+        document.removeEventListener('touchmove', handleTouchMove);
+        document.removeEventListener('touchend', handleTouchEnd);
+      };
+
+      document.addEventListener('touchmove', handleTouchMove);
+      document.addEventListener('touchend', handleTouchEnd);
+    }
+  }, [canEdit, findPointNear, updatePointPosition, onPointsChange]);
+
   return (
     <div
       ref={chartRef}
-      className="w-full"
-      onClick={handleChartClick}
-      onContextMenu={(e) => e.preventDefault()}
+      className="w-full relative"
       style={{ cursor: canEdit ? 'crosshair' : 'default' }}
     >
       <ResponsiveContainer width="100%" height={400}>
@@ -397,6 +438,19 @@ export default function FanCurveChart({
           )}
         </ComposedChart>
       </ResponsiveContainer>
+
+      {/* Transparent overlay for event handling - positioned over the chart area */}
+      {canEdit && (
+        <div
+          ref={overlayRef}
+          className="absolute inset-0"
+          style={{ cursor: draggingIndex !== null ? 'grabbing' : 'crosshair' }}
+          onMouseDown={handleOverlayMouseDown}
+          onClick={handleOverlayClick}
+          onContextMenu={handleOverlayContextMenu}
+          onTouchStart={handleOverlayTouchStart}
+        />
+      )}
 
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400">

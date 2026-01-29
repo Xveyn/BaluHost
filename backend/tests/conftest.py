@@ -191,7 +191,7 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
             UserCreate(
                 username="testuser",
                 email="test@example.com",
-                password="testpass123",
+                password="Testpass123!",
                 role="user",
             ),
             db=db_session,
@@ -286,7 +286,7 @@ def regular_user(db_session: Session) -> User:
         UserCreate(
             username="testuser",
             email="test@example.com",
-            password="testpass123",
+            password="Testpass123!",
             role="user"
         ),
         db=db_session
@@ -383,7 +383,7 @@ def admin_headers(client: TestClient, admin_user: User) -> dict[str, str]:
 @pytest.fixture
 def user_headers(client: TestClient, regular_user: User) -> dict[str, str]:
     """Get authentication headers for regular user."""
-    return get_auth_headers(client, "testuser", "testpass123")
+    return get_auth_headers(client, "testuser", "Testpass123!")
 
 
 @pytest.fixture

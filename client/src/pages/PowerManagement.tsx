@@ -463,20 +463,22 @@ export default function PowerManagement() {
           <p className="mt-1 text-xs sm:text-sm text-slate-400">CPU-Frequenzskalierung und Energieverwaltung</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Backend indicator and switch */}
-          {status?.is_using_linux_backend ? (
-            <span className="rounded-full bg-emerald-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-emerald-300">
-              <span className="hidden sm:inline">Linux Backend (echte CPU-Steuerung)</span>
-              <span className="sm:hidden">Linux</span>
-            </span>
-          ) : (
-            <span className="rounded-full bg-amber-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-amber-300">
-              <span className="hidden sm:inline">Dev Backend (simuliert)</span>
-              <span className="sm:hidden">Dev</span>
-            </span>
+          {/* Backend indicator - only show in dev mode */}
+          {status?.is_dev_mode && (
+            status?.is_using_linux_backend ? (
+              <span className="rounded-full bg-emerald-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-emerald-300">
+                <span className="hidden sm:inline">Linux Backend (echte CPU-Steuerung)</span>
+                <span className="sm:hidden">Linux</span>
+              </span>
+            ) : (
+              <span className="rounded-full bg-amber-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-amber-300">
+                <span className="hidden sm:inline">Dev Backend (simuliert)</span>
+                <span className="sm:hidden">Dev</span>
+              </span>
+            )
           )}
-          {/* Backend switch button - only show if can switch */}
-          {isAdmin && status?.can_switch_backend && (
+          {/* Backend switch button - only show in dev mode if can switch */}
+          {status?.is_dev_mode && isAdmin && status?.can_switch_backend && (
             <button
               onClick={handleSwitchBackend}
               disabled={busy}

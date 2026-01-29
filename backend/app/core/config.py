@@ -49,6 +49,7 @@ class Settings(BaseSettings):
 
     # Mobile device registration
     mobile_server_url: str | None = None  # Optional: Override server URL for mobile QR codes
+    mobile_pairing_allow_lan: bool = True  # Allow token generation from local network IPs (192.168.*, 10.*, etc.)
 
     # Network discovery (mDNS/Bonjour)
     mdns_hostname: str = "baluhost"  # Hostname for mDNS/Bonjour service (defaults to "baluhost")

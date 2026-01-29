@@ -568,7 +568,11 @@ class MdadmRaidBackend:
         array_names = set(mdstat_info.keys()) | set(self._scan_arrays())
 
         if not array_names:
-            raise RuntimeError("No RAID arrays managed by mdadm were found")
+            # No RAID arrays configured - return empty response instead of crashing
+            return RaidStatusResponse(
+                arrays=[],
+                speed_limits=self._read_speed_limits(),
+            )
 
         arrays: List[RaidArray] = []
         for name in sorted(array_names):
