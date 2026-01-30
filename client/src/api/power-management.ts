@@ -9,10 +9,22 @@ import { apiClient } from '../lib/api';
 // Power profile enum
 export type PowerProfile = 'idle' | 'low' | 'medium' | 'surge';
 
+// Service power property (same values as PowerProfile, but represents service intensity)
+export type ServicePowerProperty = 'idle' | 'low' | 'medium' | 'surge';
+
+// Preset summary for embedding in status
+export interface PowerPresetSummary {
+  id: number;
+  name: string;
+  is_system_preset: boolean;
+  is_active: boolean;
+}
+
 // Response types
 export interface PowerDemandInfo {
   source: string;
   level: PowerProfile;
+  power_property?: ServicePowerProperty;
   registered_at: string;
   expires_at?: string;
   description?: string;
@@ -39,6 +51,7 @@ export interface PermissionStatus {
 
 export interface PowerStatusResponse {
   current_profile: PowerProfile;
+  current_property?: ServicePowerProperty;
   current_frequency_mhz?: number;
   target_frequency_range?: string;
   active_demands: PowerDemandInfo[];
@@ -50,6 +63,7 @@ export interface PowerStatusResponse {
   permission_status?: PermissionStatus;
   last_profile_change?: string;
   cooldown_remaining_seconds?: number;
+  active_preset?: PowerPresetSummary;
 }
 
 export interface PowerProfilesResponse {

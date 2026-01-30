@@ -5,6 +5,8 @@ import logging
 import signal
 
 from app.api import deps
+from app.core.power_rating import requires_power
+from app.schemas.power import ServicePowerProperty
 from app.schemas.system import (
     AuditLoggingStatus,
     AuditLoggingToggle,
@@ -194,6 +196,7 @@ async def simulate_raid_failure(
 
 
 @router.post("/raid/rebuild", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=86400, description="RAID rebuild")
 async def simulate_raid_rebuild(
     payload: RaidSimulationRequest,
     _: UserPublic = Depends(deps.get_current_admin),
@@ -205,6 +208,7 @@ async def simulate_raid_rebuild(
 
 
 @router.post("/raid/finalize", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Finalizing RAID rebuild")
 async def finalize_raid_rebuild(
     payload: RaidSimulationRequest,
     _: UserPublic = Depends(deps.get_current_admin),
@@ -287,6 +291,7 @@ async def get_available_disks(_: UserPublic = Depends(deps.get_current_admin)) -
 
 
 @router.post("/raid/format-disk", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Formatting disk")
 async def format_disk(
     payload: FormatDiskRequest,
     _: UserPublic = Depends(deps.get_current_admin),
@@ -301,6 +306,7 @@ async def format_disk(
 
 
 @router.post("/raid/create-array", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=7200, description="Creating RAID array")
 async def create_array(
     payload: CreateArrayRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
@@ -454,6 +460,7 @@ class SmartTestRequest(BaseModel):
 
 
 @router.post("/smart/test")
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=3600, description="Running SMART self-test")
 async def trigger_smart_test(
     payload: SmartTestRequest,
     _: UserPublic = Depends(deps.get_current_admin),
@@ -473,6 +480,7 @@ class ScrubRequest(BaseModel):
 
 
 @router.post("/raid/scrub", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Running RAID scrub")
 async def trigger_raid_scrub(
     payload: ScrubRequest,
     _: UserPublic = Depends(deps.get_current_admin),

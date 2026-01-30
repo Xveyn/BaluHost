@@ -28,9 +28,15 @@ class PowerProfile(str, Enum):
     SURGE = "surge"
 
 
-class PowerRating(str, Enum):
+class ServicePowerProperty(str, Enum):
     """
-    Power rating for API endpoints.
+    Service power property for API endpoints.
+
+    Defines the fixed power intensity of a service/operation:
+    - IDLE: 0-10% CPU load (auth, status checks, monitoring reads)
+    - LOW: 10-30% CPU load (CRUD, metadata changes, config updates)
+    - MEDIUM: 30-60% CPU load (file upload/download, sync, SMART scan)
+    - SURGE: 60-100% CPU load (backup, RAID rebuild, restore)
 
     Used by the @requires_power decorator to register
     power demands when endpoints are called.
@@ -41,10 +47,15 @@ class PowerRating(str, Enum):
     SURGE = "surge"
 
 
+# Backwards compatibility alias
+PowerRating = ServicePowerProperty
+
+
 class PowerDemandInfo(BaseModel):
     """Information about an active power demand."""
     source: str = Field(..., description="Source identifier (e.g., 'backup_create', 'raid_rebuild')")
     level: PowerProfile = Field(..., description="Required power level")
+    power_property: Optional[ServicePowerProperty] = Field(None, description="Service power property (IDLE, LOW, MEDIUM, SURGE)")
     registered_at: datetime = Field(..., description="When demand was registered")
     expires_at: Optional[datetime] = Field(None, description="When demand expires (None = manual unregister)")
     description: Optional[str] = Field(None, description="Human-readable description")
@@ -74,6 +85,7 @@ class PermissionStatus(BaseModel):
 class PowerStatusResponse(BaseModel):
     """Response for power status endpoint."""
     current_profile: PowerProfile = Field(..., description="Currently active power profile")
+    current_property: Optional[ServicePowerProperty] = Field(None, description="Current highest service power property")
     current_frequency_mhz: Optional[float] = Field(None, description="Current CPU frequency in MHz")
     target_frequency_range: Optional[str] = Field(None, description="Target frequency range (e.g., '400-800 MHz')")
     active_demands: list[PowerDemandInfo] = Field(default_factory=list, description="Active power demands")
@@ -85,6 +97,8 @@ class PowerStatusResponse(BaseModel):
     permission_status: Optional[PermissionStatus] = Field(None, description="Permission details (only for Linux backend)")
     last_profile_change: Optional[datetime] = Field(None, description="When profile last changed")
     cooldown_remaining_seconds: Optional[int] = Field(None, description="Seconds until next downgrade allowed")
+    # Preset info
+    active_preset: Optional["PowerPresetSummary"] = Field(None, description="Currently active preset")
 
 
 class PowerProfilesResponse(BaseModel):
@@ -188,3 +202,69 @@ class SwitchBackendResponse(BaseModel):
     is_using_linux_backend: bool = Field(..., description="Whether now using Linux backend")
     previous_backend: str = Field(..., description="Previous backend name")
     new_backend: str = Field(..., description="New backend name")
+
+
+# Power Preset Schemas
+
+class PowerPresetBase(BaseModel):
+    """Base schema for power presets."""
+    name: str = Field(..., min_length=1, max_length=100, description="Preset name")
+    description: Optional[str] = Field(None, description="Preset description")
+    base_clock_mhz: int = Field(1500, ge=100, le=10000, description="Base reference clock in MHz")
+    idle_clock_mhz: int = Field(800, ge=100, le=10000, description="Clock for IDLE property in MHz")
+    low_clock_mhz: int = Field(1200, ge=100, le=10000, description="Clock for LOW property in MHz")
+    medium_clock_mhz: int = Field(2500, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
+    surge_clock_mhz: int = Field(4200, ge=100, le=10000, description="Clock for SURGE property in MHz")
+
+
+class PowerPresetCreate(PowerPresetBase):
+    """Schema for creating a new custom preset."""
+    pass
+
+
+class PowerPresetUpdate(BaseModel):
+    """Schema for updating an existing preset."""
+    name: Optional[str] = Field(None, min_length=1, max_length=100, description="Preset name")
+    description: Optional[str] = Field(None, description="Preset description")
+    base_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Base reference clock in MHz")
+    idle_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for IDLE property in MHz")
+    low_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for LOW property in MHz")
+    medium_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
+    surge_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for SURGE property in MHz")
+
+
+class PowerPresetResponse(PowerPresetBase):
+    """Schema for preset response."""
+    id: int
+    is_system_preset: bool = Field(..., description="Whether this is a system preset (cannot be deleted)")
+    is_active: bool = Field(..., description="Whether this preset is currently active")
+    created_at: datetime
+    updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PowerPresetSummary(BaseModel):
+    """Summary of a preset for embedding in other responses."""
+    id: int
+    name: str
+    is_system_preset: bool
+    is_active: bool
+
+    class Config:
+        from_attributes = True
+
+
+class PowerPresetListResponse(BaseModel):
+    """Response for listing all presets."""
+    presets: list[PowerPresetResponse]
+    active_preset: Optional[PowerPresetResponse] = None
+
+
+class ActivatePresetResponse(BaseModel):
+    """Response after activating a preset."""
+    success: bool
+    message: str
+    previous_preset: Optional[PowerPresetSummary] = None
+    new_preset: PowerPresetSummary

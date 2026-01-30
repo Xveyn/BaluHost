@@ -7,7 +7,9 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.power_rating import requires_power
 from app.core.rate_limiter import limiter, user_limiter, get_limit
+from app.schemas.power import ServicePowerProperty
 from app.schemas.files import (
     FileListResponse,
     FileOperationResponse,
@@ -340,6 +342,7 @@ async def download_file_by_id(
 
 @router.post("/upload", response_model=FileUploadResponse)
 @user_limiter.limit(get_limit("file_upload"))
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=600, description="File upload")
 async def upload_files(
     request: Request,
     response: Response,

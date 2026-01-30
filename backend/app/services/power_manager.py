@@ -37,6 +37,8 @@ from app.schemas.power import (
     PowerProfile,
     PowerProfileConfig,
     PowerStatusResponse,
+    ServicePowerProperty,
+    PowerPresetSummary,
 )
 
 logger = logging.getLogger(__name__)
@@ -524,6 +526,7 @@ class PowerManagerService:
         self._initialized = True
         self._demands: Dict[str, PowerDemandInfo] = {}
         self._current_profile = PowerProfile.IDLE
+        self._current_property: Optional[ServicePowerProperty] = ServicePowerProperty.IDLE
         self._last_profile_change: Optional[datetime] = None
         self._history: List[PowerHistoryEntry] = []
         self._max_history = 1000
@@ -853,10 +856,16 @@ class PowerManagerService:
         if profile == self._current_profile:
             return True, None
 
-        config = self._profiles.get(profile)
-        if not config:
-            logger.error(f"Unknown profile: {profile}")
-            return False, f"Unknown profile: {profile}"
+        # Try to get clock settings from active preset
+        power_property = ServicePowerProperty(profile.value)
+        config = await self._get_profile_config_from_preset(power_property)
+
+        if config is None:
+            # Fallback to default profiles
+            config = self._profiles.get(profile)
+            if not config:
+                logger.error(f"Unknown profile: {profile}")
+                return False, f"Unknown profile: {profile}"
 
         # Apply to hardware
         success, error_msg = await self._backend.apply_profile(config)
@@ -864,6 +873,7 @@ class PowerManagerService:
         if success:
             old_profile = self._current_profile
             self._current_profile = profile
+            self._current_property = power_property
             self._last_profile_change = datetime.utcnow()
 
             # Set cooldown for downgrades
@@ -889,6 +899,60 @@ class PowerManagerService:
             return True, None
 
         return False, error_msg
+
+    async def _get_profile_config_from_preset(
+        self,
+        power_property: ServicePowerProperty
+    ) -> Optional[PowerProfileConfig]:
+        """
+        Get profile config based on active preset and power property.
+
+        Args:
+            power_property: The service power property to get config for.
+
+        Returns:
+            PowerProfileConfig with clock settings from preset, or None if no preset active.
+        """
+        try:
+            from app.services.power_preset_service import get_preset_service
+
+            preset_service = get_preset_service()
+            preset = await preset_service.get_active_preset()
+
+            if preset is None:
+                return None
+
+            # Get clock speed from preset
+            target_clock = preset_service.get_clock_for_property(preset, power_property)
+
+            # Calculate min/max frequency (±15% range for better responsiveness)
+            min_freq = int(target_clock * 0.85)
+            max_freq = target_clock
+
+            # Get governor based on power property
+            governor = preset_service.get_governor_for_property(power_property)
+            epp = preset_service.get_epp_for_property(power_property)
+
+            # For SURGE, allow full boost (no max limit)
+            if power_property == ServicePowerProperty.SURGE:
+                max_freq = None
+                min_freq = int(target_clock * 0.8)  # Just set a high minimum
+
+            config = PowerProfileConfig(
+                profile=PowerProfile(power_property.value),
+                governor=governor,
+                energy_performance_preference=epp,
+                min_freq_mhz=min_freq,
+                max_freq_mhz=max_freq,
+                description=f"Preset: {preset.name}, Property: {power_property.value}"
+            )
+
+            logger.debug(f"Config from preset '{preset.name}': {power_property.value} -> {target_clock} MHz")
+            return config
+
+        except Exception as e:
+            logger.warning(f"Error getting preset config: {e}, falling back to defaults")
+            return None
 
     async def apply_profile(
         self,
@@ -919,6 +983,7 @@ class PowerManagerService:
         self,
         source: str,
         level: PowerProfile,
+        power_property: Optional[ServicePowerProperty] = None,
         timeout_seconds: Optional[int] = None,
         description: Optional[str] = None
     ) -> str:
@@ -930,6 +995,7 @@ class PowerManagerService:
         Args:
             source: Unique identifier for this demand (e.g., "backup_create")
             level: Required power level
+            power_property: Optional service power property (if using preset system)
             timeout_seconds: Auto-expire after this duration
             description: Human-readable description
 
@@ -941,16 +1007,21 @@ class PowerManagerService:
             if timeout_seconds:
                 expires_at = datetime.utcnow() + timedelta(seconds=timeout_seconds)
 
+            # If power_property not provided, derive from level
+            if power_property is None:
+                power_property = ServicePowerProperty(level.value)
+
             demand = PowerDemandInfo(
                 source=source,
                 level=level,
+                power_property=power_property,
                 registered_at=datetime.utcnow(),
                 expires_at=expires_at,
                 description=description
             )
 
             self._demands[source] = demand
-            logger.info(f"Registered power demand: {source} -> {level.value}")
+            logger.info(f"Registered power demand: {source} -> {level.value} (property: {power_property.value})")
 
             await self._recalculate_profile(f"demand_registered:{source}")
 
@@ -1013,8 +1084,33 @@ class PowerManagerService:
                 has_write_access=self._backend.has_write_permission()
             )
 
+        # Get active preset info
+        active_preset = None
+        try:
+            from app.services.power_preset_service import get_preset_service
+            preset_service = get_preset_service()
+            preset = await preset_service.get_active_preset()
+            if preset:
+                active_preset = PowerPresetSummary(
+                    id=preset.id,
+                    name=preset.name,
+                    is_system_preset=preset.is_system_preset,
+                    is_active=preset.is_active
+                )
+                # Update freq_range based on preset
+                if self._current_property:
+                    target_clock = preset_service.get_clock_for_property(preset, self._current_property)
+                    if self._current_property == ServicePowerProperty.SURGE:
+                        freq_range = f"Full boost ({target_clock} MHz+)"
+                    else:
+                        min_clock = int(target_clock * 0.85)
+                        freq_range = f"{min_clock}-{target_clock} MHz"
+        except Exception as e:
+            logger.debug(f"Could not get active preset: {e}")
+
         return PowerStatusResponse(
             current_profile=self._current_profile,
+            current_property=self._current_property,
             current_frequency_mhz=freq,
             target_frequency_range=freq_range,
             active_demands=list(self._demands.values()),
@@ -1025,7 +1121,8 @@ class PowerManagerService:
             can_switch_backend=linux_available or is_linux,  # Can switch if Linux available or currently using it
             permission_status=permission_status,
             last_profile_change=self._last_profile_change,
-            cooldown_remaining_seconds=cooldown_remaining
+            cooldown_remaining_seconds=cooldown_remaining,
+            active_preset=active_preset
         )
 
     def get_profiles(self) -> Dict[PowerProfile, PowerProfileConfig]:

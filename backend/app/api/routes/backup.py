@@ -5,6 +5,8 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.power_rating import requires_power
+from app.schemas.power import ServicePowerProperty
 from app.schemas.user import UserPublic
 from app.schemas.backup import (
     BackupCreate,
@@ -20,6 +22,7 @@ router = APIRouter()
 
 
 @router.post("/", response_model=BackupResponse, status_code=status.HTTP_201_CREATED)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Creating system backup")
 async def create_backup(
     backup_data: BackupCreate,
     current_user: UserPublic = Depends(deps.get_current_admin),
@@ -27,12 +30,12 @@ async def create_backup(
 ):
     """
     Create a new system backup (Admin only).
-    
+
     This will create a compressed archive containing:
     - Database (if includes_database=True)
     - Files (if includes_files=True)
     - Configuration (if includes_config=True)
-    
+
     The backup process may take several minutes depending on data size.
     """
     service = get_backup_service(db)
@@ -116,6 +119,7 @@ async def delete_backup(
 
 
 @router.post("/{backup_id}/restore", response_model=BackupRestoreResponse)
+@requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Restoring from backup")
 async def restore_backup(
     backup_id: int,
     restore_request: BackupRestoreRequest,
@@ -124,13 +128,13 @@ async def restore_backup(
 ):
     """
     Restore system from a backup (Admin only).
-    
+
     ⚠️ WARNING: This will overwrite current data!
-    
+
     - Database will be replaced if restore_database=True
     - Files will be replaced if restore_files=True
     - Config will be replaced if restore_config=True
-    
+
     The confirmation flag must be set to true to proceed.
     """
     if not restore_request.confirm:

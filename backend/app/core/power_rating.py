@@ -6,10 +6,10 @@ power demands when API endpoints are called.
 
 Usage:
     from app.core.power_rating import requires_power
-    from app.schemas.power import PowerRating
+    from app.schemas.power import ServicePowerProperty
 
     @router.post("/backups")
-    @requires_power(PowerRating.SURGE, timeout_seconds=3600)
+    @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600)
     async def create_backup(...):
         ...
 """
@@ -21,7 +21,7 @@ import logging
 import uuid
 from typing import Callable, Optional, TypeVar, ParamSpec
 
-from app.schemas.power import PowerProfile, PowerRating
+from app.schemas.power import PowerProfile, ServicePowerProperty
 
 logger = logging.getLogger(__name__)
 
@@ -29,13 +29,19 @@ P = ParamSpec("P")
 T = TypeVar("T")
 
 
-def _rating_to_profile(rating: PowerRating) -> PowerProfile:
-    """Convert PowerRating to PowerProfile."""
-    return PowerProfile(rating.value)
+def _property_to_profile(prop: ServicePowerProperty) -> PowerProfile:
+    """Convert ServicePowerProperty to PowerProfile."""
+    return PowerProfile(prop.value)
+
+
+# Backwards compatibility alias
+def _rating_to_profile(rating: ServicePowerProperty) -> PowerProfile:
+    """Convert ServicePowerProperty to PowerProfile (legacy name)."""
+    return _property_to_profile(rating)
 
 
 def requires_power(
-    rating: PowerRating,
+    power_property: ServicePowerProperty,
     timeout_seconds: Optional[int] = None,
     description: Optional[str] = None
 ) -> Callable[[Callable[P, T]], Callable[P, T]]:
@@ -46,14 +52,14 @@ def requires_power(
     after it completes (or on timeout).
 
     Args:
-        rating: The power level required for this endpoint
+        power_property: The service power property (IDLE, LOW, MEDIUM, SURGE)
         timeout_seconds: Auto-expire the demand after this duration.
                         Defaults to 300 (5 minutes) for safety.
         description: Human-readable description of why this power is needed
 
     Example:
         @router.post("/backups")
-        @requires_power(PowerRating.SURGE, timeout_seconds=3600, description="Creating backup")
+        @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Creating backup")
         async def create_backup(request: BackupRequest):
             ...
     """
@@ -68,7 +74,7 @@ def requires_power(
             from app.services.power_manager import get_power_manager
 
             manager = get_power_manager()
-            profile = _rating_to_profile(rating)
+            profile = _property_to_profile(power_property)
 
             # Generate unique demand ID for this request
             func_name = func.__name__
@@ -81,6 +87,7 @@ def requires_power(
                 await manager.register_demand(
                     source=demand_id,
                     level=profile,
+                    power_property=power_property,
                     timeout_seconds=timeout_seconds,
                     description=demand_description
                 )
@@ -97,38 +104,39 @@ def requires_power(
     return decorator
 
 
-class PowerRatingContext:
+class PowerPropertyContext:
     """
-    Context manager for power rating in non-decorator scenarios.
+    Context manager for power property in non-decorator scenarios.
 
     Usage:
-        async with PowerRatingContext(PowerRating.SURGE, "backup_operation"):
+        async with PowerPropertyContext(ServicePowerProperty.SURGE, "backup_operation"):
             # Long-running operation here
             pass
     """
 
     def __init__(
         self,
-        rating: PowerRating,
+        power_property: ServicePowerProperty,
         source: str,
         timeout_seconds: Optional[int] = None,
         description: Optional[str] = None
     ):
-        self.rating = rating
+        self.power_property = power_property
         self.source = source
         self.timeout_seconds = timeout_seconds
         self.description = description
         self._demand_id: Optional[str] = None
 
-    async def __aenter__(self) -> "PowerRatingContext":
+    async def __aenter__(self) -> "PowerPropertyContext":
         from app.services.power_manager import get_power_manager
 
         manager = get_power_manager()
-        profile = _rating_to_profile(self.rating)
+        profile = _property_to_profile(self.power_property)
 
         self._demand_id = await manager.register_demand(
             source=self.source,
             level=profile,
+            power_property=self.power_property,
             timeout_seconds=self.timeout_seconds,
             description=self.description
         )
@@ -143,10 +151,14 @@ class PowerRatingContext:
             await manager.unregister_demand(self._demand_id)
 
 
+# Backwards compatibility alias
+PowerRatingContext = PowerPropertyContext
+
+
 # Convenience function for programmatic demand registration
 async def register_power_demand(
     source: str,
-    rating: PowerRating,
+    power_property: ServicePowerProperty,
     timeout_seconds: Optional[int] = None,
     description: Optional[str] = None
 ) -> str:
@@ -157,7 +169,7 @@ async def register_power_demand(
 
     Args:
         source: Unique identifier for this demand
-        rating: Required power level
+        power_property: Required service power property (IDLE, LOW, MEDIUM, SURGE)
         timeout_seconds: Auto-expire after this duration
         description: Human-readable description
 
@@ -167,11 +179,12 @@ async def register_power_demand(
     from app.services.power_manager import get_power_manager
 
     manager = get_power_manager()
-    profile = _rating_to_profile(rating)
+    profile = _property_to_profile(power_property)
 
     return await manager.register_demand(
         source=source,
         level=profile,
+        power_property=power_property,
         timeout_seconds=timeout_seconds,
         description=description
     )

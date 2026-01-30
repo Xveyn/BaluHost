@@ -37,6 +37,7 @@ from app.models.scheduler_history import (
     SchedulerStatus,
     TriggerType,
 )
+from app.models.power_preset import PowerPreset
 
 __all__ = [
     "Base",
@@ -77,4 +78,5 @@ __all__ = [
     "SchedulerConfig",
     "SchedulerStatus",
     "TriggerType",
+    "PowerPreset",
 ]
