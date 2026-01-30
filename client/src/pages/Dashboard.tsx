@@ -2,7 +2,18 @@ import { useMemo, useEffect, useState } from 'react';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
+import { useNextMaintenance } from '../hooks/useNextMaintenance';
+import { useServicesSummary } from '../hooks/useServicesSummary';
 import PowerWidget from '../components/PowerWidget';
+import {
+  ActivityFeed,
+  NextMaintenanceWidget,
+  ServiceSummaryWidget,
+  NetworkWidget,
+  ConnectedDevicesWidget,
+  AlertBanner,
+  type Alert,
+} from '../components/dashboard';
 
 interface SystemStats {
   cpuUsage: number;
@@ -17,6 +28,12 @@ interface StorageStats {
   total: number;
   available: number;
   percent: number;
+}
+
+interface DashboardProps {
+  user?: {
+    role: string;
+  };
 }
 
 const formatBytes = (bytes: number): string => {
@@ -65,14 +82,19 @@ function setCachedRaid(raid: RaidStatusResponse): void {
   }
 }
 
-export default function Dashboard() {
+export default function Dashboard({ user }: DashboardProps) {
+  const isAdmin = user?.role === 'admin';
   const { system: systemInfo, storage: storageInfo, loading, error, lastUpdated, history } = useSystemTelemetry();
   const { smartData, loading: smartLoading, error: smartError, refetch: refetchSmartData } = useSmartData();
   const cachedRaid = getCachedRaid();
   const [raidData, setRaidData] = useState<RaidStatusResponse | null>(cachedRaid);
   const [raidLoading, setRaidLoading] = useState(!cachedRaid);
-  const [smartMode, setSmartMode] = useState<string>('mock');
+  const [smartMode, setSmartMode] = useState<string | null>(null);
   const [smartModeLoading, setSmartModeLoading] = useState(false);
+
+  // Hooks for alert generation
+  const { allSchedulers } = useNextMaintenance({ enabled: isAdmin });
+  const { services } = useServicesSummary({ enabled: isAdmin });
 
   useEffect(() => {
     const loadRaidData = async () => {
@@ -136,14 +158,14 @@ export default function Dashboard() {
     // Berechne Gesamtkapazität und Nutzung aus SMART-Daten (alle Festplatten)
     let total = 0;
     let used = 0;
-    
+
     if (smartData && smartData.devices.length > 0) {
       // Summiere alle Festplatten-Kapazitäten
       total = smartData.devices.reduce((sum, d) => sum + (d.capacity_bytes || 0), 0);
-      
+
       // Summiere alle genutzten Bytes (falls vorhanden)
       used = smartData.devices.reduce((sum, d) => sum + (d.used_bytes || 0), 0);
-      
+
       // Fallback: Wenn keine used_bytes vorhanden, verwende storageInfo
       if (used === 0 && storageInfo?.used) {
         used = storageInfo.used;
@@ -153,7 +175,7 @@ export default function Dashboard() {
       used = storageInfo?.used ?? 0;
       total = storageInfo?.total ?? 0;
     }
-    
+
     const available = Math.max(total - used, 0);
     const percent = total ? (used / total) * 100 : 0;
 
@@ -208,7 +230,7 @@ export default function Dashboard() {
   };
 
   const cpuFrequency = useMemo(() => {
-    return systemInfo?.cpu?.frequency_mhz 
+    return systemInfo?.cpu?.frequency_mhz
       ? `${(systemInfo.cpu.frequency_mhz / 1000).toFixed(2)} GHz`
       : null;
   }, [systemInfo]);
@@ -225,7 +247,7 @@ export default function Dashboard() {
   const memorySpeedType = useMemo(() => {
     const speed = systemInfo?.memory?.speed_mts;
     const type = systemInfo?.memory?.type;
-    
+
     if (speed && type) {
       return `${type} @ ${speed} MT/s`;
     } else if (type) {
@@ -235,6 +257,69 @@ export default function Dashboard() {
     }
     return null;
   }, [systemInfo]);
+
+  // Generate alerts from various sources
+  const alerts = useMemo<Alert[]>(() => {
+    const result: Alert[] = [];
+
+    // SMART alerts
+    if (smartData && smartData.devices.some(d => d.status !== 'PASSED')) {
+      const failedDevices = smartData.devices.filter(d => d.status !== 'PASSED');
+      result.push({
+        id: 'smart-failure',
+        type: 'critical',
+        title: 'SMART Health Warning',
+        message: `${failedDevices.length} drive${failedDevices.length > 1 ? 's' : ''} reporting issues`,
+        link: '/system',
+        linkText: 'View Details',
+        source: 'smart',
+      });
+    }
+
+    // RAID alerts
+    if (raidData && raidData.arrays.some(a => a.status.includes('degraded'))) {
+      const degradedArrays = raidData.arrays.filter(a => a.status.includes('degraded'));
+      result.push({
+        id: 'raid-degraded',
+        type: 'critical',
+        title: 'RAID Array Degraded',
+        message: `${degradedArrays.length} array${degradedArrays.length > 1 ? 's' : ''} in degraded state`,
+        link: '/raid',
+        linkText: 'View RAID',
+        source: 'raid',
+      });
+    }
+
+    // Scheduler alerts (only for admin)
+    if (isAdmin && allSchedulers.some(s => s.last_status === 'failed')) {
+      const failedSchedulers = allSchedulers.filter(s => s.last_status === 'failed');
+      result.push({
+        id: 'scheduler-failed',
+        type: 'warning',
+        title: 'Scheduler Failure',
+        message: `${failedSchedulers.length} scheduler${failedSchedulers.length > 1 ? 's' : ''} failed recently`,
+        link: '/schedulers',
+        linkText: 'View Schedulers',
+        source: 'scheduler',
+      });
+    }
+
+    // Service alerts (only for admin)
+    if (isAdmin && services.some(s => s.state === 'error')) {
+      const errorServices = services.filter(s => s.state === 'error');
+      result.push({
+        id: 'service-error',
+        type: 'warning',
+        title: 'Service Error',
+        message: `${errorServices.length} service${errorServices.length > 1 ? 's' : ''} with errors`,
+        link: '/health',
+        linkText: 'View Health',
+        source: 'service',
+      });
+    }
+
+    return result;
+  }, [smartData, raidData, allSchedulers, services, isAdmin]);
 
   const quickStats = [
     {
@@ -303,27 +388,6 @@ export default function Dashboard() {
     }
   ];
 
-  const activityFeed = [
-    {
-      title: 'Backup Completed',
-      detail: 'System image stored to NAS pool',
-      ago: '2 minutes ago',
-      icon: '⬇'
-    },
-    {
-      title: 'Upload Finished',
-      detail: 'Camera roll synced • family/photos',
-      ago: '15 minutes ago',
-      icon: '☁'
-    },
-    {
-      title: 'New User Added',
-      detail: 'sarah@baluhost.local granted access',
-      ago: '1 hour ago',
-      icon: '👤'
-    }
-  ];
-
   return (
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
@@ -337,6 +401,9 @@ export default function Dashboard() {
         </div>
       </div>
 
+      {/* Alert Banner */}
+      {alerts.length > 0 && <AlertBanner alerts={alerts} />}
+
       {error && (
         <div className="card border-rose-500/30 bg-rose-500/10 text-sm text-rose-100">
           {error}
@@ -349,6 +416,9 @@ export default function Dashboard() {
         </div>
       ) : (
         <>
+          {/* Service Summary Widget (Admin Only) - compact bar */}
+          <ServiceSummaryWidget isAdmin={isAdmin} />
+
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {quickStats.map((stat) => {
               const deltaToneClass = stat.delta.tone === 'decrease'
@@ -393,6 +463,9 @@ export default function Dashboard() {
 
             {/* Power Monitoring Widget */}
             <PowerWidget />
+
+            {/* Network Widget */}
+            <NetworkWidget />
           </div>
 
           <div className="grid grid-cols-1 gap-6">
@@ -434,32 +507,32 @@ export default function Dashboard() {
                 ) : smartData && smartData.devices.length > 0 ? (
                   <div className="space-y-3">
                     {smartData.devices.map((device) => {
-                      const criticalAttributes = device.attributes.filter(attr => 
+                      const criticalAttributes = device.attributes.filter(attr =>
                         ['Reallocated_Sector_Ct', 'Current_Pending_Sector', 'Uncorrectable_Error_Cnt'].includes(attr.name)
                       );
                       const tempAttr = device.attributes.find(attr => attr.name === 'Temperature_Celsius');
-                      
+
                       // Verwende die tatsächlichen Nutzungsdaten vom Backend, falls verfügbar
                       let usagePercent = device.used_percent ?? 0;
                       let usedBytes = device.used_bytes ?? 0;
-                      
+
                       // Fallback: Wenn keine direkten Nutzungsdaten verfügbar sind,
                       // berechne proportional basierend auf Gesamtspeicher
                       if (usedBytes === 0 && storageStats.used > 0) {
                         const totalHardwareCapacity = smartData.devices.reduce((sum, d) => sum + (d.capacity_bytes || 0), 0);
                         const deviceCapacity = device.capacity_bytes || 0;
-                        
+
                         if (deviceCapacity > 0 && totalHardwareCapacity > 0) {
                           const deviceShare = deviceCapacity / totalHardwareCapacity;
                           usedBytes = Math.round(storageStats.used * deviceShare);
                           usagePercent = (usedBytes / deviceCapacity) * 100;
                         }
                       }
-                      
+
                       const circleStyle = {
                         backgroundImage: `conic-gradient(#0ea5e9 ${Math.min(usagePercent, 100) * 3.6}deg, rgba(15,23,42,0.8) ${Math.min(usagePercent, 100) * 3.6}deg)`
                       };
-                      
+
                       return (
                         <div key={device.serial} className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-sky-500/30">
                           <div className="flex items-start justify-between gap-4">
@@ -534,33 +607,8 @@ export default function Dashboard() {
           </div>
 
           <div className="grid grid-cols-1 gap-6 xl:grid-cols-[2fr_1fr]">
-            <div className="card border-slate-800/50 bg-slate-900/55">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Recent Activity</p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">Live operations</h2>
-                </div>
-                <button className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white">
-                  View system logs
-                </button>
-              </div>
-              <div className="mt-6 space-y-4">
-                {activityFeed.map((item) => (
-                  <div key={item.title} className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-3 transition hover:border-sky-500/30">
-                    <div className="flex items-center gap-4">
-                      <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-950/70 text-lg">
-                        {item.icon}
-                      </div>
-                      <div>
-                        <p className="text-sm font-medium text-slate-100">{item.title}</p>
-                        <p className="text-xs text-slate-500">{item.detail}</p>
-                      </div>
-                    </div>
-                    <span className="text-xs text-slate-500">{item.ago}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
+            {/* Activity Feed - Now with real data */}
+            <ActivityFeed limit={5} />
 
             <div className="space-y-6">
               <div className="card border-slate-800/50 bg-slate-900/55">
@@ -578,7 +626,7 @@ export default function Dashboard() {
                             <p className="text-xs text-slate-500">RAID {array.level} • {(array.size_bytes / (1024 ** 3)).toFixed(1)} GB</p>
                           </div>
                           <span className={`rounded-full border px-2 py-0.5 text-xs ${
-                            array.status === 'clean' 
+                            array.status === 'clean'
                               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
                               : array.status.includes('degraded')
                               ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
@@ -658,7 +706,7 @@ export default function Dashboard() {
                   <li className="flex items-center justify-between">
                     <span>Durchschnitts-Temp</span>
                     <span className="text-slate-200">
-                      {smartData && smartData.devices.length > 0 
+                      {smartData && smartData.devices.length > 0
                         ? `${Math.round(smartData.devices.reduce((sum, d) => sum + (d.temperature || 0), 0) / smartData.devices.length)}°C`
                         : '—'
                       }
@@ -671,20 +719,11 @@ export default function Dashboard() {
                 </ul>
               </div>
 
-              <div className="card border-slate-800/50 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
-                <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next Maintenance</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">Scheduled raid scrub</h3>
-                <p className="mt-3 text-sm text-slate-400">Automated integrity check for pool alpha is planned for 03:00 UTC.</p>
-                <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
-                  <div>
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Window</p>
-                    <p className="mt-1 text-sm text-slate-200">Saturday - 26 Oct - 02:30 - 03:30</p>
-                  </div>
-                  <button className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white">
-                    View plan
-                  </button>
-                </div>
-              </div>
+              {/* Connected Devices Widget */}
+              <ConnectedDevicesWidget />
+
+              {/* Next Maintenance Widget - Now with real scheduler data */}
+              <NextMaintenanceWidget showAllSchedulers={isAdmin} />
             </div>
           </div>
         </>
