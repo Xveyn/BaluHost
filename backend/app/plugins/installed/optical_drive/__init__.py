@@ -66,8 +66,13 @@ class OpticalDrivePlugin(PluginBase):
             BlankMediaInfo,
             BurnAudioRequest,
             BurnIsoRequest,
+            DiscFileListResponse,
             DriveInfo,
             DriveListResponse,
+            ExtractFilesRequest,
+            FilePreviewResponse,
+            IsoExtractRequest,
+            IsoFileRequest,
             JobListResponse,
             OperationResponse,
             OpticalJob,
@@ -197,6 +202,111 @@ class OpticalDrivePlugin(PluginBase):
                 return await service.rip_audio_track(device, track_number, request.output_path)
             except ValueError as e:
                 raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        # === File Explorer Endpoints ===
+
+        @router.get("/drives/{device:path}/files", response_model=DiscFileListResponse)
+        async def list_disc_files_root(
+            device: str,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> DiscFileListResponse:
+            """List files in the root directory of a disc."""
+            device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            try:
+                return await service.list_disc_files(device, "/")
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        @router.get("/drives/{device:path}/files/{path:path}", response_model=DiscFileListResponse)
+        async def list_disc_files(
+            device: str,
+            path: str,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> DiscFileListResponse:
+            """List files in a subdirectory of a disc."""
+            device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            try:
+                return await service.list_disc_files(device, path)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        @router.post("/drives/{device:path}/extract", response_model=OpticalJob)
+        async def extract_files(
+            device: str,
+            request: ExtractFilesRequest,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> OpticalJob:
+            """Extract files from a disc to a destination directory."""
+            device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            try:
+                return await service.extract_files(device, request.paths, request.destination)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        @router.get("/drives/{device:path}/preview/{path:path}", response_model=FilePreviewResponse)
+        async def preview_disc_file(
+            device: str,
+            path: str,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> FilePreviewResponse:
+            """Get a preview of a file on the disc."""
+            device = f"/dev/{device}" if not device.startswith("/dev/") else device
+            try:
+                return await service.preview_file(device, path)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        # === ISO File Endpoints ===
+
+        @router.post("/iso/list", response_model=DiscFileListResponse)
+        async def list_iso_files(
+            request: IsoFileRequest,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> DiscFileListResponse:
+            """List files within an ISO file."""
+            try:
+                return await service.list_iso_files(request.iso_path, request.path)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
+
+        @router.post("/iso/extract", response_model=OpticalJob)
+        async def extract_from_iso(
+            request: IsoExtractRequest,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> OpticalJob:
+            """Extract files from an ISO file."""
+            try:
+                return await service.extract_from_iso(request.iso_path, request.paths, request.destination)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+
+        @router.post("/iso/preview", response_model=FilePreviewResponse)
+        async def preview_iso_file(
+            request: IsoFileRequest,
+            current_user=Depends(get_current_user),
+            service: OpticalDriveService = Depends(get_service),
+        ) -> FilePreviewResponse:
+            """Preview a file from within an ISO."""
+            try:
+                return await service.preview_iso_file(request.iso_path, request.path)
+            except ValueError as e:
+                raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+            except RuntimeError as e:
+                raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e))
 
         # === Burn Endpoints ===
 

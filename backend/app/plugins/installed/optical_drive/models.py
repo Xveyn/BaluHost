@@ -22,6 +22,12 @@ class MediaType(str, Enum):
     NONE = "none"
 
 
+class DiscFileType(str, Enum):
+    """Types of files on a disc."""
+    FILE = "file"
+    DIRECTORY = "directory"
+
+
 class JobType(str, Enum):
     """Types of optical drive jobs."""
     READ_ISO = "read_iso"
@@ -182,3 +188,49 @@ class OperationResponse(BaseModel):
     """Response for simple operations."""
     success: bool
     message: str
+
+
+# === File Explorer Models ===
+
+class DiscFile(BaseModel):
+    """Information about a file or directory on a disc."""
+    name: str = Field(..., description="File or directory name")
+    path: str = Field(..., description="Full path on the disc (e.g., /docs/readme.txt)")
+    size: int = Field(default=0, description="Size in bytes (0 for directories)")
+    type: DiscFileType = Field(..., description="Whether this is a file or directory")
+    modified_at: Optional[datetime] = Field(default=None, description="Last modification date")
+
+
+class DiscFileListResponse(BaseModel):
+    """Response containing list of files from a disc."""
+    files: List[DiscFile]
+    total: int
+    current_path: str
+
+
+class ExtractFilesRequest(BaseModel):
+    """Request to extract files from a disc."""
+    paths: List[str] = Field(..., min_length=1, description="Paths to extract (files or directories)")
+    destination: str = Field(..., description="Destination directory")
+
+
+class FilePreviewResponse(BaseModel):
+    """Response containing file preview content."""
+    path: str
+    content_type: str = Field(..., description="MIME type (text/plain, image/jpeg, etc.)")
+    content: str = Field(..., description="File content (base64 for binary, plain for text)")
+    size: int
+    is_truncated: bool = Field(default=False, description="True if content was truncated")
+
+
+class IsoFileRequest(BaseModel):
+    """Request for ISO file operations."""
+    iso_path: str = Field(..., description="Path to the ISO file on the filesystem")
+    path: str = Field(default="/", description="Path within the ISO to browse")
+
+
+class IsoExtractRequest(BaseModel):
+    """Request to extract files from an ISO."""
+    iso_path: str = Field(..., description="Path to the ISO file")
+    paths: List[str] = Field(..., min_length=1, description="Paths to extract")
+    destination: str = Field(..., description="Destination directory")
