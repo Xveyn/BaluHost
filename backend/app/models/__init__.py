@@ -46,6 +46,19 @@ from app.models.benchmark import (
     BenchmarkProfile,
     BenchmarkTargetType,
 )
+from app.models.notification import (
+    Notification,
+    NotificationPreferences,
+    NotificationType,
+    NotificationCategory,
+)
+from app.models.update_history import (
+    UpdateHistory,
+    UpdateConfig,
+    UpdateStatus,
+    UpdateChannel,
+)
+from app.models.energy_price_config import EnergyPriceConfig
 
 __all__ = [
     "Base",
@@ -93,4 +106,13 @@ __all__ = [
     "BenchmarkStatus",
     "BenchmarkProfile",
     "BenchmarkTargetType",
+    "Notification",
+    "NotificationPreferences",
+    "NotificationType",
+    "NotificationCategory",
+    "UpdateHistory",
+    "UpdateConfig",
+    "UpdateStatus",
+    "UpdateChannel",
+    "EnergyPriceConfig",
 ]

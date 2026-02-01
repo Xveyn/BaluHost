@@ -5,6 +5,7 @@ import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { Plug } from 'lucide-react';
+import NotificationCenter from './NotificationCenter';
 
 interface LayoutProps {
   children: ReactNode;
@@ -238,6 +239,18 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             icon: (
               <Plug className="h-5 w-5" />
             )
+          },
+          {
+            path: '/updates',
+            label: 'System Updates',
+            description: 'Update BaluHost',
+            adminOnly: true,
+            icon: (
+              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l4-4m-4 4l-4-4" />
+                <path stroke="currentColor" strokeLinecap="round" d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+              </svg>
+            )
           }
         ]
       : []),
@@ -439,6 +452,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
               {/* Header Right */}
               <div className="flex items-center gap-3">
+                <NotificationCenter />
                 <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
                   {user.username.charAt(0).toUpperCase()}
                 </div>

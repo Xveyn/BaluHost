@@ -125,6 +125,22 @@ class Settings(BaseSettings):
     database_url: str | None = None
     database_type: str = "sqlite"
 
+    # Email notification configuration (SMTP)
+    email_enabled: bool = False  # Enable email notifications
+    smtp_host: str = ""  # SMTP server hostname
+    smtp_port: int = 587  # SMTP port (587 for TLS, 465 for SSL)
+    smtp_use_tls: bool = True  # Use STARTTLS
+    smtp_username: str = ""  # SMTP authentication username
+    smtp_password: str = ""  # SMTP authentication password
+    email_from_address: str = "baluhost@example.com"  # Sender email address
+    email_from_name: str = "BaluHost"  # Sender display name
+
+    # WebSocket configuration
+    ws_heartbeat_interval: int = 30  # WebSocket ping interval in seconds
+
+    # Notification configuration
+    notification_retention_days: int = 90  # Days to retain old notifications
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",

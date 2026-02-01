@@ -33,6 +33,9 @@ from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
 from app.services.notification_scheduler import NotificationScheduler
 from app.services.backup_scheduler import BackupScheduler
+from app.services.websocket_manager import init_websocket_manager
+from app.services.email_service import init_email_service
+from app.services.event_emitter import init_event_emitter
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
@@ -44,6 +47,7 @@ from app.services.service_status import (
 )
 from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
 from app.plugins.manager import PluginManager
+from app.services.update_service import register_update_service
 
 logger = logging.getLogger(__name__)
 
@@ -55,6 +59,8 @@ _notification_scheduler = None
 _backup_scheduler = None
 # Plugin manager instance
 _plugin_manager = None
+# WebSocket manager instance
+_websocket_manager = None
 
 
 def _register_services() -> None:
@@ -265,6 +271,17 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     
     # Initialize Firebase (optional, warnings if not configured)
     FirebaseService.initialize()
+
+    # Initialize notification system services
+    global _websocket_manager
+    try:
+        from app.core.database import SessionLocal
+        _websocket_manager = init_websocket_manager()
+        init_email_service()
+        init_event_emitter(SessionLocal)
+        logger.info("Notification system initialized")
+    except Exception as e:
+        logger.warning(f"Notification system could not initialize: {e}")
     
     # Start notification scheduler (only if Firebase is available)
     if FirebaseService.is_available():
@@ -329,6 +346,9 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     # Register all services with the service status collector
     _register_services()
+
+    # Register update service
+    register_update_service()
 
     # Set DB engine for pool monitoring
     from app.core.database import engine

@@ -16,7 +16,11 @@ from app.schemas.energy import (
     EnergyPeriodStats,
     HourlySample,
     EnergyDashboard,
-    EnergyCostEstimate
+    EnergyCostEstimate,
+    EnergyPriceConfigRead,
+    EnergyPriceConfigUpdate,
+    CumulativeDataPoint,
+    CumulativeEnergyResponse
 )
 from app.services import energy_stats, power_monitor
 from app.core.config import settings
@@ -276,3 +280,91 @@ async def get_hourly_samples(
     """
     samples_data = energy_stats.get_hourly_samples(db, device_id, hours)
     return [HourlySample(**sample) for sample in samples_data]
+
+
+@router.get("/price", response_model=EnergyPriceConfigRead)
+async def get_energy_price(
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> EnergyPriceConfigRead:
+    """
+    Get the current energy price configuration.
+
+    Returns the cost per kWh and currency settings.
+    """
+    config = energy_stats.get_energy_price_config(db)
+    return EnergyPriceConfigRead.model_validate(config)
+
+
+@router.put("/price", response_model=EnergyPriceConfigRead)
+async def update_energy_price(
+    update_data: EnergyPriceConfigUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+) -> EnergyPriceConfigRead:
+    """
+    Update the energy price configuration.
+
+    Requires admin privileges.
+
+    Args:
+        update_data: New price configuration (cost_per_kwh: 0.01-10.00, currency)
+    """
+    config = energy_stats.update_energy_price_config(
+        db=db,
+        cost_per_kwh=update_data.cost_per_kwh,
+        currency=update_data.currency,
+        user_id=current_user.id
+    )
+    return EnergyPriceConfigRead.model_validate(config)
+
+
+@router.get("/cumulative/{device_id}", response_model=CumulativeEnergyResponse)
+async def get_cumulative_energy(
+    device_id: int,
+    period: str = Query("today", pattern="^(today|week|month)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> CumulativeEnergyResponse:
+    """
+    Get cumulative energy consumption data for charting.
+
+    Returns data points with cumulative kWh and cost over time.
+
+    Args:
+        device_id: Tapo device ID
+        period: 'today', 'week', or 'month'
+    """
+    # Get current price config
+    price_config = energy_stats.get_energy_price_config(db)
+
+    # Get cumulative data
+    data = energy_stats.get_cumulative_energy_data(
+        db=db,
+        device_id=device_id,
+        period=period,
+        cost_per_kwh=price_config.cost_per_kwh
+    )
+
+    if not data:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Device {device_id} not found"
+        )
+
+    # Update currency from config
+    data["currency"] = price_config.currency
+
+    # Convert data points to schema
+    data_points = [CumulativeDataPoint(**dp) for dp in data["data_points"]]
+
+    return CumulativeEnergyResponse(
+        device_id=data["device_id"],
+        device_name=data["device_name"],
+        period=data["period"],
+        cost_per_kwh=data["cost_per_kwh"],
+        currency=data["currency"],
+        total_kwh=data["total_kwh"],
+        total_cost=data["total_cost"],
+        data_points=data_points
+    )

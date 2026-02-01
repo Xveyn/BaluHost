@@ -90,3 +90,58 @@ export async function getHourlySamples(
   );
   return response.data;
 }
+
+// Energy Price Configuration
+export interface EnergyPriceConfig {
+  id: number;
+  cost_per_kwh: number;
+  currency: string;
+  updated_at: string;
+  updated_by_user_id: number | null;
+}
+
+export interface EnergyPriceConfigUpdate {
+  cost_per_kwh: number;
+  currency: string;
+}
+
+export async function getEnergyPriceConfig(): Promise<EnergyPriceConfig> {
+  const response = await apiClient.get<EnergyPriceConfig>('/api/energy/price');
+  return response.data;
+}
+
+export async function updateEnergyPriceConfig(
+  data: EnergyPriceConfigUpdate
+): Promise<EnergyPriceConfig> {
+  const response = await apiClient.put<EnergyPriceConfig>('/api/energy/price', data);
+  return response.data;
+}
+
+// Cumulative Energy Data
+export interface CumulativeDataPoint {
+  timestamp: string;
+  cumulative_kwh: number;
+  cumulative_cost: number;
+  instant_watts: number;
+}
+
+export interface CumulativeEnergyResponse {
+  device_id: number;
+  device_name: string;
+  period: string;
+  cost_per_kwh: number;
+  currency: string;
+  total_kwh: number;
+  total_cost: number;
+  data_points: CumulativeDataPoint[];
+}
+
+export async function getCumulativeEnergy(
+  deviceId: number,
+  period: 'today' | 'week' | 'month' = 'today'
+): Promise<CumulativeEnergyResponse> {
+  const response = await apiClient.get<CumulativeEnergyResponse>(
+    `/api/energy/cumulative/${deviceId}?period=${period}`
+  );
+  return response.data;
+}

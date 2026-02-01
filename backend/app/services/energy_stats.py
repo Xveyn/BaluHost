@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.models.power_sample import PowerSample
 from app.models.tapo_device import TapoDevice
+from app.models.energy_price_config import EnergyPriceConfig
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -254,3 +255,167 @@ def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
 
     logger.info(f"Cleaned up {deleted} power samples older than {days_to_keep} days")
     return deleted
+
+
+def get_energy_price_config(db: Session) -> EnergyPriceConfig:
+    """
+    Get the energy price configuration (singleton).
+
+    Creates the default configuration if it doesn't exist.
+
+    Args:
+        db: Database session
+
+    Returns:
+        EnergyPriceConfig instance
+    """
+    config = db.query(EnergyPriceConfig).filter(EnergyPriceConfig.id == 1).first()
+
+    if not config:
+        # Create default config
+        config = EnergyPriceConfig(
+            id=1,
+            cost_per_kwh=0.40,
+            currency="EUR",
+            updated_at=datetime.utcnow()
+        )
+        db.add(config)
+        db.commit()
+        db.refresh(config)
+        logger.info("Created default energy price config")
+
+    return config
+
+
+def update_energy_price_config(
+    db: Session,
+    cost_per_kwh: float,
+    currency: str,
+    user_id: Optional[int] = None
+) -> EnergyPriceConfig:
+    """
+    Update the energy price configuration.
+
+    Args:
+        db: Database session
+        cost_per_kwh: New cost per kWh
+        currency: Currency code
+        user_id: ID of user making the update
+
+    Returns:
+        Updated EnergyPriceConfig instance
+    """
+    config = get_energy_price_config(db)
+    config.cost_per_kwh = cost_per_kwh
+    config.currency = currency
+    config.updated_at = datetime.utcnow()
+    config.updated_by_user_id = user_id
+
+    db.commit()
+    db.refresh(config)
+
+    logger.info(f"Updated energy price to {cost_per_kwh} {currency} by user {user_id}")
+    return config
+
+
+def get_cumulative_energy_data(
+    db: Session,
+    device_id: int,
+    period: str,
+    cost_per_kwh: float
+) -> Dict:
+    """
+    Calculate cumulative energy consumption data for charting.
+
+    Args:
+        db: Database session
+        device_id: Tapo device ID
+        period: 'today', 'week', or 'month'
+        cost_per_kwh: Cost per kWh for cost calculation
+
+    Returns:
+        Dict with device info, totals, and data_points array
+    """
+    # Get device
+    device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    if not device:
+        return None
+
+    # Determine time range
+    now = datetime.utcnow()
+    if period == "today":
+        start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
+    elif period == "week":
+        start_time = now - timedelta(days=now.weekday())
+        start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
+    else:  # month
+        start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
+    # Query samples ordered by timestamp
+    samples = db.query(PowerSample).filter(
+        and_(
+            PowerSample.device_id == device_id,
+            PowerSample.timestamp >= start_time,
+            PowerSample.timestamp <= now,
+            PowerSample.is_online == True
+        )
+    ).order_by(PowerSample.timestamp).all()
+
+    if not samples:
+        return {
+            "device_id": device_id,
+            "device_name": device.name,
+            "period": period,
+            "cost_per_kwh": cost_per_kwh,
+            "currency": "EUR",
+            "total_kwh": 0.0,
+            "total_cost": 0.0,
+            "data_points": []
+        }
+
+    # Calculate cumulative energy using trapezoidal integration
+    data_points = []
+    cumulative_wh = 0.0
+
+    for i, sample in enumerate(samples):
+        if i > 0:
+            prev_sample = samples[i - 1]
+            time_diff_hours = (sample.timestamp - prev_sample.timestamp).total_seconds() / 3600
+            # Trapezoidal rule: average power * time
+            avg_power = (prev_sample.watts + sample.watts) / 2
+            cumulative_wh += avg_power * time_diff_hours
+
+        cumulative_kwh = cumulative_wh / 1000
+        cumulative_cost = cumulative_kwh * cost_per_kwh
+
+        data_points.append({
+            "timestamp": sample.timestamp.isoformat(),
+            "cumulative_kwh": round(cumulative_kwh, 4),
+            "cumulative_cost": round(cumulative_cost, 4),
+            "instant_watts": round(sample.watts, 1)
+        })
+
+    # Downsample if too many points (target ~100-200 points for smooth chart)
+    max_points = 200
+    if len(data_points) > max_points:
+        step = len(data_points) // max_points
+        # Always include first and last point
+        downsampled = [data_points[0]]
+        for i in range(step, len(data_points) - 1, step):
+            downsampled.append(data_points[i])
+        downsampled.append(data_points[-1])
+        data_points = downsampled
+
+    total_kwh = cumulative_wh / 1000
+    total_cost = total_kwh * cost_per_kwh
+
+    return {
+        "device_id": device_id,
+        "device_name": device.name,
+        "period": period,
+        "cost_per_kwh": cost_per_kwh,
+        "currency": "EUR",
+        "total_kwh": round(total_kwh, 4),
+        "total_cost": round(total_cost, 2),
+        "data_points": data_points
+    }

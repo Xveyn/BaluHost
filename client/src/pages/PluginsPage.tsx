@@ -16,7 +16,15 @@ import {
   togglePlugin,
   uninstallPlugin,
 } from '../api/plugins';
-import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink } from 'lucide-react';
+import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen } from 'lucide-react';
+import PluginDocumentation from '../components/plugins/PluginDocumentation';
+
+type TabType = 'plugins' | 'documentation';
+
+const TABS = [
+  { id: 'plugins' as TabType, label: 'Installiert', icon: Plug },
+  { id: 'documentation' as TabType, label: 'Dokumentation', icon: BookOpen },
+];
 
 export default function PluginsPage() {
   const { plugins, isLoading, error, refreshPlugins } = usePlugins();
@@ -27,6 +35,7 @@ export default function PluginsPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [showPermissionModal, setShowPermissionModal] = useState(false);
   const [selectedPermissions, setSelectedPermissions] = useState<string[]>([]);
+  const [activeTab, setActiveTab] = useState<TabType>('plugins');
 
   // Load all permissions on mount
   useEffect(() => {
@@ -141,12 +150,32 @@ export default function PluginsPage() {
             Manage installed plugins and extensions
           </p>
         </div>
-        <button
-          onClick={refreshPlugins}
-          className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white transition"
-        >
-          Refresh
-        </button>
+        {activeTab === 'plugins' && (
+          <button
+            onClick={refreshPlugins}
+            className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white transition"
+          >
+            Refresh
+          </button>
+        )}
+      </div>
+
+      {/* Tab Navigation */}
+      <div className="flex gap-2 border-b border-slate-800 -mb-px overflow-x-auto">
+        {TABS.map((tab) => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+              activeTab === tab.id
+                ? 'text-sky-400 border-sky-500'
+                : 'text-slate-400 border-transparent hover:text-slate-300'
+            }`}
+          >
+            <tab.icon className="w-4 h-4" />
+            {tab.label}
+          </button>
+        ))}
       </div>
 
       {error && (
@@ -155,13 +184,20 @@ export default function PluginsPage() {
         </div>
       )}
 
-      {actionError && (
+      {activeTab === 'plugins' && actionError && (
         <div className="p-4 rounded-lg bg-red-500/10 border border-red-500/30 text-red-400 flex items-center gap-2">
           <AlertTriangle className="h-4 w-4" />
           {actionError}
         </div>
       )}
 
+      {/* Documentation Tab */}
+      {activeTab === 'documentation' && (
+        <PluginDocumentation permissions={allPermissions} />
+      )}
+
+      {/* Plugins Tab */}
+      {activeTab === 'plugins' && (
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         {/* Plugin List */}
         <div className="lg:col-span-2 space-y-4">
@@ -377,6 +413,7 @@ export default function PluginsPage() {
           )}
         </div>
       </div>
+      )}
 
       {/* Permission Grant Modal */}
       {showPermissionModal && selectedPlugin && (

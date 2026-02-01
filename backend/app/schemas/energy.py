@@ -130,3 +130,89 @@ class EnergyCostEstimate(BaseModel):
                 "currency": "EUR"
             }
         }
+
+
+class EnergyPriceConfigRead(BaseModel):
+    """Read schema for energy price configuration."""
+    id: int
+    cost_per_kwh: float = Field(..., description="Cost per kWh in currency")
+    currency: str = Field(..., description="Currency code (e.g., EUR, USD)")
+    updated_at: datetime
+    updated_by_user_id: Optional[int]
+
+    class Config:
+        from_attributes = True
+        json_schema_extra = {
+            "example": {
+                "id": 1,
+                "cost_per_kwh": 0.40,
+                "currency": "EUR",
+                "updated_at": "2026-01-28T12:00:00",
+                "updated_by_user_id": 1
+            }
+        }
+
+
+class EnergyPriceConfigUpdate(BaseModel):
+    """Update schema for energy price configuration."""
+    cost_per_kwh: float = Field(..., ge=0.01, le=10.0, description="Cost per kWh (0.01-10.00)")
+    currency: str = Field("EUR", max_length=10, description="Currency code")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "cost_per_kwh": 0.42,
+                "currency": "EUR"
+            }
+        }
+
+
+class CumulativeDataPoint(BaseModel):
+    """Single data point for cumulative energy chart."""
+    timestamp: str = Field(..., description="ISO timestamp")
+    cumulative_kwh: float = Field(..., description="Cumulative energy in kWh")
+    cumulative_cost: float = Field(..., description="Cumulative cost in currency")
+    instant_watts: float = Field(..., description="Instantaneous power in watts")
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "timestamp": "2026-01-28T12:00:00",
+                "cumulative_kwh": 0.125,
+                "cumulative_cost": 0.05,
+                "instant_watts": 28.5
+            }
+        }
+
+
+class CumulativeEnergyResponse(BaseModel):
+    """Response with cumulative energy data for charting."""
+    device_id: int
+    device_name: str
+    period: str = Field(..., description="today, week, or month")
+    cost_per_kwh: float
+    currency: str
+    total_kwh: float = Field(..., description="Total energy for the period")
+    total_cost: float = Field(..., description="Total cost for the period")
+    data_points: List[CumulativeDataPoint] = Field(default_factory=list)
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "device_id": 1,
+                "device_name": "NAS Power Monitor",
+                "period": "today",
+                "cost_per_kwh": 0.40,
+                "currency": "EUR",
+                "total_kwh": 0.684,
+                "total_cost": 0.27,
+                "data_points": [
+                    {
+                        "timestamp": "2026-01-28T00:00:00",
+                        "cumulative_kwh": 0.0,
+                        "cumulative_cost": 0.0,
+                        "instant_watts": 25.0
+                    }
+                ]
+            }
+        }

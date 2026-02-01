@@ -22,6 +22,25 @@ import {
 } from '../hooks/useMonitoring';
 import { getPowerHistory } from '../api/power';
 import type { PowerMonitoringResponse } from '../api/power';
+import {
+  getEnergyPriceConfig,
+  updateEnergyPriceConfig,
+  getCumulativeEnergy,
+  type EnergyPriceConfig,
+  type CumulativeEnergyResponse,
+} from '../api/energy';
+import {
+  ComposedChart,
+  Area,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  ResponsiveContainer,
+  Legend,
+} from 'recharts';
+import toast from 'react-hot-toast';
 import { ServicesTab } from '../components/services';
 import { AdminBadge } from '../components/ui/AdminBadge';
 import { BenchmarkPanel } from '../components/benchmark';
@@ -796,10 +815,23 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
 }
 
 // Power Tab Component
+type CumulativePeriod = 'today' | 'week' | 'month';
+
 function PowerTab() {
   const [powerData, setPowerData] = useState<PowerMonitoringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+
+  // Energy price config state
+  const [priceConfig, setPriceConfig] = useState<EnergyPriceConfig | null>(null);
+  const [editingPrice, setEditingPrice] = useState(false);
+  const [priceInput, setPriceInput] = useState('');
+  const [savingPrice, setSavingPrice] = useState(false);
+
+  // Cumulative energy state
+  const [cumulativePeriod, setCumulativePeriod] = useState<CumulativePeriod>('today');
+  const [cumulativeData, setCumulativeData] = useState<CumulativeEnergyResponse | null>(null);
+  const [cumulativeLoading, setCumulativeLoading] = useState(false);
 
   const fetchPower = useCallback(async () => {
     try {
@@ -815,6 +847,68 @@ function PowerTab() {
       setLoading(false);
     }
   }, []);
+
+  // Fetch price config on mount
+  useEffect(() => {
+    const fetchPriceConfig = async () => {
+      try {
+        const config = await getEnergyPriceConfig();
+        setPriceConfig(config);
+        setPriceInput(config.cost_per_kwh.toString());
+      } catch (err) {
+        console.error('Failed to load price config:', err);
+      }
+    };
+    fetchPriceConfig();
+  }, []);
+
+  // Fetch cumulative data when period changes or power data updates
+  useEffect(() => {
+    const fetchCumulative = async () => {
+      if (!powerData || powerData.devices.length === 0) return;
+
+      setCumulativeLoading(true);
+      try {
+        // Use first device for now
+        const deviceId = powerData.devices[0].device_id;
+        const data = await getCumulativeEnergy(deviceId, cumulativePeriod);
+        setCumulativeData(data);
+      } catch (err) {
+        console.error('Failed to load cumulative data:', err);
+      } finally {
+        setCumulativeLoading(false);
+      }
+    };
+    fetchCumulative();
+  }, [powerData, cumulativePeriod]);
+
+  const handleSavePrice = async () => {
+    const newPrice = parseFloat(priceInput);
+    if (isNaN(newPrice) || newPrice < 0.01 || newPrice > 10.0) {
+      toast.error('Preis muss zwischen 0.01 und 10.00 liegen');
+      return;
+    }
+
+    setSavingPrice(true);
+    try {
+      const updated = await updateEnergyPriceConfig({
+        cost_per_kwh: newPrice,
+        currency: priceConfig?.currency || 'EUR',
+      });
+      setPriceConfig(updated);
+      setEditingPrice(false);
+      toast.success('Strompreis aktualisiert');
+      // Refresh cumulative data with new price
+      if (powerData && powerData.devices.length > 0) {
+        const data = await getCumulativeEnergy(powerData.devices[0].device_id, cumulativePeriod);
+        setCumulativeData(data);
+      }
+    } catch (err: any) {
+      toast.error(err.response?.data?.detail || 'Fehler beim Speichern');
+    } finally {
+      setSavingPrice(false);
+    }
+  };
 
   useEffect(() => {
     fetchPower();
@@ -971,6 +1065,221 @@ function PowerTab() {
           </div>
         );
       })}
+
+      {/* Cumulative Energy Chart Section */}
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        {/* Header with Price Config */}
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+          <div className="flex items-center gap-3">
+            <h3 className="text-base sm:text-lg font-semibold text-white">
+              Kumulierter Verbrauch & Kosten
+            </h3>
+            {priceConfig && (
+              <div className="flex items-center gap-2">
+                {editingPrice ? (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0.01"
+                      max="10"
+                      value={priceInput}
+                      onChange={(e) => setPriceInput(e.target.value)}
+                      className="w-20 px-2 py-1 text-sm bg-slate-800 border border-slate-700 rounded text-white focus:border-blue-500 focus:outline-none"
+                      disabled={savingPrice}
+                    />
+                    <span className="text-slate-400 text-sm">{priceConfig.currency}/kWh</span>
+                    <button
+                      onClick={handleSavePrice}
+                      disabled={savingPrice}
+                      className="px-2 py-1 text-xs bg-green-600 hover:bg-green-700 text-white rounded disabled:opacity-50"
+                    >
+                      {savingPrice ? '...' : '✓'}
+                    </button>
+                    <button
+                      onClick={() => {
+                        setEditingPrice(false);
+                        setPriceInput(priceConfig.cost_per_kwh.toString());
+                      }}
+                      disabled={savingPrice}
+                      className="px-2 py-1 text-xs bg-slate-700 hover:bg-slate-600 text-white rounded disabled:opacity-50"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    onClick={() => setEditingPrice(true)}
+                    className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700"
+                  >
+                    <span>{priceConfig.cost_per_kwh.toFixed(2)} {priceConfig.currency}/kWh</span>
+                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                    </svg>
+                  </button>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Period Selector */}
+          <div className="flex gap-1 sm:gap-2">
+            {(['today', 'week', 'month'] as CumulativePeriod[]).map((period) => (
+              <button
+                key={period}
+                onClick={() => setCumulativePeriod(period)}
+                className={`px-3 py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                  cumulativePeriod === period
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
+                }`}
+              >
+                {period === 'today' ? 'Heute' : period === 'week' ? 'Woche' : 'Monat'}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {/* Summary Stats */}
+        {cumulativeData && (
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Gesamt Verbrauch</p>
+              <p className="text-lg font-semibold text-emerald-400">
+                {cumulativeData.total_kwh.toFixed(3)} <span className="text-sm text-slate-400">kWh</span>
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Gesamt Kosten</p>
+              <p className="text-lg font-semibold text-orange-400">
+                {cumulativeData.total_cost.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Strompreis</p>
+              <p className="text-lg font-semibold text-slate-300">
+                {cumulativeData.cost_per_kwh.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
+              </p>
+            </div>
+            <div className="bg-slate-800/50 rounded-lg p-3">
+              <p className="text-xs text-slate-400">Datenpunkte</p>
+              <p className="text-lg font-semibold text-slate-300">
+                {cumulativeData.data_points.length}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Chart */}
+        {cumulativeLoading ? (
+          <div className="flex items-center justify-center py-12">
+            <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-blue-500" />
+          </div>
+        ) : cumulativeData && cumulativeData.data_points.length > 0 ? (
+          <div className="h-[300px] sm:h-[350px]">
+            <ResponsiveContainer width="100%" height="100%">
+              <ComposedChart
+                data={cumulativeData.data_points.map((dp) => ({
+                  time: new Date(dp.timestamp).toLocaleTimeString('de-DE', {
+                    hour: '2-digit',
+                    minute: '2-digit',
+                  }),
+                  fullTime: new Date(dp.timestamp).toLocaleString('de-DE'),
+                  kwh: dp.cumulative_kwh,
+                  cost: dp.cumulative_cost,
+                  watts: dp.instant_watts,
+                }))}
+                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+              >
+                <defs>
+                  <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                <XAxis
+                  dataKey="time"
+                  stroke="#64748b"
+                  fontSize={11}
+                  tickLine={false}
+                  interval="preserveStartEnd"
+                />
+                <YAxis
+                  yAxisId="left"
+                  stroke="#10b981"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v.toFixed(2)}`}
+                  label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: '#10b981', fontSize: 11 }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  stroke="#f97316"
+                  fontSize={11}
+                  tickLine={false}
+                  axisLine={false}
+                  tickFormatter={(v) => `${v.toFixed(2)}`}
+                  label={{ value: cumulativeData.currency, angle: 90, position: 'insideRight', fill: '#f97316', fontSize: 11 }}
+                />
+                <Tooltip
+                  contentStyle={{
+                    backgroundColor: '#1e293b',
+                    border: '1px solid #334155',
+                    borderRadius: '8px',
+                    fontSize: '12px',
+                  }}
+                  labelStyle={{ color: '#94a3b8' }}
+                  formatter={(value: number, name: string) => {
+                    if (name === 'kwh') return [`${value.toFixed(4)} kWh`, 'Verbrauch'];
+                    if (name === 'cost') return [`${value.toFixed(4)} ${cumulativeData.currency}`, 'Kosten'];
+                    if (name === 'watts') return [`${value.toFixed(1)} W`, 'Leistung'];
+                    return [value, name];
+                  }}
+                  labelFormatter={(label, payload) => {
+                    if (payload && payload[0]) {
+                      return payload[0].payload.fullTime;
+                    }
+                    return label;
+                  }}
+                />
+                <Legend
+                  wrapperStyle={{ fontSize: '12px' }}
+                  formatter={(value) => {
+                    if (value === 'kwh') return 'Verbrauch (kWh)';
+                    if (value === 'cost') return `Kosten (${cumulativeData.currency})`;
+                    return value;
+                  }}
+                />
+                <Area
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="kwh"
+                  stroke="#10b981"
+                  strokeWidth={2}
+                  fill="url(#colorKwh)"
+                  name="kwh"
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="cost"
+                  stroke="#f97316"
+                  strokeWidth={2}
+                  dot={false}
+                  name="cost"
+                />
+              </ComposedChart>
+            </ResponsiveContainer>
+          </div>
+        ) : (
+          <div className="text-center py-8 text-slate-400">
+            Keine Daten für den ausgewählten Zeitraum verfügbar
+          </div>
+        )}
+      </div>
     </div>
   );
 }

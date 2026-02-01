@@ -1,0 +1,283 @@
+"""Update service API endpoints."""
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status, Query
+from sqlalchemy.orm import Session
+
+from app.api import deps
+from app.core.database import get_db
+from app.schemas.user import UserPublic
+from app.schemas.update import (
+    UpdateCheckResponse,
+    UpdateStartRequest,
+    UpdateStartResponse,
+    UpdateProgressResponse,
+    UpdateHistoryResponse,
+    RollbackRequest,
+    RollbackResponse,
+    UpdateConfigResponse,
+    UpdateConfigUpdate,
+)
+from app.services.update_service import get_update_service
+from app.services.audit_logger_db import get_audit_logger_db
+
+router = APIRouter(prefix="/updates", tags=["updates"])
+
+
+@router.get("/check", response_model=UpdateCheckResponse)
+async def check_for_updates(
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateCheckResponse:
+    """Check if updates are available.
+
+    Returns current version, latest available version, changelog,
+    and any blockers that would prevent updating.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    result = await service.check_for_updates()
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="check_updates",
+        user=current_user.username,
+        resource="system",
+        success=True,
+        details={
+            "current_version": result.current_version.version,
+            "update_available": result.update_available,
+            "latest_version": result.latest_version.version if result.latest_version else None,
+        },
+        db=db,
+    )
+
+    return result
+
+
+@router.post("/start", response_model=UpdateStartResponse)
+async def start_update(
+    request: Optional[UpdateStartRequest] = None,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateStartResponse:
+    """Start the update process.
+
+    Initiates an update to the latest available version (or specified version).
+    The update runs in the background and progress can be monitored via
+    the /progress/{id} endpoint.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    req = request or UpdateStartRequest()
+
+    result = await service.start_update(
+        user_id=current_user.id,
+        target_version=req.target_version,
+        skip_backup=req.skip_backup,
+        force=req.force,
+    )
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="start_update",
+        user=current_user.username,
+        resource="system",
+        success=result.success,
+        details={
+            "update_id": result.update_id,
+            "target_version": req.target_version,
+            "skip_backup": req.skip_backup,
+            "force": req.force,
+            "message": result.message,
+            "blockers": result.blockers,
+        },
+        db=db,
+    )
+
+    if not result.success and result.blockers:
+        # Return 409 Conflict if blocked
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": result.message,
+                "blockers": result.blockers,
+            }
+        )
+
+    return result
+
+
+@router.get("/progress/{update_id}", response_model=UpdateProgressResponse)
+async def get_update_progress(
+    update_id: int,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateProgressResponse:
+    """Get progress of an update.
+
+    Returns current status, progress percentage, and current step
+    for the specified update.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+
+    result = service.get_update_progress(update_id)
+
+    if not result:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Update {update_id} not found",
+        )
+
+    return result
+
+
+@router.get("/current", response_model=Optional[UpdateProgressResponse])
+async def get_current_update(
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> Optional[UpdateProgressResponse]:
+    """Get the currently running update, if any.
+
+    Returns None if no update is in progress.
+
+    Requires admin privileges.
+    """
+    from app.models.update_history import UpdateHistory, UpdateStatus
+
+    # Find any running update
+    running = (
+        db.query(UpdateHistory)
+        .filter(UpdateHistory.status.in_([
+            UpdateStatus.PENDING.value,
+            UpdateStatus.CHECKING.value,
+            UpdateStatus.DOWNLOADING.value,
+            UpdateStatus.BACKING_UP.value,
+            UpdateStatus.INSTALLING.value,
+            UpdateStatus.MIGRATING.value,
+            UpdateStatus.RESTARTING.value,
+            UpdateStatus.HEALTH_CHECK.value,
+        ]))
+        .first()
+    )
+
+    if not running:
+        return None
+
+    service = get_update_service(db)
+    return service.get_update_progress(running.id)
+
+
+@router.post("/rollback", response_model=RollbackResponse)
+async def rollback_update(
+    request: Optional[RollbackRequest] = None,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> RollbackResponse:
+    """Rollback to a previous version.
+
+    Can specify a target update ID or commit to rollback to.
+    If not specified, rolls back to the previous successful update.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    req = request or RollbackRequest()
+
+    result = await service.rollback(req, current_user.id)
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="rollback",
+        user=current_user.username,
+        resource="system",
+        success=result.success,
+        details={
+            "target_update_id": req.target_update_id,
+            "target_commit": req.target_commit,
+            "restore_backup": req.restore_backup,
+            "rolled_back_to": result.rolled_back_to,
+            "message": result.message,
+        },
+        db=db,
+    )
+
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.message,
+        )
+
+    return result
+
+
+@router.get("/history", response_model=UpdateHistoryResponse)
+async def get_update_history(
+    page: int = Query(1, ge=1, description="Page number"),
+    page_size: int = Query(20, ge=1, le=100, description="Items per page"),
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateHistoryResponse:
+    """Get update history.
+
+    Returns paginated list of past updates with status and details.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    return service.get_history(page=page, page_size=page_size)
+
+
+@router.get("/config", response_model=UpdateConfigResponse)
+async def get_update_config(
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateConfigResponse:
+    """Get update service configuration.
+
+    Returns auto-check settings, update channel, backup preferences, etc.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    return service.get_config()
+
+
+@router.put("/config", response_model=UpdateConfigResponse)
+async def update_config(
+    config: UpdateConfigUpdate,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateConfigResponse:
+    """Update service configuration.
+
+    Allows modifying auto-check settings, update channel, etc.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    result = service.update_config(config, current_user.id)
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="update_config",
+        user=current_user.username,
+        resource="update_config",
+        success=True,
+        details=config.model_dump(exclude_unset=True),
+        db=db,
+    )
+
+    return result

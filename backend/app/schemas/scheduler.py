@@ -209,4 +209,11 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "default_interval": 86400,  # Daily at 3 AM
         "can_run_manually": True,
     },
+    "auto_update": {
+        "display_name": "Auto Update Check",
+        "description": "Automatically checks for available BaluHost updates",
+        "config_key": "AUTO_UPDATE_CHECK_ENABLED",
+        "default_interval": 86400,  # 24 hours
+        "can_run_manually": True,
+    },
 }

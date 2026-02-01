@@ -22,6 +22,8 @@ import PowerManagement from './pages/PowerManagement';
 import FanControl from './pages/FanControl';
 import PluginsPage from './pages/PluginsPage';
 import PluginPage from './components/PluginPage';
+import NotificationPreferencesPage from './pages/NotificationPreferencesPage';
+import UpdatePage from './pages/UpdatePage';
 import Layout from './components/Layout';
 import { PluginProvider } from './contexts/PluginContext';
 import { buildApiUrl } from './lib/api';
@@ -402,6 +404,30 @@ function App() {
           }
         />
         <Route
+          path="/settings/notifications"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <NotificationPreferencesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/notifications"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <NotificationPreferencesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
           path="/sync"
           element={
             user ? (
@@ -486,6 +512,18 @@ function App() {
               </Layout>
             ) : (
               <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/updates"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <UpdatePage />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
             )
           }
         />
