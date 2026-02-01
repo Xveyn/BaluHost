@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import logging
 import random
+import socket
 import time
 from datetime import datetime
 from typing import Optional, Tuple, Type
@@ -45,6 +46,10 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
         )
         # Previous network counters for rate calculation
         self._previous_counters: Optional[Tuple[float, int, int]] = None
+        # Cache for interface type (refreshed periodically)
+        self._interface_type: str = "unknown"
+        self._interface_type_last_check: float = 0.0
+        self._interface_type_check_interval: float = 30.0  # Check every 30 seconds
 
     def collect_sample(self) -> Optional[NetworkSampleSchema]:
         """Collect network metrics sample."""
@@ -125,6 +130,58 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
         next_up = max(0.0, base_up + random.uniform(-0.4, 0.5))
 
         return round(next_down, 2), round(next_up, 2)
+
+    def get_active_interface_type(self) -> str:
+        """Detect the type of the active network interface.
+
+        Returns: 'ethernet', 'wifi', or 'unknown'
+        """
+        current_time = time.time()
+
+        # Return cached value if still valid
+        if current_time - self._interface_type_last_check < self._interface_type_check_interval:
+            return self._interface_type
+
+        try:
+            # Get interface stats and addresses
+            if_stats = psutil.net_if_stats()
+            if_addrs = psutil.net_if_addrs()
+
+            # Find active interface (up and has IP)
+            for iface, stats in if_stats.items():
+                if not stats.isup:
+                    continue
+                # Skip loopback and virtual interfaces
+                if iface.startswith(("lo", "docker", "veth", "br-", "virbr")):
+                    continue
+
+                # Check if interface has IPv4 address
+                addrs = if_addrs.get(iface, [])
+                has_ipv4 = any(addr.family == socket.AF_INET for addr in addrs)
+                if not has_ipv4:
+                    continue
+
+                # Determine type by interface name
+                iface_lower = iface.lower()
+                if any(x in iface_lower for x in ["wlan", "wlp", "wifi", "wl"]):
+                    self._interface_type = "wifi"
+                    self._interface_type_last_check = current_time
+                    return self._interface_type
+                elif any(x in iface_lower for x in ["eth", "enp", "eno", "ens"]):
+                    self._interface_type = "ethernet"
+                    self._interface_type_last_check = current_time
+                    return self._interface_type
+
+            # No recognized interface found
+            self._interface_type = "unknown"
+            self._interface_type_last_check = current_time
+            return self._interface_type
+
+        except Exception as e:
+            logger.debug(f"Failed to detect interface type: {e}")
+            self._interface_type = "unknown"
+            self._interface_type_last_check = current_time
+            return self._interface_type
 
     def get_db_model(self) -> Type[Base]:
         """Get the NetworkSample model class."""

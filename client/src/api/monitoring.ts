@@ -89,10 +89,13 @@ export interface CurrentMemoryResponse {
   baluhost_memory_bytes?: number;  // Memory used by BaluHost processes
 }
 
+export type InterfaceType = 'wifi' | 'ethernet' | 'unknown';
+
 export interface CurrentNetworkResponse {
   timestamp: string;
   download_mbps: number;
   upload_mbps: number;
+  interface_type?: InterfaceType;
 }
 
 export interface CurrentDiskIoResponse {

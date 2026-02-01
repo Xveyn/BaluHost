@@ -1,4 +1,5 @@
 import { useMemo, useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
@@ -8,7 +9,8 @@ import PowerWidget from '../components/PowerWidget';
 import {
   ActivityFeed,
   NextMaintenanceWidget,
-  ServiceSummaryWidget,
+  ServicesPanel,
+  PluginsPanel,
   NetworkWidget,
   ConnectedDevicesWidget,
   AlertBanner,
@@ -83,8 +85,14 @@ function setCachedRaid(raid: RaidStatusResponse): void {
 }
 
 export default function Dashboard({ user }: DashboardProps) {
+  const navigate = useNavigate();
   const isAdmin = user?.role === 'admin';
   const { system: systemInfo, storage: storageInfo, loading, error, lastUpdated, history } = useSystemTelemetry();
+
+  // Navigation handlers for dashboard panels
+  const handleCpuClick = () => navigate('/system?tab=cpu');
+  const handleMemoryClick = () => navigate('/system?tab=memory');
+  const handleStorageClick = () => navigate('/system?tab=disk-io');
   const { smartData, loading: smartLoading, error: smartError, refetch: refetchSmartData } = useSmartData();
   const cachedRaid = getCachedRaid();
   const [raidData, setRaidData] = useState<RaidStatusResponse | null>(cachedRaid);
@@ -416,9 +424,6 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
       ) : (
         <>
-          {/* Service Summary Widget (Admin Only) - compact bar */}
-          <ServiceSummaryWidget isAdmin={isAdmin} />
-
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
             {quickStats.map((stat) => {
               const deltaToneClass = stat.delta.tone === 'decrease'
@@ -429,8 +434,20 @@ export default function Dashboard({ user }: DashboardProps) {
                     ? 'text-slate-400'
                     : 'text-sky-400';
 
+              // Click handler based on stat ID
+              const handleClick = stat.id === 'cpu' ? handleCpuClick
+                : stat.id === 'memory' ? handleMemoryClick
+                : stat.id === 'storage' ? handleStorageClick
+                : undefined;
+
+              const isClickable = !!handleClick;
+
               return (
-                <div key={stat.id} className="card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] active:scale-[0.98] touch-manipulation">
+                <div
+                  key={stat.id}
+                  onClick={handleClick}
+                  className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] active:scale-[0.98] touch-manipulation ${isClickable ? 'cursor-pointer' : ''}`}
+                >
                 <div className="flex items-center justify-between gap-3">
                   <div className="min-w-0 flex-1">
                     <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{stat.title}</p>
@@ -466,6 +483,12 @@ export default function Dashboard({ user }: DashboardProps) {
 
             {/* Network Widget */}
             <NetworkWidget />
+
+            {/* Services Panel (Admin Only) */}
+            {isAdmin && <ServicesPanel isAdmin={isAdmin} />}
+
+            {/* Plugins Panel (Admin Only) */}
+            {isAdmin && <PluginsPanel isAdmin={isAdmin} />}
           </div>
 
           <div className="grid grid-cols-1 gap-6">

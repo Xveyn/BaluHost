@@ -38,6 +38,14 @@ from app.models.scheduler_history import (
     TriggerType,
 )
 from app.models.power_preset import PowerPreset
+from app.models.plugin import InstalledPlugin
+from app.models.benchmark import (
+    DiskBenchmark,
+    BenchmarkTestResult,
+    BenchmarkStatus,
+    BenchmarkProfile,
+    BenchmarkTargetType,
+)
 
 __all__ = [
     "Base",
@@ -79,4 +87,10 @@ __all__ = [
     "SchedulerStatus",
     "TriggerType",
     "PowerPreset",
+    "InstalledPlugin",
+    "DiskBenchmark",
+    "BenchmarkTestResult",
+    "BenchmarkStatus",
+    "BenchmarkProfile",
+    "BenchmarkTargetType",
 ]

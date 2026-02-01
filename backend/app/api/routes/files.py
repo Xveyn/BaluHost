@@ -26,6 +26,7 @@ from app.services.permissions import PermissionDeniedError
 from app.services.audit_logger_db import get_audit_logger_db
 from app.services.shares import ShareService
 from app.models.file_metadata import FileMetadata
+from app.plugins.emit import emit_hook
 
 
 router = APIRouter()
@@ -386,6 +387,16 @@ async def upload_files(
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
+    # Emit plugin hooks for uploaded files
+    for saved_file in saved:
+        emit_hook(
+            "on_file_uploaded",
+            path=saved_file,
+            user_id=user.id,
+            size=0,  # Size would need to be tracked separately
+            content_type=None,
+        )
+
     return FileUploadResponse(message="Files uploaded", uploaded=saved, upload_ids=upload_ids)
 
 
@@ -431,6 +442,10 @@ async def delete_path_raw(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    # Emit plugin hook for file deletion
+    emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+
     return FileOperationResponse(message="Deleted")
 
 
@@ -457,6 +472,10 @@ async def delete_path_body(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    # Emit plugin hook for file deletion
+    emit_hook("on_file_deleted", path=path, user_id=user.id)
+
     return FileOperationResponse(message="Deleted")
 
 
@@ -565,6 +584,15 @@ async def move_path(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    # Emit plugin hook for file move
+    emit_hook(
+        "on_file_moved",
+        old_path=payload.source_path,
+        new_path=payload.dest_path,
+        user_id=user.id,
+    )
+
     return FileOperationResponse(message="Moved")
 
 
@@ -591,4 +619,8 @@ async def delete_path_param(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    # Emit plugin hook for file deletion
+    emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+
     return FileOperationResponse(message="Deleted")

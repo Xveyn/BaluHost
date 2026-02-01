@@ -177,10 +177,14 @@ async def get_network_current(
     if sample is None:
         raise HTTPException(status_code=503, detail="No network data available yet")
 
+    # Get interface type from collector
+    interface_type = orchestrator.network_collector.get_active_interface_type()
+
     return CurrentNetworkResponse(
         timestamp=sample.timestamp,
         download_mbps=sample.download_mbps,
         upload_mbps=sample.upload_mbps,
+        interface_type=interface_type,
     )
 
 

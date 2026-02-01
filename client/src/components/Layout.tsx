@@ -3,6 +3,8 @@ import { type ReactNode, useState } from 'react';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
+import { usePlugins } from '../contexts/PluginContext';
+import { Plug } from 'lucide-react';
 
 interface LayoutProps {
   children: ReactNode;
@@ -100,6 +102,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shutdownPending, setShutdownPending] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
+  const { pluginNavItems } = usePlugins();
 
   const navItems = [
     {
@@ -226,9 +229,29 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             description: 'Permissions',
             adminOnly: true,
             icon: navIcon.users
+          },
+          {
+            path: '/plugins',
+            label: 'Plugins',
+            description: 'Extensions',
+            adminOnly: true,
+            icon: (
+              <Plug className="h-5 w-5" />
+            )
           }
         ]
-      : [])
+      : []),
+    // Add plugin navigation items
+    ...pluginNavItems
+      .filter((item) => !item.admin_only || user.role === 'admin')
+      .map((item) => ({
+        path: `/plugins/${item.path}`,
+        label: item.label,
+        description: 'Plugin',
+        icon: (
+          <Plug className="h-5 w-5" />
+        )
+      }))
   ];
 
   const renderLink = (path: string) => location.pathname === path;

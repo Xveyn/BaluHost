@@ -2,12 +2,13 @@
  * Hook for getting current network I/O status
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getNetworkCurrent, type CurrentNetworkResponse } from '../api/monitoring';
+import { getNetworkCurrent, type CurrentNetworkResponse, type InterfaceType } from '../api/monitoring';
 
 export interface NetworkStatus {
   downloadMbps: number;
   uploadMbps: number;
   timestamp: Date;
+  interfaceType: InterfaceType;
 }
 
 interface UseNetworkStatusOptions {
@@ -63,6 +64,7 @@ export function useNetworkStatus(options: UseNetworkStatusOptions = {}): UseNetw
       downloadMbps: data.download_mbps,
       uploadMbps: data.upload_mbps,
       timestamp: new Date(data.timestamp),
+      interfaceType: data.interface_type || 'unknown',
     };
   }, [data]);
 

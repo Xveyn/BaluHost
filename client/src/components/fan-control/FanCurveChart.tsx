@@ -97,7 +97,9 @@ export default function FanCurveChart({
   const CustomDot = (props: any) => {
     const { cx, cy, payload, index } = props;
 
-    // Don't render dots for current operating point
+    // Guard clauses - früh returnen wenn Props fehlen
+    if (cx === undefined || cy === undefined) return null;
+    if (!payload) return null;
     if (payload.isCurrentPoint) return null;
 
     const isHovered = draggingIndex === index;

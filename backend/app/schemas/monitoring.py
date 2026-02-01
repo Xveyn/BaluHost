@@ -152,6 +152,7 @@ class CurrentNetworkResponse(BaseModel):
     timestamp: datetime
     download_mbps: float
     upload_mbps: float
+    interface_type: Optional[str] = None  # 'wifi', 'ethernet', or 'unknown'
 
 
 class CurrentDiskIoResponse(BaseModel):

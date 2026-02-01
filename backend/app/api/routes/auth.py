@@ -9,6 +9,7 @@ from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
 from app.services import users as user_service
 from app.services.audit_logger_db import get_audit_logger_db
+from app.plugins.emit import emit_hook
 
 router = APIRouter()
 
@@ -44,6 +45,16 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
     
     token = auth_service.create_access_token(user_record)
     user_public = user_service.serialize_user(user_record)
+
+    # Emit plugin hook for successful login
+    emit_hook(
+        "on_user_login",
+        user_id=user_record.id,
+        username=user_record.username,
+        ip=ip_address or "",
+        user_agent=user_agent,
+    )
+
     return TokenResponse(access_token=token, user=user_public)
 
 
@@ -86,6 +97,15 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
     
     token = auth_service.create_access_token(user_record)
     user_public = user_service.serialize_user(user_record)
+
+    # Emit plugin hook for user registration
+    emit_hook(
+        "on_user_created",
+        user_id=user_record.id,
+        username=user_record.username,
+        role=getattr(user_record, "role", "user"),
+    )
+
     return TokenResponse(access_token=token, user=user_public)
 
 

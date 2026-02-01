@@ -3,15 +3,19 @@
  * Shows current upload/download speeds
  */
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useNetworkStatus, formatNetworkSpeed } from '../../hooks/useNetworkStatus';
-import { ArrowDown, ArrowUp, Wifi, WifiOff } from 'lucide-react';
+import { ArrowDown, ArrowUp, Wifi, WifiOff, Cable } from 'lucide-react';
 
 interface NetworkWidgetProps {
   className?: string;
 }
 
 export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) => {
+  const navigate = useNavigate();
   const { status, loading, error } = useNetworkStatus({ refreshInterval: 3000 });
+
+  const handleClick = () => navigate('/system?tab=network');
 
   if (loading) {
     return (
@@ -48,7 +52,7 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
     );
   }
 
-  const { downloadMbps, uploadMbps } = status;
+  const { downloadMbps, uploadMbps, interfaceType } = status;
 
   // Calculate combined speed for progress bar
   const totalMbps = downloadMbps + uploadMbps;
@@ -59,8 +63,14 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
   const isIdle = totalMbps < 0.1;
   const isActive = totalMbps > 1;
 
+  // Choose icon based on interface type
+  const NetworkIcon = interfaceType === 'ethernet' ? Cable : Wifi;
+
   return (
-    <div className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(16,185,129,0.15)] active:scale-[0.98] touch-manipulation ${className}`}>
+    <div
+      onClick={handleClick}
+      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(16,185,129,0.15)] active:scale-[0.98] touch-manipulation cursor-pointer ${className}`}
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Network</p>
@@ -86,7 +96,7 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
             ? 'bg-slate-700'
             : 'bg-gradient-to-br from-green-500 to-emerald-500'
         }`}>
-          <Wifi className="h-6 w-6" />
+          <NetworkIcon className="h-6 w-6" />
         </div>
       </div>
 

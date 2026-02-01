@@ -16,6 +16,7 @@ from app.schemas.backup import (
     BackupRestoreResponse
 )
 from app.services.backup import get_backup_service, BackupService
+from app.plugins.emit import emit_hook
 
 
 router = APIRouter()
@@ -41,13 +42,36 @@ async def create_backup(
     service = get_backup_service(db)
     
     try:
+        # Emit hook for backup start
+        emit_hook(
+            "on_backup_started",
+            backup_id="pending",
+            backup_type=backup_data.backup_type or "full",
+        )
+
         backup = service.create_backup(
             backup_data=backup_data,
             creator_id=current_user.id,
             creator_username=current_user.username
         )
+
+        # Emit hook for successful backup completion
+        emit_hook(
+            "on_backup_completed",
+            backup_id=str(backup.id),
+            success=True,
+            size=backup.size_bytes,
+        )
+
         return BackupResponse.from_db(backup)
     except Exception as e:
+        # Emit hook for failed backup
+        emit_hook(
+            "on_backup_completed",
+            backup_id="failed",
+            success=False,
+            error=str(e),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to create backup: {str(e)}"

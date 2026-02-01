@@ -10,6 +10,7 @@
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { MetricChart, TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
 import { formatTimestamp } from '../lib/dateUtils';
@@ -23,6 +24,7 @@ import { getPowerHistory } from '../api/power';
 import type { PowerMonitoringResponse } from '../api/power';
 import { ServicesTab } from '../components/services';
 import { AdminBadge } from '../components/ui/AdminBadge';
+import { BenchmarkPanel } from '../components/benchmark';
 
 interface User {
   id: string;
@@ -784,6 +786,11 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
           <p className="text-xs sm:text-sm text-slate-500 mt-1">Warte auf erste Messung...</p>
         </div>
       )}
+
+      {/* Disk Benchmark Section */}
+      <div className="border-t border-slate-800 pt-6 mt-6">
+        <BenchmarkPanel />
+      </div>
     </div>
   );
 }
@@ -970,10 +977,18 @@ function PowerTab() {
 
 // Main Component
 export default function SystemMonitor({ user }: SystemMonitorProps) {
-  const [activeTab, setActiveTab] = useState<TabType>('cpu');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
 
   const isAdmin = user?.role === 'admin';
+
+  // Get active tab from URL, default to 'cpu'
+  const activeTab = (searchParams.get('tab') || 'cpu') as TabType;
+
+  // Tab change handler that updates URL
+  const handleTabChange = (tab: TabType) => {
+    setSearchParams({ tab });
+  };
 
   // Filter tabs based on admin status
   const visibleTabs = useMemo(() => {
@@ -1005,7 +1020,7 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
           {visibleTabs.map((tab) => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
+              onClick={() => handleTabChange(tab.id)}
               className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
                 activeTab === tab.id
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'

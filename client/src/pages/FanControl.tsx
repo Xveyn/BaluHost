@@ -162,44 +162,46 @@ export default function FanControl() {
         </div>
       )}
 
-      {/* Backend Switch (Always visible) */}
-      <div className="card mb-6 border-slate-800/50 bg-slate-900/55">
-        <div className="flex items-start gap-3 mb-4">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/70 border border-slate-800/40">
-            <Settings className="h-5 w-5 text-slate-400" />
+      {/* Backend Switch (Dev mode only) */}
+      {status.is_dev_mode && (
+        <div className="card mb-6 border-slate-800/50 bg-slate-900/55">
+          <div className="flex items-start gap-3 mb-4">
+            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-slate-950/70 border border-slate-800/40">
+              <Settings className="h-5 w-5 text-slate-400" />
+            </div>
+            <div className="flex-1">
+              <h3 className="text-base sm:text-lg font-semibold text-white">Backend Configuration</h3>
+              <p className="text-xs sm:text-sm text-slate-400 mt-1">
+                Switch between simulated fans and real hardware control
+              </p>
+            </div>
           </div>
-          <div className="flex-1">
-            <h3 className="text-base sm:text-lg font-semibold text-white">Backend Configuration</h3>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1">
-              Switch between simulated fans and real hardware control
-            </p>
+          <div className="flex gap-3">
+            <button
+              onClick={() => handleBackendSwitch(false)}
+              disabled={!status.is_using_linux_backend}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                !status.is_using_linux_backend
+                  ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              Use Simulation
+            </button>
+            <button
+              onClick={() => handleBackendSwitch(true)}
+              disabled={status.is_using_linux_backend}
+              className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                status.is_using_linux_backend
+                  ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
+                  : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+              } disabled:opacity-50 disabled:cursor-not-allowed`}
+            >
+              Use Linux Hardware
+            </button>
           </div>
         </div>
-        <div className="flex gap-3">
-          <button
-            onClick={() => handleBackendSwitch(false)}
-            disabled={!status.is_using_linux_backend}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              !status.is_using_linux_backend
-                ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            Use Simulation
-          </button>
-          <button
-            onClick={() => handleBackendSwitch(true)}
-            disabled={status.is_using_linux_backend}
-            className={`px-4 py-2 rounded-lg font-medium transition-colors ${
-              status.is_using_linux_backend
-                ? 'bg-emerald-500 text-white shadow-lg shadow-emerald-500/30'
-                : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-            } disabled:opacity-50 disabled:cursor-not-allowed`}
-          >
-            Use Linux Hardware
-          </button>
-        </div>
-      </div>
+      )}
 
       {/* Fan Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 mb-6">

@@ -43,6 +43,7 @@ from app.services.service_status import (
     get_service_status_collector,
 )
 from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
+from app.plugins.manager import PluginManager
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,8 @@ _discovery_service = None
 _notification_scheduler = None
 # APScheduler instance for backups
 _backup_scheduler = None
+# Plugin manager instance
+_plugin_manager = None
 
 
 def _register_services() -> None:
@@ -200,7 +203,7 @@ def _register_services() -> None:
 
 
 @asynccontextmanager
-async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
+async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     global _discovery_service
     # Allow tests to skip full app initialization by setting SKIP_APP_INIT=1
     import os
@@ -334,6 +337,25 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     logger.info("Service status collector initialized")
 
+    # Initialize plugin system
+    global _plugin_manager
+    try:
+        _plugin_manager = PluginManager.get_instance()
+        # Get a database session for plugin loading
+        from app.core.database import SessionLocal
+        with SessionLocal() as plugin_db:
+            await _plugin_manager.load_enabled_plugins(plugin_db)
+        # Mount plugin API routes dynamically
+        plugin_router = _plugin_manager.get_router()
+        if plugin_router.routes:
+            app.include_router(plugin_router, prefix="/api")
+            logger.info(f"Mounted {len(plugin_router.routes)} plugin routes")
+        # Emit system startup hook
+        _plugin_manager.emit_hook("on_system_startup")
+        logger.info("Plugin system initialized")
+    except Exception as e:
+        logger.warning(f"Plugin system could not initialize: {e}")
+
     try:
         yield
     finally:
@@ -395,6 +417,15 @@ async def _lifespan(_: FastAPI):  # pragma: no cover - startup/shutdown hook
             smart_service.stop_smart_scheduler()
         except Exception:
             logger.debug("Error while stopping SMART scheduler")
+
+        # Shutdown plugin system
+        if _plugin_manager:
+            try:
+                _plugin_manager.emit_hook("on_system_shutdown")
+                await _plugin_manager.shutdown_all()
+                logger.info("Plugin system shut down")
+            except Exception:
+                logger.debug("Error while shutting down plugin system")
 
 
 def create_app() -> FastAPI:

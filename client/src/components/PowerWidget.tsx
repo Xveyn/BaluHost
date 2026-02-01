@@ -5,12 +5,16 @@
  */
 
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Zap } from 'lucide-react';
 import { usePowerMonitoring } from '../hooks/usePowerMonitoring';
 import { parseUtcTimestamp } from '../lib/dateUtils';
 
 const PowerWidget: React.FC = () => {
+  const navigate = useNavigate();
   const { data, loading, error } = usePowerMonitoring();
+
+  const handleClick = () => navigate('/system?tab=power');
 
   // Calculate current total power and trend
   const currentPower = data?.total_current_power || 0;
@@ -119,7 +123,10 @@ const PowerWidget: React.FC = () => {
   }
 
   return (
-    <div className="card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(251,146,60,0.15)] active:scale-[0.98] touch-manipulation">
+    <div
+      onClick={handleClick}
+      className="card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(251,146,60,0.15)] active:scale-[0.98] touch-manipulation cursor-pointer"
+    >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Power</p>

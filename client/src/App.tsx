@@ -20,7 +20,10 @@ import MobileDevicesPage from './pages/MobileDevicesPage';
 import { RemoteServersPage } from './pages/RemoteServersPage';
 import PowerManagement from './pages/PowerManagement';
 import FanControl from './pages/FanControl';
+import PluginsPage from './pages/PluginsPage';
+import PluginPage from './components/PluginPage';
 import Layout from './components/Layout';
+import { PluginProvider } from './contexts/PluginContext';
 import { buildApiUrl } from './lib/api';
 import './App.css';
 
@@ -233,6 +236,7 @@ function App() {
   if (!backendReady || loading) return <LoadingScreen />;
 
   return (
+    <PluginProvider>
     <Router>
       <Routes>
         <Route
@@ -461,8 +465,33 @@ function App() {
           path="/share/:token"
           element={<PublicSharePage />}
         />
+        <Route
+          path="/plugins"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <PluginsPage />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/plugins/:pluginName/*"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <PluginPage user={user} />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
       </Routes>
     </Router>
+    </PluginProvider>
   );
 }
 
