@@ -37,7 +37,7 @@ export default function VCLSettings() {
   // Edit modal state
   const [editingUser, setEditingUser] = useState<UserVCLStats | null>(null);
   const [editForm, setEditForm] = useState<VCLSettingsUpdate>({});
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('admin');
 
   useEffect(() => {
     loadData();
@@ -219,13 +219,13 @@ export default function VCLSettings() {
           <div>
             <p className="text-slate-400">{t('vcl.storageDetails.lastCleanup')}</p>
             <p className="text-white font-semibold mt-1">
-              {overview.last_cleanup_at ? new Date(overview.last_cleanup_at).toLocaleDateString() : t('common.never')}
+              {overview.last_cleanup_at ? new Date(overview.last_cleanup_at).toLocaleDateString() : t('vcl.storageDetails.never')}
             </p>
           </div>
           <div>
             <p className="text-slate-400">{t('vcl.storageDetails.lastPriorityMode')}</p>
             <p className="text-white font-semibold mt-1">
-              {overview.last_priority_mode_at ? new Date(overview.last_priority_mode_at).toLocaleDateString() : t('common.never')}
+              {overview.last_priority_mode_at ? new Date(overview.last_priority_mode_at).toLocaleDateString() : t('vcl.storageDetails.never')}
             </p>
           </div>
           <div>

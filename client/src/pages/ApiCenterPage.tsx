@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   Code,
@@ -66,19 +66,19 @@ interface RateLimitConfig {
 
 // ==================== API Sections Data ====================
 
-const apiSections: ApiSection[] = [
+const getApiSections = (t: (key: string) => string): ApiSection[] => [
   {
-    title: 'Authentication',
+    title: t('system:apiCenter.docs.authentication.title'),
     icon: <Lock className="w-5 h-5" />,
     endpoints: [
       {
         method: 'POST',
         path: '/api/auth/login',
-        description: 'Authenticate user and get JWT token',
+        description: t('system:apiCenter.docs.authentication.login'),
         rateLimit: 'auth_login',
         body: [
-          { field: 'username', type: 'string', required: true, description: 'Username' },
-          { field: 'password', type: 'string', required: true, description: 'Password' }
+          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
+          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') }
         ],
         bodyExample: `{
   "username": "admin",
@@ -93,12 +93,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/auth/register',
-        description: 'Register new user account',
+        description: t('system:apiCenter.docs.authentication.register'),
         rateLimit: 'auth_register',
         body: [
-          { field: 'username', type: 'string', required: true, description: 'Username' },
-          { field: 'email', type: 'string', required: true, description: 'Email address' },
-          { field: 'password', type: 'string', required: true, description: 'Password' }
+          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
+          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.email') },
+          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') }
         ],
         bodyExample: `{
   "username": "newuser",
@@ -115,7 +115,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/auth/me',
-        description: 'Get current authenticated user',
+        description: t('system:apiCenter.docs.authentication.me'),
         requiresAuth: true,
         response: `{
   "user": { "id": 1, "username": "admin", "role": "admin" }
@@ -124,17 +124,17 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'Files',
+    title: t('system:apiCenter.docs.files.title'),
     icon: <FileText className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/files/list',
-        description: 'List files in directory',
+        description: t('system:apiCenter.docs.files.list'),
         requiresAuth: true,
         rateLimit: 'file_list',
         params: [
-          { name: 'path', type: 'string', required: false, description: 'Directory path' }
+          { name: 'path', type: 'string', required: false, description: t('system:apiCenter.docs.params.directoryPath') }
         ],
         response: `{
   "files": [
@@ -145,12 +145,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/files/upload',
-        description: 'Upload file',
+        description: t('system:apiCenter.docs.files.upload'),
         requiresAuth: true,
         rateLimit: 'file_upload',
         body: [
-          { field: 'file', type: 'file', required: true, description: 'File to upload' },
-          { field: 'path', type: 'string', required: false, description: 'Target directory' }
+          { field: 'file', type: 'file', required: true, description: t('system:apiCenter.docs.params.fileToUpload') },
+          { field: 'path', type: 'string', required: false, description: t('system:apiCenter.docs.params.targetDirectory') }
         ],
         bodyExample: `// FormData request:
 // file: <binary file data>
@@ -160,35 +160,35 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/files/download/{path}',
-        description: 'Download file',
+        description: t('system:apiCenter.docs.files.download'),
         requiresAuth: true,
         rateLimit: 'file_download',
         params: [
-          { name: 'path', type: 'string', required: true, description: 'File path' }
+          { name: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.filePath') }
         ],
-        response: 'Binary file content'
+        response: t('system:apiCenter.docs.responses.binaryFileContent')
       },
       {
         method: 'DELETE',
         path: '/api/files/{path}',
-        description: 'Delete file or folder',
+        description: t('system:apiCenter.docs.files.delete'),
         requiresAuth: true,
         rateLimit: 'file_delete',
         params: [
-          { name: 'path', type: 'string', required: true, description: 'Path to delete' }
+          { name: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.pathToDelete') }
         ],
         response: `{ "message": "Path deleted successfully" }`
       }
     ]
   },
   {
-    title: 'Shares',
+    title: t('system:apiCenter.docs.shares.title'),
     icon: <Shield className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/shares',
-        description: 'List all shares',
+        description: t('system:apiCenter.docs.shares.list'),
         requiresAuth: true,
         rateLimit: 'share_list',
         response: `{
@@ -200,12 +200,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/shares',
-        description: 'Create new share link',
+        description: t('system:apiCenter.docs.shares.create'),
         requiresAuth: true,
         rateLimit: 'share_create',
         body: [
-          { field: 'path', type: 'string', required: true, description: 'Path to share' },
-          { field: 'expires_in_hours', type: 'number', required: false, description: 'Expiration hours' }
+          { field: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.pathToShare') },
+          { field: 'expires_in_hours', type: 'number', required: false, description: t('system:apiCenter.docs.params.expirationHours') }
         ],
         bodyExample: `{
   "path": "/documents/report.pdf",
@@ -216,13 +216,13 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'System',
+    title: t('system:apiCenter.docs.system.title'),
     icon: <Activity className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/system/info',
-        description: 'Get system information',
+        description: t('system:apiCenter.docs.system.info'),
         requiresAuth: true,
         rateLimit: 'system_monitor',
         response: `{
@@ -235,7 +235,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/system/telemetry',
-        description: 'Get live system telemetry',
+        description: t('system:apiCenter.docs.system.telemetry'),
         requiresAuth: true,
         rateLimit: 'system_monitor',
         response: `{
@@ -247,13 +247,13 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'Logging',
+    title: t('system:apiCenter.docs.logging.title'),
     icon: <Terminal className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/logging/disk-io',
-        description: 'Get disk I/O logs',
+        description: t('system:apiCenter.docs.logging.diskIo'),
         requiresAuth: true,
         response: `{
   "logs": [{ "timestamp": "...", "operation": "read", "bytes": 4096 }]
@@ -262,7 +262,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/logging/file-access',
-        description: 'Get file access logs',
+        description: t('system:apiCenter.docs.logging.fileAccess'),
         requiresAuth: true,
         response: `{
   "logs": [{ "timestamp": "...", "user": "admin", "action": "download" }]
@@ -271,18 +271,18 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'Users',
+    title: t('system:apiCenter.docs.users.title'),
     icon: <Users className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/users',
-        description: 'List all users with filtering',
+        description: t('system:apiCenter.docs.users.list'),
         requiresAuth: true,
         params: [
-          { name: 'search', type: 'string', required: false, description: 'Search by username or email' },
-          { name: 'role', type: 'string', required: false, description: 'Filter by role' },
-          { name: 'is_active', type: 'boolean', required: false, description: 'Filter by active status' }
+          { name: 'search', type: 'string', required: false, description: t('system:apiCenter.docs.params.searchByUsernameEmail') },
+          { name: 'role', type: 'string', required: false, description: t('system:apiCenter.docs.params.filterByRole') },
+          { name: 'is_active', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.filterByActiveStatus') }
         ],
         response: `{
   "users": [...],
@@ -295,14 +295,14 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/users',
-        description: 'Create new user (Admin only)',
+        description: t('system:apiCenter.docs.users.create'),
         requiresAuth: true,
         rateLimit: 'user_create',
         body: [
-          { field: 'username', type: 'string', required: true, description: 'Username' },
-          { field: 'email', type: 'string', required: true, description: 'Email address' },
-          { field: 'password', type: 'string', required: true, description: 'Password' },
-          { field: 'role', type: 'string', required: true, description: 'User role (user/admin)' }
+          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
+          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.email') },
+          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') },
+          { field: 'role', type: 'string', required: true, description: t('system:apiCenter.docs.params.filterByRole') }
         ],
         bodyExample: `{
   "username": "newuser",
@@ -320,15 +320,15 @@ const apiSections: ApiSection[] = [
       {
         method: 'PUT',
         path: '/api/users/{user_id}',
-        description: 'Update user (Admin only)',
+        description: t('system:apiCenter.docs.users.update'),
         requiresAuth: true,
         params: [
-          { name: 'user_id', type: 'string', required: true, description: 'User ID' }
+          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userId') }
         ],
         body: [
-          { field: 'email', type: 'string', required: false, description: 'New email' },
-          { field: 'role', type: 'string', required: false, description: 'New role' },
-          { field: 'password', type: 'string', required: false, description: 'New password' }
+          { field: 'email', type: 'string', required: false, description: t('system:apiCenter.docs.params.newEmail') },
+          { field: 'role', type: 'string', required: false, description: t('system:apiCenter.docs.params.newRole') },
+          { field: 'password', type: 'string', required: false, description: t('system:apiCenter.docs.params.newPassword') }
         ],
         bodyExample: `{
   "email": "newemail@example.com",
@@ -338,38 +338,38 @@ const apiSections: ApiSection[] = [
       {
         method: 'DELETE',
         path: '/api/users/{user_id}',
-        description: 'Delete user (Admin only)',
+        description: t('system:apiCenter.docs.users.delete'),
         requiresAuth: true,
         params: [
-          { name: 'user_id', type: 'string', required: true, description: 'User ID to delete' }
+          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userIdToDelete') }
         ]
       },
       {
         method: 'POST',
         path: '/api/users/{user_id}/avatar',
-        description: 'Upload user avatar',
+        description: t('system:apiCenter.docs.users.avatar'),
         requiresAuth: true,
         params: [
-          { name: 'user_id', type: 'string', required: true, description: 'User ID' }
+          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userId') }
         ],
         body: [
-          { field: 'avatar', type: 'file', required: true, description: 'Avatar image (JPEG, PNG, GIF, WebP)' }
+          { field: 'avatar', type: 'file', required: true, description: t('system:apiCenter.docs.params.avatarImage') }
         ]
       }
     ]
   },
   {
-    title: 'VPN',
+    title: t('system:apiCenter.docs.vpn.title'),
     icon: <Wifi className="w-5 h-5" />,
     endpoints: [
       {
         method: 'POST',
         path: '/api/vpn/generate-config',
-        description: 'Generate WireGuard VPN configuration',
+        description: t('system:apiCenter.docs.vpn.generateConfig'),
         requiresAuth: true,
         body: [
-          { field: 'device_name', type: 'string', required: true, description: 'Device name for VPN client' },
-          { field: 'server_public_endpoint', type: 'string', required: true, description: 'Server endpoint (IP:port)' }
+          { field: 'device_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceNameForVpn') },
+          { field: 'server_public_endpoint', type: 'string', required: true, description: t('system:apiCenter.docs.params.serverEndpoint') }
         ],
         bodyExample: `{
   "device_name": "iPhone-Work",
@@ -383,7 +383,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/vpn/clients',
-        description: 'List all VPN clients for current user',
+        description: t('system:apiCenter.docs.vpn.listClients'),
         requiresAuth: true,
         response: `{
   "clients": [
@@ -394,23 +394,23 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/vpn/clients/{client_id}',
-        description: 'Get VPN client details',
+        description: t('system:apiCenter.docs.vpn.getClient'),
         requiresAuth: true,
         params: [
-          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
         ]
       },
       {
         method: 'PATCH',
         path: '/api/vpn/clients/{client_id}',
-        description: 'Update VPN client settings',
+        description: t('system:apiCenter.docs.vpn.updateClient'),
         requiresAuth: true,
         params: [
-          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
         ],
         body: [
-          { field: 'device_name', type: 'string', required: false, description: 'New device name' },
-          { field: 'is_active', type: 'boolean', required: false, description: 'Active status' }
+          { field: 'device_name', type: 'string', required: false, description: t('system:apiCenter.docs.params.newDeviceName') },
+          { field: 'is_active', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.activeStatus') }
         ],
         bodyExample: `{
   "device_name": "iPhone-Personal",
@@ -420,20 +420,20 @@ const apiSections: ApiSection[] = [
       {
         method: 'DELETE',
         path: '/api/vpn/clients/{client_id}',
-        description: 'Delete VPN client configuration',
+        description: t('system:apiCenter.docs.vpn.deleteClient'),
         requiresAuth: true,
         params: [
-          { name: 'client_id', type: 'integer', required: true, description: 'Client ID' }
+          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
         ]
       },
       {
         method: 'POST',
         path: '/api/vpn/fritzbox/upload',
-        description: 'Upload Fritz!Box VPN config (Admin only)',
+        description: t('system:apiCenter.docs.vpn.fritzboxUpload'),
         requiresAuth: true,
         body: [
-          { field: 'config_content', type: 'string', required: true, description: 'WireGuard .conf file content' },
-          { field: 'public_endpoint', type: 'string', required: true, description: 'Fritz!Box public endpoint' }
+          { field: 'config_content', type: 'string', required: true, description: t('system:apiCenter.docs.params.wireguardConfig') },
+          { field: 'public_endpoint', type: 'string', required: true, description: t('system:apiCenter.docs.params.fritzboxEndpoint') }
         ],
         bodyExample: `{
   "config_content": "[Interface]\\nPrivateKey = ...\\n...",
@@ -443,25 +443,25 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/vpn/fritzbox/qr',
-        description: 'Get Fritz!Box config as QR code',
+        description: t('system:apiCenter.docs.vpn.fritzboxQr'),
         requiresAuth: true,
         response: `{ "config_base64": "..." }`
       }
     ]
   },
   {
-    title: 'Mobile',
+    title: t('system:apiCenter.docs.mobile.title'),
     icon: <Smartphone className="w-5 h-5" />,
     endpoints: [
       {
         method: 'POST',
         path: '/api/mobile/token/generate',
-        description: 'Generate QR code for mobile device registration',
+        description: t('system:apiCenter.docs.mobile.generateToken'),
         requiresAuth: true,
         params: [
-          { name: 'include_vpn', type: 'boolean', required: false, description: 'Include VPN config in QR code' },
-          { name: 'device_name', type: 'string', required: false, description: 'Device name (default: iOS Device)' },
-          { name: 'token_validity_days', type: 'integer', required: false, description: 'Token validity (30-180 days)' }
+          { name: 'include_vpn', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeVpn') },
+          { name: 'device_name', type: 'string', required: false, description: t('system:apiCenter.docs.params.defaultIosDevice') },
+          { name: 'token_validity_days', type: 'integer', required: false, description: t('system:apiCenter.docs.params.tokenValidity') }
         ],
         response: `{
   "token": "...",
@@ -472,11 +472,11 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/mobile/register',
-        description: 'Register mobile device using token',
+        description: t('system:apiCenter.docs.mobile.register'),
         body: [
-          { field: 'registration_token', type: 'string', required: true, description: 'Token from QR code' },
-          { field: 'device_name', type: 'string', required: true, description: 'Device name' },
-          { field: 'platform', type: 'string', required: true, description: 'Platform (ios/android)' }
+          { field: 'registration_token', type: 'string', required: true, description: t('system:apiCenter.docs.params.tokenFromQr') },
+          { field: 'device_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceName') },
+          { field: 'platform', type: 'string', required: true, description: t('system:apiCenter.docs.params.platform') }
         ],
         bodyExample: `{
   "registration_token": "abc123xyz...",
@@ -492,7 +492,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/mobile/devices',
-        description: 'List registered mobile devices',
+        description: t('system:apiCenter.docs.mobile.listDevices'),
         requiresAuth: true,
         response: `{
   "devices": [
@@ -503,22 +503,22 @@ const apiSections: ApiSection[] = [
       {
         method: 'DELETE',
         path: '/api/mobile/devices/{device_id}',
-        description: 'Unregister mobile device',
+        description: t('system:apiCenter.docs.mobile.deleteDevice'),
         requiresAuth: true,
         params: [
-          { name: 'device_id', type: 'string', required: true, description: 'Device ID' }
+          { name: 'device_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceId') }
         ]
       },
       {
         method: 'POST',
         path: '/api/mobile/devices/{device_id}/push-token',
-        description: 'Register FCM push notification token',
+        description: t('system:apiCenter.docs.mobile.pushToken'),
         requiresAuth: true,
         params: [
-          { name: 'device_id', type: 'string', required: true, description: 'Device ID' }
+          { name: 'device_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceId') }
         ],
         body: [
-          { field: 'push_token', type: 'string', required: true, description: 'Firebase Cloud Messaging token' }
+          { field: 'push_token', type: 'string', required: true, description: t('system:apiCenter.docs.params.fcmToken') }
         ],
         bodyExample: `{
   "push_token": "fcm_token_string..."
@@ -527,19 +527,19 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'Backup',
+    title: t('system:apiCenter.docs.backup.title'),
     icon: <Database className="w-5 h-5" />,
     endpoints: [
       {
         method: 'POST',
         path: '/api/backup',
-        description: 'Create system backup (Admin only)',
+        description: t('system:apiCenter.docs.backup.create'),
         requiresAuth: true,
         body: [
-          { field: 'includes_database', type: 'boolean', required: false, description: 'Include database' },
-          { field: 'includes_files', type: 'boolean', required: false, description: 'Include files' },
-          { field: 'includes_config', type: 'boolean', required: false, description: 'Include configuration' },
-          { field: 'description', type: 'string', required: false, description: 'Backup description' }
+          { field: 'includes_database', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeDatabase') },
+          { field: 'includes_files', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeFiles') },
+          { field: 'includes_config', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeConfig') },
+          { field: 'description', type: 'string', required: false, description: t('system:apiCenter.docs.params.backupDescription') }
         ],
         bodyExample: `{
   "includes_database": true,
@@ -557,7 +557,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/backup',
-        description: 'List all backups (Admin only)',
+        description: t('system:apiCenter.docs.backup.list'),
         requiresAuth: true,
         response: `{
   "backups": [...],
@@ -568,34 +568,34 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/backup/{backup_id}',
-        description: 'Get backup details (Admin only)',
+        description: t('system:apiCenter.docs.backup.get'),
         requiresAuth: true,
         params: [
-          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
         ]
       },
       {
         method: 'DELETE',
         path: '/api/backup/{backup_id}',
-        description: 'Delete backup (Admin only)',
+        description: t('system:apiCenter.docs.backup.delete'),
         requiresAuth: true,
         params: [
-          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
         ]
       },
       {
         method: 'POST',
         path: '/api/backup/{backup_id}/restore',
-        description: 'Restore from backup (Admin only)',
+        description: t('system:apiCenter.docs.backup.restore'),
         requiresAuth: true,
         params: [
-          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
         ],
         body: [
-          { field: 'confirm', type: 'boolean', required: true, description: 'Must be true to proceed' },
-          { field: 'restore_database', type: 'boolean', required: false, description: 'Restore database' },
-          { field: 'restore_files', type: 'boolean', required: false, description: 'Restore files' },
-          { field: 'restore_config', type: 'boolean', required: false, description: 'Restore config' }
+          { field: 'confirm', type: 'boolean', required: true, description: t('system:apiCenter.docs.params.confirmTrue') },
+          { field: 'restore_database', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreDatabase') },
+          { field: 'restore_files', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreFiles') },
+          { field: 'restore_config', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreConfig') }
         ],
         bodyExample: `{
   "confirm": true,
@@ -607,23 +607,23 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/backup/{backup_id}/download',
-        description: 'Download backup file (Admin only)',
+        description: t('system:apiCenter.docs.backup.download'),
         requiresAuth: true,
         params: [
-          { name: 'backup_id', type: 'integer', required: true, description: 'Backup ID' }
+          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
         ],
-        response: 'Binary backup file (tar.gz)'
+        response: t('system:apiCenter.docs.responses.binaryBackupFile')
       }
     ]
   },
   {
-    title: 'Power Management',
+    title: t('system:apiCenter.docs.power.title'),
     icon: <Power className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/power/status',
-        description: 'Get current power management status',
+        description: t('system:apiCenter.docs.power.status'),
         requiresAuth: true,
         response: `{
   "current_profile": "balanced",
@@ -635,7 +635,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/power/profiles',
-        description: 'Get all available power profiles',
+        description: t('system:apiCenter.docs.power.profiles'),
         requiresAuth: true,
         response: `{
   "profiles": [
@@ -649,12 +649,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/power/profile',
-        description: 'Set power profile (Admin only)',
+        description: t('system:apiCenter.docs.power.setProfile'),
         requiresAuth: true,
         body: [
-          { field: 'profile', type: 'string', required: true, description: 'Profile name (power-save/balanced/performance)' },
-          { field: 'reason', type: 'string', required: false, description: 'Reason for change' },
-          { field: 'duration_seconds', type: 'integer', required: false, description: 'Override duration' }
+          { field: 'profile', type: 'string', required: true, description: t('system:apiCenter.docs.params.profileName') },
+          { field: 'reason', type: 'string', required: false, description: t('system:apiCenter.docs.params.reasonForChange') },
+          { field: 'duration_seconds', type: 'integer', required: false, description: t('system:apiCenter.docs.params.overrideDuration') }
         ],
         bodyExample: `{
   "profile": "performance",
@@ -665,12 +665,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/power/demand/register',
-        description: 'Register power demand',
+        description: t('system:apiCenter.docs.power.registerDemand'),
         requiresAuth: true,
         body: [
-          { field: 'source', type: 'string', required: true, description: 'Demand source identifier' },
-          { field: 'priority', type: 'integer', required: true, description: 'Priority (1-10)' },
-          { field: 'description', type: 'string', required: false, description: 'Demand description' }
+          { field: 'source', type: 'string', required: true, description: t('system:apiCenter.docs.params.demandSource') },
+          { field: 'priority', type: 'integer', required: true, description: t('system:apiCenter.docs.params.priority') },
+          { field: 'description', type: 'string', required: false, description: t('system:apiCenter.docs.params.demandDescription') }
         ],
         bodyExample: `{
   "source": "video_transcode",
@@ -681,10 +681,10 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/power/demand/unregister',
-        description: 'Unregister power demand',
+        description: t('system:apiCenter.docs.power.unregisterDemand'),
         requiresAuth: true,
         body: [
-          { field: 'source', type: 'string', required: true, description: 'Demand source identifier' }
+          { field: 'source', type: 'string', required: true, description: t('system:apiCenter.docs.params.demandSource') }
         ],
         bodyExample: `{
   "source": "video_transcode"
@@ -693,21 +693,21 @@ const apiSections: ApiSection[] = [
     ]
   },
   {
-    title: 'Tapo Devices',
+    title: t('system:apiCenter.docs.tapo.title'),
     icon: <Cloud className="w-5 h-5" />,
     endpoints: [
       {
         method: 'POST',
         path: '/api/tapo/devices',
-        description: 'Add Tapo power monitoring device (Admin only)',
+        description: t('system:apiCenter.docs.tapo.add'),
         requiresAuth: true,
         body: [
-          { field: 'name', type: 'string', required: true, description: 'Device name' },
-          { field: 'device_type', type: 'string', required: true, description: 'Device type (e.g., P115)' },
-          { field: 'ip_address', type: 'string', required: true, description: 'Device IP address' },
-          { field: 'email', type: 'string', required: true, description: 'Tapo account email' },
-          { field: 'password', type: 'string', required: true, description: 'Tapo account password' },
-          { field: 'is_monitoring', type: 'boolean', required: false, description: 'Enable monitoring' }
+          { field: 'name', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoDeviceName') },
+          { field: 'device_type', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoDeviceType') },
+          { field: 'ip_address', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoIpAddress') },
+          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoEmail') },
+          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoPassword') },
+          { field: 'is_monitoring', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.enableMonitoring') }
         ],
         bodyExample: `{
   "name": "Server Power",
@@ -721,7 +721,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/tapo/devices',
-        description: 'List all Tapo devices (Admin only)',
+        description: t('system:apiCenter.docs.tapo.list'),
         requiresAuth: true,
         response: `{
   "devices": [
@@ -732,10 +732,10 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/tapo/devices/{device_id}/current-power',
-        description: 'Get current power consumption',
+        description: t('system:apiCenter.docs.tapo.currentPower'),
         requiresAuth: true,
         params: [
-          { name: 'device_id', type: 'integer', required: true, description: 'Device ID' }
+          { name: 'device_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.tapoDeviceId') }
         ],
         response: `{
   "current_power_w": 45.2,
@@ -747,22 +747,22 @@ const apiSections: ApiSection[] = [
       {
         method: 'DELETE',
         path: '/api/tapo/devices/{device_id}',
-        description: 'Remove Tapo device (Admin only)',
+        description: t('system:apiCenter.docs.tapo.remove'),
         requiresAuth: true,
         params: [
-          { name: 'device_id', type: 'integer', required: true, description: 'Device ID' }
+          { name: 'device_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.tapoDeviceId') }
         ]
       }
     ]
   },
   {
-    title: 'RAID & Disks',
+    title: t('system:apiCenter.docs.raid.title'),
     icon: <HardDrive className="w-5 h-5" />,
     endpoints: [
       {
         method: 'GET',
         path: '/api/system/raid/status',
-        description: 'Get RAID array status',
+        description: t('system:apiCenter.docs.raid.status'),
         requiresAuth: true,
         response: `{
   "arrays": [
@@ -773,12 +773,12 @@ const apiSections: ApiSection[] = [
       {
         method: 'POST',
         path: '/api/system/raid/create',
-        description: 'Create RAID array (Admin only)',
+        description: t('system:apiCenter.docs.raid.create'),
         requiresAuth: true,
         body: [
-          { field: 'name', type: 'string', required: true, description: 'Array name (e.g., md0)' },
-          { field: 'level', type: 'string', required: true, description: 'RAID level (0, 1, 5, 6, 10)' },
-          { field: 'devices', type: 'array', required: true, description: 'Device paths' }
+          { field: 'name', type: 'string', required: true, description: t('system:apiCenter.docs.params.arrayName') },
+          { field: 'level', type: 'string', required: true, description: t('system:apiCenter.docs.params.raidLevel') },
+          { field: 'devices', type: 'array', required: true, description: t('system:apiCenter.docs.params.devicePaths') }
         ],
         bodyExample: `{
   "name": "md0",
@@ -789,16 +789,16 @@ const apiSections: ApiSection[] = [
       {
         method: 'DELETE',
         path: '/api/system/raid/{array_name}',
-        description: 'Delete RAID array (Admin only)',
+        description: t('system:apiCenter.docs.raid.delete'),
         requiresAuth: true,
         params: [
-          { name: 'array_name', type: 'string', required: true, description: 'Array name' }
+          { name: 'array_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.arrayNameParam') }
         ]
       },
       {
         method: 'GET',
         path: '/api/system/smart',
-        description: 'Get SMART disk health data',
+        description: t('system:apiCenter.docs.raid.smart'),
         requiresAuth: true,
         response: `{
   "disks": [
@@ -809,7 +809,7 @@ const apiSections: ApiSection[] = [
       {
         method: 'GET',
         path: '/api/system/available-disks',
-        description: 'Get available disks for RAID',
+        description: t('system:apiCenter.docs.raid.availableDisks'),
         requiresAuth: true,
         response: `{
   "disks": [
@@ -1097,6 +1097,9 @@ export default function ApiCenterPage() {
 
   const isAdmin = user?.role === 'admin';
 
+  // Memoize API sections with translations
+  const apiSections = useMemo(() => getApiSections(t), [t]);
+
   // Dynamically determine API base URL based on current location
   const getApiBaseUrl = (): string => {
     const hostname = window.location.hostname;
@@ -1203,7 +1206,7 @@ export default function ApiCenterPage() {
   };
 
   const handleSeedDefaults = async () => {
-    if (!confirm('This will seed default rate limit configurations. Continue?')) return;
+    if (!confirm(t('system:apiCenter.rateLimits.seedConfirm'))) return;
 
     const token = localStorage.getItem('token');
     if (!token) return;

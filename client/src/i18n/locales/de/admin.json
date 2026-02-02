@@ -311,12 +311,22 @@
     "stats": {
       "totalVersions": "Gesamt-Versionen",
       "storageUsed": "Speicher belegt",
-      "originalSize": "{{size}} original",
+      "original": "original",
       "totalSavings": "Gesamteinsparungen",
-      "saved": "{{size}} gespart",
+      "saved": "gespart",
       "activeUsers": "Aktive Benutzer",
-      "cached": "{{count}} gecacht"
+      "cached": "gecacht"
     },
+    "errors": {
+      "loadFailed": "VCL-Daten konnten nicht geladen werden",
+      "cleanupFailed": "Bereinigung fehlgeschlagen",
+      "updateFailed": "Einstellungen konnten nicht aktualisiert werden"
+    },
+    "cleanup": {
+      "dryRunResult": "Simulation: Würde {{versions}} Versionen löschen, {{freed}} freigeben",
+      "result": "{{versions}} Versionen gelöscht, {{freed}} freigegeben"
+    },
+    "settingsUpdated": "Einstellungen für {{username}} aktualisiert",
     "storageDetails": {
       "title": "Speicherdetails",
       "compressionRatio": "Komprimierungsverhältnis",
@@ -344,6 +354,7 @@
       "user": "Benutzer",
       "maxSize": "Max. Größe",
       "used": "Belegt",
+      "usage": "Nutzung",
       "usagePercent": "Nutzung %",
       "versions": "Versionen",
       "status": "Status",
@@ -398,6 +409,14 @@
       "markPriority": "Als Priorität markieren",
       "removePriority": "Priorität entfernen",
       "selectForComparison": "Zum Vergleich auswählen"
+    },
+    "errors": {
+      "loadFailed": "Versionsverlauf konnte nicht geladen werden",
+      "restoreFailed": "Version konnte nicht wiederhergestellt werden",
+      "deleteFailed": "Version konnte nicht gelöscht werden",
+      "priorityFailed": "Priorität konnte nicht aktualisiert werden",
+      "downloadFailed": "Version konnte nicht heruntergeladen werden",
+      "diffFailed": "Diff konnte nicht geladen werden"
     },
     "processing": "Wird verarbeitet..."
   }

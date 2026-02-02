@@ -15,14 +15,24 @@
     "title": "Profile Information",
     "avatar": "Profile Picture",
     "uploadAvatar": "Upload New Avatar",
+    "uploadAvatarBtn": "Upload Avatar",
+    "uploading": "Uploading...",
     "preview": "Preview",
     "email": "Email Address",
+    "emailLabel": "Email",
     "updateEmail": "Update Email",
+    "saving": "Saving...",
     "memberSince": "Member since",
     "emailSuccess": "Email updated successfully",
     "emailError": "Failed to update email",
     "avatarSuccess": "Avatar updated successfully",
-    "avatarError": "Failed to upload avatar"
+    "avatarError": "Failed to upload avatar",
+    "loading": "Loading...",
+    "loadFailed": "Failed to load profile",
+    "accountInfo": "Account Information",
+    "username": "Username",
+    "role": "Role",
+    "accountId": "Account ID"
   },
   "security": {
     "title": "Security Settings",
@@ -40,7 +50,15 @@
     "endAllSessions": "End All Other Sessions",
     "twoFactor": "Two-Factor Authentication",
     "enable2FA": "Enable 2FA",
-    "disable2FA": "Disable 2FA"
+    "disable2FA": "Disable 2FA",
+    "changing": "Changing...",
+    "lastActive": "Last active",
+    "current": "Current",
+    "dataExport": {
+      "title": "Data Export",
+      "description": "Download all your personal data and files in a portable format.",
+      "button": "Export My Data"
+    }
   },
   "storage": {
     "title": "Storage Usage",
@@ -50,7 +68,16 @@
     "unlimited": "Unlimited",
     "usageDetails": "Usage Details",
     "byType": "By Type",
-    "byFolder": "By Folder"
+    "byFolder": "By Folder",
+    "remaining": "remaining",
+    "noLimit": "No storage limit set",
+    "loading": "Loading storage information...",
+    "tipsTitle": "Storage Tips",
+    "tips": {
+      "deleteFiles": "Delete unnecessary files to free up space",
+      "compression": "Use file compression for large archives",
+      "contactAdmin": "Contact admin if you need more storage"
+    }
   },
   "activity": {
     "title": "Activity Log",

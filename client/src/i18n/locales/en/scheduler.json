@@ -1,6 +1,46 @@
 {
   "title": "Scheduler Dashboard",
   "description": "Manage system schedulers and view execution history",
+  "schedulers": {
+    "raid_scrub": {
+      "name": "RAID Scrub",
+      "description": "Performs RAID array scrub to check data integrity and repair errors"
+    },
+    "smart_scan": {
+      "name": "SMART Scan",
+      "description": "Scans disk health using SMART data to detect potential failures"
+    },
+    "backup": {
+      "name": "Auto Backup",
+      "description": "Creates automated system backups including database and files"
+    },
+    "sync_check": {
+      "name": "Sync Check",
+      "description": "Checks for due sync schedules and triggers synchronization"
+    },
+    "notification_check": {
+      "name": "Notification Check",
+      "description": "Checks for expiring devices and sends push notification warnings"
+    },
+    "upload_cleanup": {
+      "name": "Upload Cleanup",
+      "description": "Cleans up expired chunked uploads to free storage space"
+    },
+    "auto_update_check": {
+      "name": "Auto Update Check",
+      "description": "Automatically checks for available BaluHost updates"
+    }
+  },
+  "interval": {
+    "everySecond": "Every second",
+    "everySeconds": "Every {{count}}s",
+    "everyMinute": "Every minute",
+    "everyMinutes": "Every {{count}} min",
+    "everyHour": "Every hour",
+    "everyHours": "Every {{count}}h",
+    "daily": "Daily",
+    "everyDays": "Every {{count}} days"
+  },
   "tabs": {
     "overview": "Overview",
     "timeline": "Timeline",
@@ -42,6 +82,10 @@
     "running": "Running",
     "cancelled": "Cancelled",
     "pending": "Pending"
+  },
+  "trigger": {
+    "scheduled": "Scheduled",
+    "manual": "Manual"
   },
   "configModal": {
     "title": "Configure {{name}}",

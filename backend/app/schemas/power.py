@@ -268,3 +268,39 @@ class ActivatePresetResponse(BaseModel):
     message: str
     previous_preset: Optional[PowerPresetSummary] = None
     new_preset: PowerPresetSummary
+
+
+# Service Intensity Schemas
+
+class ServiceIntensityInfo(BaseModel):
+    """
+    Information about a service/process and its power intensity.
+
+    Combines data from active power demands, registered services,
+    process tracker metrics, and inferred intensity from CPU usage.
+    """
+    name: str = Field(..., description="Unique identifier (e.g., 'backup_create', 'baluhost-backend')")
+    display_name: str = Field(..., description="Human-readable display name")
+    intensity_level: ServicePowerProperty = Field(..., description="Intensity level (IDLE/LOW/MEDIUM/SURGE)")
+    intensity_source: str = Field(..., description="Source of intensity: 'demand', 'service', 'cpu_usage', or 'inferred'")
+
+    # Power Demand Info (if registered)
+    has_active_demand: bool = Field(False, description="Whether this service has an active power demand registered")
+    demand_description: Optional[str] = Field(None, description="Description of the active demand")
+    demand_registered_at: Optional[datetime] = Field(None, description="When the demand was registered")
+    demand_expires_at: Optional[datetime] = Field(None, description="When the demand expires (None = manual)")
+
+    # Process Metrics (if available from process tracker)
+    cpu_percent: Optional[float] = Field(None, description="Current CPU usage percentage")
+    memory_mb: Optional[float] = Field(None, description="Current memory usage in MB")
+    pid: Optional[int] = Field(None, description="Process ID")
+    is_alive: bool = Field(True, description="Whether the process is currently running")
+
+
+class ServiceIntensityResponse(BaseModel):
+    """Response for /api/power/intensities endpoint."""
+    services: list[ServiceIntensityInfo] = Field(default_factory=list, description="List of services with intensity info")
+    timestamp: datetime = Field(..., description="When this data was collected")
+    total_services: int = Field(0, description="Total number of services")
+    active_demands_count: int = Field(0, description="Number of services with active power demands")
+    highest_intensity: ServicePowerProperty = Field(ServicePowerProperty.IDLE, description="Highest intensity across all services")

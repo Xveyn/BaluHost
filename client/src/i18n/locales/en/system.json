@@ -315,6 +315,13 @@
       "autoScalingOff": "Auto-Scaling off",
       "adminOnlyChange": "Only administrators can change the preset."
     },
+    "serviceIntensity": {
+      "title": "Service Intensity",
+      "services": "{{count}} service(s)",
+      "activeDemand": "Active",
+      "noServices": "No active services",
+      "backgroundService": "Background service"
+    },
     "demands": {
       "title": "Active Power Demands"
     },
@@ -673,7 +680,8 @@
       "active": "Active",
       "off": "Off",
       "enabled": "Rate limit enabled",
-      "disabled": "Rate limit disabled"
+      "disabled": "Rate limit disabled",
+      "seedConfirm": "This will seed default rate limit configurations. Continue?"
     },
     "modal": {
       "editRateLimit": "Edit Rate Limit",
@@ -709,6 +717,161 @@
     "buttons": {
       "refresh": "Refresh",
       "editRateLimit": "Edit rate limit"
+    },
+    "docs": {
+      "authentication": {
+        "title": "Authentication",
+        "login": "Authenticate user and get JWT token",
+        "register": "Register new user account",
+        "me": "Get current authenticated user"
+      },
+      "files": {
+        "title": "Files",
+        "list": "List files in directory",
+        "upload": "Upload file",
+        "download": "Download file",
+        "delete": "Delete file or folder"
+      },
+      "shares": {
+        "title": "Shares",
+        "list": "List all shares",
+        "create": "Create new share link"
+      },
+      "system": {
+        "title": "System",
+        "info": "Get system information",
+        "telemetry": "Get live system telemetry"
+      },
+      "logging": {
+        "title": "Logging",
+        "diskIo": "Get disk I/O logs",
+        "fileAccess": "Get file access logs"
+      },
+      "users": {
+        "title": "Users",
+        "list": "List all users with filtering",
+        "create": "Create new user (Admin only)",
+        "update": "Update user (Admin only)",
+        "delete": "Delete user (Admin only)",
+        "avatar": "Upload user avatar"
+      },
+      "vpn": {
+        "title": "VPN",
+        "generateConfig": "Generate WireGuard VPN configuration",
+        "listClients": "List all VPN clients for current user",
+        "getClient": "Get VPN client details",
+        "updateClient": "Update VPN client settings",
+        "deleteClient": "Delete VPN client configuration",
+        "fritzboxUpload": "Upload Fritz!Box VPN config (Admin only)",
+        "fritzboxQr": "Get Fritz!Box config as QR code"
+      },
+      "mobile": {
+        "title": "Mobile",
+        "generateToken": "Generate QR code for mobile device registration",
+        "register": "Register mobile device using token",
+        "listDevices": "List registered mobile devices",
+        "deleteDevice": "Unregister mobile device",
+        "pushToken": "Register FCM push notification token"
+      },
+      "backup": {
+        "title": "Backup",
+        "create": "Create system backup (Admin only)",
+        "list": "List all backups (Admin only)",
+        "get": "Get backup details (Admin only)",
+        "delete": "Delete backup (Admin only)",
+        "restore": "Restore from backup (Admin only)",
+        "download": "Download backup file (Admin only)"
+      },
+      "power": {
+        "title": "Power Management",
+        "status": "Get current power management status",
+        "profiles": "Get all available power profiles",
+        "setProfile": "Set power profile (Admin only)",
+        "registerDemand": "Register power demand",
+        "unregisterDemand": "Unregister power demand"
+      },
+      "tapo": {
+        "title": "Tapo Devices",
+        "add": "Add Tapo power monitoring device (Admin only)",
+        "list": "List all Tapo devices (Admin only)",
+        "currentPower": "Get current power consumption",
+        "remove": "Remove Tapo device (Admin only)"
+      },
+      "raid": {
+        "title": "RAID & Disks",
+        "status": "Get RAID array status",
+        "create": "Create RAID array (Admin only)",
+        "delete": "Delete RAID array (Admin only)",
+        "smart": "Get SMART disk health data",
+        "availableDisks": "Get available disks for RAID"
+      },
+      "params": {
+        "username": "Username",
+        "password": "Password",
+        "email": "Email address",
+        "path": "Path",
+        "directoryPath": "Directory path",
+        "filePath": "File path",
+        "targetDirectory": "Target directory",
+        "pathToDelete": "Path to delete",
+        "pathToShare": "Path to share",
+        "expirationHours": "Expiration hours",
+        "searchByUsernameEmail": "Search by username or email",
+        "filterByRole": "Filter by role",
+        "filterByActiveStatus": "Filter by active status",
+        "userId": "User ID",
+        "userIdToDelete": "User ID to delete",
+        "newEmail": "New email",
+        "newRole": "New role",
+        "newPassword": "New password",
+        "avatarImage": "Avatar image (JPEG, PNG, GIF, WebP)",
+        "deviceName": "Device name",
+        "deviceNameForVpn": "Device name for VPN client",
+        "serverEndpoint": "Server endpoint (IP:port)",
+        "clientId": "Client ID",
+        "newDeviceName": "New device name",
+        "activeStatus": "Active status",
+        "includeVpn": "Include VPN config in QR code",
+        "defaultIosDevice": "Device name (default: iOS Device)",
+        "tokenValidity": "Token validity (30-180 days)",
+        "tokenFromQr": "Token from QR code",
+        "platform": "Platform (ios/android)",
+        "deviceId": "Device ID",
+        "fcmToken": "Firebase Cloud Messaging token",
+        "includeDatabase": "Include database",
+        "includeFiles": "Include files",
+        "includeConfig": "Include configuration",
+        "backupDescription": "Backup description",
+        "backupId": "Backup ID",
+        "confirmTrue": "Must be true to proceed",
+        "restoreDatabase": "Restore database",
+        "restoreFiles": "Restore files",
+        "restoreConfig": "Restore config",
+        "profileName": "Profile name (power-save/balanced/performance)",
+        "reasonForChange": "Reason for change",
+        "overrideDuration": "Override duration",
+        "demandSource": "Demand source identifier",
+        "priority": "Priority (1-10)",
+        "demandDescription": "Demand description",
+        "tapoDeviceName": "Device name",
+        "tapoDeviceType": "Device type (e.g., P115)",
+        "tapoIpAddress": "Device IP address",
+        "tapoEmail": "Tapo account email",
+        "tapoPassword": "Tapo account password",
+        "enableMonitoring": "Enable monitoring",
+        "tapoDeviceId": "Device ID",
+        "arrayName": "Array name (e.g., md0)",
+        "raidLevel": "RAID level (0, 1, 5, 6, 10)",
+        "devicePaths": "Device paths",
+        "arrayNameParam": "Array name",
+        "fileToUpload": "File to upload",
+        "wireguardConfig": "WireGuard .conf file content",
+        "fritzboxEndpoint": "Fritz!Box public endpoint"
+      },
+      "responses": {
+        "binaryFileContent": "Binary file content",
+        "binaryBackupFile": "Binary backup file (tar.gz)"
+      }
     }
   },
   "raidWizard": {

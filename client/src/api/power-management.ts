@@ -138,6 +138,30 @@ export interface AutoScalingConfigResponse {
   current_cpu_usage?: number;
 }
 
+// Service Intensity types
+export interface ServiceIntensityInfo {
+  name: string;
+  display_name: string;
+  intensity_level: ServicePowerProperty;
+  intensity_source: 'demand' | 'service' | 'cpu_usage' | 'inferred';
+  has_active_demand: boolean;
+  demand_description?: string;
+  demand_registered_at?: string;
+  demand_expires_at?: string;
+  cpu_percent?: number;
+  memory_mb?: number;
+  pid?: number;
+  is_alive: boolean;
+}
+
+export interface ServiceIntensityResponse {
+  services: ServiceIntensityInfo[];
+  timestamp: string;
+  total_services: number;
+  active_demands_count: number;
+  highest_intensity: ServicePowerProperty;
+}
+
 export interface SwitchBackendRequest {
   use_linux_backend: boolean;
 }
@@ -254,5 +278,13 @@ export async function switchPowerBackend(
   const response = await apiClient.post<SwitchBackendResponse>('/api/power/backend', {
     use_linux_backend: useLinuxBackend,
   });
+  return response.data;
+}
+
+/**
+ * Get service intensity information for all tracked services and processes
+ */
+export async function getServiceIntensities(): Promise<ServiceIntensityResponse> {
+  const response = await apiClient.get<ServiceIntensityResponse>('/api/power/intensities');
   return response.data;
 }

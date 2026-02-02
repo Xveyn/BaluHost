@@ -1,6 +1,46 @@
 {
   "title": "Scheduler Dashboard",
   "description": "Systemplaner verwalten und Ausführungsverlauf anzeigen",
+  "schedulers": {
+    "raid_scrub": {
+      "name": "RAID-Bereinigung",
+      "description": "Führt RAID-Array-Scrub durch, um Datenintegrität zu prüfen und Fehler zu reparieren"
+    },
+    "smart_scan": {
+      "name": "SMART-Scan",
+      "description": "Überprüft Festplattengesundheit mit SMART-Daten zur Erkennung potenzieller Ausfälle"
+    },
+    "backup": {
+      "name": "Auto-Backup",
+      "description": "Erstellt automatische Systemsicherungen einschließlich Datenbank und Dateien"
+    },
+    "sync_check": {
+      "name": "Sync-Prüfung",
+      "description": "Prüft fällige Sync-Zeitpläne und löst Synchronisierung aus"
+    },
+    "notification_check": {
+      "name": "Benachrichtigungs-Prüfung",
+      "description": "Prüft ablaufende Geräte und sendet Push-Benachrichtigungswarnungen"
+    },
+    "upload_cleanup": {
+      "name": "Upload-Bereinigung",
+      "description": "Bereinigt abgelaufene Chunk-Uploads zur Speicherfreigabe"
+    },
+    "auto_update_check": {
+      "name": "Auto-Update-Prüfung",
+      "description": "Prüft automatisch auf verfügbare BaluHost-Updates"
+    }
+  },
+  "interval": {
+    "everySecond": "Jede Sekunde",
+    "everySeconds": "Alle {{count}}s",
+    "everyMinute": "Jede Minute",
+    "everyMinutes": "Alle {{count}} Min",
+    "everyHour": "Jede Stunde",
+    "everyHours": "Alle {{count}}h",
+    "daily": "Täglich",
+    "everyDays": "Alle {{count}} Tage"
+  },
   "tabs": {
     "overview": "Übersicht",
     "timeline": "Zeitachse",
@@ -42,6 +82,10 @@
     "running": "Läuft",
     "cancelled": "Abgebrochen",
     "pending": "Ausstehend"
+  },
+  "trigger": {
+    "scheduled": "Geplant",
+    "manual": "Manuell"
   },
   "configModal": {
     "title": "{{name}} konfigurieren",

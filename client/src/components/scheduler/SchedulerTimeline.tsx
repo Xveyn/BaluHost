@@ -96,7 +96,7 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
                   <span>{getSchedulerIcon(exec.scheduler_name)}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-xs text-slate-200 truncate">
-                      {exec.scheduler_name.replace(/_/g, ' ')}
+                      {t('scheduler:schedulers.' + exec.scheduler_name + '.name', { defaultValue: exec.scheduler_name.replace(/_/g, ' ') })}
                     </div>
                     <div className="text-[10px] text-slate-500">
                       {new Date(exec.started_at).toLocaleTimeString()}
@@ -105,7 +105,7 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
                   <span
                     className={`text-[10px] px-1.5 py-0.5 rounded ${getStatusBadgeClasses(exec.status)}`}
                   >
-                    {exec.status}
+                    {t('scheduler:status.' + exec.status)}
                   </span>
                 </div>
               ))}
@@ -223,7 +223,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
                   <span className="text-lg">{getSchedulerIcon(exec.scheduler_name)}</span>
                   <div className="flex-1 min-w-0">
                     <div className="text-sm text-slate-200">
-                      {exec.scheduler_name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+                      {t('scheduler:schedulers.' + exec.scheduler_name + '.name', { defaultValue: exec.scheduler_name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) })}
                     </div>
                     <div className="text-xs text-slate-500">
                       {new Date(exec.started_at).toLocaleString()}

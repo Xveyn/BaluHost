@@ -55,7 +55,7 @@ export function VersionHistoryModal({
   const [diffData, setDiffData] = useState<VersionDiffResponse | null>(null);
   const [showDiff, setShowDiff] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
-  const { t } = useTranslation('settings');
+  const { t } = useTranslation('admin');
 
   useEffect(() => {
     loadVersions();
@@ -68,7 +68,7 @@ export function VersionHistoryModal({
       const data = await getFileVersions(fileId);
       setVersions(data.versions);
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.loadFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -81,11 +81,11 @@ export function VersionHistoryModal({
       setActionLoading(versionId);
       setError(null);
       await restoreVersion({ version_id: versionId });
-      setSuccessMessage(t('vcl.versions.restoreSuccess', { version: versionNumber }));
+      setSuccessMessage(t('versionHistory.actions.restored', { number: versionNumber }));
       setTimeout(() => setSuccessMessage(null), 3000);
       onVersionRestored?.();
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.restoreFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.restoreFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -98,11 +98,11 @@ export function VersionHistoryModal({
       setActionLoading(versionId);
       setError(null);
       await deleteVersion(versionId);
-      setSuccessMessage(t('vcl.versions.deleteSuccess', { version: versionNumber }));
+      setSuccessMessage(t('versionHistory.actions.deleted', { number: versionNumber }));
       setTimeout(() => setSuccessMessage(null), 3000);
       loadVersions(); // Reload list
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.deleteFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.deleteFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -115,7 +115,7 @@ export function VersionHistoryModal({
       await toggleVersionPriority(versionId, !currentPriority);
       loadVersions(); // Reload to update UI
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.priorityFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.priorityFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -137,10 +137,10 @@ export function VersionHistoryModal({
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
       
-      setSuccessMessage(t('vcl.versions.downloadStarted'));
+      setSuccessMessage(t('versionHistory.actions.downloadStarted'));
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.downloadFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.downloadFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -170,7 +170,7 @@ export function VersionHistoryModal({
       setDiffData(data);
       setShowDiff(true);
     } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.versions.errors.diffFailed'));
+      setError(err.response?.data?.detail || t('versionHistory.errors.diffFailed'));
     } finally {
       setDiffLoading(false);
     }
@@ -206,7 +206,7 @@ export function VersionHistoryModal({
             <div className="flex-1 flex items-center justify-center text-slate-500">
               <div className="text-center">
                 <AlertCircle className="w-12 h-12 mx-auto mb-3 text-amber-500" />
-                <p>{diffData.message || t('vcl.versions.binaryCannotCompare')}</p>
+                <p>{diffData.message || t('versionHistory.diff.binaryMessage')}</p>
               </div>
             </div>
           ) : (
@@ -250,7 +250,7 @@ export function VersionHistoryModal({
                   </tbody>
                 </table>
               ) : (
-                <div className="text-center text-slate-500">{t('vcl.versions.noDifferences')}</div>
+                <div className="text-center text-slate-500">{t('versionHistory.diff.noDifferences')}</div>
               )}
             </div>
           )}
@@ -267,7 +267,7 @@ export function VersionHistoryModal({
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-sky-400" />
-              {t('vcl.versions.title')}
+              {t('versionHistory.title')}
             </h2>
             <p className="text-sm text-slate-400 mt-1">{fileName}</p>
           </div>
@@ -284,7 +284,7 @@ export function VersionHistoryModal({
                     Loading...
                   </>
                 ) : (
-                  <>{t('vcl.versions.compare', { v1: selectedForDiff[0], v2: selectedForDiff[1] })}</>
+                  <>{t('versionHistory.diff.compare', { v1: selectedForDiff[0], v2: selectedForDiff[1] })}</>
                 )}
               </button>
             )}
@@ -320,7 +320,7 @@ export function VersionHistoryModal({
           ) : versions.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
               <Clock className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>{t('vcl.versions.noVersions')}</p>
+              <p>{t('versionHistory.noVersions')}</p>
             </div>
           ) : (
             versions.map((version, index) => {
@@ -356,11 +356,11 @@ export function VersionHistoryModal({
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2 mb-2">
                         <span className="text-lg font-semibold text-white">
-                          {t('vcl.versions.version', { number: version.version_number })}
+                          {t('versionHistory.version', { number: version.version_number })}
                         </span>
                         {isLatest && (
                           <span className="px-2 py-0.5 bg-sky-500/20 text-sky-400 text-xs font-medium rounded-full">
-                            {t('vcl.versions.latest')}
+                            {t('versionHistory.latest')}
                           </span>
                         )}
                         {version.is_high_priority && (
@@ -368,7 +368,7 @@ export function VersionHistoryModal({
                         )}
                         {version.was_cached && (
                           <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs font-medium rounded-full">
-                            {t('vcl.versions.cached')}
+                            {t('versionHistory.cached')}
                           </span>
                         )}
                       </div>
@@ -376,27 +376,27 @@ export function VersionHistoryModal({
                       {/* Metadata */}
                       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-400 mb-2">
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.created')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.created')}:</span>{' '}
                           {new Date(version.created_at).toLocaleString()}
                         </div>
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.size')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.size')}:</span>{' '}
                           {formatBytes(version.file_size)}
                         </div>
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.compressed')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.compressed')}:</span>{' '}
                           {formatBytes(version.compressed_size)}
                         </div>
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.ratio')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.ratio')}:</span>{' '}
                           {formatCompressionRatio(version.compression_ratio)}
                         </div>
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.savings')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.savings')}:</span>{' '}
                           {savingsPercent.toFixed(1)}%
                         </div>
                         <div>
-                          <span className="text-slate-500">{t('vcl.versions.storage')}:</span>{' '}
+                          <span className="text-slate-500">{t('versionHistory.fields.storage')}:</span>{' '}
                           <span className={version.storage_type === 'reference' ? 'text-green-400' : ''}>
                             {version.storage_type}
                           </span>
@@ -420,7 +420,7 @@ export function VersionHistoryModal({
                             ? 'text-amber-400 hover:bg-amber-500/10'
                             : 'text-slate-400 hover:bg-slate-700'
                         } disabled:opacity-50`}
-                        title={version.is_high_priority ? t('vcl.versions.removePriority') : t('vcl.versions.markPriority')}
+                        title={version.is_high_priority ? t('versionHistory.actions.removePriority') : t('versionHistory.actions.markPriority')}
                       >
                         {version.is_high_priority ? (
                           <Star className="w-4 h-4 fill-amber-400" />
@@ -433,7 +433,7 @@ export function VersionHistoryModal({
                         onClick={() => handleDownload(version.id, version.version_number)}
                         disabled={isWorking}
                         className="p-2 text-slate-400 hover:text-sky-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-                        title={t('vcl.versions.download')}
+                        title={t('versionHistory.actions.download')}
                       >
                         <Download className="w-4 h-4" />
                       </button>
@@ -442,7 +442,7 @@ export function VersionHistoryModal({
                         onClick={() => handleRestore(version.id, version.version_number)}
                         disabled={isWorking || isLatest}
                         className="p-2 text-slate-400 hover:text-green-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-                        title={t('vcl.versions.restore')}
+                        title={t('versionHistory.actions.restore')}
                       >
                         <RotateCcw className="w-4 h-4" />
                       </button>
@@ -451,7 +451,7 @@ export function VersionHistoryModal({
                         onClick={() => handleDelete(version.id, version.version_number)}
                         disabled={isWorking || isLatest}
                         className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
-                        title={t('vcl.versions.delete')}
+                        title={t('versionHistory.actions.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -461,7 +461,7 @@ export function VersionHistoryModal({
                   {isWorking && (
                     <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center gap-2 text-sky-400">
                       <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sky-500"></div>
-                      <span className="text-sm">{t('vcl.versions.processing')}</span>
+                      <span className="text-sm">{t('versionHistory.processing')}</span>
                     </div>
                   )}
                 </div>
@@ -475,7 +475,7 @@ export function VersionHistoryModal({
           <div className="flex items-center justify-between text-sm">
             <div className="text-slate-400">
               <Archive className="w-4 h-4 inline mr-1" />
-              {t('vcl.versions.totalCount', { count: versions.length })}
+              {t('versionHistory.versionsTotal', { count: versions.length })}
             </div>
             <button
               onClick={onClose}

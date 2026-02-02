@@ -311,12 +311,22 @@
     "stats": {
       "totalVersions": "Total Versions",
       "storageUsed": "Storage Used",
-      "originalSize": "{{size}} original",
+      "original": "original",
       "totalSavings": "Total Savings",
-      "saved": "{{size}} saved",
+      "saved": "saved",
       "activeUsers": "Active Users",
-      "cached": "{{count}} cached"
+      "cached": "cached"
     },
+    "errors": {
+      "loadFailed": "Failed to load VCL data",
+      "cleanupFailed": "Cleanup failed",
+      "updateFailed": "Failed to update settings"
+    },
+    "cleanup": {
+      "dryRunResult": "Dry run: Would delete {{versions}} versions, freeing {{freed}}",
+      "result": "Deleted {{versions}} versions, freed {{freed}}"
+    },
+    "settingsUpdated": "Settings updated for {{username}}",
     "storageDetails": {
       "title": "Storage Details",
       "compressionRatio": "Compression Ratio",
@@ -344,6 +354,7 @@
       "user": "User",
       "maxSize": "Max Size",
       "used": "Used",
+      "usage": "Usage",
       "usagePercent": "Usage %",
       "versions": "Versions",
       "status": "Status",
@@ -398,6 +409,14 @@
       "markPriority": "Mark as priority",
       "removePriority": "Remove priority",
       "selectForComparison": "Select for comparison"
+    },
+    "errors": {
+      "loadFailed": "Failed to load version history",
+      "restoreFailed": "Failed to restore version",
+      "deleteFailed": "Failed to delete version",
+      "priorityFailed": "Failed to update priority",
+      "downloadFailed": "Failed to download version",
+      "diffFailed": "Failed to load diff"
     },
     "processing": "Processing..."
   }

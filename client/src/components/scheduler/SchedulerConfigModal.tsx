@@ -115,7 +115,7 @@ export function SchedulerConfigModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <h3 id="config-modal-title" className="text-lg font-medium text-white">
-            {t('scheduler:configModal.title', { name: scheduler.display_name })}
+            {t('scheduler:configModal.title', { name: t('scheduler:schedulers.' + scheduler.name + '.name', { defaultValue: scheduler.display_name }) })}
           </h3>
           <button
             onClick={onClose}
@@ -128,7 +128,7 @@ export function SchedulerConfigModal({
         {/* Content */}
         <div className="px-6 py-4 space-y-4">
           {/* Info */}
-          <p className="text-sm text-slate-400">{scheduler.description}</p>
+          <p className="text-sm text-slate-400">{t('scheduler:schedulers.' + scheduler.name + '.description', { defaultValue: scheduler.description })}</p>
 
           {/* Interval */}
           <div>

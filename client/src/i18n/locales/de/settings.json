@@ -15,14 +15,24 @@
     "title": "Profilinformationen",
     "avatar": "Profilbild",
     "uploadAvatar": "Neues Profilbild hochladen",
+    "uploadAvatarBtn": "Profilbild hochladen",
+    "uploading": "Wird hochgeladen...",
     "preview": "Vorschau",
     "email": "E-Mail-Adresse",
+    "emailLabel": "E-Mail",
     "updateEmail": "E-Mail aktualisieren",
+    "saving": "Wird gespeichert...",
     "memberSince": "Mitglied seit",
     "emailSuccess": "E-Mail erfolgreich aktualisiert",
     "emailError": "Fehler beim Aktualisieren der E-Mail",
     "avatarSuccess": "Profilbild erfolgreich aktualisiert",
-    "avatarError": "Fehler beim Hochladen des Profilbildes"
+    "avatarError": "Fehler beim Hochladen des Profilbildes",
+    "loading": "Laden...",
+    "loadFailed": "Profil konnte nicht geladen werden",
+    "accountInfo": "Kontoinformationen",
+    "username": "Benutzername",
+    "role": "Rolle",
+    "accountId": "Konto-ID"
   },
   "security": {
     "title": "Sicherheitseinstellungen",
@@ -40,7 +50,15 @@
     "endAllSessions": "Alle anderen Sitzungen beenden",
     "twoFactor": "Zwei-Faktor-Authentifizierung",
     "enable2FA": "2FA aktivieren",
-    "disable2FA": "2FA deaktivieren"
+    "disable2FA": "2FA deaktivieren",
+    "changing": "Wird geändert...",
+    "lastActive": "Zuletzt aktiv",
+    "current": "Aktuell",
+    "dataExport": {
+      "title": "Datenexport",
+      "description": "Laden Sie alle Ihre persönlichen Daten und Dateien in einem portablen Format herunter.",
+      "button": "Meine Daten exportieren"
+    }
   },
   "storage": {
     "title": "Speichernutzung",
@@ -50,7 +68,16 @@
     "unlimited": "Unbegrenzt",
     "usageDetails": "Nutzungsdetails",
     "byType": "Nach Typ",
-    "byFolder": "Nach Ordner"
+    "byFolder": "Nach Ordner",
+    "remaining": "verbleibend",
+    "noLimit": "Kein Speicherlimit festgelegt",
+    "loading": "Lade Speicherinformationen...",
+    "tipsTitle": "Speicher-Tipps",
+    "tips": {
+      "deleteFiles": "Unnötige Dateien löschen, um Speicherplatz freizugeben",
+      "compression": "Dateikomprimierung für große Archive verwenden",
+      "contactAdmin": "Administrator kontaktieren, wenn mehr Speicher benötigt wird"
+    }
   },
   "activity": {
     "title": "Aktivitätsprotokoll",

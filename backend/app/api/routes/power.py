@@ -22,6 +22,7 @@ from app.schemas.power import (
     PowerStatusResponse,
     RegisterDemandRequest,
     RegisterDemandResponse,
+    ServiceIntensityResponse,
     SetProfileRequest,
     SetProfileResponse,
     SwitchBackendRequest,
@@ -177,6 +178,25 @@ async def unregister_power_demand(
         message=f"Demand unregistered: {request.source}",
         resulting_profile=status_after.current_profile
     )
+
+
+@router.get("/intensities", response_model=ServiceIntensityResponse)
+async def get_service_intensities(
+    _: UserPublic = Depends(deps.get_current_user)
+) -> ServiceIntensityResponse:
+    """
+    Get intensity information for all tracked services and processes.
+
+    Returns a combined view of:
+    - Services with active power demands (backup, RAID rebuild, etc.)
+    - Tracked BaluHost processes with CPU/RAM metrics
+    - Inferred intensity levels based on CPU usage
+
+    Services are sorted by intensity level (highest first) to show
+    the most demanding services at the top.
+    """
+    manager = get_power_manager()
+    return await manager.get_service_intensities()
 
 
 @router.get("/history", response_model=PowerHistoryResponse)

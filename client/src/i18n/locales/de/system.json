@@ -315,6 +315,13 @@
       "autoScalingOff": "Auto-Scaling aus",
       "adminOnlyChange": "Nur Administratoren können das Preset ändern."
     },
+    "serviceIntensity": {
+      "title": "Service-Intensität",
+      "services": "{{count}} Service(s)",
+      "activeDemand": "Aktiv",
+      "noServices": "Keine aktiven Services",
+      "backgroundService": "Hintergrunddienst"
+    },
     "demands": {
       "title": "Aktive Power-Anforderungen"
     },
@@ -673,7 +680,8 @@
       "active": "Aktiv",
       "off": "Aus",
       "enabled": "Rate Limit aktiviert",
-      "disabled": "Rate Limit deaktiviert"
+      "disabled": "Rate Limit deaktiviert",
+      "seedConfirm": "Standard-Rate-Limit-Konfigurationen werden gesetzt. Fortfahren?"
     },
     "modal": {
       "editRateLimit": "Rate Limit bearbeiten",
@@ -709,6 +717,161 @@
     "buttons": {
       "refresh": "Aktualisieren",
       "editRateLimit": "Rate Limit bearbeiten"
+    },
+    "docs": {
+      "authentication": {
+        "title": "Authentifizierung",
+        "login": "Benutzer authentifizieren und JWT-Token erhalten",
+        "register": "Neues Benutzerkonto registrieren",
+        "me": "Aktuellen authentifizierten Benutzer abrufen"
+      },
+      "files": {
+        "title": "Dateien",
+        "list": "Dateien im Verzeichnis auflisten",
+        "upload": "Datei hochladen",
+        "download": "Datei herunterladen",
+        "delete": "Datei oder Ordner löschen"
+      },
+      "shares": {
+        "title": "Freigaben",
+        "list": "Alle Freigaben auflisten",
+        "create": "Neuen Freigabe-Link erstellen"
+      },
+      "system": {
+        "title": "System",
+        "info": "Systeminformationen abrufen",
+        "telemetry": "Live-Systemtelemetrie abrufen"
+      },
+      "logging": {
+        "title": "Protokollierung",
+        "diskIo": "Festplatten-I/O-Protokolle abrufen",
+        "fileAccess": "Dateizugriffsprotokolle abrufen"
+      },
+      "users": {
+        "title": "Benutzer",
+        "list": "Alle Benutzer mit Filter auflisten",
+        "create": "Neuen Benutzer erstellen (nur Admin)",
+        "update": "Benutzer aktualisieren (nur Admin)",
+        "delete": "Benutzer löschen (nur Admin)",
+        "avatar": "Benutzer-Avatar hochladen"
+      },
+      "vpn": {
+        "title": "VPN",
+        "generateConfig": "WireGuard-VPN-Konfiguration generieren",
+        "listClients": "Alle VPN-Clients des Benutzers auflisten",
+        "getClient": "VPN-Client-Details abrufen",
+        "updateClient": "VPN-Client-Einstellungen aktualisieren",
+        "deleteClient": "VPN-Client-Konfiguration löschen",
+        "fritzboxUpload": "Fritz!Box-VPN-Konfiguration hochladen (nur Admin)",
+        "fritzboxQr": "Fritz!Box-Konfiguration als QR-Code abrufen"
+      },
+      "mobile": {
+        "title": "Mobil",
+        "generateToken": "QR-Code für Mobilgeräte-Registrierung generieren",
+        "register": "Mobilgerät mit Token registrieren",
+        "listDevices": "Registrierte Mobilgeräte auflisten",
+        "deleteDevice": "Mobilgerät abmelden",
+        "pushToken": "FCM-Push-Benachrichtigungs-Token registrieren"
+      },
+      "backup": {
+        "title": "Backup",
+        "create": "System-Backup erstellen (nur Admin)",
+        "list": "Alle Backups auflisten (nur Admin)",
+        "get": "Backup-Details abrufen (nur Admin)",
+        "delete": "Backup löschen (nur Admin)",
+        "restore": "Aus Backup wiederherstellen (nur Admin)",
+        "download": "Backup-Datei herunterladen (nur Admin)"
+      },
+      "power": {
+        "title": "Energieverwaltung",
+        "status": "Aktuellen Energieverwaltungsstatus abrufen",
+        "profiles": "Alle verfügbaren Energieprofile abrufen",
+        "setProfile": "Energieprofil festlegen (nur Admin)",
+        "registerDemand": "Energiebedarf registrieren",
+        "unregisterDemand": "Energiebedarf abmelden"
+      },
+      "tapo": {
+        "title": "Tapo-Geräte",
+        "add": "Tapo-Energiemonitor hinzufügen (nur Admin)",
+        "list": "Alle Tapo-Geräte auflisten (nur Admin)",
+        "currentPower": "Aktuellen Stromverbrauch abrufen",
+        "remove": "Tapo-Gerät entfernen (nur Admin)"
+      },
+      "raid": {
+        "title": "RAID & Festplatten",
+        "status": "RAID-Array-Status abrufen",
+        "create": "RAID-Array erstellen (nur Admin)",
+        "delete": "RAID-Array löschen (nur Admin)",
+        "smart": "SMART-Festplattengesundheitsdaten abrufen",
+        "availableDisks": "Verfügbare Festplatten für RAID abrufen"
+      },
+      "params": {
+        "username": "Benutzername",
+        "password": "Passwort",
+        "email": "E-Mail-Adresse",
+        "path": "Pfad",
+        "directoryPath": "Verzeichnispfad",
+        "filePath": "Dateipfad",
+        "targetDirectory": "Zielverzeichnis",
+        "pathToDelete": "Zu löschender Pfad",
+        "pathToShare": "Freizugebender Pfad",
+        "expirationHours": "Ablaufzeit in Stunden",
+        "searchByUsernameEmail": "Nach Benutzername oder E-Mail suchen",
+        "filterByRole": "Nach Rolle filtern",
+        "filterByActiveStatus": "Nach Aktivstatus filtern",
+        "userId": "Benutzer-ID",
+        "userIdToDelete": "Zu löschende Benutzer-ID",
+        "newEmail": "Neue E-Mail",
+        "newRole": "Neue Rolle",
+        "newPassword": "Neues Passwort",
+        "avatarImage": "Avatar-Bild (JPEG, PNG, GIF, WebP)",
+        "deviceName": "Gerätename",
+        "deviceNameForVpn": "Gerätename für VPN-Client",
+        "serverEndpoint": "Server-Endpunkt (IP:Port)",
+        "clientId": "Client-ID",
+        "newDeviceName": "Neuer Gerätename",
+        "activeStatus": "Aktivstatus",
+        "includeVpn": "VPN-Konfiguration im QR-Code einschließen",
+        "defaultIosDevice": "Gerätename (Standard: iOS-Gerät)",
+        "tokenValidity": "Token-Gültigkeit (30-180 Tage)",
+        "tokenFromQr": "Token aus QR-Code",
+        "platform": "Plattform (ios/android)",
+        "deviceId": "Geräte-ID",
+        "fcmToken": "Firebase Cloud Messaging Token",
+        "includeDatabase": "Datenbank einschließen",
+        "includeFiles": "Dateien einschließen",
+        "includeConfig": "Konfiguration einschließen",
+        "backupDescription": "Backup-Beschreibung",
+        "backupId": "Backup-ID",
+        "confirmTrue": "Muss true sein, um fortzufahren",
+        "restoreDatabase": "Datenbank wiederherstellen",
+        "restoreFiles": "Dateien wiederherstellen",
+        "restoreConfig": "Konfiguration wiederherstellen",
+        "profileName": "Profilname (power-save/balanced/performance)",
+        "reasonForChange": "Grund für Änderung",
+        "overrideDuration": "Überschreibungsdauer",
+        "demandSource": "Bedarfsquellenkennung",
+        "priority": "Priorität (1-10)",
+        "demandDescription": "Bedarfsbeschreibung",
+        "tapoDeviceName": "Gerätename",
+        "tapoDeviceType": "Gerätetyp (z.B. P115)",
+        "tapoIpAddress": "Geräte-IP-Adresse",
+        "tapoEmail": "Tapo-Konto-E-Mail",
+        "tapoPassword": "Tapo-Konto-Passwort",
+        "enableMonitoring": "Überwachung aktivieren",
+        "tapoDeviceId": "Geräte-ID",
+        "arrayName": "Array-Name (z.B. md0)",
+        "raidLevel": "RAID-Level (0, 1, 5, 6, 10)",
+        "devicePaths": "Gerätepfade",
+        "arrayNameParam": "Array-Name",
+        "fileToUpload": "Hochzuladende Datei",
+        "wireguardConfig": "WireGuard .conf Dateiinhalt",
+        "fritzboxEndpoint": "Öffentlicher Fritz!Box-Endpunkt"
+      },
+      "responses": {
+        "binaryFileContent": "Binärer Dateiinhalt",
+        "binaryBackupFile": "Binäre Backup-Datei (tar.gz)"
+      }
     }
   },
   "raidWizard": {

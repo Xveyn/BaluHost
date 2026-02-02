@@ -253,7 +253,7 @@ export default function SettingsPage() {
   if (loading || !profile) {
     return (
       <div className="text-center py-8 text-slate-400">
-        {loading ? 'Loading...' : 'Failed to load profile'}
+        {loading ? t('profile.loading') : t('profile.loadFailed')}
       </div>
     );
   }
@@ -319,7 +319,7 @@ export default function SettingsPage() {
                   <h2 className="text-2xl font-bold">{profile.username}</h2>
                   <p className="text-slate-100-secondary">{profile.role}</p>
                   <p className="text-sm text-slate-100-tertiary">
-                    Member since {new Date(profile.created_at).toLocaleDateString()}
+                    {t('profile.memberSince')} {new Date(profile.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
@@ -329,11 +329,11 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-lg font-semibold mb-4 flex items-center">
                 <Image className="w-5 h-5 mr-2 text-sky-400" />
-                Profile Picture
+                {t('profile.avatar')}
               </h3>
               <div className="space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-2">Upload New Avatar</label>
+                  <label className="block text-sm font-medium mb-2">{t('profile.uploadAvatar')}</label>
                   <input
                     type="file"
                     accept="image/*"
@@ -343,7 +343,7 @@ export default function SettingsPage() {
                 </div>
                 {avatarPreview && (
                   <div>
-                    <p className="text-sm mb-2 text-slate-100-secondary">Preview:</p>
+                    <p className="text-sm mb-2 text-slate-100-secondary">{t('profile.preview')}:</p>
                     <img
                       src={avatarPreview}
                       alt="Avatar preview"
@@ -354,7 +354,7 @@ export default function SettingsPage() {
                       disabled={saving}
                       className="mt-4 px-4 py-2 text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50"
                     >
-                      {saving ? 'Uploading...' : 'Upload Avatar'}
+                      {saving ? t('profile.uploading') : t('profile.uploadAvatarBtn')}
                     </button>
                   </div>
                 )}
@@ -365,11 +365,11 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <Mail className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Email Address
+                {t('profile.email')}
               </h3>
               <form onSubmit={handleUpdateEmail} className="space-y-3 sm:space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Email</label>
+                  <label className="block text-sm font-medium mb-1">{t('profile.emailLabel')}</label>
                   <input
                     type="email"
                     value={email}
@@ -383,7 +383,7 @@ export default function SettingsPage() {
                   disabled={saving}
                   className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50 touch-manipulation active:scale-95"
                 >
-                  {saving ? 'Saving...' : 'Update Email'}
+                  {saving ? t('profile.saving') : t('profile.updateEmail')}
                 </button>
               </form>
             </div>
@@ -392,19 +392,19 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Account Information
+                {t('profile.accountInfo')}
               </h3>
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Username</label>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.username')}</label>
                   <p className="text-base sm:text-lg truncate">{profile.username}</p>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Role</label>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.role')}</label>
                   <p className="text-base sm:text-lg capitalize">{profile.role}</p>
                 </div>
                 <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">Account ID</label>
+                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.accountId')}</label>
                   <p className="text-base sm:text-lg font-mono">{profile.id}</p>
                 </div>
               </div>
@@ -419,11 +419,11 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <Lock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Change Password
+                {t('security.changePassword')}
               </h3>
               <form onSubmit={handleChangePassword} className="space-y-3 sm:space-y-4">
                 <div>
-                  <label className="block text-sm font-medium mb-1">Current Password</label>
+                  <label className="block text-sm font-medium mb-1">{t('security.currentPassword')}</label>
                   <input
                     type="password"
                     value={currentPassword}
@@ -433,7 +433,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">New Password</label>
+                  <label className="block text-sm font-medium mb-1">{t('security.newPassword')}</label>
                   <input
                     type="password"
                     value={newPassword}
@@ -444,7 +444,7 @@ export default function SettingsPage() {
                   />
                 </div>
                 <div>
-                  <label className="block text-sm font-medium mb-1">Confirm New Password</label>
+                  <label className="block text-sm font-medium mb-1">{t('security.confirmPassword')}</label>
                   <input
                     type="password"
                     value={confirmPassword}
@@ -459,7 +459,7 @@ export default function SettingsPage() {
                   disabled={saving}
                   className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors disabled:opacity-50 bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
                 >
-                  {saving ? 'Changing...' : 'Change Password'}
+                  {saving ? t('security.changing') : t('security.changePassword')}
                 </button>
               </form>
             </div>
@@ -468,7 +468,7 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <Clock className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Active Sessions
+                {t('security.activeSessions')}
               </h3>
               <div className="space-y-3">
                 {sessions.map(session => (
@@ -487,12 +487,12 @@ export default function SettingsPage() {
                           IP: {session.ip_address}
                         </p>
                         <p className="text-xs sm:text-sm text-slate-100-tertiary">
-                          Last active: {formatDate(session.last_active)}
+                          {t('security.lastActive')}: {formatDate(session.last_active)}
                         </p>
                       </div>
                       {session.is_current && (
                         <span className="self-start px-2 py-1 text-xs rounded whitespace-nowrap" style={{ backgroundColor: 'var(--success)', color: 'white' }}>
-                          Current
+                          {t('security.current')}
                         </span>
                       )}
                     </div>
@@ -505,16 +505,16 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Data Export
+                {t('security.dataExport.title')}
               </h3>
               <p className="mb-3 sm:mb-4 text-sm sm:text-base text-slate-100-secondary">
-                Download all your personal data and files in a portable format.
+                {t('security.dataExport.description')}
               </p>
               <button
                 onClick={handleExportData}
                 className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
               >
-                Export My Data
+                {t('security.dataExport.button')}
               </button>
             </div>
           </>
@@ -547,13 +547,13 @@ export default function SettingsPage() {
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
                 <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                Storage Usage
+                {t('storage.title')}
               </h3>
               {storageQuota ? (
                 <>
                   <div className="mb-4">
                     <div className="flex justify-between mb-2">
-                      <span className="text-slate-100-secondary">Used</span>
+                      <span className="text-slate-100-secondary">{t('storage.used')}</span>
                       <span className="font-semibold">
                         {formatBytes(storageQuota.used_bytes)}
                         {storageQuota.quota_bytes && ` / ${formatBytes(storageQuota.quota_bytes)}`}
@@ -565,8 +565,8 @@ export default function SettingsPage() {
                           className="h-full rounded-full transition-all"
                           style={{
                             width: `${Math.min(storageQuota.percentage, 100)}%`,
-                            backgroundColor: storageQuota.percentage > 90 ? 'var(--error)' : 
-                                           storageQuota.percentage > 75 ? 'var(--warning)' : 
+                            backgroundColor: storageQuota.percentage > 90 ? 'var(--error)' :
+                                           storageQuota.percentage > 75 ? 'var(--warning)' :
                                            'var(--success)'
                           }}
                         />
@@ -575,35 +575,35 @@ export default function SettingsPage() {
                   </div>
                   {storageQuota.quota_bytes && (
                     <p className="text-sm text-slate-100-tertiary">
-                      {formatBytes(storageQuota.quota_bytes - storageQuota.used_bytes)} remaining
+                      {formatBytes(storageQuota.quota_bytes - storageQuota.used_bytes)} {t('storage.remaining')}
                     </p>
                   )}
                   {!storageQuota.quota_bytes && (
                     <p className="text-sm text-slate-100-tertiary">
-                      No storage limit set
+                      {t('storage.noLimit')}
                     </p>
                   )}
                 </>
               ) : (
-                <p className="text-slate-100-secondary">Loading storage information...</p>
+                <p className="text-slate-100-secondary">{t('storage.loading')}</p>
               )}
             </div>
 
             {/* Storage Info */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">Storage Tips</h3>
+              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4">{t('storage.tipsTitle')}</h3>
               <ul className="space-y-2 text-sm sm:text-base text-slate-100-secondary">
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
-                  <span>Delete unnecessary files to free up space</span>
+                  <span>{t('storage.tips.deleteFiles')}</span>
                 </li>
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
-                  <span>Use file compression for large archives</span>
+                  <span>{t('storage.tips.compression')}</span>
                 </li>
                 <li className="flex items-start">
                   <span className="mr-2">•</span>
-                  <span>Contact admin if you need more storage</span>
+                  <span>{t('storage.tips.contactAdmin')}</span>
                 </li>
               </ul>
             </div>

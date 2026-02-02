@@ -3,6 +3,7 @@
  *
  * Displays documentation about the plugin system, permissions, hooks, and risks.
  */
+import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
@@ -28,80 +29,47 @@ interface PluginDocumentationProps {
   permissions: PermissionInfo[];
 }
 
-// Hook definitions organized by category
-const HOOKS_BY_CATEGORY = {
-  'Datei-Events': [
-    { name: 'on_file_uploaded', description: 'Wird ausgelöst wenn eine Datei hochgeladen wird' },
-    { name: 'on_file_deleted', description: 'Wird ausgelöst wenn eine Datei gelöscht wird' },
-    { name: 'on_file_moved', description: 'Wird ausgelöst wenn eine Datei verschoben/umbenannt wird' },
-    { name: 'on_file_downloaded', description: 'Wird ausgelöst wenn eine Datei heruntergeladen wird' },
-  ],
-  'Benutzer-Events': [
-    { name: 'on_user_login', description: 'Wird ausgelöst bei Benutzeranmeldung' },
-    { name: 'on_user_logout', description: 'Wird ausgelöst bei Benutzerabmeldung' },
-    { name: 'on_user_created', description: 'Wird ausgelöst wenn ein neuer Benutzer erstellt wird' },
-    { name: 'on_user_deleted', description: 'Wird ausgelöst wenn ein Benutzer gelöscht wird' },
-  ],
-  'Backup-Events': [
-    { name: 'on_backup_started', description: 'Wird ausgelöst wenn ein Backup startet' },
-    { name: 'on_backup_completed', description: 'Wird ausgelöst wenn ein Backup abgeschlossen ist' },
-  ],
-  'Share-Events': [
-    { name: 'on_share_created', description: 'Wird ausgelöst wenn ein Share erstellt wird' },
-    { name: 'on_share_accessed', description: 'Wird ausgelöst wenn auf einen Share zugegriffen wird' },
-  ],
-  'System-Events': [
-    { name: 'on_system_startup', description: 'Wird ausgelöst beim Systemstart' },
-    { name: 'on_system_shutdown', description: 'Wird ausgelöst beim Herunterfahren' },
-    { name: 'on_storage_threshold', description: 'Wird ausgelöst bei Speicherplatz-Warnung' },
-  ],
-  'RAID-Events': [
-    { name: 'on_raid_degraded', description: 'Wird ausgelöst wenn ein RAID-Array degradiert' },
-    { name: 'on_raid_rebuild_started', description: 'Wird ausgelöst wenn ein Rebuild startet' },
-    { name: 'on_raid_rebuild_completed', description: 'Wird ausgelöst wenn ein Rebuild abgeschlossen ist' },
-  ],
-  'SMART-Events': [
-    { name: 'on_disk_health_warning', description: 'Wird ausgelöst bei Disk-Health-Warnung' },
-  ],
-  'Device-Events': [
-    { name: 'on_device_registered', description: 'Wird ausgelöst wenn ein Gerät registriert wird' },
-    { name: 'on_device_removed', description: 'Wird ausgelöst wenn ein Gerät entfernt wird' },
-  ],
-  'VPN-Events': [
-    { name: 'on_vpn_client_created', description: 'Wird ausgelöst wenn ein VPN-Client erstellt wird' },
-    { name: 'on_vpn_client_revoked', description: 'Wird ausgelöst wenn ein VPN-Client widerrufen wird' },
-  ],
+// Hook category keys for iteration
+const HOOK_CATEGORY_KEYS = ['file', 'user', 'backup', 'share', 'system', 'raid', 'smart', 'device', 'vpn'] as const;
+
+// Hook names organized by category key
+const HOOKS_BY_CATEGORY_KEY: Record<string, string[]> = {
+  file: ['on_file_uploaded', 'on_file_deleted', 'on_file_moved', 'on_file_downloaded'],
+  user: ['on_user_login', 'on_user_logout', 'on_user_created', 'on_user_deleted'],
+  backup: ['on_backup_started', 'on_backup_completed'],
+  share: ['on_share_created', 'on_share_accessed'],
+  system: ['on_system_startup', 'on_system_shutdown', 'on_storage_threshold'],
+  raid: ['on_raid_degraded', 'on_raid_rebuild_started', 'on_raid_rebuild_completed'],
+  smart: ['on_disk_health_warning'],
+  device: ['on_device_registered', 'on_device_removed'],
+  vpn: ['on_vpn_client_created', 'on_vpn_client_revoked'],
 };
 
-// Permission categories for grouping
-const PERMISSION_CATEGORIES: Record<string, { label: string; icon: React.ElementType; permissions: string[] }> = {
+// Permission category keys and their permissions
+const PERMISSION_CATEGORY_KEYS = ['file', 'system', 'network', 'database', 'user', 'events'] as const;
+
+const PERMISSION_CATEGORY_DATA: Record<string, { icon: React.ElementType; permissions: string[] }> = {
   file: {
-    label: 'Datei',
     icon: FileText,
     permissions: ['file:read', 'file:write', 'file:delete'],
   },
   system: {
-    label: 'System',
     icon: Server,
     permissions: ['system:info', 'system:execute'],
   },
   network: {
-    label: 'Netzwerk',
     icon: Network,
     permissions: ['network:outbound'],
   },
   database: {
-    label: 'Datenbank',
     icon: Database,
     permissions: ['db:read', 'db:write'],
   },
   user: {
-    label: 'Benutzer',
     icon: Users,
     permissions: ['user:read', 'user:write'],
   },
   events: {
-    label: 'Events & Tasks',
     icon: Zap,
     permissions: ['notification:send', 'task:background', 'event:subscribe', 'event:emit'],
   },
@@ -109,15 +77,15 @@ const PERMISSION_CATEGORIES: Record<string, { label: string; icon: React.Element
 
 // Icons for hook categories
 const HOOK_CATEGORY_ICONS: Record<string, React.ElementType> = {
-  'Datei-Events': FileText,
-  'Benutzer-Events': Users,
-  'Backup-Events': HardDrive,
-  'Share-Events': Folder,
-  'System-Events': Server,
-  'RAID-Events': Activity,
-  'SMART-Events': HardDrive,
-  'Device-Events': Smartphone,
-  'VPN-Events': Key,
+  file: FileText,
+  user: Users,
+  backup: HardDrive,
+  share: Folder,
+  system: Server,
+  raid: Activity,
+  smart: HardDrive,
+  device: Smartphone,
+  vpn: Key,
 };
 
 export default function PluginDocumentation({ permissions }: PluginDocumentationProps) {
@@ -125,6 +93,33 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
   // Create a lookup map for permission details
   const permissionMap = new Map(permissions.map((p) => [p.value, p]));
   const formattedVersion = useFormattedVersion('BaluHost');
+
+  // Build hooks data with translations
+  const hooksByCategory = useMemo(() => {
+    return HOOK_CATEGORY_KEYS.map((key) => ({
+      key,
+      label: t(`hookCategories.${key}`),
+      hooks: HOOKS_BY_CATEGORY_KEY[key].map((hookName) => ({
+        name: hookName,
+        description: t(`hooks.${hookName}`),
+      })),
+    }));
+  }, [t]);
+
+  // Build permission categories with translations
+  const permissionCategories = useMemo(() => {
+    return PERMISSION_CATEGORY_KEYS.map((key) => ({
+      key,
+      label: t(`categories.${key}`),
+      icon: PERMISSION_CATEGORY_DATA[key].icon,
+      permissions: PERMISSION_CATEGORY_DATA[key].permissions,
+    }));
+  }, [t]);
+
+  // Total hooks count
+  const totalHooks = useMemo(() => {
+    return hooksByCategory.reduce((sum, cat) => sum + cat.hooks.length, 0);
+  }, [hooksByCategory]);
 
   return (
     <div className="space-y-6">
@@ -142,11 +137,11 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
                 {t('docs.dangerousPermissions')}:
               </p>
               <ul className="mt-1 text-xs text-amber-200/70 space-y-1">
-                <li>• <code className="text-amber-300">file:write</code> - Dateien schreiben/ändern</li>
-                <li>• <code className="text-amber-300">file:delete</code> - Dateien löschen</li>
-                <li>• <code className="text-amber-300">system:execute</code> - System-Befehle ausführen</li>
-                <li>• <code className="text-amber-300">db:write</code> - Datenbank ändern</li>
-                <li>• <code className="text-amber-300">user:write</code> - Benutzerkonten ändern</li>
+                <li>• <code className="text-amber-300">file:write</code> - {t('docs.permissionDescFileWrite')}</li>
+                <li>• <code className="text-amber-300">file:delete</code> - {t('docs.permissionDescFileDelete')}</li>
+                <li>• <code className="text-amber-300">system:execute</code> - {t('docs.permissionDescSystemExecute')}</li>
+                <li>• <code className="text-amber-300">db:write</code> - {t('docs.permissionDescDbWrite')}</li>
+                <li>• <code className="text-amber-300">user:write</code> - {t('docs.permissionDescUserWrite')}</li>
               </ul>
             </div>
           </div>
@@ -163,15 +158,27 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
           <div>
             <h3 className="font-medium text-white mb-2">{t('docs.installation')}</h3>
             <p className="text-slate-400">
-              Plugins werden als Verzeichnisse im Ordner{' '}
-              <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
-                backend/app/plugins/installed/
-              </code>{' '}
-              installiert. Jedes Plugin benötigt eine{' '}
-              <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
-                plugin.json
-              </code>{' '}
-              Manifest-Datei.
+              {t('docs.installationDesc')
+                .split('{{path}}')
+                .map((part, i, arr) => (
+                  <span key={i}>
+                    {part.split('{{manifest}}').map((subPart, j, subArr) => (
+                      <span key={j}>
+                        {subPart}
+                        {j < subArr.length - 1 && (
+                          <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
+                            plugin.json
+                          </code>
+                        )}
+                      </span>
+                    ))}
+                    {i < arr.length - 1 && (
+                      <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
+                        backend/app/plugins/installed/
+                      </code>
+                    )}
+                  </span>
+                ))}
             </p>
           </div>
           <div>
@@ -187,11 +194,11 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
             <h3 className="font-medium text-white mb-2">{t('docs.pluginStructure')}</h3>
             <pre className="p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 overflow-x-auto">
 {`my_plugin/
-├── plugin.json      # Manifest (Name, Version, Permissions)
-├── __init__.py      # Plugin-Einstiegspunkt
-├── routes.py        # Optional: API-Routen
+├── plugin.json      # ${t('docs.pluginStructureManifest')}
+├── __init__.py      # ${t('docs.pluginStructureEntry')}
+├── routes.py        # ${t('docs.pluginStructureRoutes')}
 └── ui/
-    └── bundle.js    # Optional: Frontend-Komponente`}
+    └── bundle.js    # ${t('docs.pluginStructureUI')}`}
             </pre>
           </div>
         </div>
@@ -208,7 +215,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
           {t('docs.permissionsDescription')}
         </p>
         <div className="grid gap-4 md:grid-cols-2">
-          {Object.entries(PERMISSION_CATEGORIES).map(([key, category]) => {
+          {permissionCategories.map((category) => {
             const CategoryIcon = category.icon;
             const categoryPerms = category.permissions
               .map((p) => permissionMap.get(p))
@@ -217,7 +224,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
             if (categoryPerms.length === 0) return null;
 
             return (
-              <div key={key} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+              <div key={category.key} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CategoryIcon className="h-4 w-4 text-slate-400" />
                   <h3 className="text-sm font-medium text-white">{category.label}</h3>
@@ -239,7 +246,9 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
                           <AlertTriangle className="h-3 w-3 text-amber-400" />
                         )}
                       </div>
-                      <p className="text-xs text-slate-500 mt-1">{perm.description}</p>
+                      <p className="text-xs text-slate-500 mt-1">
+                        {t(`permissionDescriptions.${perm.value}`, { defaultValue: perm.description })}
+                      </p>
                     </li>
                   ))}
                 </ul>
@@ -255,7 +264,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
           <Zap className="h-5 w-5 text-sky-400" />
           <h2 className="text-lg font-medium text-white">{t('docs.eventHooks')}</h2>
           <span className="text-xs text-slate-500">
-            ({Object.values(HOOKS_BY_CATEGORY).flat().length} {t('docs.hooks')})
+            ({totalHooks} {t('docs.hooks')})
           </span>
         </div>
         <p className="text-sm text-slate-400 mb-4">
@@ -264,17 +273,17 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
           {t('docs.required')}.
         </p>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-          {Object.entries(HOOKS_BY_CATEGORY).map(([category, hooks]) => {
-            const CategoryIcon = HOOK_CATEGORY_ICONS[category] || Bell;
+          {hooksByCategory.map((category) => {
+            const CategoryIcon = HOOK_CATEGORY_ICONS[category.key] || Bell;
             return (
-              <div key={category} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
+              <div key={category.key} className="rounded-lg border border-slate-700 bg-slate-800/30 p-4">
                 <div className="flex items-center gap-2 mb-3">
                   <CategoryIcon className="h-4 w-4 text-slate-400" />
-                  <h3 className="text-sm font-medium text-white">{category}</h3>
-                  <span className="text-xs text-slate-500">({hooks.length})</span>
+                  <h3 className="text-sm font-medium text-white">{category.label}</h3>
+                  <span className="text-xs text-slate-500">({category.hooks.length})</span>
                 </div>
                 <ul className="space-y-2">
-                  {hooks.map((hook) => (
+                  {category.hooks.map((hook) => (
                     <li key={hook.name} className="text-xs">
                       <code className="text-sky-400">{hook.name}</code>
                       <p className="text-slate-500 mt-0.5">{hook.description}</p>

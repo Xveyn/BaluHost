@@ -147,9 +147,9 @@ export default function PluginsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Plugins</h1>
+          <h1 className="text-2xl font-semibold text-white">{t('title')}</h1>
           <p className="text-sm text-slate-400 mt-1">
-            Manage installed plugins and extensions
+            {t('description')}
           </p>
         </div>
         {activeTab === 'plugins' && (
@@ -157,7 +157,7 @@ export default function PluginsPage() {
             onClick={refreshPlugins}
             className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white transition"
           >
-            Refresh
+            {t('buttons.refresh')}
           </button>
         )}
       </div>
@@ -206,9 +206,9 @@ export default function PluginsPage() {
           {plugins.length === 0 ? (
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-8 text-center">
               <Plug className="h-12 w-12 mx-auto text-slate-600 mb-4" />
-              <h3 className="text-lg font-medium text-slate-300 mb-2">No plugins installed</h3>
+              <h3 className="text-lg font-medium text-slate-300 mb-2">{t('empty.noPlugins')}</h3>
               <p className="text-sm text-slate-500">
-                Place plugin directories in the backend/app/plugins/installed/ folder
+                {t('empty.noPluginsDesc')}
               </p>
             </div>
           ) : (
@@ -233,7 +233,7 @@ export default function PluginsPage() {
                         <span className="text-xs text-slate-500">v{plugin.version}</span>
                         {plugin.is_enabled && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
-                            Active
+                            {t('status.active')}
                           </span>
                         )}
                       </div>
@@ -244,13 +244,13 @@ export default function PluginsPage() {
                         </span>
                         {plugin.has_ui && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-purple-500/20 text-purple-400 border border-purple-500/30">
-                            UI
+                            {t('ui')}
                           </span>
                         )}
                         {plugin.dangerous_permissions.length > 0 && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-amber-500/20 text-amber-400 border border-amber-500/30 flex items-center gap-1">
                             <Shield className="h-3 w-3" />
-                            Requires Review
+                            {t('permissions.requiresReview')}
                           </span>
                         )}
                       </div>
@@ -268,7 +268,7 @@ export default function PluginsPage() {
                         : 'bg-sky-500/20 text-sky-400 hover:bg-sky-500/30'
                     } border border-slate-700`}
                   >
-                    {plugin.is_enabled ? 'Disable' : 'Enable'}
+                    {plugin.is_enabled ? t('buttons.disable') : t('buttons.enable')}
                   </button>
                 </div>
                 {plugin.error && (
@@ -300,20 +300,20 @@ export default function PluginsPage() {
                 </h3>
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">Version</dt>
+                    <dt className="text-slate-500">{t('details.version')}</dt>
                     <dd className="text-white">{selectedPlugin.version}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">Author</dt>
+                    <dt className="text-slate-500">{t('details.author')}</dt>
                     <dd className="text-white">{selectedPlugin.author}</dd>
                   </div>
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">Category</dt>
+                    <dt className="text-slate-500">{t('details.category')}</dt>
                     <dd className="text-white capitalize">{selectedPlugin.category}</dd>
                   </div>
                   {selectedPlugin.homepage && (
                     <div className="flex justify-between">
-                      <dt className="text-slate-500">Homepage</dt>
+                      <dt className="text-slate-500">{t('details.homepage')}</dt>
                       <dd>
                         <a
                           href={selectedPlugin.homepage}
@@ -321,20 +321,20 @@ export default function PluginsPage() {
                           rel="noopener noreferrer"
                           className="text-sky-400 hover:underline flex items-center gap-1"
                         >
-                          Link <ExternalLink className="h-3 w-3" />
+                          {t('details.link')} <ExternalLink className="h-3 w-3" />
                         </a>
                       </dd>
                     </div>
                   )}
                   <div className="flex justify-between">
-                    <dt className="text-slate-500">Status</dt>
+                    <dt className="text-slate-500">{t('details.status')}</dt>
                     <dd className={selectedPlugin.is_enabled ? 'text-green-400' : 'text-slate-400'}>
-                      {selectedPlugin.is_enabled ? 'Enabled' : 'Disabled'}
+                      {selectedPlugin.is_enabled ? t('status.enabled') : t('status.disabled')}
                     </dd>
                   </div>
                   {selectedPlugin.installed_at && (
                     <div className="flex justify-between">
-                      <dt className="text-slate-500">Installed</dt>
+                      <dt className="text-slate-500">{t('details.installed')}</dt>
                       <dd className="text-white">
                         {new Date(selectedPlugin.installed_at).toLocaleDateString()}
                       </dd>
@@ -347,10 +347,10 @@ export default function PluginsPage() {
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
                 <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
                   <Shield className="h-4 w-4" />
-                  Required Permissions
+                  {t('permissions.title')}
                 </h4>
                 {selectedPlugin.required_permissions.length === 0 ? (
-                  <p className="text-sm text-slate-500">No special permissions required</p>
+                  <p className="text-sm text-slate-500">{t('permissions.noPermissions')}</p>
                 ) : (
                   <ul className="space-y-2">
                     {selectedPlugin.required_permissions.map((perm) => {
@@ -388,7 +388,7 @@ export default function PluginsPage() {
                   className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Settings className="h-4 w-4" />
-                  Configure
+                  {t('buttons.configure')}
                 </button>
                 <button
                   onClick={() => handleUninstall(selectedPlugin.name)}
@@ -396,11 +396,11 @@ export default function PluginsPage() {
                   className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
                 >
                   <Trash2 className="h-4 w-4" />
-                  Uninstall
+                  {t('buttons.uninstall')}
                 </button>
                 {selectedPlugin.is_enabled && (
                   <p className="text-xs text-slate-500 text-center">
-                    Disable the plugin before uninstalling
+                    {t('confirm.disableFirst')}
                   </p>
                 )}
               </div>
@@ -409,7 +409,7 @@ export default function PluginsPage() {
             <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 text-center">
               <Settings className="h-8 w-8 mx-auto text-slate-600 mb-3" />
               <p className="text-sm text-slate-500">
-                Select a plugin to view details
+                {t('empty.selectPlugin')}
               </p>
             </div>
           )}
@@ -422,10 +422,10 @@ export default function PluginsPage() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm">
           <div className="bg-slate-900 border border-slate-800 rounded-xl p-6 w-full max-w-md mx-4 shadow-2xl">
             <h3 className="text-lg font-medium text-white mb-2">
-              Enable {selectedPlugin.display_name}
+              {t('modal.enableTitle', { name: selectedPlugin.display_name })}
             </h3>
             <p className="text-sm text-slate-400 mb-4">
-              This plugin requires the following permissions:
+              {t('modal.enableDesc')}
             </p>
             <div className="space-y-2 mb-6 max-h-64 overflow-y-auto">
               {selectedPlugin.required_permissions.map((perm) => {
@@ -456,7 +456,7 @@ export default function PluginsPage() {
                       <div className={`text-sm font-medium ${permInfo?.dangerous ? 'text-amber-400' : 'text-white'}`}>
                         {perm}
                         {permInfo?.dangerous && (
-                          <span className="ml-2 text-xs text-amber-500">(Dangerous)</span>
+                          <span className="ml-2 text-xs text-amber-500">({t('permissions.dangerous')})</span>
                         )}
                       </div>
                       {permInfo && (
@@ -472,14 +472,14 @@ export default function PluginsPage() {
                 onClick={() => setShowPermissionModal(false)}
                 className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600"
               >
-                Cancel
+                {t('buttons.cancel')}
               </button>
               <button
                 onClick={handleEnableWithPermissions}
                 disabled={!selectedPlugin.required_permissions.every((p) => selectedPermissions.includes(p))}
                 className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Enable Plugin
+                {t('buttons.enablePlugin')}
               </button>
             </div>
           </div>

@@ -62,7 +62,7 @@ function ExecutionRow({
           <div className="flex items-center gap-2">
             <span className="text-lg">{getSchedulerIcon(execution.scheduler_name)}</span>
             <span className="text-sm text-slate-200">
-              {execution.scheduler_name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase())}
+              {t('scheduler:schedulers.' + execution.scheduler_name + '.name', { defaultValue: execution.scheduler_name.replace(/_/g, ' ').replace(/\b\w/g, (c) => c.toUpperCase()) })}
             </span>
           </div>
         </td>
@@ -76,7 +76,7 @@ function ExecutionRow({
         </td>
         <td className="px-4 py-3">
           <span className={`inline-flex items-center rounded px-2 py-0.5 text-xs font-medium ${getStatusBadgeClasses(execution.status)}`}>
-            {execution.status}
+            {t('scheduler:status.' + execution.status)}
           </span>
         </td>
         <td className="px-4 py-3">
@@ -86,7 +86,7 @@ function ExecutionRow({
                 ? 'bg-purple-900/50 text-purple-300'
                 : 'bg-slate-800 text-slate-400'
             }`}>
-              {execution.trigger_type}
+              {t('scheduler:trigger.' + execution.trigger_type)}
             </span>
             {/* Retry button for failed executions */}
             {execution.status === 'failed' && onRetry && (

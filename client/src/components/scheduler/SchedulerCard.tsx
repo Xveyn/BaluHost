@@ -8,6 +8,24 @@ import {
   getStatusBadgeClasses,
 } from '../../api/schedulers';
 
+/**
+ * Format interval with i18n support
+ */
+function formatIntervalTranslated(seconds: number, t: (key: string, options?: Record<string, unknown>) => string): string {
+  if (seconds < 60) {
+    return seconds === 1 ? t('scheduler:interval.everySecond') : t('scheduler:interval.everySeconds', { count: seconds });
+  } else if (seconds < 3600) {
+    const minutes = Math.floor(seconds / 60);
+    return minutes === 1 ? t('scheduler:interval.everyMinute') : t('scheduler:interval.everyMinutes', { count: minutes });
+  } else if (seconds < 86400) {
+    const hours = Math.floor(seconds / 3600);
+    return hours === 1 ? t('scheduler:interval.everyHour') : t('scheduler:interval.everyHours', { count: hours });
+  } else {
+    const days = Math.floor(seconds / 86400);
+    return days === 1 ? t('scheduler:interval.daily') : t('scheduler:interval.everyDays', { count: days });
+  }
+}
+
 interface SchedulerCardProps {
   scheduler: SchedulerStatus;
   onRunNow: (name: string) => Promise<void>;
@@ -65,12 +83,12 @@ export function SchedulerCard({
       {/* Header */}
       <div className="flex items-start justify-between">
         <div className="flex items-center gap-3">
-          <span className="text-2xl" role="img" aria-label={scheduler.display_name}>
+          <span className="text-2xl" role="img" aria-label={t('scheduler:schedulers.' + scheduler.name + '.name', { defaultValue: scheduler.display_name })}>
             {getSchedulerIcon(scheduler.name)}
           </span>
           <div>
-            <h3 className="font-medium text-white">{scheduler.display_name}</h3>
-            <p className="text-xs text-slate-400 mt-0.5">{scheduler.description}</p>
+            <h3 className="font-medium text-white">{t('scheduler:schedulers.' + scheduler.name + '.name', { defaultValue: scheduler.display_name })}</h3>
+            <p className="text-xs text-slate-400 mt-0.5">{t('scheduler:schedulers.' + scheduler.name + '.description', { defaultValue: scheduler.description })}</p>
           </div>
         </div>
         <div className="flex items-center gap-1">
@@ -99,7 +117,7 @@ export function SchedulerCard({
             <Clock className="h-3 w-3" />
             {t('scheduler:card.interval')}
           </div>
-          <div className="text-slate-200 mt-0.5">{scheduler.interval_display}</div>
+          <div className="text-slate-200 mt-0.5">{formatIntervalTranslated(scheduler.interval_seconds, t)}</div>
         </div>
         <div>
           <div className="text-xs text-slate-500">{t('scheduler:card.nextRun')}</div>
@@ -119,7 +137,7 @@ export function SchedulerCard({
             {scheduler.last_status ? (
               <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${getStatusBadgeClasses(scheduler.last_status)}`}>
                 {getStatusIcon()}
-                {scheduler.last_status}
+                {t('scheduler:status.' + scheduler.last_status)}
               </span>
             ) : (
               <span className="text-xs text-slate-500">{t('scheduler:card.neverRun')}</span>
