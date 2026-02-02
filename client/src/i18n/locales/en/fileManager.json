@@ -1,0 +1,77 @@
+{
+  "title": "File Manager",
+  "actions": {
+    "upload": "Upload",
+    "newFolder": "New Folder",
+    "download": "Download",
+    "rename": "Rename",
+    "move": "Move",
+    "copy": "Copy",
+    "delete": "Delete",
+    "share": "Share",
+    "permissions": "Permissions",
+    "editPermissions": "Edit Permissions",
+    "properties": "Properties"
+  },
+  "labels": {
+    "name": "Name",
+    "size": "Size",
+    "modified": "Modified",
+    "owner": "Owner",
+    "type": "Type",
+    "path": "Path",
+    "selectAll": "Select All",
+    "deselectAll": "Deselect All"
+  },
+  "types": {
+    "folder": "Folder",
+    "file": "File",
+    "image": "Image",
+    "video": "Video",
+    "audio": "Audio",
+    "document": "Document",
+    "archive": "Archive",
+    "code": "Code"
+  },
+  "dialogs": {
+    "uploadTitle": "Upload Files",
+    "newFolderTitle": "Create New Folder",
+    "renameTitle": "Rename",
+    "deleteTitle": "Confirm Delete",
+    "deleteConfirm": "Are you sure you want to delete \"{{name}}\"?",
+    "shareTitle": "Create Share",
+    "permissionsTitle": "Edit Permissions"
+  },
+  "messages": {
+    "uploadSuccess": "Files uploaded successfully",
+    "uploadError": "Upload failed",
+    "downloadError": "Download failed",
+    "deleteSuccess": "Successfully deleted",
+    "deleteError": "Delete failed",
+    "renameSuccess": "Successfully renamed",
+    "renameError": "Rename failed",
+    "moveSuccess": "Successfully moved",
+    "moveError": "Move failed",
+    "copySuccess": "Successfully copied",
+    "copyError": "Copy failed",
+    "permissionsSaved": "Permissions saved",
+    "permissionsError": "Failed to save permissions",
+    "noFiles": "No files in this folder",
+    "dropFilesHere": "Drop files here to upload",
+    "enterFolderName": "Please enter a folder name",
+    "enterFileName": "Please enter a valid file name",
+    "folderCreated": "Folder created successfully",
+    "folderError": "Failed to create folder",
+    "sessionExpired": "Session expired. Please sign in again."
+  },
+  "views": {
+    "grid": "Grid View",
+    "list": "List View"
+  },
+  "sort": {
+    "name": "By Name",
+    "size": "By Size",
+    "date": "By Date",
+    "type": "By Type"
+  }
+}

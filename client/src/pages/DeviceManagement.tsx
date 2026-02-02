@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import {
   Smartphone,
@@ -23,6 +24,7 @@ import TapoDeviceSettings from '../components/TapoDeviceSettings';
 type Tab = 'devices' | 'register' | 'schedules' | 'smart';
 
 export default function DeviceManagement() {
+  const { t } = useTranslation(['devices', 'common']);
   const [activeTab, setActiveTab] = useState<Tab>('devices');
 
   // Devices
@@ -69,7 +71,7 @@ export default function DeviceManagement() {
       const data = await getAllDevices();
       setDevices(data);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load devices';
+      const errorMsg = err instanceof Error ? err.message : t('toast.loadFailed');
       console.error('Failed to load devices:', err);
       setError(errorMsg);
       toast.error(errorMsg);
@@ -93,7 +95,7 @@ export default function DeviceManagement() {
 
   const handleGenerateMobileToken = async () => {
     if (!newMobileDeviceName.trim()) {
-      toast.error('Please enter a device name');
+      toast.error(t('toast.enterDeviceName'));
       return;
     }
 
@@ -102,7 +104,7 @@ export default function DeviceManagement() {
       const token = await generateMobileToken(includeVpn, newMobileDeviceName.trim(), tokenValidityDays);
       setQrData(token);
       setShowQrDialog(true);
-      toast.success('QR code generated successfully');
+      toast.success(t('toast.qrGenerated'));
     } catch (error: any) {
       console.error('Failed to generate token:', error);
       const errorMsg = error?.response?.data?.detail || 'Failed to generate QR code';
@@ -114,7 +116,7 @@ export default function DeviceManagement() {
 
   const handleCreateSchedule = async () => {
     if (!selectedDeviceId) {
-      toast.error('Please select a device');
+      toast.error(t('toast.selectDevice'));
       return;
     }
 
@@ -130,7 +132,7 @@ export default function DeviceManagement() {
       };
 
       await createSyncSchedule(scheduleData);
-      toast.success('Schedule created successfully');
+      toast.success(t('toast.scheduleCreated'));
       loadSchedules();
 
       setSelectedDeviceId('');
@@ -139,7 +141,7 @@ export default function DeviceManagement() {
       setDayOfWeek(null);
       setDayOfMonth(null);
     } catch (err) {
-      toast.error('Failed to create schedule');
+      toast.error(t('toast.scheduleFailed'));
       console.error(err);
     }
   };
@@ -147,10 +149,10 @@ export default function DeviceManagement() {
   const handleDisableSchedule = async (scheduleId: number) => {
     try {
       await disableSyncSchedule(scheduleId);
-      toast.success('Schedule disabled successfully');
+      toast.success(t('toast.scheduleDisabled'));
       loadSchedules();
     } catch (err) {
-      toast.error('Failed to disable schedule');
+      toast.error(t('toast.disableFailed'));
       console.error(err);
     }
   };
@@ -163,7 +165,7 @@ export default function DeviceManagement() {
 
   const handleSaveDeviceName = async () => {
     if (!editingDevice || !newDeviceName.trim()) {
-      toast.error('Device name cannot be empty');
+      toast.error(t('toast.deviceNameEmpty'));
       return;
     }
 
@@ -174,13 +176,13 @@ export default function DeviceManagement() {
         await updateDesktopDeviceName(editingDevice.id, newDeviceName);
       }
 
-      toast.success('Device name updated successfully');
+      toast.success(t('toast.deviceUpdated'));
       setShowEditModal(false);
       setEditingDevice(null);
       setNewDeviceName('');
       loadDevices();
     } catch (err) {
-      toast.error('Failed to update device name');
+      toast.error(t('toast.updateFailed'));
       console.error(err);
     }
   };
@@ -196,9 +198,9 @@ export default function DeviceManagement() {
     try {
       if (deviceToDelete.type === 'mobile') {
         await deleteMobileDevice(deviceToDelete.id);
-        toast.success('Device deleted successfully');
+        toast.success(t('toast.deviceDeleted'));
       } else {
-        toast.error('Desktop device deletion not yet implemented');
+        toast.error(t('toast.desktopDeleteNotImplemented'));
         setShowDeleteConfirm(false);
         setDeviceToDelete(null);
         return;
@@ -208,7 +210,7 @@ export default function DeviceManagement() {
       setDeviceToDelete(null);
       loadDevices();
     } catch (err) {
-      toast.error('Failed to delete device');
+      toast.error(t('toast.deleteFailed'));
       console.error(err);
     }
   };
@@ -263,9 +265,9 @@ export default function DeviceManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Device Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            Manage connected mobile and desktop devices
+            {t('description')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -274,7 +276,7 @@ export default function DeviceManagement() {
             className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Activity className="h-4 w-4" />
-            <span>Refresh</span>
+            <span>{t('buttons.refresh')}</span>
           </button>
         </div>
       </div>
@@ -291,7 +293,7 @@ export default function DeviceManagement() {
             }`}
           >
             <Activity className="h-4 w-4" />
-            <span className="hidden sm:inline">Devices</span>
+            <span className="hidden sm:inline">{t('tabs.devices')}</span>
           </button>
           <button
             onClick={() => setActiveTab('register')}
@@ -302,8 +304,8 @@ export default function DeviceManagement() {
             }`}
           >
             <QrCodeIcon className="h-4 w-4" />
-            <span className="hidden sm:inline">Register Mobile App</span>
-            <span className="sm:hidden">Register</span>
+            <span className="hidden sm:inline">{t('tabs.register')}</span>
+            <span className="sm:hidden">{t('tabs.registerShort')}</span>
           </button>
           <button
             onClick={() => setActiveTab('schedules')}
@@ -314,8 +316,8 @@ export default function DeviceManagement() {
             }`}
           >
             <Calendar className="h-4 w-4" />
-            <span className="hidden sm:inline">Sync Schedules</span>
-            <span className="sm:hidden">Schedules</span>
+            <span className="hidden sm:inline">{t('tabs.schedules')}</span>
+            <span className="sm:hidden">{t('tabs.schedulesShort')}</span>
           </button>
           <button
             onClick={() => setActiveTab('smart')}
@@ -326,8 +328,8 @@ export default function DeviceManagement() {
             }`}
           >
             <Zap className="h-4 w-4" />
-            <span className="hidden sm:inline">Smart Devices</span>
-            <span className="sm:hidden">Smart</span>
+            <span className="hidden sm:inline">{t('tabs.smart')}</span>
+            <span className="sm:hidden">{t('tabs.smartShort')}</span>
           </button>
         </div>
       </div>
@@ -340,7 +342,7 @@ export default function DeviceManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-400 truncate">Total Devices</p>
+                  <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.totalDevices')}</p>
                   <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
                 </div>
                 <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
@@ -350,7 +352,7 @@ export default function DeviceManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-400 truncate">Mobile</p>
+                  <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.mobile')}</p>
                   <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.mobile}</p>
                 </div>
                 <Smartphone className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
@@ -360,7 +362,7 @@ export default function DeviceManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-400 truncate">Desktop</p>
+                  <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.desktop')}</p>
                   <p className="mt-1 text-xl sm:text-2xl font-semibold text-emerald-400">
                     {stats.desktop}
                   </p>
@@ -372,7 +374,7 @@ export default function DeviceManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
               <div className="flex items-center justify-between">
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs sm:text-sm text-slate-400 truncate">Active</p>
+                  <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.active')}</p>
                   <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
                 </div>
                 <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
@@ -383,7 +385,7 @@ export default function DeviceManagement() {
           {error && (
             <div className="card border-red-900/60 bg-red-950/30 p-4">
               <p className="text-sm text-red-400">
-                <strong>Error:</strong> {error}
+                <strong>{t('error')}:</strong> {error}
               </p>
             </div>
           )}
@@ -391,7 +393,7 @@ export default function DeviceManagement() {
           {/* Devices List */}
           {loading ? (
             <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-              <p className="text-sm text-slate-500">Loading devices...</p>
+              <p className="text-sm text-slate-500">{t('loading')}</p>
             </div>
           ) : (
             <div className="space-y-6">
@@ -399,16 +401,16 @@ export default function DeviceManagement() {
               <div className="card border-slate-800/60 bg-slate-900/55">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Mobile Devices</p>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('sections.mobileDevices')}</p>
                     <h2 className="mt-2 text-xl font-semibold text-white">
-                      Smartphones & Tablets ({mobileDevices.length})
+                      {t('sections.smartphonesTablets', { count: mobileDevices.length })}
                     </h2>
                   </div>
                 </div>
 
                 {mobileDevices.length === 0 ? (
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-                    No mobile devices registered
+                    {t('empty.noMobileDevices')}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -440,7 +442,7 @@ export default function DeviceManagement() {
                                   : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
                               }`}
                             >
-                              {device.is_active ? 'Active' : 'Inactive'}
+                              {device.is_active ? t('common:active') : t('common:inactive')}
                             </span>
 
                             <button
@@ -463,26 +465,26 @@ export default function DeviceManagement() {
 
                         <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                           <div>
-                            <p className="text-slate-500">Last Seen</p>
+                            <p className="text-slate-500">{t('fields.lastSeen')}</p>
                             <p className="mt-1 font-medium text-slate-200">
                               {formatDate(device.last_seen)}
                             </p>
                           </div>
                           <div>
-                            <p className="text-slate-500">Last Sync</p>
+                            <p className="text-slate-500">{t('fields.lastSync')}</p>
                             <p className="mt-1 font-medium text-slate-200">
                               {formatDate(device.last_sync)}
                             </p>
                           </div>
                           <div>
-                            <p className="text-slate-500">Registered</p>
+                            <p className="text-slate-500">{t('fields.registered')}</p>
                             <p className="mt-1 font-medium text-slate-200">
                               {formatDate(device.created_at)}
                             </p>
                           </div>
                           {device.expires_at && (
                             <div>
-                              <p className="text-slate-500">Expires</p>
+                              <p className="text-slate-500">{t('fields.expires')}</p>
                               <p className="mt-1 font-medium text-slate-200">
                                 {formatDate(device.expires_at)}
                               </p>
@@ -499,16 +501,16 @@ export default function DeviceManagement() {
               <div className="card border-slate-800/60 bg-slate-900/55">
                 <div className="mb-4 flex items-center justify-between">
                   <div>
-                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Desktop Devices</p>
+                    <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('sections.desktopDevices')}</p>
                     <h2 className="mt-2 text-xl font-semibold text-white">
-                      BaluDesk Sync Clients ({desktopDevices.length})
+                      {t('sections.baluDeskClients', { count: desktopDevices.length })}
                     </h2>
                   </div>
                 </div>
 
                 {desktopDevices.length === 0 ? (
                   <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-                    No desktop sync clients registered
+                    {t('empty.noDesktopClients')}
                   </div>
                 ) : (
                   <div className="space-y-3">
@@ -544,20 +546,20 @@ export default function DeviceManagement() {
 
                         <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                           <div>
-                            <p className="text-slate-500">Last Sync</p>
+                            <p className="text-slate-500">{t('fields.lastSync')}</p>
                             <p className="mt-1 font-medium text-slate-200">
                               {formatDate(device.last_sync)}
                             </p>
                           </div>
                           <div>
-                            <p className="text-slate-500">Registered</p>
+                            <p className="text-slate-500">{t('fields.registered')}</p>
                             <p className="mt-1 font-medium text-slate-200">
                               {formatDate(device.created_at)}
                             </p>
                           </div>
                           <div>
-                            <p className="text-slate-500">Status</p>
-                            <p className="mt-1 font-medium text-emerald-300">Active</p>
+                            <p className="text-slate-500">{t('fields.status')}</p>
+                            <p className="mt-1 font-medium text-emerald-300">{t('common:active')}</p>
                           </div>
                         </div>
                       </div>
@@ -575,25 +577,25 @@ export default function DeviceManagement() {
         <div className="card border-slate-800/60 bg-slate-900/55">
           <h3 className="text-lg font-semibold mb-4 flex items-center text-white">
             <QrCodeIcon className="w-5 h-5 mr-2 text-sky-400" />
-            Register New Mobile Device
+            {t('register.title')}
           </h3>
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Device Name
+                {t('register.deviceName')}
               </label>
               <input
                 type="text"
                 value={newMobileDeviceName}
                 onChange={(e) => setNewMobileDeviceName(e.target.value)}
-                placeholder="e.g. iPhone 15, Samsung Galaxy S24"
+                placeholder={t('register.deviceNamePlaceholder')}
                 className="input w-full"
               />
             </div>
 
             <div>
               <label className="block text-sm font-medium text-slate-300 mb-2">
-                Authorization Validity
+                {t('register.validity')}
               </label>
               <div className="space-y-2">
                 <input
@@ -609,15 +611,15 @@ export default function DeviceManagement() {
                   }}
                 />
                 <div className="flex items-center justify-between text-xs">
-                  <span className="text-slate-400">30 days (Minimum)</span>
+                  <span className="text-slate-400">{t('register.validityMin')}</span>
                   <span className="text-sky-400 font-semibold text-base">
-                    {tokenValidityDays} days ({Math.round(tokenValidityDays / 30)} months)
+                    {t('register.validityDisplay', { days: tokenValidityDays, months: Math.round(tokenValidityDays / 30) })}
                   </span>
-                  <span className="text-slate-400">180 days (Maximum)</span>
+                  <span className="text-slate-400">{t('register.validityMax')}</span>
                 </div>
                 <div className="bg-slate-800/50 border border-slate-700/50 rounded-lg p-3">
                   <p className="text-xs text-slate-400">
-                    🔔 <strong>Automatic Notifications:</strong> You will be reminded <strong>7 days</strong>, <strong>3 days</strong>, and <strong>1 hour</strong> before expiration via push notification.
+                    🔔 <strong>{t('register.notifications')}:</strong> {t('register.notificationsDesc')}
                   </p>
                 </div>
               </div>
@@ -632,7 +634,7 @@ export default function DeviceManagement() {
                 className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
               />
               <label htmlFor="includeVpn" className="text-sm text-slate-300">
-                Include VPN configuration (WireGuard)
+                {t('register.includeVpn')}
               </label>
             </div>
             <button
@@ -643,12 +645,12 @@ export default function DeviceManagement() {
               {generating ? (
                 <>
                   <RefreshCw className="w-4 h-4 animate-spin" />
-                  Generating...
+                  {t('register.generating')}
                 </>
               ) : (
                 <>
                   <Plus className="w-4 h-4" />
-                  Generate QR Code
+                  {t('register.generateQr')}
                 </>
               )}
             </button>
@@ -660,9 +662,9 @@ export default function DeviceManagement() {
       {activeTab === 'schedules' && (
         <div className="card border-slate-800/60 bg-slate-900/55">
           <div className="mb-4">
-            <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Sync Schedules</p>
+            <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('schedules.title')}</p>
             <h2 className="mt-2 text-xl font-semibold text-white">
-              Automated Sync ({schedules.length})
+              {t('schedules.automatedSync', { count: schedules.length })}
             </h2>
           </div>
 
@@ -670,18 +672,18 @@ export default function DeviceManagement() {
           <div className="mb-6 rounded-2xl border border-slate-800 bg-slate-900/70 p-4">
             <h3 className="mb-3 text-sm font-medium text-slate-300 flex items-center gap-2">
               <Plus className="h-4 w-4" />
-              Create New Schedule
+              {t('schedules.createNew')}
             </h3>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Device</label>
+                <label className="block text-xs text-slate-400 mb-1">{t('schedules.device')}</label>
                 <select
                   value={selectedDeviceId}
                   onChange={(e) => setSelectedDeviceId(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 >
-                  <option value="">Select device...</option>
+                  <option value="">{t('schedules.selectDevice')}</option>
                   {devices.map((device) => (
                     <option key={device.id} value={device.id}>
                       {device.name} ({device.type})
@@ -691,20 +693,20 @@ export default function DeviceManagement() {
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Frequency</label>
+                <label className="block text-xs text-slate-400 mb-1">{t('schedules.frequency')}</label>
                 <select
                   value={scheduleType}
                   onChange={(e) => setScheduleType(e.target.value as 'daily' | 'weekly' | 'monthly')}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="daily">{t('schedules.daily')}</option>
+                  <option value="weekly">{t('schedules.weekly')}</option>
+                  <option value="monthly">{t('schedules.monthly')}</option>
                 </select>
               </div>
 
               <div>
-                <label className="block text-xs text-slate-400 mb-1">Time</label>
+                <label className="block text-xs text-slate-400 mb-1">{t('schedules.time')}</label>
                 <input
                   type="time"
                   value={timeOfDay}
@@ -715,27 +717,27 @@ export default function DeviceManagement() {
 
               {scheduleType === 'weekly' && (
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Day of Week</label>
+                  <label className="block text-xs text-slate-400 mb-1">{t('schedules.dayOfWeek')}</label>
                   <select
                     value={dayOfWeek ?? ''}
                     onChange={(e) => setDayOfWeek(e.target.value ? parseInt(e.target.value) : null)}
                     className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                   >
-                    <option value="">Select day...</option>
-                    <option value="0">Sunday</option>
-                    <option value="1">Monday</option>
-                    <option value="2">Tuesday</option>
-                    <option value="3">Wednesday</option>
-                    <option value="4">Thursday</option>
-                    <option value="5">Friday</option>
-                    <option value="6">Saturday</option>
+                    <option value="">{t('schedules.selectDay')}</option>
+                    <option value="0">{t('days.sunday')}</option>
+                    <option value="1">{t('days.monday')}</option>
+                    <option value="2">{t('days.tuesday')}</option>
+                    <option value="3">{t('days.wednesday')}</option>
+                    <option value="4">{t('days.thursday')}</option>
+                    <option value="5">{t('days.friday')}</option>
+                    <option value="6">{t('days.saturday')}</option>
                   </select>
                 </div>
               )}
 
               {scheduleType === 'monthly' && (
                 <div>
-                  <label className="block text-xs text-slate-400 mb-1">Day of Month</label>
+                  <label className="block text-xs text-slate-400 mb-1">{t('schedules.dayOfMonth')}</label>
                   <input
                     type="number"
                     min="1"
@@ -754,7 +756,7 @@ export default function DeviceManagement() {
                   className="w-full rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-2 text-sm font-medium text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20 touch-manipulation active:scale-95 flex items-center justify-center gap-2"
                 >
                   <Plus className="h-4 w-4" />
-                  Create
+                  {t('buttons.create')}
                 </button>
               </div>
             </div>
@@ -763,11 +765,11 @@ export default function DeviceManagement() {
           {/* Schedules List */}
           {schedulesLoading ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-              Loading schedules...
+              {t('schedules.loadingSchedules')}
             </div>
           ) : schedules.length === 0 ? (
             <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-              No sync schedules configured
+              {t('schedules.noSchedules')}
             </div>
           ) : (
             <div className="space-y-3">
@@ -805,7 +807,7 @@ export default function DeviceManagement() {
                               : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
                           }`}
                         >
-                          {schedule.is_enabled ? 'Enabled' : 'Disabled'}
+                          {schedule.is_enabled ? t('common:enabled') : t('common:disabled')}
                         </span>
 
                         {schedule.is_enabled && (
@@ -823,7 +825,7 @@ export default function DeviceManagement() {
                     {schedule.next_run_at && (
                       <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                         <Clock className="h-3 w-3" />
-                        <span>Next run: {formatDate(schedule.next_run_at)}</span>
+                        <span>{t('schedules.nextRun')} {formatDate(schedule.next_run_at)}</span>
                       </div>
                     )}
                   </div>
@@ -844,7 +846,7 @@ export default function DeviceManagement() {
         <div className="fixed inset-0 bg-black/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-700 rounded-xl max-w-md w-full p-6">
             <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xl font-semibold text-white">QR Code for Mobile App</h3>
+              <h3 className="text-xl font-semibold text-white">{t('qrDialog.title')}</h3>
               <button
                 onClick={() => {
                   setShowQrDialog(false);
@@ -868,25 +870,25 @@ export default function DeviceManagement() {
             </div>
 
             <div className="space-y-2 text-sm text-slate-300 mb-4">
-              <p>✓ Scan this QR code with the BaluHost Mobile App</p>
-              <p>✓ Registration token is valid for <strong>5 minutes</strong></p>
-              <p>✓ Device authorization is valid for <strong className="text-sky-400">{qrData.device_token_validity_days} days ({Math.round(qrData.device_token_validity_days / 30)} months)</strong></p>
+              <p>✓ {t('qrDialog.scanInfo')}</p>
+              <p>✓ {t('qrDialog.tokenValidity')}</p>
+              <p>✓ {t('qrDialog.deviceValidity', { days: qrData.device_token_validity_days, months: Math.round(qrData.device_token_validity_days / 30) })}</p>
               {qrData.vpn_config && (
-                <p className="text-green-400">✓ VPN configuration included</p>
+                <p className="text-green-400">✓ {t('qrDialog.vpnIncluded')}</p>
               )}
             </div>
 
             <div className="bg-sky-500/10 border border-sky-500/30 rounded-lg p-3 mb-4">
               <p className="text-xs text-sky-300 font-semibold mb-1.5 flex items-center gap-1.5">
-                🔔 Automatic Reminders
+                🔔 {t('qrDialog.reminders')}
               </p>
               <p className="text-xs text-slate-300">
-                You will be notified <strong>7 days</strong>, <strong>3 days</strong>, and <strong>1 hour</strong> before expiration via push notification.
+                {t('qrDialog.remindersDesc')}
               </p>
             </div>
 
             <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-              <p className="text-xs text-slate-400 mb-1">Token expires at:</p>
+              <p className="text-xs text-slate-400 mb-1">{t('qrDialog.expiresAt')}</p>
               <p className="text-sm text-white font-mono">
                 {new Date(qrData.expires_at).toLocaleString()}
               </p>
@@ -900,7 +902,7 @@ export default function DeviceManagement() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
             <div className="mb-3 sm:mb-4 flex items-center justify-between">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Edit Device Name</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('modal.editTitle')}</h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -916,20 +918,20 @@ export default function DeviceManagement() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Device Name
+                  {t('fields.deviceName')}
                 </label>
                 <input
                   type="text"
                   value={newDeviceName}
                   onChange={(e) => setNewDeviceName(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter device name"
+                  placeholder={t('register.deviceNamePlaceholder')}
                 />
               </div>
 
               <div className="text-xs text-slate-500">
-                <p>Type: {editingDevice.type === 'mobile' ? 'Mobile' : 'Desktop'}</p>
-                <p>Platform: {getPlatformLabel(editingDevice.platform)}</p>
+                <p>{t('fields.type')}: {editingDevice.type === 'mobile' ? t('stats.mobile') : t('stats.desktop')}</p>
+                <p>{t('fields.platform')}: {getPlatformLabel(editingDevice.platform)}</p>
               </div>
             </div>
 
@@ -942,13 +944,13 @@ export default function DeviceManagement() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('buttons.cancel')}
               </button>
               <button
                 onClick={handleSaveDeviceName}
                 className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
               >
-                Save
+                {t('buttons.save')}
               </button>
             </div>
           </div>
@@ -963,12 +965,11 @@ export default function DeviceManagement() {
               <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
                 <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Delete Device</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('modal.deleteTitle')}</h2>
             </div>
 
             <p className="mb-4 sm:mb-6 text-sm text-slate-400">
-              Are you sure you want to delete <strong>{deviceToDelete.name}</strong>? This device
-              will need to re-register to access BaluHost.
+              {t('modal.deleteConfirm', { name: deviceToDelete.name })}
             </p>
 
             <div className="flex gap-2">
@@ -979,13 +980,13 @@ export default function DeviceManagement() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('buttons.cancel')}
               </button>
               <button
                 onClick={confirmDeleteDevice}
                 className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
               >
-                Delete
+                {t('buttons.delete')}
               </button>
             </div>
           </div>

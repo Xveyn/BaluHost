@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import {
   getCpuHistory,
   getMemoryHistory,
@@ -26,18 +27,18 @@ import {
 
 type MetricType = 'cpu' | 'memory' | 'network' | 'disk_io'
 
-const METRIC_TABS: { id: MetricType; label: string; icon: React.ElementType; color: string }[] = [
-  { id: 'cpu', label: 'CPU', icon: Cpu, color: 'blue' },
-  { id: 'memory', label: 'Memory', icon: MemoryStick, color: 'emerald' },
-  { id: 'network', label: 'Network', icon: Network, color: 'purple' },
-  { id: 'disk_io', label: 'Disk I/O', icon: HardDrive, color: 'amber' },
+const METRIC_TABS: { id: MetricType; labelKey: string; icon: React.ElementType; color: string }[] = [
+  { id: 'cpu', labelKey: 'admin:monitoring.metrics.cpu', icon: Cpu, color: 'blue' },
+  { id: 'memory', labelKey: 'admin:monitoring.metrics.memory', icon: MemoryStick, color: 'emerald' },
+  { id: 'network', labelKey: 'admin:monitoring.metrics.network', icon: Network, color: 'purple' },
+  { id: 'disk_io', labelKey: 'admin:monitoring.metrics.diskIo', icon: HardDrive, color: 'amber' },
 ]
 
-const TIME_RANGES: { value: TimeRange; label: string }[] = [
-  { value: '10m', label: '10 Min' },
-  { value: '1h', label: '1 Hour' },
-  { value: '24h', label: '24 Hours' },
-  { value: '7d', label: '7 Days' },
+const TIME_RANGES: { value: TimeRange; labelKey: string }[] = [
+  { value: '10m', labelKey: 'admin:monitoring.timeRanges.10m' },
+  { value: '1h', labelKey: 'admin:monitoring.timeRanges.1h' },
+  { value: '24h', labelKey: 'admin:monitoring.timeRanges.24h' },
+  { value: '7d', labelKey: 'admin:monitoring.timeRanges.7d' },
 ]
 
 function formatDate(dateStr: string): string {
@@ -82,6 +83,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 }
 
 export default function MonitoringHistoryViewer() {
+  const { t } = useTranslation(['admin', 'common'])
   const [activeMetric, setActiveMetric] = useState<MetricType>('cpu')
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [loading, setLoading] = useState(true)
@@ -145,7 +147,7 @@ export default function MonitoringHistoryViewer() {
     if (!cpuData || cpuData.samples.length === 0) {
       return (
         <div className="h-[300px] flex items-center justify-center text-slate-400">
-          No CPU data available for this time range
+          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.cpu') })}
         </div>
       )
     }
@@ -183,7 +185,7 @@ export default function MonitoringHistoryViewer() {
           <Area
             type="monotone"
             dataKey="usage"
-            name="CPU Usage %"
+            name={t('admin:monitoring.charts.cpuUsage')}
             stroke="#3b82f6"
             fill="url(#cpuGradient)"
             strokeWidth={2}
@@ -197,7 +199,7 @@ export default function MonitoringHistoryViewer() {
     if (!memoryData || memoryData.samples.length === 0) {
       return (
         <div className="h-[300px] flex items-center justify-center text-slate-400">
-          No memory data available for this time range
+          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.memory') })}
         </div>
       )
     }
@@ -235,7 +237,7 @@ export default function MonitoringHistoryViewer() {
           <Area
             type="monotone"
             dataKey="percent"
-            name="Memory Usage %"
+            name={t('admin:monitoring.charts.memoryUsage')}
             stroke="#10b981"
             fill="url(#memoryGradient)"
             strokeWidth={2}
@@ -249,7 +251,7 @@ export default function MonitoringHistoryViewer() {
     if (!networkData || networkData.samples.length === 0) {
       return (
         <div className="h-[300px] flex items-center justify-center text-slate-400">
-          No network data available for this time range
+          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.network') })}
         </div>
       )
     }
@@ -290,7 +292,7 @@ export default function MonitoringHistoryViewer() {
           <Area
             type="monotone"
             dataKey="download"
-            name="Download (Mbps)"
+            name={t('admin:monitoring.charts.download')}
             stroke="#8b5cf6"
             fill="url(#downloadGradient)"
             strokeWidth={2}
@@ -298,7 +300,7 @@ export default function MonitoringHistoryViewer() {
           <Area
             type="monotone"
             dataKey="upload"
-            name="Upload (Mbps)"
+            name={t('admin:monitoring.charts.upload')}
             stroke="#06b6d4"
             fill="url(#uploadGradient)"
             strokeWidth={2}
@@ -312,7 +314,7 @@ export default function MonitoringHistoryViewer() {
     if (!diskIoData || Object.keys(diskIoData.disks).length === 0) {
       return (
         <div className="h-[300px] flex items-center justify-center text-slate-400">
-          No disk I/O data available for this time range
+          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.diskIo') })}
         </div>
       )
     }
@@ -325,7 +327,7 @@ export default function MonitoringHistoryViewer() {
     if (samples.length === 0) {
       return (
         <div className="h-[300px] flex items-center justify-center text-slate-400">
-          No disk I/O samples available
+          {t('admin:monitoring.noSamplesAvailable', { metric: t('admin:monitoring.metrics.diskIo') })}
         </div>
       )
     }
@@ -339,7 +341,7 @@ export default function MonitoringHistoryViewer() {
     return (
       <div>
         <p className="text-xs text-slate-400 mb-2">
-          Showing: {firstDisk} ({diskNames.length} disk{diskNames.length > 1 ? 's' : ''} available)
+          {t('admin:monitoring.showingDisk', { disk: firstDisk, count: diskNames.length })}
         </p>
         <ResponsiveContainer width="100%" height={300}>
           <AreaChart data={chartData}>
@@ -370,7 +372,7 @@ export default function MonitoringHistoryViewer() {
             <Area
               type="monotone"
               dataKey="read"
-              name="Read (MB/s)"
+              name={t('admin:monitoring.charts.read')}
               stroke="#f59e0b"
               fill="url(#readGradient)"
               strokeWidth={2}
@@ -378,7 +380,7 @@ export default function MonitoringHistoryViewer() {
             <Area
               type="monotone"
               dataKey="write"
-              name="Write (MB/s)"
+              name={t('admin:monitoring.charts.write')}
               stroke="#ef4444"
               fill="url(#writeGradient)"
               strokeWidth={2}
@@ -394,7 +396,7 @@ export default function MonitoringHistoryViewer() {
       return (
         <div className="h-[300px] flex flex-col items-center justify-center">
           <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-          <p className="text-slate-400">Loading history data...</p>
+          <p className="text-slate-400">{t('admin:monitoring.loadingHistory')}</p>
         </div>
       )
     }
@@ -433,12 +435,12 @@ export default function MonitoringHistoryViewer() {
       {/* Header */}
       <div className="flex items-center justify-between flex-wrap gap-4">
         <div>
-          <h3 className="text-lg font-semibold text-white">Monitoring History</h3>
+          <h3 className="text-lg font-semibold text-white">{t('admin:monitoring.title')}</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Historical metrics from database storage
+            {t('admin:monitoring.subtitle')}
             {sampleCount > 0 && (
               <span className="ml-2">
-                ({sampleCount.toLocaleString()} samples, source: {source})
+                ({t('admin:monitoring.samplesInfo', { count: sampleCount, formatted: sampleCount.toLocaleString(), source })})
               </span>
             )}
           </p>
@@ -449,7 +451,7 @@ export default function MonitoringHistoryViewer() {
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors text-sm border border-slate-600/50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('common:refresh')}
         </button>
       </div>
 
@@ -469,7 +471,7 @@ export default function MonitoringHistoryViewer() {
               }`}
             >
               <Icon className="w-4 h-4" />
-              {tab.label}
+              {t(tab.labelKey)}
             </button>
           )
         })}
@@ -479,7 +481,7 @@ export default function MonitoringHistoryViewer() {
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 text-slate-400">
           <Clock className="w-4 h-4" />
-          <span className="text-sm">Time Range:</span>
+          <span className="text-sm">{t('admin:monitoring.timeRange')}:</span>
         </div>
         <div className="flex gap-2">
           {TIME_RANGES.map((range) => (
@@ -492,7 +494,7 @@ export default function MonitoringHistoryViewer() {
                   : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-300'
               }`}
             >
-              {range.label}
+              {t(range.labelKey)}
             </button>
           ))}
         </div>
@@ -506,8 +508,7 @@ export default function MonitoringHistoryViewer() {
       {/* Info Note */}
       <div className="bg-slate-800/30 border border-slate-700/40 rounded-lg px-4 py-3">
         <p className="text-xs text-slate-400">
-          This view shows historical monitoring data stored in the database. Data is persisted based on
-          retention settings configured in the Stats tab. For real-time monitoring, use the System Monitor page.
+          {t('admin:monitoring.infoNote')}
         </p>
       </div>
     </div>

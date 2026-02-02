@@ -4,6 +4,7 @@
  * Renders plugin UI by dynamically loading the plugin's JavaScript bundle.
  */
 import { useEffect, useState, Suspense, type ComponentType } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
 import { usePlugins } from '../contexts/PluginContext';
 import { loadPluginComponent, loadPluginStyles } from '../lib/pluginLoader';
@@ -24,6 +25,7 @@ interface PluginComponentProps {
 }
 
 export default function PluginPage({ user }: PluginPageProps) {
+  const { t } = useTranslation('plugins');
   const { pluginName } = useParams<{ pluginName: string }>();
   const navigate = useNavigate();
   const { enabledPlugins } = usePlugins();
@@ -91,7 +93,7 @@ export default function PluginPage({ user }: PluginPageProps) {
     return (
       <div className="flex flex-col items-center justify-center h-64 gap-4">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500" />
-        <p className="text-sm text-slate-400">Loading plugin...</p>
+        <p className="text-sm text-slate-400">{t('loading')}</p>
       </div>
     );
   }
@@ -103,14 +105,14 @@ export default function PluginPage({ user }: PluginPageProps) {
           <AlertTriangle className="h-8 w-8 text-red-400" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-medium text-white mb-1">Plugin Error</h3>
+          <h3 className="text-lg font-medium text-white mb-1">{t('error')}</h3>
           <p className="text-sm text-slate-400 max-w-md">{error}</p>
         </div>
         <button
           onClick={() => navigate('/')}
           className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-sky-500/50"
         >
-          Go to Dashboard
+          {t('goToDashboard')}
         </button>
       </div>
     );
@@ -123,8 +125,8 @@ export default function PluginPage({ user }: PluginPageProps) {
           <Plug className="h-8 w-8 text-slate-500" />
         </div>
         <div className="text-center">
-          <h3 className="text-lg font-medium text-white mb-1">No Content</h3>
-          <p className="text-sm text-slate-400">This plugin does not provide a UI component.</p>
+          <h3 className="text-lg font-medium text-white mb-1">{t('noContent')}</h3>
+          <p className="text-sm text-slate-400">{t('noUIComponent')}</p>
         </div>
       </div>
     );

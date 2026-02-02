@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Power,
   Trash2,
@@ -24,12 +25,13 @@ export function ServerProfileList({
   onStartServer,
   onDelete,
 }: ServerProfileListProps) {
+  const { t } = useTranslation('remoteServers');
   const [testingId, setTestingId] = useState<number | null>(null);
   const [startingId, setStartingId] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
   const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Delete server profile "${name}"? This cannot be undone.`)) {
+    if (window.confirm(t('servers.deleteConfirm', { name }))) {
       try {
         setDeleteConfirm(id);
         await onDelete?.(id);
@@ -64,9 +66,9 @@ export function ServerProfileList({
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <ChevronRight className="w-6 h-6 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No Server Profiles</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('servers.noProfiles')}</h3>
           <p className="text-sm text-gray-600">
-            Add your first remote server profile to get started managing BaluHost instances from here.
+            {t('servers.noProfilesDescription')}
           </p>
         </div>
       </div>
@@ -106,7 +108,7 @@ export function ServerProfileList({
           {profile.last_used && (
             <div className="mb-3 text-xs text-gray-500 flex items-center gap-1">
               <Clock className="w-3 h-3" />
-              Last used: {new Date(profile.last_used).toLocaleString()}
+              {t('servers.lastUsed')}: {new Date(profile.last_used).toLocaleString()}
             </div>
           )}
 
@@ -116,35 +118,35 @@ export function ServerProfileList({
               onClick={() => handleTest(profile.id)}
               disabled={isLoading || testingId === profile.id}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Test SSH connection"
+              title={t('servers.testConnection')}
             >
               {testingId === profile.id ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Network className="w-4 h-4" />
               )}
-              Test
+              {t('servers.test')}
             </button>
 
             <button
               onClick={() => handleStart(profile.id)}
               disabled={isLoading || startingId === profile.id}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-green-100 text-green-700 rounded hover:bg-green-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Start remote server"
+              title={t('servers.startRemote')}
             >
               {startingId === profile.id ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <Power className="w-4 h-4" />
               )}
-              Start
+              {t('servers.start')}
             </button>
 
             <button
               onClick={() => handleDelete(profile.id, profile.name)}
               disabled={isLoading || deleteConfirm === profile.id}
               className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Delete profile"
+              title={t('servers.deleteProfile')}
             >
               <Trash2 className="w-4 h-4" />
             </button>

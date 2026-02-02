@@ -4,6 +4,7 @@
  * Admin-only page for managing installed plugins.
  */
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { usePlugins } from '../contexts/PluginContext';
 import type {
   PluginDetail,
@@ -22,11 +23,12 @@ import PluginDocumentation from '../components/plugins/PluginDocumentation';
 type TabType = 'plugins' | 'documentation';
 
 const TABS = [
-  { id: 'plugins' as TabType, label: 'Installiert', icon: Plug },
-  { id: 'documentation' as TabType, label: 'Dokumentation', icon: BookOpen },
+  { id: 'plugins' as TabType, labelKey: 'tabs.installed', icon: Plug },
+  { id: 'documentation' as TabType, labelKey: 'tabs.documentation', icon: BookOpen },
 ];
 
 export default function PluginsPage() {
+  const { t } = useTranslation(['plugins', 'common']);
   const { plugins, isLoading, error, refreshPlugins } = usePlugins();
   const [selectedPlugin, setSelectedPlugin] = useState<PluginDetail | null>(null);
   const [allPermissions, setAllPermissions] = useState<PermissionInfo[]>([]);
@@ -51,7 +53,7 @@ export default function PluginsPage() {
       const details = await getPluginDetails(name);
       setSelectedPlugin(details);
     } catch (err) {
-      setActionError('Failed to load plugin details');
+      setActionError(t('errors.loadDetailsFailed'));
     } finally {
       setDetailsLoading(false);
     }
@@ -69,7 +71,7 @@ export default function PluginsPage() {
           await loadPluginDetails(plugin.name);
         }
       } catch (err) {
-        setActionError('Failed to disable plugin');
+        setActionError(t('errors.disableFailed'));
       } finally {
         setActionLoading(false);
       }
@@ -95,14 +97,14 @@ export default function PluginsPage() {
       await refreshPlugins();
       await loadPluginDetails(selectedPlugin.name);
     } catch (err) {
-      setActionError('Failed to enable plugin');
+      setActionError(t('errors.enableFailed'));
     } finally {
       setActionLoading(false);
     }
   };
 
   const handleUninstall = async (name: string) => {
-    if (!confirm(`Uninstall plugin "${name}"? This will remove its configuration.`)) {
+    if (!confirm(t('confirm.uninstall', { name }))) {
       return;
     }
 
@@ -115,7 +117,7 @@ export default function PluginsPage() {
         setSelectedPlugin(null);
       }
     } catch (err) {
-      setActionError('Failed to uninstall plugin');
+      setActionError(t('errors.uninstallFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -173,7 +175,7 @@ export default function PluginsPage() {
             }`}
           >
             <tab.icon className="w-4 h-4" />
-            {tab.label}
+            {t(tab.labelKey)}
           </button>
         ))}
       </div>

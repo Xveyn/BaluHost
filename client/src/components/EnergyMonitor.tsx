@@ -6,6 +6,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Zap,
   TrendingUp,
@@ -39,6 +40,7 @@ import { parseUtcTimestamp } from '../lib/dateUtils';
 type TimeWindow = '10min' | '1hour' | '24hours' | '7days';
 
 const EnergyMonitor: React.FC = () => {
+  const { t } = useTranslation('system');
   const [devices, setDevices] = useState<TapoDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null);
@@ -191,7 +193,7 @@ const EnergyMonitor: React.FC = () => {
   if (loading && devices.length === 0) {
     return (
       <div className="card">
-        <p className="text-sm text-slate-500">Loading energy monitor...</p>
+        <p className="text-sm text-slate-500">{t('energyMonitor.loading')}</p>
       </div>
     );
   }
@@ -202,9 +204,9 @@ const EnergyMonitor: React.FC = () => {
         <div className="flex items-center gap-3 text-amber-200">
           <AlertCircle className="w-6 h-6" />
           <div>
-            <h3 className="font-semibold">No Devices Configured</h3>
+            <h3 className="font-semibold">{t('energyMonitor.noDevices')}</h3>
             <p className="text-sm text-slate-400 mt-1">
-              Configure a Tapo device in Settings to enable energy monitoring
+              {t('energyMonitor.noDevicesHint')}
             </p>
           </div>
         </div>
@@ -219,9 +221,9 @@ const EnergyMonitor: React.FC = () => {
       {/* Header */}
       <div className="flex flex-wrap items-center justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-semibold text-white">Energy Monitor</h1>
+          <h1 className="text-3xl font-semibold text-white">{t('energyMonitor.title')}</h1>
           <p className="mt-1 text-sm text-slate-400">
-            Power consumption analysis and statistics
+            {t('energyMonitor.subtitle')}
           </p>
         </div>
 
@@ -259,7 +261,7 @@ const EnergyMonitor: React.FC = () => {
             <div className="flex items-center gap-2 text-sm">
               <div className={`h-2 w-2 rounded-full ${dashboard?.is_online ? 'bg-emerald-500' : 'bg-red-500'} animate-pulse`} />
               <span className="text-slate-400">
-                {dashboard?.is_online ? 'Online' : 'Offline'}
+                {dashboard?.is_online ? t('energyMonitor.online') : t('energyMonitor.offline')}
               </span>
             </div>
             <p className="text-xs text-slate-500 mt-1">
@@ -275,31 +277,31 @@ const EnergyMonitor: React.FC = () => {
         <div className="card border-slate-800/40 bg-slate-900/60">
           <div className="flex items-center gap-3 mb-3">
             <Calendar className="w-5 h-5 text-sky-400" />
-            <h3 className="font-semibold text-white">Today</h3>
+            <h3 className="font-semibold text-white">{t('energyMonitor.today')}</h3>
           </div>
           {stats ? (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Energy</span>
+                  <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
                     {stats.total_energy_kwh.toFixed(3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Avg Power</span>
+                  <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
                     {stats.avg_watts.toFixed(1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Peak</span>
+                  <span className="text-slate-400">{t('energyMonitor.peak')}</span>
                   <span className="text-white font-semibold">
                     {stats.max_watts.toFixed(1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Cost</span>
+                  <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
                     €{costs.today?.estimated_cost.toFixed(2) || '0.00'}
                   </span>
@@ -307,7 +309,7 @@ const EnergyMonitor: React.FC = () => {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">No data yet</p>
+            <p className="text-sm text-slate-500">{t('energyMonitor.noDataYet')}</p>
           )}
         </div>
 
@@ -315,31 +317,31 @@ const EnergyMonitor: React.FC = () => {
         <div className="card border-slate-800/40 bg-slate-900/60">
           <div className="flex items-center gap-3 mb-3">
             <BarChart3 className="w-5 h-5 text-violet-400" />
-            <h3 className="font-semibold text-white">This Week</h3>
+            <h3 className="font-semibold text-white">{t('energyMonitor.thisWeek')}</h3>
           </div>
           {dashboard?.week ? (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Energy</span>
+                  <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.week.total_energy_kwh.toFixed(3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Avg Power</span>
+                  <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.week.avg_watts.toFixed(1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Uptime</span>
+                  <span className="text-slate-400">{t('energyMonitor.uptime')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.week.uptime_percentage.toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Cost</span>
+                  <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
                     €{costs.week?.estimated_cost.toFixed(2) || '0.00'}
                   </span>
@@ -347,7 +349,7 @@ const EnergyMonitor: React.FC = () => {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">No data yet</p>
+            <p className="text-sm text-slate-500">{t('energyMonitor.noDataYet')}</p>
           )}
         </div>
 
@@ -355,31 +357,31 @@ const EnergyMonitor: React.FC = () => {
         <div className="card border-slate-800/40 bg-slate-900/60">
           <div className="flex items-center gap-3 mb-3">
             <TrendingUp className="w-5 h-5 text-emerald-400" />
-            <h3 className="font-semibold text-white">This Month</h3>
+            <h3 className="font-semibold text-white">{t('energyMonitor.thisMonth')}</h3>
           </div>
           {dashboard?.month ? (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Energy</span>
+                  <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.month.total_energy_kwh.toFixed(3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Avg Power</span>
+                  <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.month.avg_watts.toFixed(1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Uptime</span>
+                  <span className="text-slate-400">{t('energyMonitor.uptime')}</span>
                   <span className="text-white font-semibold">
                     {dashboard.month.uptime_percentage.toFixed(1)}%
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Cost</span>
+                  <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
                     €{costs.month?.estimated_cost.toFixed(2) || '0.00'}
                   </span>
@@ -387,7 +389,7 @@ const EnergyMonitor: React.FC = () => {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">No data yet</p>
+            <p className="text-sm text-slate-500">{t('energyMonitor.noDataYet')}</p>
           )}
         </div>
 
@@ -395,31 +397,31 @@ const EnergyMonitor: React.FC = () => {
         <div className="card border-slate-800/40 bg-slate-900/60">
           <div className="flex items-center gap-3 mb-3">
             <Clock className="w-5 h-5 text-red-400" />
-            <h3 className="font-semibold text-white">Downtime</h3>
+            <h3 className="font-semibold text-white">{t('energyMonitor.downtime')}</h3>
           </div>
           {stats ? (
             <>
               <div className="space-y-2">
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Today</span>
+                  <span className="text-slate-400">{t('energyMonitor.today')}</span>
                   <span className="text-white font-semibold">
                     {stats.downtime_minutes} min
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Week</span>
+                  <span className="text-slate-400">{t('energyMonitor.week')}</span>
                   <span className="text-white font-semibold">
                     {dashboard?.week?.downtime_minutes || 0} min
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Month</span>
+                  <span className="text-slate-400">{t('energyMonitor.month')}</span>
                   <span className="text-white font-semibold">
                     {dashboard?.month?.downtime_minutes || 0} min
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
-                  <span className="text-slate-400">Uptime %</span>
+                  <span className="text-slate-400">{t('energyMonitor.uptime')} %</span>
                   <span className={`font-semibold ${stats.uptime_percentage > 99 ? 'text-emerald-400' : stats.uptime_percentage > 95 ? 'text-amber-400' : 'text-red-400'}`}>
                     {stats.uptime_percentage.toFixed(1)}%
                   </span>
@@ -427,7 +429,7 @@ const EnergyMonitor: React.FC = () => {
               </div>
             </>
           ) : (
-            <p className="text-sm text-slate-500">No data yet</p>
+            <p className="text-sm text-slate-500">{t('energyMonitor.noDataYet')}</p>
           )}
         </div>
       </div>
@@ -436,12 +438,12 @@ const EnergyMonitor: React.FC = () => {
       <div className="card border-slate-800/50 bg-slate-900/55">
         <div className="flex items-center justify-between mb-6">
           <div>
-            <h2 className="text-xl font-semibold text-white">Power Consumption</h2>
+            <h2 className="text-xl font-semibold text-white">{t('energyMonitor.powerConsumption')}</h2>
             <p className="text-sm text-slate-400 mt-1">
-              {timeWindow === '10min' && 'Last 10 minutes (live)'}
-              {timeWindow === '1hour' && 'Last hour'}
-              {timeWindow === '24hours' && 'Last 24 hours'}
-              {timeWindow === '7days' && 'Last 7 days'}
+              {timeWindow === '10min' && t('energyMonitor.last10Minutes')}
+              {timeWindow === '1hour' && t('energyMonitor.lastHour')}
+              {timeWindow === '24hours' && t('energyMonitor.last24Hours')}
+              {timeWindow === '7days' && t('energyMonitor.last7Days')}
             </p>
           </div>
           <Activity className="w-6 h-6 text-amber-500" />
@@ -461,10 +463,10 @@ const EnergyMonitor: React.FC = () => {
                 }
               `}
             >
-              {window === '10min' && '10 Min'}
-              {window === '1hour' && '1 Hour'}
-              {window === '24hours' && '24 Hours'}
-              {window === '7days' && '7 Days'}
+              {window === '10min' && t('energyMonitor.tenMin')}
+              {window === '1hour' && t('energyMonitor.oneHour')}
+              {window === '24hours' && t('energyMonitor.twentyFourHours')}
+              {window === '7days' && t('energyMonitor.sevenDays')}
             </button>
           ))}
         </div>
@@ -508,8 +510,8 @@ const EnergyMonitor: React.FC = () => {
           <div className="h-80 flex items-center justify-center text-slate-500">
             <div className="text-center">
               <Activity className="w-12 h-12 mx-auto mb-3 opacity-50" />
-              <p>No chart data available yet</p>
-              <p className="text-xs mt-1">Data will appear after the first hour of monitoring</p>
+              <p>{t('energyMonitor.noChartData')}</p>
+              <p className="text-xs mt-1">{t('energyMonitor.noChartDataHint')}</p>
             </div>
           </div>
         )}
@@ -519,10 +521,10 @@ const EnergyMonitor: React.FC = () => {
       <div className="card border-slate-800/40 bg-slate-900/60">
         <div className="flex items-center gap-3 mb-4">
           <DollarSign className="w-5 h-5 text-emerald-400" />
-          <h3 className="font-semibold text-white">Cost Settings</h3>
+          <h3 className="font-semibold text-white">{t('energyMonitor.costSettings')}</h3>
         </div>
         <div className="flex items-center gap-4">
-          <label className="text-sm text-slate-400">Cost per kWh (€)</label>
+          <label className="text-sm text-slate-400">{t('energyMonitor.costPerKwh')}</label>
           <input
             type="number"
             step="0.01"
@@ -532,7 +534,7 @@ const EnergyMonitor: React.FC = () => {
             className="input w-32"
           />
           <span className="text-xs text-slate-500">
-            Current: €{costPerKwh.toFixed(2)}/kWh
+            {t('energyMonitor.current')}: €{costPerKwh.toFixed(2)}/kWh
           </span>
         </div>
       </div>

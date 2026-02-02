@@ -5,6 +5,7 @@
  * channel preferences, category filters, and quiet hours.
  */
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
   Mail,
@@ -38,13 +39,14 @@ const ALL_CATEGORIES: NotificationCategory[] = [
 ];
 
 const PRIORITY_LABELS = [
-  { value: 0, label: 'Alle', description: 'Alle Benachrichtigungen erhalten' },
-  { value: 1, label: 'Warnungen+', description: 'Nur Warnungen und kritische Meldungen' },
-  { value: 2, label: 'Wichtig', description: 'Nur hohe Priorität und kritische Meldungen' },
-  { value: 3, label: 'Nur kritisch', description: 'Nur kritische Systemmeldungen' },
+  { value: 0, label: 'priority.all', description: 'priority.allDesc' },
+  { value: 1, label: 'priority.warnings', description: 'priority.warningsDesc' },
+  { value: 2, label: 'priority.important', description: 'priority.importantDesc' },
+  { value: 3, label: 'priority.critical', description: 'priority.criticalDesc' },
 ];
 
 export default function NotificationPreferencesPage() {
+  const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -81,7 +83,7 @@ export default function NotificationPreferencesPage() {
       setCategoryPrefs(prefs.category_preferences || {});
     } catch (error) {
       console.error('Failed to load preferences:', error);
-      toast.error('Fehler beim Laden der Einstellungen');
+      toast.error(t('toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -100,10 +102,10 @@ export default function NotificationPreferencesPage() {
         min_priority: minPriority,
         category_preferences: categoryPrefs,
       });
-      toast.success('Einstellungen gespeichert');
+      toast.success(t('toast.saved'));
     } catch (error) {
       console.error('Failed to save preferences:', error);
-      toast.error('Fehler beim Speichern');
+      toast.error(t('toast.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -150,9 +152,9 @@ export default function NotificationPreferencesPage() {
             <ChevronLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl font-bold text-slate-100">Benachrichtigungen</h1>
+            <h1 className="text-2xl font-bold text-slate-100">{t('title')}</h1>
             <p className="text-sm text-slate-400">
-              Konfiguriere wie und wann du benachrichtigt wirst
+              {t('description')}
             </p>
           </div>
         </div>
@@ -166,13 +168,13 @@ export default function NotificationPreferencesPage() {
           ) : (
             <Save className="h-4 w-4" />
           )}
-          Speichern
+          {t('buttons.save')}
         </button>
       </div>
 
       {/* Global Channel Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-100">Benachrichtigungskanäle</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('channels.title')}</h2>
         <div className="grid gap-4 sm:grid-cols-3">
           {/* Email */}
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-800 p-4 transition hover:border-slate-700">
@@ -185,8 +187,8 @@ export default function NotificationPreferencesPage() {
             <div className="flex items-center gap-3">
               <Mail className="h-5 w-5 text-slate-400" />
               <div>
-                <p className="font-medium text-slate-100">E-Mail</p>
-                <p className="text-xs text-slate-400">Benachrichtigungen per E-Mail</p>
+                <p className="font-medium text-slate-100">{t('channels.email')}</p>
+                <p className="text-xs text-slate-400">{t('channels.emailDesc')}</p>
               </div>
             </div>
           </label>
@@ -202,8 +204,8 @@ export default function NotificationPreferencesPage() {
             <div className="flex items-center gap-3">
               <Smartphone className="h-5 w-5 text-slate-400" />
               <div>
-                <p className="font-medium text-slate-100">Push</p>
-                <p className="text-xs text-slate-400">Mobile App Benachrichtigungen</p>
+                <p className="font-medium text-slate-100">{t('channels.push')}</p>
+                <p className="text-xs text-slate-400">{t('channels.pushDesc')}</p>
               </div>
             </div>
           </label>
@@ -219,8 +221,8 @@ export default function NotificationPreferencesPage() {
             <div className="flex items-center gap-3">
               <Monitor className="h-5 w-5 text-slate-400" />
               <div>
-                <p className="font-medium text-slate-100">In-App</p>
-                <p className="text-xs text-slate-400">Benachrichtigungen im Browser</p>
+                <p className="font-medium text-slate-100">{t('channels.inApp')}</p>
+                <p className="text-xs text-slate-400">{t('channels.inAppDesc')}</p>
               </div>
             </div>
           </label>
@@ -229,9 +231,9 @@ export default function NotificationPreferencesPage() {
 
       {/* Priority Filter */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-100">Prioritätsfilter</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('priority.title')}</h2>
         <p className="mb-4 text-sm text-slate-400">
-          Wähle die minimale Priorität für Benachrichtigungen
+          {t('priority.description')}
         </p>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
           {PRIORITY_LABELS.map(({ value, label, description }) => (
@@ -251,9 +253,9 @@ export default function NotificationPreferencesPage() {
                   onChange={() => setMinPriority(value)}
                   className="h-4 w-4 border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
                 />
-                <span className="font-medium text-slate-100">{label}</span>
+                <span className="font-medium text-slate-100">{t(label)}</span>
               </div>
-              <p className="mt-1 pl-6 text-xs text-slate-400">{description}</p>
+              <p className="mt-1 pl-6 text-xs text-slate-400">{t(description)}</p>
             </label>
           ))}
         </div>
@@ -265,8 +267,8 @@ export default function NotificationPreferencesPage() {
           <div className="flex items-center gap-3">
             <Moon className="h-5 w-5 text-slate-400" />
             <div>
-              <h2 className="text-lg font-semibold text-slate-100">Ruhezeiten</h2>
-              <p className="text-sm text-slate-400">Keine Benachrichtigungen während dieser Zeit</p>
+              <h2 className="text-lg font-semibold text-slate-100">{t('quietHours.title')}</h2>
+              <p className="text-sm text-slate-400">{t('quietHours.description')}</p>
             </div>
           </div>
           <label className="relative inline-flex cursor-pointer items-center">
@@ -283,7 +285,7 @@ export default function NotificationPreferencesPage() {
         {quietHoursEnabled && (
           <div className="flex items-center gap-4 mt-4">
             <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-400">Von</label>
+              <label className="text-sm text-slate-400">{t('quietHours.from')}</label>
               <input
                 type="time"
                 value={quietHoursStart}
@@ -292,7 +294,7 @@ export default function NotificationPreferencesPage() {
               />
             </div>
             <div className="flex items-center gap-2">
-              <label className="text-sm text-slate-400">Bis</label>
+              <label className="text-sm text-slate-400">{t('quietHours.to')}</label>
               <input
                 type="time"
                 value={quietHoursEnd}
@@ -306,32 +308,32 @@ export default function NotificationPreferencesPage() {
 
       {/* Category Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-100">Kategorie-Einstellungen</h2>
+        <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('categories.title')}</h2>
         <p className="mb-4 text-sm text-slate-400">
-          Konfiguriere Benachrichtigungen für einzelne Kategorien
+          {t('categories.description')}
         </p>
 
         <div className="overflow-x-auto">
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-800 text-left text-sm text-slate-400">
-                <th className="pb-3 pr-4">Kategorie</th>
+                <th className="pb-3 pr-4">{t('categories.category')}</th>
                 <th className="pb-3 px-4 text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Mail className="h-4 w-4" />
-                    <span>E-Mail</span>
+                    <span>{t('channels.email')}</span>
                   </div>
                 </th>
                 <th className="pb-3 px-4 text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Smartphone className="h-4 w-4" />
-                    <span>Push</span>
+                    <span>{t('channels.push')}</span>
                   </div>
                 </th>
                 <th className="pb-3 pl-4 text-center">
                   <div className="flex items-center justify-center gap-1">
                     <Monitor className="h-4 w-4" />
-                    <span>In-App</span>
+                    <span>{t('channels.inApp')}</span>
                   </div>
                 </th>
               </tr>

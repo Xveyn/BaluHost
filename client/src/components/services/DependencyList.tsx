@@ -1,4 +1,5 @@
 import { CheckCircle, XCircle, Terminal } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { DependencyStatus } from '../../api/service-status';
 
 interface DependencyListProps {
@@ -6,11 +7,13 @@ interface DependencyListProps {
 }
 
 export default function DependencyList({ dependencies }: DependencyListProps) {
+  const { t } = useTranslation(['system', 'common']);
+  
   return (
     <div className="card border-slate-800/40">
       <h3 className="font-semibold text-white mb-4 flex items-center gap-2">
         <Terminal className="w-5 h-5 text-slate-400" />
-        System Dependencies
+        {t('system:services.dependencies.title')}
       </h3>
 
       <div className="space-y-3">
@@ -39,19 +42,19 @@ export default function DependencyList({ dependencies }: DependencyListProps) {
                     : 'bg-red-500/20 text-red-400'
                 }`}
               >
-                {dep.available ? 'Available' : 'Not Found'}
+                {dep.available ? t('system:services.dependencies.available') : t('system:services.dependencies.notFound')}
               </span>
             </div>
 
             {dep.available && dep.path && (
               <p className="text-xs text-slate-400 mb-1 truncate" title={dep.path}>
-                Path: {dep.path}
+                {t('system:services.dependencies.path')}: {dep.path}
               </p>
             )}
 
             {dep.available && dep.version && (
               <p className="text-xs text-slate-400 mb-1 truncate" title={dep.version}>
-                Version: {dep.version}
+                {t('system:services.dependencies.version')}: {dep.version}
               </p>
             )}
 

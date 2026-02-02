@@ -1,5 +1,6 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
@@ -86,6 +87,7 @@ function setCachedRaid(raid: RaidStatusResponse): void {
 
 export default function Dashboard({ user }: DashboardProps) {
   const navigate = useNavigate();
+  const { t } = useTranslation('dashboard');
   const isAdmin = user?.role === 'admin';
   const { system: systemInfo, storage: storageInfo, loading, error, lastUpdated, history } = useSystemTelemetry();
 
@@ -400,8 +402,8 @@ export default function Dashboard({ user }: DashboardProps) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold text-white">Dashboard</h1>
-          <p className="mt-1 text-sm text-slate-400">Secure personal cloud orchestration overview</p>
+          <h1 className="text-3xl font-semibold text-white">{t('title')}</h1>
+          <p className="mt-1 text-sm text-slate-400">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs text-slate-400 shadow-inner">
           <span className={`inline-flex h-2 w-2 rounded-full ${lastUpdated ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />

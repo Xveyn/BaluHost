@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { createFileShare, type CreateFileShareRequest } from '../api/shares';
 import { apiClient } from '../lib/api';
@@ -12,6 +13,7 @@ interface CreateFileShareModalProps {
 }
 
 const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileShareModalProps) => {
+  const { t } = useTranslation(['shares', 'common']);
   const [loading, setLoading] = useState(false);
   const [, setExplorerLoading] = useState(false);
   const [explorerPath, setExplorerPath] = useState<string>('/');
@@ -67,7 +69,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
     <div className="fixed inset-0 bg-black bg-opacity-70 flex items-center justify-center z-50">
       <div className="bg-gray-900 rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto border border-gray-800 shadow-2xl">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold text-white">Share with User</h2>
+          <h2 className="text-xl font-bold text-white">{t('shares:modal.shareWithUser')}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-200"
@@ -80,7 +82,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
           {/* File Explorer Selection */}
           {!fileId && (
             <div>
-              <label className="block text-sm font-medium mb-1 text-white">Select File to Share</label>
+              <label className="block text-sm font-medium mb-1 text-white">{t('shares:form.selectFileToShare')}</label>
               <div className="flex items-center gap-2 mb-2">
                 <span className="text-xs text-gray-400">{explorerPath}</span>
                 <button
@@ -93,7 +95,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                     setExplorerPath(newPath);
                   }}
                 >
-                  ↑ Up
+                  ↑ {t('shares:buttons.up')}
                 </button>
               </div>
               <select
@@ -115,7 +117,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                 }}
                 required
               >
-                <option value={0}>Select a file...</option>
+                <option value={0}>{t('shares:form.selectFile')}</option>
                 {explorerFiles.map((file: any) => (
                   file.is_directory ? (
                     <option key={file.id} value={file.id} disabled className="text-gray-500 bg-gray-900">
@@ -129,14 +131,14 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                 ))}
               </select>
               {formData.file_id === 0 && (
-                <div className="text-xs text-red-400 mb-2">Please select a file to share.</div>
+                <div className="text-xs text-red-400 mb-2">{t('shares:form.selectFileRequired')}</div>
               )}
             </div>
           )}
 
             {/* User Selection */}
             <div>
-              <label className="block text-sm font-medium mb-1">Share with User</label>
+              <label className="block text-sm font-medium mb-1">{t('shares:modal.shareWithUser')}</label>
               <select
                 value={formData.shared_with_user_id}
                 onChange={(e) => setFormData({ ...formData, shared_with_user_id: Number(e.target.value) })}
@@ -144,7 +146,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                 required
                 disabled={users.length === 0}
               >
-                <option value={0} disabled>Select a user...</option>
+                <option value={0} disabled>{t('shares:form.selectUser')}</option>
                 {(users ?? []).map((user) => (
                   <option key={user.id || user._id || user.email} value={user.id || user._id || ''}>
                     {user.username || user.name || user.email || 'Unknown User'}
@@ -155,7 +157,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
 
             {/* Permissions */}
             <div>
-              <label className="block text-sm font-medium mb-2 text-white">Permissions</label>
+              <label className="block text-sm font-medium mb-2 text-white">{t('shares:table.permissions')}</label>
               <div className={`space-y-2 pl-4 ${formData.shared_with_user_id === 0 ? 'opacity-50 pointer-events-none' : ''}`}>
                 <label className="flex items-center">
                   <input
@@ -165,7 +167,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                     className="mr-2"
                     disabled={formData.shared_with_user_id === 0}
                   />
-                  <span className="text-sm">Can Read (view and download)</span>
+                  <span className="text-sm">{t('shares:permissions.canRead')} ({t('shares:permissions.canReadDesc')})</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -175,7 +177,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                     className="mr-2"
                     disabled={formData.shared_with_user_id === 0}
                   />
-                  <span className="text-sm">Can Write (edit file)</span>
+                  <span className="text-sm">{t('shares:permissions.canWrite')} ({t('shares:permissions.canWriteDesc')})</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -185,7 +187,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                     className="mr-2"
                     disabled={formData.shared_with_user_id === 0}
                   />
-                  <span className="text-sm">Can Delete</span>
+                  <span className="text-sm">{t('shares:permissions.canDelete')}</span>
                 </label>
                 <label className="flex items-center">
                   <input
@@ -195,7 +197,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                     className="mr-2"
                     disabled={formData.shared_with_user_id === 0}
                   />
-                  <span className="text-sm">Can Share (re-share with others)</span>
+                  <span className="text-sm">{t('shares:permissions.canShare')} ({t('shares:permissions.canShareDesc')})</span>
                 </label>
               </div>
             </div>
@@ -203,7 +205,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
             {/* Expiration Date */}
             <div>
               <label className="block text-sm font-medium mb-1">
-                <span className="text-white">Expiration Date (Optional)</span>
+                <span className="text-white">{t('shares:form.expirationDateOptional')}</span>
               </label>
               <input
                 type="datetime-local"
@@ -223,14 +225,14 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
                 onClick={onClose}
                 className="px-4 py-2 text-gray-300 bg-gray-800 border border-gray-700 rounded-lg hover:bg-gray-700"
               >
-                Cancel
+                {t('shares:buttons.cancel')}
               </button>
               <button
                 type="submit"
                 disabled={loading || formData.file_id === 0 || formData.shared_with_user_id === 0}
                 className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 border border-blue-700"
               >
-                {loading ? 'Sharing...' : 'Share File'}
+                {loading ? t('shares:buttons.sharing') : t('shares:buttons.share')}
               </button>
             </div>
           </form>

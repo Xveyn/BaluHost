@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RefreshCw, AlertTriangle, CheckCircle, XCircle, Clock, Play, Square } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import type { ServiceStatus } from '../../api/service-status';
 import { ServiceState, formatUptime, getStateBgColor } from '../../api/service-status';
 
@@ -11,6 +12,7 @@ interface ServiceCardProps {
 }
 
 export default function ServiceCard({ service, onRestart, onStop, onStart }: ServiceCardProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [isRestarting, setIsRestarting] = useState(false);
   const [isStopping, setIsStopping] = useState(false);
   const [isStarting, setIsStarting] = useState(false);
@@ -33,7 +35,7 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
 
     // Confirmation dialog for destructive action
     const confirmed = window.confirm(
-      `Stop ${service.display_name}?\n\nThis will halt the service until manually restarted.`
+      `${t('system:services.confirm.stopTitle', { name: service.display_name })}\n\n${t('system:services.confirm.stopMessage')}`
     );
     if (!confirmed) return;
 
@@ -97,13 +99,13 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
       {/* Metrics Grid */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <p className="text-xs text-slate-400">Uptime</p>
+          <p className="text-xs text-slate-400">{t('system:services.card.uptime')}</p>
           <p className="text-sm font-medium text-white">
             {formatUptime(service.uptime_seconds)}
           </p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">Samples</p>
+          <p className="text-xs text-slate-400">{t('system:services.card.samples')}</p>
           <p className="text-sm font-medium text-white">
             {service.sample_count?.toLocaleString() ?? '-'}
           </p>
@@ -115,7 +117,7 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
         <div className="mb-3 p-2 bg-red-500/10 border border-red-500/20 rounded-lg">
           <div className="flex items-center gap-2 text-red-400 text-sm">
             <AlertTriangle className="w-4 h-4" />
-            <span>{service.error_count} error(s)</span>
+            <span>{t('system:services.card.errors', { count: service.error_count })}</span>
           </div>
           {service.last_error && (
             <p className="text-xs text-red-300 mt-1 truncate" title={service.last_error}>
@@ -128,7 +130,7 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
       {/* Interval */}
       {service.interval_seconds && (
         <div className="mb-3">
-          <p className="text-xs text-slate-400">Interval</p>
+          <p className="text-xs text-slate-400">{t('system:services.card.interval')}</p>
           <p className="text-sm font-medium text-white">
             {service.interval_seconds >= 60
               ? `${Math.round(service.interval_seconds / 60)}m`
@@ -141,7 +143,7 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
       {!service.config_enabled && (
         <div className="mb-3 p-2 bg-yellow-500/10 border border-yellow-500/20 rounded-lg">
           <p className="text-xs text-yellow-400">
-            Disabled in configuration
+            {t('system:services.card.disabledInConfig')}
           </p>
         </div>
       )}
@@ -154,14 +156,14 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
             onClick={handleStart}
             disabled={isAnyOperationInProgress || !canStart}
             className="px-3 py-2 flex items-center justify-center gap-1.5 bg-green-700 hover:bg-green-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-green-700"
-            title={canStart ? 'Start service' : 'Service is already running'}
+            title={canStart ? t('system:services.actions.startTooltip') : t('system:services.actions.alreadyRunning')}
           >
             {isStarting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <Play className="w-4 h-4" />
             )}
-            <span className="text-xs sm:text-sm">Start</span>
+            <span className="text-xs sm:text-sm">{t('system:services.actions.start')}</span>
           </button>
 
           {/* Stop Button */}
@@ -169,14 +171,14 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
             onClick={handleStop}
             disabled={isAnyOperationInProgress || !canStop}
             className="px-3 py-2 flex items-center justify-center gap-1.5 bg-red-700 hover:bg-red-600 text-white rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-red-700"
-            title={canStop ? 'Stop service (requires confirmation)' : 'Service is not running'}
+            title={canStop ? t('system:services.actions.stopTooltip') : t('system:services.actions.notRunning')}
           >
             {isStopping ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <Square className="w-3.5 h-3.5" />
             )}
-            <span className="text-xs sm:text-sm">Stop</span>
+            <span className="text-xs sm:text-sm">{t('system:services.actions.stop')}</span>
           </button>
 
           {/* Restart Button */}
@@ -184,14 +186,14 @@ export default function ServiceCard({ service, onRestart, onStop, onStart }: Ser
             onClick={handleRestart}
             disabled={isAnyOperationInProgress || !canRestart}
             className="px-3 py-2 flex items-center justify-center gap-1.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-lg transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            title={canRestart ? 'Restart service' : 'Service must be running to restart'}
+            title={canRestart ? t('system:services.actions.restartTooltip') : t('system:services.actions.mustBeRunning')}
           >
             {isRestarting ? (
               <RefreshCw className="w-4 h-4 animate-spin" />
             ) : (
               <RefreshCw className="w-4 h-4" />
             )}
-            <span className="text-xs sm:text-sm">Restart</span>
+            <span className="text-xs sm:text-sm">{t('system:services.actions.restart')}</span>
           </button>
         </div>
       )}

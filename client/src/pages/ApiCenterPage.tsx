@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Code,
   Lock,
@@ -835,10 +836,11 @@ interface EndpointCardProps {
   endpoint: ApiEndpoint;
   rateLimits: Record<string, RateLimitConfig>;
   isAdmin: boolean;
+  t: (key: string) => string;
   onEditRateLimit?: (config: RateLimitConfig) => void;
 }
 
-function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: EndpointCardProps) {
+function EndpointCard({ endpoint, rateLimits, isAdmin, t, onEditRateLimit }: EndpointCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
@@ -863,7 +865,7 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
           <code className="text-cyan-400 font-mono text-xs sm:text-sm truncate">{endpoint.path}</code>
           <span className="text-slate-400 text-xs sm:text-sm hidden lg:inline truncate">{endpoint.description}</span>
           {endpoint.requiresAuth && (
-            <span title="Requires authentication" className="flex-shrink-0"><Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /></span>
+            <span title={t('system:apiCenter.authRequired')} className="flex-shrink-0"><Shield className="w-3.5 h-3.5 sm:w-4 sm:h-4 text-amber-400" /></span>
           )}
           {rateLimit && (
             <span
@@ -887,7 +889,7 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
                 onEditRateLimit(rateLimit);
               }}
               className="p-2 sm:p-1.5 rounded-lg bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors touch-manipulation active:scale-95 min-w-[36px] min-h-[36px] sm:min-w-0 sm:min-h-0 flex items-center justify-center"
-              title="Edit rate limit"
+              title={t('system:apiCenter.buttons.editRateLimit')}
             >
               <Settings className="w-4 h-4" />
             </button>
@@ -906,13 +908,13 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
 
           {endpoint.params && endpoint.params.length > 0 && (
             <div>
-              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">Parameters</h4>
+              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">{t('system:apiCenter.parameters')}</h4>
               <div className="space-y-1.5 sm:space-y-2">
                 {endpoint.params.map((param, idx) => (
                   <div key={idx} className="flex items-start gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
                     <code className="text-cyan-400 font-mono">{param.name}</code>
                     <span className="text-slate-500">({param.type})</span>
-                    {param.required && <span className="text-red-400 text-[10px] sm:text-xs">required</span>}
+                    {param.required && <span className="text-red-400 text-[10px] sm:text-xs">{t('system:apiCenter.required')}</span>}
                     <span className="text-slate-400 w-full sm:w-auto">{param.description}</span>
                   </div>
                 ))}
@@ -922,13 +924,13 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
 
           {endpoint.body && endpoint.body.length > 0 && (
             <div>
-              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">Request Body</h4>
+              <h4 className="text-xs sm:text-sm font-semibold text-slate-300 mb-2">{t('system:apiCenter.requestBody')}</h4>
               <div className="space-y-1.5 sm:space-y-2">
                 {endpoint.body.map((field, idx) => (
                   <div key={idx} className="flex items-start gap-2 sm:gap-3 text-xs sm:text-sm flex-wrap">
                     <code className="text-violet-400 font-mono">{field.field}</code>
                     <span className="text-slate-500">({field.type})</span>
-                    {field.required && <span className="text-red-400 text-[10px] sm:text-xs">required</span>}
+                    {field.required && <span className="text-red-400 text-[10px] sm:text-xs">{t('system:apiCenter.required')}</span>}
                     <span className="text-slate-400 w-full sm:w-auto">{field.description}</span>
                   </div>
                 ))}
@@ -936,7 +938,7 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
               {endpoint.bodyExample && (
                 <div className="mt-3">
                   <div className="flex items-center justify-between mb-2">
-                    <h5 className="text-xs font-semibold text-slate-400">Example</h5>
+                    <h5 className="text-xs font-semibold text-slate-400">{t('system:apiCenter.example')}</h5>
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
@@ -958,7 +960,7 @@ function EndpointCard({ endpoint, rateLimits, isAdmin, onEditRateLimit }: Endpoi
           {endpoint.response && (
             <div>
               <div className="flex items-center justify-between mb-2">
-                <h4 className="text-xs sm:text-sm font-semibold text-slate-300">Response</h4>
+                <h4 className="text-xs sm:text-sm font-semibold text-slate-300">{t('system:apiCenter.response')}</h4>
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -986,9 +988,10 @@ interface RateLimitModalProps {
   config: RateLimitConfig | null;
   onClose: () => void;
   onSave: (endpointType: string, data: { limit_string: string; description: string; enabled: boolean }) => Promise<void>;
+  t: (key: string) => string;
 }
 
-function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
+function RateLimitModal({ config, onClose, onSave, t }: RateLimitModalProps) {
   const [form, setForm] = useState({
     limit_string: config?.limit_string || '',
     description: config?.description || '',
@@ -1014,19 +1017,19 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
       <div className="relative bg-slate-900 border border-slate-700/50 rounded-xl p-4 sm:p-6 w-full max-w-md max-h-[100vh] sm:max-h-[90vh] overflow-y-auto shadow-2xl">
         <h3 className="text-lg sm:text-xl font-bold text-white mb-4 flex items-center gap-2">
           <Zap className="w-5 h-5 text-yellow-400" />
-          Edit Rate Limit
+          {t('system:apiCenter.modal.editRateLimit')}
         </h3>
         
         <div className="space-y-4">
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Endpoint</label>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">{t('system:apiCenter.modal.endpoint')}</label>
             <code className="block w-full px-3 py-2 bg-slate-900/60 border border-slate-700/50 rounded-lg text-cyan-400 text-xs sm:text-sm truncate">
               {config.endpoint_type}
             </code>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Rate Limit</label>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">{t('system:apiCenter.modal.rateLimit')}</label>
             <input
               type="text"
               value={form.limit_string}
@@ -1034,17 +1037,17 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
               className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-white focus:border-cyan-500 focus:outline-none text-sm min-h-[44px]"
               placeholder="5/minute"
             />
-            <p className="text-[10px] sm:text-xs text-slate-500 mt-1">Format: number/unit (e.g., 5/minute, 100/hour)</p>
+            <p className="text-[10px] sm:text-xs text-slate-500 mt-1">{t('system:apiCenter.modal.rateLimitFormat')}</p>
           </div>
 
           <div>
-            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">Description</label>
+            <label className="block text-xs sm:text-sm font-medium text-slate-300 mb-1">{t('system:apiCenter.modal.description')}</label>
             <input
               type="text"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               className="w-full px-3 py-2.5 bg-slate-900/60 border border-slate-700/50 rounded-lg text-white focus:border-cyan-500 focus:outline-none text-sm min-h-[44px]"
-              placeholder="Rate limit description"
+              placeholder={t('system:apiCenter.modal.descriptionPlaceholder')}
             />
           </div>
 
@@ -1056,7 +1059,7 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
               className="w-5 h-5 rounded"
             />
-            <label htmlFor="enabled" className="text-sm text-slate-300">Enabled</label>
+            <label htmlFor="enabled" className="text-sm text-slate-300">{t('system:apiCenter.modal.enabled')}</label>
           </div>
         </div>
 
@@ -1065,14 +1068,14 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
             onClick={onClose}
             className="px-4 py-2.5 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors touch-manipulation active:scale-95 min-h-[44px]"
           >
-            Cancel
+            {t('system:apiCenter.modal.cancel')}
           </button>
           <button
             onClick={handleSave}
             disabled={saving}
             className="px-4 py-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg transition-colors disabled:opacity-50 touch-manipulation active:scale-95 min-h-[44px]"
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? t('system:apiCenter.modal.saving') : t('system:apiCenter.modal.saveChanges')}
           </button>
         </div>
       </div>
@@ -1083,6 +1086,7 @@ function RateLimitModal({ config, onClose, onSave }: RateLimitModalProps) {
 // ==================== Main Component ====================
 
 export default function ApiCenterPage() {
+  const { t } = useTranslation(['system', 'common']);
   const [user, setUser] = useState<User | null>(null);
   const [activeTab, setActiveTab] = useState<'docs' | 'limits'>('docs');
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -1171,7 +1175,7 @@ export default function ApiCenterPage() {
   ) => {
     const token = localStorage.getItem('token');
     if (!token) {
-      toast.error('Not authenticated');
+      toast.error(t('system:apiCenter.toasts.notAuthenticated'));
       return;
     }
 
@@ -1189,11 +1193,11 @@ export default function ApiCenterPage() {
     });
 
     if (response.ok) {
-      toast.success('Rate limit updated');
+      toast.success(t('system:apiCenter.toasts.rateLimitUpdated'));
       loadRateLimits();
     } else {
       const error = await response.json();
-      toast.error(error.detail || 'Failed to update rate limit');
+      toast.error(error.detail || t('system:apiCenter.toasts.updateFailed'));
       throw new Error('Failed to save');
     }
   };
@@ -1211,13 +1215,13 @@ export default function ApiCenterPage() {
       });
 
       if (response.ok) {
-        toast.success('Default rate limits seeded');
+        toast.success(t('system:apiCenter.toasts.defaultsSeeded'));
         loadRateLimits();
       } else {
-        toast.error('Failed to seed defaults');
+        toast.error(t('system:apiCenter.toasts.seedFailed'));
       }
     } catch (error) {
-      toast.error('Failed to seed defaults');
+      toast.error(t('system:apiCenter.toasts.seedFailed'));
     }
   };
 
@@ -1236,11 +1240,11 @@ export default function ApiCenterPage() {
       });
 
       if (response.ok) {
-        toast.success(`Rate limit ${!config.enabled ? 'enabled' : 'disabled'}`);
+        toast.success(!config.enabled ? t('system:apiCenter.rateLimits.enabled') : t('system:apiCenter.rateLimits.disabled'));
         loadRateLimits();
       }
     } catch (error) {
-      toast.error('Failed to toggle rate limit');
+      toast.error(t('system:apiCenter.toasts.updateFailed'));
     }
   };
 
@@ -1249,15 +1253,15 @@ export default function ApiCenterPage() {
     : apiSections;
 
   const getCategoryFromEndpoint = (endpoint: string): string => {
-    if (endpoint.startsWith('auth_')) return 'Authentication';
-    if (endpoint.startsWith('file_')) return 'File Operations';
-    if (endpoint.startsWith('share_')) return 'Sharing';
-    if (endpoint.startsWith('mobile_')) return 'Mobile';
-    if (endpoint.startsWith('vpn_')) return 'VPN';
-    if (endpoint.includes('admin')) return 'Admin';
-    if (endpoint.includes('user')) return 'Users';
-    if (endpoint.includes('system')) return 'System';
-    return 'Other';
+    if (endpoint.startsWith('auth_')) return t('system:apiCenter.categories.authentication');
+    if (endpoint.startsWith('file_')) return t('system:apiCenter.categories.fileOperations');
+    if (endpoint.startsWith('share_')) return t('system:apiCenter.categories.sharing');
+    if (endpoint.startsWith('mobile_')) return t('system:apiCenter.categories.mobile');
+    if (endpoint.startsWith('vpn_')) return t('system:apiCenter.categories.vpn');
+    if (endpoint.includes('admin')) return t('system:apiCenter.categories.admin');
+    if (endpoint.includes('user')) return t('system:apiCenter.categories.users');
+    if (endpoint.includes('system')) return t('system:apiCenter.categories.system');
+    return t('system:apiCenter.categories.other');
   };
 
   const groupedRateLimits = rateLimitsList.reduce((acc, config) => {
@@ -1274,10 +1278,10 @@ export default function ApiCenterPage() {
         <div>
           <h1 className="text-xl sm:text-2xl lg:text-3xl font-bold bg-gradient-to-r from-cyan-400 via-blue-400 to-violet-400 bg-clip-text text-transparent flex items-center gap-2 sm:gap-3">
             <Code className="w-6 h-6 sm:w-8 sm:h-8 text-cyan-400" />
-            API Center
+            {t('system:apiCenter.title')}
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            REST API <span className="hidden sm:inline">Documentation</span> {isAdmin && <span className="hidden sm:inline">& Rate Limits</span>}
+            {t('system:apiCenter.subtitle')} <span className="hidden sm:inline">{t('system:apiCenter.tabs.documentation')}</span> {isAdmin && <span className="hidden sm:inline">& {t('system:apiCenter.tabs.rateLimits')}</span>}
           </p>
         </div>
 
@@ -1293,7 +1297,7 @@ export default function ApiCenterPage() {
               }`}
             >
               <BookOpen className="w-4 h-4" />
-              <span className="hidden sm:inline">API </span>Docs
+              <span className="hidden sm:inline">API </span>{t('system:apiCenter.tabs.documentation')}
             </button>
             <button
               onClick={() => setActiveTab('limits')}
@@ -1304,7 +1308,7 @@ export default function ApiCenterPage() {
               }`}
             >
               <Zap className="w-4 h-4" />
-              <span className="hidden sm:inline">Rate </span>Limits
+              <span className="hidden sm:inline">Rate </span>{t('system:apiCenter.tabs.rateLimits')}
               <AdminBadge />
             </button>
           </div>
@@ -1319,7 +1323,7 @@ export default function ApiCenterPage() {
             <div className="flex items-start gap-2 sm:gap-3">
               <Code className="w-4 h-4 sm:w-5 sm:h-5 text-cyan-400 mt-0.5 flex-shrink-0" />
               <div className="min-w-0 flex-1">
-                <h3 className="font-semibold text-white text-sm sm:text-base mb-1">Base URL</h3>
+                <h3 className="font-semibold text-white text-sm sm:text-base mb-1">{t('system:apiCenter.baseUrl')}</h3>
                 <div className="flex items-center gap-2">
                   <code className="text-xs sm:text-sm text-cyan-400 bg-slate-900/60 px-2 sm:px-3 py-1 rounded block overflow-x-auto flex-1">
                     {apiBaseUrl}
@@ -1327,16 +1331,16 @@ export default function ApiCenterPage() {
                   <button
                     onClick={() => {
                       navigator.clipboard.writeText(apiBaseUrl);
-                      toast.success('Base URL copied!');
+                      toast.success(t('system:apiCenter.baseUrlCopied'));
                     }}
                     className="p-2 bg-slate-700/50 hover:bg-slate-700 rounded-lg transition-colors flex-shrink-0 touch-manipulation active:scale-95"
-                    title="Copy Base URL"
+                    title={t('system:apiCenter.baseUrl')}
                   >
                     <Copy className="w-4 h-4 text-slate-300" />
                   </button>
                 </div>
                 <p className="text-xs sm:text-sm text-slate-400 mt-2">
-                  <span className="hidden sm:inline">All authenticated endpoints require: </span>
+                  <span className="hidden sm:inline">{t('system:apiCenter.authRequiredNote')} </span>
                   <code className="text-[10px] sm:text-xs text-slate-300 bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded sm:ml-2 block sm:inline mt-1 sm:mt-0 overflow-x-auto">
                     Authorization: Bearer {"<token>"}
                   </code>
@@ -1355,7 +1359,7 @@ export default function ApiCenterPage() {
                   : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
               }`}
             >
-              All
+              {t('system:apiCenter.all')}
             </button>
             {apiSections.map((section) => (
               <button
@@ -1389,6 +1393,7 @@ export default function ApiCenterPage() {
                     endpoint={endpoint}
                     rateLimits={rateLimits}
                     isAdmin={isAdmin}
+                    t={t}
                     onEditRateLimit={undefined}
                   />
                 ))}
@@ -1407,14 +1412,14 @@ export default function ApiCenterPage() {
               onClick={handleSeedDefaults}
               className="px-3 sm:px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors flex items-center gap-2 text-xs sm:text-sm touch-manipulation active:scale-95 min-h-[40px]"
             >
-              🌱 <span className="hidden sm:inline">Seed </span>Defaults
+              🌱 <span className="hidden sm:inline">{t('system:apiCenter.rateLimits.seedDefaults')}</span>
             </button>
             <button
               onClick={loadRateLimits}
               className="px-3 sm:px-4 py-2 bg-slate-700/50 hover:bg-slate-700 text-white rounded-lg transition-colors flex items-center gap-2 text-xs sm:text-sm touch-manipulation active:scale-95 min-h-[40px]"
             >
               <RefreshCw className="w-4 h-4" />
-              <span className="hidden sm:inline">Refresh</span>
+              <span className="hidden sm:inline">{t('system:apiCenter.buttons.refresh')}</span>
             </button>
           </div>
 
@@ -1422,25 +1427,25 @@ export default function ApiCenterPage() {
           <div className="bg-yellow-500/10 border border-yellow-500/30 rounded-xl p-3 sm:p-4">
             <h3 className="text-yellow-400 font-semibold text-sm sm:text-base mb-2 flex items-center gap-2">
               <Zap className="w-4 h-4 sm:w-5 sm:h-5" />
-              Rate Limit Protection
+              {t('system:apiCenter.rateLimits.title')}
             </h3>
             <p className="text-slate-300 text-xs sm:text-sm">
-              <span className="hidden sm:inline">Rate limits protect your API from abuse. </span>Format: <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">number/unit</code>
-              {' '}(e.g., <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">5/min</code>)
+              <span className="hidden sm:inline">{t('system:apiCenter.rateLimits.description')} </span>{t('system:apiCenter.rateLimits.format')}: <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">number/unit</code>
+              {' '}({t('system:apiCenter.rateLimits.example')}, <code className="bg-slate-900/60 px-1.5 sm:px-2 py-0.5 rounded text-[10px] sm:text-xs">5/min</code>)
             </p>
           </div>
 
           {/* Rate Limits by Category */}
           {loading ? (
-            <div className="text-slate-400 text-sm">Loading rate limits...</div>
+            <div className="text-slate-400 text-sm">{t('system:apiCenter.rateLimits.loading')}</div>
           ) : Object.keys(groupedRateLimits).length === 0 ? (
             <div className="bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-8 sm:p-12 text-center">
-              <p className="text-slate-400 text-sm mb-4">No rate limit configurations found</p>
+              <p className="text-slate-400 text-sm mb-4">{t('system:apiCenter.rateLimits.noConfigs')}</p>
               <button
                 onClick={handleSeedDefaults}
                 className="px-4 sm:px-6 py-2.5 sm:py-3 bg-blue-600 hover:bg-blue-500 text-white rounded-lg transition-colors text-sm touch-manipulation active:scale-95 min-h-[44px]"
               >
-                🌱 Seed Defaults
+                🌱 {t('system:apiCenter.rateLimits.seedDefaults')}
               </button>
             </div>
           ) : (
@@ -1460,10 +1465,10 @@ export default function ApiCenterPage() {
                   <table className="w-full">
                     <thead>
                       <tr className="text-left text-xs text-slate-400 border-b border-slate-700/30">
-                        <th className="px-3 sm:px-4 py-2 font-medium">Endpoint</th>
-                        <th className="px-3 sm:px-4 py-2 font-medium">Limit</th>
-                        <th className="px-3 sm:px-4 py-2 font-medium">Status</th>
-                        <th className="px-3 sm:px-4 py-2 font-medium text-right">Actions</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.endpoint')}</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.limit')}</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.status')}</th>
+                        <th className="px-3 sm:px-4 py-2 font-medium text-right">{t('system:apiCenter.rateLimits.actions')}</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1488,14 +1493,14 @@ export default function ApiCenterPage() {
                                   : 'bg-slate-600/30 text-slate-400 hover:bg-slate-600/50'
                               }`}
                             >
-                              {config.enabled ? '✓ Active' : '✗ Off'}
+                              {config.enabled ? `✓ ${t('system:apiCenter.rateLimits.active')}` : `✗ ${t('system:apiCenter.rateLimits.off')}`}
                             </button>
                           </td>
                           <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-right">
                             <button
                               onClick={() => setEditingConfig(config)}
                               className="p-1.5 sm:p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition-colors touch-manipulation active:scale-95"
-                              title="Edit rate limit"
+                              title={t('system:apiCenter.buttons.editRateLimit')}
                             >
                               <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
                             </button>
@@ -1517,6 +1522,7 @@ export default function ApiCenterPage() {
           config={editingConfig}
           onClose={() => setEditingConfig(null)}
           onSave={handleSaveRateLimit}
+          t={t}
         />
       )}
     </div>

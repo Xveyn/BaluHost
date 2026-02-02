@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { buildApiUrl } from '../lib/api';
 import { getAllServices, type ServiceStatus, ServiceState } from '../api/service-status';
 import {
@@ -114,6 +115,7 @@ const getStateBadgeClass = (state: string) => {
 
 export default function AdminHealth() {
   const navigate = useNavigate();
+  const { t } = useTranslation('admin');
   const [health, setHealth] = useState<HealthData | null>(null);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -176,13 +178,13 @@ export default function AdminHealth() {
           <button
             onClick={() => navigate('/')}
             className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-700/70 bg-slate-800/50 text-slate-400 transition hover:border-sky-500/50 hover:text-white"
-            title="Back to Dashboard"
+            title={t('health.backToDashboard')}
           >
             <ArrowLeft className="h-5 w-5" />
           </button>
           <div>
-            <h1 className="text-2xl sm:text-3xl font-semibold text-white">System Health</h1>
-            <p className="mt-1 text-sm text-slate-400">Backend services and system status overview</p>
+            <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('health.title')}</h1>
+            <p className="mt-1 text-sm text-slate-400">{t('health.subtitle')}</p>
           </div>
         </div>
         <button
@@ -191,7 +193,7 @@ export default function AdminHealth() {
           className="flex items-center gap-2 min-h-[44px] rounded-xl border border-slate-700/70 bg-slate-800/50 px-4 py-2.5 text-sm font-medium text-slate-300 transition hover:border-sky-500/50 hover:text-white disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${loading || servicesLoading ? 'animate-spin' : ''}`} />
-          {loading || servicesLoading ? 'Refreshing...' : 'Refresh'}
+          {loading || servicesLoading ? t('health.refreshing') : t('common:buttons.refresh')}
         </button>
       </div>
 

@@ -4,6 +4,7 @@
  */
 import React, { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { getAllDevices, type Device } from '../../api/devices';
 import { Smartphone, Monitor, Wifi, WifiOff } from 'lucide-react';
 
@@ -19,6 +20,7 @@ interface ConnectedDevicesWidgetProps {
 }
 
 export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ className = '' }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(true);
@@ -76,7 +78,7 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
   if (loading) {
     return (
       <div className={`rounded-xl border border-slate-800/50 bg-slate-900/55 p-4 ${className}`}>
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Connected Devices</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:devices.title')}</p>
         <div className="mt-3 flex items-center gap-4">
           <div className="h-6 w-16 rounded bg-slate-800 animate-pulse" />
           <div className="h-6 w-16 rounded bg-slate-800 animate-pulse" />
@@ -88,10 +90,10 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
   if (error) {
     return (
       <div className={`rounded-xl border border-slate-800/50 bg-slate-900/55 p-4 ${className}`}>
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Connected Devices</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:devices.title')}</p>
         <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
           <WifiOff className="h-4 w-4" />
-          <span>Unable to load</span>
+          <span>{t('dashboard:devices.unableToLoad')}</span>
         </div>
       </div>
     );
@@ -103,12 +105,12 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
         className={`rounded-xl border border-slate-800/50 bg-slate-900/55 p-4 cursor-pointer transition hover:border-slate-700/60 hover:bg-slate-900/70 ${className}`}
         onClick={handleViewDevices}
       >
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Connected Devices</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:devices.title')}</p>
         <div className="mt-3 flex items-center gap-2 text-sm text-slate-500">
           <Wifi className="h-4 w-4" />
-          <span>No devices registered</span>
+          <span>{t('dashboard:devices.noDevicesRegistered')}</span>
         </div>
-        <p className="mt-2 text-xs text-slate-600">Click to add a device</p>
+        <p className="mt-2 text-xs text-slate-600">{t('dashboard:devices.clickToAddDevice')}</p>
       </div>
     );
   }
@@ -119,11 +121,11 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
       onClick={handleViewDevices}
     >
       <div className="flex items-center justify-between">
-        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Connected Devices</p>
+        <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:devices.title')}</p>
         {summary.activeRecently > 0 && (
           <div className="flex items-center gap-1">
             <span className="inline-flex h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
-            <span className="text-xs text-emerald-400">{summary.activeRecently} online</span>
+            <span className="text-xs text-emerald-400">{t('dashboard:devices.online', { count: summary.activeRecently })}</span>
           </div>
         )}
       </div>
@@ -136,7 +138,7 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
           </div>
           <div>
             <p className="text-lg font-semibold text-white">{summary.mobile}</p>
-            <p className="text-xs text-slate-500">Mobile</p>
+            <p className="text-xs text-slate-500">{t('dashboard:devices.mobile')}</p>
           </div>
         </div>
 
@@ -147,12 +149,12 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
           </div>
           <div>
             <p className="text-lg font-semibold text-white">{summary.desktop}</p>
-            <p className="text-xs text-slate-500">Desktop</p>
+            <p className="text-xs text-slate-500">{t('dashboard:devices.desktop')}</p>
           </div>
         </div>
       </div>
 
-      <p className="mt-3 text-xs text-slate-600">Click to manage devices</p>
+      <p className="mt-3 text-xs text-slate-600">{t('dashboard:devices.clickToManage')}</p>
     </div>
   );
 };

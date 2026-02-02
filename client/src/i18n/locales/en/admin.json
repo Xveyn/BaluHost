@@ -1,0 +1,324 @@
+{
+  "title": "Administration",
+  "users": {
+    "title": "User Management",
+    "createUser": "Create User",
+    "editUser": "Edit User",
+    "deleteUser": "Delete User",
+    "deleteConfirm": "Are you sure you want to delete user \"{{username}}\"?",
+    "roles": {
+      "admin": "Administrator",
+      "user": "User",
+      "guest": "Guest"
+    },
+    "fields": {
+      "username": "Username",
+      "email": "Email",
+      "role": "Role",
+      "created": "Created",
+      "lastLogin": "Last Login",
+      "status": "Status"
+    },
+    "messages": {
+      "created": "User created successfully",
+      "updated": "User updated successfully",
+      "deleted": "User deleted successfully",
+      "error": "User operation failed",
+      "invalidEmail": "Please enter a valid email address"
+    }
+  },
+  "system": {
+    "title": "System Monitor",
+    "health": "System Health",
+    "services": "Services",
+    "processes": "Processes",
+    "resources": "Resources"
+  },
+  "raid": {
+    "title": "RAID Management",
+    "status": "RAID Status",
+    "drives": "Drives",
+    "rebuild": "Rebuilding",
+    "healthy": "Healthy",
+    "degraded": "Degraded",
+    "failed": "Failed"
+  },
+  "logs": {
+    "title": "Logs",
+    "auditLog": "Audit Log",
+    "systemLog": "System Log",
+    "accessLog": "Access Log",
+    "filter": "Filter",
+    "export": "Export"
+  },
+  "scheduler": {
+    "title": "Task Scheduler",
+    "tasks": "Scheduled Tasks",
+    "newTask": "New Task",
+    "editTask": "Edit Task",
+    "deleteTask": "Delete Task"
+  },
+  "devices": {
+    "title": "Device Management",
+    "registered": "Registered Devices",
+    "newDevice": "Register New Device",
+    "deleteDevice": "Remove Device",
+    "deleteConfirm": "Really delete device \"{{name}}\"?",
+    "enterName": "Please enter device name",
+    "fields": {
+      "name": "Device Name",
+      "type": "Device Type",
+      "lastSeen": "Last Seen",
+      "status": "Status"
+    },
+    "messages": {
+      "registered": "Device registered successfully",
+      "deleted": "Device removed successfully",
+      "error": "Could not delete device"
+    }
+  },
+  "database": {
+    "title": "Database",
+    "subtitle": "Database Inspector & Maintenance",
+    "tabs": {
+      "tables": "Tables",
+      "stats": "Stats",
+      "storage": "Storage",
+      "history": "History",
+      "maintenance": "Maintenance"
+    },
+    "selectTable": "Select table",
+    "noTableSelected": "No table selected",
+    "loadOwners": "Load owners",
+    "exportCsv": "Export as CSV",
+    "refresh": "Refresh",
+    "rowsOf": "rows of",
+    "page": "Page"
+  },
+  "health": {
+    "title": "System Health",
+    "subtitle": "Server & Service Status",
+    "backToDashboard": "Back to Dashboard",
+    "refreshing": "Refreshing...",
+    "lastUpdated": "Last updated",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage",
+    "diskUsage": "Disk Usage",
+    "uptime": "Uptime",
+    "temperature": "Temperature",
+    "services": "Services",
+    "serviceStatus": {
+      "running": "Running",
+      "stopped": "Stopped",
+      "error": "Error",
+      "unknown": "Unknown"
+    }
+  },
+  "monitoring": {
+    "title": "Monitoring History",
+    "subtitle": "Historical metrics from database storage",
+    "samplesInfo": "{{formatted}} samples, source: {{source}}",
+    "loadingHistory": "Loading history data...",
+    "noDataAvailable": "No {{metric}} data available for this time range",
+    "noSamplesAvailable": "No {{metric}} samples available",
+    "timeRange": "Time Range",
+    "timeRanges": {
+      "10m": "10 Min",
+      "1h": "1 Hour",
+      "24h": "24 Hours",
+      "7d": "7 Days"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Memory",
+      "network": "Network",
+      "diskIo": "Disk I/O"
+    },
+    "charts": {
+      "cpuUsage": "CPU Usage %",
+      "memoryUsage": "Memory Usage %",
+      "download": "Download (Mbps)",
+      "upload": "Upload (Mbps)",
+      "read": "Read (MB/s)",
+      "write": "Write (MB/s)"
+    },
+    "showingDisk": "Showing: {{disk}} ({{count}} disk(s) available)",
+    "infoNote": "This view shows historical monitoring data stored in the database. Data is persisted based on retention settings configured in the Stats tab. For real-time monitoring, use the System Monitor page."
+  },
+  "maintenance": {
+    "title": "Database Maintenance",
+    "subtitle": "Health monitoring and cleanup tools",
+    "loading": "Loading maintenance tools...",
+    "connection": "Connection",
+    "databaseType": "Database Type",
+    "integrityCheck": "Integrity Check",
+    "poolSize": "Pool Size",
+    "overallHealth": "Overall Health",
+    "healthy": "Healthy",
+    "issuesDetected": "Issues Detected",
+    "poolDetails": {
+      "title": "Connection Pool Details",
+      "size": "Pool Size",
+      "checkedIn": "Checked In",
+      "checkedOut": "Checked Out",
+      "overflow": "Overflow"
+    },
+    "cleanup": {
+      "title": "Monitoring Data Cleanup",
+      "description": "Manually trigger cleanup of expired monitoring samples. This removes samples older than the configured retention period for each metric type.",
+      "runCleanup": "Run Cleanup",
+      "confirm": "Confirm",
+      "success": "{{message}}",
+      "totalDeleted": "Total deleted: {{formatted}} samples",
+      "noSamplesDeleted": "No samples were deleted - all data is within retention period."
+    }
+  },
+  "databaseStats": {
+    "title": "Monitoring Database Statistics",
+    "lastUpdated": "Last updated: {{time}}",
+    "autoRefresh": "(auto-refresh every {{seconds}}s)",
+    "loading": "Loading database statistics...",
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Memory",
+      "network": "Network",
+      "diskIo": "Disk I/O",
+      "process": "Process"
+    },
+    "fields": {
+      "samples": "Samples",
+      "size": "Size",
+      "lastCleanup": "Last Cleanup",
+      "totalCleaned": "Total Cleaned",
+      "retention": "{{hours}}h retention"
+    },
+    "summary": {
+      "totalSamples": "Total Samples",
+      "totalSize": "Total Size",
+      "metricTypes": "Metric Types"
+    }
+  },
+  "storageAnalysis": {
+    "title": "Storage Analysis",
+    "subtitle": "Database: {{type}} | Total Size: {{size}}",
+    "loading": "Loading storage analysis...",
+    "summary": {
+      "totalSize": "Total Size",
+      "totalTables": "Total Tables",
+      "totalRows": "Total Rows",
+      "monitoringData": "Monitoring Data"
+    },
+    "charts": {
+      "dataDistribution": "Data Distribution",
+      "topTablesBySize": "Top Tables by Size",
+      "noDataAvailable": "No data available",
+      "noTablesFound": "No tables found",
+      "monitoringData": "Monitoring Data",
+      "applicationData": "Application Data"
+    },
+    "table": {
+      "title": "All Tables",
+      "name": "Table Name",
+      "rows": "Rows",
+      "size": "Est. Size",
+      "percent": "% of Total",
+      "monitoring": "Monitoring"
+    }
+  },
+  "vcl": {
+    "title": "VCL Settings",
+    "loading": "Loading...",
+    "stats": {
+      "totalVersions": "Total Versions",
+      "storageUsed": "Storage Used",
+      "originalSize": "{{size}} original",
+      "totalSavings": "Total Savings",
+      "saved": "{{size}} saved",
+      "activeUsers": "Active Users",
+      "cached": "{{count}} cached"
+    },
+    "storageDetails": {
+      "title": "Storage Details",
+      "compressionRatio": "Compression Ratio",
+      "compressionSavings": "Compression Savings",
+      "dedupSavings": "Dedup Savings",
+      "uniqueBlobs": "Unique Blobs",
+      "priorityVersions": "Priority Versions",
+      "lastCleanup": "Last Cleanup",
+      "lastPriorityMode": "Last Priority Mode",
+      "updated": "Updated",
+      "never": "Never"
+    },
+    "maintenance": {
+      "title": "Maintenance",
+      "dryRunCleanup": "Dry Run Cleanup",
+      "triggerCleanup": "Trigger Cleanup",
+      "refreshStats": "Refresh Stats",
+      "confirmCleanup": "Trigger cleanup for all users exceeding quota?",
+      "cleanupResult": "{{action}} {{count}} versions, freed {{size}}",
+      "dryRun": "Dry run: Would delete",
+      "deleted": "Deleted"
+    },
+    "userQuotas": {
+      "title": "User Quotas",
+      "user": "User",
+      "maxSize": "Max Size",
+      "used": "Used",
+      "usagePercent": "Usage %",
+      "versions": "Versions",
+      "status": "Status",
+      "actions": "Actions",
+      "enabled": "Enabled",
+      "disabled": "Disabled",
+      "edit": "Edit",
+      "noUsers": "No users found"
+    },
+    "editModal": {
+      "title": "Edit Settings: {{username}}",
+      "maxSizeLabel": "Max Size (bytes)",
+      "enableVcl": "Enable VCL for this user",
+      "save": "Save",
+      "settingsUpdated": "Updated settings for {{username}}"
+    }
+  },
+  "versionHistory": {
+    "title": "Version History",
+    "loading": "Loading...",
+    "noVersions": "No versions available",
+    "versionsTotal": "{{count}} version(s) total",
+    "version": "Version {{number}}",
+    "latest": "Latest",
+    "cached": "Cached",
+    "diff": {
+      "title": "Version Diff: {{fileName}}",
+      "close": "Close",
+      "old": "Old: v{{version}} ({{size}})",
+      "new": "New: v{{version}} ({{size}})",
+      "binaryMessage": "Binary files cannot be compared",
+      "noDifferences": "No differences found",
+      "compare": "Compare v{{v1}} ↔ v{{v2}}"
+    },
+    "fields": {
+      "created": "Created",
+      "size": "Size",
+      "compressed": "Compressed",
+      "ratio": "Ratio",
+      "savings": "Savings",
+      "storage": "Storage"
+    },
+    "actions": {
+      "restore": "Restore this version",
+      "restoreConfirm": "Restore file to version {{number}}?",
+      "restored": "File restored to version {{number}}",
+      "delete": "Delete version",
+      "deleteConfirm": "Delete version {{number}}? This cannot be undone.",
+      "deleted": "Version {{number}} deleted",
+      "download": "Download version",
+      "downloadStarted": "Download started",
+      "markPriority": "Mark as priority",
+      "removePriority": "Remove priority",
+      "selectForComparison": "Select for comparison"
+    },
+    "processing": "Processing..."
+  }
+}

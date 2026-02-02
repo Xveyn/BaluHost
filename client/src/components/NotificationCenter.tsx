@@ -4,6 +4,7 @@
  * Displays a bell icon with unread count badge and a dropdown showing recent notifications.
  */
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, X, Settings, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
@@ -25,6 +26,7 @@ interface NotificationCenterProps {
 }
 
 export const NotificationCenter: React.FC<NotificationCenterProps> = ({ className = '' }) => {
+  const { t } = useTranslation('notifications');
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState<Notification[]>([]);
@@ -116,10 +118,10 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       await markAllAsRead();
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
-      toast.success('Alle Benachrichtigungen als gelesen markiert');
+      toast.success(t('markedAllRead'));
     } catch (error) {
       console.error('Failed to mark all as read:', error);
-      toast.error('Fehler beim Markieren');
+      toast.error(t('markError'));
     }
   };
 
@@ -143,7 +145,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="relative flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
-        title="Benachrichtigungen"
+        title={t('title')}
       >
         <Bell className="h-5 w-5" />
         {unreadCount > 0 && (
@@ -152,7 +154,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
           </span>
         )}
         {isConnected && (
-          <span className="absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full bg-green-500" title="Verbunden" />
+          <span className="absolute bottom-0.5 right-0.5 h-2 w-2 rounded-full bg-green-500" title={t('connected')} />
         )}
       </button>
 
@@ -161,16 +163,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
         <div className="absolute right-0 top-12 z-50 w-96 max-w-[calc(100vw-2rem)] rounded-xl border border-slate-800 bg-slate-900/95 shadow-xl backdrop-blur-xl">
           {/* Header */}
           <div className="flex items-center justify-between border-b border-slate-800 px-4 py-3">
-            <h3 className="text-sm font-semibold text-slate-100">Benachrichtigungen</h3>
+            <h3 className="text-sm font-semibold text-slate-100">{t('title')}</h3>
             <div className="flex items-center gap-2">
               {unreadCount > 0 && (
                 <button
                   onClick={handleMarkAllAsRead}
                   className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-                  title="Alle als gelesen markieren"
+                  title={t('markAllRead')}
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
-                  Alle gelesen
+                  {t('allRead')}
                 </button>
               )}
               <button
@@ -179,7 +181,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
                   navigate('/settings/notifications');
                 }}
                 className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
-                title="Einstellungen"
+                title={t('settings')}
               >
                 <Settings className="h-4 w-4" />
               </button>
@@ -195,7 +197,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
             ) : notifications.length === 0 ? (
               <div className="py-8 text-center text-slate-400">
                 <Bell className="mx-auto mb-2 h-8 w-8 opacity-50" />
-                <p className="text-sm">Keine Benachrichtigungen</p>
+                <p className="text-sm">{t('noNotifications')}</p>
               </div>
             ) : (
               <div className="divide-y divide-slate-800">
@@ -260,7 +262,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
                         <button
                           onClick={(e) => handleDismiss(e, notification)}
                           className="rounded p-1 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-                          title="Verwerfen"
+                          title={t('dismiss')}
                         >
                           <X className="h-4 w-4" />
                         </button>
@@ -282,7 +284,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
                 }}
                 className="w-full rounded-lg py-2 text-center text-sm text-sky-400 transition hover:bg-slate-800"
               >
-                Alle Benachrichtigungen anzeigen
+                {t('viewAll')}
               </button>
             </div>
           )}

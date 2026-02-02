@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Clock, Smartphone, HardDrive, Calendar, Settings, Trash2, CheckCircle, AlertTriangle, Edit2, X, Save } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { apiClient } from '../lib/api';
 
 interface SyncDevice {
@@ -50,6 +51,7 @@ const WEEKDAYS = [
 ];
 
 export default function SyncSettings() {
+  const { t } = useTranslation('settings');
   const [devices, setDevices] = useState<SyncDevice[]>([]);
   const [schedules, setSchedules] = useState<SyncSchedule[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>('');
@@ -213,7 +215,7 @@ export default function SyncSettings() {
 
   async function createSchedule() {
     if (!selectedDevice) {
-      setError('Please select a device first');
+      setError(t('sync.selectDeviceFirst'));
       return;
     }
 
@@ -233,20 +235,20 @@ export default function SyncSettings() {
       }
 
       await apiClient.post('/api/sync/schedule/create', payload);
-      setSuccess('Schedule created successfully');
+      setSuccess(t('sync.scheduleCreated'));
       await loadSyncData();
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Failed to create schedule');
+      setError(err.response?.data?.detail || err.message || t('sync.createScheduleFailed'));
     }
   }
 
   async function disableSchedule(scheduleId: number) {
     try {
       await apiClient.post(`/api/sync/schedule/${scheduleId}/disable`);
-      setSuccess('Schedule disabled');
+      setSuccess(t('sync.scheduleDisabled'));
       await loadSyncData();
     } catch (err: any) {
-      setError('Failed to disable schedule');
+      setError(t('sync.disableScheduleFailed'));
     }
   }
 
@@ -272,11 +274,11 @@ export default function SyncSettings() {
       }
 
       await apiClient.put(`/api/sync/schedule/${editingSchedule.schedule_id}`, payload);
-      setSuccess('Schedule updated successfully');
+      setSuccess(t('sync.scheduleUpdated'));
       setEditingSchedule(null);
       await loadSyncData();
     } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || 'Failed to update schedule');
+      setError(err.response?.data?.detail || err.message || t('sync.updateScheduleFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -296,9 +298,9 @@ export default function SyncSettings() {
         upload_speed_limit: uploadLimit,
         download_speed_limit: downloadLimit
       });
-      setSuccess('Bandwidth limits saved');
+      setSuccess(t('sync.bandwidthSaved'));
     } catch (err: any) {
-      setError('Failed to save limits');
+      setError(t('sync.saveLimitsFailed'));
     }
   }
 
@@ -306,10 +308,10 @@ export default function SyncSettings() {
     if (!clientId) return;
     try {
       await apiClient.post(`/api/vpn/clients/${clientId}/revoke`);
-      setSuccess('VPN access revoked');
+      setSuccess(t('sync.vpnRevoked'));
       await loadSyncData();
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || 'Failed to revoke VPN client');
+      setError(err?.response?.data?.detail || err?.message || t('sync.revokeVpnFailed'));
     }
   }
 
@@ -339,7 +341,7 @@ export default function SyncSettings() {
       <div className="rounded-lg shadow bg-slate-900/55 p-6">
         <h2 className="text-2xl font-bold mb-4 flex items-center gap-2">
           <Settings className="w-6 h-6" />
-          Sync Settings
+          {t('sync.title')}
         </h2>
 
         {error && (
@@ -360,12 +362,12 @@ export default function SyncSettings() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Smartphone className="w-5 h-5" />
-            Device Registration
+            {t('sync.deviceRegistration')}
           </h3>
           <div className="text-slate-400 text-sm">
-            Device registration and per-device sync configuration must be performed in the Mobile Apps or the desktop sync client.
+            {t('sync.deviceRegistrationInfo')}
             <div className="mt-2">
-              Manage devices from the <a href="/mobile-devices" className="text-sky-400 underline">Mobile Apps</a> page.
+              {t('sync.manageDevicesFrom')} <a href="/mobile-devices" className="text-sky-400 underline">{t('sync.mobileAppsPage')}</a>
             </div>
           </div>
         </div>
@@ -374,7 +376,7 @@ export default function SyncSettings() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Calendar className="w-5 h-5" />
-            Create Sync Schedule
+            {t('sync.createSchedule')}
           </h3>
 
           <div className="space-y-4">
@@ -382,13 +384,13 @@ export default function SyncSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* Device Dropdown */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Device</label>
+                <label className="block text-sm text-slate-400 mb-1">{t('sync.device')}</label>
                 <select
                   value={selectedDevice}
                   onChange={(e) => setSelectedDevice(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
                 >
-                  <option value="">Select device...</option>
+                  <option value="">{t('sync.selectDevice')}</option>
                   {devices.map((device) => (
                     <option key={device.device_id} value={device.device_id}>
                       {device.device_name} ({device.device_id.substring(0, 8)}...)
@@ -399,15 +401,15 @@ export default function SyncSettings() {
 
               {/* Schedule Type */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Schedule Type</label>
+                <label className="block text-sm text-slate-400 mb-1">{t('sync.scheduleType')}</label>
                 <select
                   value={scheduleType}
                   onChange={(e) => setScheduleType(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
                 >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="daily">{t('sync.daily')}</option>
+                  <option value="weekly">{t('sync.weekly')}</option>
+                  <option value="monthly">{t('sync.monthly')}</option>
                 </select>
               </div>
             </div>
@@ -416,7 +418,7 @@ export default function SyncSettings() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
               {/* Time */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Time</label>
+                <label className="block text-sm text-slate-400 mb-1">{t('sync.time')}</label>
                 <input
                   type="time"
                   value={scheduleTime}
@@ -428,7 +430,7 @@ export default function SyncSettings() {
               {/* Day of Week (for weekly) */}
               {scheduleType === 'weekly' && (
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Day of Week</label>
+                  <label className="block text-sm text-slate-400 mb-1">{t('sync.dayOfWeek')}</label>
                   <div className="flex gap-1">
                     {WEEKDAYS.map((day) => (
                       <button
@@ -451,7 +453,7 @@ export default function SyncSettings() {
               {/* Day of Month (for monthly) */}
               {scheduleType === 'monthly' && (
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Day of Month</label>
+                  <label className="block text-sm text-slate-400 mb-1">{t('sync.dayOfMonth')}</label>
                   <select
                     value={dayOfMonth}
                     onChange={(e) => setDayOfMonth(parseInt(e.target.value))}
@@ -471,7 +473,7 @@ export default function SyncSettings() {
               disabled={!selectedDevice}
               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
-              Create Schedule
+              {t('sync.createScheduleBtn')}
             </button>
           </div>
         </div>
@@ -480,19 +482,19 @@ export default function SyncSettings() {
         <div className="mb-6">
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <HardDrive className="w-5 h-5" />
-            Bandwidth Limits (bytes/sec)
+            {t('sync.bandwidthLimits')}
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
             <input
               type="number"
-              placeholder="Upload Limit"
+              placeholder={t('sync.uploadLimit')}
               value={uploadLimit || ''}
               onChange={(e) => setUploadLimit(e.target.value ? parseInt(e.target.value) : null)}
               className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
             />
             <input
               type="number"
-              placeholder="Download Limit"
+              placeholder={t('sync.downloadLimit')}
               value={downloadLimit || ''}
               onChange={(e) => setDownloadLimit(e.target.value ? parseInt(e.target.value) : null)}
               className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
@@ -501,7 +503,7 @@ export default function SyncSettings() {
               onClick={saveBandwidthLimits}
               className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors"
             >
-              Save Limits
+              {t('sync.saveLimits')}
             </button>
           </div>
         </div>
@@ -510,11 +512,11 @@ export default function SyncSettings() {
         <div>
           <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
             <Clock className="w-5 h-5" />
-            Active Schedules
+            {t('sync.activeSchedules')}
           </h3>
           {schedules.length === 0 ? (
             <div className="text-slate-400 text-center py-8">
-              No schedules configured
+              {t('sync.noSchedules')}
             </div>
           ) : (
             <div className="space-y-3">
@@ -532,7 +534,7 @@ export default function SyncSettings() {
                       <span className="text-sm text-slate-400">{getScheduleDescription(schedule)}</span>
                     </div>
                     <div className="text-xs text-slate-500 mt-1">
-                      Next run: {formatDate(schedule.next_run_at)} | Last run: {formatDate(schedule.last_run_at)}
+                      {t('sync.nextRun')}: {formatDate(schedule.next_run_at)} | {t('sync.lastRun')}: {formatDate(schedule.last_run_at)}
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
@@ -562,10 +564,10 @@ export default function SyncSettings() {
       <div className="rounded-lg shadow bg-slate-900/55 p-6">
         <h3 className="text-lg font-semibold mb-3 flex items-center gap-2">
           <Smartphone className="w-5 h-5" />
-          Registered Devices
+          {t('sync.registeredDevices')}
         </h3>
         {devices.length === 0 ? (
-          <div className="text-slate-400 text-center py-6">No devices registered</div>
+          <div className="text-slate-400 text-center py-6">{t('sync.noDevices')}</div>
         ) : (
           <div className="space-y-3">
             {devices.map((d) => (
@@ -577,33 +579,33 @@ export default function SyncSettings() {
                       <span className="text-xs text-slate-400 ml-2">({d.device_id.substring(0, 8)}...)</span>
                     </div>
                     <div className="text-xs text-slate-500">
-                      Status: {d.status} | Last sync: {formatDate(d.last_sync)}
+                      {t('sync.status')}: {d.status} | {t('sync.lastSync')}: {formatDate(d.last_sync)}
                     </div>
                   </div>
                   <div className="text-right">
                     {d.vpn_client_id ? (
                       <div className="text-xs text-slate-300">
                         <div className="flex items-center gap-3">
-                          <div>VPN: <span className="font-medium text-sky-300">{d.vpn_assigned_ip ?? `client ${d.vpn_client_id}`}</span></div>
+                          <div>{t('sync.vpn')}: <span className="font-medium text-sky-300">{d.vpn_assigned_ip ?? `client ${d.vpn_client_id}`}</span></div>
                           <button
                             onClick={() => revokeVpnClient(d.vpn_client_id!)}
                             className="px-2 py-1 bg-rose-600 hover:bg-rose-700 text-white text-xs rounded transition-colors"
                           >
-                            Revoke VPN
+                            {t('sync.revokeVpn')}
                           </button>
                         </div>
                         <div className="text-xs text-slate-500">
-                          Last handshake: {d.vpn_last_handshake ? formatDate(d.vpn_last_handshake) : 'N/A'}
+                          {t('sync.lastHandshake')}: {d.vpn_last_handshake ? formatDate(d.vpn_last_handshake) : 'N/A'}
                         </div>
                       </div>
                     ) : (
-                      <div className="text-xs text-slate-400">No VPN configured</div>
+                      <div className="text-xs text-slate-400">{t('sync.noVpnConfigured')}</div>
                     )}
                   </div>
                 </div>
                 {/* Per-device sync folders */}
                 <div className="mt-3 border-t border-slate-700 pt-3">
-                  <div className="text-sm text-slate-400 mb-2">Sync Folders (read-only)</div>
+                  <div className="text-sm text-slate-400 mb-2">{t('sync.syncFolders')}</div>
                   {deviceFolders[d.device_id] && deviceFolders[d.device_id].length > 0 ? (
                     <div className="space-y-2">
                       {deviceFolders[d.device_id].map((f) => (
@@ -636,7 +638,7 @@ export default function SyncSettings() {
           <div className="relative z-10 w-full max-w-md rounded-lg bg-slate-900 shadow-xl">
             {/* Header */}
             <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
-              <h3 className="text-lg font-medium text-white">Edit Schedule</h3>
+              <h3 className="text-lg font-medium text-white">{t('sync.editSchedule')}</h3>
               <button
                 onClick={() => setEditingSchedule(null)}
                 className="rounded-md p-1 text-slate-400 hover:bg-slate-800 hover:text-white transition-colors"
@@ -648,26 +650,26 @@ export default function SyncSettings() {
             {/* Content */}
             <div className="px-6 py-4 space-y-4">
               <div className="text-sm text-slate-400">
-                Device: <span className="text-slate-200">{getDeviceName(editingSchedule.device_id)}</span>
+                {t('sync.device')}: <span className="text-slate-200">{getDeviceName(editingSchedule.device_id)}</span>
               </div>
 
               {/* Schedule Type */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Schedule Type</label>
+                <label className="block text-sm text-slate-400 mb-1">{t('sync.scheduleType')}</label>
                 <select
                   value={editScheduleType}
                   onChange={(e) => setEditScheduleType(e.target.value)}
                   className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
                 >
-                  <option value="daily">Daily</option>
-                  <option value="weekly">Weekly</option>
-                  <option value="monthly">Monthly</option>
+                  <option value="daily">{t('sync.daily')}</option>
+                  <option value="weekly">{t('sync.weekly')}</option>
+                  <option value="monthly">{t('sync.monthly')}</option>
                 </select>
               </div>
 
               {/* Time */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Time</label>
+                <label className="block text-sm text-slate-400 mb-1">{t('sync.time')}</label>
                 <input
                   type="time"
                   value={editScheduleTime}
@@ -679,7 +681,7 @@ export default function SyncSettings() {
               {/* Day of Week (for weekly) */}
               {editScheduleType === 'weekly' && (
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Day of Week</label>
+                  <label className="block text-sm text-slate-400 mb-1">{t('sync.dayOfWeek')}</label>
                   <div className="flex gap-1">
                     {WEEKDAYS.map((day) => (
                       <button
@@ -702,7 +704,7 @@ export default function SyncSettings() {
               {/* Day of Month (for monthly) */}
               {editScheduleType === 'monthly' && (
                 <div>
-                  <label className="block text-sm text-slate-400 mb-1">Day of Month</label>
+                  <label className="block text-sm text-slate-400 mb-1">{t('sync.dayOfMonth')}</label>
                   <select
                     value={editDayOfMonth}
                     onChange={(e) => setEditDayOfMonth(parseInt(e.target.value))}
@@ -722,7 +724,7 @@ export default function SyncSettings() {
                 onClick={() => setEditingSchedule(null)}
                 className="px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 rounded-lg transition-colors"
               >
-                Cancel
+                {t('sync.cancel')}
               </button>
               <button
                 onClick={updateSchedule}
@@ -730,7 +732,7 @@ export default function SyncSettings() {
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
               >
                 <Save className="w-4 h-4" />
-                {isSaving ? 'Saving...' : 'Save Changes'}
+                {isSaving ? t('sync.saving') : t('sync.saveChanges')}
               </button>
             </div>
           </div>

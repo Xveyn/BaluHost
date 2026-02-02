@@ -2,6 +2,7 @@
  * Shared metric chart component using Recharts
  */
 
+import { useTranslation } from 'react-i18next';
 import {
   LineChart,
   Line,
@@ -61,9 +62,11 @@ export default function MetricChart({
   height = 300,
   showArea = false,
   loading = false,
-  emptyMessage = 'Keine Daten verfügbar',
+  emptyMessage,
   compact = false,
 }: MetricChartProps) {
+  const { t } = useTranslation('system');
+  const noDataMessage = emptyMessage ?? t('monitoring.noDataAvailable');
   // Format data with time labels
   const chartData = data.map((point) => ({
     ...point,
@@ -75,7 +78,7 @@ export default function MetricChart({
       <div className="flex items-center justify-center" style={{ height }}>
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-blue-500" />
-          <p className="mt-2 text-sm text-slate-400">Lade Daten...</p>
+          <p className="mt-2 text-sm text-slate-400">{t('monitoring.loadingData')}</p>
         </div>
       </div>
     );
@@ -98,7 +101,7 @@ export default function MetricChart({
               d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"
             />
           </svg>
-          <p className="mt-2 text-sm text-slate-400">{emptyMessage}</p>
+          <p className="mt-2 text-sm text-slate-400">{noDataMessage}</p>
         </div>
       </div>
     );

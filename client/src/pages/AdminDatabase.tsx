@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { useTranslation } from 'react-i18next'
 import useAdminDb from '../hooks/useAdminDb'
 import AdminDataTable from '../components/AdminDataTable'
 import { rowsToCsv } from '../lib/csv'
@@ -10,20 +11,21 @@ import MonitoringHistoryViewer from '../components/admin/MonitoringHistoryViewer
 
 type TabType = 'tables' | 'stats' | 'storage' | 'history' | 'maintenance'
 
-const TABS: { id: TabType; label: string; icon: React.ElementType }[] = [
-  { id: 'tables', label: 'Tables', icon: Table },
-  { id: 'stats', label: 'Stats', icon: BarChart3 },
-  { id: 'storage', label: 'Storage', icon: Database },
-  { id: 'history', label: 'History', icon: History },
-  { id: 'maintenance', label: 'Maintenance', icon: Wrench },
-]
-
 export default function AdminDatabase() {
+  const { t } = useTranslation('admin');
   const [activeTab, setActiveTab] = useState<TabType>('tables')
   const [tables, setTables] = useState<string[]>([])
   const [selected, setSelected] = useState<string | null>(null)
   const [page, setPage] = useState<number>(1)
   const [pageSize] = useState<number>(50)
+
+  const tabs = [
+    { id: 'tables' as TabType, label: t('database.tabs.tables'), icon: Table },
+    { id: 'stats' as TabType, label: t('database.tabs.stats'), icon: BarChart3 },
+    { id: 'storage' as TabType, label: t('database.tabs.storage'), icon: Database },
+    { id: 'history' as TabType, label: t('database.tabs.history'), icon: History },
+    { id: 'maintenance' as TabType, label: t('database.tabs.maintenance'), icon: Wrench },
+  ];
 
   const { fetchTables, fetchSchema, fetchRows } = useAdminDb()
   const [schema, setSchema] = useState<any | null>(null)
@@ -457,7 +459,7 @@ export default function AdminDatabase() {
         {/* Tab Navigation */}
         <div className="mb-6 sm:mb-8">
           <div className="flex flex-wrap gap-2 sm:gap-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 sm:pb-0">
-            {TABS.map((tab) => {
+            {tabs.map((tab) => {
               const Icon = tab.icon
               return (
                 <button

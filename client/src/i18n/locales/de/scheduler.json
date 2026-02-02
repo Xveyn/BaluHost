@@ -1,0 +1,129 @@
+{
+  "title": "Scheduler Dashboard",
+  "description": "Systemplaner verwalten und Ausführungsverlauf anzeigen",
+  "tabs": {
+    "overview": "Übersicht",
+    "timeline": "Zeitachse",
+    "syncSchedules": "Sync-Zeitpläne",
+    "maintenance": "Wartung",
+    "history": "Verlauf"
+  },
+  "stats": {
+    "running": "{{count}} Laufend",
+    "enabled": "{{count}} Aktiviert"
+  },
+  "syncTab": {
+    "title": "Sync-Zeitpläne",
+    "description": "Benutzerdefinierte Sync-Zeitpläne können auf der Einstellungsseite unter dem Tab Sync konfiguriert werden. Dieser Bereich wird in einem zukünftigen Update erweitert.",
+    "goToSettings": "Zu Einstellungen"
+  },
+  "buttons": {
+    "refresh": "Aktualisieren",
+    "runNow": "Jetzt ausführen",
+    "configure": "Konfigurieren",
+    "retry": "Wiederholen",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren"
+  },
+  "toast": {
+    "runSuccess": "{{name}} erfolgreich ausgeführt",
+    "runFailed": "Scheduler konnte nicht ausgeführt werden",
+    "toggleSuccess": "Scheduler erfolgreich umgeschaltet",
+    "toggleFailed": "Scheduler konnte nicht umgeschaltet werden",
+    "configSaved": "Konfiguration gespeichert",
+    "configFailed": "Konfiguration konnte nicht gespeichert werden",
+    "retrySuccess": "{{name}} erfolgreich wiederholt",
+    "retryFailed": "Wiederholung fehlgeschlagen"
+  },
+  "status": {
+    "all": "Alle",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "running": "Läuft",
+    "cancelled": "Abgebrochen",
+    "pending": "Ausstehend"
+  },
+  "configModal": {
+    "title": "{{name}} konfigurieren",
+    "runInterval": "Ausführungsintervall",
+    "enabled": "Aktiviert",
+    "minIntervalHint": "Minimum: 60 Sekunden",
+    "minIntervalError": "Mindestintervall beträgt 60 Sekunden",
+    "saveFailed": "Konfiguration konnte nicht gespeichert werden",
+    "envVar": "Umgebungsvariable",
+    "envVarNote": "Änderungen hier überschreiben die Standardkonfiguration, können aber beim Serverneustart zurückgesetzt werden.",
+    "units": {
+      "seconds": "Sekunden",
+      "minutes": "Minuten",
+      "hours": "Stunden",
+      "days": "Tage"
+    }
+  },
+  "history": {
+    "title": "Ausführungsverlauf",
+    "filter": "Filter",
+    "noExecutions": "Keine Ausführungen gefunden",
+    "pagination": "Seite {{page}} von {{totalPages}} ({{total}} gesamt)",
+    "result": "Ergebnis",
+    "error": "Fehler",
+    "jobId": "Job-ID",
+    "triggeredBy": "Ausgelöst von Benutzer-ID",
+    "completed": "Abgeschlossen",
+    "columns": {
+      "scheduler": "Scheduler",
+      "started": "Gestartet",
+      "duration": "Dauer",
+      "status": "Status",
+      "trigger": "Auslöser"
+    }
+  },
+  "timeline": {
+    "title": "24-Stunden-Aktivitätszeitachse",
+    "completed": "abgeschlossen",
+    "failed": "fehlgeschlagen",
+    "running": "läuft",
+    "recentFailures": "Letzte Fehler"
+  },
+  "card": {
+    "active": "Aktiv",
+    "disabled": "Deaktiviert",
+    "stopped": "Gestoppt",
+    "interval": "Intervall",
+    "nextRun": "Nächste Ausführung",
+    "last": "Zuletzt",
+    "neverRun": "Noch nie ausgeführt"
+  },
+  "maintenance": {
+    "triggerRaidScrub": "RAID-Scrub starten",
+    "runSmartShort": "SMART-Kurztest",
+    "toggleSmartMode": "SMART-Modus umschalten",
+    "raidStatus": "RAID-Status",
+    "smartStatus": "SMART-Status",
+    "size": "Größe",
+    "resyncProgress": "Resync-Fortschritt",
+    "devices": "Geräte",
+    "device": "Gerät",
+    "mode": "Modus",
+    "temp": "Temp",
+    "attributes": "Attribute",
+    "noArrays": "Keine Arrays erkannt.",
+    "noSmartDevices": "Keine SMART-Geräte gefunden.",
+    "loadFailed": "Daten konnten nicht geladen werden",
+    "scrubStarted": "Scrub gestartet",
+    "scrubFailed": "Scrub fehlgeschlagen",
+    "smartTestStarted": "SMART-Test gestartet",
+    "smartTestFailed": "SMART-Test fehlgeschlagen",
+    "smartMode": "SMART-Modus: {{mode}}",
+    "toggleFailed": "Umschalten fehlgeschlagen",
+    "noDeviceSelected": "Kein Gerät für SMART-Test ausgewählt",
+    "confirmTokenCreated": "Bestätigungstoken erstellt. Bestätigen zum Ausführen.",
+    "confirmRequestFailed": "Bestätigungsanfrage fehlgeschlagen",
+    "actionExecuted": "Aktion ausgeführt",
+    "executionFailed": "Ausführung fehlgeschlagen",
+    "confirm": "Bestätigen",
+    "confirmDescription": "Ein einmaliges Bestätigungstoken wurde erstellt. Klicken Sie auf Bestätigen, um die Aktion jetzt auszuführen.",
+    "token": "Token",
+    "expiresAt": "Läuft ab am",
+    "confirmExecute": "Ausführung bestätigen"
+  }
+}

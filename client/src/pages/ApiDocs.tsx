@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Code,
   Lock,
@@ -1102,6 +1103,7 @@ function EndpointCard({ endpoint }: { endpoint: ApiEndpoint }) {
 }
 
 export default function ApiDocs() {
+  const { t } = useTranslation(['apiDocs', 'common']);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [showAuth, setShowAuth] = useState(false);
   const [tokenInput, setTokenInput] = useState('');
@@ -1142,10 +1144,10 @@ export default function ApiDocs() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-bold bg-gradient-to-r from-sky-400 via-indigo-400 to-violet-400 bg-clip-text text-transparent">
-            Baluhost NAS API
+            {t('title')}
           </h1>
           <p className="text-slate-400 mt-1 sm:mt-2 text-xs sm:text-sm">
-            REST API Documentation v1.0.0 • FastAPI 0.115.3
+            {t('subtitle')}
           </p>
         </div>
         <>
@@ -1155,25 +1157,25 @@ export default function ApiDocs() {
             ) : (
               <Lock className="w-4 h-4" />
             )}
-            <span className="ml-2">{authorized ? 'Authorized' : 'Authorize'}</span>
+            <span className="ml-2">{authorized ? t('authorize.authorized') : t('authorize.button')}</span>
           </button>
 
           {showAuth && (
             <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-4">
               <div className="absolute inset-0 bg-black/60" onClick={closeAuth} />
               <div className="bg-slate-900 border border-slate-800 rounded-lg p-4 sm:p-6 w-full max-w-lg z-10 max-h-[90vh] overflow-y-auto">
-                <h3 className="text-base sm:text-lg font-semibold text-slate-100 mb-3">Authorize</h3>
-                <p className="text-xs sm:text-sm text-slate-400 mb-3">Enter your Bearer token (JWT) to authorize requests from the UI.</p>
+                <h3 className="text-base sm:text-lg font-semibold text-slate-100 mb-3">{t('authorize.title')}</h3>
+                <p className="text-xs sm:text-sm text-slate-400 mb-3">{t('authorize.description')}</p>
                 <input
                   value={tokenInput}
                   onChange={(e) => setTokenInput(e.target.value)}
-                  placeholder="Bearer eyJhbGci..."
+                  placeholder={t('authorize.placeholder')}
                   className="w-full bg-slate-950/60 border border-slate-800 rounded px-3 py-2.5 text-sm text-slate-200 mb-4 min-h-[44px]"
                 />
                 <div className="flex flex-col-reverse sm:flex-row gap-2 sm:justify-end">
-                  <button className="btn btn-secondary min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={clearAuth}>Clear</button>
-                  <button className="btn min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={closeAuth}>Cancel</button>
-                  <button className="btn btn-primary min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={saveAuth}>Save</button>
+                  <button className="btn btn-secondary min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={clearAuth}>{t('authorize.clear')}</button>
+                  <button className="btn min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={closeAuth}>{t('authorize.cancel')}</button>
+                  <button className="btn btn-primary min-h-[44px] touch-manipulation active:scale-95 transition-transform" onClick={saveAuth}>{t('authorize.save')}</button>
                 </div>
               </div>
             </div>
@@ -1186,12 +1188,12 @@ export default function ApiDocs() {
         <div className="flex items-start gap-3">
           <Code className="w-5 h-5 text-sky-400 mt-0.5" />
           <div>
-            <h3 className="font-semibold text-slate-200 mb-1">Base URL</h3>
+            <h3 className="font-semibold text-slate-200 mb-1">{t('baseUrl.title')}</h3>
             <code className="text-sm text-sky-400 bg-slate-950/60 px-3 py-1 rounded">
               http://localhost:8000
             </code>
             <p className="text-sm text-slate-400 mt-2">
-              All authenticated endpoints require a Bearer token in the Authorization header:
+              {t('baseUrl.authInfo')}
             </p>
             <code className="text-xs text-slate-300 bg-slate-950/60 px-3 py-1 rounded mt-2 inline-block">
               Authorization: Bearer {"<"}access_token{">"}
@@ -1207,7 +1209,7 @@ export default function ApiDocs() {
             onClick={() => setSelectedSection(null)}
             className={`btn min-h-[44px] whitespace-nowrap touch-manipulation active:scale-95 transition-transform ${!selectedSection ? 'btn-primary' : 'btn-secondary'}`}
           >
-            All Endpoints
+            {t('filters.allEndpoints')}
           </button>
           {apiSections.map((section) => (
             <button

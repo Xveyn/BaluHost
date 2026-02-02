@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import { createArray, type AvailableDisk } from '../api/raid';
 
 interface RaidSetupWizardProps {
@@ -81,6 +82,7 @@ const formatBytes = (bytes: number): string => {
 };
 
 export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: RaidSetupWizardProps) {
+  const { t } = useTranslation('system');
   const [currentStep, setCurrentStep] = useState<WizardStep>('select-disks');
   const [selectedDisks, setSelectedDisks] = useState<string[]>([]);
   const [selectedRaidLevel, setSelectedRaidLevel] = useState<string>('raid1');
@@ -157,11 +159,11 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
         devices,
       });
 
-      toast.success(`RAID Array ${arrayName} successfully created`);
+      toast.success(t('raidWizard.arrayCreated', { name: arrayName }));
       onSuccess();
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to create array';
+      const message = err instanceof Error ? err.message : t('raidWizard.createFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -170,9 +172,9 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
   const renderStepIndicator = () => {
     const steps = [
-      { id: 'select-disks', label: 'Disks' },
-      { id: 'raid-level', label: 'RAID-Level' },
-      { id: 'confirm', label: 'Bestätigung' },
+      { id: 'select-disks', label: t('raidWizard.steps.disks') },
+      { id: 'raid-level', label: t('raidWizard.steps.raidLevel') },
+      { id: 'confirm', label: t('raidWizard.steps.confirm') },
     ];
 
     const currentIndex = steps.findIndex((s) => s.id === currentStep);
@@ -212,16 +214,16 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
   const renderDiskSelection = () => (
     <div>
-      <h3 className="text-xl font-semibold text-white">Select Disks</h3>
+      <h3 className="text-xl font-semibold text-white">{t('raidWizard.selectDisks.title')}</h3>
       <p className="mt-1 text-sm text-slate-400">
-        Choose the disks you want to use for the RAID array.
+        {t('raidWizard.selectDisks.description')}
       </p>
 
       <div className="mt-6 space-y-3">
         {freeDisks.length === 0 ? (
           <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-4 text-center">
             <p className="text-sm text-amber-200">
-              No available disks found. All disks are already in a RAID array.
+              {t('raidWizard.selectDisks.noDisks')}
             </p>
           </div>
         ) : (
@@ -257,14 +259,14 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
                   </div>
                   <div>
                     <p className="font-medium text-slate-200">/dev/{disk.name}</p>
-                    <p className="text-xs text-slate-400">{disk.model || 'Unbekanntes Modell'}</p>
+                    <p className="text-xs text-slate-400">{disk.model || t('raidWizard.selectDisks.unknownModel')}</p>
                   </div>
                 </div>
                 <div className="text-right">
                   <p className="text-sm font-medium text-slate-300">{formatBytes(disk.size_bytes)}</p>
                   {disk.partitions.length > 0 && (
                     <p className="text-xs text-slate-500">
-                      {disk.partitions.length} Partition{disk.partitions.length > 1 ? 'en' : ''}
+                      {t('raidWizard.selectDisks.partitions', { count: disk.partitions.length })}
                     </p>
                   )}
                 </div>
@@ -277,8 +279,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
       {selectedDisks.length > 0 && (
         <div className="mt-4 rounded-lg border border-slate-700/70 bg-slate-900/60 p-3">
           <p className="text-sm text-slate-300">
-            <span className="font-medium text-white">{selectedDisks.length}</span> Disk
-            {selectedDisks.length > 1 ? 'n' : ''} ausgewählt
+            {t('raidWizard.selectDisks.disksSelected', { count: selectedDisks.length })}
           </p>
         </div>
       )}
@@ -289,7 +290,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
           onClick={onClose}
           className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
         >
-          Abbrechen
+          {t('raidWizard.cancel')}
         </button>
         <button
           type="button"
@@ -301,7 +302,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
               : 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
           }`}
         >
-          Weiter
+          {t('raidWizard.next')}
         </button>
       </div>
     </div>
@@ -312,9 +313,9 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
     return (
       <div>
-        <h3 className="text-xl font-semibold text-white">Select RAID Level</h3>
+        <h3 className="text-xl font-semibold text-white">{t('raidWizard.raidLevel.title')}</h3>
         <p className="mt-1 text-sm text-slate-400">
-          Choose the appropriate RAID level for your setup with {selectedDisks.length} disks.
+          {t('raidWizard.raidLevel.description', { count: selectedDisks.length })}
         </p>
 
         <div className="mt-6 space-y-3">
@@ -335,7 +336,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
                     <p className="font-semibold text-white">{raid.name}</p>
                     {raid.recommended && (
                       <span className="rounded-full bg-emerald-500/20 px-2 py-0.5 text-xs font-medium text-emerald-200">
-                        Empfohlen
+                        {t('raidWizard.raidLevel.recommended')}
                       </span>
                     )}
                   </div>
@@ -343,15 +344,15 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
                   <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                     <div>
-                      <p className="text-slate-500">Redundanz</p>
+                      <p className="text-slate-500">{t('raidWizard.raidLevel.redundancy')}</p>
                       <p className="text-slate-300">{raid.redundancy}</p>
                     </div>
                     <div>
-                      <p className="text-slate-500">Kapazität</p>
+                      <p className="text-slate-500">{t('raidWizard.raidLevel.capacity')}</p>
                       <p className="text-slate-300">{raid.capacity}</p>
                     </div>
                     <div className="col-span-2">
-                      <p className="text-slate-500">Performance</p>
+                      <p className="text-slate-500">{t('raidWizard.raidLevel.performance')}</p>
                       <p className="text-slate-300">{raid.performance}</p>
                     </div>
                   </div>
@@ -378,7 +379,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
             onClick={() => setCurrentStep('select-disks')}
             className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
           >
-            Back
+            {t('raidWizard.back')}
           </button>
           <div className="flex gap-3">
             <button
@@ -386,7 +387,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
               onClick={onClose}
               className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
             >
-              Abbrechen
+              {t('raidWizard.cancel')}
             </button>
             <button
               type="button"
@@ -398,7 +399,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
                   : 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
               }`}
             >
-              Next
+              {t('raidWizard.next')}
             </button>
           </div>
         </div>
@@ -412,13 +413,13 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
     return (
       <form onSubmit={handleSubmit}>
-        <h3 className="text-xl font-semibold text-white">Confirm Configuration</h3>
-        <p className="mt-2 text-sm text-slate-400">Review your RAID configuration before creating.</p>
+        <h3 className="text-xl font-semibold text-white">{t('raidWizard.confirm.title')}</h3>
+        <p className="mt-2 text-sm text-slate-400">{t('raidWizard.confirm.description')}</p>
 
         <div className="mt-6 space-y-4">
           {/* Array Name */}
           <div>
-            <label className="block text-sm font-medium text-slate-300">Array-Name</label>
+            <label className="block text-sm font-medium text-slate-300">{t('raidWizard.confirm.arrayName')}</label>
             <input
               type="text"
               value={arrayName}
@@ -431,25 +432,25 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
 
           {/* Configuration Summary */}
           <div className="rounded-lg border border-slate-700/70 bg-slate-900/60 p-4">
-            <h4 className="font-medium text-white">Zusammenfassung</h4>
+            <h4 className="font-medium text-white">{t('raidWizard.confirm.summary')}</h4>
 
             <div className="mt-3 space-y-2 text-sm">
               <div className="flex justify-between">
-                <span className="text-slate-400">RAID-Level:</span>
+                <span className="text-slate-400">{t('raidWizard.confirm.raidLevelLabel')}</span>
                 <span className="font-medium text-slate-200">{raidInfo?.name}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Anzahl Festplatten:</span>
+                <span className="text-slate-400">{t('raidWizard.confirm.diskCount')}</span>
                 <span className="font-medium text-slate-200">{selectedDisks.length}</span>
               </div>
               <div className="flex justify-between">
-                <span className="text-slate-400">Verfügbare Kapazität:</span>
+                <span className="text-slate-400">{t('raidWizard.confirm.availableCapacity')}</span>
                 <span className="font-medium text-emerald-200">{capacity}</span>
               </div>
             </div>
 
             <div className="mt-4 border-t border-slate-800 pt-3">
-              <p className="text-xs font-medium text-slate-400">Selected Disks:</p>
+              <p className="text-xs font-medium text-slate-400">{t('raidWizard.confirm.selectedDisks')}</p>
               <div className="mt-2 flex flex-wrap gap-2">
                 {selectedDisks.map((disk) => (
                   <span
@@ -478,10 +479,9 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
                 />
               </svg>
               <div>
-                <p className="text-sm font-medium text-amber-200">Wichtiger Hinweis</p>
+                <p className="text-sm font-medium text-amber-200">{t('raidWizard.confirm.warningTitle')}</p>
                 <p className="mt-1 text-xs text-amber-200/80">
-                  All data on the selected disks will be deleted. Make sure you have
-                  created backups before proceeding.
+                  {t('raidWizard.confirm.warningMessage')}
                 </p>
               </div>
             </div>
@@ -494,7 +494,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
             onClick={() => setCurrentStep('raid-level')}
             className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
           >
-            Zurück
+            {t('raidWizard.back')}
           </button>
           <div className="flex gap-3">
             <button
@@ -502,7 +502,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
               onClick={onClose}
               className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
             >
-              Abbrechen
+              {t('raidWizard.cancel')}
             </button>
             <button
               type="submit"
@@ -513,7 +513,7 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
                   : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
               }`}
             >
-              {busy ? 'Wird erstellt...' : 'Array erstellen'}
+              {busy ? t('raidWizard.creating') : t('raidWizard.createArray')}
             </button>
           </div>
         </div>

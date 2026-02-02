@@ -1,4 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
+import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
 
@@ -7,6 +8,7 @@ interface LoginProps {
 }
 
 export default function Login({ onLogin }: LoginProps) {
+  const { t } = useTranslation('login');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -115,8 +117,8 @@ export default function Login({ onLogin }: LoginProps) {
                 <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
               </div>
             </div>
-            <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">BalùHost</h1>
-            <p className="mt-2 text-sm text-slate-100-tertiary">Secure Personal Cloud Gateway</p>
+            <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">{t('title')}</h1>
+            <p className="mt-2 text-sm text-slate-100-tertiary">{t('subtitle')}</p>
             
             {/* Connection mode indicator */}
             {connectionMode !== 'checking' && (
@@ -127,9 +129,9 @@ export default function Login({ onLogin }: LoginProps) {
                   'bg-slate-400'
                 }`} />
                 <span className="text-slate-100-tertiary uppercase tracking-wider">
-                  {connectionMode === 'local' ? 'Direct Local Access' :
-                   connectionMode === 'ipc' ? 'Network Mode' :
-                   'Fallback Mode'}
+                  {connectionMode === 'local' ? t('connectionModes.local') :
+                   connectionMode === 'ipc' ? t('connectionModes.network') :
+                   t('connectionModes.fallback')}
                 </span>
               </div>
             )}
@@ -144,7 +146,7 @@ export default function Login({ onLogin }: LoginProps) {
 
             <div className="space-y-2">
               <label htmlFor="username" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
-                Username
+                {t('form.username')}
               </label>
               <input
                 type="text"
@@ -159,8 +161,8 @@ export default function Login({ onLogin }: LoginProps) {
 
             <div className="space-y-2">
               <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
-                <label htmlFor="password">Password</label>
-                <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">Keep your vault secure</span>
+                <label htmlFor="password">{t('form.password')}</label>
+                <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">{t('form.passwordHint')}</span>
               </div>
               <input
                 type="password"
@@ -178,16 +180,16 @@ export default function Login({ onLogin }: LoginProps) {
               className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
               disabled={loading}
             >
-              {loading ? 'Authorising...' : 'Access System'}
+              {loading ? t('form.loading') : t('form.submit')}
             </button>
           </form>
 
           <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
-            Default credentials - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
+            {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
           </div>
 
           <div className="mt-4 sm:mt-6 text-center text-[10px] sm:text-[11px] uppercase tracking-[0.3em] sm:tracking-[0.35em] text-slate-100-tertiary">
-            Firmware v4.2.0 - System Status <span className="text-sky-400">Optimal</span>
+            {t('firmware')} v4.2.0 - {t('systemStatus')} <span className="text-sky-400">{t('optimal')}</span>
           </div>
         </div>
       </div>

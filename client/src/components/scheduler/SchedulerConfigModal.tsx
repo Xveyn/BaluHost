@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X, Save, Loader2 } from 'lucide-react';
 import type { SchedulerStatus, SchedulerConfigUpdate } from '../../api/schedulers';
 
@@ -17,6 +18,7 @@ export function SchedulerConfigModal({
   onClose,
   onSave,
 }: SchedulerConfigModalProps) {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [intervalValue, setIntervalValue] = useState(1);
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('hours');
   const [isEnabled, setIsEnabled] = useState(true);
@@ -70,7 +72,7 @@ export function SchedulerConfigModal({
 
       // Validate minimum interval (60 seconds)
       if (intervalSeconds < 60) {
-        setError('Minimum interval is 60 seconds');
+        setError(t('scheduler:configModal.minIntervalError'));
         setIsSaving(false);
         return;
       }
@@ -84,10 +86,10 @@ export function SchedulerConfigModal({
       if (success) {
         onClose();
       } else {
-        setError('Failed to save configuration');
+        setError(t('scheduler:configModal.saveFailed'));
       }
     } catch (err: any) {
-      setError(err.message || 'Failed to save configuration');
+      setError(err.message || t('scheduler:configModal.saveFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -113,7 +115,7 @@ export function SchedulerConfigModal({
         {/* Header */}
         <div className="flex items-center justify-between border-b border-slate-800 px-6 py-4">
           <h3 id="config-modal-title" className="text-lg font-medium text-white">
-            Configure {scheduler.display_name}
+            {t('scheduler:configModal.title', { name: scheduler.display_name })}
           </h3>
           <button
             onClick={onClose}
@@ -131,7 +133,7 @@ export function SchedulerConfigModal({
           {/* Interval */}
           <div>
             <label className="block text-sm font-medium text-slate-300 mb-2">
-              Run Interval
+              {t('scheduler:configModal.runInterval')}
             </label>
             <div className="flex gap-2">
               <input
@@ -146,21 +148,21 @@ export function SchedulerConfigModal({
                 onChange={(e) => setIntervalUnit(e.target.value as IntervalUnit)}
                 className="rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
               >
-                <option value="seconds">Seconds</option>
-                <option value="minutes">Minutes</option>
-                <option value="hours">Hours</option>
-                <option value="days">Days</option>
+                <option value="seconds">{t('scheduler:configModal.units.seconds')}</option>
+                <option value="minutes">{t('scheduler:configModal.units.minutes')}</option>
+                <option value="hours">{t('scheduler:configModal.units.hours')}</option>
+                <option value="days">{t('scheduler:configModal.units.days')}</option>
               </select>
             </div>
             <p className="mt-1 text-xs text-slate-500">
-              Minimum: 60 seconds
+              {t('scheduler:configModal.minIntervalHint')}
             </p>
           </div>
 
           {/* Enabled toggle */}
           <div className="flex items-center justify-between">
             <label className="text-sm font-medium text-slate-300">
-              Enabled
+              {t('scheduler:configModal.enabled')}
             </label>
             <button
               type="button"
@@ -183,10 +185,10 @@ export function SchedulerConfigModal({
           {scheduler.config_key && (
             <div className="rounded-md bg-slate-800/50 p-3">
               <p className="text-xs text-slate-400">
-                Environment variable: <code className="text-slate-300">{scheduler.config_key}</code>
+                {t('scheduler:configModal.envVar')}: <code className="text-slate-300">{scheduler.config_key}</code>
               </p>
               <p className="text-xs text-slate-500 mt-1">
-                Changes here override the default configuration but may be reset on server restart.
+                {t('scheduler:configModal.envVarNote')}
               </p>
             </div>
           )}
@@ -205,7 +207,7 @@ export function SchedulerConfigModal({
             onClick={onClose}
             className="rounded-md px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 transition-colors"
           >
-            Cancel
+            {t('common:buttons.cancel')}
           </button>
           <button
             onClick={handleSave}
@@ -217,7 +219,7 @@ export function SchedulerConfigModal({
             ) : (
               <Save className="h-4 w-4" />
             )}
-            Save Changes
+            {t('common:buttons.save')}
           </button>
         </div>
       </div>

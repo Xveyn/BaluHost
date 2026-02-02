@@ -1,0 +1,30 @@
+{
+  "title": "Shared File",
+  "description": "Someone has shared a file with you",
+  "loading": "Loading share...",
+  "accessDenied": "Access Denied",
+  "goHome": "Go to Home",
+  "password": {
+    "required": "Password Required",
+    "description": "This share is password protected. Please enter the password to access it.",
+    "label": "Password",
+    "placeholder": "Enter password",
+    "invalid": "Invalid password",
+    "submit": "Access File"
+  },
+  "errors": {
+    "expired": "This share link has expired",
+    "notAccessible": "This share link is no longer accessible",
+    "loadFailed": "Failed to load share information",
+    "accessFailed": "Failed to access share",
+    "downloadFailed": "Failed to download file"
+  },
+  "file": {
+    "expires": "Expires:",
+    "preview": "Preview",
+    "download": "Download",
+    "downloading": "Downloading...",
+    "noActions": "This file cannot be downloaded or previewed."
+  },
+  "footer": "Powered by BaluHost NAS Manager"
+}

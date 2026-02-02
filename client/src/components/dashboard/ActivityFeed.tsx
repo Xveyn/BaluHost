@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useActivityFeed } from '../../hooks/useActivityFeed';
 import {
   Upload,
@@ -42,6 +43,7 @@ function ActivityIcon({ type, success }: { type: string; success: boolean }) {
 }
 
 export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 5 }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { activities, loading, error } = useActivityFeed({ limit, days: 1 });
 
@@ -53,14 +55,14 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 5 }) => {
     <div className="card border-slate-800/50 bg-slate-900/55">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Recent Activity</p>
-          <h2 className="mt-2 text-xl font-semibold text-white">Live operations</h2>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:activity.title')}</p>
+          <h2 className="mt-2 text-xl font-semibold text-white">{t('dashboard:activity.liveOperations')}</h2>
         </div>
         <button
           onClick={handleViewLogs}
           className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white"
         >
-          View system logs
+          {t('dashboard:activity.viewSystemLogs')}
         </button>
       </div>
 
@@ -88,14 +90,14 @@ export const ActivityFeed: React.FC<ActivityFeedProps> = ({ limit = 5 }) => {
           // Error state
           <div className="flex items-center gap-3 rounded-2xl border border-rose-500/30 bg-rose-500/10 px-4 py-4 text-rose-200">
             <AlertCircle className="h-5 w-5 shrink-0" />
-            <span className="text-sm">Failed to load activity: {error}</span>
+            <span className="text-sm">{t('dashboard:activity.failedToLoad', { error })}</span>
           </div>
         ) : activities.length === 0 ? (
           // Empty state
           <div className="flex flex-col items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 px-4 py-8 text-center">
             <FileText className="h-8 w-8 text-slate-600 mb-2" />
-            <p className="text-sm text-slate-400">No recent activity</p>
-            <p className="text-xs text-slate-500 mt-1">File operations will appear here</p>
+            <p className="text-sm text-slate-400">{t('dashboard:activity.noRecentActivity')}</p>
+            <p className="text-xs text-slate-500 mt-1">{t('dashboard:activity.operationsAppearHere')}</p>
           </div>
         ) : (
           // Activity list

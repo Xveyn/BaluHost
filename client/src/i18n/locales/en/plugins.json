@@ -1,0 +1,58 @@
+{
+  "title": "Plugins",
+  "description": "Manage installed plugins and extensions",
+  "tabs": {
+    "installed": "Installed",
+    "documentation": "Documentation"
+  },
+  "buttons": {
+    "refresh": "Refresh",
+    "enable": "Enable",
+    "disable": "Disable",
+    "configure": "Configure",
+    "uninstall": "Uninstall",
+    "enablePlugin": "Enable Plugin",
+    "cancel": "Cancel"
+  },
+  "status": {
+    "active": "Active",
+    "enabled": "Enabled",
+    "disabled": "Disabled"
+  },
+  "details": {
+    "version": "Version",
+    "author": "Author",
+    "category": "Category",
+    "homepage": "Homepage",
+    "link": "Link",
+    "status": "Status",
+    "installed": "Installed"
+  },
+  "permissions": {
+    "title": "Required Permissions",
+    "noPermissions": "No special permissions required",
+    "dangerous": "Dangerous",
+    "requiresReview": "Requires Review"
+  },
+  "empty": {
+    "noPlugins": "No plugins installed",
+    "noPluginsDesc": "Place plugin directories in the backend/app/plugins/installed/ folder",
+    "selectPlugin": "Select a plugin to view details"
+  },
+  "modal": {
+    "enableTitle": "Enable {{name}}",
+    "enableDesc": "This plugin requires the following permissions:",
+    "allPermissionsRequired": "All permissions must be granted"
+  },
+  "errors": {
+    "loadDetailsFailed": "Failed to load plugin details",
+    "enableFailed": "Failed to enable plugin",
+    "disableFailed": "Failed to disable plugin",
+    "uninstallFailed": "Failed to uninstall plugin"
+  },
+  "confirm": {
+    "uninstall": "Uninstall plugin \"{{name}}\"? This will remove its configuration.",
+    "disableFirst": "Disable the plugin before uninstalling"
+  },
+  "ui": "UI"
+}

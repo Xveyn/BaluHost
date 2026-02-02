@@ -1,0 +1,20 @@
+{
+  "title": "BalùHost",
+  "subtitle": "Secure Personal Cloud Gateway",
+  "connectionModes": {
+    "local": "Direct Local Access",
+    "network": "Network Mode",
+    "fallback": "Fallback Mode"
+  },
+  "form": {
+    "username": "Username",
+    "password": "Password",
+    "passwordHint": "Keep your vault secure",
+    "submit": "Access System",
+    "loading": "Authorising..."
+  },
+  "defaultCredentials": "Default credentials",
+  "systemStatus": "System Status",
+  "optimal": "Optimal",
+  "firmware": "Firmware"
+}

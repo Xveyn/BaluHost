@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Play, Settings, Power, Clock, AlertCircle, CheckCircle, Loader2 } from 'lucide-react';
 import type { SchedulerStatus } from '../../api/schedulers';
 import {
@@ -22,6 +23,7 @@ export function SchedulerCard({
   onToggle,
   disabled = false,
 }: SchedulerCardProps) {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [isRunning, setIsRunning] = useState(false);
   const [isToggling, setIsToggling] = useState(false);
 
@@ -76,15 +78,15 @@ export function SchedulerCard({
           {scheduler.is_running && scheduler.is_enabled ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-green-900/50 px-2 py-0.5 text-xs text-green-300">
               <span className="h-1.5 w-1.5 rounded-full bg-green-400 animate-pulse" />
-              Active
+              {t('scheduler:card.active')}
             </span>
           ) : !scheduler.is_enabled ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-yellow-900/50 px-2 py-0.5 text-xs text-yellow-300">
-              Disabled
+              {t('scheduler:card.disabled')}
             </span>
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-slate-800 px-2 py-0.5 text-xs text-slate-400">
-              Stopped
+              {t('scheduler:card.stopped')}
             </span>
           )}
         </div>
@@ -95,12 +97,12 @@ export function SchedulerCard({
         <div>
           <div className="text-xs text-slate-500 flex items-center gap-1">
             <Clock className="h-3 w-3" />
-            Interval
+            {t('scheduler:card.interval')}
           </div>
           <div className="text-slate-200 mt-0.5">{scheduler.interval_display}</div>
         </div>
         <div>
-          <div className="text-xs text-slate-500">Next Run</div>
+          <div className="text-xs text-slate-500">{t('scheduler:card.nextRun')}</div>
           <div className="text-slate-200 mt-0.5">
             {scheduler.is_enabled && scheduler.next_run_at
               ? formatRelativeTime(scheduler.next_run_at)
@@ -113,14 +115,14 @@ export function SchedulerCard({
       <div className="mt-3 pt-3 border-t border-slate-800">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
-            <span className="text-xs text-slate-500">Last:</span>
+            <span className="text-xs text-slate-500">{t('scheduler:card.last')}:</span>
             {scheduler.last_status ? (
               <span className={`inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-xs ${getStatusBadgeClasses(scheduler.last_status)}`}>
                 {getStatusIcon()}
                 {scheduler.last_status}
               </span>
             ) : (
-              <span className="text-xs text-slate-500">Never run</span>
+              <span className="text-xs text-slate-500">{t('scheduler:card.neverRun')}</span>
             )}
           </div>
           {scheduler.last_run_at && (
@@ -149,14 +151,14 @@ export function SchedulerCard({
             ) : (
               <Play className="h-4 w-4" />
             )}
-            Run Now
+            {t('scheduler:buttons.runNow')}
           </button>
         )}
         <button
           onClick={() => onConfigure(scheduler)}
           disabled={disabled}
           className="inline-flex items-center justify-center rounded-md bg-slate-700 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-slate-600 disabled:opacity-50"
-          title="Configure"
+          title={t('scheduler:buttons.configure')}
         >
           <Settings className="h-4 w-4" />
         </button>
@@ -168,7 +170,7 @@ export function SchedulerCard({
               ? 'bg-slate-700 text-white hover:bg-slate-600'
               : 'bg-emerald-600 text-white hover:bg-emerald-700'
           }`}
-          title={scheduler.is_enabled ? 'Disable' : 'Enable'}
+          title={scheduler.is_enabled ? t('scheduler:buttons.disable') : t('scheduler:buttons.enable')}
         >
           {isToggling ? (
             <Loader2 className="h-4 w-4 animate-spin" />

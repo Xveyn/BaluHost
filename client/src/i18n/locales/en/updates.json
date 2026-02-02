@@ -1,0 +1,90 @@
+{
+  "title": "System Updates",
+  "description": "Manage BaluHost updates and version control",
+  "tabs": {
+    "overview": "Overview",
+    "history": "History",
+    "settings": "Settings"
+  },
+  "buttons": {
+    "checkForUpdates": "Check for Updates",
+    "update": "Update",
+    "updateTo": "Update to v{{version}}",
+    "confirmUpdate": "Confirm update?",
+    "yesUpdate": "Yes, Update",
+    "rollback": "Rollback",
+    "previous": "Previous",
+    "next": "Next"
+  },
+  "version": {
+    "current": "Current Version",
+    "available": "Update Available",
+    "upToDate": "Up to Date",
+    "upToDateDesc": "You're running the latest version.",
+    "lastChecked": "Last checked:",
+    "channel": "{{channel}} Channel"
+  },
+  "blockers": {
+    "title": "Update Blocked",
+    "updateBlocked": "Update blocked: {{blockers}}"
+  },
+  "changelog": {
+    "title": "Changelog",
+    "prerelease": "Pre-release",
+    "breakingChanges": "Breaking Changes:"
+  },
+  "history": {
+    "title": "Update History",
+    "noHistory": "No update history",
+    "version": "Version",
+    "status": "Status",
+    "date": "Date",
+    "duration": "Duration",
+    "actions": "Actions",
+    "page": "Page {{current}} of {{total}}"
+  },
+  "status": {
+    "pending": "Pending",
+    "downloading": "Downloading",
+    "installing": "Installing",
+    "completed": "Completed",
+    "failed": "Failed",
+    "rolledBack": "Rolled Back"
+  },
+  "settings": {
+    "autoCheck": "Automatic Update Checks",
+    "autoCheckDesc": "Periodically check for new versions",
+    "checkInterval": "Check Interval",
+    "checkIntervalDesc": "Hours between automatic checks",
+    "every6Hours": "Every 6 hours",
+    "every12Hours": "Every 12 hours",
+    "every24Hours": "Every 24 hours",
+    "every2Days": "Every 2 days",
+    "everyWeek": "Every week",
+    "channel": "Update Channel",
+    "stable": "Stable",
+    "stableDesc": "Recommended for production",
+    "beta": "Beta",
+    "betaDesc": "Early access to new features",
+    "autoBackup": "Backup Before Update",
+    "autoBackupDesc": "Create database backup before installing updates",
+    "requireHealthy": "Require Healthy Services",
+    "requireHealthyDesc": "Only allow updates when all services are healthy"
+  },
+  "rollback": {
+    "title": "Confirm Rollback",
+    "description": "Are you sure you want to rollback? This will restore the previous version and may require a service restart."
+  },
+  "toast": {
+    "updateStarted": "Update started",
+    "updateCompleted": "Updated to {{version}}",
+    "rollbackSuccess": "Rolled back to {{version}}",
+    "settingsSaved": "Settings saved",
+    "checkFailed": "Failed to check for updates",
+    "updateFailed": "Failed to start update",
+    "rollbackFailed": "Rollback failed",
+    "settingsFailed": "Failed to save settings",
+    "historyFailed": "Failed to fetch history",
+    "configFailed": "Failed to fetch config"
+  }
+}

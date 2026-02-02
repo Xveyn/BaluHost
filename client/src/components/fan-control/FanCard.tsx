@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { FanMode } from '../../api/fan-control';
 import type { FanInfo } from '../../api/fan-control';
 
@@ -21,6 +22,7 @@ export default function FanCard({
   isReadOnly,
   isLoading
 }: FanCardProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [localPWM, setLocalPWM] = useState(fan.pwm_percent);
   const debouncedPWMUpdate = useRef<ReturnType<typeof setTimeout> | null>(null);
 
@@ -89,13 +91,13 @@ export default function FanCard({
       {/* RPM & PWM */}
       <div className="grid grid-cols-2 gap-3 mb-3">
         <div>
-          <p className="text-xs text-slate-400">RPM</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.card.rpm')}</p>
           <p className="text-lg font-bold text-white">
             {fan.rpm !== null ? fan.rpm.toLocaleString() : '—'}
           </p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">PWM</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.card.pwm')}</p>
           <p className="text-lg font-bold text-white">
             {fan.pwm_percent}%
           </p>
@@ -105,7 +107,7 @@ export default function FanCard({
       {/* Temperature */}
       {fan.temperature_celsius !== null && (
         <div className="mb-3">
-          <p className="text-xs text-slate-400">Temperature</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.card.temperature')}</p>
           <p className="text-lg font-bold text-white">
             {fan.temperature_celsius.toFixed(1)}°C
           </p>
@@ -129,7 +131,7 @@ export default function FanCard({
           {isLoading && fan.mode !== FanMode.AUTO ? (
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
           ) : (
-            'Auto'
+            t('system:fanControl.card.auto')
           )}
         </button>
         <button
@@ -147,7 +149,7 @@ export default function FanCard({
           {isLoading && fan.mode !== FanMode.MANUAL ? (
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
           ) : (
-            'Manual'
+            t('system:fanControl.card.manual')
           )}
         </button>
       </div>
@@ -156,7 +158,7 @@ export default function FanCard({
       {fan.mode === FanMode.MANUAL && (
         <div onClick={(e) => e.stopPropagation()}>
           <label className="text-xs text-slate-400 block mb-1">
-            Manual PWM: {localPWM}%
+            {t('system:fanControl.card.manualPwm')}: {localPWM}%
           </label>
           <input
             type="range"

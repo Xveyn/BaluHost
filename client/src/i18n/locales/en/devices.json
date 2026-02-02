@@ -1,0 +1,136 @@
+{
+  "title": "Device Management",
+  "description": "Manage connected mobile and desktop devices",
+  "tabs": {
+    "devices": "Devices",
+    "register": "Register Mobile App",
+    "registerShort": "Register",
+    "schedules": "Sync Schedules",
+    "schedulesShort": "Schedules",
+    "smart": "Smart Devices",
+    "smartShort": "Smart"
+  },
+  "stats": {
+    "totalDevices": "Total Devices",
+    "mobile": "Mobile",
+    "desktop": "Desktop",
+    "active": "Active"
+  },
+  "sections": {
+    "mobileDevices": "Mobile Devices",
+    "smartphonesTablets": "Smartphones & Tablets ({{count}})",
+    "desktopDevices": "Desktop Devices",
+    "baluDeskClients": "BaluDesk Sync Clients ({{count}})"
+  },
+  "empty": {
+    "noMobileDevices": "No mobile devices registered",
+    "noDesktopClients": "No desktop sync clients registered"
+  },
+  "fields": {
+    "lastSeen": "Last Seen",
+    "lastSync": "Last Sync",
+    "registered": "Registered",
+    "expires": "Expires",
+    "status": "Status",
+    "deviceName": "Device Name",
+    "type": "Type",
+    "platform": "Platform"
+  },
+  "register": {
+    "title": "Register New Mobile Device",
+    "deviceName": "Device Name",
+    "deviceNamePlaceholder": "e.g. iPhone 15, Samsung Galaxy S24",
+    "validity": "Authorization Validity",
+    "validityMin": "30 days (Minimum)",
+    "validityMax": "180 days (Maximum)",
+    "validityDisplay": "{{days}} days ({{months}} months)",
+    "includeVpn": "Include VPN configuration (WireGuard)",
+    "generateQr": "Generate QR Code",
+    "generating": "Generating...",
+    "notifications": "Automatic Notifications",
+    "notificationsDesc": "You will be reminded 7 days, 3 days, and 1 hour before expiration via push notification."
+  },
+  "qrDialog": {
+    "title": "QR Code for Mobile App",
+    "scanInfo": "Scan this QR code with the BaluHost Mobile App",
+    "tokenValidity": "Registration token is valid for 5 minutes",
+    "deviceValidity": "Device authorization is valid for {{days}} days ({{months}} months)",
+    "vpnIncluded": "VPN configuration included",
+    "reminders": "Automatic Reminders",
+    "remindersDesc": "You will be notified 7 days, 3 days, and 1 hour before expiration via push notification.",
+    "expiresAt": "Token expires at:"
+  },
+  "schedules": {
+    "title": "Sync Schedules",
+    "automatedSync": "Automated Sync ({{count}})",
+    "createNew": "Create New Schedule",
+    "device": "Device",
+    "selectDevice": "Select device...",
+    "frequency": "Frequency",
+    "daily": "Daily",
+    "weekly": "Weekly",
+    "monthly": "Monthly",
+    "time": "Time",
+    "dayOfWeek": "Day of Week",
+    "selectDay": "Select day...",
+    "dayOfMonth": "Day of Month",
+    "nextRun": "Next run:",
+    "noSchedules": "No sync schedules configured",
+    "loadingSchedules": "Loading schedules..."
+  },
+  "days": {
+    "sunday": "Sunday",
+    "monday": "Monday",
+    "tuesday": "Tuesday",
+    "wednesday": "Wednesday",
+    "thursday": "Thursday",
+    "friday": "Friday",
+    "saturday": "Saturday",
+    "sun": "Sun",
+    "mon": "Mon",
+    "tue": "Tue",
+    "wed": "Wed",
+    "thu": "Thu",
+    "fri": "Fri",
+    "sat": "Sat"
+  },
+  "modal": {
+    "editTitle": "Edit Device Name",
+    "deleteTitle": "Delete Device",
+    "deleteConfirm": "Are you sure you want to delete {{name}}? This device will need to re-register to access BaluHost."
+  },
+  "buttons": {
+    "refresh": "Refresh",
+    "save": "Save",
+    "cancel": "Cancel",
+    "delete": "Delete",
+    "create": "Create",
+    "disable": "Disable"
+  },
+  "platforms": {
+    "ios": "iOS",
+    "android": "Android",
+    "windows": "Windows",
+    "mac": "macOS",
+    "linux": "Linux",
+    "unknown": "Desktop"
+  },
+  "toast": {
+    "deviceUpdated": "Device name updated successfully",
+    "deviceDeleted": "Device deleted successfully",
+    "scheduleCreated": "Schedule created successfully",
+    "scheduleDisabled": "Schedule disabled successfully",
+    "qrGenerated": "QR code generated successfully",
+    "loadFailed": "Failed to load devices",
+    "updateFailed": "Failed to update device name",
+    "deleteFailed": "Failed to delete device",
+    "scheduleFailed": "Failed to create schedule",
+    "disableFailed": "Failed to disable schedule",
+    "enterDeviceName": "Please enter a device name",
+    "selectDevice": "Please select a device",
+    "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",
+    "deviceNameEmpty": "Device name cannot be empty"
+  },
+  "loading": "Loading devices...",
+  "error": "Error"
+}

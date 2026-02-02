@@ -1,10 +1,12 @@
 import { useState, useEffect } from 'react';
 import { Download, Trash2, RotateCcw, AlertTriangle, Database, FolderOpen, Settings, CheckCircle, XCircle, Clock, HardDrive } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 	import { listBackups, createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
 	import type { Backup, BackupListResponse, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
 import { apiCache } from '../lib/api';
 
 export default function BackupSettings() {
+	const { t } = useTranslation('settings');
 	// Removed backupType, only checkboxes used
 	const [includesDatabase, setIncludesDatabase] = useState(true);
 	const [includesFiles, setIncludesFiles] = useState(true);
@@ -37,7 +39,7 @@ export default function BackupSettings() {
 			const totalBytes = response.backups.reduce((acc, b) => acc + b.size_bytes, 0);
 			setTotalSize({ bytes: totalBytes, mb: totalBytes / 1024 / 1024 });
 		} catch (err: any) {
-			setError(err.response?.data?.detail || 'Failed to load backups');
+			setError(err.response?.data?.detail || t('backup.loadFailed'));
 			setBackups([]);
 		} finally {
 			setLoading(false);
@@ -56,12 +58,12 @@ export default function BackupSettings() {
 				backup_path: backupPath
 			};
 			await createBackup(request);
-			setSuccess('Backup created successfully');
+			setSuccess(t('backup.createSuccess'));
 			// Clear API cache to force fresh backup list
 			apiCache.clear();
 			await loadBackups();
 		} catch (err: any) {
-			setError(err.response?.data?.detail || 'Failed to create backup');
+			setError(err.response?.data?.detail || t('backup.createFailed'));
 		} finally {
 			setCreating(false);
 		}
@@ -73,14 +75,14 @@ export default function BackupSettings() {
 		setError(null);
 		try {
 			await deleteBackup(backupToDelete.id);
-			setSuccess('Backup deleted successfully');
+			setSuccess(t('backup.deleteSuccess'));
 			// Clear API cache to force fresh backup list
 			apiCache.clear();
 			await loadBackups();
 			setDeleteDialogOpen(false);
 			setBackupToDelete(null);
 		} catch (err: any) {
-			setError(err.response?.data?.detail || 'Failed to delete backup');
+			setError(err.response?.data?.detail || t('backup.deleteFailed'));
 		} finally {
 			setDeleting(false);
 		}
@@ -104,12 +106,12 @@ export default function BackupSettings() {
 			setSelectedBackup(null);
 			setRestoreConfirm('');
 			setTimeout(() => {
-				if (window.confirm('Backup restored. Reload the page now?')) {
+				if (window.confirm(t('backup.restoreReloadPrompt'))) {
 					window.location.reload();
 				}
 			}, 2000);
 		} catch (err: any) {
-			setError(err.response?.data?.detail || 'Failed to restore backup');
+			setError(err.response?.data?.detail || t('backup.restoreFailed'));
 		} finally {
 			setRestoring(false);
 		}
@@ -161,9 +163,9 @@ export default function BackupSettings() {
 			<div className="rounded-lg shadow bg-slate-900/55 p-6 w-full">
 				<div className="flex items-start justify-between">
 					  <div className="w-full">
-						<h2 className="text-2xl font-bold mb-2">Backup & Restore</h2>
+						<h2 className="text-2xl font-bold mb-2">{t('backup.title')}</h2>
 						<p className="text-slate-400">
-							Create and manage system backups. Backups include database and files.
+							{t('backup.description')}
 						</p>
 						<div className="mt-4 flex flex-col gap-3">
 							<div className="flex flex-col gap-4 mt-2">
@@ -183,20 +185,20 @@ export default function BackupSettings() {
 									</label>
 								</div>
 								<div className="flex items-center gap-2 mt-4">
-									<label htmlFor="backupPath" className="text-sm text-slate-400 min-w-[120px]">Backup Location:</label>
-									<input id="backupPath" type="text" value={backupPath} onChange={e => setBackupPath(e.target.value)} placeholder="e.g. /mnt/backup or leave empty" className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 w-full" disabled={creating} />
+									<label htmlFor="backupPath" className="text-sm text-slate-400 min-w-[120px]">{t('backup.backupLocation')}:</label>
+									<input id="backupPath" type="text" value={backupPath} onChange={e => setBackupPath(e.target.value)} placeholder={t('backup.backupLocationPlaceholder')} className="px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500 w-full" disabled={creating} />
 								</div>
 							</div>
 							{backups && backups.length > 0 && (
 								<div className="flex items-center gap-4 text-sm mt-2">
 									<div className="flex items-center gap-2">
 										<HardDrive className="w-4 h-4 text-slate-400" />
-										<span className="text-slate-400">Total Size:</span>
+										<span className="text-slate-400">{t('backup.totalSize')}:</span>
 										<span className="font-medium text-slate-200">{totalSize.mb.toFixed(2)} MB</span>
 									</div>
 									<div className="flex items-center gap-2">
 										<Database className="w-4 h-4 text-slate-400" />
-										<span className="text-slate-400">Backups:</span>
+										<span className="text-slate-400">{t('backup.backupsCount')}:</span>
 										<span className="font-medium text-slate-200">{backups.length}</span>
 									</div>
 								</div>
@@ -205,7 +207,7 @@ export default function BackupSettings() {
 					</div>
 					<button onClick={handleCreateBackup} disabled={creating} className="px-4 py-2 bg-sky-500 hover:bg-sky-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg flex items-center gap-2 transition-colors">
 						<Database className="w-4 h-4" />
-						{creating ? 'Creating...' : 'Create Backup'}
+						{creating ? t('backup.creating') : t('backup.createBackup')}
 					</button>
 				</div>
 			</div>
@@ -227,15 +229,15 @@ export default function BackupSettings() {
 			)}
 			<div className="rounded-lg shadow bg-slate-900/55 overflow-hidden w-full">
 				<div className="p-6 border-b border-slate-800">
-					<h3 className="text-lg font-semibold">Available Backups</h3>
+					<h3 className="text-lg font-semibold">{t('backup.availableBackups')}</h3>
 				</div>
 				{loading ? (
-					<div className="p-8 text-center text-slate-400">Loading backups...</div>
+					<div className="p-8 text-center text-slate-400">{t('backup.loadingBackups')}</div>
 				) : !backups || backups.length === 0 ? (
 					<div className="p-8 text-center text-slate-400">
 						<Database className="w-12 h-12 mx-auto mb-3 opacity-50" />
-						<p>No backups available</p>
-						<p className="text-sm mt-1">Create your first backup to get started</p>
+						<p>{t('backup.noBackups')}</p>
+						<p className="text-sm mt-1">{t('backup.createFirstBackup')}</p>
 					</div>
 				) : (
 					<div className="overflow-x-auto">
@@ -310,13 +312,13 @@ export default function BackupSettings() {
 								<AlertTriangle className="w-6 h-6 text-red-400" />
 							</div>
 							<div className="flex-1">
-								<h3 className="text-lg font-semibold text-slate-100 mb-2">Delete Backup</h3>
-								<p className="text-sm text-slate-400">Are you sure you want to delete <span className="font-medium text-slate-200">{backupToDelete.filename}</span>? This action cannot be undone.</p>
+								<h3 className="text-lg font-semibold text-slate-100 mb-2">{t('backup.deleteBackup')}</h3>
+								<p className="text-sm text-slate-400">{t('backup.deleteConfirm')} <span className="font-medium text-slate-200">{backupToDelete.filename}</span>? {t('backup.cannotBeUndone')}</p>
 							</div>
 						</div>
 						<div className="flex justify-end gap-3">
-							<button onClick={() => { setDeleteDialogOpen(false); setBackupToDelete(null); }} disabled={deleting} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
-							<button onClick={handleDeleteBackup} disabled={deleting} className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{deleting ? 'Deleting...' : 'Delete'}</button>
+							<button onClick={() => { setDeleteDialogOpen(false); setBackupToDelete(null); }} disabled={deleting} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">{t('backup.cancel')}</button>
+							<button onClick={handleDeleteBackup} disabled={deleting} className="px-4 py-2 bg-red-500 hover:bg-red-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{deleting ? t('backup.deleting') : t('backup.delete')}</button>
 						</div>
 					</div>
 				</div>
@@ -329,19 +331,19 @@ export default function BackupSettings() {
 								<AlertTriangle className="w-6 h-6 text-yellow-400" />
 							</div>
 							<div className="flex-1">
-								<h3 className="text-lg font-semibold text-slate-100 mb-2">Restore Backup</h3>
-								<p className="text-sm text-slate-400 mb-4">⚠️ This will <strong className="text-red-400">overwrite all current data</strong> with the backup from:</p>
+								<h3 className="text-lg font-semibold text-slate-100 mb-2">{t('backup.restoreBackup')}</h3>
+								<p className="text-sm text-slate-400 mb-4">⚠️ {t('backup.restoreWarning')}</p>
 								<div className="p-3 bg-slate-800 rounded-lg mb-4">
 									<div className="text-sm text-slate-300 font-medium">{selectedBackup.filename}</div>
 									<div className="text-xs text-slate-400 mt-1">{formatDate(selectedBackup.created_at)}</div>
 								</div>
-								<p className="text-sm text-slate-400 mb-4">Type <span className="font-mono font-bold text-red-400">RESTORE</span> to confirm:</p>
-								<input type="text" value={restoreConfirm} onChange={(e) => setRestoreConfirm(e.target.value)} placeholder="Type RESTORE" className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500" disabled={restoring} />
+								<p className="text-sm text-slate-400 mb-4">{t('backup.typeRestore')}</p>
+								<input type="text" value={restoreConfirm} onChange={(e) => setRestoreConfirm(e.target.value)} placeholder={t('backup.typeRestorePlaceholder')} className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100 placeholder-slate-500 focus:outline-none focus:ring-2 focus:ring-sky-500" disabled={restoring} />
 							</div>
 						</div>
 						<div className="flex justify-end gap-3">
-							<button onClick={() => { setRestoreDialogOpen(false); setSelectedBackup(null); setRestoreConfirm(''); }} disabled={restoring} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">Cancel</button>
-							<button onClick={handleRestoreBackup} disabled={restoring || restoreConfirm !== 'RESTORE'} className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{restoring ? 'Restoring...' : 'Restore Backup'}</button>
+							<button onClick={() => { setRestoreDialogOpen(false); setSelectedBackup(null); setRestoreConfirm(''); }} disabled={restoring} className="px-4 py-2 text-slate-300 hover:text-slate-100 hover:bg-slate-800 rounded-lg transition-colors">{t('backup.cancel')}</button>
+							<button onClick={handleRestoreBackup} disabled={restoring || restoreConfirm !== 'RESTORE'} className="px-4 py-2 bg-yellow-500 hover:bg-yellow-600 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors">{restoring ? t('backup.restoring') : t('backup.restoreBackupBtn')}</button>
 						</div>
 					</div>
 				</div>

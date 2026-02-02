@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useNextMaintenance, formatNextRun, formatScheduleWindow } from '../../hooks/useNextMaintenance';
 import { getSchedulerIcon } from '../../api/schedulers';
 import { Clock, Calendar, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
@@ -15,6 +16,7 @@ interface NextMaintenanceWidgetProps {
 export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
   showAllSchedulers = false,
 }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { nextMaintenance, allSchedulers, loading, error } = useNextMaintenance();
 
@@ -39,7 +41,7 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
   if (loading) {
     return (
       <div className="card border-slate-800/50 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next Maintenance</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{t('dashboard:maintenance.title')}</p>
         <div className="mt-2 h-6 w-48 rounded bg-slate-800 animate-pulse" />
         <div className="mt-3 h-4 w-64 rounded bg-slate-800/50 animate-pulse" />
         <div className="mt-4 rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3">
@@ -52,8 +54,8 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
   if (error) {
     return (
       <div className="card border-slate-800/50 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next Maintenance</p>
-        <h3 className="mt-2 text-lg font-semibold text-slate-400">Unable to load</h3>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{t('dashboard:maintenance.title')}</p>
+        <h3 className="mt-2 text-lg font-semibold text-slate-400">{t('dashboard:maintenance.unableToLoad')}</h3>
         <p className="mt-3 text-sm text-rose-300">{error}</p>
       </div>
     );
@@ -62,19 +64,19 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
   if (!nextMaintenance) {
     return (
       <div className="card border-slate-800/50 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
-        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next Maintenance</p>
-        <h3 className="mt-2 text-lg font-semibold text-slate-400">No scheduled tasks</h3>
-        <p className="mt-3 text-sm text-slate-500">All schedulers are disabled or none configured.</p>
+        <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{t('dashboard:maintenance.title')}</p>
+        <h3 className="mt-2 text-lg font-semibold text-slate-400">{t('dashboard:maintenance.noScheduledTasks')}</h3>
+        <p className="mt-3 text-sm text-slate-500">{t('dashboard:maintenance.allDisabled')}</p>
         <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
           <div className="flex items-center gap-2">
             <Calendar className="h-4 w-4 text-slate-500" />
-            <span className="text-slate-400">Configure schedulers</span>
+            <span className="text-slate-400">{t('dashboard:maintenance.configureSchedulers')}</span>
           </div>
           <button
             onClick={handleViewPlan}
             className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white"
           >
-            Manage
+            {t('dashboard:maintenance.manage')}
           </button>
         </div>
       </div>
@@ -88,7 +90,7 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
     <div className="card border-slate-800/50 bg-gradient-to-br from-slate-900/70 via-slate-900/40 to-slate-950/80">
       <div className="flex items-start justify-between gap-2">
         <div>
-          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">Next Maintenance</p>
+          <p className="text-xs uppercase tracking-[0.3em] text-slate-500">{t('dashboard:maintenance.title')}</p>
           <h3 className="mt-2 text-lg font-semibold text-white flex items-center gap-2">
             <span>{icon}</span>
             {scheduler.display_name}
@@ -97,7 +99,7 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
         {isOverdue && (
           <div className="flex items-center gap-1 rounded-full bg-amber-500/20 px-2 py-0.5">
             <AlertTriangle className="h-3 w-3 text-amber-400" />
-            <span className="text-xs text-amber-300">Overdue</span>
+            <span className="text-xs text-amber-300">{t('dashboard:maintenance.overdue')}</span>
           </div>
         )}
       </div>
@@ -116,7 +118,7 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
 
       <div className="mt-4 flex items-center justify-between rounded-xl border border-slate-800 bg-slate-900/70 px-4 py-3 text-sm text-slate-300">
         <div>
-          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Window</p>
+          <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('dashboard:maintenance.window')}</p>
           <p className="mt-1 text-sm text-slate-200">{formatScheduleWindow(nextRunAt)}</p>
           <p className="text-xs text-slate-500 mt-0.5">{formatNextRun(nextRunAt)}</p>
         </div>
@@ -124,13 +126,13 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
           onClick={handleViewPlan}
           className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-400 transition hover:border-slate-500 hover:text-white"
         >
-          View plan
+          {t('dashboard:maintenance.viewPlan')}
         </button>
       </div>
 
       {showAllSchedulers && allSchedulers.length > 1 && (
         <div className="mt-3 pt-3 border-t border-slate-800/50">
-          <p className="text-xs text-slate-500 mb-2">{allSchedulers.length} schedulers total</p>
+          <p className="text-xs text-slate-500 mb-2">{t('dashboard:maintenance.schedulersTotal', { count: allSchedulers.length })}</p>
           <div className="flex flex-wrap gap-1.5">
             {allSchedulers.slice(0, 4).map((s) => (
               <span

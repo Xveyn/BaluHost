@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Trash2,
   Loader2,
@@ -21,6 +22,7 @@ export function VPNProfileList({
   onTestConnection,
   onDelete,
 }: VPNProfileListProps) {
+  const { t } = useTranslation('remoteServers');
   const [testingId, setTestingId] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
 
@@ -34,7 +36,7 @@ export function VPNProfileList({
   };
 
   const handleDelete = async (id: number, name: string) => {
-    if (window.confirm(`Delete VPN profile "${name}"? This cannot be undone.`)) {
+    if (window.confirm(t('vpn.deleteConfirm', { name }))) {
       try {
         setDeleteConfirm(id);
         await onDelete?.(id);
@@ -62,9 +64,9 @@ export function VPNProfileList({
           <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
             <ChevronRight className="w-6 h-6 text-gray-400" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">No VPN Profiles</h3>
+          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('vpn.noProfiles')}</h3>
           <p className="text-sm text-gray-600">
-            Add your first VPN profile to connect to remote networks securely.
+            {t('vpn.noProfilesDescription')}
           </p>
         </div>
       </div>
@@ -101,8 +103,8 @@ export function VPNProfileList({
 
           {/* Dates */}
           <div className="mb-3 text-xs text-gray-500 space-y-1">
-            <p>Created: {new Date(profile.created_at).toLocaleString()}</p>
-            <p>Updated: {new Date(profile.updated_at).toLocaleString()}</p>
+            <p>{t('vpn.created')}: {new Date(profile.created_at).toLocaleString()}</p>
+            <p>{t('vpn.updated')}: {new Date(profile.updated_at).toLocaleString()}</p>
           </div>
 
           {/* Actions */}
@@ -111,21 +113,21 @@ export function VPNProfileList({
               onClick={() => handleTest(profile.id)}
               disabled={isLoading || testingId === profile.id}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Validate VPN configuration"
+              title={t('vpn.validateConfig')}
             >
               {testingId === profile.id ? (
                 <Loader2 className="w-4 h-4 animate-spin" />
               ) : (
                 <RefreshCw className="w-4 h-4" />
               )}
-              Validate
+              {t('vpn.validate')}
             </button>
 
             <button
               onClick={() => handleDelete(profile.id, profile.name)}
               disabled={isLoading || deleteConfirm === profile.id}
               className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-              title="Delete profile"
+              title={t('vpn.deleteProfile')}
             >
               <Trash2 className="w-4 h-4" />
             </button>

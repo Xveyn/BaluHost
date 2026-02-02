@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { ChevronDown, ChevronRight, ChevronLeft, Filter, RefreshCw, Loader2, RotateCcw } from 'lucide-react';
 import type { SchedulerExecution, SchedulerHistoryResponse, SchedulerExecStatus } from '../../api/schedulers';
 import {
@@ -26,6 +27,7 @@ function ExecutionRow({
   execution: SchedulerExecution;
   onRetry?: (schedulerName: string) => Promise<void>;
 }) {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isRetrying, setIsRetrying] = useState(false);
   const result = parseResultSummary(execution.result_summary);
@@ -92,10 +94,10 @@ function ExecutionRow({
                 onClick={handleRetry}
                 disabled={isRetrying}
                 className="inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white transition-colors disabled:opacity-50"
-                title="Retry this scheduler"
+                title={t('scheduler:buttons.retry')}
               >
                 <RotateCcw className={`h-3 w-3 ${isRetrying ? 'animate-spin' : ''}`} />
-                Retry
+                {t('scheduler:buttons.retry')}
               </button>
             )}
           </div>
@@ -108,7 +110,7 @@ function ExecutionRow({
               {/* Result summary */}
               {result && (
                 <div>
-                  <span className="text-xs text-slate-500">Result:</span>
+                  <span className="text-xs text-slate-500">{t('scheduler:history.result')}:</span>
                   <pre className="mt-1 text-xs text-slate-300 bg-slate-900/50 rounded p-2 overflow-x-auto">
                     {JSON.stringify(result, null, 2)}
                   </pre>
@@ -117,7 +119,7 @@ function ExecutionRow({
               {/* Error message */}
               {execution.error_message && (
                 <div>
-                  <span className="text-xs text-slate-500">Error:</span>
+                  <span className="text-xs text-slate-500">{t('scheduler:history.error')}:</span>
                   <div className="mt-1 text-xs text-red-400 bg-red-900/20 rounded p-2">
                     {execution.error_message}
                   </div>
@@ -126,19 +128,19 @@ function ExecutionRow({
               {/* Job ID */}
               {execution.job_id && (
                 <div className="text-xs text-slate-500">
-                  Job ID: <span className="text-slate-400">{execution.job_id}</span>
+                  {t('scheduler:history.jobId')}: <span className="text-slate-400">{execution.job_id}</span>
                 </div>
               )}
               {/* User ID for manual runs */}
               {execution.user_id && (
                 <div className="text-xs text-slate-500">
-                  Triggered by User ID: <span className="text-slate-400">{execution.user_id}</span>
+                  {t('scheduler:history.triggeredBy')}: <span className="text-slate-400">{execution.user_id}</span>
                 </div>
               )}
               {/* Completed at */}
               {execution.completed_at && (
                 <div className="text-xs text-slate-500">
-                  Completed: <span className="text-slate-400">{new Date(execution.completed_at).toLocaleString()}</span>
+                  {t('scheduler:history.completed')}: <span className="text-slate-400">{new Date(execution.completed_at).toLocaleString()}</span>
                 </div>
               )}
             </div>
@@ -159,21 +161,22 @@ export function ExecutionHistoryTable({
   onRetry,
   statusFilter,
 }: ExecutionHistoryTableProps) {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [filterOpen, setFilterOpen] = useState(false);
 
   const statusOptions: Array<{ value: SchedulerExecStatus | undefined; label: string }> = [
-    { value: undefined, label: 'All' },
-    { value: StatusEnum.COMPLETED, label: 'Completed' },
-    { value: StatusEnum.FAILED, label: 'Failed' },
-    { value: StatusEnum.RUNNING, label: 'Running' },
-    { value: StatusEnum.CANCELLED, label: 'Cancelled' },
+    { value: undefined, label: t('scheduler:status.all') },
+    { value: StatusEnum.COMPLETED, label: t('scheduler:status.completed') },
+    { value: StatusEnum.FAILED, label: t('scheduler:status.failed') },
+    { value: StatusEnum.RUNNING, label: t('scheduler:status.running') },
+    { value: StatusEnum.CANCELLED, label: t('scheduler:status.cancelled') },
   ];
 
   return (
     <div className="rounded-lg border border-slate-800 bg-slate-900/60 overflow-hidden">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-slate-800">
-        <h3 className="font-medium text-white">Execution History</h3>
+        <h3 className="font-medium text-white">{t('scheduler:history.title')}</h3>
         <div className="flex items-center gap-2">
           {/* Status filter */}
           <div className="relative">
@@ -186,7 +189,7 @@ export function ExecutionHistoryTable({
               }`}
             >
               <Filter className="h-4 w-4" />
-              {statusFilter || 'Filter'}
+              {statusFilter || t('scheduler:history.filter')}
             </button>
             {filterOpen && (
               <>
@@ -222,7 +225,7 @@ export function ExecutionHistoryTable({
             className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('scheduler:buttons.refresh')}
           </button>
         </div>
       </div>
@@ -241,19 +244,19 @@ export function ExecutionHistoryTable({
             <tr className="border-b border-slate-800 bg-slate-800/30">
               <th className="w-10 px-4 py-2"></th>
               <th className="px-4 py-2 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Scheduler
+                {t('scheduler:history.columns.scheduler')}
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Started
+                {t('scheduler:history.columns.started')}
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Duration
+                {t('scheduler:history.columns.duration')}
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Status
+                {t('scheduler:history.columns.status')}
               </th>
               <th className="px-4 py-2 text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                Trigger
+                {t('scheduler:history.columns.trigger')}
               </th>
             </tr>
           </thead>
@@ -267,7 +270,7 @@ export function ExecutionHistoryTable({
             ) : history?.executions.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-slate-400">
-                  No executions found
+                  {t('scheduler:history.noExecutions')}
                 </td>
               </tr>
             ) : (
@@ -283,7 +286,7 @@ export function ExecutionHistoryTable({
       {history && history.total_pages > 1 && (
         <div className="flex items-center justify-between px-4 py-3 border-t border-slate-800">
           <div className="text-sm text-slate-400">
-            Page {history.page} of {history.total_pages} ({history.total} total)
+            {t('scheduler:history.pagination', { page: history.page, totalPages: history.total_pages, total: history.total })}
           </div>
           <div className="flex items-center gap-2">
             <button
@@ -292,14 +295,14 @@ export function ExecutionHistoryTable({
               className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <ChevronLeft className="h-4 w-4" />
-              Previous
+              {t('common:buttons.back')}
             </button>
             <button
               onClick={() => onPageChange(history.page + 1)}
               disabled={history.page >= history.total_pages}
               className="inline-flex items-center gap-1 rounded-md bg-slate-800 px-3 py-1.5 text-sm text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
             >
-              Next
+              {t('common:buttons.next')}
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>

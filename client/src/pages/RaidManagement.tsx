@@ -1,5 +1,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
   deleteArray,
   finalizeRaidRebuild,
@@ -62,6 +63,7 @@ const canSimulateFailure = (device: RaidDevice): boolean => ['active', 'spare', 
 const shouldShowFinalize = (array: RaidArray): boolean => ['rebuilding', 'degraded'].includes(array.status.toLowerCase());
 
 export default function RaidManagement() {
+  const { t } = useTranslation(['system', 'common']);
   const [arrays, setArrays] = useState<RaidArray[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -85,10 +87,10 @@ export default function RaidManagement() {
       setError(null);
       setLastUpdated(new Date());
       if (notifySuccess) {
-        toast.success('RAID status updated');
+        toast.success(t('system:raid.messages.statusUpdated'));
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load RAID status.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.loadError');
       setError(message);
       toast.error(message);
     } finally {
@@ -101,7 +103,7 @@ export default function RaidManagement() {
       const response = await getAvailableDisks();
       setAvailableDisks(response.disks ?? []);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to load disks.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.loadDisksError');
       toast.error(message);
     }
   };
@@ -132,7 +134,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Simulation failed.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.simulationFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -146,7 +148,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start rebuild.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.rebuildFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -160,7 +162,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Finalize failed.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.finalizeFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -177,7 +179,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update bitmap.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.bitmapUpdateFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -194,7 +196,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to start scrub.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.scrubFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -212,7 +214,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to update write-mostly.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.writeMostlyFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -229,7 +231,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to remove device.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.removeDeviceFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -243,7 +245,7 @@ export default function RaidManagement() {
     event.currentTarget.reset();
     const rawDevice = typeof device === 'string' ? device.trim() : '';
     if (!rawDevice) {
-      toast.error('Please specify device name.');
+      toast.error(t('system:raid.messages.specifyDeviceName'));
       return;
     }
 
@@ -253,7 +255,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to add spare device.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.addSpareFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -275,7 +277,7 @@ export default function RaidManagement() {
     }
 
     if (payload.set_speed_limit_min === undefined && payload.set_speed_limit_max === undefined) {
-      toast.error('Please set at least one speed value.');
+      toast.error(t('system:raid.messages.setSpeedValue'));
       return;
     }
 
@@ -285,7 +287,7 @@ export default function RaidManagement() {
       toast.success(response.message);
       await loadStatus();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to set speed limit.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.speedLimitFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -316,7 +318,7 @@ export default function RaidManagement() {
       setSelectedDisk(null);
       await loadAvailableDisks();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Format failed.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.formatFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -324,7 +326,7 @@ export default function RaidManagement() {
   };
 
   const handleDeleteArray = async (arrayName: string) => {
-    if (!window.confirm(`Really delete array "${arrayName}"? This action cannot be undone.`)) {
+    if (!window.confirm(t('system:raid.messages.deleteConfirm', { name: arrayName }))) {
       return;
     }
 
@@ -335,7 +337,7 @@ export default function RaidManagement() {
       await loadStatus();
       await loadAvailableDisks();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Array deletion failed.';
+      const message = err instanceof Error ? err.message : t('system:raid.messages.deleteFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -346,15 +348,15 @@ export default function RaidManagement() {
     <div className="space-y-4 sm:space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">RAID Control</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('system:raid.title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            Monitor array integrity, simulate failures, and control rebuilds.
+            {t('system:raid.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-3">
           {lastUpdated && (
             <span className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
-              Updated {lastUpdated.toLocaleTimeString()}
+              {t('system:raid.labels.updated')} {lastUpdated.toLocaleTimeString()}
             </span>
           )}
           <button
@@ -366,7 +368,7 @@ export default function RaidManagement() {
                 : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
             }`}
           >
-            Refresh
+            {t('system:raid.actions.refresh')}
           </button>
         </div>
       </div>
@@ -379,11 +381,11 @@ export default function RaidManagement() {
 
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-          <p className="text-sm text-slate-500">Loading RAID status...</p>
+          <p className="text-sm text-slate-500">{t('system:raid.labels.loading')}</p>
         </div>
       ) : arrays.length === 0 ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center text-sm text-slate-400">
-          No RAID arrays detected. Ensure the system uses mdadm and arrays are active.
+          {t('system:raid.labels.noArrays')}
         </div>
       ) : (
         <div className="space-y-6">
@@ -391,13 +393,13 @@ export default function RaidManagement() {
             <div className="card border-slate-800/60 bg-slate-900/55 px-4 sm:px-6 py-4 sm:py-5">
               <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
                 <div className="flex-1 min-w-0">
-                  <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-500">Sync Limits</p>
+                  <p className="text-[10px] sm:text-xs uppercase tracking-[0.3em] text-slate-500">{t('system:raid.labels.syncLimits')}</p>
                   <p className="mt-2 text-xs sm:text-sm text-slate-300">
-                    Min: {speedLimits.minimum ?? 'System Default'} kB/s · Max: {speedLimits.maximum ?? 'System Default'} kB/s
+                    Min: {speedLimits.minimum ?? t('system:raid.labels.systemDefault')} kB/s · Max: {speedLimits.maximum ?? t('system:raid.labels.systemDefault')} kB/s
                   </p>
                 </div>
                 <p className="text-[10px] sm:text-xs text-slate-500">
-                  Applies globally to all arrays
+                  {t('system:raid.labels.appliesGlobally')}
                 </p>
               </div>
             </div>
@@ -425,26 +427,26 @@ export default function RaidManagement() {
                         {array.level.toUpperCase()}
                       </span>
                       <span className="hidden sm:inline rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
-                        Bitmap: {array.bitmap ? array.bitmap : 'aus'}
+                        {t('system:raid.labels.bitmap')}: {array.bitmap ? array.bitmap : t('system:raid.labels.bitmapOff')}
                       </span>
                       {array.sync_action && (
                         <span className="hidden sm:inline rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
-                          Sync: {array.sync_action}
+                          {t('system:raid.labels.sync')}: {array.sync_action}
                         </span>
                       )}
                     </div>
                     <p className="text-xs sm:text-sm text-slate-400">
-                      {formatBytes(array.size_bytes)} · {array.devices.length} Drives
+                      {formatBytes(array.size_bytes)} · {array.devices.length} {t('system:raid.labels.drives')}
                     </p>
                     <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500">
-                      <span>Write-mostly: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
-                      <span>Spares: {array.devices.filter((device) => device.state === 'spare').length}</span>
+                      <span>{t('system:raid.labels.writeMostly')}: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
+                      <span>{t('system:raid.labels.spares')}: {array.devices.filter((device) => device.state === 'spare').length}</span>
                     </div>
                   </div>
                   <div className="w-full sm:w-auto space-y-2">
                     {array.resync_progress !== null && array.resync_progress !== undefined && (
                       <div className="flex flex-row sm:flex-col items-center sm:items-end text-xs sm:text-sm text-slate-300">
-                        <span className="mr-2 sm:mr-0">Sync:</span>
+                        <span className="mr-2 sm:mr-0">{t('system:raid.labels.sync')}:</span>
                         <span className="text-slate-200 font-medium">{array.resync_progress.toFixed(1)}%</span>
                       </div>
                     )}
@@ -458,7 +460,7 @@ export default function RaidManagement() {
                             : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
                         }`}
                       >
-                        {array.bitmap ? 'Disable Bitmap' : 'Enable Bitmap'}
+                        {array.bitmap ? t('system:raid.actions.disableBitmap') : t('system:raid.actions.enableBitmap')}
                       </button>
                       <button
                         onClick={() => handleTriggerScrub(array)}
@@ -469,8 +471,8 @@ export default function RaidManagement() {
                             : 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100 hover:border-indigo-500/60'
                         }`}
                       >
-                        <span className="hidden sm:inline">Start Integrity Check</span>
-                        <span className="sm:hidden">Check</span>
+                        <span className="hidden sm:inline">{t('system:raid.actions.integrityCheck')}</span>
+                        <span className="sm:hidden">{t('system:raid.actions.check')}</span>
                       </button>
                       <button
                         onClick={() => handleSimulateFailure(array)}
@@ -481,7 +483,7 @@ export default function RaidManagement() {
                             : 'border-amber-500/40 bg-amber-500/15 text-amber-100 hover:border-amber-500/60'
                         }`}
                       >
-                        <span className="hidden sm:inline">Degrade Array</span>
+                        <span className="hidden sm:inline">{t('system:raid.actions.degradeArray')}</span>
                         <span className="sm:hidden">Degrade</span>
                       </button>
                       {showFinalize && (
@@ -494,7 +496,7 @@ export default function RaidManagement() {
                               : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                           }`}
                         >
-                          <span className="hidden sm:inline">Complete Rebuild</span>
+                          <span className="hidden sm:inline">{t('system:raid.actions.completeRebuild')}</span>
                           <span className="sm:hidden">Rebuild</span>
                         </button>
                       )}
@@ -507,7 +509,7 @@ export default function RaidManagement() {
                             : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
                         }`}
                       >
-                        <span className="hidden sm:inline">Delete Array</span>
+                        <span className="hidden sm:inline">{t('system:raid.deleteArray')}</span>
                         <span className="sm:hidden">Delete</span>
                       </button>
                     </div>
@@ -523,7 +525,7 @@ export default function RaidManagement() {
                       />
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      Current rebuild progress.
+                      {t('system:raid.labels.rebuildProgress')}
                     </p>
                   </div>
                 )}
@@ -533,9 +535,9 @@ export default function RaidManagement() {
                     <table className="min-w-full divide-y divide-slate-800/60">
                       <thead>
                         <tr className="text-left text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">Device</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">Status</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">Actions</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.device')}</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.status')}</th>
+                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.actions')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
@@ -565,7 +567,7 @@ export default function RaidManagement() {
                                         : 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-500/60'
                                     }`}
                                   >
-                                    <span className="hidden sm:inline">Degrade Device</span>
+                                    <span className="hidden sm:inline">{t('system:raid.actions.degradeDevice')}</span>
                                     <span className="sm:hidden">Degrade</span>
                                   </button>
                                   <button
@@ -577,7 +579,7 @@ export default function RaidManagement() {
                                         : 'border-sky-500/50 bg-sky-500/10 text-sky-100 hover:border-sky-500/60'
                                     }`}
                                   >
-                                    <span className="hidden sm:inline">Start Rebuild</span>
+                                    <span className="hidden sm:inline">{t('system:raid.actions.startRebuild')}</span>
                                     <span className="sm:hidden">Rebuild</span>
                                   </button>
                                   <button
@@ -589,7 +591,7 @@ export default function RaidManagement() {
                                         : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-slate-600'
                                     }`}
                                   >
-                                    {lowerState === 'write-mostly' ? 'Rm W-M' : 'W-M'}
+                                    {lowerState === 'write-mostly' ? t('system:raid.actions.removeWriteMostly') : t('system:raid.actions.writeMostly')}
                                   </button>
                                   {lowerState === 'spare' && (
                                     <button
@@ -601,8 +603,8 @@ export default function RaidManagement() {
                                           : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                                       }`}
                                     >
-                                      <span className="hidden sm:inline">Remove Spare</span>
-                                      <span className="sm:hidden">Remove</span>
+                                      <span className="hidden sm:inline">{t('system:raid.actions.removeSpare')}</span>
+                                      <span className="sm:hidden">{t('system:raid.actions.remove')}</span>
                                     </button>
                                   )}
                                 </div>
@@ -618,11 +620,11 @@ export default function RaidManagement() {
                 <div className="border-t border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
                   <div className="grid gap-3 sm:gap-5 md:grid-cols-2">
                     <form onSubmit={(event) => handleAddSpare(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-300">
-                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">Add Spare</p>
+                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">{t('system:raid.labels.addSpare')}</p>
                       <div className="mt-2 sm:mt-3 flex items-center gap-2 sm:gap-3">
                         <input
                           name="spare-device"
-                          placeholder="e.g. sdc1"
+                          placeholder={t('system:raid.labels.sparePlaceholder')}
                           className="flex-1 rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                         <button
@@ -634,26 +636,26 @@ export default function RaidManagement() {
                               : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                           }`}
                         >
-                          Add
+                          {t('system:raid.actions.add')}
                         </button>
                       </div>
                     </form>
 
                     <form onSubmit={(event) => handleUpdateSpeed(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-300">
-                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">Set Sync Limits (kB/s)</p>
+                      <p className="text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">{t('system:raid.labels.syncLimitsKbs')}</p>
                       <div className="mt-2 sm:mt-3 grid grid-cols-2 gap-2 sm:gap-3">
                         <input
                           name="speed-min"
                           type="number"
                           min={0}
-                          placeholder={speedLimits?.minimum?.toString() ?? 'min'}
+                          placeholder={speedLimits?.minimum?.toString() ?? t('system:raid.labels.min')}
                           className="rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                         <input
                           name="speed-max"
                           type="number"
                           min={0}
-                          placeholder={speedLimits?.maximum?.toString() ?? 'max'}
+                          placeholder={speedLimits?.maximum?.toString() ?? t('system:raid.labels.max')}
                           className="rounded-lg border border-slate-800 bg-slate-950/70 px-2 sm:px-3 py-1.5 sm:py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                         />
                       </div>
@@ -666,7 +668,7 @@ export default function RaidManagement() {
                             : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-sky-500/40 hover:text-white'
                         }`}
                       >
-                        Apply
+                        {t('system:raid.actions.apply')}
                       </button>
                     </form>
                   </div>
@@ -682,8 +684,8 @@ export default function RaidManagement() {
         <div className="border-b border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
             <div>
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Disk Management</h2>
-              <p className="mt-1 text-xs sm:text-sm text-slate-400">Format available disks and create new arrays</p>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('system:raid.diskManagement.title')}</h2>
+              <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('system:raid.diskManagement.subtitle')}</p>
             </div>
             <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
               <button
@@ -695,7 +697,7 @@ export default function RaidManagement() {
                     : 'border-sky-500/30 bg-sky-500/10 text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/15'
                 }`}
               >
-                Refresh
+                {t('system:raid.actions.refresh')}
               </button>
               {isDevMode && (
                 <button
@@ -706,9 +708,9 @@ export default function RaidManagement() {
                       ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                       : 'border-violet-500/40 bg-violet-500/15 text-violet-100 hover:border-violet-500/60'
                   }`}
-                  title="Dev-Mode: Add Mock Disk"
+                  title={t('system:raid.diskManagement.devModeAddMock')}
                 >
-                  🧪 <span className="hidden sm:inline">Add Mock</span>
+                  🧪 <span className="hidden sm:inline">{t('system:raid.actions.addMock')}</span>
                 </button>
               )}
               <button
@@ -719,9 +721,9 @@ export default function RaidManagement() {
                     ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                     : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                 }`}
-                title={availableDisks.filter(d => !d.in_raid).length < 2 ? 'At least 2 free disks required' : ''}
+                title={availableDisks.filter(d => !d.in_raid).length < 2 ? t('system:raid.diskManagement.minDisksRequired') : ''}
               >
-                Create New Array
+                {t('system:raid.actions.createNewArray')}
               </button>
             </div>
           </div>
@@ -732,18 +734,18 @@ export default function RaidManagement() {
             <table className="min-w-full divide-y divide-slate-800/60">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
-                  <th className="px-5 py-3">Name</th>
-                  <th className="px-5 py-3">Size</th>
-                  <th className="px-5 py-3">Model</th>
-                  <th className="px-5 py-3">Status</th>
-                  <th className="px-5 py-3">Actions</th>
+                  <th className="px-5 py-3">{t('system:raid.tableHeaders.name')}</th>
+                  <th className="px-5 py-3">{t('system:raid.tableHeaders.size')}</th>
+                  <th className="px-5 py-3">{t('system:raid.tableHeaders.model')}</th>
+                  <th className="px-5 py-3">{t('system:raid.tableHeaders.status')}</th>
+                  <th className="px-5 py-3">{t('system:raid.tableHeaders.actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {availableDisks.length === 0 ? (
                   <tr>
                     <td colSpan={5} className="px-5 py-8 text-center text-sm text-slate-400">
-                      No disks available
+                      {t('system:raid.diskManagement.noDisks')}
                     </td>
                   </tr>
                 ) : (
@@ -751,7 +753,7 @@ export default function RaidManagement() {
                     <tr key={disk.name} className="group transition hover:bg-slate-900/65">
                       <td className="px-5 py-4 text-sm font-medium text-slate-200">/dev/{disk.name}</td>
                       <td className="px-5 py-4 text-sm text-slate-300">{formatBytes(disk.size_bytes)}</td>
-                      <td className="px-5 py-4 text-sm text-slate-300">{disk.model || 'N/A'}</td>
+                      <td className="px-5 py-4 text-sm text-slate-300">{disk.model || t('system:raid.diskManagement.na')}</td>
                       <td className="px-5 py-4">
                         <div className="flex flex-wrap items-center gap-2">
                           {disk.in_raid ? (
@@ -770,18 +772,18 @@ export default function RaidManagement() {
                                 </div>
                               ) : (
                                 <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-xs text-sky-100">
-                                  In RAID
+                                  {t('system:raid.diskManagement.inRaid')}
                                 </span>
                               );
                             })()
                           ) : (
                             <span className="rounded-full border border-slate-700/50 bg-slate-800/40 px-2 py-0.5 text-xs text-slate-400">
-                              Free
+                              {t('system:raid.diskManagement.free')}
                             </span>
                           )}
                           {disk.is_partitioned && (
                             <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-xs text-amber-100">
-                              Partitioned
+                              {t('system:raid.diskManagement.partitioned')}
                             </span>
                           )}
                         </div>
@@ -799,7 +801,7 @@ export default function RaidManagement() {
                               : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                           }`}
                         >
-                          Format
+                          {t('system:raid.actions.format')}
                         </button>
                       </td>
                     </tr>
@@ -815,13 +817,13 @@ export default function RaidManagement() {
       {showFormatDialog && selectedDisk && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl" onClick={() => setShowFormatDialog(false)}>
           <div className="card w-full max-w-md border-rose-500/40 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(220,38,38,0.3)]" onClick={(e) => e.stopPropagation()}>
-            <h3 className="text-xl font-semibold text-white">Format Disk</h3>
+            <h3 className="text-xl font-semibold text-white">{t('system:raid.formatDialog.title')}</h3>
             <p className="mt-2 text-sm text-slate-400">
-              Format disk <span className="font-medium text-slate-200">/dev/{selectedDisk.name}</span>
+              {t('system:raid.formatDialog.formatDisk')} <span className="font-medium text-slate-200">/dev/{selectedDisk.name}</span>
             </p>
             <form onSubmit={handleFormatDisk} className="mt-4 space-y-4">
               <div>
-                <label className="block text-sm font-medium text-slate-300">Filesystem</label>
+                <label className="block text-sm font-medium text-slate-300">{t('system:raid.formatDialog.filesystem')}</label>
                 <select
                   name="filesystem"
                   defaultValue="ext4"
@@ -834,11 +836,11 @@ export default function RaidManagement() {
                 </select>
               </div>
               <div>
-                <label className="block text-sm font-medium text-slate-300">Label (optional)</label>
+                <label className="block text-sm font-medium text-slate-300">{t('system:raid.formatDialog.label')}</label>
                 <input
                   name="label"
                   type="text"
-                  placeholder="e.g. MyDisk"
+                  placeholder={t('system:raid.formatDialog.labelPlaceholder')}
                   className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                 />
               </div>
@@ -851,7 +853,7 @@ export default function RaidManagement() {
                   }}
                   className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
                 >
-                  Cancel
+                  {t('system:raid.actions.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -862,7 +864,7 @@ export default function RaidManagement() {
                       : 'border-rose-500/40 bg-rose-500/15 text-rose-200 hover:border-rose-500/60'
                   }`}
                 >
-                  Format
+                  {t('system:raid.actions.format')}
                 </button>
               </div>
             </form>

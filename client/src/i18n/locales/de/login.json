@@ -1,0 +1,20 @@
+{
+  "title": "BalùHost",
+  "subtitle": "Sicheres persönliches Cloud-Gateway",
+  "connectionModes": {
+    "local": "Direkter lokaler Zugriff",
+    "network": "Netzwerk-Modus",
+    "fallback": "Fallback-Modus"
+  },
+  "form": {
+    "username": "Benutzername",
+    "password": "Passwort",
+    "passwordHint": "Halte deinen Tresor sicher",
+    "submit": "Zugriff erhalten",
+    "loading": "Autorisiere..."
+  },
+  "defaultCredentials": "Standard-Anmeldedaten",
+  "systemStatus": "System-Status",
+  "optimal": "Optimal",
+  "firmware": "Firmware"
+}

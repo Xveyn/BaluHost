@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getDatabaseHealth } from '../../lib/api'
 import type { DatabaseHealthResponse } from '../../lib/api'
 import { triggerCleanup } from '../../api/monitoring'
@@ -21,6 +22,7 @@ interface CleanupResult {
 }
 
 export default function MaintenanceTools() {
+  const { t } = useTranslation(['admin', 'common'])
   const [health, setHealth] = useState<DatabaseHealthResponse | null>(null)
   const [healthLoading, setHealthLoading] = useState(true)
   const [healthError, setHealthError] = useState<string | null>(null)
@@ -78,7 +80,7 @@ export default function MaintenanceTools() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-        <p className="text-slate-400">Loading maintenance tools...</p>
+        <p className="text-slate-400">{t('admin:maintenance.loading')}</p>
       </div>
     )
   }
@@ -88,9 +90,9 @@ export default function MaintenanceTools() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Database Maintenance</h3>
+          <h3 className="text-lg font-semibold text-white">{t('admin:maintenance.title')}</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Health monitoring and cleanup tools
+            {t('admin:maintenance.subtitle')}
           </p>
         </div>
         <button
@@ -99,7 +101,7 @@ export default function MaintenanceTools() {
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors text-sm border border-slate-600/50"
         >
           <RefreshCw className={`w-4 h-4 ${healthLoading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('common:refresh')}
         </button>
       </div>
 
@@ -122,9 +124,9 @@ export default function MaintenanceTools() {
               )}
             </div>
             <div>
-              <p className="text-xs text-slate-400">Connection</p>
+              <p className="text-xs text-slate-400">{t('admin:maintenance.connection')}</p>
               <p className={`text-sm font-semibold ${health?.is_healthy ? 'text-emerald-400' : 'text-red-400'}`}>
-                {health?.connection_status || 'Unknown'}
+                {health?.connection_status || t('common:unknown')}
               </p>
             </div>
           </div>
@@ -137,9 +139,9 @@ export default function MaintenanceTools() {
               <Database className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-xs text-slate-400">Database Type</p>
+              <p className="text-xs text-slate-400">{t('admin:maintenance.databaseType')}</p>
               <p className="text-sm font-semibold text-white capitalize">
-                {health?.database_type || 'Unknown'}
+                {health?.database_type || t('common:unknown')}
               </p>
             </div>
           </div>
@@ -153,9 +155,9 @@ export default function MaintenanceTools() {
                 <Shield className={`w-5 h-5 ${getIntegrityColor(health.integrity_check).text}`} />
               </div>
               <div>
-                <p className="text-xs text-slate-400">Integrity Check</p>
+                <p className="text-xs text-slate-400">{t('admin:maintenance.integrityCheck')}</p>
                 <p className={`text-sm font-semibold ${getIntegrityColor(health.integrity_check).text}`}>
-                  {health.integrity_check || 'N/A'}
+                  {health.integrity_check || t('common:notAvailable')}
                 </p>
               </div>
             </div>
@@ -167,9 +169,9 @@ export default function MaintenanceTools() {
                 <Server className="w-5 h-5 text-purple-400" />
               </div>
               <div>
-                <p className="text-xs text-slate-400">Pool Size</p>
+                <p className="text-xs text-slate-400">{t('admin:maintenance.poolSize')}</p>
                 <p className="text-sm font-semibold text-white">
-                  {health.pool_size ?? 'N/A'}
+                  {health.pool_size ?? t('common:notAvailable')}
                 </p>
               </div>
             </div>
@@ -181,8 +183,8 @@ export default function MaintenanceTools() {
                 <Activity className="w-5 h-5 text-slate-400" />
               </div>
               <div>
-                <p className="text-xs text-slate-400">Status</p>
-                <p className="text-sm font-semibold text-slate-400">N/A</p>
+                <p className="text-xs text-slate-400">{t('admin:users.fields.status')}</p>
+                <p className="text-sm font-semibold text-slate-400">{t('common:notAvailable')}</p>
               </div>
             </div>
           </div>
@@ -199,9 +201,9 @@ export default function MaintenanceTools() {
               )}
             </div>
             <div>
-              <p className="text-xs text-slate-400">Overall Health</p>
+              <p className="text-xs text-slate-400">{t('admin:maintenance.overallHealth')}</p>
               <p className={`text-sm font-semibold ${health?.is_healthy ? 'text-emerald-400' : 'text-red-400'}`}>
-                {health?.is_healthy ? 'Healthy' : 'Issues Detected'}
+                {health?.is_healthy ? t('admin:maintenance.healthy') : t('admin:maintenance.issuesDetected')}
               </p>
             </div>
           </div>
@@ -211,23 +213,23 @@ export default function MaintenanceTools() {
       {/* PostgreSQL Pool Details */}
       {health?.database_type === 'postgresql' && health.pool_size !== undefined && (
         <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
-          <h4 className="text-sm font-semibold text-white mb-3">Connection Pool Details</h4>
+          <h4 className="text-sm font-semibold text-white mb-3">{t('admin:maintenance.poolDetails.title')}</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
-              <p className="text-slate-400 text-xs">Pool Size</p>
+              <p className="text-slate-400 text-xs">{t('admin:maintenance.poolDetails.size')}</p>
               <p className="text-white font-medium">{health.pool_size}</p>
             </div>
             <div>
-              <p className="text-slate-400 text-xs">Checked In</p>
-              <p className="text-emerald-400 font-medium">{health.pool_checked_in ?? 'N/A'}</p>
+              <p className="text-slate-400 text-xs">{t('admin:maintenance.poolDetails.checkedIn')}</p>
+              <p className="text-emerald-400 font-medium">{health.pool_checked_in ?? t('common:notAvailable')}</p>
             </div>
             <div>
-              <p className="text-slate-400 text-xs">Checked Out</p>
-              <p className="text-blue-400 font-medium">{health.pool_checked_out ?? 'N/A'}</p>
+              <p className="text-slate-400 text-xs">{t('admin:maintenance.poolDetails.checkedOut')}</p>
+              <p className="text-blue-400 font-medium">{health.pool_checked_out ?? t('common:notAvailable')}</p>
             </div>
             <div>
-              <p className="text-slate-400 text-xs">Overflow</p>
-              <p className="text-amber-400 font-medium">{health.pool_overflow ?? 'N/A'}</p>
+              <p className="text-slate-400 text-xs">{t('admin:maintenance.poolDetails.overflow')}</p>
+              <p className="text-amber-400 font-medium">{health.pool_overflow ?? t('common:notAvailable')}</p>
             </div>
           </div>
         </div>
@@ -239,11 +241,10 @@ export default function MaintenanceTools() {
           <div>
             <h4 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
               <Trash2 className="w-4 h-4 text-amber-400" />
-              Monitoring Data Cleanup
+              {t('admin:maintenance.cleanup.title')}
             </h4>
             <p className="text-xs text-slate-400 max-w-lg">
-              Manually trigger cleanup of expired monitoring samples. This removes samples older than
-              the configured retention period for each metric type.
+              {t('admin:maintenance.cleanup.description')}
             </p>
           </div>
 
@@ -254,7 +255,7 @@ export default function MaintenanceTools() {
               className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-amber-300 border border-amber-500/30 hover:from-amber-500/30 hover:to-amber-600/20 transition-all text-sm font-medium"
             >
               <Trash2 className="w-4 h-4" />
-              Run Cleanup
+              {t('admin:maintenance.cleanup.runCleanup')}
             </button>
           ) : (
             <div className="flex items-center gap-2">
@@ -268,14 +269,14 @@ export default function MaintenanceTools() {
                 ) : (
                   <Trash2 className="w-4 h-4" />
                 )}
-                Confirm
+                {t('admin:maintenance.cleanup.confirm')}
               </button>
               <button
                 onClick={() => setShowConfirm(false)}
                 disabled={cleanupLoading}
                 className="px-4 py-2.5 rounded-xl bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 transition-all text-sm font-medium border border-slate-600/50"
               >
-                Cancel
+                {t('common:cancel')}
               </button>
             </div>
           )}
@@ -300,10 +301,10 @@ export default function MaintenanceTools() {
                 ))}
               </div>
             ) : (
-              <p className="text-xs text-slate-400">No samples were deleted - all data is within retention period.</p>
+              <p className="text-xs text-slate-400">{t('admin:maintenance.cleanup.noSamplesDeleted')}</p>
             )}
             <p className="text-xs text-slate-400 mt-3">
-              Total deleted: <span className="text-white font-medium">{cleanupResult.total.toLocaleString()}</span> samples
+              {t('admin:maintenance.cleanup.totalDeleted', { count: cleanupResult.total, formatted: cleanupResult.total.toLocaleString() })}
             </p>
           </div>
         )}

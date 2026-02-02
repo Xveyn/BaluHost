@@ -6,11 +6,13 @@
 
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { Zap } from 'lucide-react';
 import { usePowerMonitoring } from '../hooks/usePowerMonitoring';
 import { parseUtcTimestamp } from '../lib/dateUtils';
 
 const PowerWidget: React.FC = () => {
+  const { t } = useTranslation('system');
   const navigate = useNavigate();
   const { data, loading, error } = usePowerMonitoring();
 
@@ -47,7 +49,7 @@ const PowerWidget: React.FC = () => {
   // Format trend delta
   const formatDelta = () => {
     if (Math.abs(trendDelta) < 1) {
-      return { label: 'Stable', tone: 'steady' };
+      return { label: t('powerWidget.stable'), tone: 'steady' };
     }
     if (trendDelta > 0) {
       return { label: `+${trendDelta.toFixed(1)}W`, tone: 'increase' };
@@ -73,8 +75,8 @@ const PowerWidget: React.FC = () => {
       <div className="card border-slate-800/40 bg-slate-900/60">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Power</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Loading...</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('powerWidget.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('powerWidget.loading')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-[0_12px_38px_rgba(251,146,60,0.35)]">
             <Zap className="h-6 w-6" />
@@ -89,15 +91,15 @@ const PowerWidget: React.FC = () => {
       <div className="card border-slate-800/40 bg-slate-900/60">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Power</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Offline</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('powerWidget.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('powerWidget.offline')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
             <Zap className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-3 sm:mt-4 flex items-center justify-between gap-2 text-xs text-slate-400">
-          <span className="truncate">No devices configured</span>
+          <span className="truncate">{t('powerWidget.noDevices')}</span>
         </div>
       </div>
     );
@@ -108,7 +110,7 @@ const PowerWidget: React.FC = () => {
       <div className="card border-slate-800/40 bg-slate-900/60">
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Power</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('powerWidget.title')}</p>
             <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">—</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
@@ -116,7 +118,7 @@ const PowerWidget: React.FC = () => {
           </div>
         </div>
         <div className="mt-3 sm:mt-4 flex items-center justify-between gap-2 text-xs text-slate-400">
-          <span className="truncate">Configure in Settings</span>
+          <span className="truncate">{t('powerWidget.configureInSettings')}</span>
         </div>
       </div>
     );
@@ -129,7 +131,7 @@ const PowerWidget: React.FC = () => {
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Power</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('powerWidget.title')}</p>
           <p className="mt-2 text-2xl sm:text-3xl font-semibold text-white truncate">
             {currentPower.toFixed(1)} W
           </p>
@@ -141,12 +143,12 @@ const PowerWidget: React.FC = () => {
       <div className="mt-3 sm:mt-4 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
           <span className="truncate flex-1 min-w-0">
-            Energy today: {totalEnergyToday.toFixed(2)} kWh
+            {t('powerWidget.energyToday')}: {totalEnergyToday.toFixed(2)} kWh
           </span>
           <span className={`${deltaToneClass} shrink-0`}>{delta.label}</span>
         </div>
         <div className="text-xs text-slate-500 truncate">
-          {devices.length} {devices.length === 1 ? 'device' : 'devices'} monitored
+          {devices.length} {devices.length === 1 ? t('powerWidget.device') : t('powerWidget.devices')} {t('powerWidget.monitored')}
         </div>
       </div>
       <div className="mt-4 sm:mt-5 h-2 w-full overflow-hidden rounded-full bg-slate-800">

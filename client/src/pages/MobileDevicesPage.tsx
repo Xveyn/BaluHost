@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
 import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 
@@ -10,6 +11,7 @@ interface UserInfo {
 }
 
 export default function MobileDevicesPage() {
+  const { t } = useTranslation('common');
   const [user, setUser] = useState<UserInfo | null>(null);
   const [devices, setDevices] = useState<MobileDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -116,14 +118,14 @@ export default function MobileDevicesPage() {
   };
 
   const getTimeAgo = (dateString: string | null) => {
-    if (!dateString) return 'Nie';
+    if (!dateString) return t('time.never', 'Nie');
     const date = new Date(dateString);
     const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
     
-    if (seconds < 60) return 'Gerade eben';
-    if (seconds < 3600) return `Vor ${Math.floor(seconds / 60)} Min`;
-    if (seconds < 86400) return `Vor ${Math.floor(seconds / 3600)} Std`;
-    return `Vor ${Math.floor(seconds / 86400)} Tagen`;
+    if (seconds < 60) return t('time.justNow');
+    if (seconds < 3600) return t('time.minutesAgo', { count: Math.floor(seconds / 60) });
+    if (seconds < 86400) return t('time.hoursAgo', { count: Math.floor(seconds / 3600) });
+    return t('time.daysAgo', { count: Math.floor(seconds / 86400) });
   };
 
   const handleShowDeviceQr = (device: MobileDevice) => {

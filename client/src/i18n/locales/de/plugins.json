@@ -1,0 +1,58 @@
+{
+  "title": "Plugins",
+  "description": "Installierte Plugins und Erweiterungen verwalten",
+  "tabs": {
+    "installed": "Installiert",
+    "documentation": "Dokumentation"
+  },
+  "buttons": {
+    "refresh": "Aktualisieren",
+    "enable": "Aktivieren",
+    "disable": "Deaktivieren",
+    "configure": "Konfigurieren",
+    "uninstall": "Deinstallieren",
+    "enablePlugin": "Plugin aktivieren",
+    "cancel": "Abbrechen"
+  },
+  "status": {
+    "active": "Aktiv",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert"
+  },
+  "details": {
+    "version": "Version",
+    "author": "Autor",
+    "category": "Kategorie",
+    "homepage": "Homepage",
+    "link": "Link",
+    "status": "Status",
+    "installed": "Installiert"
+  },
+  "permissions": {
+    "title": "Erforderliche Berechtigungen",
+    "noPermissions": "Keine besonderen Berechtigungen erforderlich",
+    "dangerous": "Gefährlich",
+    "requiresReview": "Prüfung erforderlich"
+  },
+  "empty": {
+    "noPlugins": "Keine Plugins installiert",
+    "noPluginsDesc": "Platzieren Sie Plugin-Verzeichnisse im Ordner backend/app/plugins/installed/",
+    "selectPlugin": "Wählen Sie ein Plugin aus, um Details anzuzeigen"
+  },
+  "modal": {
+    "enableTitle": "{{name}} aktivieren",
+    "enableDesc": "Dieses Plugin benötigt folgende Berechtigungen:",
+    "allPermissionsRequired": "Alle Berechtigungen müssen erteilt werden"
+  },
+  "errors": {
+    "loadDetailsFailed": "Plugin-Details konnten nicht geladen werden",
+    "enableFailed": "Plugin konnte nicht aktiviert werden",
+    "disableFailed": "Plugin konnte nicht deaktiviert werden",
+    "uninstallFailed": "Plugin konnte nicht deinstalliert werden"
+  },
+  "confirm": {
+    "uninstall": "Plugin \"{{name}}\" deinstallieren? Die Konfiguration wird entfernt.",
+    "disableFirst": "Deaktivieren Sie das Plugin vor der Deinstallation"
+  },
+  "ui": "Benutzeroberfläche"
+}

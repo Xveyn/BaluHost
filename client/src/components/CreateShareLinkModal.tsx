@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { createShareLink, type CreateShareLinkRequest } from '../api/shares';
 import { apiClient } from '../lib/api';
@@ -10,6 +11,7 @@ interface CreateShareLinkModalProps {
 }
 
 export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: CreateShareLinkModalProps) {
+  const { t } = useTranslation(['shares', 'common']);
   const [files, setFiles] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [loadingFiles, setLoadingFiles] = useState(!fileId);
@@ -63,7 +65,7 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
     <div className="fixed inset-0 bg-black/70 backdrop-blur-sm flex items-center justify-center z-50">
       <div className="bg-gray-900/95 backdrop-blur-md border border-white/10 rounded-xl p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto shadow-2xl">
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-2xl font-bold text-white">Create Share Link</h2>
+          <h2 className="text-2xl font-bold text-white">{t('shares:modal.createShareLink')}</h2>
           <button
             onClick={onClose}
             className="text-gray-400 hover:text-gray-200 transition-colors"
@@ -76,9 +78,9 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
           {/* File Selection */}
           {!fileId && (
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">File</label>
+              <label className="block text-sm font-semibold text-gray-300 mb-2">{t('shares:form.file')}</label>
               {loadingFiles ? (
-                <div className="text-gray-400">Loading files...</div>
+                <div className="text-gray-400">{t('shares:loadingFiles')}</div>
               ) : (
                 <select
                   value={formData.file_id}
@@ -86,7 +88,7 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
                   className="w-full px-4 py-2.5 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-white"
                   required
                 >
-                  <option value={0} className="bg-gray-800">Select a file...</option>
+                  <option value={0} className="bg-gray-800">{t('shares:form.selectFile')}</option>
                   {files.filter(f => !f.is_directory).map((file) => (
                     <option key={file.id} value={file.id} className="bg-gray-800">
                       {file.name}
@@ -100,21 +102,21 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
           {/* Password */}
           <div>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              Password Protection (Optional)
+              {t('shares:form.passwordProtectionOptional')}
             </label>
             <input
               type="password"
               value={formData.password}
               onChange={(e) => setFormData({ ...formData, password: e.target.value })}
               className="w-full px-4 py-2.5 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-white placeholder-gray-400"
-              placeholder="Leave empty for no password"
+              placeholder={t('shares:form.passwordPlaceholder')}
             />
           </div>
 
           {/* Max Downloads */}
           <div>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              Maximum Downloads (Optional)
+              {t('shares:form.maxDownloadsOptional')}
             </label>
             <input
               type="number"
@@ -125,14 +127,14 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
                 max_downloads: e.target.value ? Number(e.target.value) : null 
               })}
               className="w-full px-4 py-2.5 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-white placeholder-gray-400"
-              placeholder="Unlimited"
+              placeholder={t('shares:form.unlimited')}
             />
           </div>
 
           {/* Expiration Date */}
           <div>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              Expiration Date (Optional)
+              {t('shares:form.expirationDateOptional')}
             </label>
             <input
               type="datetime-local"
@@ -148,14 +150,14 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
           {/* Description */}
           <div>
             <label className="block text-sm font-semibold text-gray-300 mb-2">
-              Description (Optional)
+              {t('shares:form.descriptionOptional')}
             </label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
               className="w-full px-4 py-2.5 bg-white/5 backdrop-blur-sm border border-white/10 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 transition-all text-white placeholder-gray-400 resize-none"
               rows={3}
-              placeholder="Add a description for this share link"
+              placeholder={t('shares:form.descriptionPlaceholderLink')}
             />
           </div>
 
@@ -168,7 +170,7 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
                 onChange={(e) => setFormData({ ...formData, allow_download: e.target.checked })}
                 className="mr-3 w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
               />
-              <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Allow downloads</span>
+              <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">{t('shares:permissions.allowDownloads')}</span>
             </label>
             <label className="flex items-center cursor-pointer group">
               <input
@@ -177,7 +179,7 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
                 onChange={(e) => setFormData({ ...formData, allow_preview: e.target.checked })}
                 className="mr-3 w-4 h-4 text-blue-500 rounded focus:ring-blue-500"
               />
-              <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">Allow preview</span>
+              <span className="text-sm font-medium text-gray-300 group-hover:text-white transition-colors">{t('shares:permissions.allowPreviews')}</span>
             </label>
           </div>
 
@@ -188,14 +190,14 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
               onClick={onClose}
               className="px-5 py-2.5 text-gray-300 bg-white/5 border border-white/10 rounded-lg hover:bg-white/10 transition-all font-medium"
             >
-              Cancel
+              {t('shares:buttons.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading || formData.file_id === 0}
               className="px-5 py-2.5 bg-gradient-to-r from-blue-600 to-blue-700 text-white rounded-lg hover:from-blue-700 hover:to-blue-800 disabled:opacity-50 disabled:cursor-not-allowed transition-all font-medium shadow-lg"
             >
-              {loading ? 'Creating...' : 'Create Share Link'}
+              {loading ? t('shares:buttons.creating') : t('shares:modal.createShareLink')}
             </button>
           </div>
         </form>

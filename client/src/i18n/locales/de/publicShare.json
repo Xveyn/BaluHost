@@ -1,0 +1,30 @@
+{
+  "title": "Geteilte Datei",
+  "description": "Jemand hat eine Datei mit Ihnen geteilt",
+  "loading": "Freigabe wird geladen...",
+  "accessDenied": "Zugriff verweigert",
+  "goHome": "Zur Startseite",
+  "password": {
+    "required": "Passwort erforderlich",
+    "description": "Diese Freigabe ist passwortgeschützt. Bitte geben Sie das Passwort ein.",
+    "label": "Passwort",
+    "placeholder": "Passwort eingeben",
+    "invalid": "Ungültiges Passwort",
+    "submit": "Datei öffnen"
+  },
+  "errors": {
+    "expired": "Dieser Freigabe-Link ist abgelaufen",
+    "notAccessible": "Dieser Freigabe-Link ist nicht mehr zugänglich",
+    "loadFailed": "Freigabeinformationen konnten nicht geladen werden",
+    "accessFailed": "Zugriff auf Freigabe fehlgeschlagen",
+    "downloadFailed": "Download fehlgeschlagen"
+  },
+  "file": {
+    "expires": "Läuft ab:",
+    "preview": "Vorschau",
+    "download": "Herunterladen",
+    "downloading": "Wird heruntergeladen...",
+    "noActions": "Diese Datei kann nicht heruntergeladen oder angezeigt werden."
+  },
+  "footer": "Powered by BaluHost NAS Manager"
+}

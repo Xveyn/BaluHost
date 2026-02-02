@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   getShareLinkInfo,
   accessShareLink,
@@ -10,6 +11,7 @@ import { apiClient } from '../lib/api';
 import { Download, Lock, Eye, FileIcon, Calendar, AlertCircle } from 'lucide-react';
 
 export default function PublicSharePage() {
+  const { t } = useTranslation(['publicShare', 'common']);
   const { token } = useParams<{ token: string }>();
   const navigate = useNavigate();
 
@@ -39,9 +41,9 @@ export default function PublicSharePage() {
 
       if (!data.is_accessible) {
         if (data.is_expired) {
-          setError('This share link has expired');
+          setError(t('errors.expired'));
         } else {
-          setError('This share link is no longer accessible');
+          setError(t('errors.notAccessible'));
         }
       } else if (data.has_password) {
         setPasswordRequired(true);
@@ -51,7 +53,7 @@ export default function PublicSharePage() {
       }
     } catch (err: any) {
       console.error('Failed to load share info:', err);
-      setError(err.response?.data?.detail || 'Failed to load share information');
+      setError(err.response?.data?.detail || t('errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -69,9 +71,9 @@ export default function PublicSharePage() {
     } catch (err: any) {
       console.error('Failed to access share:', err);
       if (err.response?.status === 403) {
-        setError('Invalid password');
+        setError(t('password.invalid'));
       } else {
-        setError(err.response?.data?.detail || 'Failed to access share');
+        setError(err.response?.data?.detail || t('errors.accessFailed'));
       }
     }
   };
@@ -107,7 +109,7 @@ export default function PublicSharePage() {
       window.URL.revokeObjectURL(url);
     } catch (err: any) {
       console.error('Download failed:', err);
-      setError(err.response?.data?.detail || 'Failed to download file');
+      setError(err.response?.data?.detail || t('errors.downloadFailed'));
     } finally {
       setDownloading(false);
     }
@@ -130,7 +132,7 @@ export default function PublicSharePage() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-sky-500 mx-auto mb-4"></div>
-          <p className="text-slate-400">Loading share...</p>
+          <p className="text-slate-400">{t('loading')}</p>
         </div>
       </div>
     );
@@ -141,13 +143,13 @@ export default function PublicSharePage() {
       <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/80 p-6 sm:p-8 max-w-md w-full text-center">
           <AlertCircle className="w-12 sm:w-16 h-12 sm:h-16 text-red-500 mx-auto mb-4" />
-          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">Access Denied</h1>
+          <h1 className="text-xl sm:text-2xl font-bold text-white mb-2">{t('accessDenied')}</h1>
           <p className="text-slate-400 mb-6 text-sm sm:text-base">{error}</p>
           <button
             onClick={() => navigate('/')}
             className="min-h-[44px] px-6 py-2.5 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium touch-manipulation active:scale-95 transition-all"
           >
-            Go to Home
+            {t('goHome')}
           </button>
         </div>
       </div>
@@ -160,8 +162,8 @@ export default function PublicSharePage() {
         <div className="rounded-xl border border-slate-800/60 bg-slate-900/80 overflow-hidden shadow-xl">
           {/* Header */}
           <div className="bg-gradient-to-r from-sky-600 to-sky-700 p-4 sm:p-6 text-white">
-            <h1 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">Shared File</h1>
-            <p className="text-sky-100 text-sm sm:text-base">Someone has shared a file with you</p>
+            <h1 className="text-xl sm:text-2xl font-bold mb-1 sm:mb-2">{t('title')}</h1>
+            <p className="text-sky-100 text-sm sm:text-base">{t('description')}</p>
           </div>
 
           {/* Content */}
@@ -171,20 +173,20 @@ export default function PublicSharePage() {
               <div>
                 <div className="text-center mb-6">
                   <Lock className="w-12 sm:w-16 h-12 sm:h-16 text-sky-500 mx-auto mb-4" />
-                  <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">Password Required</h2>
+                  <h2 className="text-lg sm:text-xl font-semibold text-white mb-2">{t('password.required')}</h2>
                   <p className="text-slate-400 text-sm sm:text-base">
-                    This share is password protected. Please enter the password to access it.
+                    {t('password.description')}
                   </p>
                 </div>
 
                 <form onSubmit={handlePasswordSubmit} className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300 mb-2">Password</label>
+                    <label className="block text-sm font-medium text-slate-300 mb-2">{t('password.label')}</label>
                     <input
                       type="password"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
-                      placeholder="Enter password"
+                      placeholder={t('password.placeholder')}
                       className="w-full px-4 py-3 min-h-[44px] bg-slate-800/60 border border-slate-700/50 rounded-lg text-white placeholder-slate-500 focus:ring-2 focus:ring-sky-500 focus:border-transparent"
                       required
                       autoFocus
@@ -201,7 +203,7 @@ export default function PublicSharePage() {
                     type="submit"
                     className="w-full min-h-[44px] px-4 py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium touch-manipulation active:scale-95 transition-all"
                   >
-                    Access File
+                    {t('password.submit')}
                   </button>
                 </form>
 
@@ -218,7 +220,7 @@ export default function PublicSharePage() {
                     {info.expires_at && (
                       <div className="flex items-center text-sm text-slate-500 mt-2">
                         <Calendar className="w-4 h-4 mr-2" />
-                        Expires: {formatDate(info.expires_at)}
+                        {t('file.expires')} {formatDate(info.expires_at)}
                       </div>
                     )}
                   </div>
@@ -252,7 +254,7 @@ export default function PublicSharePage() {
                   {info?.expires_at && (
                     <div className="flex items-center text-sm text-slate-500 mt-4">
                       <Calendar className="w-4 h-4 mr-2" />
-                      Expires: {formatDate(info.expires_at)}
+                      {t('file.expires')} {formatDate(info.expires_at)}
                     </div>
                   )}
                 </div>
@@ -271,7 +273,7 @@ export default function PublicSharePage() {
                       onClick={() => {/* TODO: Implement preview */}}
                     >
                       <Eye className="w-5 h-5 mr-2" />
-                      Preview
+                      {t('file.preview')}
                     </button>
                   )}
                   {accessData.allow_download && (
@@ -281,14 +283,14 @@ export default function PublicSharePage() {
                       className="flex-1 min-h-[44px] px-4 py-3 bg-sky-600 text-white rounded-lg hover:bg-sky-700 font-medium flex items-center justify-center disabled:opacity-50 touch-manipulation active:scale-95 transition-all"
                     >
                       <Download className="w-5 h-5 mr-2" />
-                      {downloading ? 'Downloading...' : 'Download'}
+                      {downloading ? t('file.downloading') : t('file.download')}
                     </button>
                   )}
                 </div>
 
                 {!accessData.allow_download && !accessData.allow_preview && (
                   <p className="text-center text-slate-500 mt-4 text-sm">
-                    This file cannot be downloaded or previewed.
+                    {t('file.noActions')}
                   </p>
                 )}
               </div>
@@ -298,7 +300,7 @@ export default function PublicSharePage() {
 
         {/* Footer */}
         <div className="text-center mt-6 text-slate-500 text-xs sm:text-sm">
-          <p>Powered by BaluHost NAS Manager</p>
+          <p>{t('footer')}</p>
         </div>
       </div>
     </div>

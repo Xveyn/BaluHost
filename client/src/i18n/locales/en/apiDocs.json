@@ -1,0 +1,42 @@
+{
+  "title": "Baluhost NAS API",
+  "subtitle": "REST API Documentation v1.0.0 • FastAPI 0.115.3",
+  "authorize": {
+    "button": "Authorize",
+    "authorized": "Authorized",
+    "title": "Authorize",
+    "description": "Enter your Bearer token (JWT) to authorize requests from the UI.",
+    "placeholder": "Bearer eyJhbGci...",
+    "clear": "Clear",
+    "cancel": "Cancel",
+    "save": "Save"
+  },
+  "baseUrl": {
+    "title": "Base URL",
+    "authInfo": "All authenticated endpoints require a Bearer token in the Authorization header:"
+  },
+  "filters": {
+    "allEndpoints": "All Endpoints"
+  },
+  "sections": {
+    "authentication": "Authentication",
+    "files": "Files",
+    "logging": "Logging",
+    "system": "System",
+    "users": "Users",
+    "shares": "Shares",
+    "backup": "Backup",
+    "mobileDevices": "Mobile Devices",
+    "vpn": "VPN",
+    "powerManagement": "Power Management",
+    "energyMonitoring": "Energy Monitoring"
+  },
+  "endpoint": {
+    "parameters": "Parameters",
+    "requestBody": "Request Body",
+    "responseExample": "Response Example",
+    "required": "required",
+    "requiresAuth": "Requires authentication",
+    "copied": "Copied"
+  }
+}

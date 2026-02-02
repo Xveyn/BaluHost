@@ -1,7 +1,9 @@
 import { Palette } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
 import { useTheme, themes, type ThemeType } from '../contexts/ThemeContext';
 
 export default function AppearanceSettings() {
+  const { t } = useTranslation('settings');
   const { theme, setTheme } = useTheme();
   
   // Helper to convert RGB string to hex color for preview
@@ -11,10 +13,10 @@ export default function AppearanceSettings() {
     <div className="rounded-lg shadow bg-theme-card p-6">
       <h3 className="text-lg font-semibold mb-4 flex items-center">
         <Palette className="w-5 h-5 mr-2 text-theme-accent" />
-        Color Theme
+        {t('appearance.colorTheme')}
       </h3>
       <p className="mb-6 text-theme-text-secondary">
-        Choose your preferred color scheme for the interface.
+        {t('appearance.colorThemeDescription')}
       </p>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {(Object.keys(themes) as ThemeType[]).map(themeKey => {
@@ -33,7 +35,7 @@ export default function AppearanceSettings() {
                 <span className="font-semibold">{themes[themeKey].name}</span>
                 {theme === themeKey && (
                   <span className="text-xs px-2 py-1 rounded bg-theme-accent text-white">
-                    Active
+                    {t('appearance.active')}
                   </span>
                 )}
               </div>

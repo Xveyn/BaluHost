@@ -5,6 +5,7 @@
  */
 
 import React, { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Zap, Plus, Trash2, Power, AlertCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -15,6 +16,7 @@ import {
 import type { TapoDevice, TapoDeviceCreate } from '../api/power';
 
 const TapoDeviceSettings: React.FC = () => {
+  const { t } = useTranslation('settings');
   const [devices, setDevices] = useState<TapoDevice[]>([]);
   const [loading, setLoading] = useState(true);
   const [showAddForm, setShowAddForm] = useState(false);
@@ -98,7 +100,7 @@ const TapoDeviceSettings: React.FC = () => {
   if (loading) {
     return (
       <div className="card">
-        <p className="text-sm text-slate-500">Loading devices...</p>
+        <p className="text-sm text-slate-500">{t('tapo.loading')}</p>
       </div>
     );
   }
@@ -108,9 +110,9 @@ const TapoDeviceSettings: React.FC = () => {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-bold text-white">Power Monitoring</h2>
+          <h2 className="text-2xl font-bold text-white">{t('tapo.title')}</h2>
           <p className="text-sm text-slate-400 mt-1">
-            Configure Tapo smart plugs to monitor NAS power consumption
+            {t('tapo.description')}
           </p>
         </div>
         <button
@@ -118,7 +120,7 @@ const TapoDeviceSettings: React.FC = () => {
           className="btn-primary flex items-center gap-2"
         >
           <Plus className="w-4 h-4" />
-          Add Device
+          {t('tapo.addDevice')}
         </button>
       </div>
 
@@ -127,19 +129,19 @@ const TapoDeviceSettings: React.FC = () => {
         <div className="card bg-slate-800/50 border-amber-500/20">
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <Zap className="w-5 h-5 text-amber-500" />
-            Add Tapo Device
+            {t('tapo.addTapoDevice')}
           </h3>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Device Name *
+                  {t('tapo.deviceName')} *
                 </label>
                 <input
                   type="text"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  placeholder="e.g., NAS Power Monitor"
+                  placeholder={t('tapo.deviceNamePlaceholder')}
                   className="input w-full"
                   required
                 />
@@ -147,7 +149,7 @@ const TapoDeviceSettings: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Device Type
+                  {t('tapo.deviceType')}
                 </label>
                 <select
                   value={formData.device_type}
@@ -162,7 +164,7 @@ const TapoDeviceSettings: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  IP Address *
+                  {t('tapo.ipAddress')} *
                 </label>
                 <input
                   type="text"
@@ -176,13 +178,13 @@ const TapoDeviceSettings: React.FC = () => {
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Tapo Account Email *
+                  {t('tapo.accountEmail')} *
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  placeholder="your@email.com"
+                  placeholder={t('tapo.emailPlaceholder')}
                   className="input w-full"
                   required
                 />
@@ -190,18 +192,18 @@ const TapoDeviceSettings: React.FC = () => {
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Tapo Account Password *
+                  {t('tapo.accountPassword')} *
                 </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Enter password"
+                  placeholder={t('tapo.passwordPlaceholder')}
                   className="input w-full"
                   required
                 />
                 <p className="text-xs text-slate-500 mt-1">
-                  Credentials are encrypted before storage
+                  {t('tapo.credentialsEncrypted')}
                 </p>
               </div>
             </div>
@@ -215,7 +217,7 @@ const TapoDeviceSettings: React.FC = () => {
                 className="rounded border-slate-600 bg-slate-700 text-amber-500 focus:ring-amber-500"
               />
               <label htmlFor="is_monitoring" className="text-sm text-slate-300">
-                Enable monitoring for this device
+                {t('tapo.enableMonitoring')}
               </label>
             </div>
 
@@ -225,10 +227,10 @@ const TapoDeviceSettings: React.FC = () => {
                 onClick={() => setShowAddForm(false)}
                 className="btn-secondary"
               >
-                Cancel
+                {t('tapo.cancel')}
               </button>
               <button type="submit" className="btn-primary">
-                Add Device
+                {t('tapo.addDevice')}
               </button>
             </div>
           </form>
@@ -237,14 +239,14 @@ const TapoDeviceSettings: React.FC = () => {
 
       {/* Device List */}
       <div className="card">
-        <h3 className="text-lg font-semibold text-white mb-4">Configured Devices</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">{t('tapo.configuredDevices')}</h3>
 
         {devices.length === 0 ? (
           <div className="text-center py-8">
             <Zap className="w-12 h-12 text-slate-600 mx-auto mb-3" />
-            <p className="text-slate-400">No devices configured</p>
+            <p className="text-slate-400">{t('tapo.noDevices')}</p>
             <p className="text-sm text-slate-500 mt-1">
-              Add a Tapo device to start monitoring power consumption
+              {t('tapo.noDevicesHint')}
             </p>
           </div>
         ) : (
@@ -293,7 +295,7 @@ const TapoDeviceSettings: React.FC = () => {
                       )}
                       {device.last_connected && !device.last_error && (
                         <p className="text-xs text-emerald-400 mt-1">
-                          Last seen: {new Date(device.last_connected).toLocaleString()}
+                          {t('tapo.lastSeen')}: {new Date(device.last_connected).toLocaleString()}
                         </p>
                       )}
                     </div>

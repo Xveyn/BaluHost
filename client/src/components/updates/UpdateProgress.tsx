@@ -8,6 +8,7 @@
  * - Status indicator
  * - Rollback option (when failed)
  */
+import { useTranslation } from 'react-i18next';
 import { Loader2, Clock, AlertTriangle, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
 import {
   getStatusInfo,
@@ -27,8 +28,9 @@ export default function UpdateProgress({
   onRollback,
   rollbackLoading = false,
 }: UpdateProgressProps) {
+  const { t } = useTranslation('updates');
   const percent = progress.progress_percent;
-  const currentStep = progress.current_step || 'Initializing...';
+  const currentStep = progress.current_step || t('progress.initializing');
   const statusInfo = getStatusInfo(progress.status);
   const inProgress = isUpdateInProgress(progress.status);
 
@@ -51,7 +53,7 @@ export default function UpdateProgress({
             <AlertTriangle className="w-5 h-5 text-amber-500" />
           )}
           <div>
-            <span className="font-medium text-white">System Update</span>
+            <span className="font-medium text-white">{t('progress.systemUpdate')}</span>
             <span className={`ml-2 text-sm ${statusInfo.color}`}>
               {statusInfo.icon} {statusInfo.label}
             </span>
@@ -70,7 +72,7 @@ export default function UpdateProgress({
             ) : (
               <RotateCcw className="w-4 h-4" />
             )}
-            Rollback
+            {t('progress.rollback')}
           </button>
         )}
       </div>
@@ -78,12 +80,12 @@ export default function UpdateProgress({
       {/* Version transition */}
       <div className="flex items-center gap-3 mb-4 p-3 bg-slate-700/50 rounded-lg">
         <div className="flex-1">
-          <span className="text-xs text-slate-400 block">From</span>
+          <span className="text-xs text-slate-400 block">{t('progress.from')}</span>
           <span className="font-mono text-white">{progress.from_version}</span>
         </div>
         <div className="text-slate-500">→</div>
         <div className="flex-1">
-          <span className="text-xs text-slate-400 block">To</span>
+          <span className="text-xs text-slate-400 block">{t('progress.to')}</span>
           <span className="font-mono text-sky-400">{progress.to_version}</span>
         </div>
       </div>
@@ -91,7 +93,7 @@ export default function UpdateProgress({
       {/* Progress bar */}
       <div className="mb-4">
         <div className="flex justify-between items-center mb-1.5">
-          <span className="text-sm text-slate-400">Progress</span>
+          <span className="text-sm text-slate-400">{t('progress.progress')}</span>
           <span className="text-sm font-medium text-sky-400">{percent}%</span>
         </div>
         <div className="w-full h-3 bg-slate-700 rounded-full overflow-hidden">
@@ -111,12 +113,12 @@ export default function UpdateProgress({
       {/* Current step */}
       <div className="flex items-center justify-between text-sm">
         <div className="flex items-center gap-2 text-slate-400">
-          <span>Status:</span>
+          <span>{t('progress.status')}:</span>
           <span className="text-white">{currentStep}</span>
         </div>
         <div className="flex items-center gap-1.5 text-slate-400">
           <Clock className="w-4 h-4" />
-          <span>{formatDuration(elapsed)} elapsed</span>
+          <span>{t('progress.elapsed', { duration: formatDuration(elapsed) })}</span>
         </div>
       </div>
 

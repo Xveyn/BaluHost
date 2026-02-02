@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api';
 import { UploadProgressModal } from '../components/UploadProgressModal';
@@ -218,6 +219,7 @@ interface FileManagerProps {
 }
 
 export default function FileManager({ user }: FileManagerProps) {
+                    const { t } = useTranslation(['fileManager', 'common']);
                     // User-Liste State ganz oben definieren
                     const [allUsers, setAllUsers] = useState<Array<{ id: string; username: string }>>([]);
                   // User-Liste immer beim Mount laden
@@ -273,9 +275,9 @@ export default function FileManager({ user }: FileManagerProps) {
               can_delete: rule.canDelete,
             }))
           });
-          toast.success('Berechtigungen gespeichert!');
+          toast.success(t('fileManager:messages.permissionsSaved'));
         } catch (err) {
-          toast.error('Fehler beim Speichern der Berechtigungen');
+          toast.error(t('fileManager:messages.permissionsError'));
         }
         setShowEditPermissionsModal(false);
         setFileToEditPermissions(null);
@@ -625,7 +627,7 @@ export default function FileManager({ user }: FileManagerProps) {
         if (ids.length > 0) {
           setUploadIds(ids);
         } else {
-          toast.success('Files uploaded successfully!');
+          toast.success(t('fileManager:messages.uploadSuccess'));
         }
         
         // Invalidate cache and reload
@@ -636,11 +638,11 @@ export default function FileManager({ user }: FileManagerProps) {
         loadVclQuota(); // Reload VCL quota after upload
       } else {
         const error = await response.json();
-        toast.error(`Upload failed: ${getErrorMessage(error)}`);
+        toast.error(`${t('fileManager:messages.uploadError')}: ${getErrorMessage(error)}`);
       }
     } catch (err) {
       console.error('Upload failed:', err);
-      toast.error('Upload failed. Please try again.');
+      toast.error(t('fileManager:messages.uploadError'));
     } finally {
       setUploading(false);
     }
@@ -693,13 +695,13 @@ export default function FileManager({ user }: FileManagerProps) {
       }
     } catch (err) {
       console.error('Download failed:', err);
-      toast.error('Download failed. Please try again.');
+      toast.error(t('fileManager:messages.downloadError', 'Download failed'));
     }
   };
 
   const handleCreateFolder = async () => {
     if (!newFolderName.trim()) {
-      toast.error('Please enter a folder name');
+      toast.error(t('fileManager:messages.enterFolderName', 'Please enter a folder name'));
       return;
     }
 
@@ -722,18 +724,18 @@ export default function FileManager({ user }: FileManagerProps) {
       });
 
       if (response.ok) {
-        toast.success('Folder created successfully!');
+        toast.success(t('fileManager:messages.folderCreated', 'Folder created successfully'));
         setShowNewFolderDialog(false);
         setNewFolderName('');
         sessionStorage.removeItem(`files_cache_${currentPath}`);
         loadFiles(currentPath, false);
       } else {
         const error = await response.json();
-        toast.error(`Failed to create folder: ${getErrorMessage(error)}`);
+        toast.error(`${t('fileManager:messages.folderError', 'Failed to create folder')}: ${getErrorMessage(error)}`);
       }
     } catch (err) {
       console.error('Create folder failed:', err);
-      toast.error('Failed to create folder. Please try again.');
+      toast.error(t('fileManager:messages.folderError', 'Failed to create folder'));
     }
   };
 
@@ -759,7 +761,7 @@ export default function FileManager({ user }: FileManagerProps) {
       });
 
       if (response.ok) {
-        toast.success(`${fileToDelete.type === 'directory' ? 'Folder' : 'File'} deleted successfully!`);
+        toast.success(t('fileManager:messages.deleteSuccess'));
         setShowDeleteDialog(false);
         setFileToDelete(null);
         sessionStorage.removeItem(`files_cache_${currentPath}`);
@@ -768,11 +770,11 @@ export default function FileManager({ user }: FileManagerProps) {
         loadStorageInfo();
       } else {
         const error = await response.json();
-        toast.error(`Delete failed: ${getErrorMessage(error)}`);
+        toast.error(`${t('fileManager:messages.deleteError')}: ${getErrorMessage(error)}`);
       }
     } catch (err) {
       console.error('Delete failed:', err);
-      toast.error('Delete failed. Please try again.');
+      toast.error(t('fileManager:messages.deleteError'));
     }
   };
 
@@ -784,7 +786,7 @@ export default function FileManager({ user }: FileManagerProps) {
 
   const handleRename = async () => {
     if (!fileToRename || !newFileName.trim()) {
-      toast.error('Please enter a valid file name');
+      toast.error(t('fileManager:messages.enterFileName', 'Please enter a valid file name'));
       return;
     }
 
@@ -804,7 +806,7 @@ export default function FileManager({ user }: FileManagerProps) {
       });
 
       if (response.ok) {
-        toast.success('Renamed successfully!');
+        toast.success(t('fileManager:messages.renameSuccess'));
         setShowRenameDialog(false);
         setFileToRename(null);
         setNewFileName('');
@@ -812,11 +814,11 @@ export default function FileManager({ user }: FileManagerProps) {
         loadFiles(currentPath, false);
       } else {
         const error = await response.json();
-        toast.error(`Rename failed: ${getErrorMessage(error)}`);
+        toast.error(`${t('fileManager:messages.renameError')}: ${getErrorMessage(error)}`);
       }
     } catch (err) {
       console.error('Rename failed:', err);
-      toast.error('Rename failed. Please try again.');
+      toast.error(t('fileManager:messages.renameError'));
     }
   };
 

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   ComposedChart,
   Line,
@@ -44,6 +45,7 @@ export default function FanCurveChart({
   minPoints = 2,
   maxPoints = 10,
 }: FanCurveChartProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [draggingIndex, setDraggingIndex] = useState<number | null>(null);
   const [localPoints, setLocalPoints] = useState<FanCurvePoint[]>(points);
   const chartRef = useRef<HTMLDivElement>(null);
@@ -175,7 +177,7 @@ export default function FanCurveChart({
     return (
       <div className="bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 shadow-xl">
         <p className="text-xs text-slate-400">
-          {data.isCurrentPoint ? 'Current' : 'Curve Point'}
+          {data.isCurrentPoint ? t('system:fanControl.curve.current') : t('system:fanControl.curve.curvePoint')}
         </p>
         <p className="text-sm font-semibold text-white">
           {data.temp.toFixed(1)}°C → {data.pwm}%

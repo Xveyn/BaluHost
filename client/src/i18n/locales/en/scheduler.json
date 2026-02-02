@@ -1,0 +1,129 @@
+{
+  "title": "Scheduler Dashboard",
+  "description": "Manage system schedulers and view execution history",
+  "tabs": {
+    "overview": "Overview",
+    "timeline": "Timeline",
+    "syncSchedules": "Sync Schedules",
+    "maintenance": "Maintenance",
+    "history": "History"
+  },
+  "stats": {
+    "running": "{{count}} Running",
+    "enabled": "{{count}} Enabled"
+  },
+  "syncTab": {
+    "title": "Sync Schedules",
+    "description": "User-defined sync schedules can be configured in the Settings page under the Sync tab. This section will be enhanced with direct schedule management in a future update.",
+    "goToSettings": "Go to Settings"
+  },
+  "buttons": {
+    "refresh": "Refresh",
+    "runNow": "Run Now",
+    "configure": "Configure",
+    "retry": "Retry",
+    "enable": "Enable",
+    "disable": "Disable"
+  },
+  "toast": {
+    "runSuccess": "{{name}} ran successfully",
+    "runFailed": "Failed to run scheduler",
+    "toggleSuccess": "Scheduler toggled successfully",
+    "toggleFailed": "Failed to toggle scheduler",
+    "configSaved": "Configuration saved",
+    "configFailed": "Failed to save configuration",
+    "retrySuccess": "{{name}} retried successfully",
+    "retryFailed": "Retry failed"
+  },
+  "status": {
+    "all": "All",
+    "completed": "Completed",
+    "failed": "Failed",
+    "running": "Running",
+    "cancelled": "Cancelled",
+    "pending": "Pending"
+  },
+  "configModal": {
+    "title": "Configure {{name}}",
+    "runInterval": "Run Interval",
+    "enabled": "Enabled",
+    "minIntervalHint": "Minimum: 60 seconds",
+    "minIntervalError": "Minimum interval is 60 seconds",
+    "saveFailed": "Failed to save configuration",
+    "envVar": "Environment variable",
+    "envVarNote": "Changes here override the default configuration but may be reset on server restart.",
+    "units": {
+      "seconds": "Seconds",
+      "minutes": "Minutes",
+      "hours": "Hours",
+      "days": "Days"
+    }
+  },
+  "history": {
+    "title": "Execution History",
+    "filter": "Filter",
+    "noExecutions": "No executions found",
+    "pagination": "Page {{page}} of {{totalPages}} ({{total}} total)",
+    "result": "Result",
+    "error": "Error",
+    "jobId": "Job ID",
+    "triggeredBy": "Triggered by User ID",
+    "completed": "Completed",
+    "columns": {
+      "scheduler": "Scheduler",
+      "started": "Started",
+      "duration": "Duration",
+      "status": "Status",
+      "trigger": "Trigger"
+    }
+  },
+  "timeline": {
+    "title": "24-Hour Activity Timeline",
+    "completed": "completed",
+    "failed": "failed",
+    "running": "running",
+    "recentFailures": "Recent Failures"
+  },
+  "card": {
+    "active": "Active",
+    "disabled": "Disabled",
+    "stopped": "Stopped",
+    "interval": "Interval",
+    "nextRun": "Next Run",
+    "last": "Last",
+    "neverRun": "Never run"
+  },
+  "maintenance": {
+    "triggerRaidScrub": "Trigger RAID Scrub",
+    "runSmartShort": "Run SMART Short",
+    "toggleSmartMode": "Toggle SMART Mode",
+    "raidStatus": "RAID Status",
+    "smartStatus": "SMART Status",
+    "size": "Size",
+    "resyncProgress": "Resync Progress",
+    "devices": "Devices",
+    "device": "Device",
+    "mode": "Mode",
+    "temp": "Temp",
+    "attributes": "Attributes",
+    "noArrays": "No arrays detected.",
+    "noSmartDevices": "No SMART devices found.",
+    "loadFailed": "Failed to load data",
+    "scrubStarted": "Scrub started",
+    "scrubFailed": "Scrub failed",
+    "smartTestStarted": "SMART test started",
+    "smartTestFailed": "SMART test failed",
+    "smartMode": "SMART mode: {{mode}}",
+    "toggleFailed": "Toggle failed",
+    "noDeviceSelected": "No device selected for SMART test",
+    "confirmTokenCreated": "Confirmation token created. Confirm to execute.",
+    "confirmRequestFailed": "Failed to request confirmation",
+    "actionExecuted": "Action executed",
+    "executionFailed": "Execution failed",
+    "confirm": "Confirm",
+    "confirmDescription": "A one-time confirmation token was created. Click Confirm to execute the action now.",
+    "token": "Token",
+    "expiresAt": "Expires at",
+    "confirmExecute": "Confirm Execute"
+  }
+}

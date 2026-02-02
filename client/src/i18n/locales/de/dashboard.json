@@ -1,0 +1,120 @@
+{
+  "title": "Dashboard",
+  "subtitle": "Systemübersicht",
+  "widgets": {
+    "systemStatus": "Systemstatus",
+    "storageUsage": "Speichernutzung",
+    "cpuUsage": "CPU-Auslastung",
+    "memoryUsage": "Arbeitsspeicher",
+    "networkTraffic": "Netzwerkverkehr",
+    "diskIO": "Festplatten I/O",
+    "recentActivity": "Letzte Aktivitäten",
+    "quickActions": "Schnellaktionen"
+  },
+  "stats": {
+    "totalFiles": "Dateien gesamt",
+    "totalUsers": "Benutzer gesamt",
+    "activeConnections": "Aktive Verbindungen",
+    "uptime": "Betriebszeit",
+    "temperature": "Temperatur"
+  },
+  "charts": {
+    "last24Hours": "Letzte 24 Stunden",
+    "lastWeek": "Letzte Woche",
+    "lastMonth": "Letzter Monat",
+    "cpuHistory": "CPU-Verlauf",
+    "memoryHistory": "Speicherverlauf",
+    "networkHistory": "Netzwerkverlauf"
+  },
+  "system": {
+    "cpuFrequency": "CPU-Frequenz",
+    "cpuEnergy": "CPU-Energie",
+    "fanControl": "Lüftersteuerung",
+    "pwmFanControl": "PWM-Lüftersteuerung",
+    "raidStatus": "RAID-Status",
+    "smartStatus": "SMART-Status"
+  },
+  "activity": {
+    "title": "Letzte Aktivitäten",
+    "liveOperations": "Live-Operationen",
+    "viewSystemLogs": "System-Logs anzeigen",
+    "failedToLoad": "Aktivitäten konnten nicht geladen werden: {{error}}",
+    "noRecentActivity": "Keine aktuellen Aktivitäten",
+    "operationsAppearHere": "Dateioperationen werden hier angezeigt"
+  },
+  "alerts": {
+    "dismiss": "Verwerfen",
+    "view": "Anzeigen",
+    "systemAlerts": "{{count}} Systemwarnungen",
+    "critical": "{{count}} kritisch",
+    "warnings": "{{count}} Warnung",
+    "warnings_plural": "{{count}} Warnungen",
+    "collapse": "Einklappen",
+    "expand": "Ausklappen"
+  },
+  "devices": {
+    "title": "Verbundene Geräte",
+    "unableToLoad": "Laden fehlgeschlagen",
+    "noDevicesRegistered": "Keine Geräte registriert",
+    "clickToAddDevice": "Klicken zum Hinzufügen",
+    "online": "{{count}} online",
+    "mobile": "Mobil",
+    "desktop": "Desktop",
+    "clickToManage": "Klicken zum Verwalten"
+  },
+  "network": {
+    "title": "Netzwerk",
+    "loading": "Lädt...",
+    "offline": "Offline",
+    "monitoringUnavailable": "Netzwerküberwachung nicht verfügbar",
+    "idle": "Inaktiv",
+    "active": "Aktiv",
+    "lowActivity": "Geringe Aktivität",
+    "standby": "Standby",
+    "live": "Live"
+  },
+  "services": {
+    "title": "Dienste",
+    "backendServices": "Backend-Dienste",
+    "loading": "Lädt...",
+    "loadingServices": "Lade Dienste...",
+    "failedToLoad": "Dienste konnten nicht geladen werden",
+    "failedToLoadStatus": "Dienststatus konnte nicht geladen werden",
+    "error": "Fehler",
+    "running": "{{count}} aktiv",
+    "ofTotal": "von {{total}} Backend-Diensten",
+    "errorsCount": "{{count}} Fehler",
+    "errorsCount_plural": "{{count}} Fehler",
+    "stoppedCount": "{{count}} gestoppt",
+    "allHealthy": "Alle gesund"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "loading": "Lädt...",
+    "error": "Fehler",
+    "failedToLoad": "Plugin-Status konnte nicht geladen werden",
+    "noPlugins": "Keine Plugins",
+    "browseAvailable": "Klicken zum Durchsuchen",
+    "active": "{{count}} aktiv",
+    "ofInstalled": "von {{total}} installierten Plugin",
+    "ofInstalled_plural": "von {{total}} installierten Plugins",
+    "errorsCount": "{{count}} Fehler",
+    "errorsCount_plural": "{{count}} Fehler",
+    "noneActive": "Keine aktiv",
+    "inactive": "{{count}} inaktiv",
+    "allActive": "Alle aktiv"
+  },
+  "maintenance": {
+    "title": "Nächste Wartung",
+    "unableToLoad": "Laden fehlgeschlagen",
+    "noScheduledTasks": "Keine geplanten Aufgaben",
+    "allDisabled": "Alle Scheduler sind deaktiviert oder nicht konfiguriert.",
+    "configureSchedulers": "Scheduler konfigurieren",
+    "manage": "Verwalten",
+    "overdue": "Überfällig",
+    "lastRun": "Letzter Lauf: {{status}}",
+    "window": "Zeitfenster",
+    "viewPlan": "Plan anzeigen",
+    "schedulersTotal": "{{count}} Scheduler insgesamt"
+  }
+}

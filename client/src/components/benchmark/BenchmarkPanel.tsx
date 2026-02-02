@@ -9,6 +9,7 @@
  * - Benchmark history (collapsible)
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   Play,
   History,
@@ -42,6 +43,7 @@ import BenchmarkProgress from './BenchmarkProgress';
 import BenchmarkResults, { BenchmarkResultsCompact } from './BenchmarkResults';
 
 export default function BenchmarkPanel() {
+  const { t } = useTranslation('system');
   // State
   const [selectedDisk, setSelectedDisk] = useState<string>('');
   const [selectedProfile, setSelectedProfile] = useState<BenchmarkProfile>('quick');
@@ -138,8 +140,8 @@ export default function BenchmarkPanel() {
       {/* Section Header */}
       <div className="flex items-center gap-2">
         <Gauge className="w-5 h-5 text-sky-500" />
-        <h3 className="text-lg font-semibold text-white">Disk Benchmark</h3>
-        <span className="text-xs text-slate-500 ml-2">(CrystalDiskMark Style)</span>
+        <h3 className="text-lg font-semibold text-white">{t('benchmark.title')}</h3>
+        <span className="text-xs text-slate-500 ml-2">({t('benchmark.crystalDiskMarkStyle')})</span>
       </div>
 
       {/* Error display */}
@@ -156,7 +158,7 @@ export default function BenchmarkPanel() {
             {/* Disk selection */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1.5">
-                Select Disk
+                {t('benchmark.selectDisk')}
               </label>
               <div className="relative">
                 <HardDrive className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
@@ -166,7 +168,7 @@ export default function BenchmarkPanel() {
                   disabled={disksLoading || isRunning}
                   className="w-full pl-10 pr-4 py-2 bg-slate-900 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-sky-500 disabled:opacity-50"
                 >
-                  {disksLoading && <option>Loading...</option>}
+                  {disksLoading && <option>{t('benchmark.loadingDisks')}</option>}
                   {disks.map(disk => (
                     <option key={disk.name} value={disk.name} disabled={!disk.can_benchmark}>
                       {disk.name} - {disk.size_display} {disk.model ? `(${disk.model})` : ''}{' '}
@@ -186,7 +188,7 @@ export default function BenchmarkPanel() {
             {/* Profile selection */}
             <div>
               <label className="block text-sm font-medium text-slate-400 mb-1.5">
-                Benchmark Profile
+                {t('benchmark.profile')}
               </label>
               <select
                 value={selectedProfile}
@@ -220,7 +222,7 @@ export default function BenchmarkPanel() {
               ) : (
                 <Play className="w-4 h-4" />
               )}
-              Start Benchmark
+              {t('benchmark.start')}
             </button>
           </div>
         </div>
@@ -249,7 +251,7 @@ export default function BenchmarkPanel() {
         <div className="bg-red-900/30 border border-red-700 rounded-lg px-4 py-3">
           <div className="flex items-center gap-2 text-red-300">
             <XCircle className="w-5 h-5" />
-            <span className="font-medium">Benchmark Failed</span>
+            <span className="font-medium">{t('benchmark.failed')}</span>
           </div>
           {activeBenchmark.error_message && (
             <p className="mt-2 text-sm text-red-400">{activeBenchmark.error_message}</p>
@@ -265,8 +267,8 @@ export default function BenchmarkPanel() {
         >
           <div className="flex items-center gap-2">
             <History className="w-4 h-4 text-slate-400" />
-            <span className="font-medium text-white">Benchmark History</span>
-            <span className="text-sm text-slate-500">({historyBenchmarks.length} recent)</span>
+            <span className="font-medium text-white">{t('benchmark.history')}</span>
+            <span className="text-sm text-slate-500">({historyBenchmarks.length} {t('benchmark.recent')})</span>
           </div>
           {showHistory ? (
             <ChevronUp className="w-4 h-4 text-slate-400" />
@@ -283,7 +285,7 @@ export default function BenchmarkPanel() {
               </div>
             ) : historyBenchmarks.length === 0 ? (
               <div className="text-center py-8 text-slate-500">
-                No benchmarks yet. Run your first benchmark!
+                {t('benchmark.noHistory')}
               </div>
             ) : (
               <div className="divide-y divide-slate-700">

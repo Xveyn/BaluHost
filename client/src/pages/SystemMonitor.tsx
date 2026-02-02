@@ -11,6 +11,7 @@
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { MetricChart, TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
 import { formatTimestamp } from '../lib/dateUtils';
@@ -168,6 +169,7 @@ function StatCard({ label, value, unit, color, icon }: StatCardProps) {
 
 // CPU Tab Component
 function CpuTab({ timeRange }: { timeRange: TimeRange }) {
+  const { t } = useTranslation(['system', 'common']);
   const { current, history, loading, error } = useCpuMonitoring({ historyDuration: timeRange });
   const [viewMode, setViewMode] = useState<'overall' | 'per-thread'>('overall');
 
@@ -260,15 +262,15 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
     // If we have P/E core info (Intel hybrid)
     if (pCores !== null && pCores !== undefined && eCores !== null && eCores !== undefined) {
       return {
-        main: `${cores} Kerne / ${threads} Threads`,
-        detail: `${pCores} P-Cores, ${eCores} E-Cores`,
+        main: t('monitor.coresThreads', { cores, threads }),
+        detail: `${pCores} ${t('monitor.pCores')}, ${eCores} ${t('monitor.eCores')}`,
         isHybrid: true,
       };
     }
 
     return {
-      main: `${cores} Kerne`,
-      detail: `${threads} Threads`,
+      main: `${cores} ${t('monitor.cores')}`,
+      detail: `${threads} ${t('monitor.threads')}`,
       isHybrid: false,
     };
   }, [current]);
@@ -282,21 +284,21 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       {/* Current Stats */}
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
-          label="CPU-Auslastung"
+          label={t('monitor.cpuUsage')}
           value={current?.usage_percent?.toFixed(1) ?? '0'}
           unit="%"
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">%</span>}
         />
         <StatCard
-          label="Frequenz"
+          label={t('monitor.frequency')}
           value={current?.frequency_mhz ? (current.frequency_mhz / 1000).toFixed(2) : '-'}
           unit="GHz"
           color="purple"
           icon={<span className="text-purple-400 text-base sm:text-xl">~</span>}
         />
         <StatCard
-          label="Temperatur"
+          label={t('monitor.temperature')}
           value={current?.temperature_celsius?.toFixed(1) ?? '-'}
           unit="°C"
           color="orange"
@@ -306,7 +308,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
         <div className="card border-slate-800/60 bg-gradient-to-br from-green-500/10 to-transparent p-3 sm:p-5">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-400">Prozessor</p>
+              <p className="text-[10px] sm:text-xs font-medium uppercase tracking-wider text-slate-400">{t('monitor.processor')}</p>
               <p className="mt-1 sm:mt-2 text-base sm:text-xl font-semibold text-white truncate">
                 {coreInfo?.main ?? '-'}
               </p>
@@ -326,7 +328,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       {/* Usage Chart - Toggle Buttons */}
       <div className="flex items-center justify-between">
         <h3 className="text-base sm:text-lg font-semibold text-white">
-          {viewMode === 'overall' ? 'CPU-Auslastung' : 'CPU-Auslastung (Per Thread)'}
+          {viewMode === 'overall' ? t('monitor.cpuUsage') : t('monitor.cpuUsagePerThread')}
         </h3>
         {current?.thread_usages && current.thread_usages.length > 0 && (
           <div className="flex gap-2">
@@ -338,7 +340,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
-              Gesamt
+              {t('monitor.overall')}
             </button>
             <button
               onClick={() => setViewMode('per-thread')}
@@ -348,7 +350,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   : 'text-slate-400 hover:bg-slate-800'
               }`}
             >
-              Per Thread
+              {t('monitor.perThread')}
             </button>
           </div>
         )}
@@ -359,7 +361,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
         <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
           <MetricChart
             data={usageChartData}
-            lines={[{ dataKey: 'usage', name: 'Auslastung (%)', color: '#3b82f6' }]}
+            lines={[{ dataKey: 'usage', name: t('monitor.usagePercent'), color: '#3b82f6' }]}
             yAxisLabel="%"
             yAxisDomain={[0, 100]}
             height={250}
@@ -373,12 +375,12 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       {viewMode === 'per-thread' && individualThreadCharts.length > 0 && (
         <>
           {/* P-Cores Section (for hybrid CPUs) */}
-          {isHybridCpu && individualThreadCharts.some(t => t.threadType === 'P') && (
+          {isHybridCpu && individualThreadCharts.some(tc => tc.threadType === 'P') && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-blue-500"></div>
                 <h4 className="text-sm sm:text-base font-semibold text-white">
-                  P-Cores (Performance) - {current?.p_core_count} Kerne / {(current?.p_core_count ?? 0) * 2} Threads
+                  {t('monitor.pCoresPerformance')} - {t('monitor.coresThreadsCount', { cores: current?.p_core_count, threads: (current?.p_core_count ?? 0) * 2 })}
                 </h4>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
@@ -411,12 +413,12 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
           )}
 
           {/* E-Cores Section (for hybrid CPUs) */}
-          {isHybridCpu && individualThreadCharts.some(t => t.threadType === 'E') && (
+          {isHybridCpu && individualThreadCharts.some(tc => tc.threadType === 'E') && (
             <div className="space-y-3">
               <div className="flex items-center gap-2">
                 <div className="h-3 w-3 rounded-full bg-green-500"></div>
                 <h4 className="text-sm sm:text-base font-semibold text-white">
-                  E-Cores (Efficiency) - {current?.e_core_count} Kerne / {current?.e_core_count} Threads
+                  {t('monitor.eCoresEfficiency')} - {t('monitor.coresThreadsCount', { cores: current?.e_core_count, threads: current?.e_core_count })}
                 </h4>
               </div>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
@@ -452,7 +454,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
           {!isHybridCpu && (
             <div className="space-y-3">
               <h4 className="text-sm sm:text-base font-semibold text-white">
-                Logische Prozessoren ({individualThreadCharts.length})
+                {t('monitor.logicalProcessors')} ({individualThreadCharts.length})
               </h4>
               <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
                 {individualThreadCharts.map((thread) => (
@@ -491,10 +493,10 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       {/* Temperature Chart - only show if data available */}
       {hasTemperatureData && (
         <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">CPU-Temperatur</h3>
+          <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{t('monitor.cpuTemperature')}</h3>
           <MetricChart
             data={temperatureChartData}
-            lines={[{ dataKey: 'temperature', name: 'Temperatur (°C)', color: '#f97316' }]}
+            lines={[{ dataKey: 'temperature', name: t('monitor.temperatureUnit'), color: '#f97316' }]}
             yAxisLabel="°C"
             yAxisDomain={[0, 'auto']}
             height={250}
@@ -509,6 +511,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
 
 // Memory Tab Component
 function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
+  const { t } = useTranslation(['system', 'common']);
   const { current, history, loading, error } = useMemoryMonitoring({ historyDuration: timeRange });
 
   // Calculate total RAM in GB for chart domain
@@ -538,25 +541,25 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
       {/* Current Stats */}
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
         <StatCard
-          label="Belegt"
+          label={t('monitor.used')}
           value={current ? formatBytes(current.used_bytes) : '-'}
           color="purple"
           icon={<span className="text-purple-400 text-base sm:text-xl">📊</span>}
         />
         <StatCard
-          label="Gesamt"
+          label={t('monitor.total')}
           value={current ? formatBytes(current.total_bytes) : '-'}
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">Σ</span>}
         />
         <StatCard
-          label="Verfügbar"
+          label={t('monitor.available')}
           value={current?.available_bytes ? formatBytes(current.available_bytes) : '-'}
           color="green"
           icon={<span className="text-green-400 text-base sm:text-xl">✓</span>}
         />
         <StatCard
-          label="Auslastung"
+          label={t('monitor.utilization')}
           value={current?.percent?.toFixed(1) ?? '0'}
           unit="%"
           color="orange"
@@ -572,13 +575,13 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
 
       {/* Chart - Absolute values in GB */}
       <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">RAM-Verlauf (absolut)</h3>
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{t('monitor.ramHistory')}</h3>
         <MetricChart
           data={chartData}
           lines={[
-            { dataKey: 'usedGb', name: 'Belegt (GB)', color: '#a855f7' },
+            { dataKey: 'usedGb', name: t('monitor.usedGb'), color: '#a855f7' },
             ...(hasBaluhostData
-              ? [{ dataKey: 'baluhostGb', name: 'BaluHost (GB)', color: '#06b6d4' }]
+              ? [{ dataKey: 'baluhostGb', name: t('monitor.baluhostGb'), color: '#06b6d4' }]
               : []),
           ]}
           yAxisLabel="GB"
@@ -594,6 +597,7 @@ function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
 
 // Network Tab Component
 function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
+  const { t } = useTranslation(['system', 'common']);
   const { current, history, loading, error } = useNetworkMonitoring({ historyDuration: timeRange });
 
   // Filter and map network data - only include valid samples
@@ -616,14 +620,14 @@ function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
       {/* Current Stats */}
       <div className="grid grid-cols-2 gap-3 sm:gap-5">
         <StatCard
-          label="Download"
+          label={t('monitor.download')}
           value={current?.download_mbps?.toFixed(2) ?? '0'}
           unit="Mbit/s"
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">↓</span>}
         />
         <StatCard
-          label="Upload"
+          label={t('monitor.upload')}
           value={current?.upload_mbps?.toFixed(2) ?? '0'}
           unit="Mbit/s"
           color="green"
@@ -633,12 +637,12 @@ function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
 
       {/* Chart */}
       <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">Netzwerk-Verlauf</h3>
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{t('monitor.networkHistory')}</h3>
         <MetricChart
           data={chartData}
           lines={[
-            { dataKey: 'download', name: 'Download (Mbit/s)', color: '#3b82f6' },
-            { dataKey: 'upload', name: 'Upload (Mbit/s)', color: '#10b981' },
+            { dataKey: 'download', name: t('monitor.downloadMbps'), color: '#3b82f6' },
+            { dataKey: 'upload', name: t('monitor.uploadMbps'), color: '#10b981' },
           ]}
           yAxisLabel="Mbit/s"
           height={300}
@@ -651,6 +655,7 @@ function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
 
 // Disk I/O Tab Component
 function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
+  const { t } = useTranslation(['system', 'common']);
   const { disks, history, availableDisks, loading, error } = useDiskIoMonitoring({
     historyDuration: timeRange,
   });
@@ -708,40 +713,40 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
       {selectedDisk && (
         <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-6">
           <StatCard
-            label="Lesen"
+            label={t('monitor.read')}
             value={currentDisk?.read_mbps?.toFixed(2) ?? '0'}
             unit="MB/s"
             color="blue"
             icon={<span className="text-blue-400 text-base sm:text-xl">📖</span>}
           />
           <StatCard
-            label="Schreiben"
+            label={t('monitor.write')}
             value={currentDisk?.write_mbps?.toFixed(2) ?? '0'}
             unit="MB/s"
             color="green"
             icon={<span className="text-green-400 text-base sm:text-xl">✏️</span>}
           />
           <StatCard
-            label="Lese-IOPS"
+            label={t('monitor.readIops')}
             value={currentDisk?.read_iops?.toFixed(0) ?? '0'}
             color="purple"
             icon={<span className="text-purple-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
-            label="Schreib-IOPS"
+            label={t('monitor.writeIops')}
             value={currentDisk?.write_iops?.toFixed(0) ?? '0'}
             color="orange"
             icon={<span className="text-orange-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
-            label="Antwortzeit"
+            label={t('monitor.responseTime')}
             value={currentDisk?.avg_response_ms?.toFixed(2) ?? '-'}
             unit="ms"
             color="cyan"
             icon={<span className="text-cyan-400 text-base sm:text-xl">⏱</span>}
           />
           <StatCard
-            label="Aktive Zeit"
+            label={t('monitor.activeTime')}
             value={currentDisk?.active_time_percent?.toFixed(1) ?? '-'}
             unit="%"
             color="teal"
@@ -754,7 +759,7 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
       {selectedDisk && (
         <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
           <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
-            <h3 className="text-base sm:text-lg font-semibold text-white">{selectedDisk} - Verlauf</h3>
+            <h3 className="text-base sm:text-lg font-semibold text-white">{selectedDisk} - {t('monitor.history')}</h3>
             <div className="flex gap-2">
               <button
                 onClick={() => setViewMode('throughput')}
@@ -764,7 +769,7 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
                     : 'text-slate-400 hover:bg-slate-800'
                 }`}
               >
-                Durchsatz
+                {t('monitor.throughput')}
               </button>
               <button
                 onClick={() => setViewMode('iops')}
@@ -774,7 +779,7 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
                     : 'text-slate-400 hover:bg-slate-800'
                 }`}
               >
-                IOPS
+                {t('monitor.iops')}
               </button>
             </div>
           </div>
@@ -783,12 +788,12 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
             lines={[
               {
                 dataKey: 'read',
-                name: viewMode === 'throughput' ? 'Lesen (MB/s)' : 'Lese-IOPS',
+                name: viewMode === 'throughput' ? t('monitor.readMbs') : t('monitor.readIops'),
                 color: '#3b82f6',
               },
               {
                 dataKey: 'write',
-                name: viewMode === 'throughput' ? 'Schreiben (MB/s)' : 'Schreib-IOPS',
+                name: viewMode === 'throughput' ? t('monitor.writeMbs') : t('monitor.writeIops'),
                 color: '#10b981',
               },
             ]}
@@ -801,8 +806,8 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
 
       {availableDisks.length === 0 && !loading && (
         <div className="text-center py-8 sm:py-12 text-slate-400">
-          <p>Keine Festplatten erkannt</p>
-          <p className="text-xs sm:text-sm text-slate-500 mt-1">Warte auf erste Messung...</p>
+          <p>{t('monitor.noDisksDetected')}</p>
+          <p className="text-xs sm:text-sm text-slate-500 mt-1">{t('monitor.waitingForData')}</p>
         </div>
       )}
 
@@ -818,6 +823,7 @@ function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
 type CumulativePeriod = 'today' | 'week' | 'month';
 
 function PowerTab() {
+  const { t } = useTranslation(['system', 'common']);
   const [powerData, setPowerData] = useState<PowerMonitoringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -885,7 +891,7 @@ function PowerTab() {
   const handleSavePrice = async () => {
     const newPrice = parseFloat(priceInput);
     if (isNaN(newPrice) || newPrice < 0.01 || newPrice > 10.0) {
-      toast.error('Preis muss zwischen 0.01 und 10.00 liegen');
+      toast.error(t('monitor.power.priceMustBeBetween'));
       return;
     }
 
@@ -897,14 +903,14 @@ function PowerTab() {
       });
       setPriceConfig(updated);
       setEditingPrice(false);
-      toast.success('Strompreis aktualisiert');
+      toast.success(t('monitor.power.priceUpdated'));
       // Refresh cumulative data with new price
       if (powerData && powerData.devices.length > 0) {
         const data = await getCumulativeEnergy(powerData.devices[0].device_id, cumulativePeriod);
         setCumulativeData(data);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Fehler beim Speichern');
+      toast.error(err.response?.data?.detail || t('monitor.power.saveError'));
     } finally {
       setSavingPrice(false);
     }
@@ -967,9 +973,9 @@ function PowerTab() {
             d="M13 10V3L4 14h7v7l9-11h-9z"
           />
         </svg>
-        <p className="mt-4 text-slate-400">Keine Tapo-Geräte konfiguriert</p>
+        <p className="mt-4 text-slate-400">{t('monitor.power.noTapoDevices')}</p>
         <p className="text-sm text-slate-500 mt-1">
-          Konfigurieren Sie ein Tapo-Gerät in den Einstellungen, um den Stromverbrauch zu überwachen.
+          {t('monitor.power.configureTapoDevice')}
         </p>
       </div>
     );
@@ -980,28 +986,28 @@ function PowerTab() {
       {/* Total Power Stats */}
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
-          label="Aktuelle Leistung"
+          label={t('monitor.power.currentPower')}
           value={powerData.total_current_power.toFixed(1)}
           unit="W"
           color="yellow"
           icon={<span className="text-yellow-400 text-base sm:text-xl">⚡</span>}
         />
         <StatCard
-          label="Kumuliert (Sitzung)"
+          label={t('monitor.power.cumulativeSession')}
           value={totalCumulativeEnergy.toFixed(4)}
           unit="kWh"
           color="orange"
           icon={<span className="text-orange-400 text-base sm:text-xl">Σ</span>}
         />
         <StatCard
-          label="Heute gesamt"
+          label={t('monitor.power.todayTotal')}
           value={powerData.devices.reduce((sum, d) => sum + (d.latest_sample?.energy_today ?? 0), 0).toFixed(2)}
           unit="kWh"
           color="green"
           icon={<span className="text-green-400 text-base sm:text-xl">📊</span>}
         />
         <StatCard
-          label="Geräte"
+          label={t('monitor.power.devices')}
           value={powerData.devices.length}
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">#</span>}
@@ -1017,31 +1023,31 @@ function PowerTab() {
             <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
             <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
               <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">Leistung</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.powerLabel')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
                   {device.latest_sample?.watts?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
                 </p>
               </div>
               <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">Spannung</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.voltage')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
                   {device.latest_sample?.voltage?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
                 </p>
               </div>
               <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">Strom</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.current')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
                   {device.latest_sample?.current?.toFixed(3) ?? '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
                 </p>
               </div>
               <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">Heute</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.today')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
                   {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
                 </p>
               </div>
               <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">Kumuliert (Sitzung)</p>
+                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.cumulativeSession')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-orange-400">
                   {deviceCumulativeEnergy.toFixed(4)} <span className="text-sm sm:text-base text-slate-400">kWh</span>
                 </p>
@@ -1056,7 +1062,7 @@ function PowerTab() {
                     time: formatTimestamp(s.timestamp),
                     watts: s.watts,
                   }))}
-                  lines={[{ dataKey: 'watts', name: 'Leistung (W)', color: '#eab308' }]}
+                  lines={[{ dataKey: 'watts', name: t('monitor.power.powerWatts'), color: '#eab308' }]}
                   height={180}
                   showArea
                 />
@@ -1072,7 +1078,7 @@ function PowerTab() {
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
             <h3 className="text-base sm:text-lg font-semibold text-white">
-              Kumulierter Verbrauch & Kosten
+              {t('monitor.power.cumulativeConsumptionCosts')}
             </h3>
             {priceConfig && (
               <div className="flex items-center gap-2">
@@ -1134,7 +1140,7 @@ function PowerTab() {
                     : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
                 }`}
               >
-                {period === 'today' ? 'Heute' : period === 'week' ? 'Woche' : 'Monat'}
+                {period === 'today' ? t('monitor.power.periodToday') : period === 'week' ? t('monitor.power.periodWeek') : t('monitor.power.periodMonth')}
               </button>
             ))}
           </div>
@@ -1144,25 +1150,25 @@ function PowerTab() {
         {cumulativeData && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">Gesamt Verbrauch</p>
+              <p className="text-xs text-slate-400">{t('monitor.power.totalConsumption')}</p>
               <p className="text-lg font-semibold text-emerald-400">
                 {cumulativeData.total_kwh.toFixed(3)} <span className="text-sm text-slate-400">kWh</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">Gesamt Kosten</p>
+              <p className="text-xs text-slate-400">{t('monitor.power.totalCosts')}</p>
               <p className="text-lg font-semibold text-orange-400">
                 {cumulativeData.total_cost.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">Strompreis</p>
+              <p className="text-xs text-slate-400">{t('monitor.power.electricityPrice')}</p>
               <p className="text-lg font-semibold text-slate-300">
                 {cumulativeData.cost_per_kwh.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">Datenpunkte</p>
+              <p className="text-xs text-slate-400">{t('monitor.power.dataPoints')}</p>
               <p className="text-lg font-semibold text-slate-300">
                 {cumulativeData.data_points.length}
               </p>
@@ -1233,9 +1239,9 @@ function PowerTab() {
                   }}
                   labelStyle={{ color: '#94a3b8' }}
                   formatter={(value: number, name: string) => {
-                    if (name === 'kwh') return [`${value.toFixed(4)} kWh`, 'Verbrauch'];
-                    if (name === 'cost') return [`${value.toFixed(4)} ${cumulativeData.currency}`, 'Kosten'];
-                    if (name === 'watts') return [`${value.toFixed(1)} W`, 'Leistung'];
+                    if (name === 'kwh') return [`${value.toFixed(4)} kWh`, t('monitor.power.consumption')];
+                    if (name === 'cost') return [`${value.toFixed(4)} ${cumulativeData.currency}`, t('monitor.power.costsLabel')];
+                    if (name === 'watts') return [`${value.toFixed(1)} W`, t('monitor.power.powerLabel')];
                     return [value, name];
                   }}
                   labelFormatter={(label, payload) => {
@@ -1248,8 +1254,8 @@ function PowerTab() {
                 <Legend
                   wrapperStyle={{ fontSize: '12px' }}
                   formatter={(value) => {
-                    if (value === 'kwh') return 'Verbrauch (kWh)';
-                    if (value === 'cost') return `Kosten (${cumulativeData.currency})`;
+                    if (value === 'kwh') return t('monitor.power.consumptionKwh');
+                    if (value === 'cost') return `${t('monitor.power.costsLabel')} (${cumulativeData.currency})`;
                     return value;
                   }}
                 />
@@ -1276,7 +1282,7 @@ function PowerTab() {
           </div>
         ) : (
           <div className="text-center py-8 text-slate-400">
-            Keine Daten für den ausgewählten Zeitraum verfügbar
+            {t('monitor.noDataForPeriod')}
           </div>
         )}
       </div>
@@ -1286,6 +1292,7 @@ function PowerTab() {
 
 // Main Component
 export default function SystemMonitor({ user }: SystemMonitorProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
 
@@ -1304,21 +1311,34 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
     return TABS.filter(tab => !tab.adminOnly || isAdmin);
   }, [isAdmin]);
 
+  // Translate tab labels
+  const getTabLabel = (tabId: TabType): string => {
+    const tabKeyMap: Record<TabType, string> = {
+      'cpu': 'monitor.tabs.cpu',
+      'memory': 'monitor.tabs.memory',
+      'network': 'monitor.tabs.network',
+      'disk-io': 'monitor.tabs.diskIo',
+      'power': 'monitor.tabs.power',
+      'services': 'monitor.tabs.services',
+    };
+    return t(tabKeyMap[tabId]);
+  };
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">System Monitor</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('monitor.title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            Echtzeit-Überwachung von CPU, RAM, Netzwerk, Festplatten und Stromverbrauch
+            {t('monitor.subtitleLong')}
           </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
           <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
           <div className="rounded-full border border-slate-800 bg-slate-900/70 px-3 sm:px-4 py-1.5 sm:py-2 text-xs text-slate-400 shadow-inner">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 inline-block mr-2" />
-            Live
+            {t('monitor.live')}
           </div>
         </div>
       </div>
@@ -1337,8 +1357,8 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
               }`}
             >
               {tab.icon}
-              <span className="hidden sm:inline">{tab.label}</span>
-              <span className="sm:hidden">{tab.label.slice(0, 3)}</span>
+              <span className="hidden sm:inline">{getTabLabel(tab.id)}</span>
+              <span className="sm:hidden">{getTabLabel(tab.id).slice(0, 3)}</span>
               {tab.adminOnly && <AdminBadge />}
             </button>
           ))}

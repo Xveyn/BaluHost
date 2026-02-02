@@ -7,6 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   getPowerStatus,
   PROFILE_INFO,
@@ -49,6 +50,7 @@ interface PowerStatusWidgetProps {
 }
 
 export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetProps) {
+  const { t } = useTranslation('system');
   const [status, setStatus] = useState<PowerStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +62,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
         setStatus(data);
         setError(null);
       } catch (err) {
-        setError('Laden fehlgeschlagen');
+        setError(t('powerStatus.loadFailed'));
       } finally {
         setLoading(false);
       }
@@ -85,7 +87,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
     return (
       <div className={`card border-slate-700/50 p-4 ${className}`}>
         <div className="text-center text-sm text-slate-500">
-          Power-Status nicht verfügbar
+          {t('powerStatus.notAvailable')}
         </div>
       </div>
     );
@@ -109,7 +111,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
           {/* Profile info */}
           <div>
             <p className="text-xs font-medium uppercase tracking-wider text-slate-400">
-              Power Profile
+              {t('powerStatus.title')}
             </p>
             <p className={`text-lg font-semibold ${getProfileTextClass(profile)}`}>
               {info.name}
@@ -124,8 +126,8 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
           </p>
           <p className="text-xs text-slate-400">
             {status.active_demands.length > 0
-              ? `${status.active_demands.length} Anforderung${status.active_demands.length !== 1 ? 'en' : ''}`
-              : 'Keine Anforderungen'}
+              ? `${status.active_demands.length} ${status.active_demands.length !== 1 ? t('powerStatus.requests') : t('powerStatus.request')}`
+              : t('powerStatus.noRequests')}
           </p>
         </div>
       </div>
@@ -138,7 +140,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
               <svg className="h-3 w-3" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />
               </svg>
-              Auto-Scaling
+              {t('powerStatus.autoScaling')}
             </span>
           )}
           {status.is_dev_mode && (
@@ -148,7 +150,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
           )}
         </div>
         <span className="text-xs text-slate-500">
-          {status.target_frequency_range || 'Dynamisch'}
+          {status.target_frequency_range || t('powerStatus.dynamic')}
         </span>
       </div>
     </Link>

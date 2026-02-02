@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next';
 import { useMultiUploadProgress } from '../hooks/useUploadProgress';
 
 interface UploadProgressModalProps {
@@ -6,6 +7,7 @@ interface UploadProgressModalProps {
 }
 
 export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalProps) {
+  const { t } = useTranslation(['shares']);
   const {
     progressMap,
     errors,
@@ -38,7 +40,7 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
       <div className="card border-slate-800/60 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)] max-w-2xl w-full mx-4 max-h-[80vh] overflow-auto">
         <div className="flex justify-between items-center mb-4">
           <h2 className="text-xl font-semibold text-white">
-            Uploading Files
+            {t('shares:upload.title')}
           </h2>
           {allCompleted && (
             <button
@@ -53,7 +55,7 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
         {/* Overall Progress */}
         <div className="mb-6">
           <div className="flex justify-between text-sm text-slate-300 mb-2">
-            <span>Overall Progress</span>
+            <span>{t('shares:upload.overallProgress')}</span>
             <span>{overallPercentage.toFixed(1)}%</span>
           </div>
           <div className="w-full bg-slate-800/60 rounded-full h-3 overflow-hidden">
@@ -96,10 +98,10 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
                   </span>
                   <span className={`text-xs font-semibold ${statusColor} ml-2`}>
                     {progress.status === 'completed'
-                      ? '✓ Done'
+                      ? `✓ ${t('shares:status.done')}`
                       : progress.status === 'failed'
-                      ? '✗ Failed'
-                      : 'Uploading...'}
+                      ? `✗ ${t('shares:status.failed')}`
+                      : t('shares:status.uploading')}
                   </span>
                 </div>
 
@@ -124,7 +126,7 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
 
                 {error && (
                   <div className="mt-2 text-xs text-rose-400">
-                    Error: {error.message}
+                    {t('shares:upload.error', { message: error.message })}
                   </div>
                 )}
               </div>
@@ -134,13 +136,13 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
 
         {allCompleted && !hasErrors && (
           <div className="mt-4 text-center text-emerald-400 font-semibold">
-            All files uploaded successfully!
+            {t('shares:upload.allCompleted')}
           </div>
         )}
 
         {hasErrors && (
           <div className="mt-4 text-center text-rose-400 font-semibold">
-            Some files failed to upload
+            {t('shares:upload.someFailed')}
           </div>
         )}
       </div>

@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useServicesSummary } from '../../hooks/useServicesSummary';
 import { Server, CheckCircle2, XCircle, AlertCircle, MinusCircle } from 'lucide-react';
 
@@ -12,6 +13,7 @@ interface ServiceSummaryWidgetProps {
 }
 
 export const ServiceSummaryWidget: React.FC<ServiceSummaryWidgetProps> = ({ isAdmin }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { summary, services, loading, error } = useServicesSummary({
     enabled: isAdmin,
@@ -32,7 +34,7 @@ export const ServiceSummaryWidget: React.FC<ServiceSummaryWidgetProps> = ({ isAd
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <Server className="h-4 w-4 text-slate-500" />
-            <span className="text-sm text-slate-400">Loading services...</span>
+            <span className="text-sm text-slate-400">{t('dashboard:services.loadingServices')}</span>
           </div>
           <div className="h-5 w-32 rounded bg-slate-800 animate-pulse" />
         </div>
@@ -46,7 +48,7 @@ export const ServiceSummaryWidget: React.FC<ServiceSummaryWidgetProps> = ({ isAd
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-3">
             <AlertCircle className="h-4 w-4 text-rose-400" />
-            <span className="text-sm text-rose-300">Failed to load services</span>
+            <span className="text-sm text-rose-300">{t('dashboard:services.failedToLoad')}</span>
           </div>
         </div>
       </div>
@@ -74,7 +76,7 @@ export const ServiceSummaryWidget: React.FC<ServiceSummaryWidgetProps> = ({ isAd
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3">
           <Server className={`h-4 w-4 ${hasErrors ? 'text-rose-400' : 'text-slate-400'}`} />
-          <span className="text-sm text-slate-300">Backend Services</span>
+          <span className="text-sm text-slate-300">{t('dashboard:services.backendServices')}</span>
         </div>
 
         <div className="flex items-center gap-3">

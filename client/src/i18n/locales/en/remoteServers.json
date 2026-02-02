@@ -1,0 +1,30 @@
+{
+  "title": "Remote Servers",
+  "description": "Manage and control your remote BaluHost servers with SSH and VPN profiles",
+  "tabs": {
+    "servers": "Servers",
+    "vpn": "VPN Profiles"
+  },
+  "servers": {
+    "title": "Server Profiles",
+    "description": "Add and manage remote BaluHost servers"
+  },
+  "vpn": {
+    "title": "VPN Profiles",
+    "description": "Upload and manage VPN configurations for secure connections"
+  },
+  "quickStart": {
+    "title": "Quick Start",
+    "step1": "Create a VPN Profile if you need secure access (optional)",
+    "step2": "Add a Server Profile with your SSH credentials",
+    "step3": "Test the connection to verify SSH access",
+    "step4": "Use \"Start Server\" to remotely power on your server"
+  },
+  "buttons": {
+    "addServer": "Add Server",
+    "addVpn": "Add VPN",
+    "testConnection": "Test Connection",
+    "startServer": "Start Server",
+    "delete": "Delete"
+  }
+}

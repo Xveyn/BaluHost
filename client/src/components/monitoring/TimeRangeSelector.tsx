@@ -2,6 +2,7 @@
  * Time range selector for monitoring charts
  */
 
+import { useTranslation } from 'react-i18next';
 import type { TimeRange } from '../../api/monitoring';
 
 export interface TimeRangeSelectorProps {
@@ -10,18 +11,20 @@ export interface TimeRangeSelectorProps {
   className?: string;
 }
 
-const TIME_RANGES: { value: TimeRange; label: string }[] = [
-  { value: '10m', label: '10 Min' },
-  { value: '1h', label: '1 Std' },
-  { value: '24h', label: '24 Std' },
-  { value: '7d', label: '7 Tage' },
-];
+const TIME_RANGE_KEYS: TimeRange[] = ['10m', '1h', '24h', '7d'];
 
 export default function TimeRangeSelector({
   value,
   onChange,
   className = '',
 }: TimeRangeSelectorProps) {
+  const { t } = useTranslation('system');
+
+  const TIME_RANGES = TIME_RANGE_KEYS.map((r) => ({
+    value: r,
+    label: t(`monitoring.timeRange.${r}`),
+  }));
+
   return (
     <div className={`flex gap-2 ${className}`}>
       {TIME_RANGES.map((range) => (

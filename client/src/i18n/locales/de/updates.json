@@ -1,0 +1,90 @@
+{
+  "title": "Systemaktualisierungen",
+  "description": "BaluHost-Updates und Versionskontrolle verwalten",
+  "tabs": {
+    "overview": "Übersicht",
+    "history": "Verlauf",
+    "settings": "Einstellungen"
+  },
+  "buttons": {
+    "checkForUpdates": "Nach Updates suchen",
+    "update": "Aktualisieren",
+    "updateTo": "Auf v{{version}} aktualisieren",
+    "confirmUpdate": "Update bestätigen?",
+    "yesUpdate": "Ja, aktualisieren",
+    "rollback": "Zurücksetzen",
+    "previous": "Zurück",
+    "next": "Weiter"
+  },
+  "version": {
+    "current": "Aktuelle Version",
+    "available": "Update verfügbar",
+    "upToDate": "Aktuell",
+    "upToDateDesc": "Sie verwenden die neueste Version.",
+    "lastChecked": "Zuletzt geprüft:",
+    "channel": "{{channel}} Channel"
+  },
+  "blockers": {
+    "title": "Update blockiert",
+    "updateBlocked": "Update blockiert: {{blockers}}"
+  },
+  "changelog": {
+    "title": "Änderungsprotokoll",
+    "prerelease": "Vorabversion",
+    "breakingChanges": "Breaking Changes:"
+  },
+  "history": {
+    "title": "Update-Verlauf",
+    "noHistory": "Kein Update-Verlauf",
+    "version": "Version",
+    "status": "Status",
+    "date": "Datum",
+    "duration": "Dauer",
+    "actions": "Aktionen",
+    "page": "Seite {{current}} von {{total}}"
+  },
+  "status": {
+    "pending": "Ausstehend",
+    "downloading": "Wird heruntergeladen",
+    "installing": "Wird installiert",
+    "completed": "Abgeschlossen",
+    "failed": "Fehlgeschlagen",
+    "rolledBack": "Zurückgesetzt"
+  },
+  "settings": {
+    "autoCheck": "Automatische Update-Prüfung",
+    "autoCheckDesc": "Regelmäßig nach neuen Versionen suchen",
+    "checkInterval": "Prüfintervall",
+    "checkIntervalDesc": "Stunden zwischen automatischen Prüfungen",
+    "every6Hours": "Alle 6 Stunden",
+    "every12Hours": "Alle 12 Stunden",
+    "every24Hours": "Alle 24 Stunden",
+    "every2Days": "Alle 2 Tage",
+    "everyWeek": "Jede Woche",
+    "channel": "Update-Kanal",
+    "stable": "Stabil",
+    "stableDesc": "Empfohlen für Produktivumgebungen",
+    "beta": "Beta",
+    "betaDesc": "Frühzeitiger Zugang zu neuen Funktionen",
+    "autoBackup": "Backup vor Update",
+    "autoBackupDesc": "Datenbank-Backup vor Updates erstellen",
+    "requireHealthy": "Gesunde Dienste erforderlich",
+    "requireHealthyDesc": "Updates nur erlauben, wenn alle Dienste gesund sind"
+  },
+  "rollback": {
+    "title": "Rollback bestätigen",
+    "description": "Sind Sie sicher, dass Sie zurücksetzen möchten? Die vorherige Version wird wiederhergestellt und ein Dienst-Neustart kann erforderlich sein."
+  },
+  "toast": {
+    "updateStarted": "Update gestartet",
+    "updateCompleted": "Auf {{version}} aktualisiert",
+    "rollbackSuccess": "Auf {{version}} zurückgesetzt",
+    "settingsSaved": "Einstellungen gespeichert",
+    "checkFailed": "Update-Prüfung fehlgeschlagen",
+    "updateFailed": "Update fehlgeschlagen",
+    "rollbackFailed": "Rollback fehlgeschlagen",
+    "settingsFailed": "Einstellungen konnten nicht gespeichert werden",
+    "historyFailed": "Verlauf konnte nicht geladen werden",
+    "configFailed": "Konfiguration konnte nicht geladen werden"
+  }
+}

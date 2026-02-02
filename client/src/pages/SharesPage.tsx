@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   listShareLinks,
   listFileShares,
@@ -18,6 +19,7 @@ import EditShareLinkModal from '../components/EditShareLinkModal';
 import EditFileShareModal from '../components/EditFileShareModal';
 
 export default function SharesPage() {
+  const { t } = useTranslation(['shares', 'common']);
   // User list for modal
   const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'links' | 'shares' | 'shared-with-me'>('links');
@@ -86,26 +88,26 @@ export default function SharesPage() {
   };
 
   const handleDeleteShareLink = async (linkId: number) => {
-    if (!confirm('Are you sure you want to delete this share link?')) return;
+    if (!confirm(t('confirm.deleteLink'))) return;
 
     try {
       await deleteShareLink(linkId);
       await loadData();
     } catch (error) {
       console.error('Failed to delete share link:', error);
-      alert('Failed to delete share link');
+      alert(t('toast.deleteFailed'));
     }
   };
 
   const handleDeleteFileShare = async (shareId: number) => {
-    if (!confirm('Are you sure you want to revoke this file share?')) return;
+    if (!confirm(t('confirm.revokeShare'))) return;
 
     try {
       await deleteFileShare(shareId);
       await loadData();
     } catch (error) {
       console.error('Failed to delete file share:', error);
-      alert('Failed to revoke file share');
+      alert(t('toast.revokeFailed'));
     }
   };
 
@@ -117,7 +119,7 @@ export default function SharesPage() {
   };
 
   const formatDate = (dateString: string | null) => {
-    if (!dateString) return 'Never';
+    if (!dateString) return t('common:time.never');
     return new Date(dateString).toLocaleDateString();
   };
 
@@ -190,8 +192,8 @@ export default function SharesPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">File Sharing</h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-400">Manage public share links and user file shares</p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('description')}</p>
         </div>
       </div>
 
@@ -201,9 +203,9 @@ export default function SharesPage() {
           <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-400 truncate">Active Links</p>
+                <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.activeLinks')}</p>
                 <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.active_share_links}</p>
-                <p className="text-xs text-slate-500 mt-0.5">of {statistics.total_share_links} total</p>
+                <p className="text-xs text-slate-500 mt-0.5">{t('stats.ofTotal', { total: statistics.total_share_links })}</p>
               </div>
               <div className="rounded-lg bg-sky-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
                 <Link2 className="h-5 w-5 sm:h-6 sm:w-6 text-sky-400" />
@@ -213,9 +215,9 @@ export default function SharesPage() {
           <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-400 truncate">Downloads</p>
+                <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.downloads')}</p>
                 <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.total_downloads}</p>
-                <p className="text-xs text-slate-500 mt-0.5">all time</p>
+                <p className="text-xs text-slate-500 mt-0.5">{t('stats.allTime')}</p>
               </div>
               <div className="rounded-lg bg-green-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
                 <Download className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />
@@ -225,9 +227,9 @@ export default function SharesPage() {
           <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-400 truncate">User Shares</p>
+                <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.userShares')}</p>
                 <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.active_file_shares}</p>
-                <p className="text-xs text-slate-500 mt-0.5">of {statistics.total_file_shares} total</p>
+                <p className="text-xs text-slate-500 mt-0.5">{t('stats.ofTotal', { total: statistics.total_file_shares })}</p>
               </div>
               <div className="rounded-lg bg-purple-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
                 <Users className="h-5 w-5 sm:h-6 sm:w-6 text-purple-400" />
@@ -237,9 +239,9 @@ export default function SharesPage() {
           <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
             <div className="flex items-center justify-between">
               <div className="min-w-0 flex-1">
-                <p className="text-xs sm:text-sm text-slate-400 truncate">Shared With Me</p>
+                <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.sharedWithMe')}</p>
                 <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{statistics.files_shared_with_me}</p>
-                <p className="text-xs text-slate-500 mt-0.5">files accessible</p>
+                <p className="text-xs text-slate-500 mt-0.5">{t('stats.filesAccessible')}</p>
               </div>
               <div className="rounded-lg bg-orange-500/20 p-2 sm:p-3 flex-shrink-0 ml-2">
                 <Share2 className="h-5 w-5 sm:h-6 sm:w-6 text-orange-400" />
@@ -263,8 +265,8 @@ export default function SharesPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Link2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">Public Share Links</span>
-                <span className="sm:hidden">Links</span>
+                <span className="hidden sm:inline">{t('tabs.publicLinks')}</span>
+                <span className="sm:hidden">{t('tabs.links')}</span>
               </div>
               {activeTab === 'links' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
@@ -280,8 +282,8 @@ export default function SharesPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">User Shares</span>
-                <span className="sm:hidden">Shares</span>
+                <span className="hidden sm:inline">{t('tabs.userShares')}</span>
+                <span className="sm:hidden">{t('tabs.shares')}</span>
               </div>
               {activeTab === 'shares' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
@@ -297,8 +299,8 @@ export default function SharesPage() {
             >
               <div className="flex items-center justify-center gap-2">
                 <Share2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span className="hidden sm:inline">Shared With Me</span>
-                <span className="sm:hidden">Received</span>
+                <span className="hidden sm:inline">{t('tabs.sharedWithMe')}</span>
+                <span className="sm:hidden">{t('tabs.received')}</span>
               </div>
               {activeTab === 'shared-with-me' && (
                 <div className="absolute bottom-0 left-0 right-0 h-0.5 bg-sky-500" />
@@ -318,7 +320,7 @@ export default function SharesPage() {
                   type="text"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
-                  placeholder="Search by file name..."
+                  placeholder={t('search.placeholder')}
                   className="w-full pl-10 sm:pl-11 pr-4 py-2.5 sm:py-3 border border-slate-700 bg-slate-900/70 rounded-xl focus:ring-2 focus:ring-sky-500 focus:border-sky-500 transition-all text-slate-200 placeholder-slate-500 text-sm sm:text-base"
                 />
               </div>
@@ -331,7 +333,7 @@ export default function SharesPage() {
                 }`}
               >
                 <Filter className="w-4 h-4 sm:w-5 sm:h-5" />
-                <span>Filters</span>
+                <span>{t('search.filters')}</span>
               </button>
 
               {/* Action Button */}
@@ -341,8 +343,8 @@ export default function SharesPage() {
                   className="btn btn-primary flex items-center justify-center gap-2 touch-manipulation active:scale-95"
                 >
                   <Link2 className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden sm:inline">Create Link</span>
-                  <span className="sm:hidden">Create</span>
+                  <span className="hidden sm:inline">{t('buttons.createLink')}</span>
+                  <span className="sm:hidden">{t('buttons.create')}</span>
                 </button>
               )}
               {activeTab === 'shares' && (
@@ -351,8 +353,8 @@ export default function SharesPage() {
                   className="btn btn-primary flex items-center justify-center gap-2 touch-manipulation active:scale-95"
                 >
                   <Users className="w-4 h-4 sm:w-5 sm:h-5" />
-                  <span className="hidden sm:inline">Share with User</span>
-                  <span className="sm:hidden">Share</span>
+                  <span className="hidden sm:inline">{t('buttons.shareWithUser')}</span>
+                  <span className="sm:hidden">{t('buttons.share')}</span>
                 </button>
               )}
             </div>
@@ -361,7 +363,7 @@ export default function SharesPage() {
             {showFilters && (
               <div className="flex flex-wrap gap-2 sm:gap-3 p-3 sm:p-4 bg-slate-800/30 rounded-xl border border-slate-700/50">
                 <span className="text-xs sm:text-sm font-semibold text-slate-300 flex items-center mr-2">
-                  Status:
+                  {t('search.status')}:
                 </span>
                 {(['all', 'active', 'expired'] as const).map((status) => (
                   <label key={status} className="flex items-center cursor-pointer">
@@ -372,7 +374,7 @@ export default function SharesPage() {
                       onChange={(e) => setStatusFilter(e.target.value as typeof statusFilter)}
                       className="mr-1.5 sm:mr-2 w-4 h-4 text-sky-500"
                     />
-                    <span className="text-xs sm:text-sm font-medium text-slate-300 capitalize">{status}</span>
+                    <span className="text-xs sm:text-sm font-medium text-slate-300 capitalize">{t(`search.${status}`)}</span>
                   </label>
                 ))}
               </div>
@@ -382,7 +384,7 @@ export default function SharesPage() {
           {loading ? (
             <div className="flex flex-col items-center justify-center py-12 sm:py-16">
               <div className="animate-spin rounded-full h-10 w-10 sm:h-12 sm:w-12 border-b-2 border-sky-500 mb-4"></div>
-              <p className="text-slate-400 font-medium text-sm sm:text-base">Loading shares...</p>
+              <p className="text-slate-400 font-medium text-sm sm:text-base">{t('loading')}</p>
             </div>
           ) : (
             <>
@@ -393,19 +395,19 @@ export default function SharesPage() {
                     <div className="text-center py-12 sm:py-16">
                       <Link2 className="w-12 h-12 sm:w-16 sm:h-16 text-slate-600 mx-auto mb-4" />
                       <h3 className="text-base sm:text-lg font-semibold text-slate-300 mb-2">
-                        {shareLinks.length === 0 ? 'No share links yet' : 'No matching share links found'}
+                        {shareLinks.length === 0 ? t('empty.noLinks') : t('empty.noMatchingLinks')}
                       </h3>
                       <p className="text-slate-500 mb-6 text-sm sm:text-base">
                         {shareLinks.length === 0
-                          ? 'Create your first public share link to get started'
-                          : 'Try adjusting your search or filters'}
+                          ? t('empty.noLinksDesc')
+                          : t('empty.tryAdjusting')}
                       </p>
                       {shareLinks.length === 0 && (
                         <button
                           onClick={() => setShowCreateLinkModal(true)}
                           className="btn btn-primary touch-manipulation active:scale-95"
                         >
-                          Create Your First Link
+                          {t('buttons.createFirstLink')}
                         </button>
                       )}
                     </div>
@@ -416,12 +418,12 @@ export default function SharesPage() {
                         <table className="min-w-full">
                           <thead className="bg-slate-800/30 border-b border-slate-700/50">
                             <tr>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">File</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Status</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Downloads</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Expires</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Created</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.status')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.downloads')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.created')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.actions')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
@@ -437,20 +439,20 @@ export default function SharesPage() {
                                   <div className="flex flex-wrap gap-1.5">
                                     {link.is_expired ? (
                                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-red-500/40 bg-red-500/15 text-red-300">
-                                        Expired
+                                        {t('status.expired')}
                                       </span>
                                     ) : link.is_accessible ? (
                                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-green-500/40 bg-green-500/15 text-green-300">
-                                        Active
+                                        {t('status.active')}
                                       </span>
                                     ) : (
                                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-yellow-500/40 bg-yellow-500/15 text-yellow-300">
-                                        Limited
+                                        {t('status.limited')}
                                       </span>
                                     )}
                                     {link.has_password && (
                                       <span className="px-2.5 py-1 rounded-full text-xs font-semibold border border-sky-500/40 bg-sky-500/15 text-sky-300">
-                                        Protected
+                                        {t('status.protected')}
                                       </span>
                                     )}
                                   </div>

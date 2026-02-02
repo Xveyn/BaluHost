@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useNetworkStatus, formatNetworkSpeed } from '../../hooks/useNetworkStatus';
 import { ArrowDown, ArrowUp, Wifi, WifiOff, Cable } from 'lucide-react';
 
@@ -12,6 +13,7 @@ interface NetworkWidgetProps {
 }
 
 export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { status, loading, error } = useNetworkStatus({ refreshInterval: 3000 });
 
@@ -22,8 +24,8 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
       <div className={`card border-slate-800/40 bg-slate-900/60 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Network</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Loading...</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:network.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('dashboard:network.loading')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-green-500 to-emerald-500 text-white shadow-[0_12px_38px_rgba(16,185,129,0.35)]">
             <Wifi className="h-6 w-6" />
@@ -38,15 +40,15 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
       <div className={`card border-slate-800/40 bg-slate-900/60 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Network</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Offline</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:network.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('dashboard:network.offline')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
             <WifiOff className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-3 sm:mt-4 flex items-center justify-between gap-2 text-xs text-slate-400">
-          <span className="truncate">Network monitoring unavailable</span>
+          <span className="truncate">{t('dashboard:network.monitoringUnavailable')}</span>
         </div>
       </div>
     );
@@ -73,7 +75,7 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Network</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:network.title')}</p>
           <div className="mt-2 flex items-center gap-4">
             {/* Download */}
             <div className="flex items-center gap-1.5">
@@ -103,10 +105,10 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
       <div className="mt-3 sm:mt-4 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
           <span className="truncate flex-1 min-w-0">
-            {isIdle ? 'Idle' : isActive ? 'Active' : 'Low activity'}
+            {isIdle ? t('dashboard:network.idle') : isActive ? t('dashboard:network.active') : t('dashboard:network.lowActivity')}
           </span>
           <span className={`shrink-0 ${isActive ? 'text-emerald-400' : 'text-slate-500'}`}>
-            {isIdle ? 'Standby' : 'Live'}
+            {isIdle ? t('dashboard:network.standby') : t('dashboard:network.live')}
           </span>
         </div>
       </div>

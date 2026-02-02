@@ -1,0 +1,120 @@
+{
+  "title": "Dashboard",
+  "subtitle": "System Overview",
+  "widgets": {
+    "systemStatus": "System Status",
+    "storageUsage": "Storage Usage",
+    "cpuUsage": "CPU Usage",
+    "memoryUsage": "Memory Usage",
+    "networkTraffic": "Network Traffic",
+    "diskIO": "Disk I/O",
+    "recentActivity": "Recent Activity",
+    "quickActions": "Quick Actions"
+  },
+  "stats": {
+    "totalFiles": "Total Files",
+    "totalUsers": "Total Users",
+    "activeConnections": "Active Connections",
+    "uptime": "Uptime",
+    "temperature": "Temperature"
+  },
+  "charts": {
+    "last24Hours": "Last 24 Hours",
+    "lastWeek": "Last Week",
+    "lastMonth": "Last Month",
+    "cpuHistory": "CPU History",
+    "memoryHistory": "Memory History",
+    "networkHistory": "Network History"
+  },
+  "system": {
+    "cpuFrequency": "CPU Frequency",
+    "cpuEnergy": "CPU Energy",
+    "fanControl": "Fan Control",
+    "pwmFanControl": "PWM Fan Control",
+    "raidStatus": "RAID Status",
+    "smartStatus": "SMART Status"
+  },
+  "activity": {
+    "title": "Recent Activity",
+    "liveOperations": "Live operations",
+    "viewSystemLogs": "View system logs",
+    "failedToLoad": "Failed to load activity: {{error}}",
+    "noRecentActivity": "No recent activity",
+    "operationsAppearHere": "File operations will appear here"
+  },
+  "alerts": {
+    "dismiss": "Dismiss",
+    "view": "View",
+    "systemAlerts": "{{count}} System Alerts",
+    "critical": "{{count}} critical",
+    "warnings": "{{count}} warning",
+    "warnings_plural": "{{count}} warnings",
+    "collapse": "Collapse",
+    "expand": "Expand"
+  },
+  "devices": {
+    "title": "Connected Devices",
+    "unableToLoad": "Unable to load",
+    "noDevicesRegistered": "No devices registered",
+    "clickToAddDevice": "Click to add a device",
+    "online": "{{count}} online",
+    "mobile": "Mobile",
+    "desktop": "Desktop",
+    "clickToManage": "Click to manage devices"
+  },
+  "network": {
+    "title": "Network",
+    "loading": "Loading...",
+    "offline": "Offline",
+    "monitoringUnavailable": "Network monitoring unavailable",
+    "idle": "Idle",
+    "active": "Active",
+    "lowActivity": "Low activity",
+    "standby": "Standby",
+    "live": "Live"
+  },
+  "services": {
+    "title": "Services",
+    "backendServices": "Backend Services",
+    "loading": "Loading...",
+    "loadingServices": "Loading services...",
+    "failedToLoad": "Failed to load services",
+    "failedToLoadStatus": "Failed to load service status",
+    "error": "Error",
+    "running": "{{count}} Running",
+    "ofTotal": "of {{total}} backend services",
+    "errorsCount": "{{count}} error",
+    "errorsCount_plural": "{{count}} errors",
+    "stoppedCount": "{{count}} stopped",
+    "allHealthy": "All healthy"
+  },
+  "plugins": {
+    "title": "Plugins",
+    "loading": "Loading...",
+    "error": "Error",
+    "failedToLoad": "Failed to load plugin status",
+    "noPlugins": "No Plugins",
+    "browseAvailable": "Click to browse available plugins",
+    "active": "{{count}} Active",
+    "ofInstalled": "of {{total}} installed plugin",
+    "ofInstalled_plural": "of {{total}} installed plugins",
+    "errorsCount": "{{count}} error",
+    "errorsCount_plural": "{{count}} errors",
+    "noneActive": "None active",
+    "inactive": "{{count}} inactive",
+    "allActive": "All active"
+  },
+  "maintenance": {
+    "title": "Next Maintenance",
+    "unableToLoad": "Unable to load",
+    "noScheduledTasks": "No scheduled tasks",
+    "allDisabled": "All schedulers are disabled or none configured.",
+    "configureSchedulers": "Configure schedulers",
+    "manage": "Manage",
+    "overdue": "Overdue",
+    "lastRun": "Last run: {{status}}",
+    "window": "Window",
+    "viewPlan": "View plan",
+    "schedulersTotal": "{{count}} schedulers total"
+  }
+}

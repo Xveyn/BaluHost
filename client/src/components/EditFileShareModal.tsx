@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { updateFileShare, type FileShare, type UpdateFileShareRequest } from '../api/shares';
 
@@ -9,6 +10,7 @@ interface EditFileShareModalProps {
 }
 
 export default function EditFileShareModal({ fileShare, onClose, onSuccess }: EditFileShareModalProps) {
+  const { t } = useTranslation(['shares', 'common']);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<UpdateFileShareRequest>({
     can_read: fileShare.can_read,
@@ -40,7 +42,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Edit File Share</h2>
+          <h2 className="text-xl font-bold">{t('shares:modal.editFileShare')}</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
@@ -53,13 +55,13 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
           {/* File and User Info (read-only) */}
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium mb-1">File</label>
+              <label className="block text-sm font-medium mb-1">{t('shares:form.file')}</label>
               <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-700">
                 {fileShare.file_name}
               </div>
             </div>
             <div>
-              <label className="block text-sm font-medium mb-1">Shared With</label>
+              <label className="block text-sm font-medium mb-1">{t('shares:form.sharedWith')}</label>
               <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-700">
                 {fileShare.shared_with_username}
               </div>
@@ -68,7 +70,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
 
           {/* Permissions */}
           <div>
-            <label className="block text-sm font-medium mb-2">Permissions</label>
+            <label className="block text-sm font-medium mb-2">{t('shares:table.permissions')}</label>
             <div className="space-y-2">
               <label className="flex items-center">
                 <input
@@ -77,7 +79,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
                   onChange={(e) => setFormData({ ...formData, can_read: e.target.checked })}
                   className="mr-2"
                 />
-                <span className="text-sm">Can Read</span>
+                <span className="text-sm">{t('shares:permissions.canRead')}</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -86,7 +88,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
                   onChange={(e) => setFormData({ ...formData, can_write: e.target.checked })}
                   className="mr-2"
                 />
-                <span className="text-sm">Can Write</span>
+                <span className="text-sm">{t('shares:permissions.canWrite')}</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -95,7 +97,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
                   onChange={(e) => setFormData({ ...formData, can_delete: e.target.checked })}
                   className="mr-2"
                 />
-                <span className="text-sm">Can Delete</span>
+                <span className="text-sm">{t('shares:permissions.canDelete')}</span>
               </label>
               <label className="flex items-center">
                 <input
@@ -104,7 +106,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
                   onChange={(e) => setFormData({ ...formData, can_share: e.target.checked })}
                   className="mr-2"
                 />
-                <span className="text-sm">Can Re-share</span>
+                <span className="text-sm">{t('shares:permissions.canShare')}</span>
               </label>
             </div>
           </div>
@@ -112,7 +114,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
           {/* Expiration Date */}
           <div>
             <label className="block text-sm font-medium mb-1">
-              Expiration Date (leave empty for no expiration)
+              {t('shares:form.expirationDate')} ({t('shares:form.expirationHint')})
             </label>
             <input
               type="date"
@@ -130,14 +132,14 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
               onClick={onClose}
               className="px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
             >
-              Cancel
+              {t('shares:buttons.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Saving...' : 'Save Changes'}
+              {loading ? t('shares:buttons.saving') : t('shares:buttons.save')}
             </button>
           </div>
         </form>

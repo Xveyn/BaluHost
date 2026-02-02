@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { useServicesSummary } from '../../hooks/useServicesSummary';
 import { Server } from 'lucide-react';
 
@@ -13,6 +14,7 @@ interface ServicesPanelProps {
 }
 
 export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className = '' }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { summary, loading, error } = useServicesSummary({
     enabled: isAdmin,
@@ -58,12 +60,12 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
   // Status text
   const getStatusText = () => {
     if (hasErrors) {
-      return `${summary.error} error${summary.error > 1 ? 's' : ''}`;
+      return t('dashboard:services.errorsCount', { count: summary.error });
     }
     if (hasStopped) {
-      return `${summary.stopped} stopped`;
+      return t('dashboard:services.stoppedCount', { count: summary.stopped });
     }
-    return 'All healthy';
+    return t('dashboard:services.allHealthy');
   };
 
   const statusTextColor = hasErrors
@@ -77,8 +79,8 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
       <div className={`card border-slate-800/40 bg-slate-900/60 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Services</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Loading...</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:services.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('dashboard:services.loading')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
             <Server className="h-6 w-6" />
@@ -93,15 +95,15 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
       <div className={`card border-rose-500/30 bg-rose-500/10 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Services</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-rose-300">Error</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:services.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-rose-300">{t('dashboard:services.error')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400">
             <Server className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-3 sm:mt-4 text-xs text-rose-300">
-          Failed to load service status
+          {t('dashboard:services.failedToLoadStatus')}
         </div>
       </div>
     );
@@ -118,9 +120,9 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Services</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:services.title')}</p>
           <p className="mt-2 text-2xl sm:text-3xl font-semibold text-white truncate">
-            {summary.running} Running
+            {t('dashboard:services.running', { count: summary.running })}
           </p>
         </div>
         <div
@@ -134,7 +136,7 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
       <div className="mt-3 sm:mt-4 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
           <span className="truncate flex-1 min-w-0">
-            of {summary.total} backend services
+            {t('dashboard:services.ofTotal', { total: summary.total })}
           </span>
           <span className={`shrink-0 ${statusTextColor}`}>
             {getStatusText()}

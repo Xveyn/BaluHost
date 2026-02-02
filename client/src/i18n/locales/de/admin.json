@@ -1,0 +1,324 @@
+{
+  "title": "Administration",
+  "users": {
+    "title": "Benutzerverwaltung",
+    "createUser": "Benutzer erstellen",
+    "editUser": "Benutzer bearbeiten",
+    "deleteUser": "Benutzer löschen",
+    "deleteConfirm": "Möchten Sie den Benutzer \"{{username}}\" wirklich löschen?",
+    "roles": {
+      "admin": "Administrator",
+      "user": "Benutzer",
+      "guest": "Gast"
+    },
+    "fields": {
+      "username": "Benutzername",
+      "email": "E-Mail",
+      "role": "Rolle",
+      "created": "Erstellt",
+      "lastLogin": "Letzter Login",
+      "status": "Status"
+    },
+    "messages": {
+      "created": "Benutzer erfolgreich erstellt",
+      "updated": "Benutzer erfolgreich aktualisiert",
+      "deleted": "Benutzer erfolgreich gelöscht",
+      "error": "Fehler bei der Benutzeroperation",
+      "invalidEmail": "Bitte eine gültige E-Mail-Adresse eingeben"
+    }
+  },
+  "system": {
+    "title": "Systemmonitor",
+    "health": "Systemgesundheit",
+    "services": "Dienste",
+    "processes": "Prozesse",
+    "resources": "Ressourcen"
+  },
+  "raid": {
+    "title": "RAID-Verwaltung",
+    "status": "RAID-Status",
+    "drives": "Laufwerke",
+    "rebuild": "Rebuilding",
+    "healthy": "Gesund",
+    "degraded": "Degradiert",
+    "failed": "Ausgefallen"
+  },
+  "logs": {
+    "title": "Protokolle",
+    "auditLog": "Audit-Log",
+    "systemLog": "System-Log",
+    "accessLog": "Zugriffs-Log",
+    "filter": "Filtern",
+    "export": "Exportieren"
+  },
+  "scheduler": {
+    "title": "Aufgabenplanung",
+    "tasks": "Geplante Aufgaben",
+    "newTask": "Neue Aufgabe",
+    "editTask": "Aufgabe bearbeiten",
+    "deleteTask": "Aufgabe löschen"
+  },
+  "devices": {
+    "title": "Geräteverwaltung",
+    "registered": "Registrierte Geräte",
+    "newDevice": "Neues Gerät registrieren",
+    "deleteDevice": "Gerät entfernen",
+    "deleteConfirm": "Gerät \"{{name}}\" wirklich löschen?",
+    "enterName": "Bitte Gerätenamen eingeben",
+    "fields": {
+      "name": "Gerätename",
+      "type": "Gerätetyp",
+      "lastSeen": "Zuletzt gesehen",
+      "status": "Status"
+    },
+    "messages": {
+      "registered": "Gerät erfolgreich registriert",
+      "deleted": "Gerät erfolgreich entfernt",
+      "error": "Gerät konnte nicht gelöscht werden"
+    }
+  },
+  "database": {
+    "title": "Datenbank",
+    "subtitle": "Datenbankinspektor & Wartung",
+    "tabs": {
+      "tables": "Tabellen",
+      "stats": "Statistiken",
+      "storage": "Speicher",
+      "history": "Verlauf",
+      "maintenance": "Wartung"
+    },
+    "selectTable": "Tabelle auswählen",
+    "noTableSelected": "Keine Tabelle ausgewählt",
+    "loadOwners": "Besitzer laden",
+    "exportCsv": "Als CSV exportieren",
+    "refresh": "Aktualisieren",
+    "rowsOf": "Zeilen von",
+    "page": "Seite"
+  },
+  "health": {
+    "title": "Systemgesundheit",
+    "subtitle": "Server & Service Status",
+    "backToDashboard": "Zurück zum Dashboard",
+    "refreshing": "Wird aktualisiert...",
+    "lastUpdated": "Zuletzt aktualisiert",
+    "cpuUsage": "CPU-Auslastung",
+    "memoryUsage": "Speicherauslastung",
+    "diskUsage": "Festplattennutzung",
+    "uptime": "Betriebszeit",
+    "temperature": "Temperatur",
+    "services": "Dienste",
+    "serviceStatus": {
+      "running": "Läuft",
+      "stopped": "Gestoppt",
+      "error": "Fehler",
+      "unknown": "Unbekannt"
+    }
+  },
+  "monitoring": {
+    "title": "Monitoring-Verlauf",
+    "subtitle": "Historische Metriken aus Datenbankspeicher",
+    "samplesInfo": "{{formatted}} Samples, Quelle: {{source}}",
+    "loadingHistory": "Lade Verlaufsdaten...",
+    "noDataAvailable": "Keine {{metric}}-Daten für diesen Zeitraum verfügbar",
+    "noSamplesAvailable": "Keine {{metric}}-Samples verfügbar",
+    "timeRange": "Zeitraum",
+    "timeRanges": {
+      "10m": "10 Min",
+      "1h": "1 Stunde",
+      "24h": "24 Stunden",
+      "7d": "7 Tage"
+    },
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Speicher",
+      "network": "Netzwerk",
+      "diskIo": "Disk I/O"
+    },
+    "charts": {
+      "cpuUsage": "CPU-Auslastung %",
+      "memoryUsage": "Speicherauslastung %",
+      "download": "Download (Mbps)",
+      "upload": "Upload (Mbps)",
+      "read": "Lesen (MB/s)",
+      "write": "Schreiben (MB/s)"
+    },
+    "showingDisk": "Anzeige: {{disk}} ({{count}} Festplatte(n) verfügbar)",
+    "infoNote": "Diese Ansicht zeigt historische Monitoring-Daten aus der Datenbank. Daten werden gemäß den Aufbewahrungseinstellungen im Tab Statistiken gespeichert. Für Echtzeit-Monitoring verwenden Sie die System-Monitor-Seite."
+  },
+  "maintenance": {
+    "title": "Datenbank-Wartung",
+    "subtitle": "Gesundheitsüberwachung und Bereinigungswerkzeuge",
+    "loading": "Lade Wartungswerkzeuge...",
+    "connection": "Verbindung",
+    "databaseType": "Datenbanktyp",
+    "integrityCheck": "Integritätsprüfung",
+    "poolSize": "Pool-Größe",
+    "overallHealth": "Gesamtzustand",
+    "healthy": "Gesund",
+    "issuesDetected": "Probleme erkannt",
+    "poolDetails": {
+      "title": "Verbindungspool-Details",
+      "size": "Pool-Größe",
+      "checkedIn": "Eingecheckt",
+      "checkedOut": "Ausgecheckt",
+      "overflow": "Überlauf"
+    },
+    "cleanup": {
+      "title": "Monitoring-Datenbereinigung",
+      "description": "Manuelle Bereinigung abgelaufener Monitoring-Samples auslösen. Entfernt Samples, die älter als die konfigurierte Aufbewahrungsdauer für jeden Metriktyp sind.",
+      "runCleanup": "Bereinigung starten",
+      "confirm": "Bestätigen",
+      "success": "{{message}}",
+      "totalDeleted": "Gesamt gelöscht: {{formatted}} Samples",
+      "noSamplesDeleted": "Keine Samples wurden gelöscht - alle Daten sind innerhalb der Aufbewahrungsdauer."
+    }
+  },
+  "databaseStats": {
+    "title": "Monitoring-Datenbankstatistiken",
+    "lastUpdated": "Zuletzt aktualisiert: {{time}}",
+    "autoRefresh": "(Auto-Aktualisierung alle {{seconds}}s)",
+    "loading": "Lade Datenbankstatistiken...",
+    "metrics": {
+      "cpu": "CPU",
+      "memory": "Speicher",
+      "network": "Netzwerk",
+      "diskIo": "Disk I/O",
+      "process": "Prozess"
+    },
+    "fields": {
+      "samples": "Samples",
+      "size": "Größe",
+      "lastCleanup": "Letzte Bereinigung",
+      "totalCleaned": "Gesamt bereinigt",
+      "retention": "{{hours}}h Aufbewahrung"
+    },
+    "summary": {
+      "totalSamples": "Gesamt-Samples",
+      "totalSize": "Gesamtgröße",
+      "metricTypes": "Metrik-Typen"
+    }
+  },
+  "storageAnalysis": {
+    "title": "Speicheranalyse",
+    "subtitle": "Datenbank: {{type}} | Gesamtgröße: {{size}}",
+    "loading": "Lade Speicheranalyse...",
+    "summary": {
+      "totalSize": "Gesamtgröße",
+      "totalTables": "Gesamt-Tabellen",
+      "totalRows": "Gesamt-Zeilen",
+      "monitoringData": "Monitoring-Daten"
+    },
+    "charts": {
+      "dataDistribution": "Datenverteilung",
+      "topTablesBySize": "Top-Tabellen nach Größe",
+      "noDataAvailable": "Keine Daten verfügbar",
+      "noTablesFound": "Keine Tabellen gefunden",
+      "monitoringData": "Monitoring-Daten",
+      "applicationData": "Anwendungsdaten"
+    },
+    "table": {
+      "title": "Alle Tabellen",
+      "name": "Tabellenname",
+      "rows": "Zeilen",
+      "size": "Gesch. Größe",
+      "percent": "% des Gesamten",
+      "monitoring": "Monitoring"
+    }
+  },
+  "vcl": {
+    "title": "VCL-Einstellungen",
+    "loading": "Lädt...",
+    "stats": {
+      "totalVersions": "Gesamt-Versionen",
+      "storageUsed": "Speicher belegt",
+      "originalSize": "{{size}} original",
+      "totalSavings": "Gesamteinsparungen",
+      "saved": "{{size}} gespart",
+      "activeUsers": "Aktive Benutzer",
+      "cached": "{{count}} gecacht"
+    },
+    "storageDetails": {
+      "title": "Speicherdetails",
+      "compressionRatio": "Komprimierungsverhältnis",
+      "compressionSavings": "Komprimierungseinsparungen",
+      "dedupSavings": "Dedup-Einsparungen",
+      "uniqueBlobs": "Eindeutige Blobs",
+      "priorityVersions": "Prioritäts-Versionen",
+      "lastCleanup": "Letzte Bereinigung",
+      "lastPriorityMode": "Letzter Prioritätsmodus",
+      "updated": "Aktualisiert",
+      "never": "Nie"
+    },
+    "maintenance": {
+      "title": "Wartung",
+      "dryRunCleanup": "Bereinigung simulieren",
+      "triggerCleanup": "Bereinigung auslösen",
+      "refreshStats": "Statistiken aktualisieren",
+      "confirmCleanup": "Bereinigung für alle Benutzer auslösen, die das Kontingent überschreiten?",
+      "cleanupResult": "{{action}} {{count}} Versionen, {{size}} freigegeben",
+      "dryRun": "Simulation: Würde löschen",
+      "deleted": "Gelöscht"
+    },
+    "userQuotas": {
+      "title": "Benutzer-Kontingente",
+      "user": "Benutzer",
+      "maxSize": "Max. Größe",
+      "used": "Belegt",
+      "usagePercent": "Nutzung %",
+      "versions": "Versionen",
+      "status": "Status",
+      "actions": "Aktionen",
+      "enabled": "Aktiviert",
+      "disabled": "Deaktiviert",
+      "edit": "Bearbeiten",
+      "noUsers": "Keine Benutzer gefunden"
+    },
+    "editModal": {
+      "title": "Einstellungen bearbeiten: {{username}}",
+      "maxSizeLabel": "Max. Größe (Bytes)",
+      "enableVcl": "VCL für diesen Benutzer aktivieren",
+      "save": "Speichern",
+      "settingsUpdated": "Einstellungen für {{username}} aktualisiert"
+    }
+  },
+  "versionHistory": {
+    "title": "Versionsverlauf",
+    "loading": "Lädt...",
+    "noVersions": "Keine Versionen verfügbar",
+    "versionsTotal": "{{count}} Version(en) gesamt",
+    "version": "Version {{number}}",
+    "latest": "Aktuell",
+    "cached": "Gecacht",
+    "diff": {
+      "title": "Versionsvergleich: {{fileName}}",
+      "close": "Schließen",
+      "old": "Alt: v{{version}} ({{size}})",
+      "new": "Neu: v{{version}} ({{size}})",
+      "binaryMessage": "Binärdateien können nicht verglichen werden",
+      "noDifferences": "Keine Unterschiede gefunden",
+      "compare": "Vergleiche v{{v1}} ↔ v{{v2}}"
+    },
+    "fields": {
+      "created": "Erstellt",
+      "size": "Größe",
+      "compressed": "Komprimiert",
+      "ratio": "Verhältnis",
+      "savings": "Einsparungen",
+      "storage": "Speicher"
+    },
+    "actions": {
+      "restore": "Diese Version wiederherstellen",
+      "restoreConfirm": "Datei auf Version {{number}} wiederherstellen?",
+      "restored": "Datei auf Version {{number}} wiederhergestellt",
+      "delete": "Version löschen",
+      "deleteConfirm": "Version {{number}} löschen? Dies kann nicht rückgängig gemacht werden.",
+      "deleted": "Version {{number}} gelöscht",
+      "download": "Version herunterladen",
+      "downloadStarted": "Download gestartet",
+      "markPriority": "Als Priorität markieren",
+      "removePriority": "Priorität entfernen",
+      "selectForComparison": "Zum Vergleich auswählen"
+    },
+    "processing": "Wird verarbeitet..."
+  }
+}

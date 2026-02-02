@@ -1,0 +1,45 @@
+{
+  "title": "Benachrichtigungen",
+  "description": "Konfiguriere wie und wann du benachrichtigt wirst",
+  "channels": {
+    "title": "Benachrichtigungskanäle",
+    "email": "E-Mail",
+    "emailDesc": "Benachrichtigungen per E-Mail",
+    "push": "Push",
+    "pushDesc": "Mobile App Benachrichtigungen",
+    "inApp": "In-App",
+    "inAppDesc": "Benachrichtigungen im Browser"
+  },
+  "priority": {
+    "title": "Prioritätsfilter",
+    "description": "Wähle die minimale Priorität für Benachrichtigungen",
+    "all": "Alle",
+    "allDesc": "Alle Benachrichtigungen erhalten",
+    "warnings": "Warnungen+",
+    "warningsDesc": "Nur Warnungen und kritische Meldungen",
+    "important": "Wichtig",
+    "importantDesc": "Nur hohe Priorität und kritische Meldungen",
+    "critical": "Nur kritisch",
+    "criticalDesc": "Nur kritische Systemmeldungen"
+  },
+  "quietHours": {
+    "title": "Ruhezeiten",
+    "description": "Keine Benachrichtigungen während dieser Zeit",
+    "from": "Von",
+    "to": "Bis"
+  },
+  "categories": {
+    "title": "Kategorie-Einstellungen",
+    "description": "Konfiguriere Benachrichtigungen für einzelne Kategorien",
+    "category": "Kategorie"
+  },
+  "buttons": {
+    "save": "Speichern",
+    "back": "Zurück"
+  },
+  "toast": {
+    "saved": "Einstellungen gespeichert",
+    "loadFailed": "Fehler beim Laden der Einstellungen",
+    "saveFailed": "Fehler beim Speichern"
+  }
+}

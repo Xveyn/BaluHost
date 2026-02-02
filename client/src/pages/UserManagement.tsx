@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
 import { 
@@ -41,6 +42,7 @@ interface UserFormData {
 }
 
 export default function UserManagement() {
+  const { t } = useTranslation(['admin', 'common']);
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats>({ total: 0, active: 0, inactive: 0, admins: 0 });
   const [loading, setLoading] = useState(false);
@@ -140,12 +142,12 @@ export default function UserManagement() {
 
     // Pflichtfelder validieren
     if (!formData.username || !formData.password) {
-      toast.error('Bitte alle Pflichtfelder ausfüllen!');
+      toast.error(t('common:errors.requiredField'));
       return;
     }
     // Email Format grob prüfen (nur wenn ausgefüllt)
     if (formData.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email)) {
-      toast.error('Bitte eine gültige E-Mail-Adresse eingeben!');
+      toast.error(t('admin:users.messages.invalidEmail', 'Please enter a valid email address'));
       return;
     }
 

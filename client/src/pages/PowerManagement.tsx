@@ -11,6 +11,7 @@
  */
 
 import { useEffect, useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import {
   getPowerStatus,
@@ -55,7 +56,7 @@ const formatTimestamp = (ts: string): string => {
 };
 
 // Format relative time
-const formatRelativeTime = (ts: string): string => {
+const formatRelativeTime = (ts: string, t: (key: string, options?: Record<string, unknown>) => string): string => {
   const now = new Date();
   const then = new Date(ts);
   const diffMs = now.getTime() - then.getTime();
@@ -63,9 +64,9 @@ const formatRelativeTime = (ts: string): string => {
   const diffMinutes = Math.floor(diffSeconds / 60);
   const diffHours = Math.floor(diffMinutes / 60);
 
-  if (diffSeconds < 60) return `vor ${diffSeconds}s`;
-  if (diffMinutes < 60) return `vor ${diffMinutes}min`;
-  if (diffHours < 24) return `vor ${diffHours}h`;
+  if (diffSeconds < 60) return t('system:power.relativeTime.secondsAgo', { count: diffSeconds });
+  if (diffMinutes < 60) return t('system:power.relativeTime.minutesAgo', { count: diffMinutes });
+  if (diffHours < 24) return t('system:power.relativeTime.hoursAgo', { count: diffHours });
   return formatTimestamp(ts);
 };
 
@@ -152,9 +153,10 @@ interface PresetSelectorProps {
   activePresetId?: number;
   onSelect: (presetId: number) => void;
   disabled?: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function PresetSelector({ presets, activePresetId, onSelect, disabled }: PresetSelectorProps) {
+function PresetSelector({ presets, activePresetId, onSelect, disabled, t }: PresetSelectorProps) {
   // Order: system presets first (Energy Saver, Balanced, Performance), then custom
   const systemPresets = presets.filter(p => p.is_system_preset);
   const customPresets = presets.filter(p => !p.is_system_preset);
@@ -181,7 +183,7 @@ function PresetSelector({ presets, activePresetId, onSelect, disabled }: PresetS
               <span className="mt-1 text-xs text-slate-400 text-center line-clamp-2">{preset.description}</span>
             )}
             {!preset.is_system_preset && (
-              <span className="mt-1 px-2 py-0.5 text-[10px] bg-slate-700/50 rounded-full text-slate-400">Custom</span>
+              <span className="mt-1 px-2 py-0.5 text-[10px] bg-slate-700/50 rounded-full text-slate-400">{t('system:power.custom')}</span>
             )}
           </button>
         );
@@ -194,9 +196,10 @@ function PresetSelector({ presets, activePresetId, onSelect, disabled }: PresetS
 interface PresetClockVisualizationProps {
   preset: PowerPreset;
   currentProperty?: ServicePowerProperty;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function PresetClockVisualization({ preset, currentProperty }: PresetClockVisualizationProps) {
+function PresetClockVisualization({ preset, currentProperty, t }: PresetClockVisualizationProps) {
   const properties: ServicePowerProperty[] = ['idle', 'low', 'medium', 'surge'];
   const maxClock = Math.max(preset.idle_clock_mhz, preset.low_clock_mhz, preset.medium_clock_mhz, preset.surge_clock_mhz);
 
@@ -224,7 +227,7 @@ function PresetClockVisualization({ preset, currentProperty }: PresetClockVisual
                 <span className="text-sm">{info.icon}</span>
                 <span className="text-sm font-medium text-white">{info.name}</span>
                 {isActive && (
-                  <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-300 rounded">AKTIV</span>
+                  <span className="px-1.5 py-0.5 text-[10px] bg-emerald-500/20 text-emerald-300 rounded">{t('system:power.activeLabel')}</span>
                 )}
               </div>
               <span className="text-sm text-slate-400">{formatClockSpeed(clock)}</span>
@@ -253,13 +256,14 @@ interface DemandListProps {
   demands: PowerDemandInfo[];
   onUnregister: (source: string) => void;
   isAdmin: boolean;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function DemandList({ demands, onUnregister, isAdmin }: DemandListProps) {
+function DemandList({ demands, onUnregister, isAdmin, t }: DemandListProps) {
   if (demands.length === 0) {
     return (
       <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 sm:p-6 text-center text-sm sm:text-base text-slate-400">
-        Keine aktiven Power-Anforderungen
+        {t('system:power.noDemands')}
       </div>
     );
   }
@@ -279,8 +283,8 @@ function DemandList({ demands, onUnregister, isAdmin }: DemandListProps) {
                 <p className="font-medium text-sm sm:text-base truncate">{demand.source}</p>
                 {demand.description && <p className="text-xs sm:text-sm opacity-80 truncate">{demand.description}</p>}
                 <p className="text-[10px] sm:text-xs opacity-60">
-                  Registriert: {formatRelativeTime(demand.registered_at)}
-                  {demand.expires_at && <span className="hidden sm:inline"> &bull; Lauft ab: {formatTimestamp(demand.expires_at)}</span>}
+                  {t('system:power.registered')}: {formatRelativeTime(demand.registered_at, t)}
+                  {demand.expires_at && <span className="hidden sm:inline"> &bull; {t('system:power.expiresAt')}: {formatTimestamp(demand.expires_at)}</span>}
                 </p>
               </div>
             </div>
@@ -290,7 +294,7 @@ function DemandList({ demands, onUnregister, isAdmin }: DemandListProps) {
                 <button
                   onClick={() => onUnregister(demand.source)}
                   className="rounded p-2 text-slate-400 hover:bg-slate-700 hover:text-white touch-manipulation active:scale-95 min-w-[36px] min-h-[36px] flex items-center justify-center"
-                  title="Anforderung entfernen"
+                  title={t('system:power.removeDemand')}
                 >
                   <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -308,13 +312,14 @@ function DemandList({ demands, onUnregister, isAdmin }: DemandListProps) {
 // History table component
 interface HistoryTableProps {
   entries: PowerHistoryEntry[];
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function HistoryTable({ entries }: HistoryTableProps) {
+function HistoryTable({ entries, t }: HistoryTableProps) {
   if (entries.length === 0) {
     return (
       <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-4 sm:p-6 text-center text-sm text-slate-400">
-        Keine Historie vorhanden
+        {t('system:power.noHistory')}
       </div>
     );
   }
@@ -327,16 +332,16 @@ function HistoryTable({ entries }: HistoryTableProps) {
           <thead className="bg-slate-800/50">
             <tr>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                Zeitpunkt
+                {t('system:power.tableHeaders.timestamp')}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                Property
+                {t('system:power.tableHeaders.property')}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                Grund
+                {t('system:power.tableHeaders.reason')}
               </th>
               <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-slate-400">
-                Frequenz
+                {t('system:power.tableHeaders.frequency')}
               </th>
             </tr>
           </thead>
@@ -397,9 +402,10 @@ interface PresetEditorProps {
   onSave: (data: CreatePresetRequest) => void;
   onClose: () => void;
   onDelete?: () => void;
+  t: (key: string, options?: Record<string, unknown>) => string;
 }
 
-function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) {
+function PresetEditor({ preset, onSave, onClose, onDelete, t }: PresetEditorProps) {
   const [name, setName] = useState(preset?.name || '');
   const [description, setDescription] = useState(preset?.description || '');
   const [idleClock, setIdleClock] = useState(preset?.idle_clock_mhz || 800);
@@ -424,7 +430,7 @@ function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) 
       <div className="bg-slate-900 border border-slate-700 rounded-lg w-full max-w-md max-h-[90vh] overflow-y-auto">
         <div className="p-4 border-b border-slate-700 flex items-center justify-between">
           <h3 className="text-lg font-medium text-white">
-            {preset ? 'Preset bearbeiten' : 'Neues Preset erstellen'}
+            {preset ? t('system:power.presetEditor.editPreset') : t('system:power.presetEditor.createPreset')}
           </h3>
           <button onClick={onClose} className="text-slate-400 hover:text-white">
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -436,27 +442,27 @@ function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) 
         <div className="p-4 space-y-4">
           {/* Name */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Name</label>
+            <label className="block text-sm font-medium text-slate-400 mb-1">{t('system:power.presetEditor.name')}</label>
             <input
               type="text"
               value={name}
               onChange={(e) => setName(e.target.value)}
               disabled={preset?.is_system_preset}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              placeholder="Mein Preset"
+              placeholder={t('system:power.presetEditor.namePlaceholder')}
             />
           </div>
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium text-slate-400 mb-1">Beschreibung</label>
+            <label className="block text-sm font-medium text-slate-400 mb-1">{t('system:power.presetEditor.description')}</label>
             <input
               type="text"
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               disabled={preset?.is_system_preset}
               className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white focus:outline-none focus:ring-2 focus:ring-blue-500 disabled:opacity-50"
-              placeholder="Beschreibung..."
+              placeholder={t('system:power.presetEditor.descriptionPlaceholder')}
             />
           </div>
 
@@ -534,7 +540,7 @@ function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) 
               onClick={onDelete}
               className="px-4 py-2 bg-red-500/20 text-red-300 rounded-lg hover:bg-red-500/30"
             >
-              Loschen
+              {t('system:power.presetEditor.delete')}
             </button>
           )}
           <div className="flex-1" />
@@ -542,14 +548,14 @@ function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) 
             onClick={onClose}
             className="px-4 py-2 bg-slate-700 text-white rounded-lg hover:bg-slate-600"
           >
-            Abbrechen
+            {t('system:power.presetEditor.cancel')}
           </button>
           <button
             onClick={handleSave}
             disabled={!name.trim()}
             className="px-4 py-2 bg-blue-500 text-white rounded-lg hover:bg-blue-600 disabled:opacity-50"
           >
-            Speichern
+            {t('system:power.presetEditor.save')}
           </button>
         </div>
       </div>
@@ -559,6 +565,7 @@ function PresetEditor({ preset, onSave, onClose, onDelete }: PresetEditorProps) 
 
 // Main component
 export default function PowerManagement() {
+  const { t } = useTranslation(['system', 'common']);
   const [status, setStatus] = useState<PowerStatusResponse | null>(null);
   const [presets, setPresets] = useState<PowerPreset[]>([]);
   const [demands, setDemands] = useState<PowerDemandInfo[]>([]);
@@ -592,16 +599,16 @@ export default function PowerManagement() {
       setLastUpdated(new Date());
 
       if (showSuccess) {
-        toast.success('Status aktualisiert');
+        toast.success(t('system:power.toasts.statusUpdated'));
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Laden fehlgeschlagen';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.loadFailed');
       setError(message);
       toast.error(message);
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     void loadData();
@@ -618,7 +625,7 @@ export default function PowerManagement() {
       toast.success(result.message);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Preset konnte nicht aktiviert werden';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.presetActivateFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -631,10 +638,10 @@ export default function PowerManagement() {
     setBusy(true);
     try {
       await unregisterPowerDemand({ source });
-      toast.success('Anforderung entfernt');
+      toast.success(t('system:power.toasts.demandRemoved'));
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Anforderung konnte nicht entfernt werden';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.demandRemoveFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -649,9 +656,9 @@ export default function PowerManagement() {
       const newConfig = { ...autoScaling, enabled: !autoScaling.enabled };
       await updateAutoScalingConfig(newConfig);
       setAutoScaling(newConfig);
-      toast.success(newConfig.enabled ? 'Auto-Scaling aktiviert' : 'Auto-Scaling deaktiviert');
+      toast.success(newConfig.enabled ? t('system:power.toasts.autoScalingEnabled') : t('system:power.toasts.autoScalingDisabled'));
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Einstellung konnte nicht geandert werden';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.settingChangeFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -669,7 +676,7 @@ export default function PowerManagement() {
       toast.success(result.message);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Backend konnte nicht gewechselt werden';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.backendSwitchFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -681,15 +688,15 @@ export default function PowerManagement() {
     try {
       if (editorPreset === 'new') {
         await createPreset(data);
-        toast.success('Preset erstellt');
+        toast.success(t('system:power.toasts.presetCreated'));
       } else if (editorPreset) {
         await updatePreset(editorPreset.id, data);
-        toast.success('Preset aktualisiert');
+        toast.success(t('system:power.toasts.presetUpdated'));
       }
       setEditorPreset(null);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Speichern fehlgeschlagen';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.saveFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -702,11 +709,11 @@ export default function PowerManagement() {
     setBusy(true);
     try {
       await deletePreset(editorPreset.id);
-      toast.success('Preset geloscht');
+      toast.success(t('system:power.toasts.presetDeleted'));
       setEditorPreset(null);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Loschen fehlgeschlagen';
+      const message = err instanceof Error ? err.message : t('system:power.toasts.deleteFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -724,13 +731,13 @@ export default function PowerManagement() {
   if (error && !status) {
     return (
       <div className="rounded-lg border border-red-500/30 bg-red-500/10 p-6 text-center text-red-200">
-        <p className="font-medium">Fehler beim Laden</p>
+        <p className="font-medium">{t('system:power.errors.loadingTitle')}</p>
         <p className="mt-1 text-sm">{error}</p>
         <button
           onClick={() => loadData(true)}
           className="mt-4 rounded bg-red-500/20 px-4 py-2 hover:bg-red-500/30"
         >
-          Erneut versuchen
+          {t('system:power.errors.retryButton')}
         </button>
       </div>
     );
@@ -744,21 +751,21 @@ export default function PowerManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-xl sm:text-2xl font-semibold text-white">Power Management</h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-400">CPU-Frequenzskalierung und Energieverwaltung</p>
+          <h1 className="text-xl sm:text-2xl font-semibold text-white">{t('system:power.title')}</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('system:power.subtitle')}</p>
         </div>
         <div className="flex flex-wrap items-center gap-2 sm:gap-3">
           {/* Backend indicator - only show in dev mode */}
           {status?.is_dev_mode && (
             status?.is_using_linux_backend ? (
               <span className="rounded-full bg-emerald-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-emerald-300">
-                <span className="hidden sm:inline">Linux Backend</span>
-                <span className="sm:hidden">Linux</span>
+                <span className="hidden sm:inline">{t('system:power.backend.linux')}</span>
+                <span className="sm:hidden">{t('system:power.backend.linuxShort')}</span>
               </span>
             ) : (
               <span className="rounded-full bg-amber-500/20 px-2 sm:px-3 py-1 text-xs sm:text-sm text-amber-300">
-                <span className="hidden sm:inline">Dev Backend</span>
-                <span className="sm:hidden">Dev</span>
+                <span className="hidden sm:inline">{t('system:power.backend.dev')}</span>
+                <span className="sm:hidden">{t('system:power.backend.devShort')}</span>
               </span>
             )
           )}
@@ -772,7 +779,7 @@ export default function PowerManagement() {
                   ? 'bg-amber-500/20 text-amber-300 hover:bg-amber-500/30'
                   : 'bg-emerald-500/20 text-emerald-300 hover:bg-emerald-500/30'
               }`}
-              title={status.is_using_linux_backend ? 'Zu Dev-Backend wechseln' : 'Zu Linux-Backend wechseln'}
+              title={status.is_using_linux_backend ? t('system:power.backend.switchToDev') : t('system:power.backend.switchToLinux')}
             >
               {status.is_using_linux_backend ? '-> Dev' : '-> Linux'}
               <AdminBadge />
@@ -783,7 +790,7 @@ export default function PowerManagement() {
             disabled={busy}
             className="rounded-lg border border-slate-700 bg-slate-800 px-3 sm:px-4 py-2 text-xs sm:text-sm text-white hover:bg-slate-700 touch-manipulation active:scale-95 min-h-[36px]"
           >
-            <span className="hidden sm:inline">Aktualisieren</span>
+            <span className="hidden sm:inline">{t('system:power.buttons.refresh')}</span>
             <span className="sm:hidden">&#x21bb;</span>
           </button>
         </div>
@@ -792,23 +799,23 @@ export default function PowerManagement() {
       {/* Status Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
-          label="Aktives Preset"
+          label={t('system:power.statusCards.activePreset')}
           value={activePreset?.name || '-'}
           subValue={activePreset?.description}
           color={activePreset?.name.includes('Performance') ? 'red' : activePreset?.name.includes('Energy') ? 'emerald' : 'blue'}
           icon={<span className="text-2xl">{activePreset ? getPresetIcon(activePreset.name) : '⚡'}</span>}
         />
         <StatCard
-          label="Aktuelle Property"
+          label={t('system:power.statusCards.currentProperty')}
           value={currentProperty ? PROPERTY_INFO[currentProperty].name : '-'}
           subValue={status?.target_frequency_range}
           color={PROFILE_INFO[currentProperty || 'idle']?.color || 'slate'}
           icon={<span className="text-2xl">{currentProperty ? PROPERTY_INFO[currentProperty].icon : '⚡'}</span>}
         />
         <StatCard
-          label="CPU-Frequenz"
+          label={t('system:power.statusCards.cpuFrequency')}
           value={status?.current_frequency_mhz ? formatClockSpeed(status.current_frequency_mhz) : '-'}
-          subValue={lastUpdated ? `Aktualisiert: ${lastUpdated.toLocaleTimeString('de-DE')}` : undefined}
+          subValue={lastUpdated ? `${t('system:power.statusCards.updated')}: ${lastUpdated.toLocaleTimeString()}` : undefined}
           color="blue"
           icon={
             <svg className="h-6 w-6 text-blue-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -817,12 +824,12 @@ export default function PowerManagement() {
           }
         />
         <StatCard
-          label="Aktive Anforderungen"
+          label={t('system:power.statusCards.activeDemands')}
           value={demands.length}
-          subValue={demands.length > 0 ? `Hochste: ${PROPERTY_INFO[(demands.reduce((a, b) =>
+          subValue={demands.length > 0 ? `${t('system:power.statusCards.highest')}: ${PROPERTY_INFO[(demands.reduce((a, b) =>
             ['surge', 'medium', 'low', 'idle'].indexOf((a.power_property || a.level) as string) <
             ['surge', 'medium', 'low', 'idle'].indexOf((b.power_property || b.level) as string) ? a : b
-          ).power_property || demands[0].level) as ServicePowerProperty].name}` : 'Keine'}
+          ).power_property || demands[0].level) as ServicePowerProperty].name}` : t('system:power.statusCards.none')}
           color="purple"
           icon={
             <svg className="h-6 w-6 text-purple-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -835,7 +842,7 @@ export default function PowerManagement() {
       {/* Preset Selection */}
       <div className="card border-slate-700/50 p-4 sm:p-6">
         <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
-          <h2 className="text-base sm:text-lg font-medium text-white">Preset auswahlen</h2>
+          <h2 className="text-base sm:text-lg font-medium text-white">{t('system:power.presetSection.selectPreset')}</h2>
           {isAdmin && (
             <div className="flex gap-2">
               <button
@@ -846,7 +853,7 @@ export default function PowerManagement() {
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
                 </svg>
-                Custom Preset
+                {t('system:power.buttons.customPreset')}
               </button>
               <button
                 onClick={handleToggleAutoScaling}
@@ -857,7 +864,7 @@ export default function PowerManagement() {
                     : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
                 }`}
               >
-                {autoScaling?.enabled ? 'Auto-Scaling aktiv' : 'Auto-Scaling aus'}
+                {autoScaling?.enabled ? t('system:power.presetSection.autoScalingActive') : t('system:power.presetSection.autoScalingOff')}
               </button>
             </div>
           )}
@@ -867,10 +874,11 @@ export default function PowerManagement() {
           activePresetId={activePreset?.id}
           onSelect={handlePresetSelect}
           disabled={busy || !isAdmin}
+          t={t}
         />
         {!isAdmin && (
           <p className="mt-3 text-sm text-slate-500">
-            Nur Administratoren konnen das Preset andern.
+            {t('system:power.presetSection.adminOnlyChange')}
           </p>
         )}
       </div>
@@ -880,7 +888,7 @@ export default function PowerManagement() {
         <div className="card border-slate-700/50 p-4 sm:p-6">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-medium text-white">
-              Preset: {activePreset.name}
+              {t('system:power.presetSection.preset')}: {activePreset.name}
             </h2>
             {isAdmin && (
               <button
@@ -890,50 +898,50 @@ export default function PowerManagement() {
                 <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                 </svg>
-                Bearbeiten
+                {t('system:power.buttons.edit')}
               </button>
             )}
           </div>
-          <PresetClockVisualization preset={activePreset} currentProperty={currentProperty} />
+          <PresetClockVisualization preset={activePreset} currentProperty={currentProperty} t={t} />
         </div>
       )}
 
       {/* Active Demands */}
       <div className="card border-slate-700/50 p-4 sm:p-6">
-        <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">Aktive Power-Anforderungen</h2>
-        <DemandList demands={demands} onUnregister={handleUnregisterDemand} isAdmin={isAdmin} />
+        <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">{t('system:power.demands.title')}</h2>
+        <DemandList demands={demands} onUnregister={handleUnregisterDemand} isAdmin={isAdmin} t={t} />
       </div>
 
       {/* History */}
       <div className="card border-slate-700/50 p-4 sm:p-6">
-        <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">Property-Historie</h2>
-        <HistoryTable entries={history} />
+        <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">{t('system:power.history.title')}</h2>
+        <HistoryTable entries={history} t={t} />
       </div>
 
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (
         <div className="card border-slate-700/50 p-4 sm:p-6">
           <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white flex items-center gap-2">
-            Auto-Scaling Konfiguration
+            {t('system:power.autoScaling.title')}
             <AdminBadge />
           </h2>
           <div className="grid grid-cols-3 gap-2 sm:gap-4">
             <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">SURGE</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.surge')}</p>
               <p className="text-sm sm:text-xl font-semibold text-red-300">&gt;{autoScaling.cpu_surge_threshold}%</p>
             </div>
             <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">MEDIUM</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.medium')}</p>
               <p className="text-sm sm:text-xl font-semibold text-yellow-300">&gt;{autoScaling.cpu_medium_threshold}%</p>
             </div>
             <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">LOW</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.low')}</p>
               <p className="text-sm sm:text-xl font-semibold text-blue-300">&gt;{autoScaling.cpu_low_threshold}%</p>
             </div>
           </div>
           <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-slate-500">
-            Cooldown: {autoScaling.cooldown_seconds}s &bull; CPU-Monitor:{' '}
-            {autoScaling.use_cpu_monitoring ? 'Aktiv' : 'Inaktiv'}
+            {t('system:power.autoScaling.cooldown')}: {autoScaling.cooldown_seconds}s &bull; {t('system:power.autoScaling.cpuMonitor')}:{' '}
+            {autoScaling.use_cpu_monitoring ? t('system:power.autoScaling.active') : t('system:power.autoScaling.inactive')}
           </p>
         </div>
       )}
@@ -941,7 +949,7 @@ export default function PowerManagement() {
       {/* Permission Status (Linux backend only) */}
       {status?.is_using_linux_backend && status.permission_status && (
         <div className="card border-slate-700/50 p-4 sm:p-6">
-          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">Berechtigungsstatus</h2>
+          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">{t('system:power.permissions.title')}</h2>
           <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             {/* Write Access Status */}
             <div className={`rounded-lg border p-2 sm:p-4 ${
@@ -949,17 +957,17 @@ export default function PowerManagement() {
                 ? 'border-emerald-500/30 bg-emerald-500/10'
                 : 'border-red-500/30 bg-red-500/10'
             }`}>
-              <p className="text-[10px] sm:text-sm text-slate-400">Schreibzugriff</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.permissions.writeAccess')}</p>
               <p className={`text-sm sm:text-xl font-semibold ${
                 status.permission_status.has_write_access ? 'text-emerald-300' : 'text-red-300'
               }`}>
-                {status.permission_status.has_write_access ? 'OK' : 'Nein'}
+                {status.permission_status.has_write_access ? t('system:power.permissions.ok') : t('system:power.permissions.no')}
               </p>
             </div>
 
             {/* User Info */}
             <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">Benutzer</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.permissions.user')}</p>
               <p className="text-sm sm:text-xl font-semibold text-white truncate">{status.permission_status.user}</p>
             </div>
 
@@ -969,11 +977,11 @@ export default function PowerManagement() {
                 ? 'border-emerald-500/30 bg-emerald-500/10'
                 : 'border-amber-500/30 bg-amber-500/10'
             }`}>
-              <p className="text-[10px] sm:text-sm text-slate-400">cpufreq</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.permissions.cpufreq')}</p>
               <p className={`text-sm sm:text-xl font-semibold ${
                 status.permission_status.in_cpufreq_group ? 'text-emerald-300' : 'text-amber-300'
               }`}>
-                {status.permission_status.in_cpufreq_group ? 'OK' : 'Nein'}
+                {status.permission_status.in_cpufreq_group ? t('system:power.permissions.ok') : t('system:power.permissions.no')}
               </p>
             </div>
 
@@ -983,11 +991,11 @@ export default function PowerManagement() {
                 ? 'border-emerald-500/30 bg-emerald-500/10'
                 : 'border-slate-700/50 bg-slate-800/30'
             }`}>
-              <p className="text-[10px] sm:text-sm text-slate-400">Sudo</p>
+              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.permissions.sudo')}</p>
               <p className={`text-sm sm:text-xl font-semibold ${
                 status.permission_status.sudo_available ? 'text-emerald-300' : 'text-slate-400'
               }`}>
-                {status.permission_status.sudo_available ? 'OK' : 'Nein'}
+                {status.permission_status.sudo_available ? t('system:power.permissions.ok') : t('system:power.permissions.no')}
               </p>
             </div>
           </div>
@@ -1001,6 +1009,7 @@ export default function PowerManagement() {
           onSave={handleSavePreset}
           onClose={() => setEditorPreset(null)}
           onDelete={editorPreset !== 'new' && !editorPreset.is_system_preset ? handleDeletePreset : undefined}
+          t={t}
         />
       )}
     </div>

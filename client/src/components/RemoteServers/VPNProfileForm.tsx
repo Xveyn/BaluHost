@@ -1,4 +1,5 @@
 import { useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Plus, Upload, Loader2, X } from 'lucide-react';
 import * as api from '../../api/remote-servers';
 
@@ -17,6 +18,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
   const [certFile, setCertFile] = useState<File | null>(null);
   const [keyFile, setKeyFile] = useState<File | null>(null);
   const [loading, setLoading] = useState(false);
+  const { t } = useTranslation('remoteServers');
 
   const configInputRef = useRef<HTMLInputElement>(null);
   const certInputRef = useRef<HTMLInputElement>(null);
@@ -71,7 +73,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
         disabled={isLoading}
       >
         <Plus className="w-4 h-4" />
-        Add VPN Profile
+        {t('vpn.addProfile')}
       </button>
 
       {open && (
@@ -80,8 +82,8 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
             {/* Header */}
             <div className="flex items-center justify-between border-b px-6 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">Add VPN Profile</h2>
-                <p className="text-sm text-gray-600 mt-1">Upload VPN configuration for secure remote access</p>
+                <h2 className="text-lg font-semibold text-gray-900">{t('vpn.addProfile')}</h2>
+                <p className="text-sm text-gray-600 mt-1">{t('vpn.addProfileDescription')}</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
@@ -96,12 +98,12 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* Profile Name */}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-                  Profile Name <span className="text-red-500">*</span>
+                  {t('vpn.profileName')} <span className="text-red-500">*</span>
                 </label>
                 <input
                   id="name"
                   type="text"
-                  placeholder="e.g., Home OpenVPN"
+                  placeholder={t('vpn.profileNamePlaceholder')}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
@@ -112,7 +114,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* VPN Type */}
               <div>
                 <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
-                  VPN Type <span className="text-red-500">*</span>
+                  {t('vpn.type')} <span className="text-red-500">*</span>
                 </label>
                 <select
                   id="type"
@@ -129,12 +131,12 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* Description */}
               <div>
                 <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
-                  Description
+                  {t('vpn.description')}
                 </label>
                 <input
                   id="description"
                   type="text"
-                  placeholder="Optional description"
+                  placeholder={t('vpn.descriptionPlaceholder')}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
@@ -144,7 +146,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* Config File Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Configuration File <span className="text-red-500">*</span>
+                  {t('vpn.configFile')} <span className="text-red-500">*</span>
                 </label>
                 <div
                   onClick={() => configInputRef.current?.click()}
@@ -153,7 +155,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   <div className="flex items-center justify-center gap-2">
                     <Upload className="w-4 h-4 text-gray-400" />
                     <span className="text-sm text-gray-600">
-                      {configFile ? configFile.name : 'Click to upload config'}
+                      {configFile ? configFile.name : t('vpn.clickToUploadConfig')}
                     </span>
                   </div>
                   <input
@@ -169,7 +171,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* Certificate File Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Certificate (Optional)
+                  {t('vpn.certificate')}
                 </label>
                 <div
                   onClick={() => certInputRef.current?.click()}
@@ -178,7 +180,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-gray-600 flex items-center gap-2">
                       <Upload className="w-4 h-4" />
-                      {certFile ? certFile.name : 'Click to upload certificate'}
+                      {certFile ? certFile.name : t('vpn.clickToUploadCert')}
                     </span>
                     {certFile && (
                       <X
@@ -203,7 +205,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
               {/* Private Key File Upload */}
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Private Key (Optional)
+                  {t('vpn.privateKey')}
                 </label>
                 <div
                   onClick={() => keyInputRef.current?.click()}
@@ -212,7 +214,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   <div className="flex items-center justify-between gap-2">
                     <span className="text-sm text-gray-600 flex items-center gap-2">
                       <Upload className="w-4 h-4" />
-                      {keyFile ? keyFile.name : 'Click to upload private key'}
+                      {keyFile ? keyFile.name : t('vpn.clickToUploadKey')}
                     </span>
                     {keyFile && (
                       <X
@@ -244,7 +246,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   className="w-4 h-4 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
                 />
                 <label htmlFor="auto" className="text-sm text-gray-700 cursor-pointer">
-                  Auto-connect on startup
+                  {t('vpn.autoConnect')}
                 </label>
               </div>
 
@@ -255,7 +257,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   onClick={() => setOpen(false)}
                   className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
                 >
-                  Cancel
+                  {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
@@ -263,7 +265,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(loading || isLoading) && <Loader2 className="w-4 h-4 animate-spin" />}
-                  Create VPN Profile
+                  {t('vpn.createProfile')}
                 </button>
               </div>
             </form>

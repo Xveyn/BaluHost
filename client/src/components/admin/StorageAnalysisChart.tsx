@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getDatabaseInfo } from '../../lib/api'
 import type { DatabaseInfoResponse } from '../../lib/api'
 import { RefreshCw, Database, HardDrive, Table } from 'lucide-react'
@@ -71,6 +72,7 @@ const CustomBarTooltip = ({ active, payload }: CustomTooltipProps) => {
 }
 
 export default function StorageAnalysisChart() {
+  const { t } = useTranslation(['admin', 'common'])
   const [info, setInfo] = useState<DatabaseInfoResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -95,7 +97,7 @@ export default function StorageAnalysisChart() {
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-        <p className="text-slate-400">Loading storage analysis...</p>
+        <p className="text-slate-400">{t('admin:storageAnalysis.loading')}</p>
       </div>
     )
   }
@@ -144,9 +146,9 @@ export default function StorageAnalysisChart() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Storage Analysis</h3>
+          <h3 className="text-lg font-semibold text-white">{t('admin:storageAnalysis.title')}</h3>
           <p className="text-xs text-slate-400 mt-1">
-            Database: {info.database_type} | Total Size: {formatBytes(info.total_size_bytes)}
+            {t('admin:storageAnalysis.subtitle', { type: info.database_type, size: formatBytes(info.total_size_bytes) })}
           </p>
         </div>
         <button
@@ -155,7 +157,7 @@ export default function StorageAnalysisChart() {
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors text-sm border border-slate-600/50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('common:refresh')}
         </button>
       </div>
 
@@ -164,7 +166,7 @@ export default function StorageAnalysisChart() {
         <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <HardDrive className="w-4 h-4 text-blue-400" />
-            <p className="text-xs text-slate-400">Total Size</p>
+            <p className="text-xs text-slate-400">{t('admin:storageAnalysis.summary.totalSize')}</p>
           </div>
           <p className="text-xl font-bold text-white">{formatBytes(info.total_size_bytes)}</p>
         </div>
@@ -172,7 +174,7 @@ export default function StorageAnalysisChart() {
         <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Table className="w-4 h-4 text-emerald-400" />
-            <p className="text-xs text-slate-400">Total Tables</p>
+            <p className="text-xs text-slate-400">{t('admin:storageAnalysis.summary.totalTables')}</p>
           </div>
           <p className="text-xl font-bold text-white">{info.tables.length}</p>
         </div>
@@ -180,7 +182,7 @@ export default function StorageAnalysisChart() {
         <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Database className="w-4 h-4 text-purple-400" />
-            <p className="text-xs text-slate-400">Total Rows</p>
+            <p className="text-xs text-slate-400">{t('admin:storageAnalysis.summary.totalRows')}</p>
           </div>
           <p className="text-xl font-bold text-white">{totalRows.toLocaleString()}</p>
         </div>
@@ -188,7 +190,7 @@ export default function StorageAnalysisChart() {
         <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
           <div className="flex items-center gap-2 mb-2">
             <Database className="w-4 h-4 text-amber-400" />
-            <p className="text-xs text-slate-400">Monitoring Data</p>
+            <p className="text-xs text-slate-400">{t('admin:storageAnalysis.summary.monitoringData')}</p>
           </div>
           <p className="text-xl font-bold text-white">{formatBytes(monitoringSize)}</p>
         </div>

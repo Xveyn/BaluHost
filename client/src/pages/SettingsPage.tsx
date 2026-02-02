@@ -1,7 +1,9 @@
 import { useState, useEffect } from 'react';
-import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi, History } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi, History, Globe } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import BackupSettings from '../components/BackupSettings';
+import LanguageSettings from '../components/LanguageSettings';
 import VpnManagement from '../components/VpnManagement';
 import VCLSettings from '../components/vcl/VCLSettings';
 import { AdminBadge } from '../components/ui/AdminBadge';
@@ -38,10 +40,11 @@ interface Session {
 }
 
 export default function SettingsPage() {
+  const { t } = useTranslation('settings');
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn' | 'vcl'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn' | 'vcl' | 'language'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -258,22 +261,23 @@ export default function SettingsPage() {
   return (
     <div className="space-y-4 sm:space-y-6">
       <div>
-        <h1 className="text-2xl sm:text-3xl font-semibold text-white">Settings</h1>
-        <p className="mt-1 text-sm text-slate-400">Manage your account settings and preferences</p>
+        <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
+        <p className="mt-1 text-sm text-slate-400">{t('subtitle')}</p>
       </div>
 
       {/* Tabs */}
       <div className="mb-4 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
         <div className="flex gap-1 sm:gap-2 overflow-x-auto border-b border-slate-800 scrollbar-hide">
           {[
-            { id: 'profile', label: 'Profile', icon: User },
-            { id: 'security', label: 'Security', icon: Lock },
-            { id: 'storage', label: 'Storage', icon: HardDrive },
-            { id: 'activity', label: 'Activity', icon: Activity },
+            { id: 'profile', label: t('tabs.profile'), icon: User },
+            { id: 'security', label: t('tabs.security'), icon: Lock },
+            { id: 'storage', label: t('tabs.storage'), icon: HardDrive },
+            { id: 'activity', label: t('tabs.activity'), icon: Activity },
+            { id: 'language', label: t('tabs.language'), icon: Globe },
             ...(profile?.role === 'admin' ? [
-              { id: 'backup', label: 'Backup', icon: Database, adminOnly: true },
-              { id: 'vpn', label: 'VPN', icon: Wifi, adminOnly: true },
-              { id: 'vcl', label: 'Version Control', icon: History, adminOnly: true }
+              { id: 'backup', label: t('tabs.backup'), icon: Database, adminOnly: true },
+              { id: 'vpn', label: t('tabs.vpn'), icon: Wifi, adminOnly: true },
+              { id: 'vcl', label: t('tabs.vcl'), icon: History, adminOnly: true }
             ] : [])
           ].map(tab => (
             <button
@@ -529,6 +533,11 @@ export default function SettingsPage() {
         {/* VCL Tab (Admin only) */}
         {activeTab === 'vcl' && profile?.role === 'admin' && (
           <VCLSettings />
+        )}
+
+        {/* Language Tab */}
+        {activeTab === 'language' && (
+          <LanguageSettings />
         )}
 
         {/* Storage Tab */}

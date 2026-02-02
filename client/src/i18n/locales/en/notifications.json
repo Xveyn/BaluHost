@@ -1,0 +1,45 @@
+{
+  "title": "Notifications",
+  "description": "Configure how and when you get notified",
+  "channels": {
+    "title": "Notification Channels",
+    "email": "Email",
+    "emailDesc": "Notifications via email",
+    "push": "Push",
+    "pushDesc": "Mobile app notifications",
+    "inApp": "In-App",
+    "inAppDesc": "Notifications in browser"
+  },
+  "priority": {
+    "title": "Priority Filter",
+    "description": "Choose the minimum priority for notifications",
+    "all": "All",
+    "allDesc": "Receive all notifications",
+    "warnings": "Warnings+",
+    "warningsDesc": "Only warnings and critical messages",
+    "important": "Important",
+    "importantDesc": "Only high priority and critical messages",
+    "critical": "Critical only",
+    "criticalDesc": "Only critical system messages"
+  },
+  "quietHours": {
+    "title": "Quiet Hours",
+    "description": "No notifications during this time",
+    "from": "From",
+    "to": "To"
+  },
+  "categories": {
+    "title": "Category Settings",
+    "description": "Configure notifications for individual categories",
+    "category": "Category"
+  },
+  "buttons": {
+    "save": "Save",
+    "back": "Back"
+  },
+  "toast": {
+    "saved": "Settings saved",
+    "loadFailed": "Failed to load settings",
+    "saveFailed": "Failed to save"
+  }
+}

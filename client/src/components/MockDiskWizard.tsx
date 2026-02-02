@@ -1,5 +1,6 @@
 import { type FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 
 interface MockDiskWizardProps {
   onClose: () => void;
@@ -9,6 +10,7 @@ interface MockDiskWizardProps {
 const DISK_LETTERS = ['h', 'i', 'j', 'k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z'];
 
 export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardProps) {
+  const { t } = useTranslation('system');
   const [step, setStep] = useState<number>(1);
   const [busy, setBusy] = useState<boolean>(false);
   
@@ -41,11 +43,11 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
       }
 
       const result = await response.json();
-      toast.success(result.message || 'Mock disk successfully added');
+      toast.success(result.message || t('mockDisk.successMessage'));
       await onSuccess();
       onClose();
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Error adding mock disk';
+      const message = err instanceof Error ? err.message : t('mockDisk.errorMessage');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -53,10 +55,10 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
   };
 
   const purposeOptions = [
-    { value: 'storage', label: 'Storage', icon: '💾', desc: 'General storage' },
-    { value: 'backup', label: 'Backup', icon: '🔄', desc: 'Backup storage' },
-    { value: 'archive', label: 'Archive', icon: '📦', desc: 'Long-term archiving' },
-    { value: 'cache', label: 'Cache', icon: '⚡', desc: 'Fast cache' },
+    { value: 'storage', label: t('mockDisk.purpose.storage'), icon: '💾', desc: t('mockDisk.purpose.storageDesc') },
+    { value: 'backup', label: t('mockDisk.purpose.backup'), icon: '🔄', desc: t('mockDisk.purpose.backupDesc') },
+    { value: 'archive', label: t('mockDisk.purpose.archive'), icon: '📦', desc: t('mockDisk.purpose.archiveDesc') },
+    { value: 'cache', label: t('mockDisk.purpose.cache'), icon: '⚡', desc: t('mockDisk.purpose.cacheDesc') },
   ];
 
   return (
@@ -66,8 +68,8 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
         <div className="border-b border-slate-800/60 px-6 py-5">
           <div className="flex items-center justify-between">
             <div>
-              <h2 className="text-2xl font-semibold text-white">Add Mock Disk</h2>
-              <p className="mt-1 text-sm text-slate-400">Dev-Mode: Add simulated disk to configuration</p>
+              <h2 className="text-2xl font-semibold text-white">{t('mockDisk.title')}</h2>
+              <p className="mt-1 text-sm text-slate-400">{t('mockDisk.subtitle')}</p>
             </div>
             <button
               onClick={onClose}
@@ -111,14 +113,14 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
             {step === 1 && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Disk Identification</h3>
-                  <p className="mt-1 text-sm text-slate-400">Select device letter and size</p>
+                  <h3 className="text-lg font-semibold text-white">{t('mockDisk.step1.title')}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{t('mockDisk.step1.description')}</p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300">Device Letter</label>
-                    <p className="mt-1 text-xs text-slate-500">The disk will be created as /dev/sd{diskLetter}</p>
+                    <label className="block text-sm font-medium text-slate-300">{t('mockDisk.step1.deviceLetter')}</label>
+                    <p className="mt-1 text-xs text-slate-500">{t('mockDisk.step1.deviceLetterHint', { letter: diskLetter })}</p>
                     <select
                       value={diskLetter}
                       onChange={(e) => setDiskLetter(e.target.value)}
@@ -133,7 +135,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300">Disk Size</label>
+                    <label className="block text-sm font-medium text-slate-300">{t('mockDisk.step1.diskSize')}</label>
                     <div className="mt-2 flex items-center gap-3">
                       <input
                         type="number"
@@ -145,7 +147,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                       />
                       <span className="text-sm text-slate-400">GB</span>
                     </div>
-                    <p className="mt-1 text-xs text-slate-500">Recommended: 5-50 GB for Dev-Mode</p>
+                    <p className="mt-1 text-xs text-slate-500">{t('mockDisk.step1.sizeRecommendation')}</p>
                   </div>
 
                   <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 px-4 py-3">
@@ -154,9 +156,9 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                         <path strokeLinecap="round" strokeLinejoin="round" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                       </svg>
                       <div className="text-sm text-sky-200">
-                        <p className="font-medium">Dev-Mode Notice</p>
+                        <p className="font-medium">{t('mockDisk.step1.devModeNotice')}</p>
                         <p className="mt-1 text-xs text-sky-300">
-                          This disk is purely simulated and doesn't use real storage. It's only used for testing and RAID configuration.
+                          {t('mockDisk.step1.devModeNoticeDesc')}
                         </p>
                       </div>
                     </div>
@@ -169,13 +171,13 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
             {step === 2 && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Disk Details</h3>
-                  <p className="mt-1 text-sm text-slate-400">Model name and purpose</p>
+                  <h3 className="text-lg font-semibold text-white">{t('mockDisk.step2.title')}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{t('mockDisk.step2.description')}</p>
                 </div>
 
                 <div className="space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-slate-300">Model Name</label>
+                    <label className="block text-sm font-medium text-slate-300">{t('mockDisk.step2.modelName')}</label>
                     <input
                       type="text"
                       value={diskName}
@@ -183,11 +185,11 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                       placeholder="e.g. BaluHost Dev Disk 10GB"
                       className="mt-2 w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
                     />
-                    <p className="mt-1 text-xs text-slate-500">Will be displayed in disk list</p>
+                    <p className="mt-1 text-xs text-slate-500">{t('mockDisk.step2.modelNameHint')}</p>
                   </div>
 
                   <div>
-                    <label className="block text-sm font-medium text-slate-300">Purpose</label>
+                    <label className="block text-sm font-medium text-slate-300">{t('mockDisk.step2.purpose')}</label>
                     <div className="mt-2 grid grid-cols-2 gap-3">
                       {purposeOptions.map((option) => (
                         <button
@@ -215,25 +217,25 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
             {step === 3 && (
               <div className="space-y-6">
                 <div>
-                  <h3 className="text-lg font-semibold text-white">Summary</h3>
-                  <p className="mt-1 text-sm text-slate-400">Review configuration</p>
+                  <h3 className="text-lg font-semibold text-white">{t('mockDisk.step3.title')}</h3>
+                  <p className="mt-1 text-sm text-slate-400">{t('mockDisk.step3.description')}</p>
                 </div>
 
                 <div className="space-y-3 rounded-xl border border-slate-800 bg-slate-900/60 p-5">
                   <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
-                    <span className="text-sm text-slate-400">Device Name</span>
+                    <span className="text-sm text-slate-400">{t('mockDisk.step3.deviceName')}</span>
                     <span className="font-medium text-slate-200">/dev/sd{diskLetter}</span>
                   </div>
                   <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
-                    <span className="text-sm text-slate-400">Size</span>
+                    <span className="text-sm text-slate-400">{t('mockDisk.step3.size')}</span>
                     <span className="font-medium text-slate-200">{diskSize} GB</span>
                   </div>
                   <div className="flex items-center justify-between border-b border-slate-800/60 pb-3">
-                    <span className="text-sm text-slate-400">Model Name</span>
+                    <span className="text-sm text-slate-400">{t('mockDisk.step3.modelName')}</span>
                     <span className="font-medium text-slate-200">{diskName}</span>
                   </div>
                   <div className="flex items-center justify-between">
-                    <span className="text-sm text-slate-400">Purpose</span>
+                    <span className="text-sm text-slate-400">{t('mockDisk.step3.purpose')}</span>
                     <span className="font-medium text-slate-200">
                       {purposeOptions.find(p => p.value === diskPurpose)?.label}
                     </span>
@@ -246,9 +248,9 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                       <path strokeLinecap="round" strokeLinejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" />
                     </svg>
                     <div className="text-sm text-amber-200">
-                      <p className="font-medium">Important</p>
+                      <p className="font-medium">{t('mockDisk.step3.important')}</p>
                       <p className="mt-1 text-xs text-amber-300">
-                        This mock disk is only available in Dev-Mode and will be reset when the backend restarts.
+                        {t('mockDisk.step3.importantDesc')}
                       </p>
                     </div>
                   </div>
@@ -270,7 +272,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
               }}
               className="rounded-lg border border-slate-700/70 bg-slate-900/60 px-4 py-2 text-sm text-slate-200 transition hover:border-slate-600"
             >
-              {step === 1 ? 'Cancel' : 'Back'}
+              {step === 1 ? t('mockDisk.cancel') : t('mockDisk.back')}
             </button>
 
             {step < 3 ? (
@@ -279,7 +281,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                 onClick={() => setStep(step + 1)}
                 className="rounded-lg border border-sky-500/50 bg-sky-500/15 px-6 py-2 text-sm font-medium text-sky-100 transition hover:border-sky-500/70 hover:bg-sky-500/20"
               >
-                Next
+                {t('mockDisk.next')}
               </button>
             ) : (
               <button
@@ -291,7 +293,7 @@ export default function MockDiskWizard({ onClose, onSuccess }: MockDiskWizardPro
                     : 'border-emerald-500/50 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/70 hover:bg-emerald-500/20'
                 }`}
               >
-                {busy ? 'Adding...' : 'Add Mock Disk'}
+                {busy ? t('mockDisk.adding') : t('mockDisk.addMockDisk')}
               </button>
             )}
           </div>

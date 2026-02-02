@@ -1,4 +1,5 @@
 import { useState, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2, BarChart3 } from 'lucide-react';
 import { useSchedulers, useSchedulerHistory } from '../hooks/useSchedulers';
 import { SchedulerCard } from '../components/scheduler/SchedulerCard';
@@ -19,14 +20,15 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'overview', label: 'Overview', icon: <Clock className="h-4 w-4" /> },
-  { id: 'timeline', label: 'Timeline', icon: <BarChart3 className="h-4 w-4" /> },
-  { id: 'sync', label: 'Sync Schedules', icon: <Calendar className="h-4 w-4" /> },
-  { id: 'maintenance', label: 'Maintenance', icon: <Wrench className="h-4 w-4" /> },
-  { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
+  { id: 'overview', label: 'tabs.overview', icon: <Clock className="h-4 w-4" /> },
+  { id: 'timeline', label: 'tabs.timeline', icon: <BarChart3 className="h-4 w-4" /> },
+  { id: 'sync', label: 'tabs.syncSchedules', icon: <Calendar className="h-4 w-4" /> },
+  { id: 'maintenance', label: 'tabs.maintenance', icon: <Wrench className="h-4 w-4" /> },
+  { id: 'history', label: 'tabs.history', icon: <History className="h-4 w-4" /> },
 ];
 
 export default function SchedulerDashboard() {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [configModalOpen, setConfigModalOpen] = useState(false);
   const [selectedScheduler, setSelectedScheduler] = useState<SchedulerStatus | null>(null);
@@ -83,7 +85,7 @@ export default function SchedulerDashboard() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to run scheduler');
+      toast.error(err.message || t('toast.runFailed'));
     }
   };
 
@@ -101,7 +103,7 @@ export default function SchedulerDashboard() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to toggle scheduler');
+      toast.error(err.message || t('toast.toggleFailed'));
     }
   };
 
@@ -109,12 +111,12 @@ export default function SchedulerDashboard() {
     try {
       const success = await updateConfig(name, config);
       if (success) {
-        toast.success('Configuration saved');
+        toast.success(t('toast.configSaved'));
         return true;
       }
       return false;
     } catch (err: any) {
-      toast.error(err.message || 'Failed to save configuration');
+      toast.error(err.message || t('toast.configFailed'));
       return false;
     }
   };
@@ -123,13 +125,13 @@ export default function SchedulerDashboard() {
     try {
       const result = await retryExecution(schedulerName);
       if (result.success) {
-        toast.success(`${schedulerName.replace(/_/g, ' ')} retried successfully`);
+        toast.success(t('toast.retrySuccess', { name: schedulerName.replace(/_/g, ' ') }));
         refetchHistory();
       } else {
-        toast.error(result.message || 'Retry failed');
+        toast.error(result.message || t('toast.retryFailed'));
       }
     } catch (err: any) {
-      toast.error(err.message || 'Failed to retry scheduler');
+      toast.error(err.message || t('toast.retryFailed'));
     }
   };
 
@@ -138,9 +140,9 @@ export default function SchedulerDashboard() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Scheduler Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
           <p className="text-sm text-slate-400 mt-1">
-            Manage system schedulers and view execution history
+            {t('description')}
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -148,10 +150,10 @@ export default function SchedulerDashboard() {
           <div className="flex items-center gap-2 text-sm">
             <span className="inline-flex items-center gap-1.5 rounded-full bg-green-900/50 px-3 py-1 text-green-300">
               <span className="h-2 w-2 rounded-full bg-green-400 animate-pulse" />
-              {totalRunning} Running
+              {t('stats.running', { count: totalRunning })}
             </span>
             <span className="inline-flex items-center rounded-full bg-slate-800 px-3 py-1 text-slate-300">
-              {totalEnabled} Enabled
+              {t('stats.enabled', { count: totalEnabled })}
             </span>
           </div>
           <button
@@ -160,7 +162,7 @@ export default function SchedulerDashboard() {
             className="inline-flex items-center gap-1.5 rounded-md bg-slate-800 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors disabled:opacity-50"
           >
             <RefreshCw className={`h-4 w-4 ${schedulersLoading ? 'animate-spin' : ''}`} />
-            Refresh
+            {t('buttons.refresh')}
           </button>
         </div>
       </div>
@@ -179,7 +181,7 @@ export default function SchedulerDashboard() {
               }`}
             >
               {tab.icon}
-              {tab.label}
+              {t(tab.label)}
             </button>
           ))}
         </nav>
@@ -229,18 +231,17 @@ export default function SchedulerDashboard() {
           <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6">
             <div className="flex items-center gap-3 mb-4">
               <Calendar className="h-6 w-6 text-sky-400" />
-              <h2 className="text-lg font-medium text-white">Sync Schedules</h2>
+              <h2 className="text-lg font-medium text-white">{t('syncTab.title')}</h2>
             </div>
             <p className="text-sm text-slate-400 mb-6">
-              User-defined sync schedules can be configured in the Settings page under the Sync tab.
-              This section will be enhanced with direct schedule management in a future update.
+              {t('syncTab.description')}
             </p>
             <a
               href="/settings"
               className="inline-flex items-center gap-2 rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 transition-colors"
             >
               <Settings className="h-4 w-4" />
-              Go to Settings
+              {t('syncTab.goToSettings')}
             </a>
           </div>
         )}

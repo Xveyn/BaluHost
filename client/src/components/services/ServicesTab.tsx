@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { RefreshCw, Server, AlertTriangle, CheckCircle, StopCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import ServiceCard from './ServiceCard';
 import DependencyList from './DependencyList';
 import AppMetrics from './AppMetrics';
@@ -18,6 +19,7 @@ interface ServicesTabProps {
 }
 
 export default function ServicesTab({ isAdmin }: ServicesTabProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [snapshot, setSnapshot] = useState<AdminDebugSnapshot | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -25,7 +27,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
 
   const fetchData = useCallback(async () => {
     if (!isAdmin) {
-      setError('Admin access required');
+      setError(t('system:services.adminRequired'));
       setIsLoading(false);
       return;
     }
@@ -60,15 +62,15 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
     try {
       const result = await restartService(serviceName);
       if (result.success) {
-        toast.success(`${serviceName} restarted successfully`);
+        toast.success(t('system:services.toast.restartSuccess', { name: serviceName }));
       } else {
-        toast.error(result.message || `Failed to restart ${serviceName}`);
+        toast.error(result.message || t('system:services.toast.restartFailed', { name: serviceName }));
       }
       // Refresh data after restart
       await fetchData();
     } catch (err: any) {
       console.error('Failed to restart service:', err);
-      toast.error(err.response?.data?.detail || `Failed to restart ${serviceName}`);
+      toast.error(err.response?.data?.detail || t('system:services.toast.restartFailed', { name: serviceName }));
     }
   };
 
@@ -76,15 +78,15 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
     try {
       const result = await stopService(serviceName);
       if (result.success) {
-        toast.success(`${serviceName} stopped successfully`);
+        toast.success(t('system:services.toast.stopSuccess', { name: serviceName }));
       } else {
-        toast.error(result.message || `Failed to stop ${serviceName}`);
+        toast.error(result.message || t('system:services.toast.stopFailed', { name: serviceName }));
       }
       // Refresh data after stop
       await fetchData();
     } catch (err: any) {
       console.error('Failed to stop service:', err);
-      toast.error(err.response?.data?.detail || `Failed to stop ${serviceName}`);
+      toast.error(err.response?.data?.detail || t('system:services.toast.stopFailed', { name: serviceName }));
     }
   };
 
@@ -92,15 +94,15 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
     try {
       const result = await startService(serviceName);
       if (result.success) {
-        toast.success(`${serviceName} started successfully`);
+        toast.success(t('system:services.toast.startSuccess', { name: serviceName }));
       } else {
-        toast.error(result.message || `Failed to start ${serviceName}`);
+        toast.error(result.message || t('system:services.toast.startFailed', { name: serviceName }));
       }
       // Refresh data after start
       await fetchData();
     } catch (err: any) {
       console.error('Failed to start service:', err);
-      toast.error(err.response?.data?.detail || `Failed to start ${serviceName}`);
+      toast.error(err.response?.data?.detail || t('system:services.toast.startFailed', { name: serviceName }));
     }
   };
 
@@ -109,7 +111,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <AlertTriangle className="w-12 h-12 text-yellow-500 mx-auto mb-4" />
-          <p className="text-slate-300">Admin access required to view service status</p>
+          <p className="text-slate-300">{t('system:services.adminRequired')}</p>
         </div>
       </div>
     );
@@ -133,7 +135,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
             onClick={handleRefresh}
             className="mt-4 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors"
           >
-            Retry
+            {t('system:services.retry')}
           </button>
         </div>
       </div>
@@ -158,11 +160,11 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
         <div>
           <h2 className="text-xl font-bold text-white flex items-center gap-2">
             <Server className="w-6 h-6 text-slate-400" />
-            Service Status
+            {t('system:services.title')}
           </h2>
           {lastRefresh && (
             <p className="text-xs text-slate-400 mt-1">
-              Last updated: {lastRefresh.toLocaleTimeString()}
+              {t('system:services.lastUpdated')}: {lastRefresh.toLocaleTimeString()}
             </p>
           )}
         </div>
@@ -172,7 +174,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           className="px-4 py-2 flex items-center gap-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-colors disabled:opacity-50"
         >
           <RefreshCw className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('system:services.refresh')}
         </button>
       </div>
 
@@ -184,7 +186,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">{runningCount}</p>
-            <p className="text-xs text-slate-400">Running</p>
+            <p className="text-xs text-slate-400">{t('system:services.summary.running')}</p>
           </div>
         </div>
         <div className="card border-slate-800/40 flex items-center gap-3">
@@ -193,7 +195,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">{stoppedCount}</p>
-            <p className="text-xs text-slate-400">Stopped</p>
+            <p className="text-xs text-slate-400">{t('system:services.summary.stopped')}</p>
           </div>
         </div>
         <div className="card border-slate-800/40 flex items-center gap-3">
@@ -202,7 +204,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">{errorCount}</p>
-            <p className="text-xs text-slate-400">Errors</p>
+            <p className="text-xs text-slate-400">{t('system:services.summary.errors')}</p>
           </div>
         </div>
         <div className="card border-slate-800/40 flex items-center gap-3">
@@ -211,7 +213,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">{disabledCount}</p>
-            <p className="text-xs text-slate-400">Disabled</p>
+            <p className="text-xs text-slate-400">{t('system:services.summary.disabled')}</p>
           </div>
         </div>
         <div className="card border-slate-800/40 flex items-center gap-3">
@@ -220,14 +222,14 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
           </div>
           <div>
             <p className="text-2xl font-bold text-white">{availableDeps}/{snapshot.dependencies.length}</p>
-            <p className="text-xs text-slate-400">Dependencies</p>
+            <p className="text-xs text-slate-400">{t('system:services.summary.dependencies')}</p>
           </div>
         </div>
       </div>
 
       {/* Services Grid */}
       <div>
-        <h3 className="text-lg font-semibold text-white mb-4">Background Services</h3>
+        <h3 className="text-lg font-semibold text-white mb-4">{t('system:services.backgroundServices')}</h3>
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {snapshot.services.map((service) => (
             <ServiceCard

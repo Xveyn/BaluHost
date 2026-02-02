@@ -1,14 +1,15 @@
 import { useEffect, useState, useCallback } from 'react'
+import { useTranslation } from 'react-i18next'
 import { getDatabaseStats } from '../../api/monitoring'
 import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
 import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw } from 'lucide-react'
 
-const METRIC_CONFIG: Record<string, { label: string; icon: React.ElementType; color: string }> = {
-  cpu: { label: 'CPU', icon: Cpu, color: 'blue' },
-  memory: { label: 'Memory', icon: MemoryStick, color: 'emerald' },
-  network: { label: 'Network', icon: Network, color: 'purple' },
-  disk_io: { label: 'Disk I/O', icon: HardDrive, color: 'amber' },
-  process: { label: 'Process', icon: Activity, color: 'rose' },
+const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType; color: string }> = {
+  cpu: { labelKey: 'admin:databaseStats.metrics.cpu', icon: Cpu, color: 'blue' },
+  memory: { labelKey: 'admin:databaseStats.metrics.memory', icon: MemoryStick, color: 'emerald' },
+  network: { labelKey: 'admin:databaseStats.metrics.network', icon: Network, color: 'purple' },
+  disk_io: { labelKey: 'admin:databaseStats.metrics.diskIo', icon: HardDrive, color: 'amber' },
+  process: { labelKey: 'admin:databaseStats.metrics.process', icon: Activity, color: 'rose' },
 }
 
 function formatBytes(bytes: number): string {
@@ -34,10 +35,11 @@ function formatDate(dateStr?: string): string {
 interface MetricCardProps {
   metricType: string
   stats: MetricDatabaseStats
+  t: (key: string, options?: Record<string, unknown>) => string
 }
 
-function MetricCard({ metricType, stats }: MetricCardProps) {
-  const config = METRIC_CONFIG[metricType] || { label: metricType, icon: Database, color: 'slate' }
+function MetricCard({ metricType, stats, t }: MetricCardProps) {
+  const config = METRIC_CONFIG[metricType] || { labelKey: metricType, icon: Database, color: 'slate' }
   const Icon = config.icon
   const colorClasses: Record<string, { border: string; bg: string; text: string; glow: string }> = {
     blue: { border: 'hover:border-blue-500/50', bg: 'from-blue-500/20 to-blue-600/10', text: 'text-blue-400', glow: 'hover:shadow-blue-500/10' },
@@ -60,30 +62,30 @@ function MetricCard({ metricType, stats }: MetricCardProps) {
             <div className={`w-8 h-8 bg-gradient-to-br ${colors.bg} rounded-lg flex items-center justify-center`}>
               <Icon className={`w-4 h-4 ${colors.text}`} />
             </div>
-            <h3 className="text-sm font-semibold text-white">{config.label}</h3>
+            <h3 className="text-sm font-semibold text-white">{t(config.labelKey)}</h3>
           </div>
           <span className={`text-xs font-medium px-2 py-1 rounded-lg bg-slate-800/60 ${colors.text}`}>
-            {stats.retention_hours}h retention
+            {t('admin:databaseStats.fields.retention', { hours: stats.retention_hours })}
           </span>
         </div>
 
         {/* Stats Grid */}
         <div className="grid grid-cols-2 gap-3">
           <div>
-            <p className="text-xs text-slate-400 mb-1">Samples</p>
+            <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.samples')}</p>
             <p className="text-lg font-bold text-white">{stats.count.toLocaleString()}</p>
           </div>
           <div>
-            <p className="text-xs text-slate-400 mb-1">Size</p>
+            <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.size')}</p>
             <p className="text-lg font-bold text-white">{formatBytes(stats.estimated_size_bytes)}</p>
           </div>
           <div className="col-span-2">
-            <p className="text-xs text-slate-400 mb-1">Last Cleanup</p>
+            <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.lastCleanup')}</p>
             <p className="text-sm text-slate-300">{formatDate(stats.last_cleanup)}</p>
           </div>
           {stats.total_cleaned > 0 && (
             <div className="col-span-2">
-              <p className="text-xs text-slate-400 mb-1">Total Cleaned</p>
+              <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.totalCleaned')}</p>
               <p className="text-sm text-slate-300">{stats.total_cleaned.toLocaleString()}</p>
             </div>
           )}
@@ -99,6 +101,7 @@ interface DatabaseStatsCardsProps {
 }
 
 export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval = 30000 }: DatabaseStatsCardsProps) {
+  const { t } = useTranslation(['admin', 'common'])
   const [stats, setStats] = useState<DatabaseStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -130,7 +133,7 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
     return (
       <div className="flex flex-col items-center justify-center py-12">
         <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-        <p className="text-slate-400">Loading database statistics...</p>
+        <p className="text-slate-400">{t('admin:databaseStats.loading')}</p>
       </div>
     )
   }
@@ -159,11 +162,11 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
       {/* Header with refresh info */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">Monitoring Database Statistics</h3>
+          <h3 className="text-lg font-semibold text-white">{t('admin:databaseStats.title')}</h3>
           {lastUpdate && (
             <p className="text-xs text-slate-400 mt-1">
-              Last updated: {lastUpdate.toLocaleTimeString('de-DE')}
-              {autoRefresh && ` (auto-refresh every ${refreshInterval / 1000}s)`}
+              {t('admin:databaseStats.lastUpdated', { time: lastUpdate.toLocaleTimeString('de-DE') })}
+              {autoRefresh && ` ${t('admin:databaseStats.autoRefresh', { seconds: refreshInterval / 1000 })}`}
             </p>
           )}
         </div>
@@ -173,14 +176,14 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
           className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 hover:text-white transition-colors text-sm border border-slate-600/50"
         >
           <RefreshCw className={`w-4 h-4 ${loading ? 'animate-spin' : ''}`} />
-          Refresh
+          {t('common:refresh')}
         </button>
       </div>
 
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {metricTypes.map((metricType) => (
-          <MetricCard key={metricType} metricType={metricType} stats={stats.metrics[metricType]} />
+          <MetricCard key={metricType} metricType={metricType} stats={stats.metrics[metricType]} t={t} />
         ))}
       </div>
 
@@ -192,7 +195,7 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
               <Database className="w-5 h-5 text-blue-400" />
             </div>
             <div>
-              <p className="text-sm text-slate-400">Total Samples</p>
+              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.totalSamples')}</p>
               <p className="text-xl font-bold text-white">{stats.total_samples.toLocaleString()}</p>
             </div>
           </div>
@@ -201,7 +204,7 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
               <HardDrive className="w-5 h-5 text-emerald-400" />
             </div>
             <div>
-              <p className="text-sm text-slate-400">Total Size</p>
+              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.totalSize')}</p>
               <p className="text-xl font-bold text-white">{formatBytes(stats.total_size_bytes)}</p>
             </div>
           </div>
@@ -210,7 +213,7 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
               <Activity className="w-5 h-5 text-purple-400" />
             </div>
             <div>
-              <p className="text-sm text-slate-400">Metric Types</p>
+              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.metricTypes')}</p>
               <p className="text-xl font-bold text-white">{metricTypes.length}</p>
             </div>
           </div>

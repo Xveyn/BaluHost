@@ -1,4 +1,5 @@
 import { useEffect, useState, useRef } from 'react';
+import { useTranslation } from 'react-i18next';
 import { getRaidStatus, triggerRaidScrub } from '../../api/raid';
 import { fetchSmartStatus, getSmartMode, toggleSmartMode, runSmartTest } from '../../api/smart';
 import { requestConfirmation, executeConfirmation } from '../../api/raid';
@@ -33,6 +34,7 @@ interface MaintenancePanelProps {
 }
 
 export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
+  const { t } = useTranslation(['scheduler', 'common']);
   const [raid, setRaid] = useState<any>(null);
   const [smart, setSmart] = useState<any>(null);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
@@ -56,7 +58,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
       setSelectedDevice(s?.devices?.[0]?.name ?? null);
       setSmartMode(m);
     } catch (err: any) {
-      addToast(err?.message || 'Failed to load data', 'error');
+      addToast(err?.message || t('scheduler:maintenance.loadFailed'), 'error');
     }
   };
 
@@ -68,10 +70,10 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
     setBusy(true);
     try {
       const res = await triggerRaidScrub();
-      addToast(res.message || 'Scrub started', 'success');
+      addToast(res.message || t('scheduler:maintenance.scrubStarted'), 'success');
       await load();
     } catch (err: any) {
-      addToast(err?.message || 'Scrub failed', 'error');
+      addToast(err?.message || t('scheduler:maintenance.scrubFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -88,9 +90,9 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
         action: 'delete_array',
         payload: { array: arrayName },
       });
-      addToast('Confirmation token created. Confirm to execute.', 'info');
+      addToast(t('scheduler:maintenance.confirmTokenCreated'), 'info');
     } catch (err: any) {
-      addToast(err?.message || 'Failed to request confirmation', 'error');
+      addToast(err?.message || t('scheduler:maintenance.confirmRequestFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -101,11 +103,11 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
     setConfirmModal((s) => ({ ...s, loading: true }));
     try {
       const resp = await executeConfirmation(confirmModal.token!);
-      addToast(resp.message || 'Action executed', 'success');
+      addToast(resp.message || t('scheduler:maintenance.actionExecuted'), 'success');
       setConfirmModal({ visible: false });
       await load();
     } catch (err: any) {
-      addToast(err?.message || 'Execution failed', 'error');
+      addToast(err?.message || t('scheduler:maintenance.executionFailed'), 'error');
       setConfirmModal({ visible: false });
     }
   };
@@ -130,12 +132,12 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
     setBusy(true);
     try {
       const device = selectedDevice || smart?.devices?.[0]?.name;
-      if (!device) throw new Error('No device selected for SMART test');
+      if (!device) throw new Error(t('scheduler:maintenance.noDeviceSelected'));
       const res = await runSmartTest({ device, type: 'short' });
-      addToast(res.message || 'SMART test started', 'success');
+      addToast(res.message || t('scheduler:maintenance.smartTestStarted'), 'success');
       await load();
     } catch (err: any) {
-      addToast(err?.message || 'SMART test failed', 'error');
+      addToast(err?.message || t('scheduler:maintenance.smartTestFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -146,9 +148,9 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
     try {
       const res = await toggleSmartMode();
       setSmartMode(res);
-      addToast(res.message || `SMART mode: ${res.mode}`, 'success');
+      addToast(res.message || t('scheduler:maintenance.smartMode', { mode: res.mode }), 'success');
     } catch (err: any) {
-      addToast(err?.message || 'Toggle failed', 'error');
+      addToast(err?.message || t('scheduler:maintenance.toggleFailed'), 'error');
     } finally {
       setBusy(false);
     }
@@ -164,7 +166,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
           className="inline-flex items-center gap-2 min-h-[44px] rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:opacity-50 transition-colors"
         >
           <HardDrive className="h-4 w-4" />
-          Trigger RAID Scrub
+          {t('scheduler:maintenance.triggerRaidScrub')}
         </button>
         <button
           onClick={handleSmartTest}
@@ -172,7 +174,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
           className="inline-flex items-center gap-2 min-h-[44px] rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50 transition-colors"
         >
           <Activity className="h-4 w-4" />
-          Run SMART Short
+          {t('scheduler:maintenance.runSmartShort')}
         </button>
         <button
           onClick={handleToggleSmart}
@@ -180,7 +182,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
           className="inline-flex items-center gap-2 min-h-[44px] rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors"
         >
           <RefreshCw className="h-4 w-4" />
-          Toggle SMART Mode
+          {t('scheduler:maintenance.toggleSmartMode')}
         </button>
       </div>
 
@@ -189,7 +191,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="text-lg font-medium text-white flex items-center gap-2">
             <HardDrive className="h-5 w-5" />
-            RAID Status
+            {t('scheduler:maintenance.raidStatus')}
           </h3>
           <div className="mt-4 space-y-4">
             {raid?.arrays?.length ? (
@@ -201,7 +203,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                         {a.name} <span className="text-xs text-slate-400">({a.level})</span>
                       </div>
                       <div className="text-xs text-slate-400">
-                        Size: {a.size_bytes ? Math.round(a.size_bytes / (1024 * 1024 * 1024)) + ' GB' : 'n/a'}
+                        {t('scheduler:maintenance.size')}: {a.size_bytes ? Math.round(a.size_bytes / (1024 * 1024 * 1024)) + ' GB' : 'n/a'}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
@@ -212,14 +214,14 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                         className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
                       >
                         <Trash2 className="h-3 w-3" />
-                        Delete
+                        {t('common:buttons.delete')}
                       </button>
                     </div>
                   </div>
 
                   {a.resync_progress != null && (
                     <div className="mt-3">
-                      <div className="text-xs text-slate-400">Resync Progress</div>
+                      <div className="text-xs text-slate-400">{t('scheduler:maintenance.resyncProgress')}</div>
                       <ProgressBar value={a.resync_progress} />
                       <div className="mt-1 text-xs text-slate-400">
                         {Math.round((a.resync_progress || 0) * 100)}%
@@ -228,7 +230,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                   )}
 
                   <div className="mt-3 text-xs">
-                    <div className="text-slate-400 mb-1">Devices</div>
+                    <div className="text-slate-400 mb-1">{t('scheduler:maintenance.devices')}</div>
                     <div className="flex flex-wrap gap-2">
                       {a.devices?.map((d: any) => (
                         <div
@@ -244,7 +246,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                 </div>
               ))
             ) : (
-              <div className="text-sm text-slate-400">No arrays detected.</div>
+              <div className="text-sm text-slate-400">{t('scheduler:maintenance.noArrays')}</div>
             )}
           </div>
         </div>
@@ -253,12 +255,12 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
           <h3 className="text-lg font-medium text-white flex items-center gap-2">
             <Activity className="h-5 w-5" />
-            SMART Status
+            {t('scheduler:maintenance.smartStatus')}
           </h3>
           <div className="mt-4 space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
-                <label className="text-xs text-slate-400">Device:</label>
+                <label className="text-xs text-slate-400">{t('scheduler:maintenance.device')}:</label>
                 <select
                   value={selectedDevice ?? ''}
                   onChange={(e) => setSelectedDevice(e.target.value || null)}
@@ -273,7 +275,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                 </select>
               </div>
               <div className="text-xs text-slate-400">
-                Mode: <span className="text-slate-100">{smartMode?.mode ?? 'unknown'}</span>
+                {t('scheduler:maintenance.mode')}: <span className="text-slate-100">{smartMode?.mode ?? t('common:status.unknown')}</span>
               </div>
             </div>
 
@@ -289,19 +291,19 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                     </div>
                     <div className="flex flex-col items-end gap-2">
                       <div className="text-xs">
-                        Temp: <span className="font-medium">{dev.temperature ?? 'n/a'}</span>
+                        {t('scheduler:maintenance.temp')}: <span className="font-medium">{dev.temperature ?? 'n/a'}</span>
                         {dev.temperature ? 'C' : ''}
                       </div>
                       <StatusBadge status={dev.status} />
                     </div>
                   </div>
                   <div className="mt-3 text-xs text-slate-400">
-                    Attributes: {dev.attributes?.length ?? 0}
+                    {t('scheduler:maintenance.attributes')}: {dev.attributes?.length ?? 0}
                   </div>
                 </div>
               ))
             ) : (
-              <div className="text-sm text-slate-400">No SMART devices found.</div>
+              <div className="text-sm text-slate-400">{t('scheduler:maintenance.noSmartDevices')}</div>
             )}
           </div>
         </div>
@@ -319,17 +321,17 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
             role="dialog"
             aria-modal="true"
           >
-            <h3 className="text-lg font-medium text-white">Confirm {confirmModal.action}</h3>
+            <h3 className="text-lg font-medium text-white">{t('scheduler:maintenance.confirm')} {confirmModal.action}</h3>
             <p className="mt-2 text-sm text-slate-400">
-              A one-time confirmation token was created. Click Confirm to execute the action now.
+              {t('scheduler:maintenance.confirmDescription')}
             </p>
             <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-              <div className="text-xs text-slate-400">Token</div>
+              <div className="text-xs text-slate-400">{t('scheduler:maintenance.token')}</div>
               <div className="mt-1 font-mono text-sm break-all text-slate-100">
                 {confirmModal.token}
               </div>
               <div className="mt-2 text-xs text-slate-400">
-                Expires at:{' '}
+                {t('scheduler:maintenance.expiresAt')}:{' '}
                 {confirmModal.expires_at
                   ? new Date(confirmModal.expires_at * 1000).toLocaleString()
                   : 'n/a'}
@@ -340,7 +342,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                 onClick={() => setConfirmModal({ visible: false })}
                 className="rounded-md px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
               >
-                Cancel
+                {t('common:buttons.cancel')}
               </button>
               <button
                 ref={confirmButtonRef}
@@ -348,7 +350,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                 disabled={confirmModal.loading}
                 className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
               >
-                Confirm Execute
+                {t('scheduler:maintenance.confirmExecute')}
               </button>
             </div>
           </div>

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { useTranslation } from 'react-i18next'
 
 interface Column {
   name: string
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
+  const { t } = useTranslation('admin')
   const [isMobile, setIsMobile] = useState(false)
 
   // hide specific columns from display (e.g. parent_path, is_directory, mime_type)
@@ -61,7 +63,7 @@ export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
 
     // booleans
     if (n.startsWith('is_') || n === 'is_directory' || typeof raw === 'boolean') {
-      return raw ? 'true' : 'false'
+      return raw ? t('common.true') : t('common.false')
     }
 
     // dates

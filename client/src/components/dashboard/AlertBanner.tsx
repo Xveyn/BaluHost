@@ -4,6 +4,7 @@
  */
 import React, { useState, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   AlertCircle,
@@ -32,6 +33,7 @@ interface AlertBannerProps {
 }
 
 export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const [expanded, setExpanded] = useState(false);
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
@@ -117,16 +119,16 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) =
             <p className={`text-sm font-medium ${primaryStyles.text}`}>
               {visibleAlerts.length === 1
                 ? primaryAlert.title
-                : `${visibleAlerts.length} System Alerts`}
+                : t('dashboard:alerts.systemAlerts', { count: visibleAlerts.length })}
             </p>
             {visibleAlerts.length === 1 && (
               <p className="text-xs text-slate-400 mt-0.5">{primaryAlert.message}</p>
             )}
             {visibleAlerts.length > 1 && (
               <p className="text-xs text-slate-400 mt-0.5">
-                {criticalCount > 0 && `${criticalCount} critical`}
+                {criticalCount > 0 && t('dashboard:alerts.critical', { count: criticalCount })}
                 {criticalCount > 0 && warningCount > 0 && ', '}
-                {warningCount > 0 && `${warningCount} warning${warningCount > 1 ? 's' : ''}`}
+                {warningCount > 0 && t('dashboard:alerts.warnings', { count: warningCount })}
               </p>
             )}
           </div>
@@ -141,7 +143,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) =
               }}
               className="rounded-full border border-slate-700/70 px-3 py-1 text-xs text-slate-300 transition hover:border-slate-500 hover:text-white"
             >
-              {primaryAlert.linkText || 'View'}
+              {primaryAlert.linkText || t('dashboard:alerts.view')}
             </button>
           )}
 
@@ -149,12 +151,12 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) =
             <button className="flex items-center gap-1 text-xs text-slate-400 hover:text-white">
               {expanded ? (
                 <>
-                  <span>Collapse</span>
+                  <span>{t('dashboard:alerts.collapse')}</span>
                   <ChevronUp className="h-4 w-4" />
                 </>
               ) : (
                 <>
-                  <span>Expand</span>
+                  <span>{t('dashboard:alerts.expand')}</span>
                   <ChevronDown className="h-4 w-4" />
                 </>
               )}
@@ -168,7 +170,7 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) =
                 handleDismiss(primaryAlert.id);
               }}
               className="p-1 text-slate-400 hover:text-white transition"
-              title="Dismiss"
+              title={t('dashboard:alerts.dismiss')}
             >
               <X className="h-4 w-4" />
             </button>
@@ -200,13 +202,13 @@ export const AlertBanner: React.FC<AlertBannerProps> = ({ alerts, onDismiss }) =
                       onClick={() => handleNavigate(alert.link!)}
                       className="rounded-full border border-slate-700/70 px-2 py-0.5 text-xs text-slate-300 transition hover:border-slate-500 hover:text-white"
                     >
-                      {alert.linkText || 'View'}
+                      {alert.linkText || t('dashboard:alerts.view')}
                     </button>
                   )}
                   <button
                     onClick={() => handleDismiss(alert.id)}
                     className="p-1 text-slate-400 hover:text-white transition"
-                    title="Dismiss"
+                    title={t('dashboard:alerts.dismiss')}
                   >
                     <X className="h-3.5 w-3.5" />
                   </button>

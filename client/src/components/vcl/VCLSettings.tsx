@@ -4,6 +4,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import {
   HardDrive,
   Users,
@@ -36,6 +37,7 @@ export default function VCLSettings() {
   // Edit modal state
   const [editingUser, setEditingUser] = useState<UserVCLStats | null>(null);
   const [editForm, setEditForm] = useState<VCLSettingsUpdate>({});
+  const { t } = useTranslation('settings');
 
   useEffect(() => {
     loadData();
@@ -52,7 +54,7 @@ export default function VCLSettings() {
       setOverview(overviewData);
       setUsers(usersData?.users || []);
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load VCL data');
+      setError(err.response?.data?.detail || t('vcl.errors.loadFailed'));
       // Set empty arrays on error
       setUsers([]);
       setOverview(null);
@@ -69,12 +71,12 @@ export default function VCLSettings() {
       setError(null);
       const result = await triggerCleanup({ dry_run: dryRun });
       setSuccessMessage(
-        `${dryRun ? 'Dry run: Would delete' : 'Deleted'} ${result.deleted_versions} versions, freed ${formatBytes(result.freed_bytes)}`
+        t(dryRun ? 'vcl.cleanup.dryRunResult' : 'vcl.cleanup.result', { versions: result.deleted_versions, freed: formatBytes(result.freed_bytes) })
       );
       setTimeout(() => setSuccessMessage(null), 5000);
       if (!dryRun) loadData(); // Reload stats
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to trigger cleanup');
+      setError(err.response?.data?.detail || t('vcl.errors.cleanupFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -95,12 +97,12 @@ export default function VCLSettings() {
       setActionLoading(true);
       setError(null);
       await updateUserSettingsAdmin(editingUser.user_id, editForm);
-      setSuccessMessage(`Updated settings for ${editingUser.username}`);
+      setSuccessMessage(t('vcl.settingsUpdated', { username: editingUser.username }));
       setTimeout(() => setSuccessMessage(null), 3000);
       setEditingUser(null);
       loadData(); // Reload
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to update settings');
+      setError(err.response?.data?.detail || t('vcl.errors.updateFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -143,7 +145,7 @@ export default function VCLSettings() {
         <div className="card border-slate-800/60 bg-slate-900/55">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Total Versions</p>
+              <p className="text-slate-400 text-sm">{t('vcl.stats.totalVersions')}</p>
               <p className="text-2xl font-bold text-white mt-1">{overview.total_versions.toLocaleString()}</p>
             </div>
             <Clock className="w-10 h-10 text-sky-400 opacity-50" />
@@ -153,9 +155,9 @@ export default function VCLSettings() {
         <div className="card border-slate-800/60 bg-slate-900/55">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Storage Used</p>
+              <p className="text-slate-400 text-sm">{t('vcl.stats.storageUsed')}</p>
               <p className="text-2xl font-bold text-white mt-1">{formatBytes(overview.total_compressed_bytes)}</p>
-              <p className="text-xs text-slate-500 mt-1">{formatBytes(overview.total_size_bytes)} original</p>
+              <p className="text-xs text-slate-500 mt-1">{formatBytes(overview.total_size_bytes)} {t('vcl.stats.original')}</p>
             </div>
             <HardDrive className="w-10 h-10 text-violet-400 opacity-50" />
           </div>
@@ -164,9 +166,9 @@ export default function VCLSettings() {
         <div className="card border-slate-800/60 bg-slate-900/55">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Total Savings</p>
+              <p className="text-slate-400 text-sm">{t('vcl.stats.totalSavings')}</p>
               <p className="text-2xl font-bold text-white mt-1">{savingsPercent.toFixed(1)}%</p>
-              <p className="text-xs text-slate-500 mt-1">{formatBytes(totalSavings)} saved</p>
+              <p className="text-xs text-slate-500 mt-1">{formatBytes(totalSavings)} {t('vcl.stats.saved')}</p>
             </div>
             <TrendingUp className="w-10 h-10 text-green-400 opacity-50" />
           </div>
@@ -175,9 +177,9 @@ export default function VCLSettings() {
         <div className="card border-slate-800/60 bg-slate-900/55">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-slate-400 text-sm">Active Users</p>
+              <p className="text-slate-400 text-sm">{t('vcl.stats.activeUsers')}</p>
               <p className="text-2xl font-bold text-white mt-1">{overview.total_users}</p>
-              <p className="text-xs text-slate-500 mt-1">{overview.cached_versions_count} cached</p>
+              <p className="text-xs text-slate-500 mt-1">{overview.cached_versions_count} {t('vcl.stats.cached')}</p>
             </div>
             <Users className="w-10 h-10 text-amber-400 opacity-50" />
           </div>
@@ -188,48 +190,48 @@ export default function VCLSettings() {
       <div className="card border-slate-800/60 bg-slate-900/55">
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Database className="w-5 h-5 text-sky-400" />
-          Storage Details
+          {t('vcl.storageDetails.title')}
         </h3>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
-            <p className="text-slate-400">Compression Ratio</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.compressionRatio')}</p>
             <p className="text-white font-semibold mt-1">{compressionRatio.toFixed(2)}x</p>
           </div>
           <div>
-            <p className="text-slate-400">Compression Savings</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.compressionSavings')}</p>
             <p className="text-white font-semibold mt-1">{formatBytes(overview.compression_savings_bytes)}</p>
           </div>
           <div>
-            <p className="text-slate-400">Dedup Savings</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.dedupSavings')}</p>
             <p className="text-white font-semibold mt-1">{formatBytes(overview.deduplication_savings_bytes)}</p>
           </div>
           <div>
-            <p className="text-slate-400">Unique Blobs</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.uniqueBlobs')}</p>
             <p className="text-white font-semibold mt-1">{overview.unique_blobs} / {overview.total_blobs}</p>
           </div>
           <div>
-            <p className="text-slate-400">Priority Versions</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.priorityVersions')}</p>
             <p className="text-white font-semibold mt-1 flex items-center gap-1">
               <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
               {overview.priority_count}
             </p>
           </div>
           <div>
-            <p className="text-slate-400">Last Cleanup</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.lastCleanup')}</p>
             <p className="text-white font-semibold mt-1">
-              {overview.last_cleanup_at ? new Date(overview.last_cleanup_at).toLocaleDateString() : 'Never'}
+              {overview.last_cleanup_at ? new Date(overview.last_cleanup_at).toLocaleDateString() : t('common.never')}
             </p>
           </div>
           <div>
-            <p className="text-slate-400">Last Priority Mode</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.lastPriorityMode')}</p>
             <p className="text-white font-semibold mt-1">
-              {overview.last_priority_mode_at ? new Date(overview.last_priority_mode_at).toLocaleDateString() : 'Never'}
+              {overview.last_priority_mode_at ? new Date(overview.last_priority_mode_at).toLocaleDateString() : t('common.never')}
             </p>
           </div>
           <div>
-            <p className="text-slate-400">Updated</p>
+            <p className="text-slate-400">{t('vcl.storageDetails.updated')}</p>
             <p className="text-white font-semibold mt-1">
-              {overview.updated_at ? new Date(overview.updated_at).toLocaleTimeString() : 'N/A'}
+              {overview.updated_at ? new Date(overview.updated_at).toLocaleTimeString() : t('common.na')}
             </p>
           </div>
         </div>
@@ -239,7 +241,7 @@ export default function VCLSettings() {
       <div className="card border-slate-800/60 bg-slate-900/55">
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <RefreshCw className="w-5 h-5 text-sky-400" />
-          Maintenance
+          {t('vcl.maintenance.title')}
         </h3>
         <div className="flex flex-wrap gap-3">
           <button
@@ -248,7 +250,7 @@ export default function VCLSettings() {
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
-            Dry Run Cleanup
+            {t('vcl.maintenance.dryRun')}
           </button>
           <button
             onClick={() => handleCleanup(false)}
@@ -256,7 +258,7 @@ export default function VCLSettings() {
             className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <Trash2 className="w-4 h-4" />
-            Trigger Cleanup
+            {t('vcl.maintenance.triggerCleanup')}
           </button>
           <button
             onClick={loadData}
@@ -264,7 +266,7 @@ export default function VCLSettings() {
             className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <RefreshCw className={`w-4 h-4 ${actionLoading ? 'animate-spin' : ''}`} />
-            Refresh Stats
+            {t('vcl.maintenance.refreshStats')}
           </button>
         </div>
       </div>
@@ -273,19 +275,19 @@ export default function VCLSettings() {
       <div className="card border-slate-800/60 bg-slate-900/55">
         <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
           <Users className="w-5 h-5 text-sky-400" />
-          User Quotas
+          {t('vcl.userQuotas.title')}
         </h3>
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
               <tr className="text-left border-b border-slate-800">
-                <th className="pb-3 text-slate-400 font-medium">User</th>
-                <th className="pb-3 text-slate-400 font-medium">Max Size</th>
-                <th className="pb-3 text-slate-400 font-medium">Used</th>
-                <th className="pb-3 text-slate-400 font-medium">Usage %</th>
-                <th className="pb-3 text-slate-400 font-medium">Versions</th>
-                <th className="pb-3 text-slate-400 font-medium">Status</th>
-                <th className="pb-3 text-slate-400 font-medium">Actions</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.user')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.maxSize')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.used')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.usage')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.versions')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.status')}</th>
+                <th className="pb-3 text-slate-400 font-medium">{t('vcl.userQuotas.actions')}</th>
               </tr>
             </thead>
             <tbody>
@@ -323,7 +325,7 @@ export default function VCLSettings() {
                             : 'bg-red-500/20 text-red-400'
                         }`}
                       >
-                        {user.is_enabled ? 'Enabled' : 'Disabled'}
+                        {user.is_enabled ? t('common.enabled') : t('common.disabled')}
                       </span>
                     </td>
                     <td className="py-3">
@@ -331,7 +333,7 @@ export default function VCLSettings() {
                         onClick={() => handleEditUser(user)}
                         className="text-sky-400 hover:text-sky-300 transition-colors"
                       >
-                        Edit
+                        {t('common.edit')}
                       </button>
                     </td>
                   </tr>
@@ -339,7 +341,7 @@ export default function VCLSettings() {
               }) : (
                 <tr>
                   <td colSpan={7} className="py-8 text-center text-slate-500">
-                    No users found
+                    {t('vcl.userQuotas.noUsers')}
                   </td>
                 </tr>
               )}
@@ -354,13 +356,13 @@ export default function VCLSettings() {
           <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-md">
             <div className="p-6 border-b border-slate-800">
               <h3 className="text-lg font-semibold text-white">
-                Edit Settings: {editingUser.username}
+                {t('vcl.editModal.title', { username: editingUser.username })}
               </h3>
             </div>
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  Max Size (bytes)
+                  {t('vcl.editModal.maxSizeBytes')}
                 </label>
                 <input
                   type="number"
@@ -384,7 +386,7 @@ export default function VCLSettings() {
                     }
                     className="w-4 h-4 rounded border-slate-700 bg-slate-800"
                   />
-                  <span className="text-sm text-slate-300">Enable VCL for this user</span>
+                  <span className="text-sm text-slate-300">{t('vcl.editModal.enableVcl')}</span>
                 </label>
               </div>
             </div>
@@ -393,14 +395,14 @@ export default function VCLSettings() {
                 onClick={() => setEditingUser(null)}
                 className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
               >
-                Cancel
+                {t('common.cancel')}
               </button>
               <button
                 onClick={handleSaveUserSettings}
                 disabled={actionLoading}
                 className="px-4 py-2 bg-sky-500 hover:bg-sky-600 text-white rounded-lg transition-colors disabled:opacity-50"
               >
-                Save
+                {t('common.save')}
               </button>
             </div>
           </div>

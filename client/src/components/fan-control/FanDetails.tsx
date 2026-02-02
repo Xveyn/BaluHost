@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo } from 'react';
 import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import type { FanInfo, FanCurvePoint } from '../../api/fan-control';
 import { CURVE_PRESETS, updateFanConfig } from '../../api/fan-control';
 import FanCurveChart from './FanCurveChart';
@@ -14,6 +15,7 @@ interface FanDetailsProps {
 }
 
 export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate }: FanDetailsProps) {
+  const { t } = useTranslation(['system', 'common']);
   const [curvePoints, setCurvePoints] = useState<FanCurvePoint[]>(fan.curve_points);
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
   const [hysteresis, setHysteresis] = useState<number>(fan.hysteresis_celsius ?? 3.0);
@@ -47,14 +49,14 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
 
   const validateCurvePoints = (points: FanCurvePoint[]): { valid: boolean; error?: string } => {
     if (points.length < 2) {
-      return { valid: false, error: 'Curve must have at least 2 points' };
+      return { valid: false, error: t('system:fanControl.validation.minPoints') };
     }
 
     // Check ascending temperatures
     const sorted = [...points].sort((a, b) => a.temp - b.temp);
     for (let i = 0; i < sorted.length - 1; i++) {
       if (sorted[i].temp >= sorted[i + 1].temp) {
-        return { valid: false, error: 'Temperature values must be strictly ascending' };
+        return { valid: false, error: t('system:fanControl.validation.ascendingTemp') };
       }
     }
 
@@ -63,7 +65,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       if (point.pwm < fan.min_pwm_percent || point.pwm > fan.max_pwm_percent) {
         return {
           valid: false,
-          error: `PWM must be between ${fan.min_pwm_percent}% and ${fan.max_pwm_percent}%`
+          error: t('system:fanControl.validation.pwmRange', { min: fan.min_pwm_percent, max: fan.max_pwm_percent })
         };
       }
     }
@@ -74,7 +76,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const handleSaveCurve = () => {
     const validation = validateCurvePoints(curvePoints);
     if (!validation.valid) {
-      toast.error(validation.error || 'Invalid curve configuration');
+      toast.error(validation.error || t('system:fanControl.validation.invalidCurve'));
       return;
     }
 
@@ -108,7 +110,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
     const presetPoints = CURVE_PRESETS[preset];
     if (presetPoints) {
       setCurvePoints([...presetPoints]);
-      toast.success(`Applied ${preset} preset - click Save to confirm`);
+      toast.success(t('system:fanControl.curve.presetApplied', { preset }));
     }
   };
 
@@ -122,10 +124,10 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
     setIsUpdatingHysteresis(true);
     try {
       await updateFanConfig(fan.fan_id, { hysteresis_celsius: hysteresis });
-      toast.success(`Hysteresis set to ${hysteresis}°C`);
+      toast.success(t('system:fanControl.messages.hysteresisSet', { value: hysteresis }));
       onConfigUpdate?.();
     } catch {
-      toast.error('Failed to update hysteresis');
+      toast.error(t('system:fanControl.messages.hysteresisFailed'));
       setHysteresis(fan.hysteresis_celsius ?? 3.0);
     } finally {
       setIsUpdatingHysteresis(false);
@@ -139,7 +141,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
         <h2 className="text-xl font-bold text-white flex items-center gap-2">
           <TrendingUp className="w-6 h-6 text-sky-400" />
-          {fan.name} - Temperature Curve
+          {fan.name} - {t('system:fanControl.curve.title')}
         </h2>
 
         {/* Preset Buttons */}
@@ -148,26 +150,26 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
             <button
               onClick={() => handleApplyPreset('silent')}
               className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title="Low fan speeds, prioritizes quiet operation"
+              title={t('system:fanControl.presets.silentDesc')}
             >
               <Volume2 className="w-4 h-4" />
-              Silent
+              {t('system:fanControl.presets.silent')}
             </button>
             <button
               onClick={() => handleApplyPreset('balanced')}
               className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title="Balance between noise and cooling"
+              title={t('system:fanControl.presets.balancedDesc')}
             >
               <Gauge className="w-4 h-4" />
-              Balanced
+              {t('system:fanControl.presets.balanced')}
             </button>
             <button
               onClick={() => handleApplyPreset('performance')}
               className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title="Maximum cooling, higher fan speeds"
+              title={t('system:fanControl.presets.performanceDesc')}
             >
               <Zap className="w-4 h-4" />
-              Performance
+              {t('system:fanControl.presets.performance')}
             </button>
           </div>
         )}
@@ -177,7 +179,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       <div className="mb-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <p className="text-sm text-slate-400">
-            Configure temperature-based PWM curve (active in Auto mode)
+            {t('system:fanControl.curve.configureInfo')}
           </p>
           <div className="flex gap-2 items-center">
             {/* View Mode Toggle */}
@@ -191,7 +193,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                 }`}
               >
                 <LineChartIcon className="w-3 h-3" />
-                Chart
+                {t('system:fanControl.curve.chart')}
               </button>
               <button
                 onClick={() => setViewMode('table')}
@@ -202,7 +204,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                 }`}
               >
                 <Table className="w-3 h-3" />
-                Table
+                {t('system:fanControl.curve.table')}
               </button>
             </div>
 
@@ -213,13 +215,13 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                   onClick={handleDiscardChanges}
                   className="px-4 py-2 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm"
                 >
-                  Discard
+                  {t('system:fanControl.curve.discard')}
                 </button>
                 <button
                   onClick={handleSaveCurve}
                   className="px-4 py-2 bg-emerald-500 text-white rounded-lg hover:bg-emerald-600 shadow-lg shadow-emerald-500/30 text-sm"
                 >
-                  Save
+                  {t('system:fanControl.curve.save')}
                 </button>
               </div>
             )}
@@ -250,9 +252,9 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               <table className="w-full border border-slate-700">
                 <thead className="bg-slate-800">
                   <tr>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">Temperature (°C)</th>
-                    <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">PWM (%)</th>
-                    {canEdit && <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">Actions</th>}
+                    <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.temperatureCol')}</th>
+                    <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.pwmCol')}</th>
+                    {canEdit && <th className="px-4 py-2 text-left text-sm font-medium text-slate-300">{t('system:fanControl.details.actionsCol')}</th>}
                   </tr>
                 </thead>
                 <tbody>
@@ -295,7 +297,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                               disabled={curvePoints.length <= 2}
                               className="text-rose-400 hover:text-rose-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                             >
-                              Remove
+                              {t('system:fanControl.curve.remove')}
                             </button>
                           </td>
                         )}
@@ -310,7 +312,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                 onClick={handleAddPoint}
                 className="mt-3 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 shadow-lg shadow-sky-500/30 text-sm"
               >
-                Add Point
+                {t('system:fanControl.curve.addPoint')}
               </button>
             )}
           </>
@@ -320,27 +322,27 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       {/* Fan Stats */}
       <div className="grid grid-cols-2 md:grid-cols-5 gap-4 pt-4 border-t border-slate-700">
         <div>
-          <p className="text-xs text-slate-400">Min PWM</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.details.minPwm')}</p>
           <p className="text-lg font-bold text-white">{fan.min_pwm_percent}%</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">Max PWM</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.details.maxPwm')}</p>
           <p className="text-lg font-bold text-white">{fan.max_pwm_percent}%</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">Emergency Temp</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.details.emergencyTemp')}</p>
           <p className="text-lg font-bold text-white">{fan.emergency_temp_celsius}°C</p>
         </div>
         <div>
-          <p className="text-xs text-slate-400">Sensor ID</p>
+          <p className="text-xs text-slate-400">{t('system:fanControl.details.sensorId')}</p>
           <p className="text-sm font-mono text-slate-300">{fan.temp_sensor_id || '—'}</p>
         </div>
         <div>
           <p className="text-xs text-slate-400 flex items-center gap-1">
-            Hysteresis
+            {t('system:fanControl.details.hysteresis')}
             <span
               className="cursor-help"
-              title="Temperature deadband to prevent fan oscillation. Fan speed only decreases after temperature drops by this amount."
+              title={t('system:fanControl.details.hysteresisTooltip')}
             >
               <Info className="w-3 h-3 text-slate-500" />
             </span>
@@ -361,10 +363,10 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
               />
               <span className="text-sm text-slate-400">°C</span>
               {hysteresisChanged && !isUpdatingHysteresis && (
-                <span className="text-xs text-amber-400">unsaved</span>
+                <span className="text-xs text-amber-400">{t('system:fanControl.details.unsaved')}</span>
               )}
               {isUpdatingHysteresis && (
-                <span className="text-xs text-sky-400">saving...</span>
+                <span className="text-xs text-sky-400">{t('system:fanControl.details.saving')}</span>
               )}
             </div>
           ) : (

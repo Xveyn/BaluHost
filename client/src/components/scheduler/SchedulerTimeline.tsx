@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { Clock, CheckCircle, XCircle, Loader2, ChevronUp } from 'lucide-react';
 import type { SchedulerExecution, TimelineEntry } from '../../api/schedulers';
 import { groupExecutionsByHour, getSchedulerIcon, getStatusBadgeClasses } from '../../api/schedulers';
@@ -9,6 +10,7 @@ interface SchedulerTimelineProps {
 }
 
 function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: number }) {
+  const { t } = useTranslation(['scheduler']);
   const [isExpanded, setIsExpanded] = useState(false);
   const total = entry.completedCount + entry.failedCount + entry.runningCount;
   const barHeight = maxCount > 0 ? Math.max(4, (total / maxCount) * 48) : 0;
@@ -59,13 +61,13 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
             <div className="font-medium text-white mb-1">{entry.hour}</div>
             <div className="flex flex-col gap-0.5">
               {entry.completedCount > 0 && (
-                <span className="text-green-400">{entry.completedCount} completed</span>
+                <span className="text-green-400">{entry.completedCount} {t('scheduler:timeline.completed')}</span>
               )}
               {entry.failedCount > 0 && (
-                <span className="text-red-400">{entry.failedCount} failed</span>
+                <span className="text-red-400">{entry.failedCount} {t('scheduler:timeline.failed')}</span>
               )}
               {entry.runningCount > 0 && (
-                <span className="text-blue-400">{entry.runningCount} running</span>
+                <span className="text-blue-400">{entry.runningCount} {t('scheduler:timeline.running')}</span>
               )}
             </div>
           </div>
@@ -116,6 +118,7 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
 }
 
 export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProps) {
+  const { t } = useTranslation(['scheduler']);
   const timelineData = useMemo(() => groupExecutionsByHour(executions), [executions]);
   const maxCount = useMemo(
     () => Math.max(...timelineData.map((e) => e.completedCount + e.failedCount + e.runningCount), 1),
@@ -141,7 +144,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
           <Clock className="h-5 w-5 text-sky-400" />
-          <h3 className="font-medium text-white">24-Hour Activity Timeline</h3>
+          <h3 className="font-medium text-white">{t('scheduler:timeline.title')}</h3>
         </div>
         <div className="flex items-center gap-4 text-sm">
           <div className="flex items-center gap-1.5">
@@ -189,15 +192,15 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
       <div className="flex items-center justify-center gap-6 mt-8 pt-4 border-t border-slate-800">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-green-500" />
-          <span className="text-xs text-slate-400">Completed</span>
+          <span className="text-xs text-slate-400">{t('scheduler:status.completed')}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-red-500" />
-          <span className="text-xs text-slate-400">Failed</span>
+          <span className="text-xs text-slate-400">{t('scheduler:status.failed')}</span>
         </div>
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-blue-500" />
-          <span className="text-xs text-slate-400">Running</span>
+          <span className="text-xs text-slate-400">{t('scheduler:status.running')}</span>
         </div>
       </div>
 
@@ -206,7 +209,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
         <div className="mt-6 pt-4 border-t border-slate-800">
           <h4 className="text-sm font-medium text-slate-300 mb-3 flex items-center gap-2">
             <XCircle className="h-4 w-4 text-red-500" />
-            Recent Failures
+            {t('scheduler:timeline.recentFailures')}
           </h4>
           <div className="space-y-2">
             {executions

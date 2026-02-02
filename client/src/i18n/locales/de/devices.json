@@ -1,0 +1,136 @@
+{
+  "title": "Geräteverwaltung",
+  "description": "Verbundene Mobil- und Desktop-Geräte verwalten",
+  "tabs": {
+    "devices": "Geräte",
+    "register": "Mobile App registrieren",
+    "registerShort": "Registrieren",
+    "schedules": "Sync-Zeitpläne",
+    "schedulesShort": "Zeitpläne",
+    "smart": "Smart Devices",
+    "smartShort": "Smart"
+  },
+  "stats": {
+    "totalDevices": "Geräte gesamt",
+    "mobile": "Mobil",
+    "desktop": "Desktop",
+    "active": "Aktiv"
+  },
+  "sections": {
+    "mobileDevices": "Mobilgeräte",
+    "smartphonesTablets": "Smartphones & Tablets ({{count}})",
+    "desktopDevices": "Desktop-Geräte",
+    "baluDeskClients": "BaluDesk Sync Clients ({{count}})"
+  },
+  "empty": {
+    "noMobileDevices": "Keine Mobilgeräte registriert",
+    "noDesktopClients": "Keine Desktop Sync Clients registriert"
+  },
+  "fields": {
+    "lastSeen": "Zuletzt gesehen",
+    "lastSync": "Letzter Sync",
+    "registered": "Registriert",
+    "expires": "Läuft ab",
+    "status": "Status",
+    "deviceName": "Gerätename",
+    "type": "Typ",
+    "platform": "Plattform"
+  },
+  "register": {
+    "title": "Neues Mobilgerät registrieren",
+    "deviceName": "Gerätename",
+    "deviceNamePlaceholder": "z.B. iPhone 15, Samsung Galaxy S24",
+    "validity": "Autorisierungsgültigkeit",
+    "validityMin": "30 Tage (Minimum)",
+    "validityMax": "180 Tage (Maximum)",
+    "validityDisplay": "{{days}} Tage ({{months}} Monate)",
+    "includeVpn": "VPN-Konfiguration einschließen (WireGuard)",
+    "generateQr": "QR-Code generieren",
+    "generating": "Wird generiert...",
+    "notifications": "Automatische Benachrichtigungen",
+    "notificationsDesc": "Sie werden 7 Tage, 3 Tage und 1 Stunde vor Ablauf per Push-Benachrichtigung erinnert."
+  },
+  "qrDialog": {
+    "title": "QR-Code für Mobile App",
+    "scanInfo": "Scannen Sie diesen QR-Code mit der BaluHost Mobile App",
+    "tokenValidity": "Registrierungstoken ist 5 Minuten gültig",
+    "deviceValidity": "Geräteautorisierung ist {{days}} Tage gültig ({{months}} Monate)",
+    "vpnIncluded": "VPN-Konfiguration enthalten",
+    "reminders": "Automatische Erinnerungen",
+    "remindersDesc": "Sie werden 7 Tage, 3 Tage und 1 Stunde vor Ablauf per Push-Benachrichtigung erinnert.",
+    "expiresAt": "Token läuft ab:"
+  },
+  "schedules": {
+    "title": "Sync-Zeitpläne",
+    "automatedSync": "Automatisierter Sync ({{count}})",
+    "createNew": "Neuen Zeitplan erstellen",
+    "device": "Gerät",
+    "selectDevice": "Gerät auswählen...",
+    "frequency": "Häufigkeit",
+    "daily": "Täglich",
+    "weekly": "Wöchentlich",
+    "monthly": "Monatlich",
+    "time": "Zeit",
+    "dayOfWeek": "Wochentag",
+    "selectDay": "Tag auswählen...",
+    "dayOfMonth": "Tag des Monats",
+    "nextRun": "Nächste Ausführung:",
+    "noSchedules": "Keine Sync-Zeitpläne konfiguriert",
+    "loadingSchedules": "Zeitpläne werden geladen..."
+  },
+  "days": {
+    "sunday": "Sonntag",
+    "monday": "Montag",
+    "tuesday": "Dienstag",
+    "wednesday": "Mittwoch",
+    "thursday": "Donnerstag",
+    "friday": "Freitag",
+    "saturday": "Samstag",
+    "sun": "So",
+    "mon": "Mo",
+    "tue": "Di",
+    "wed": "Mi",
+    "thu": "Do",
+    "fri": "Fr",
+    "sat": "Sa"
+  },
+  "modal": {
+    "editTitle": "Gerätename bearbeiten",
+    "deleteTitle": "Gerät löschen",
+    "deleteConfirm": "Sind Sie sicher, dass Sie {{name}} löschen möchten? Das Gerät muss sich erneut registrieren, um auf BaluHost zuzugreifen."
+  },
+  "buttons": {
+    "refresh": "Aktualisieren",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "delete": "Löschen",
+    "create": "Erstellen",
+    "disable": "Deaktivieren"
+  },
+  "platforms": {
+    "ios": "iOS",
+    "android": "Android",
+    "windows": "Windows",
+    "mac": "macOS",
+    "linux": "Linux",
+    "unknown": "Desktop"
+  },
+  "toast": {
+    "deviceUpdated": "Gerätename erfolgreich aktualisiert",
+    "deviceDeleted": "Gerät erfolgreich gelöscht",
+    "scheduleCreated": "Zeitplan erfolgreich erstellt",
+    "scheduleDisabled": "Zeitplan deaktiviert",
+    "qrGenerated": "QR-Code erfolgreich generiert",
+    "loadFailed": "Geräte konnten nicht geladen werden",
+    "updateFailed": "Gerätename konnte nicht aktualisiert werden",
+    "deleteFailed": "Gerät konnte nicht gelöscht werden",
+    "scheduleFailed": "Zeitplan konnte nicht erstellt werden",
+    "disableFailed": "Zeitplan konnte nicht deaktiviert werden",
+    "enterDeviceName": "Bitte geben Sie einen Gerätenamen ein",
+    "selectDevice": "Bitte wählen Sie ein Gerät",
+    "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",
+    "deviceNameEmpty": "Gerätename darf nicht leer sein"
+  },
+  "loading": "Geräte werden geladen...",
+  "error": "Fehler"
+}

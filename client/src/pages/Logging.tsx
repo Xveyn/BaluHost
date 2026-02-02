@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { loggingApi } from '../api/logging';
 import type { AuditLoggingStatus, FileAccessLogsResponse } from '../api/logging';
 import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
@@ -6,6 +7,7 @@ import toast from 'react-hot-toast';
 import { formatDateTime } from '../lib/dateUtils';
 
 const Logging: React.FC = () => {
+  const { t } = useTranslation(['system', 'common']);
   const [fileAccessLogs, setFileAccessLogs] = useState<FileAccessLogsResponse | null>(
     null
   );
@@ -55,11 +57,11 @@ const Logging: React.FC = () => {
       setAuditStatus(newStatus);
       toast.success(
         newStatus.enabled
-          ? 'Audit logging enabled'
-          : 'Audit logging disabled'
+          ? t('logging.enabledSuccess')
+          : t('logging.disabledSuccess')
       );
     } catch (err: any) {
-      toast.error(err.message || 'Failed to toggle audit logging');
+      toast.error(err.message || t('logging.toggleError'));
       console.error('Error toggling audit logging:', err);
     } finally {
       setTogglingAudit(false);
@@ -105,7 +107,7 @@ const Logging: React.FC = () => {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="text-slate-400">Loading logging data...</div>
+        <div className="text-slate-400">{t('common:loading')}</div>
       </div>
     );
   }
@@ -113,7 +115,7 @@ const Logging: React.FC = () => {
   if (error) {
     return (
       <div className="card border-red-900/60 bg-red-950/30 p-4">
-        <p className="font-bold text-red-400">Error</p>
+        <p className="font-bold text-red-400">{t('common:error')}</p>
         <p className="text-red-300">{error}</p>
       </div>
     );
@@ -124,12 +126,12 @@ const Logging: React.FC = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Logging</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('logging.title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            System activity and audit logs
+            {t('logging.description')}
             {auditStatus && (
               <span className={`ml-2 text-xs ${auditStatus.enabled ? 'text-green-400' : 'text-yellow-400'}`}>
-                ({auditStatus.enabled ? 'Logging Enabled' : 'Logging Disabled'})
+                ({auditStatus.enabled ? t('logging.loggingEnabled') : t('logging.loggingDisabled')})
               </span>
             )}
           </p>
@@ -148,13 +150,13 @@ const Logging: React.FC = () => {
               <Power className="h-4 w-4" />
               <span className="hidden sm:inline">
                 {togglingAudit
-                  ? 'Toggling...'
+                  ? t('logging.toggling')
                   : auditStatus.enabled
-                  ? 'Disable Logging'
-                  : 'Enable Logging'}
+                  ? t('logging.disableLogging')
+                  : t('logging.enableLogging')}
               </span>
               <span className="sm:hidden">
-                {auditStatus.enabled ? 'Off' : 'On'}
+                {auditStatus.enabled ? t('common:off') : t('common:on')}
               </span>
             </button>
           )}
@@ -163,18 +165,18 @@ const Logging: React.FC = () => {
             onChange={(e) => setTimeRange(Number(e.target.value))}
             className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
           >
-            <option value={1}>Last 1 hour</option>
-            <option value={6}>Last 6 hours</option>
-            <option value={24}>Last 24 hours</option>
-            <option value={72}>Last 3 days</option>
-            <option value={168}>Last week</option>
+            <option value={1}>{t('logging.lastHour', { count: 1 })}</option>
+            <option value={6}>{t('logging.lastHours', { count: 6 })}</option>
+            <option value={24}>{t('logging.lastHours', { count: 24 })}</option>
+            <option value={72}>{t('logging.lastDays', { count: 3 })}</option>
+            <option value={168}>{t('logging.lastWeek')}</option>
           </select>
           <button
             onClick={loadData}
             className="btn btn-primary flex items-center gap-2 justify-center touch-manipulation active:scale-95"
           >
             <RefreshCw className="h-4 w-4" />
-            <span className="hidden sm:inline">Refresh</span>
+            <span className="hidden sm:inline">{t('common:refresh')}</span>
           </button>
         </div>
       </div>
@@ -184,7 +186,7 @@ const Logging: React.FC = () => {
         <div className="flex flex-col gap-3 mb-4">
           <div className="flex items-center gap-2">
             <FileText className="h-5 w-5 text-slate-400" />
-            <h2 className="text-lg sm:text-xl font-semibold text-white">File Access Logs</h2>
+            <h2 className="text-lg sm:text-xl font-semibold text-white">{t('logging.fileAccessLogs')}</h2>
           </div>
           <div className="flex flex-col sm:flex-row gap-2">
             <select
@@ -192,7 +194,7 @@ const Logging: React.FC = () => {
               onChange={(e) => setActionFilter(e.target.value)}
               className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
-              <option value="">All Actions</option>
+              <option value="">{t('logging.allActions')}</option>
               {availableActions.map((action) => (
                 <option key={action} value={action}>
                   {action}
@@ -204,7 +206,7 @@ const Logging: React.FC = () => {
               onChange={(e) => setUserFilter(e.target.value)}
               className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
-              <option value="">All Users</option>
+              <option value="">{t('logging.allUsers')}</option>
               {availableUsers.map((user) => (
                 <option key={user} value={user}>
                   {user}
@@ -221,13 +223,13 @@ const Logging: React.FC = () => {
               <table className="min-w-full divide-y divide-slate-800/60">
                 <thead>
                   <tr className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider">
-                    <th className="px-4 py-3">Timestamp</th>
-                    <th className="px-4 py-3">User</th>
-                    <th className="px-4 py-3">Action</th>
-                    <th className="px-4 py-3">File</th>
-                    <th className="px-4 py-3">Size</th>
-                    <th className="px-4 py-3">Duration</th>
-                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3">{t('logging.timestamp')}</th>
+                    <th className="px-4 py-3">{t('logging.user')}</th>
+                    <th className="px-4 py-3">{t('logging.action')}</th>
+                    <th className="px-4 py-3">{t('logging.file')}</th>
+                    <th className="px-4 py-3">{t('logging.size')}</th>
+                    <th className="px-4 py-3">{t('logging.duration')}</th>
+                    <th className="px-4 py-3">{t('logging.status')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
@@ -264,7 +266,7 @@ const Logging: React.FC = () => {
                         {log.success ? (
                           <span className="inline-flex items-center text-green-400">
                             <CheckCircle className="h-4 w-4 mr-1" />
-                            Success
+                            {t('logging.success')}
                           </span>
                         ) : (
                           <span
@@ -272,7 +274,7 @@ const Logging: React.FC = () => {
                             title={log.error}
                           >
                             <XCircle className="h-4 w-4 mr-1" />
-                            Failed
+                            {t('logging.failed')}
                           </span>
                         )}
                       </td>
@@ -327,12 +329,12 @@ const Logging: React.FC = () => {
             </div>
           </>
         ) : (
-          <div className="text-center py-8 text-slate-400">No file access logs found</div>
+          <div className="text-center py-8 text-slate-400">{t('logging.noLogsFound')}</div>
         )}
 
         {fileAccessLogs && fileAccessLogs.total > fileAccessLogs.logs.length && (
           <div className="mt-4 text-center text-sm text-slate-400">
-            Showing {fileAccessLogs.logs.length} of {fileAccessLogs.total} logs
+            {t('logging.showingOfTotal', { shown: fileAccessLogs.logs.length, total: fileAccessLogs.total })}
           </div>
         )}
       </div>

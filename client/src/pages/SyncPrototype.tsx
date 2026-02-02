@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import {
   Smartphone,
@@ -12,6 +13,7 @@ import {
 import { getAllDevices, updateMobileDeviceName, updateDesktopDeviceName, deleteMobileDevice, type Device } from '../api/devices';
 
 export default function SyncPrototype() {
+  const { t } = useTranslation(['devices', 'common']);
   const [devices, setDevices] = useState<Device[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -37,7 +39,7 @@ export default function SyncPrototype() {
       const data = await getAllDevices();
       setDevices(data);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load devices';
+      const errorMsg = err instanceof Error ? err.message : t('toast.loadFailed');
       console.error('Failed to load devices:', err);
       setError(errorMsg);
       toast.error(errorMsg);
@@ -54,7 +56,7 @@ export default function SyncPrototype() {
 
   const handleSaveDeviceName = async () => {
     if (!editingDevice || !newDeviceName.trim()) {
-      toast.error('Device name cannot be empty');
+      toast.error(t('toast.deviceNameEmpty'));
       return;
     }
 
@@ -65,13 +67,13 @@ export default function SyncPrototype() {
         await updateDesktopDeviceName(editingDevice.id, newDeviceName);
       }
 
-      toast.success('Device name updated successfully');
+      toast.success(t('toast.deviceUpdated'));
       setShowEditModal(false);
       setEditingDevice(null);
       setNewDeviceName('');
       loadDevices();
     } catch (err) {
-      toast.error('Failed to update device name');
+      toast.error(t('toast.updateFailed'));
       console.error(err);
     }
   };
@@ -87,9 +89,9 @@ export default function SyncPrototype() {
     try {
       if (deviceToDelete.type === 'mobile') {
         await deleteMobileDevice(deviceToDelete.id);
-        toast.success('Device deleted successfully');
+        toast.success(t('toast.deviceDeleted'));
       } else {
-        toast.error('Desktop device deletion not yet implemented');
+        toast.error(t('toast.desktopDeleteNotImplemented'));
         setShowDeleteConfirm(false);
         setDeviceToDelete(null);
         return;
@@ -99,7 +101,7 @@ export default function SyncPrototype() {
       setDeviceToDelete(null);
       loadDevices();
     } catch (err) {
-      toast.error('Failed to delete device');
+      toast.error(t('toast.deleteFailed'));
       console.error(err);
     }
   };
@@ -154,9 +156,9 @@ export default function SyncPrototype() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">Device Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">
-            Manage connected mobile and desktop devices
+            {t('description')}
           </p>
         </div>
         <div className="flex gap-2">
@@ -165,7 +167,7 @@ export default function SyncPrototype() {
             className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Activity className="h-4 w-4" />
-            <span>Refresh</span>
+            <span>{t('buttons.refresh')}</span>
           </button>
         </div>
       </div>
@@ -175,7 +177,7 @@ export default function SyncPrototype() {
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Total Devices</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.totalDevices')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
             </div>
             <Activity className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
@@ -185,7 +187,7 @@ export default function SyncPrototype() {
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Mobile</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.mobile')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.mobile}</p>
             </div>
             <Smartphone className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
@@ -195,7 +197,7 @@ export default function SyncPrototype() {
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Desktop</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.desktop')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-emerald-400">
                 {stats.desktop}
               </p>
@@ -207,7 +209,7 @@ export default function SyncPrototype() {
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Active</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('stats.active')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
             </div>
             <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
@@ -218,7 +220,7 @@ export default function SyncPrototype() {
       {error && (
         <div className="card border-red-900/60 bg-red-950/30 p-4">
           <p className="text-sm text-red-400">
-            <strong>Error:</strong> {error}
+            <strong>{t('error')}:</strong> {error}
           </p>
         </div>
       )}
@@ -226,7 +228,7 @@ export default function SyncPrototype() {
       {/* Devices List */}
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-          <p className="text-sm text-slate-500">Loading devices...</p>
+          <p className="text-sm text-slate-500">{t('loading')}</p>
         </div>
       ) : (
         <div className="space-y-6">
@@ -234,16 +236,16 @@ export default function SyncPrototype() {
           <div className="card border-slate-800/60 bg-slate-900/55">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Mobile Devices</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('sections.mobileDevices')}</p>
                 <h2 className="mt-2 text-xl font-semibold text-white">
-                  Smartphones & Tablets ({mobileDevices.length})
+                  {t('sections.smartphonesTablets', { count: mobileDevices.length })}
                 </h2>
               </div>
             </div>
 
             {mobileDevices.length === 0 ? (
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-                No mobile devices registered
+                {t('empty.noMobileDevices')}
               </div>
             ) : (
               <div className="space-y-3">
@@ -275,13 +277,13 @@ export default function SyncPrototype() {
                               : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
                           }`}
                         >
-                          {device.is_active ? 'Active' : 'Inactive'}
+                          {device.is_active ? t('platforms.active', 'Active') : t('platforms.inactive', 'Inactive')}
                         </span>
 
                         <button
                           onClick={() => handleEditDevice(device)}
                           className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
-                          title="Edit device name"
+                          title={t('modal.editTitle')}
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
@@ -289,7 +291,7 @@ export default function SyncPrototype() {
                         <button
                           onClick={() => handleDeleteDevice(device)}
                           className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                          title="Delete device"
+                          title={t('modal.deleteTitle')}
                         >
                           <Trash2 className="h-4 w-4" />
                         </button>
@@ -298,26 +300,26 @@ export default function SyncPrototype() {
 
                     <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
                       <div>
-                        <p className="text-slate-500">Last Seen</p>
+                        <p className="text-slate-500">{t('fields.lastSeen')}</p>
                         <p className="mt-1 font-medium text-slate-200">
                           {formatDate(device.last_seen)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Last Sync</p>
+                        <p className="text-slate-500">{t('fields.lastSync')}</p>
                         <p className="mt-1 font-medium text-slate-200">
                           {formatDate(device.last_sync)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Registered</p>
+                        <p className="text-slate-500">{t('fields.registered')}</p>
                         <p className="mt-1 font-medium text-slate-200">
                           {formatDate(device.created_at)}
                         </p>
                       </div>
                       {device.expires_at && (
                         <div>
-                          <p className="text-slate-500">Expires</p>
+                          <p className="text-slate-500">{t('fields.expires')}</p>
                           <p className="mt-1 font-medium text-slate-200">
                             {formatDate(device.expires_at)}
                           </p>
@@ -334,16 +336,16 @@ export default function SyncPrototype() {
           <div className="card border-slate-800/60 bg-slate-900/55">
             <div className="mb-4 flex items-center justify-between">
               <div>
-                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">Desktop Devices</p>
+                <p className="text-xs uppercase tracking-[0.25em] text-slate-500">{t('sections.desktopDevices')}</p>
                 <h2 className="mt-2 text-xl font-semibold text-white">
-                  BaluDesk Sync Clients ({desktopDevices.length})
+                  {t('sections.baluDeskClients', { count: desktopDevices.length })}
                 </h2>
               </div>
             </div>
 
             {desktopDevices.length === 0 ? (
               <div className="rounded-2xl border border-slate-800 bg-slate-900/70 p-8 text-center text-sm text-slate-500">
-                No desktop sync clients registered
+                {t('empty.noDesktopClients')}
               </div>
             ) : (
               <div className="space-y-3">
@@ -370,7 +372,7 @@ export default function SyncPrototype() {
                         <button
                           onClick={() => handleEditDevice(device)}
                           className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-emerald-200 transition hover:border-emerald-500/50 hover:bg-emerald-500/20"
-                          title="Edit device name"
+                          title={t('modal.editTitle')}
                         >
                           <Edit2 className="h-4 w-4" />
                         </button>
@@ -379,20 +381,20 @@ export default function SyncPrototype() {
 
                     <div className="mt-3 grid grid-cols-2 sm:grid-cols-3 gap-3 text-xs">
                       <div>
-                        <p className="text-slate-500">Last Sync</p>
+                        <p className="text-slate-500">{t('fields.lastSync')}</p>
                         <p className="mt-1 font-medium text-slate-200">
                           {formatDate(device.last_sync)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Registered</p>
+                        <p className="text-slate-500">{t('fields.registered')}</p>
                         <p className="mt-1 font-medium text-slate-200">
                           {formatDate(device.created_at)}
                         </p>
                       </div>
                       <div>
-                        <p className="text-slate-500">Status</p>
-                        <p className="mt-1 font-medium text-emerald-300">Active</p>
+                        <p className="text-slate-500">{t('fields.status')}</p>
+                        <p className="mt-1 font-medium text-emerald-300">{t('stats.active')}</p>
                       </div>
                     </div>
                   </div>
@@ -408,7 +410,7 @@ export default function SyncPrototype() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
           <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
             <div className="mb-3 sm:mb-4 flex items-center justify-between">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Edit Device Name</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('modal.editTitle')}</h2>
               <button
                 onClick={() => {
                   setShowEditModal(false);
@@ -424,20 +426,20 @@ export default function SyncPrototype() {
             <div className="space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Device Name
+                  {t('fields.deviceName')}
                 </label>
                 <input
                   type="text"
                   value={newDeviceName}
                   onChange={(e) => setNewDeviceName(e.target.value)}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter device name"
+                  placeholder={t('fields.deviceName')}
                 />
               </div>
 
               <div className="text-xs text-slate-500">
-                <p>Type: {editingDevice.type === 'mobile' ? 'Mobile' : 'Desktop'}</p>
-                <p>Platform: {getPlatformLabel(editingDevice.platform)}</p>
+                <p>{t('fields.type')}: {editingDevice.type === 'mobile' ? t('stats.mobile') : t('stats.desktop')}</p>
+                <p>{t('fields.platform')}: {getPlatformLabel(editingDevice.platform)}</p>
               </div>
             </div>
 
@@ -450,13 +452,13 @@ export default function SyncPrototype() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('buttons.cancel')}
               </button>
               <button
                 onClick={handleSaveDeviceName}
                 className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
               >
-                Save
+                {t('buttons.save')}
               </button>
             </div>
           </div>
@@ -471,12 +473,11 @@ export default function SyncPrototype() {
               <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
                 <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Delete Device</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('modal.deleteTitle')}</h2>
             </div>
 
             <p className="mb-4 sm:mb-6 text-sm text-slate-400">
-              Are you sure you want to delete <strong>{deviceToDelete.name}</strong>? This device
-              will need to re-register to access BaluHost.
+              {t('modal.deleteConfirm', { name: deviceToDelete.name })}
             </p>
 
             <div className="flex gap-2">
@@ -487,13 +488,13 @@ export default function SyncPrototype() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('buttons.cancel')}
               </button>
               <button
                 onClick={confirmDeleteDevice}
                 className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
               >
-                Delete
+                {t('buttons.delete')}
               </button>
             </div>
           </div>

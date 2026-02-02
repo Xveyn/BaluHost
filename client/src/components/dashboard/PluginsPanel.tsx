@@ -4,6 +4,7 @@
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import { usePluginsSummary } from '../../hooks/usePluginsSummary';
 import { Plug } from 'lucide-react';
 
@@ -13,6 +14,7 @@ interface PluginsPanelProps {
 }
 
 export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className = '' }) => {
+  const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { summary, loading, error } = usePluginsSummary({
     enabled: isAdmin,
@@ -65,15 +67,15 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
   // Status text
   const getStatusText = () => {
     if (hasErrors) {
-      return `${summary.withErrors} error${summary.withErrors > 1 ? 's' : ''}`;
+      return t('dashboard:plugins.errorsCount', { count: summary.withErrors });
     }
     if (noneActive) {
-      return 'None active';
+      return t('dashboard:plugins.noneActive');
     }
     if (someInactive) {
-      return `${summary.disabled} inactive`;
+      return t('dashboard:plugins.inactive', { count: summary.disabled });
     }
-    return 'All active';
+    return t('dashboard:plugins.allActive');
   };
 
   const statusTextColor = hasErrors
@@ -89,8 +91,8 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
       <div className={`card border-slate-800/40 bg-slate-900/60 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Plugins</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">Loading...</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:plugins.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('dashboard:plugins.loading')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
             <Plug className="h-6 w-6" />
@@ -105,15 +107,15 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
       <div className={`card border-rose-500/30 bg-rose-500/10 ${className}`}>
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Plugins</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-rose-300">Error</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:plugins.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-rose-300">{t('dashboard:plugins.error')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-rose-500/20 text-rose-400">
             <Plug className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-3 sm:mt-4 text-xs text-rose-300">
-          Failed to load plugin status
+          {t('dashboard:plugins.failedToLoad')}
         </div>
       </div>
     );
@@ -127,15 +129,15 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Plugins</p>
-            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">No Plugins</p>
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:plugins.title')}</p>
+            <p className="mt-2 text-2xl sm:text-3xl font-semibold text-slate-400">{t('dashboard:plugins.noPlugins')}</p>
           </div>
           <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-800 text-slate-500">
             <Plug className="h-6 w-6" />
           </div>
         </div>
         <div className="mt-3 sm:mt-4 text-xs text-slate-500">
-          Click to browse available plugins
+          {t('dashboard:plugins.browseAvailable')}
         </div>
       </div>
     );
@@ -148,9 +150,9 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">Plugins</p>
+          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('dashboard:plugins.title')}</p>
           <p className="mt-2 text-2xl sm:text-3xl font-semibold text-white truncate">
-            {summary.enabled} Active
+            {t('dashboard:plugins.active', { count: summary.enabled })}
           </p>
         </div>
         <div
@@ -164,7 +166,7 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
       <div className="mt-3 sm:mt-4 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
           <span className="truncate flex-1 min-w-0">
-            of {summary.total} installed plugin{summary.total !== 1 ? 's' : ''}
+            {t('dashboard:plugins.ofInstalled', { total: summary.total, count: summary.total })}
           </span>
           <span className={`shrink-0 ${statusTextColor}`}>
             {getStatusText()}

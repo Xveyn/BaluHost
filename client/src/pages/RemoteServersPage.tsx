@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { useServerProfiles, useVPNProfiles } from '../hooks/useRemoteServers';
 import { ServerProfileForm } from '../components/RemoteServers/ServerProfileForm';
 import { ServerProfileList } from '../components/RemoteServers/ServerProfileList';
@@ -7,6 +8,7 @@ import { VPNProfileList } from '../components/RemoteServers/VPNProfileList';
 import { Server, Lock } from 'lucide-react';
 
 export function RemoteServersPage() {
+  const { t } = useTranslation(['remoteServers', 'common']);
   const serverProfiles = useServerProfiles();
   const vpnProfiles = useVPNProfiles();
   const [activeTab, setActiveTab] = useState<'servers' | 'vpn'>('servers');
@@ -15,9 +17,9 @@ export function RemoteServersPage() {
     <div className="space-y-6 sm:space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-white">Remote Servers</h1>
+        <h1 className="text-2xl sm:text-3xl font-bold text-white">{t('title')}</h1>
         <p className="text-slate-400 mt-1 sm:mt-2 text-xs sm:text-sm">
-          Manage and control your remote BaluHost servers with SSH and VPN profiles
+          {t('description')}
         </p>
       </div>
 
@@ -33,7 +35,7 @@ export function RemoteServersPage() {
             }`}
           >
             <Server className="w-4 h-4" />
-            <span className="text-sm">Servers</span>
+            <span className="text-sm">{t('tabs.servers')}</span>
           </button>
           <button
             onClick={() => setActiveTab('vpn')}
@@ -44,7 +46,7 @@ export function RemoteServersPage() {
             }`}
           >
             <Lock className="w-4 h-4" />
-            <span className="text-sm">VPN Profiles</span>
+            <span className="text-sm">{t('tabs.vpn')}</span>
           </button>
         </div>
       </div>
@@ -56,9 +58,9 @@ export function RemoteServersPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-800/60 px-4 sm:px-6 py-4">
               <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">Server Profiles</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-white">{t('servers.title')}</h2>
                 <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                  Add and manage remote BaluHost servers
+                  {t('servers.description')}
                 </p>
               </div>
               <ServerProfileForm
@@ -88,9 +90,9 @@ export function RemoteServersPage() {
             {/* Header */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 border-b border-slate-800/60 px-4 sm:px-6 py-4">
               <div>
-                <h2 className="text-lg sm:text-xl font-semibold text-white">VPN Profiles</h2>
+                <h2 className="text-lg sm:text-xl font-semibold text-white">{t('vpn.title')}</h2>
                 <p className="text-xs sm:text-sm text-slate-400 mt-1">
-                  Upload and manage VPN configurations for secure connections
+                  {t('vpn.description')}
                 </p>
               </div>
               <VPNProfileForm
@@ -113,23 +115,23 @@ export function RemoteServersPage() {
 
       {/* Info Card */}
       <div className="rounded-xl border border-sky-500/30 bg-sky-500/10 p-4 sm:p-6">
-        <h3 className="text-base sm:text-lg font-semibold text-sky-300 mb-3">Quick Start</h3>
+        <h3 className="text-base sm:text-lg font-semibold text-sky-300 mb-3">{t('quickStart.title')}</h3>
         <ul className="text-xs sm:text-sm text-sky-200/80 space-y-2">
           <li className="flex gap-2">
             <span className="font-semibold text-sky-300">1.</span>
-            <span>Create a VPN Profile if you need secure access (optional)</span>
+            <span>{t('quickStart.step1')}</span>
           </li>
           <li className="flex gap-2">
             <span className="font-semibold text-sky-300">2.</span>
-            <span>Add a Server Profile with your SSH credentials</span>
+            <span>{t('quickStart.step2')}</span>
           </li>
           <li className="flex gap-2">
             <span className="font-semibold text-sky-300">3.</span>
-            <span>Test the connection to verify SSH access</span>
+            <span>{t('quickStart.step3')}</span>
           </li>
           <li className="flex gap-2">
             <span className="font-semibold text-sky-300">4.</span>
-            <span>Use "Start Server" to remotely power on your server</span>
+            <span>{t('quickStart.step4')}</span>
           </li>
         </ul>
       </div>

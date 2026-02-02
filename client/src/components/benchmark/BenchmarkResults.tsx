@@ -6,6 +6,7 @@
  * - Random read/write in IOPS
  * - Color-coded values for easy comparison
  */
+import { useTranslation } from 'react-i18next';
 import { formatThroughput, formatIops } from '../../api/benchmark';
 import type { BenchmarkSummaryResults } from '../../api/benchmark';
 
@@ -37,6 +38,7 @@ function ResultRow({ label, readValue, writeValue }: ResultRowProps) {
 }
 
 export default function BenchmarkResults({ results, diskName, diskModel }: BenchmarkResultsProps) {
+  const { t } = useTranslation('system');
   // Check if we have any results
   const hasResults =
     results.seq_read_mbps !== undefined ||
@@ -47,7 +49,7 @@ export default function BenchmarkResults({ results, diskName, diskModel }: Bench
   if (!hasResults) {
     return (
       <div className="bg-slate-800 rounded-lg p-6 border border-slate-700 text-center text-slate-400">
-        No benchmark results available yet.
+        {t('benchmark.noResults')}
       </div>
     );
   }
@@ -61,7 +63,7 @@ export default function BenchmarkResults({ results, diskName, diskModel }: Bench
             <h3 className="font-semibold text-white">{diskName}</h3>
             {diskModel && <p className="text-xs text-slate-400 mt-0.5">{diskModel}</p>}
           </div>
-          <div className="text-xs text-slate-500 font-mono">CrystalDiskMark Style</div>
+          <div className="text-xs text-slate-500 font-mono">{t('benchmark.crystalDiskMarkStyle')}</div>
         </div>
       </div>
 
@@ -70,8 +72,8 @@ export default function BenchmarkResults({ results, diskName, diskModel }: Bench
         {/* Column headers */}
         <div className="grid grid-cols-3 gap-2 mb-3">
           <div className="text-sm font-medium text-slate-500"></div>
-          <div className="text-center text-sm font-medium text-sky-500">Read</div>
-          <div className="text-center text-sm font-medium text-rose-500">Write</div>
+          <div className="text-center text-sm font-medium text-sky-500">{t('benchmark.read')}</div>
+          <div className="text-center text-sm font-medium text-rose-500">{t('benchmark.write')}</div>
         </div>
 
         {/* Sequential results */}
@@ -112,10 +114,10 @@ export default function BenchmarkResults({ results, diskName, diskModel }: Bench
         {/* Legend */}
         <div className="mt-4 pt-3 border-t border-slate-700">
           <div className="flex flex-wrap gap-4 text-xs text-slate-500">
-            <span><strong>SEQ</strong> = Sequential</span>
-            <span><strong>RND</strong> = Random</span>
-            <span><strong>Q</strong> = Queue Depth</span>
-            <span><strong>T</strong> = Threads</span>
+            <span><strong>SEQ</strong> = {t('benchmark.sequential')}</span>
+            <span><strong>RND</strong> = {t('benchmark.random')}</span>
+            <span><strong>Q</strong> = {t('benchmark.queueDepth')}</span>
+            <span><strong>T</strong> = {t('benchmark.threads')}</span>
           </div>
         </div>
       </div>
@@ -127,22 +129,23 @@ export default function BenchmarkResults({ results, diskName, diskModel }: Bench
  * Compact version of results for history view
  */
 export function BenchmarkResultsCompact({ results }: { results: BenchmarkSummaryResults }) {
+  const { t } = useTranslation('system');
   return (
     <div className="grid grid-cols-2 gap-2 text-sm">
       <div className="flex justify-between">
-        <span className="text-slate-500">Seq Read:</span>
+        <span className="text-slate-500">{t('benchmark.seqRead')}:</span>
         <span className="text-sky-400 font-mono">{formatThroughput(results.seq_read_mbps)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-slate-500">Seq Write:</span>
+        <span className="text-slate-500">{t('benchmark.seqWrite')}:</span>
         <span className="text-rose-400 font-mono">{formatThroughput(results.seq_write_mbps)}</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-slate-500">4K Read:</span>
+        <span className="text-slate-500">{t('benchmark.randRead')}:</span>
         <span className="text-sky-400 font-mono">{formatIops(results.rand_read_iops)} IOPS</span>
       </div>
       <div className="flex justify-between">
-        <span className="text-slate-500">4K Write:</span>
+        <span className="text-slate-500">{t('benchmark.randWrite')}:</span>
         <span className="text-rose-400 font-mono">{formatIops(results.rand_write_iops)} IOPS</span>
       </div>
     </div>

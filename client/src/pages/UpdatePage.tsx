@@ -10,6 +10,7 @@
  * - Rollback to previous versions
  */
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
 import {
   Download,
@@ -56,12 +57,13 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'overview', label: 'Overview', icon: <Package className="h-4 w-4" /> },
-  { id: 'history', label: 'History', icon: <History className="h-4 w-4" /> },
-  { id: 'settings', label: 'Settings', icon: <Settings className="h-4 w-4" /> },
+  { id: 'overview', label: 'tabs.overview', icon: <Package className="h-4 w-4" /> },
+  { id: 'history', label: 'tabs.history', icon: <History className="h-4 w-4" /> },
+  { id: 'settings', label: 'tabs.settings', icon: <Settings className="h-4 w-4" /> },
 ];
 
 export default function UpdatePage() {
+  const { t } = useTranslation(['updates', 'common']);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
   const [loading, setLoading] = useState(true);
   const [checkLoading, setCheckLoading] = useState(false);
@@ -89,7 +91,7 @@ export default function UpdatePage() {
       const result = await checkForUpdates();
       setCheckResult(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to check for updates');
+      toast.error(err.response?.data?.detail || t('toast.checkFailed'));
     } finally {
       setCheckLoading(false);
     }
@@ -114,7 +116,7 @@ export default function UpdatePage() {
       setHistory(result.updates);
       setHistoryTotal(result.total);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to fetch history');
+      toast.error(err.response?.data?.detail || t('toast.historyFailed'));
     }
   }, [historyPage]);
 
@@ -124,7 +126,7 @@ export default function UpdatePage() {
       const result = await getUpdateConfig();
       setConfig(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to fetch config');
+      toast.error(err.response?.data?.detail || t('toast.configFailed'));
     }
   }, []);
 
@@ -158,7 +160,7 @@ export default function UpdatePage() {
         if (!isUpdateInProgress(progress.status)) {
           await fetchCheck();
           if (progress.status === 'completed') {
-            toast.success(`Updated to ${progress.to_version}`);
+            toast.success(t('toast.updateCompleted', { version: progress.to_version }));
           }
         }
       } catch (err) {
@@ -177,7 +179,7 @@ export default function UpdatePage() {
     try {
       const result = await startUpdate();
       if (result.success && result.update_id) {
-        toast.success('Update started');
+        toast.success(t('toast.updateStarted'));
         const progress = await getUpdateProgress(result.update_id);
         setCurrentUpdate(progress);
       } else {
@@ -186,9 +188,9 @@ export default function UpdatePage() {
     } catch (err: any) {
       const detail = err.response?.data?.detail;
       if (typeof detail === 'object' && detail.blockers) {
-        toast.error(`Update blocked: ${detail.blockers.join(', ')}`);
+        toast.error(t('blockers.updateBlocked', { blockers: detail.blockers.join(', ') }));
       } else {
-        toast.error(detail || 'Failed to start update');
+        toast.error(detail || t('toast.updateFailed'));
       }
     } finally {
       setUpdateLoading(false);
@@ -204,7 +206,7 @@ export default function UpdatePage() {
         target_update_id: updateId || rollbackTarget || undefined,
       });
       if (result.success) {
-        toast.success(`Rolled back to ${result.rolled_back_to}`);
+        toast.success(t('toast.rollbackSuccess', { version: result.rolled_back_to }));
         await fetchCheck();
         await fetchHistory();
         setCurrentUpdate(null);
@@ -212,7 +214,7 @@ export default function UpdatePage() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Rollback failed');
+      toast.error(err.response?.data?.detail || t('toast.rollbackFailed'));
     } finally {
       setRollbackLoading(false);
       setRollbackTarget(null);
@@ -226,9 +228,9 @@ export default function UpdatePage() {
     try {
       const updated = await updateConfig({ [key]: value });
       setConfig(updated);
-      toast.success('Settings saved');
+      toast.success(t('toast.settingsSaved'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || 'Failed to save settings');
+      toast.error(err.response?.data?.detail || t('toast.settingsFailed'));
     } finally {
       setConfigLoading(false);
     }
@@ -249,10 +251,10 @@ export default function UpdatePage() {
         <div>
           <h1 className="text-2xl font-bold text-white flex items-center gap-3">
             <Download className="h-7 w-7 text-sky-500" />
-            System Updates
+            {t('title')}
           </h1>
           <p className="text-slate-400 mt-1">
-            Manage BaluHost updates and version control
+            {t('description')}
           </p>
         </div>
         <button
@@ -261,7 +263,7 @@ export default function UpdatePage() {
           className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded-lg transition-colors"
         >
           <RefreshCw className={`h-4 w-4 ${checkLoading ? 'animate-spin' : ''}`} />
-          Check for Updates
+          {t('buttons.checkForUpdates')}
         </button>
       </div>
 
@@ -278,7 +280,7 @@ export default function UpdatePage() {
             }`}
           >
             {tab.icon}
-            {tab.label}
+            {t(tab.label)}
           </button>
         ))}
       </div>
@@ -301,7 +303,7 @@ export default function UpdatePage() {
             <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
               <div className="flex items-center gap-2 mb-4">
                 <Package className="h-5 w-5 text-slate-400" />
-                <h3 className="font-medium text-white">Current Version</h3>
+                <h3 className="font-medium text-white">{t('version.current')}</h3>
               </div>
               {checkResult && (
                 <div className="space-y-3">
@@ -321,7 +323,7 @@ export default function UpdatePage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     <span className={getChannelInfo(checkResult.channel).color}>
-                      {getChannelInfo(checkResult.channel).label} Channel
+                      {t('version.channel', { channel: getChannelInfo(checkResult.channel).label })}
                     </span>
                   </div>
                 </div>
@@ -343,7 +345,7 @@ export default function UpdatePage() {
                   <CheckCircle className="h-5 w-5 text-emerald-400" />
                 )}
                 <h3 className="font-medium text-white">
-                  {checkResult?.update_available ? 'Update Available' : 'Up to Date'}
+                  {checkResult?.update_available ? t('version.available') : t('version.upToDate')}
                 </h3>
               </div>
               {checkResult?.update_available && checkResult.latest_version ? (
@@ -360,13 +362,13 @@ export default function UpdatePage() {
                   {checkResult.last_checked && (
                     <div className="flex items-center gap-2 text-xs text-slate-500">
                       <Clock className="h-3 w-3" />
-                      Last checked: {new Date(checkResult.last_checked).toLocaleString()}
+                      {t('version.lastChecked')} {new Date(checkResult.last_checked).toLocaleString()}
                     </div>
                   )}
                 </div>
               ) : (
                 <p className="text-slate-400">
-                  You're running the latest version.
+                  {t('version.upToDateDesc')}
                 </p>
               )}
             </div>
@@ -378,7 +380,7 @@ export default function UpdatePage() {
               <div className="flex items-start gap-3">
                 <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5" />
                 <div>
-                  <h4 className="font-medium text-amber-400">Update Blocked</h4>
+                  <h4 className="font-medium text-amber-400">{t('blockers.title')}</h4>
                   <ul className="mt-2 space-y-1 text-sm text-slate-300">
                     {checkResult.blockers.map((blocker, i) => (
                       <li key={i}>• {blocker}</li>
@@ -392,7 +394,7 @@ export default function UpdatePage() {
           {/* Changelog */}
           {checkResult?.update_available && checkResult.changelog.length > 0 && (
             <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
-              <h3 className="font-medium text-white mb-4">Changelog</h3>
+              <h3 className="font-medium text-white mb-4">{t('changelog.title')}</h3>
               <div className="space-y-4">
                 {checkResult.changelog.map((entry, i) => (
                   <div key={i} className="border-l-2 border-sky-500/50 pl-4">
@@ -400,7 +402,7 @@ export default function UpdatePage() {
                       <span className="font-medium text-white">v{entry.version}</span>
                       {entry.is_prerelease && (
                         <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 text-xs rounded">
-                          Pre-release
+                          {t('changelog.prerelease')}
                         </span>
                       )}
                     </div>
@@ -414,7 +416,7 @@ export default function UpdatePage() {
                     {entry.breaking_changes.length > 0 && (
                       <div className="mt-2">
                         <span className="text-rose-400 text-sm font-medium">
-                          Breaking Changes:
+                          {t('changelog.breakingChanges')}
                         </span>
                         <ul className="space-y-1 text-sm text-rose-300">
                           {entry.breaking_changes.map((change, j) => (
@@ -439,11 +441,11 @@ export default function UpdatePage() {
                   className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors font-medium"
                 >
                   <Download className="h-5 w-5" />
-                  Update to v{checkResult.latest_version?.version}
+                  {t('buttons.updateTo', { version: checkResult.latest_version?.version })}
                 </button>
               ) : (
                 <div className="flex items-center gap-3 p-3 bg-slate-700 rounded-lg">
-                  <span className="text-sm text-slate-300">Confirm update?</span>
+                  <span className="text-sm text-slate-300">{t('buttons.confirmUpdate')}</span>
                   <button
                     onClick={handleStartUpdate}
                     disabled={updateLoading}
@@ -452,14 +454,14 @@ export default function UpdatePage() {
                     {updateLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
                     ) : (
-                      'Yes, Update'
+                      t('buttons.yesUpdate')
                     )}
                   </button>
                   <button
                     onClick={() => setShowUpdateConfirm(false)}
                     className="px-4 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm"
                   >
-                    Cancel
+                    {t('common:cancel')}
                   </button>
                 </div>
               )}
@@ -474,19 +476,19 @@ export default function UpdatePage() {
             <thead>
               <tr className="border-b border-slate-700 bg-slate-800/50">
                 <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  Version
+                  {t('history.version')}
                 </th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  Status
+                  {t('history.status')}
                 </th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  Date
+                  {t('history.date')}
                 </th>
                 <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  Duration
+                  {t('history.duration')}
                 </th>
                 <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">
-                  Actions
+                  {t('history.actions')}
                 </th>
               </tr>
             </thead>
@@ -494,7 +496,7 @@ export default function UpdatePage() {
               {history.length === 0 ? (
                 <tr>
                   <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                    No update history
+                    {t('history.noHistory')}
                   </td>
                 </tr>
               ) : (
@@ -553,7 +555,7 @@ export default function UpdatePage() {
           {historyTotal > 10 && (
             <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
               <span className="text-sm text-slate-400">
-                Page {historyPage} of {Math.ceil(historyTotal / 10)}
+                {t('history.page', { current: historyPage, total: Math.ceil(historyTotal / 10) })}
               </span>
               <div className="flex gap-2">
                 <button
@@ -561,14 +563,14 @@ export default function UpdatePage() {
                   disabled={historyPage === 1}
                   className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm"
                 >
-                  Previous
+                  {t('buttons.previous')}
                 </button>
                 <button
                   onClick={() => setHistoryPage((p) => p + 1)}
                   disabled={historyPage >= Math.ceil(historyTotal / 10)}
                   className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm"
                 >
-                  Next
+                  {t('buttons.next')}
                 </button>
               </div>
             </div>
@@ -581,9 +583,9 @@ export default function UpdatePage() {
           {/* Auto-Check */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Automatic Update Checks</h3>
+              <h3 className="font-medium text-white">{t('settings.autoCheck')}</h3>
               <p className="text-sm text-slate-400">
-                Periodically check for new versions
+                {t('settings.autoCheckDesc')}
               </p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -603,8 +605,8 @@ export default function UpdatePage() {
           {/* Check Interval */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Check Interval</h3>
-              <p className="text-sm text-slate-400">Hours between automatic checks</p>
+              <h3 className="font-medium text-white">{t('settings.checkInterval')}</h3>
+              <p className="text-sm text-slate-400">{t('settings.checkIntervalDesc')}</p>
             </div>
             <select
               value={config.check_interval_hours}
@@ -614,18 +616,18 @@ export default function UpdatePage() {
               disabled={configLoading || !config.auto_check_enabled}
               className="bg-slate-700 border border-slate-600 text-white rounded px-3 py-2 text-sm"
             >
-              <option value={6}>Every 6 hours</option>
-              <option value={12}>Every 12 hours</option>
-              <option value={24}>Every 24 hours</option>
-              <option value={48}>Every 2 days</option>
-              <option value={168}>Every week</option>
+              <option value={6}>{t('settings.every6Hours')}</option>
+              <option value={12}>{t('settings.every12Hours')}</option>
+              <option value={24}>{t('settings.every24Hours')}</option>
+              <option value={48}>{t('settings.every2Days')}</option>
+              <option value={168}>{t('settings.everyWeek')}</option>
             </select>
           </div>
 
           {/* Update Channel */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Update Channel</h3>
+              <h3 className="font-medium text-white">{t('settings.channel')}</h3>
               <p className="text-sm text-slate-400">
                 {getChannelInfo(config.channel as UpdateChannel).description}
               </p>
@@ -638,17 +640,17 @@ export default function UpdatePage() {
               disabled={configLoading}
               className="bg-slate-700 border border-slate-600 text-white rounded px-3 py-2 text-sm"
             >
-              <option value="stable">Stable</option>
-              <option value="beta">Beta</option>
+              <option value="stable">{t('settings.stable')}</option>
+              <option value="beta">{t('settings.beta')}</option>
             </select>
           </div>
 
           {/* Auto Backup */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Backup Before Update</h3>
+              <h3 className="font-medium text-white">{t('settings.autoBackup')}</h3>
               <p className="text-sm text-slate-400">
-                Create database backup before installing updates
+                {t('settings.autoBackupDesc')}
               </p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -668,9 +670,9 @@ export default function UpdatePage() {
           {/* Require Healthy Services */}
           <div className="flex items-center justify-between">
             <div>
-              <h3 className="font-medium text-white">Require Healthy Services</h3>
+              <h3 className="font-medium text-white">{t('settings.requireHealthy')}</h3>
               <p className="text-sm text-slate-400">
-                Only allow updates when all services are healthy
+                {t('settings.requireHealthyDesc')}
               </p>
             </div>
             <label className="relative inline-flex items-center cursor-pointer">
@@ -693,7 +695,7 @@ export default function UpdatePage() {
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <Clock className="h-4 w-4" />
                 <span>
-                  Last checked: {new Date(config.last_check_at).toLocaleString()}
+                  {t('version.lastChecked')} {new Date(config.last_check_at).toLocaleString()}
                 </span>
                 {config.last_available_version && (
                   <span className="text-sky-400">
@@ -712,11 +714,10 @@ export default function UpdatePage() {
           <div className="bg-slate-800 rounded-lg p-6 max-w-md w-full mx-4 border border-slate-700">
             <div className="flex items-center gap-3 mb-4">
               <AlertTriangle className="h-6 w-6 text-amber-400" />
-              <h3 className="text-lg font-medium text-white">Confirm Rollback</h3>
+              <h3 className="text-lg font-medium text-white">{t('rollback.title')}</h3>
             </div>
             <p className="text-slate-300 mb-6">
-              Are you sure you want to rollback? This will restore the previous version
-              and may require a service restart.
+              {t('rollback.description')}
             </p>
             <div className="flex justify-end gap-3">
               <button
@@ -726,7 +727,7 @@ export default function UpdatePage() {
                 }}
                 className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
               >
-                Cancel
+                {t('common:cancel')}
               </button>
               <button
                 onClick={() => handleRollback()}
@@ -738,7 +739,7 @@ export default function UpdatePage() {
                 ) : (
                   <RotateCcw className="h-4 w-4" />
                 )}
-                Rollback
+                {t('buttons.rollback')}
               </button>
             </div>
           </div>

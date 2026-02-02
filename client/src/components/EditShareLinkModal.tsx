@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import { updateShareLink, type ShareLink, type UpdateShareLinkRequest } from '../api/shares';
 
@@ -9,6 +10,7 @@ interface EditShareLinkModalProps {
 }
 
 export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: EditShareLinkModalProps) {
+  const { t } = useTranslation(['shares', 'common']);
   const [loading, setLoading] = useState(false);
   const [formData, setFormData] = useState<UpdateShareLinkRequest>({
     password: '',
@@ -52,7 +54,7 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div className="bg-white rounded-lg p-6 max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-xl font-bold">Edit Share Link</h2>
+          <h2 className="text-xl font-bold">{t('shares:modal.editShareLink')}</h2>
           <button
             onClick={onClose}
             className="text-gray-500 hover:text-gray-700"
@@ -64,7 +66,7 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
         <form onSubmit={handleSubmit} className="space-y-4">
           {/* File Info (read-only) */}
           <div>
-            <label className="block text-sm font-medium mb-1">File</label>
+            <label className="block text-sm font-medium mb-1">{t('shares:form.file')}</label>
             <div className="px-3 py-2 bg-gray-50 rounded-lg text-gray-700">
               {shareLink.file_name}
             </div>
@@ -73,7 +75,7 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
           {/* Password */}
           <div>
             <div className="flex items-center justify-between mb-1">
-              <label className="block text-sm font-medium">Password Protection</label>
+              <label className="block text-sm font-medium">{t('shares:form.passwordProtection')}</label>
               <label className="flex items-center text-sm">
                 <input
                   type="checkbox"
@@ -81,12 +83,12 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
                   onChange={(e) => setChangePassword(e.target.checked)}
                   className="mr-2"
                 />
-                Change Password
+                {t('shares:buttons.changePassword')}
               </label>
             </div>
             {shareLink.has_password && !changePassword && (
               <div className="text-sm text-gray-600 px-3 py-2 bg-blue-50 rounded-lg">
-                🔒 Currently password protected
+                🔒 {t('shares:form.currentlyProtected')}
               </div>
             )}
             {changePassword && (
@@ -95,11 +97,11 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  placeholder="Leave empty to remove password"
+                  placeholder={t('shares:form.passwordRemoveHint')}
                   className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
                 />
                 <p className="text-xs text-gray-500 mt-1">
-                  Leave empty to remove password protection
+                  {t('shares:form.passwordRemoveHint')}
                 </p>
               </>
             )}
@@ -114,7 +116,7 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
                 onChange={(e) => setFormData({ ...formData, allow_download: e.target.checked })}
                 className="mr-2"
               />
-              <span className="text-sm">Allow Download</span>
+              <span className="text-sm">{t('shares:permissions.allowDownload')}</span>
             </label>
             <label className="flex items-center">
               <input
@@ -123,32 +125,32 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
                 onChange={(e) => setFormData({ ...formData, allow_preview: e.target.checked })}
                 className="mr-2"
               />
-              <span className="text-sm">Allow Preview</span>
+              <span className="text-sm">{t('shares:permissions.allowPreview')}</span>
             </label>
           </div>
 
           {/* Max Downloads */}
           <div>
             <label className="block text-sm font-medium mb-1">
-              Max Downloads (leave empty for unlimited)
+              {t('shares:form.maxDownloads')} ({t('shares:form.maxDownloadsHint')})
             </label>
             <input
               type="number"
               min="1"
               value={formData.max_downloads || ''}
               onChange={(e) => setFormData({ ...formData, max_downloads: e.target.value ? Number(e.target.value) : null })}
-              placeholder="Unlimited"
+              placeholder={t('shares:form.unlimited')}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
             />
             <p className="text-xs text-gray-500 mt-1">
-              Current downloads: {shareLink.download_count}
+              {t('shares:form.currentDownloads', { count: shareLink.download_count })}
             </p>
           </div>
 
           {/* Expiration Date */}
           <div>
             <label className="block text-sm font-medium mb-1">
-              Expiration Date (leave empty for no expiration)
+              {t('shares:form.expirationDate')} ({t('shares:form.expirationHint')})
             </label>
             <input
               type="date"
@@ -161,11 +163,11 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
 
           {/* Description */}
           <div>
-            <label className="block text-sm font-medium mb-1">Description (optional)</label>
+            <label className="block text-sm font-medium mb-1">{t('shares:form.descriptionOptional')}</label>
             <textarea
               value={formData.description}
               onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-              placeholder="Add a description..."
+              placeholder={t('shares:form.descriptionPlaceholder')}
               rows={3}
               maxLength={500}
               className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500"
@@ -179,14 +181,14 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
               onClick={onClose}
               className="px-4 py-2 text-gray-700 border rounded-lg hover:bg-gray-50"
             >
-              Cancel
+              {t('shares:buttons.cancel')}
             </button>
             <button
               type="submit"
               disabled={loading}
               className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
             >
-              {loading ? 'Saving...' : 'Save Changes'}
+              {loading ? t('shares:buttons.saving') : t('shares:buttons.save')}
             </button>
           </div>
         </form>

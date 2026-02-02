@@ -1,0 +1,77 @@
+{
+  "title": "Dateimanager",
+  "actions": {
+    "upload": "Hochladen",
+    "newFolder": "Neuer Ordner",
+    "download": "Herunterladen",
+    "rename": "Umbenennen",
+    "move": "Verschieben",
+    "copy": "Kopieren",
+    "delete": "Löschen",
+    "share": "Freigeben",
+    "permissions": "Berechtigungen",
+    "editPermissions": "Rechte bearbeiten",
+    "properties": "Eigenschaften"
+  },
+  "labels": {
+    "name": "Name",
+    "size": "Größe",
+    "modified": "Geändert",
+    "owner": "Besitzer",
+    "type": "Typ",
+    "path": "Pfad",
+    "selectAll": "Alle auswählen",
+    "deselectAll": "Auswahl aufheben"
+  },
+  "types": {
+    "folder": "Ordner",
+    "file": "Datei",
+    "image": "Bild",
+    "video": "Video",
+    "audio": "Audio",
+    "document": "Dokument",
+    "archive": "Archiv",
+    "code": "Code"
+  },
+  "dialogs": {
+    "uploadTitle": "Dateien hochladen",
+    "newFolderTitle": "Neuen Ordner erstellen",
+    "renameTitle": "Umbenennen",
+    "deleteTitle": "Löschen bestätigen",
+    "deleteConfirm": "Möchten Sie \"{{name}}\" wirklich löschen?",
+    "shareTitle": "Freigabe erstellen",
+    "permissionsTitle": "Berechtigungen bearbeiten"
+  },
+  "messages": {
+    "uploadSuccess": "Dateien erfolgreich hochgeladen",
+    "uploadError": "Hochladen fehlgeschlagen",
+    "downloadError": "Download fehlgeschlagen",
+    "deleteSuccess": "Erfolgreich gelöscht",
+    "deleteError": "Löschen fehlgeschlagen",
+    "renameSuccess": "Erfolgreich umbenannt",
+    "renameError": "Umbenennen fehlgeschlagen",
+    "moveSuccess": "Erfolgreich verschoben",
+    "moveError": "Verschieben fehlgeschlagen",
+    "copySuccess": "Erfolgreich kopiert",
+    "copyError": "Kopieren fehlgeschlagen",
+    "permissionsSaved": "Berechtigungen gespeichert",
+    "permissionsError": "Fehler beim Speichern der Berechtigungen",
+    "noFiles": "Keine Dateien in diesem Ordner",
+    "dropFilesHere": "Dateien hier ablegen zum Hochladen",
+    "enterFolderName": "Bitte Ordnernamen eingeben",
+    "enterFileName": "Bitte gültigen Dateinamen eingeben",
+    "folderCreated": "Ordner erfolgreich erstellt",
+    "folderError": "Ordner konnte nicht erstellt werden",
+    "sessionExpired": "Sitzung abgelaufen. Bitte erneut anmelden."
+  },
+  "views": {
+    "grid": "Kachelansicht",
+    "list": "Listenansicht"
+  },
+  "sort": {
+    "name": "Nach Name",
+    "size": "Nach Größe",
+    "date": "Nach Datum",
+    "type": "Nach Typ"
+  }
+}
