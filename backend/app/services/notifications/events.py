@@ -359,7 +359,7 @@ class EventEmitter:
             message = config.message_template
 
         # Create notification
-        from app.services.notification_service import get_notification_service
+        from app.services.notifications.service import get_notification_service
 
         if self._db_session_factory:
             db = self._db_session_factory()

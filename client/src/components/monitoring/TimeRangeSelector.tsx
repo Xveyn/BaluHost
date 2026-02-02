@@ -18,11 +18,11 @@ export default function TimeRangeSelector({
   onChange,
   className = '',
 }: TimeRangeSelectorProps) {
-  const { t } = useTranslation('system');
+  const { t } = useTranslation(['system', 'admin']);
 
   const TIME_RANGES = TIME_RANGE_KEYS.map((r) => ({
     value: r,
-    label: t(`monitoring.timeRange.${r}`),
+    label: t(`admin:monitoring.timeRanges.${r}`),
   }));
 
   return (

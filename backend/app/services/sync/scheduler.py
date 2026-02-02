@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 import asyncio
 
 from app.models.sync_progress import SyncSchedule
-from app.services.file_sync import FileSyncService
+from app.services.sync.file_sync import FileSyncService
 
 
 class SyncSchedulerService:

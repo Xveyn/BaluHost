@@ -91,7 +91,7 @@ export default function UpdatePage() {
       const result = await checkForUpdates();
       setCheckResult(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('toast.checkFailed'));
+      toast.error(err.response?.data?.detail || t('common:toast.checkFailed'));
     } finally {
       setCheckLoading(false);
     }
@@ -116,7 +116,7 @@ export default function UpdatePage() {
       setHistory(result.updates);
       setHistoryTotal(result.total);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('toast.historyFailed'));
+      toast.error(err.response?.data?.detail || t('common:toast.historyFailed'));
     }
   }, [historyPage]);
 
@@ -126,7 +126,7 @@ export default function UpdatePage() {
       const result = await getUpdateConfig();
       setConfig(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('toast.configFailed'));
+      toast.error(err.response?.data?.detail || t('common:toast.configFailed'));
     }
   }, []);
 
@@ -160,7 +160,7 @@ export default function UpdatePage() {
         if (!isUpdateInProgress(progress.status)) {
           await fetchCheck();
           if (progress.status === 'completed') {
-            toast.success(t('toast.updateCompleted', { version: progress.to_version }));
+            toast.success(t('common:toast.updateCompleted', { version: progress.to_version }));
           }
         }
       } catch (err) {
@@ -179,7 +179,7 @@ export default function UpdatePage() {
     try {
       const result = await startUpdate();
       if (result.success && result.update_id) {
-        toast.success(t('toast.updateStarted'));
+        toast.success(t('common:toast.updateStarted'));
         const progress = await getUpdateProgress(result.update_id);
         setCurrentUpdate(progress);
       } else {
@@ -190,7 +190,7 @@ export default function UpdatePage() {
       if (typeof detail === 'object' && detail.blockers) {
         toast.error(t('blockers.updateBlocked', { blockers: detail.blockers.join(', ') }));
       } else {
-        toast.error(detail || t('toast.updateFailed'));
+        toast.error(detail || t('common:toast.updateFailed'));
       }
     } finally {
       setUpdateLoading(false);
@@ -206,7 +206,7 @@ export default function UpdatePage() {
         target_update_id: updateId || rollbackTarget || undefined,
       });
       if (result.success) {
-        toast.success(t('toast.rollbackSuccess', { version: result.rolled_back_to }));
+        toast.success(t('common:toast.rollbackSuccess', { version: result.rolled_back_to }));
         await fetchCheck();
         await fetchHistory();
         setCurrentUpdate(null);
@@ -214,7 +214,7 @@ export default function UpdatePage() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('toast.rollbackFailed'));
+      toast.error(err.response?.data?.detail || t('common:toast.rollbackFailed'));
     } finally {
       setRollbackLoading(false);
       setRollbackTarget(null);
@@ -228,9 +228,9 @@ export default function UpdatePage() {
     try {
       const updated = await updateConfig({ [key]: value });
       setConfig(updated);
-      toast.success(t('toast.settingsSaved'));
+      toast.success(t('common:toast.settingsSaved'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('toast.settingsFailed'));
+      toast.error(err.response?.data?.detail || t('common:toast.settingsFailed'));
     } finally {
       setConfigLoading(false);
     }

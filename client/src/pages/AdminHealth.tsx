@@ -134,7 +134,7 @@ export default function AdminHealth() {
       const data = await res.json();
       setHealth(data);
     } catch (err: any) {
-      setError(err?.message || 'Fehler beim Laden');
+      setError(err?.message || t('health.loadError'));
     } finally {
       setLoading(false);
     }
@@ -208,23 +208,23 @@ export default function AdminHealth() {
         <div className="flex items-center justify-between mb-6">
           <div className="flex items-center gap-3">
             <Server className="h-5 w-5 text-sky-400" />
-            <h2 className="text-lg font-semibold text-white">Backend Services</h2>
+            <h2 className="text-lg font-semibold text-white">{t('health.backendServices')}</h2>
           </div>
           <div className="flex items-center gap-3 text-xs">
             <span className="flex items-center gap-1.5">
               <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400" />
-              <span className="text-emerald-300">{serviceSummary.running} running</span>
+              <span className="text-emerald-300">{t('health.serviceLabels.running', { count: serviceSummary.running })}</span>
             </span>
             {serviceSummary.stopped > 0 && (
               <span className="flex items-center gap-1.5">
                 <MinusCircle className="h-3.5 w-3.5 text-slate-400" />
-                <span className="text-slate-400">{serviceSummary.stopped} stopped</span>
+                <span className="text-slate-400">{t('health.serviceLabels.stopped', { count: serviceSummary.stopped })}</span>
               </span>
             )}
             {serviceSummary.error > 0 && (
               <span className="flex items-center gap-1.5">
                 <XCircle className="h-3.5 w-3.5 text-rose-400" />
-                <span className="text-rose-300">{serviceSummary.error} error</span>
+                <span className="text-rose-300">{t('health.serviceLabels.error', { count: serviceSummary.error })}</span>
               </span>
             )}
           </div>
@@ -241,7 +241,7 @@ export default function AdminHealth() {
           </div>
         ) : services.length === 0 ? (
           <div className="text-center py-8 text-slate-500">
-            No services registered
+            {t('health.noServicesRegistered')}
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -270,25 +270,25 @@ export default function AdminHealth() {
                 {service.uptime_seconds !== null && service.state === ServiceState.RUNNING && (
                   <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                     <Clock className="h-3.5 w-3.5" />
-                    <span>Uptime: {formatUptime(service.uptime_seconds)}</span>
+                    <span>{t('health.serviceDetails.uptime')}: {formatUptime(service.uptime_seconds)}</span>
                   </div>
                 )}
 
                 {service.error_count > 0 && (
                   <div className="mt-2 text-xs text-rose-400">
-                    {service.error_count} error{service.error_count > 1 ? 's' : ''} logged
+                    {t('health.serviceDetails.errorsLogged', { count: service.error_count })}
                   </div>
                 )}
 
                 {service.last_error && (
                   <div className="mt-2 text-xs text-rose-300 truncate" title={service.last_error}>
-                    Last: {service.last_error}
+                    {t('health.serviceDetails.lastError')}: {service.last_error}
                   </div>
                 )}
 
                 {service.sample_count !== null && (
                   <div className="mt-2 text-xs text-slate-500">
-                    {service.sample_count.toLocaleString()} samples collected
+                    {t('health.serviceDetails.samplesCollected', { count: service.sample_count })}
                   </div>
                 )}
               </div>
@@ -387,12 +387,12 @@ export default function AdminHealth() {
               </div>
             </div>
             <div className="space-y-2 text-xs text-slate-400">
-              <p>System status: <span className="text-emerald-400">{health.status}</span></p>
-              <p>Mode: {health.system.dev_mode ? 'Development' : 'Production'}</p>
+              <p>{t('health.systemStatus')}: <span className="text-emerald-400">{health.status}</span></p>
+              <p>{t('health.mode')}: {health.system.dev_mode ? t('health.development') : t('health.production')}</p>
               {health.raid?.arrays.length ? (
-                <p>{health.raid.arrays.length} RAID array{health.raid.arrays.length > 1 ? 's' : ''}</p>
+                <p>{t('health.raidArrays', { count: health.raid.arrays.length })}</p>
               ) : (
-                <p>No RAID configured</p>
+                <p>{t('health.noRaidConfigured')}</p>
               )}
             </div>
           </div>
@@ -404,7 +404,7 @@ export default function AdminHealth() {
         <div className="card border-slate-800/50 bg-slate-900/55">
           <div className="flex items-center gap-3 mb-6">
             <HardDrive className="h-5 w-5 text-sky-400" />
-            <h2 className="text-lg font-semibold text-white">Storage Devices</h2>
+            <h2 className="text-lg font-semibold text-white">{t('health.storageDevices')}</h2>
           </div>
           <div className="space-y-3">
             {health.smart.devices.map((device) => (
@@ -424,20 +424,20 @@ export default function AdminHealth() {
                 </div>
                 <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                   <div>
-                    <p className="text-slate-500">Capacity</p>
+                    <p className="text-slate-500">{t('health.deviceLabels.capacity')}</p>
                     <p className="text-slate-200">{formatBytes(device.capacity_bytes)}</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Used</p>
+                    <p className="text-slate-500">{t('health.deviceLabels.used')}</p>
                     <p className="text-slate-200">{device.used_percent.toFixed(1)}%</p>
                   </div>
                   <div>
-                    <p className="text-slate-500">Mount</p>
+                    <p className="text-slate-500">{t('health.deviceLabels.mount')}</p>
                     <p className="text-slate-200">{device.mount_point}</p>
                   </div>
                   {device.temperature !== null && (
                     <div>
-                      <p className="text-slate-500">Temperature</p>
+                      <p className="text-slate-500">{t('health.deviceLabels.temperature')}</p>
                       <p className="text-slate-200">{device.temperature}°C</p>
                     </div>
                   )}

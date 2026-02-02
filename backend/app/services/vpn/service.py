@@ -362,7 +362,7 @@ PersistentKeepalive = 25
             FritzBoxConfigResponse
         """
         from app.models.vpn import FritzBoxVPNConfig
-        from app.services.vpn_encryption import VPNEncryption
+        from app.services.vpn.encryption import VPNEncryption
         from app.schemas.vpn import FritzBoxConfigResponse
 
         # Parse config
@@ -424,7 +424,7 @@ PersistentKeepalive = 25
             Base64 encoded config string
         """
         from app.models.vpn import FritzBoxVPNConfig
-        from app.services.vpn_encryption import VPNEncryption
+        from app.services.vpn.encryption import VPNEncryption
         
         if config_id:
             config = db.query(FritzBoxVPNConfig).filter(

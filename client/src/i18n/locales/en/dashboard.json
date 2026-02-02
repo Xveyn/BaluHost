@@ -1,6 +1,7 @@
 {
   "title": "Dashboard",
   "subtitle": "System Overview",
+  "loading": "Loading system insights...",
   "widgets": {
     "systemStatus": "System Status",
     "storageUsage": "Storage Usage",
@@ -12,11 +13,23 @@
     "quickActions": "Quick Actions"
   },
   "stats": {
+    "cpu": "CPU",
+    "memory": "Memory",
+    "totalStorage": "Total Storage",
+    "uptime": "Uptime",
     "totalFiles": "Total Files",
     "totalUsers": "Total Users",
     "activeConnections": "Active Connections",
-    "uptime": "Uptime",
-    "temperature": "Temperature"
+    "temperature": "Temperature",
+    "coresActive": "{{count}} cores active",
+    "coresAt": "{{count}} cores @ {{frequency}}",
+    "ofTotal": "of {{total}} used",
+    "awaitingMount": "Awaiting mount info",
+    "systemAvailability": "System availability"
+  },
+  "sync": {
+    "synced": "Synced {{time}}",
+    "waiting": "Waiting for telemetry"
   },
   "charts": {
     "last24Hours": "Last 24 Hours",
@@ -50,7 +63,27 @@
     "warnings": "{{count}} warning",
     "warnings_plural": "{{count}} warnings",
     "collapse": "Collapse",
-    "expand": "Expand"
+    "expand": "Expand",
+    "smartFailure": {
+      "title": "SMART Health Warning",
+      "message": "{{count}} drive(s) reporting issues"
+    },
+    "raidDegraded": {
+      "title": "RAID Array Degraded",
+      "message": "{{count}} array(s) in degraded state"
+    },
+    "schedulerFailed": {
+      "title": "Scheduler Failure",
+      "message": "{{count}} scheduler(s) failed recently"
+    },
+    "serviceError": {
+      "title": "Service Error",
+      "message": "{{count}} service(s) with errors"
+    },
+    "viewDetails": "View Details",
+    "viewRaid": "View RAID",
+    "viewSchedulers": "View Schedulers",
+    "viewHealth": "View Health"
   },
   "devices": {
     "title": "Connected Devices",
@@ -116,5 +149,49 @@
     "window": "Window",
     "viewPlan": "View plan",
     "schedulersTotal": "{{count}} schedulers total"
+  },
+  "smart": {
+    "title": "Physical Drives",
+    "subtitle": "SMART Status",
+    "loading": "Loading SMART data...",
+    "error": "Error",
+    "healthy": "Healthy",
+    "noDevices": "No drives detected",
+    "modeToggle": {
+      "mock": "Mock Data",
+      "real": "Real SMART Data",
+      "current": "Current: {{mode}}"
+    },
+    "device": {
+      "status": "Status",
+      "capacity": "Capacity",
+      "temperature": "Temperature",
+      "used": "Used"
+    }
+  },
+  "raid": {
+    "title": "RAID Arrays",
+    "configTitle": "NAS Configuration",
+    "loading": "Loading RAID data...",
+    "noArrays": "No RAID arrays configured",
+    "devices": "{{count}} devices",
+    "active": "{{count}} active",
+    "resyncProgress": "Resync Progress"
+  },
+  "health": {
+    "title": "System Health",
+    "checksTitle": "NAS Checks",
+    "checking": "Checking...",
+    "error": "Error",
+    "allDrivesOk": "All drives OK",
+    "warningDetected": "Warning detected",
+    "arraysOptimal": "Arrays optimal",
+    "degraded": "Degraded",
+    "noRaid": "No RAID",
+    "physicalDrives": "Physical drives",
+    "detected": "{{count}} detected",
+    "totalCapacity": "Total capacity (HW)",
+    "avgTemp": "Average temp",
+    "storageUsed": "Storage used (FS)"
   }
 }

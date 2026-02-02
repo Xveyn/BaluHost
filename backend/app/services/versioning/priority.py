@@ -11,10 +11,10 @@ from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
     from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
-    from app.services.vcl import VCLService
+    from app.services.versioning.vcl import VCLService
 else:
     from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
-    from app.services.vcl import VCLService
+    from app.services.versioning.vcl import VCLService
 
 
 class VCLPriorityMode:

@@ -2,10 +2,15 @@
   "title": "Administration",
   "users": {
     "title": "User Management",
+    "subtitle": "Control access policies and collaboration roles",
     "createUser": "Create User",
     "editUser": "Edit User",
     "deleteUser": "Delete User",
     "deleteConfirm": "Are you sure you want to delete user \"{{username}}\"?",
+    "deleteConfirmGeneric": "Are you sure you want to delete this user? This action cannot be undone.",
+    "noToken": "No authentication token found. Please log in.",
+    "loading": "Loading users...",
+    "noUsersFound": "No users found",
     "roles": {
       "admin": "Administrator",
       "user": "User",
@@ -14,16 +19,62 @@
     "fields": {
       "username": "Username",
       "email": "Email",
+      "emailOptional": "Email (optional)",
+      "password": "Password",
+      "passwordKeep": "Password (leave empty to keep current)",
       "role": "Role",
       "created": "Created",
       "lastLogin": "Last Login",
-      "status": "Status"
+      "status": "Status",
+      "activeUser": "Active User",
+      "actions": "Actions"
+    },
+    "placeholders": {
+      "search": "Search users...",
+      "enterUsername": "Enter username",
+      "enterEmail": "Enter email (optional)",
+      "enterPassword": "Enter password"
+    },
+    "filters": {
+      "allRoles": "All Roles",
+      "allStatus": "All Status"
+    },
+    "stats": {
+      "totalUsers": "Total Users",
+      "active": "Active",
+      "inactive": "Inactive",
+      "admins": "Admins"
+    },
+    "buttons": {
+      "exportCsv": "Export CSV",
+      "export": "Export",
+      "addUser": "Add User",
+      "add": "Add",
+      "deleteSelected": "Delete Selected",
+      "cancel": "Cancel",
+      "create": "Create",
+      "update": "Update"
+    },
+    "bulk": {
+      "selected": "{{count}} user(s) selected",
+      "deleted": "Deleted {{count}} user(s)"
+    },
+    "status": {
+      "active": "Active",
+      "inactive": "Inactive"
     },
     "messages": {
       "created": "User created successfully",
       "updated": "User updated successfully",
       "deleted": "User deleted successfully",
+      "statusUpdated": "User status updated",
+      "exported": "Users exported to CSV",
       "error": "User operation failed",
+      "createFailed": "Failed to create user",
+      "updateFailed": "Failed to update user",
+      "deleteFailed": "Failed to delete user",
+      "toggleFailed": "Failed to toggle user status",
+      "bulkDeleteFailed": "Failed to delete users",
       "invalidEmail": "Please enter a valid email address"
     }
   },
@@ -101,17 +152,44 @@
     "backToDashboard": "Back to Dashboard",
     "refreshing": "Refreshing...",
     "lastUpdated": "Last updated",
+    "loadError": "Failed to load",
     "cpuUsage": "CPU Usage",
     "memoryUsage": "Memory Usage",
     "diskUsage": "Disk Usage",
     "uptime": "Uptime",
     "temperature": "Temperature",
     "services": "Services",
+    "backendServices": "Backend Services",
+    "noServicesRegistered": "No services registered",
     "serviceStatus": {
       "running": "Running",
       "stopped": "Stopped",
       "error": "Error",
       "unknown": "Unknown"
+    },
+    "serviceLabels": {
+      "running": "{{count}} running",
+      "stopped": "{{count}} stopped",
+      "error": "{{count}} error"
+    },
+    "serviceDetails": {
+      "uptime": "Uptime",
+      "errorsLogged": "{{count}} error(s) logged",
+      "lastError": "Last",
+      "samplesCollected": "{{count, number}} samples collected"
+    },
+    "systemStatus": "System status",
+    "mode": "Mode",
+    "development": "Development",
+    "production": "Production",
+    "noRaidConfigured": "No RAID configured",
+    "raidArrays": "{{count}} RAID array(s)",
+    "storageDevices": "Storage Devices",
+    "deviceLabels": {
+      "capacity": "Capacity",
+      "used": "Used",
+      "mount": "Mount",
+      "temperature": "Temperature"
     }
   },
   "monitoring": {
@@ -119,7 +197,9 @@
     "subtitle": "Historical metrics from database storage",
     "samplesInfo": "{{formatted}} samples, source: {{source}}",
     "loadingHistory": "Loading history data...",
+    "loadingData": "Loading data...",
     "noDataAvailable": "No {{metric}} data available for this time range",
+    "noData": "No data available",
     "noSamplesAvailable": "No {{metric}} samples available",
     "timeRange": "Time Range",
     "timeRanges": {

@@ -83,7 +83,7 @@ export default function UserManagement() {
     const token = localStorage.getItem('token');
     
     if (!token) {
-      const errorMsg = 'No authentication token found. Please log in.';
+      const errorMsg = t('users.noToken');
       setError(errorMsg);
       toast.error(errorMsg);
       setLoading(false);
@@ -175,16 +175,16 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || 'Failed to create user');
+        toast.error(errorData.detail || t('users.messages.createFailed'));
         return;
       }
 
-      toast.success('User created successfully');
+      toast.success(t('users.messages.created'));
       setShowUserModal(false);
       resetForm();
       loadUsers();
     } catch (err) {
-      toast.error('Failed to create user');
+      toast.error(t('users.messages.createFailed'));
       console.error(err);
     }
   };
@@ -213,17 +213,17 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || 'Failed to update user');
+        toast.error(errorData.detail || t('users.messages.updateFailed'));
         return;
       }
 
-      toast.success('User updated successfully');
+      toast.success(t('users.messages.updated'));
       setShowUserModal(false);
       setEditingUser(null);
       resetForm();
       loadUsers();
     } catch (err) {
-      toast.error('Failed to update user');
+      toast.error(t('users.messages.updateFailed'));
       console.error(err);
     }
   };
@@ -242,14 +242,14 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        toast.error(errorData.detail || 'Failed to delete user');
+        toast.error(errorData.detail || t('users.messages.deleteFailed'));
         return;
       }
 
-      toast.success('User deleted successfully');
+      toast.success(t('users.messages.deleted'));
       loadUsers();
     } catch (err) {
-      toast.error('Failed to delete user');
+      toast.error(t('users.messages.deleteFailed'));
       console.error(err);
     }
   };
@@ -270,16 +270,16 @@ export default function UserManagement() {
       });
 
       if (!response.ok) {
-        toast.error('Failed to delete users');
+        toast.error(t('users.messages.bulkDeleteFailed'));
         return;
       }
 
       const result = await response.json();
-      toast.success(`Deleted ${result.deleted} user(s)`);
+      toast.success(t('users.bulk.deleted', { count: result.deleted }));
       setSelectedUsers(new Set());
       loadUsers();
     } catch (err) {
-      toast.error('Failed to delete users');
+      toast.error(t('users.messages.bulkDeleteFailed'));
       console.error(err);
     }
   };
@@ -297,14 +297,14 @@ export default function UserManagement() {
       });
 
       if (!response.ok) {
-        toast.error('Failed to toggle user status');
+        toast.error(t('users.messages.toggleFailed'));
         return;
       }
 
-      toast.success('User status updated');
+      toast.success(t('users.messages.statusUpdated'));
       loadUsers();
     } catch (err) {
-      toast.error('Failed to toggle user status');
+      toast.error(t('users.messages.toggleFailed'));
       console.error(err);
     }
   };
@@ -331,7 +331,7 @@ export default function UserManagement() {
     a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
     a.click();
     window.URL.revokeObjectURL(url);
-    toast.success('Users exported to CSV');
+    toast.success(t('users.messages.exported'));
   };
 
   const openCreateModal = () => {
@@ -408,26 +408,26 @@ export default function UserManagement() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
           <h1 className="text-2xl sm:text-3xl font-semibold text-white">
-            User Management
+            {t('users.title')}
           </h1>
-          <p className="mt-1 text-xs sm:text-sm text-slate-400">Control access policies and collaboration roles</p>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('users.subtitle')}</p>
         </div>
         <div className="flex gap-2">
-          <button 
+          <button
             onClick={handleExportCSV}
             className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Download className="h-4 w-4" />
-            <span className="hidden sm:inline">Export CSV</span>
-            <span className="sm:hidden">Export</span>
+            <span className="hidden sm:inline">{t('users.buttons.exportCsv')}</span>
+            <span className="sm:hidden">{t('users.buttons.export')}</span>
           </button>
-          <button 
+          <button
             onClick={openCreateModal}
             className="btn btn-primary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Plus className="h-4 w-4" />
-            <span className="hidden sm:inline">Add User</span>
-            <span className="sm:hidden">Add</span>
+            <span className="hidden sm:inline">{t('users.buttons.addUser')}</span>
+            <span className="sm:hidden">{t('users.buttons.add')}</span>
           </button>
         </div>
       </div>
@@ -437,37 +437,37 @@ export default function UserManagement() {
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Total Users</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.totalUsers')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
             </div>
             <Users className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
           </div>
         </div>
-        
+
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Active</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.active')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
             </div>
             <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
           </div>
         </div>
-        
+
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Inactive</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.inactive')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-slate-400">{stats.inactive}</p>
             </div>
             <XCircle className="h-6 w-6 sm:h-8 sm:w-8 text-slate-500 flex-shrink-0 ml-2" />
           </div>
         </div>
-        
+
         <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
           <div className="flex items-center justify-between">
             <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">Admins</p>
+              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.admins')}</p>
               <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.admins}</p>
             </div>
             <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
@@ -483,7 +483,7 @@ export default function UserManagement() {
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 type="text"
-                placeholder="Search users..."
+                placeholder={t('users.placeholders.search')}
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
                 className="w-full rounded-lg border border-slate-700 bg-slate-900/70 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
@@ -497,19 +497,19 @@ export default function UserManagement() {
               onChange={(e) => setRoleFilter(e.target.value)}
               className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
-              <option value="">All Roles</option>
-              <option value="admin">Admin</option>
-              <option value="user">User</option>
+              <option value="">{t('users.filters.allRoles')}</option>
+              <option value="admin">{t('users.roles.admin')}</option>
+              <option value="user">{t('users.roles.user')}</option>
             </select>
-            
+
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
             >
-              <option value="">All Status</option>
-              <option value="true">Active</option>
-              <option value="false">Inactive</option>
+              <option value="">{t('users.filters.allStatus')}</option>
+              <option value="true">{t('users.status.active')}</option>
+              <option value="false">{t('users.status.inactive')}</option>
             </select>
           </div>
         </div>
@@ -517,14 +517,14 @@ export default function UserManagement() {
         {selectedUsers.size > 0 && (
           <div className="mt-4 flex items-center justify-between rounded-lg border border-rose-900/60 bg-rose-950/30 p-3">
             <span className="text-sm text-rose-200">
-              {selectedUsers.size} user(s) selected
+              {t('users.bulk.selected', { count: selectedUsers.size })}
             </span>
             <button
               onClick={handleBulkDelete}
               className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
             >
               <Trash2 className="h-4 w-4" />
-              Delete Selected
+              {t('users.buttons.deleteSelected')}
             </button>
           </div>
         )}
@@ -541,7 +541,7 @@ export default function UserManagement() {
       {/* Users List */}
       {loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-          <p className="text-sm text-slate-500">Loading users...</p>
+          <p className="text-sm text-slate-500">{t('users.loading')}</p>
         </div>
       ) : (
         <>
@@ -564,38 +564,38 @@ export default function UserManagement() {
                         onClick={() => handleSort('username')}
                         className="flex items-center gap-1 hover:text-slate-300"
                       >
-                        Username
+                        {t('users.fields.username')}
                         {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
                       </button>
                     </th>
-                    <th className="px-6 py-4">Email</th>
+                    <th className="px-6 py-4">{t('users.fields.email')}</th>
                     <th className="px-6 py-4">
                       <button
                         onClick={() => handleSort('role')}
                         className="flex items-center gap-1 hover:text-slate-300"
                       >
-                        Role
+                        {t('users.fields.role')}
                         {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
                       </button>
                     </th>
-                    <th className="px-6 py-4">Status</th>
+                    <th className="px-6 py-4">{t('users.fields.status')}</th>
                     <th className="px-6 py-4">
                       <button
                         onClick={() => handleSort('created_at')}
                         className="flex items-center gap-1 hover:text-slate-300"
                       >
-                        Created
+                        {t('users.fields.created')}
                         {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
                       </button>
                     </th>
-                    <th className="px-6 py-4">Actions</th>
+                    <th className="px-6 py-4">{t('users.fields.actions')}</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800/60">
                   {users.length === 0 ? (
                     <tr>
                       <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
-                        No users found
+                        {t('users.noUsersFound')}
                       </td>
                     </tr>
                   ) : (
@@ -641,12 +641,12 @@ export default function UserManagement() {
                             {user.is_active ? (
                               <>
                                 <CheckCircle className="h-3 w-3" />
-                                Active
+                                {t('users.status.active')}
                               </>
                             ) : (
                               <>
                                 <XCircle className="h-3 w-3" />
-                                Inactive
+                                {t('users.status.inactive')}
                               </>
                             )}
                           </button>
@@ -659,14 +659,14 @@ export default function UserManagement() {
                             <button
                               onClick={() => openEditModal(user)}
                               className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
-                              title="Edit user"
+                              title={t('users.editUser')}
                             >
                               <Edit className="h-4 w-4" />
                             </button>
                             <button
                               onClick={() => openDeleteConfirm(user.id)}
                               className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                              title="Delete user"
+                              title={t('users.deleteUser')}
                             >
                               <Trash2 className="h-4 w-4" />
                             </button>
@@ -684,7 +684,7 @@ export default function UserManagement() {
           <div className="lg:hidden space-y-3">
             {users.length === 0 ? (
               <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-                <p className="text-sm text-slate-500">No users found</p>
+                <p className="text-sm text-slate-500">{t('users.noUsersFound')}</p>
               </div>
             ) : (
               users.map((user) => (
@@ -712,14 +712,14 @@ export default function UserManagement() {
                       <button
                         onClick={() => openEditModal(user)}
                         className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
-                        title="Edit user"
+                        title={t('users.editUser')}
                       >
                         <Edit className="h-4 w-4" />
                       </button>
                       <button
                         onClick={() => openDeleteConfirm(user.id)}
                         className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
-                        title="Delete user"
+                        title={t('users.deleteUser')}
                       >
                         <Trash2 className="h-4 w-4" />
                       </button>
@@ -745,17 +745,17 @@ export default function UserManagement() {
                       {user.is_active ? (
                         <>
                           <CheckCircle className="h-3 w-3" />
-                          Active
+                          {t('users.status.active')}
                         </>
                       ) : (
                         <>
                           <XCircle className="h-3 w-3" />
-                          Inactive
+                          {t('users.status.inactive')}
                         </>
                       )}
                     </button>
                     <span className="text-xs text-slate-500">
-                      Created {new Date(user.created_at).toLocaleDateString()}
+                      {t('users.fields.created')} {new Date(user.created_at).toLocaleDateString()}
                     </span>
                   </div>
                 </div>
@@ -771,7 +771,7 @@ export default function UserManagement() {
           <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
             <div className="mb-3 sm:mb-4 flex items-center justify-between">
               <h2 className="text-lg sm:text-xl font-semibold text-white">
-                {editingUser ? 'Edit User' : 'Create User'}
+                {editingUser ? t('users.editUser') : t('users.createUser')}
               </h2>
               <button
                 onClick={() => {
@@ -788,54 +788,54 @@ export default function UserManagement() {
             <div className="space-y-3 sm:space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Username
+                  {t('users.fields.username')}
                 </label>
                 <input
                   type="text"
                   value={formData.username}
                   onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter username"
+                  placeholder={t('users.placeholders.enterUsername')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Email <span className="text-slate-500">(optional)</span>
+                  {t('users.fields.emailOptional')}
                 </label>
                 <input
                   type="email"
                   value={formData.email}
                   onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter email (optional)"
+                  placeholder={t('users.placeholders.enterEmail')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Password {editingUser && '(leave empty to keep current)'}
+                  {editingUser ? t('users.fields.passwordKeep') : t('users.fields.password')}
                 </label>
                 <input
                   type="password"
                   value={formData.password}
                   onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder="Enter password"
+                  placeholder={t('users.placeholders.enterPassword')}
                 />
               </div>
 
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-1">
-                  Role
+                  {t('users.fields.role')}
                 </label>
                 <select
                   value={formData.role}
                   onChange={(e) => setFormData({ ...formData, role: e.target.value })}
                   className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
                 >
-                  <option value="user">User</option>
-                  <option value="admin">Admin</option>
+                  <option value="user">{t('users.roles.user')}</option>
+                  <option value="admin">{t('users.roles.admin')}</option>
                 </select>
               </div>
 
@@ -848,7 +848,7 @@ export default function UserManagement() {
                   className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
                 />
                 <label htmlFor="is_active" className="text-sm text-slate-300">
-                  Active User
+                  {t('users.fields.activeUser')}
                 </label>
               </div>
             </div>
@@ -862,13 +862,13 @@ export default function UserManagement() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('users.buttons.cancel')}
               </button>
               <button
                 onClick={editingUser ? handleUpdateUser : handleCreateUser}
                 className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
               >
-                {editingUser ? 'Update' : 'Create'}
+                {editingUser ? t('users.buttons.update') : t('users.buttons.create')}
               </button>
             </div>
           </div>
@@ -883,11 +883,11 @@ export default function UserManagement() {
               <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
                 <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
               </div>
-              <h2 className="text-lg sm:text-xl font-semibold text-white">Delete User</h2>
+              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('users.deleteUser')}</h2>
             </div>
 
             <p className="mb-4 sm:mb-6 text-sm text-slate-400">
-              Are you sure you want to delete this user? This action cannot be undone.
+              {t('users.deleteConfirmGeneric')}
             </p>
 
             <div className="flex gap-2">
@@ -898,13 +898,13 @@ export default function UserManagement() {
                 }}
                 className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
               >
-                Cancel
+                {t('users.buttons.cancel')}
               </button>
               <button
                 onClick={confirmDelete}
                 className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
               >
-                Delete
+                {t('common:buttons.delete')}
               </button>
             </div>
           </div>

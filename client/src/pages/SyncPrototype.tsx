@@ -39,7 +39,7 @@ export default function SyncPrototype() {
       const data = await getAllDevices();
       setDevices(data);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('toast.loadFailed');
+      const errorMsg = err instanceof Error ? err.message : t('common:toast.loadFailed');
       console.error('Failed to load devices:', err);
       setError(errorMsg);
       toast.error(errorMsg);
@@ -56,7 +56,7 @@ export default function SyncPrototype() {
 
   const handleSaveDeviceName = async () => {
     if (!editingDevice || !newDeviceName.trim()) {
-      toast.error(t('toast.deviceNameEmpty'));
+      toast.error(t('common:toast.deviceNameEmpty'));
       return;
     }
 
@@ -67,13 +67,13 @@ export default function SyncPrototype() {
         await updateDesktopDeviceName(editingDevice.id, newDeviceName);
       }
 
-      toast.success(t('toast.deviceUpdated'));
+      toast.success(t('common:toast.deviceUpdated'));
       setShowEditModal(false);
       setEditingDevice(null);
       setNewDeviceName('');
       loadDevices();
     } catch (err) {
-      toast.error(t('toast.updateFailed'));
+      toast.error(t('common:toast.updateFailed'));
       console.error(err);
     }
   };
@@ -89,9 +89,9 @@ export default function SyncPrototype() {
     try {
       if (deviceToDelete.type === 'mobile') {
         await deleteMobileDevice(deviceToDelete.id);
-        toast.success(t('toast.deviceDeleted'));
+        toast.success(t('common:toast.deviceDeleted'));
       } else {
-        toast.error(t('toast.desktopDeleteNotImplemented'));
+        toast.error(t('common:toast.desktopDeleteNotImplemented'));
         setShowDeleteConfirm(false);
         setDeviceToDelete(null);
         return;
@@ -101,7 +101,7 @@ export default function SyncPrototype() {
       setDeviceToDelete(null);
       loadDevices();
     } catch (err) {
-      toast.error(t('toast.deleteFailed'));
+      toast.error(t('common:toast.deleteFailed'));
       console.error(err);
     }
   };

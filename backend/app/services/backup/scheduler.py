@@ -6,7 +6,7 @@ import logging
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
-from app.services.backup import BackupService
+from app.services.backup.service import BackupService
 from app.schemas.backup import BackupCreate
 from app.core.config import get_settings
 

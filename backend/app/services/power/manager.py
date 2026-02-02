@@ -5,7 +5,7 @@ Manages CPU frequency profiles for optimal power consumption based on workload.
 Supports AMD Ryzen (amd-pstate driver) and Intel (intel_pstate) CPUs.
 
 Usage:
-    from app.services.power_manager import get_power_manager
+    from app.services.power.manager import get_power_manager
 
     manager = get_power_manager()
     await manager.apply_profile(PowerProfile.SURGE)
@@ -914,7 +914,7 @@ class PowerManagerService:
             PowerProfileConfig with clock settings from preset, or None if no preset active.
         """
         try:
-            from app.services.power_preset_service import get_preset_service
+            from app.services.power.presets import get_preset_service
 
             preset_service = get_preset_service()
             preset = await preset_service.get_active_preset()
@@ -1087,7 +1087,7 @@ class PowerManagerService:
         # Get active preset info
         active_preset = None
         try:
-            from app.services.power_preset_service import get_preset_service
+            from app.services.power.presets import get_preset_service
             preset_service = get_preset_service()
             preset = await preset_service.get_active_preset()
             if preset:

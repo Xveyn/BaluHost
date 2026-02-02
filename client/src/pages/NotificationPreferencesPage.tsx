@@ -83,7 +83,7 @@ export default function NotificationPreferencesPage() {
       setCategoryPrefs(prefs.category_preferences || {});
     } catch (error) {
       console.error('Failed to load preferences:', error);
-      toast.error(t('toast.loadFailed'));
+      toast.error(t('common:toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -102,10 +102,10 @@ export default function NotificationPreferencesPage() {
         min_priority: minPriority,
         category_preferences: categoryPrefs,
       });
-      toast.success(t('toast.saved'));
+      toast.success(t('common:toast.saved'));
     } catch (error) {
       console.error('Failed to save preferences:', error);
-      toast.error(t('toast.saveFailed'));
+      toast.error(t('common:toast.saveFailed'));
     } finally {
       setSaving(false);
     }

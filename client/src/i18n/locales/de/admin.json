@@ -2,10 +2,15 @@
   "title": "Administration",
   "users": {
     "title": "Benutzerverwaltung",
+    "subtitle": "Zugriffsrichtlinien und Rollen verwalten",
     "createUser": "Benutzer erstellen",
     "editUser": "Benutzer bearbeiten",
     "deleteUser": "Benutzer löschen",
     "deleteConfirm": "Möchten Sie den Benutzer \"{{username}}\" wirklich löschen?",
+    "deleteConfirmGeneric": "Möchten Sie diesen Benutzer wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+    "noToken": "Kein Authentifizierungstoken gefunden. Bitte melden Sie sich an.",
+    "loading": "Benutzer werden geladen...",
+    "noUsersFound": "Keine Benutzer gefunden",
     "roles": {
       "admin": "Administrator",
       "user": "Benutzer",
@@ -14,16 +19,62 @@
     "fields": {
       "username": "Benutzername",
       "email": "E-Mail",
+      "emailOptional": "E-Mail (optional)",
+      "password": "Passwort",
+      "passwordKeep": "Passwort (leer lassen um aktuelles zu behalten)",
       "role": "Rolle",
       "created": "Erstellt",
       "lastLogin": "Letzter Login",
-      "status": "Status"
+      "status": "Status",
+      "activeUser": "Aktiver Benutzer",
+      "actions": "Aktionen"
+    },
+    "placeholders": {
+      "search": "Benutzer suchen...",
+      "enterUsername": "Benutzername eingeben",
+      "enterEmail": "E-Mail eingeben (optional)",
+      "enterPassword": "Passwort eingeben"
+    },
+    "filters": {
+      "allRoles": "Alle Rollen",
+      "allStatus": "Alle Status"
+    },
+    "stats": {
+      "totalUsers": "Benutzer gesamt",
+      "active": "Aktiv",
+      "inactive": "Inaktiv",
+      "admins": "Admins"
+    },
+    "buttons": {
+      "exportCsv": "CSV exportieren",
+      "export": "Exportieren",
+      "addUser": "Benutzer hinzufügen",
+      "add": "Hinzufügen",
+      "deleteSelected": "Ausgewählte löschen",
+      "cancel": "Abbrechen",
+      "create": "Erstellen",
+      "update": "Aktualisieren"
+    },
+    "bulk": {
+      "selected": "{{count}} Benutzer ausgewählt",
+      "deleted": "{{count}} Benutzer gelöscht"
+    },
+    "status": {
+      "active": "Aktiv",
+      "inactive": "Inaktiv"
     },
     "messages": {
       "created": "Benutzer erfolgreich erstellt",
       "updated": "Benutzer erfolgreich aktualisiert",
       "deleted": "Benutzer erfolgreich gelöscht",
+      "statusUpdated": "Benutzerstatus aktualisiert",
+      "exported": "Benutzer als CSV exportiert",
       "error": "Fehler bei der Benutzeroperation",
+      "createFailed": "Benutzer konnte nicht erstellt werden",
+      "updateFailed": "Benutzer konnte nicht aktualisiert werden",
+      "deleteFailed": "Benutzer konnte nicht gelöscht werden",
+      "toggleFailed": "Benutzerstatus konnte nicht geändert werden",
+      "bulkDeleteFailed": "Benutzer konnten nicht gelöscht werden",
       "invalidEmail": "Bitte eine gültige E-Mail-Adresse eingeben"
     }
   },
@@ -101,17 +152,44 @@
     "backToDashboard": "Zurück zum Dashboard",
     "refreshing": "Wird aktualisiert...",
     "lastUpdated": "Zuletzt aktualisiert",
+    "loadError": "Fehler beim Laden",
     "cpuUsage": "CPU-Auslastung",
     "memoryUsage": "Speicherauslastung",
     "diskUsage": "Festplattennutzung",
     "uptime": "Betriebszeit",
     "temperature": "Temperatur",
     "services": "Dienste",
+    "backendServices": "Backend-Dienste",
+    "noServicesRegistered": "Keine Dienste registriert",
     "serviceStatus": {
       "running": "Läuft",
       "stopped": "Gestoppt",
       "error": "Fehler",
       "unknown": "Unbekannt"
+    },
+    "serviceLabels": {
+      "running": "{{count}} läuft",
+      "stopped": "{{count}} gestoppt",
+      "error": "{{count}} Fehler"
+    },
+    "serviceDetails": {
+      "uptime": "Betriebszeit",
+      "errorsLogged": "{{count}} Fehler protokolliert",
+      "lastError": "Letzter",
+      "samplesCollected": "{{count, number}} Samples gesammelt"
+    },
+    "systemStatus": "Systemstatus",
+    "mode": "Modus",
+    "development": "Entwicklung",
+    "production": "Produktion",
+    "noRaidConfigured": "Kein RAID konfiguriert",
+    "raidArrays": "{{count}} RAID-Array(s)",
+    "storageDevices": "Speichergeräte",
+    "deviceLabels": {
+      "capacity": "Kapazität",
+      "used": "Genutzt",
+      "mount": "Mount",
+      "temperature": "Temperatur"
     }
   },
   "monitoring": {
@@ -119,7 +197,9 @@
     "subtitle": "Historische Metriken aus Datenbankspeicher",
     "samplesInfo": "{{formatted}} Samples, Quelle: {{source}}",
     "loadingHistory": "Lade Verlaufsdaten...",
+    "loadingData": "Daten werden geladen...",
     "noDataAvailable": "Keine {{metric}}-Daten für diesen Zeitraum verfügbar",
+    "noData": "Keine Daten verfügbar",
     "noSamplesAvailable": "Keine {{metric}}-Samples verfügbar",
     "timeRange": "Zeitraum",
     "timeRanges": {

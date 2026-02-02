@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
-from app.services import file_metadata_db
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.files import metadata_db as file_metadata_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.permissions import PermissionDeniedError, can_view, ensure_owner_or_privileged
 
 ROOT_DIR = Path(settings.nas_storage_path).expanduser().resolve()

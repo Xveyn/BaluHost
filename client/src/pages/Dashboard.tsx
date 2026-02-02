@@ -278,10 +278,10 @@ export default function Dashboard({ user }: DashboardProps) {
       result.push({
         id: 'smart-failure',
         type: 'critical',
-        title: 'SMART Health Warning',
-        message: `${failedDevices.length} drive${failedDevices.length > 1 ? 's' : ''} reporting issues`,
+        title: t('alerts.smartFailure.title'),
+        message: t('alerts.smartFailure.message', { count: failedDevices.length }),
         link: '/system',
-        linkText: 'View Details',
+        linkText: t('alerts.viewDetails'),
         source: 'smart',
       });
     }
@@ -292,10 +292,10 @@ export default function Dashboard({ user }: DashboardProps) {
       result.push({
         id: 'raid-degraded',
         type: 'critical',
-        title: 'RAID Array Degraded',
-        message: `${degradedArrays.length} array${degradedArrays.length > 1 ? 's' : ''} in degraded state`,
+        title: t('alerts.raidDegraded.title'),
+        message: t('alerts.raidDegraded.message', { count: degradedArrays.length }),
         link: '/raid',
-        linkText: 'View RAID',
+        linkText: t('alerts.viewRaid'),
         source: 'raid',
       });
     }
@@ -306,10 +306,10 @@ export default function Dashboard({ user }: DashboardProps) {
       result.push({
         id: 'scheduler-failed',
         type: 'warning',
-        title: 'Scheduler Failure',
-        message: `${failedSchedulers.length} scheduler${failedSchedulers.length > 1 ? 's' : ''} failed recently`,
+        title: t('alerts.schedulerFailed.title'),
+        message: t('alerts.schedulerFailed.message', { count: failedSchedulers.length }),
         link: '/schedulers',
-        linkText: 'View Schedulers',
+        linkText: t('alerts.viewSchedulers'),
         source: 'scheduler',
       });
     }
@@ -320,29 +320,29 @@ export default function Dashboard({ user }: DashboardProps) {
       result.push({
         id: 'service-error',
         type: 'warning',
-        title: 'Service Error',
-        message: `${errorServices.length} service${errorServices.length > 1 ? 's' : ''} with errors`,
+        title: t('alerts.serviceError.title'),
+        message: t('alerts.serviceError.message', { count: errorServices.length }),
         link: '/health',
-        linkText: 'View Health',
+        linkText: t('alerts.viewHealth'),
         source: 'service',
       });
     }
 
     return result;
-  }, [smartData, raidData, allSchedulers, services, isAdmin]);
+  }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
   const quickStats = [
     {
       id: 'cpu',
-      title: 'CPU',
+      title: t('stats.cpu'),
       value: `${systemStats.cpuUsage.toFixed(1)}%`,
       meta: cpuModel
         ? cpuModel
         : (cpuFrequency
-          ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}${cpuTemperature ? ` • ${cpuTemperature}` : ''}`
-          : `${systemStats.cpuCores || 0} cores active${cpuTemperature ? ` • ${cpuTemperature}` : ''}`),
+          ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
+          : t('stats.coresActive', { count: systemStats.cpuCores || 0 }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')),
       submeta: cpuModel && cpuFrequency
-        ? `${systemStats.cpuCores || 0} cores @ ${cpuFrequency}${cpuTemperature ? ` • ${cpuTemperature}` : ''}`
+        ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
         : undefined,
       delta: formatDelta(cpuDelta),
       accent: 'from-violet-500 to-fuchsia-500',
@@ -355,10 +355,10 @@ export default function Dashboard({ user }: DashboardProps) {
     },
     {
       id: 'memory',
-      title: 'Memory',
+      title: t('stats.memory'),
       value: formatBytes(systemStats.memoryUsed),
-      meta: memorySpeedType || `of ${formatBytes(systemStats.memoryTotal)}`,
-      submeta: memorySpeedType ? `of ${formatBytes(systemStats.memoryTotal)}` : undefined,
+      meta: memorySpeedType || t('stats.ofTotal', { total: formatBytes(systemStats.memoryTotal) }),
+      submeta: memorySpeedType ? t('stats.ofTotal', { total: formatBytes(systemStats.memoryTotal) }) : undefined,
       delta: formatDelta(memoryDelta),
       accent: 'from-sky-500 to-indigo-500',
       progress: memoryPercent,
@@ -370,9 +370,9 @@ export default function Dashboard({ user }: DashboardProps) {
     },
     {
       id: 'storage',
-      title: 'Total Storage',
+      title: t('stats.totalStorage'),
       value: formatBytes(storageStats.used),
-      meta: storageStats.total ? `of ${formatBytes(storageStats.total)} used` : 'Awaiting mount info',
+      meta: storageStats.total ? t('stats.ofTotal', { total: formatBytes(storageStats.total) }) : t('stats.awaitingMount'),
       delta: formatDelta(storageDelta),
       accent: 'from-cyan-500 to-sky-600',
       progress: storageStats.percent,
@@ -384,9 +384,9 @@ export default function Dashboard({ user }: DashboardProps) {
     },
     {
       id: 'uptime',
-      title: 'Uptime',
+      title: t('stats.uptime'),
       value: formatUptime(systemStats.uptime),
-      meta: 'System availability',
+      meta: t('stats.systemAvailability'),
       delta: { label: 'Live', tone: 'live' },
       accent: 'from-emerald-500 to-teal-500',
       progress: 100,
@@ -407,7 +407,7 @@ export default function Dashboard({ user }: DashboardProps) {
         </div>
         <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs text-slate-400 shadow-inner">
           <span className={`inline-flex h-2 w-2 rounded-full ${lastUpdated ? 'bg-emerald-400' : 'bg-amber-400 animate-pulse'}`} />
-          {lastUpdated ? `Synced ${lastUpdated.toLocaleTimeString()}` : 'Waiting for telemetry'}
+          {lastUpdated ? t('sync.synced', { time: lastUpdated.toLocaleTimeString() }) : t('sync.waiting')}
         </div>
       </div>
 
@@ -422,7 +422,7 @@ export default function Dashboard({ user }: DashboardProps) {
 
       {loading ? (
         <div className="card">
-          <p className="text-sm text-slate-500">Loading system insights...</p>
+          <p className="text-sm text-slate-500">{t('loading')}</p>
         </div>
       ) : (
         <>
@@ -497,8 +497,8 @@ export default function Dashboard({ user }: DashboardProps) {
             <div className="card border-slate-800/50 bg-slate-900/55">
               <div className="flex flex-wrap items-center justify-between gap-3">
                 <div>
-                  <p className="text-xs uppercase tracking-[0.32em] text-slate-500">Physical Drives</p>
-                  <h2 className="mt-2 text-xl font-semibold text-white">SMART Status</h2>
+                  <p className="text-xs uppercase tracking-[0.32em] text-slate-500">{t('smart.title')}</p>
+                  <h2 className="mt-2 text-xl font-semibold text-white">{t('smart.subtitle')}</h2>
                 </div>
                 <div className="flex items-center gap-2 text-xs">
                   {smartMode && (
@@ -506,24 +506,24 @@ export default function Dashboard({ user }: DashboardProps) {
                       onClick={handleToggleSmartMode}
                       disabled={smartModeLoading}
                       className="rounded-full border border-slate-700/70 bg-slate-800/50 px-3 py-1 text-slate-300 transition hover:border-sky-500/50 hover:bg-slate-700/50 hover:text-white disabled:opacity-50"
-                      title={`Aktuell: ${smartMode === 'mock' ? 'Mock-Daten' : 'Echte SMART-Daten'}`}
+                      title={t('smart.modeToggle.current', { mode: smartMode === 'mock' ? t('smart.modeToggle.mock') : t('smart.modeToggle.real') })}
                     >
                       {smartModeLoading ? '...' : (smartMode === 'mock' ? '🔄 Mock' : '🔄 Real')}
                     </button>
                   )}
                   {smartLoading ? (
-                    <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-400">Loading...</span>
+                    <span className="rounded-full border border-slate-700 px-3 py-1 text-slate-400">{t('network.loading')}</span>
                   ) : smartError ? (
-                    <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-rose-200">Error</span>
+                    <span className="rounded-full border border-rose-500/30 bg-rose-500/10 px-3 py-1 text-rose-200">{t('smart.error')}</span>
                   ) : (
-                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-200">Healthy</span>
+                    <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-emerald-200">{t('smart.healthy')}</span>
                   )}
                 </div>
               </div>
               <div className="mt-6">
                 {smartLoading ? (
                   <div className="flex h-52 items-center justify-center rounded-2xl border border-slate-800/60 bg-slate-900/60 text-sm text-slate-500">
-                    SMART-Daten werden geladen...
+                    {t('smart.loading')}
                   </div>
                 ) : smartError ? (
                   <div className="flex h-52 items-center justify-center rounded-2xl border border-rose-500/30 bg-rose-500/10 text-sm text-rose-200">
@@ -575,19 +575,19 @@ export default function Dashboard({ user }: DashboardProps) {
                               </div>
                               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                                 <div>
-                                  <p className="text-slate-500">Status</p>
+                                  <p className="text-slate-500">{t('smart.device.status')}</p>
                                   <p className={`mt-1 font-medium ${device.status === 'PASSED' ? 'text-emerald-300' : 'text-rose-300'}`}>
                                     {device.status}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-slate-500">Kapazität</p>
+                                  <p className="text-slate-500">{t('smart.device.capacity')}</p>
                                   <p className="mt-1 font-medium text-slate-200">
                                     {device.capacity_bytes ? formatBytes(device.capacity_bytes) : 'N/A'}
                                   </p>
                                 </div>
                                 <div>
-                                  <p className="text-slate-500">Temperatur</p>
+                                  <p className="text-slate-500">{t('smart.device.temperature')}</p>
                                   <p className="mt-1 font-medium text-slate-200">
                                     {device.temperature !== null ? `${device.temperature}°C` : tempAttr ? `${tempAttr.raw}°C` : 'N/A'}
                                   </p>
@@ -615,7 +615,7 @@ export default function Dashboard({ user }: DashboardProps) {
                                   <p className="text-[0.55rem] text-slate-400">{formatBytes(usedBytes)}</p>
                                 </div>
                               </div>
-                              <p className="mt-1 text-[0.65rem] text-slate-500">Genutzt</p>
+                              <p className="mt-1 text-[0.65rem] text-slate-500">{t('smart.device.used')}</p>
                             </div>
                           </div>
                         </div>
@@ -624,7 +624,7 @@ export default function Dashboard({ user }: DashboardProps) {
                   </div>
                 ) : (
                   <div className="flex h-52 items-center justify-center rounded-2xl border border-slate-800/60 bg-slate-900/60 text-sm text-slate-500">
-                    Keine Festplatten gefunden
+                    {t('smart.noDevices')}
                   </div>
                 )}
               </div>
@@ -637,10 +637,10 @@ export default function Dashboard({ user }: DashboardProps) {
 
             <div className="space-y-6">
               <div className="card border-slate-800/50 bg-slate-900/55">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">NAS Configuration</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">RAID Arrays</h3>
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('raid.configTitle')}</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{t('raid.title')}</h3>
                 {raidLoading ? (
-                  <div className="mt-5 text-sm text-slate-500">RAID-Daten werden geladen...</div>
+                  <div className="mt-5 text-sm text-slate-500">{t('raid.loading')}</div>
                 ) : raidData && raidData.arrays.length > 0 ? (
                   <div className="mt-5 space-y-3">
                     {raidData.arrays.map((array) => (
@@ -661,12 +661,12 @@ export default function Dashboard({ user }: DashboardProps) {
                           </span>
                         </div>
                         <div className="mt-2 text-xs text-slate-400">
-                          {array.devices.length} Geräte • {array.devices.filter(d => d.state.includes('active')).length} aktiv
+                          {t('raid.devices', { count: array.devices.length })} • {t('raid.active', { count: array.devices.filter(d => d.state.includes('active')).length })}
                         </div>
                         {array.resync_progress !== null && array.resync_progress !== undefined && (
                           <div className="mt-2">
                             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
-                              <span>Resync Progress</span>
+                              <span>{t('raid.resyncProgress')}</span>
                               <span>{array.resync_progress.toFixed(1)}%</span>
                             </div>
                             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
@@ -681,46 +681,46 @@ export default function Dashboard({ user }: DashboardProps) {
                     ))}
                   </div>
                 ) : (
-                  <div className="mt-5 text-sm text-slate-500">Keine RAID-Arrays konfiguriert</div>
+                  <div className="mt-5 text-sm text-slate-500">{t('raid.noArrays')}</div>
                 )}
               </div>
 
               <div className="card border-slate-800/50 bg-slate-900/55">
-                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">System Health</p>
-                <h3 className="mt-2 text-lg font-semibold text-white">NAS Checks</h3>
+                <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('health.title')}</p>
+                <h3 className="mt-2 text-lg font-semibold text-white">{t('health.checksTitle')}</h3>
                 <ul className="mt-5 space-y-3 text-sm text-slate-400">
                   <li className="flex items-center justify-between">
-                    <span>SMART Status</span>
+                    <span>{t('smart.subtitle')}</span>
                     {smartLoading ? (
-                      <span className="text-slate-400">Prüfe...</span>
+                      <span className="text-slate-400">{t('health.checking')}</span>
                     ) : smartError ? (
-                      <span className="text-rose-300">Fehler</span>
+                      <span className="text-rose-300">{t('health.error')}</span>
                     ) : smartData && smartData.devices.every(d => d.status === 'PASSED') ? (
-                      <span className="text-emerald-300">Alle Festplatten OK</span>
+                      <span className="text-emerald-300">{t('health.allDrivesOk')}</span>
                     ) : (
-                      <span className="text-amber-300">Warnung erkannt</span>
+                      <span className="text-amber-300">{t('health.warningDetected')}</span>
                     )}
                   </li>
                   <li className="flex items-center justify-between">
-                    <span>RAID Status</span>
+                    <span>{t('system.raidStatus')}</span>
                     {raidLoading ? (
-                      <span className="text-slate-400">Prüfe...</span>
+                      <span className="text-slate-400">{t('health.checking')}</span>
                     ) : raidData && raidData.arrays.every(a => a.status === 'clean') ? (
-                      <span className="text-emerald-300">Arrays optimal</span>
+                      <span className="text-emerald-300">{t('health.arraysOptimal')}</span>
                     ) : raidData && raidData.arrays.some(a => a.status.includes('degraded')) ? (
-                      <span className="text-amber-300">Degraded</span>
+                      <span className="text-amber-300">{t('health.degraded')}</span>
                     ) : (
-                      <span className="text-slate-400">Kein RAID</span>
+                      <span className="text-slate-400">{t('health.noRaid')}</span>
                     )}
                   </li>
                   <li className="flex items-center justify-between">
-                    <span>Physische Festplatten</span>
+                    <span>{t('health.physicalDrives')}</span>
                     <span className="text-slate-200">
-                      {smartData ? `${smartData.devices.length} erkannt` : '—'}
+                      {smartData ? t('health.detected', { count: smartData.devices.length }) : '—'}
                     </span>
                   </li>
                   <li className="flex items-center justify-between">
-                    <span>Gesamtkapazität (HW)</span>
+                    <span>{t('health.totalCapacity')}</span>
                     <span className="text-slate-200">
                       {smartData && smartData.devices.length > 0
                         ? formatBytes(smartData.devices.reduce((sum, d) => sum + (d.capacity_bytes || 0), 0))
@@ -729,7 +729,7 @@ export default function Dashboard({ user }: DashboardProps) {
                     </span>
                   </li>
                   <li className="flex items-center justify-between">
-                    <span>Durchschnitts-Temp</span>
+                    <span>{t('health.avgTemp')}</span>
                     <span className="text-slate-200">
                       {smartData && smartData.devices.length > 0
                         ? `${Math.round(smartData.devices.reduce((sum, d) => sum + (d.temperature || 0), 0) / smartData.devices.length)}°C`
@@ -738,7 +738,7 @@ export default function Dashboard({ user }: DashboardProps) {
                     </span>
                   </li>
                   <li className="flex items-center justify-between">
-                    <span>Speicher genutzt (FS)</span>
+                    <span>{t('health.storageUsed')}</span>
                     <span className="text-slate-200">{storageStats.percent.toFixed(1)}%</span>
                   </li>
                 </ul>

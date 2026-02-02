@@ -95,7 +95,7 @@ export default function SharesPage() {
       await loadData();
     } catch (error) {
       console.error('Failed to delete share link:', error);
-      alert(t('toast.deleteFailed'));
+      alert(t('common:toast.deleteFailed'));
     }
   };
 
@@ -107,7 +107,7 @@ export default function SharesPage() {
       await loadData();
     } catch (error) {
       console.error('Failed to delete file share:', error);
-      alert(t('toast.revokeFailed'));
+      alert(t('common:toast.revokeFailed'));
     }
   };
 

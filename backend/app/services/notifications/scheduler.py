@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.mobile import MobileDevice, ExpirationNotification
-from app.services.firebase_service import FirebaseService
+from app.services.notifications.firebase import FirebaseService
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)

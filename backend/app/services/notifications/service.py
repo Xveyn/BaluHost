@@ -179,7 +179,7 @@ class NotificationService:
             db: Database session
             notification: Notification to send
         """
-        from app.services.firebase_service import FirebaseService
+        from app.services.notifications.firebase import FirebaseService
         from app.models.mobile import MobileDevice
 
         if not FirebaseService.is_available():

@@ -65,8 +65,8 @@ export default function MetricChart({
   emptyMessage,
   compact = false,
 }: MetricChartProps) {
-  const { t } = useTranslation('system');
-  const noDataMessage = emptyMessage ?? t('monitoring.noDataAvailable');
+  const { t } = useTranslation(['system', 'admin']);
+  const noDataMessage = emptyMessage ?? t('admin:monitoring.noData');
   // Format data with time labels
   const chartData = data.map((point) => ({
     ...point,
@@ -78,7 +78,7 @@ export default function MetricChart({
       <div className="flex items-center justify-center" style={{ height }}>
         <div className="text-center">
           <div className="inline-block h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-blue-500" />
-          <p className="mt-2 text-sm text-slate-400">{t('monitoring.loadingData')}</p>
+          <p className="mt-2 text-sm text-slate-400">{t('admin:monitoring.loadingData')}</p>
         </div>
       </div>
     );

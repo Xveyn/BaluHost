@@ -1,6 +1,7 @@
 {
   "title": "Dashboard",
   "subtitle": "Systemübersicht",
+  "loading": "Lade Systemdaten...",
   "widgets": {
     "systemStatus": "Systemstatus",
     "storageUsage": "Speichernutzung",
@@ -12,11 +13,23 @@
     "quickActions": "Schnellaktionen"
   },
   "stats": {
+    "cpu": "CPU",
+    "memory": "Speicher",
+    "totalStorage": "Gesamtspeicher",
+    "uptime": "Betriebszeit",
     "totalFiles": "Dateien gesamt",
     "totalUsers": "Benutzer gesamt",
     "activeConnections": "Aktive Verbindungen",
-    "uptime": "Betriebszeit",
-    "temperature": "Temperatur"
+    "temperature": "Temperatur",
+    "coresActive": "{{count}} Kerne aktiv",
+    "coresAt": "{{count}} Kerne @ {{frequency}}",
+    "ofTotal": "von {{total}} genutzt",
+    "awaitingMount": "Warte auf Mount-Info",
+    "systemAvailability": "Systemverfügbarkeit"
+  },
+  "sync": {
+    "synced": "Synchronisiert {{time}}",
+    "waiting": "Warte auf Telemetrie"
   },
   "charts": {
     "last24Hours": "Letzte 24 Stunden",
@@ -50,7 +63,27 @@
     "warnings": "{{count}} Warnung",
     "warnings_plural": "{{count}} Warnungen",
     "collapse": "Einklappen",
-    "expand": "Ausklappen"
+    "expand": "Ausklappen",
+    "smartFailure": {
+      "title": "SMART-Warnung",
+      "message": "{{count}} Festplatte(n) mit Problemen"
+    },
+    "raidDegraded": {
+      "title": "RAID-Array degradiert",
+      "message": "{{count}} Array(s) im degradierten Zustand"
+    },
+    "schedulerFailed": {
+      "title": "Scheduler-Fehler",
+      "message": "{{count}} Scheduler kürzlich fehlgeschlagen"
+    },
+    "serviceError": {
+      "title": "Dienst-Fehler",
+      "message": "{{count}} Dienst(e) mit Fehlern"
+    },
+    "viewDetails": "Details anzeigen",
+    "viewRaid": "RAID anzeigen",
+    "viewSchedulers": "Scheduler anzeigen",
+    "viewHealth": "Status anzeigen"
   },
   "devices": {
     "title": "Verbundene Geräte",
@@ -116,5 +149,49 @@
     "window": "Zeitfenster",
     "viewPlan": "Plan anzeigen",
     "schedulersTotal": "{{count}} Scheduler insgesamt"
+  },
+  "smart": {
+    "title": "Physische Festplatten",
+    "subtitle": "SMART-Status",
+    "loading": "SMART-Daten werden geladen...",
+    "error": "Fehler",
+    "healthy": "Gesund",
+    "noDevices": "Keine Festplatten gefunden",
+    "modeToggle": {
+      "mock": "Mock-Daten",
+      "real": "Echte SMART-Daten",
+      "current": "Aktuell: {{mode}}"
+    },
+    "device": {
+      "status": "Status",
+      "capacity": "Kapazität",
+      "temperature": "Temperatur",
+      "used": "Genutzt"
+    }
+  },
+  "raid": {
+    "title": "RAID-Arrays",
+    "configTitle": "NAS-Konfiguration",
+    "loading": "RAID-Daten werden geladen...",
+    "noArrays": "Keine RAID-Arrays konfiguriert",
+    "devices": "{{count}} Geräte",
+    "active": "{{count}} aktiv",
+    "resyncProgress": "Resync-Fortschritt"
+  },
+  "health": {
+    "title": "Systemgesundheit",
+    "checksTitle": "NAS-Prüfungen",
+    "checking": "Prüfe...",
+    "error": "Fehler",
+    "allDrivesOk": "Alle Festplatten OK",
+    "warningDetected": "Warnung erkannt",
+    "arraysOptimal": "Arrays optimal",
+    "degraded": "Degradiert",
+    "noRaid": "Kein RAID",
+    "physicalDrives": "Physische Festplatten",
+    "detected": "{{count}} erkannt",
+    "totalCapacity": "Gesamtkapazität (HW)",
+    "avgTemp": "Durchschnitts-Temp",
+    "storageUsed": "Speicher genutzt (FS)"
   }
 }

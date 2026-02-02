@@ -25,8 +25,8 @@ from app.schemas.tapo import (
     PowerMonitoringResponse,
     CurrentPowerResponse,
 )
-from app.services.vpn_encryption import VPNEncryption
-from app.services import energy_stats
+from app.services.vpn.encryption import VPNEncryption
+from app.services.power import energy as energy_stats
 
 logger = logging.getLogger(__name__)
 

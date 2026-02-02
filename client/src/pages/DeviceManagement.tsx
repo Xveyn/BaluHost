@@ -71,7 +71,7 @@ export default function DeviceManagement() {
       const data = await getAllDevices();
       setDevices(data);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('toast.loadFailed');
+      const errorMsg = err instanceof Error ? err.message : t('common:toast.loadFailed');
       console.error('Failed to load devices:', err);
       setError(errorMsg);
       toast.error(errorMsg);
@@ -95,7 +95,7 @@ export default function DeviceManagement() {
 
   const handleGenerateMobileToken = async () => {
     if (!newMobileDeviceName.trim()) {
-      toast.error(t('toast.enterDeviceName'));
+      toast.error(t('common:toast.enterDeviceName'));
       return;
     }
 
@@ -104,7 +104,7 @@ export default function DeviceManagement() {
       const token = await generateMobileToken(includeVpn, newMobileDeviceName.trim(), tokenValidityDays);
       setQrData(token);
       setShowQrDialog(true);
-      toast.success(t('toast.qrGenerated'));
+      toast.success(t('common:toast.qrGenerated'));
     } catch (error: any) {
       console.error('Failed to generate token:', error);
       const errorMsg = error?.response?.data?.detail || 'Failed to generate QR code';
@@ -116,7 +116,7 @@ export default function DeviceManagement() {
 
   const handleCreateSchedule = async () => {
     if (!selectedDeviceId) {
-      toast.error(t('toast.selectDevice'));
+      toast.error(t('common:toast.selectDevice'));
       return;
     }
 
@@ -132,7 +132,7 @@ export default function DeviceManagement() {
       };
 
       await createSyncSchedule(scheduleData);
-      toast.success(t('toast.scheduleCreated'));
+      toast.success(t('common:toast.scheduleCreated'));
       loadSchedules();
 
       setSelectedDeviceId('');
@@ -141,7 +141,7 @@ export default function DeviceManagement() {
       setDayOfWeek(null);
       setDayOfMonth(null);
     } catch (err) {
-      toast.error(t('toast.scheduleFailed'));
+      toast.error(t('common:toast.scheduleFailed'));
       console.error(err);
     }
   };
@@ -149,10 +149,10 @@ export default function DeviceManagement() {
   const handleDisableSchedule = async (scheduleId: number) => {
     try {
       await disableSyncSchedule(scheduleId);
-      toast.success(t('toast.scheduleDisabled'));
+      toast.success(t('common:toast.scheduleDisabled'));
       loadSchedules();
     } catch (err) {
-      toast.error(t('toast.disableFailed'));
+      toast.error(t('common:toast.disableFailed'));
       console.error(err);
     }
   };
@@ -165,7 +165,7 @@ export default function DeviceManagement() {
 
   const handleSaveDeviceName = async () => {
     if (!editingDevice || !newDeviceName.trim()) {
-      toast.error(t('toast.deviceNameEmpty'));
+      toast.error(t('common:toast.deviceNameEmpty'));
       return;
     }
 
@@ -176,13 +176,13 @@ export default function DeviceManagement() {
         await updateDesktopDeviceName(editingDevice.id, newDeviceName);
       }
 
-      toast.success(t('toast.deviceUpdated'));
+      toast.success(t('common:toast.deviceUpdated'));
       setShowEditModal(false);
       setEditingDevice(null);
       setNewDeviceName('');
       loadDevices();
     } catch (err) {
-      toast.error(t('toast.updateFailed'));
+      toast.error(t('common:toast.updateFailed'));
       console.error(err);
     }
   };
@@ -198,9 +198,9 @@ export default function DeviceManagement() {
     try {
       if (deviceToDelete.type === 'mobile') {
         await deleteMobileDevice(deviceToDelete.id);
-        toast.success(t('toast.deviceDeleted'));
+        toast.success(t('common:toast.deviceDeleted'));
       } else {
-        toast.error(t('toast.desktopDeleteNotImplemented'));
+        toast.error(t('common:toast.desktopDeleteNotImplemented'));
         setShowDeleteConfirm(false);
         setDeviceToDelete(null);
         return;
@@ -210,7 +210,7 @@ export default function DeviceManagement() {
       setDeviceToDelete(null);
       loadDevices();
     } catch (err) {
-      toast.error(t('toast.deleteFailed'));
+      toast.error(t('common:toast.deleteFailed'));
       console.error(err);
     }
   };

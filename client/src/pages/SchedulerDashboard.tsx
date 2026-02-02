@@ -85,7 +85,7 @@ export default function SchedulerDashboard() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.message || t('toast.runFailed'));
+      toast.error(err.message || t('common:toast.runFailed'));
     }
   };
 
@@ -103,7 +103,7 @@ export default function SchedulerDashboard() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.message || t('toast.toggleFailed'));
+      toast.error(err.message || t('common:toast.toggleFailed'));
     }
   };
 
@@ -111,12 +111,12 @@ export default function SchedulerDashboard() {
     try {
       const success = await updateConfig(name, config);
       if (success) {
-        toast.success(t('toast.configSaved'));
+        toast.success(t('common:toast.configSaved'));
         return true;
       }
       return false;
     } catch (err: any) {
-      toast.error(err.message || t('toast.configFailed'));
+      toast.error(err.message || t('common:toast.configFailed'));
       return false;
     }
   };
@@ -125,13 +125,13 @@ export default function SchedulerDashboard() {
     try {
       const result = await retryExecution(schedulerName);
       if (result.success) {
-        toast.success(t('toast.retrySuccess', { name: schedulerName.replace(/_/g, ' ') }));
+        toast.success(t('common:toast.retrySuccess', { name: schedulerName.replace(/_/g, ' ') }));
         refetchHistory();
       } else {
-        toast.error(result.message || t('toast.retryFailed'));
+        toast.error(result.message || t('common:toast.retryFailed'));
       }
     } catch (err: any) {
-      toast.error(err.message || t('toast.retryFailed'));
+      toast.error(err.message || t('common:toast.retryFailed'));
     }
   };
 

@@ -11,8 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.sync_progress import SyncSchedule
-from app.services.file_sync import FileSyncService
-from app.services.audit_logger import AuditLogger
+from app.services.sync.file_sync import FileSyncService
+from app.services.audit.logger import AuditLogger
 
 logger = logging.getLogger(__name__)
 
@@ -163,7 +163,7 @@ class SyncBackgroundScheduler:
     
     async def cleanup_expired_uploads(self):
         """Clean up expired chunked uploads."""
-        from app.services.progressive_sync import ProgressiveSyncService
+        from app.services.sync.progressive import ProgressiveSyncService
         from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
 
         execution_id = log_scheduler_execution("upload_cleanup", job_id="cleanup_uploads")

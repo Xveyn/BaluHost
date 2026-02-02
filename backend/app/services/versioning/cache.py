@@ -11,10 +11,10 @@ from datetime import datetime
 from sqlalchemy.orm import Session
 
 if TYPE_CHECKING:
-    from app.services.vcl import VCLService
+    from app.services.versioning.vcl import VCLService
     from app.models.file_metadata import FileMetadata
 else:
-    from app.services.vcl import VCLService
+    from app.services.versioning.vcl import VCLService
     from app.models.file_metadata import FileMetadata
 
 
