@@ -148,6 +148,14 @@ export interface UpdateConfigUpdate {
 // API Functions
 
 /**
+ * Get current version (public endpoint, no auth required)
+ */
+export async function getPublicVersion(): Promise<VersionInfo> {
+  const response = await apiClient.get<VersionInfo>('/api/updates/version');
+  return response.data;
+}
+
+/**
  * Check for available updates
  */
 export async function checkForUpdates(): Promise<UpdateCheckResponse> {

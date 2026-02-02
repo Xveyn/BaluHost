@@ -26,6 +26,7 @@ import NotificationPreferencesPage from './pages/NotificationPreferencesPage';
 import UpdatePage from './pages/UpdatePage';
 import Layout from './components/Layout';
 import { PluginProvider } from './contexts/PluginContext';
+import { VersionProvider } from './contexts/VersionContext';
 import { buildApiUrl } from './lib/api';
 import './App.css';
 
@@ -238,6 +239,7 @@ function App() {
   if (!backendReady || loading) return <LoadingScreen />;
 
   return (
+    <VersionProvider>
     <PluginProvider>
     <Router>
       <Routes>
@@ -530,6 +532,7 @@ function App() {
       </Routes>
     </Router>
     </PluginProvider>
+    </VersionProvider>
   );
 }
 

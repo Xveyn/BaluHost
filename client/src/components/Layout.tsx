@@ -1,9 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
 import { type ReactNode, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
 import { usePlugins } from '../contexts/PluginContext';
+import { useFormattedVersion } from '../contexts/VersionContext';
 import { Plug } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 
@@ -100,34 +102,36 @@ const navIcon = {
 
 export default function Layout({ children, user, onLogout }: LayoutProps) {
   const location = useLocation();
+  const { t } = useTranslation('common');
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shutdownPending, setShutdownPending] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
   const { pluginNavItems } = usePlugins();
+  const formattedVersion = useFormattedVersion('');
 
   const navItems = [
     {
       path: '/',
-      label: 'Dashboard',
-      description: 'System overview',
+      label: t('navigation.dashboard'),
+      description: t('navigation.dashboardDesc'),
       icon: navIcon.dashboard
     },
     {
       path: '/files',
-      label: 'File Manager',
-      description: 'Storage & sync',
+      label: t('navigation.files'),
+      description: t('navigation.filesDesc'),
       icon: navIcon.files
     },
     {
       path: '/system',
-      label: 'System Monitor',
-      description: 'CPU, RAM, Netzwerk, Disk I/O',
+      label: t('navigation.system'),
+      description: t('navigation.systemDesc'),
       icon: navIcon.system
     },
     {
       path: '/power',
-      label: 'Power Management',
-      description: 'CPU-Frequenz & Energie',
+      label: t('navigation.power'),
+      description: t('navigation.powerDesc'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
           <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
@@ -136,26 +140,26 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     },
     {
       path: '/logging',
-      label: 'Logging',
-      description: 'Activity Logs',
+      label: t('navigation.logs'),
+      description: t('navigation.logsDesc'),
       icon: navIcon.logging
     },
     {
       path: '/shares',
-      label: 'Sharing',
-      description: 'Share Files',
+      label: t('navigation.shares'),
+      description: t('navigation.sharesDesc'),
       icon: navIcon.shares
     },
     {
       path: '/sync-prototype',
-      label: 'Device Management',
-      description: 'Mobile & Desktop',
+      label: t('navigation.devices'),
+      description: t('navigation.devicesDesc'),
       icon: navIcon.mobile
     },
     {
       path: '/remote-servers',
-      label: 'Remote Servers',
-      description: 'SSH & VPN',
+      label: t('navigation.remoteServers'),
+      description: t('navigation.remoteServersDesc'),
       icon: (
         <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
           <rect x="3" y="4" width="18" height="12" rx="1" stroke="currentColor" />
@@ -168,22 +172,22 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
     },
     {
       path: '/settings',
-      label: 'Settings',
-      description: 'Account',
+      label: t('navigation.settings'),
+      description: t('navigation.settingsDesc'),
       icon: navIcon.settings
     },
     {
       path: '/docs',
-      label: 'API Center',
-      description: 'Docs & Limits',
+      label: t('navigation.apiCenter'),
+      description: t('navigation.apiCenterDesc'),
       icon: navIcon.docs
     },
     ...(user.role === 'admin'
       ? [
           {
             path: '/fan-control',
-            label: 'Fan Control',
-            description: 'PWM-Lüftersteuerung',
+            label: t('navigation.fanControl'),
+            description: t('navigation.fanControlDesc'),
             adminOnly: true,
             icon: (
               <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
@@ -194,15 +198,15 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           },
           {
             path: '/raid',
-            label: 'RAID Control',
-            description: 'Arrays & Health',
+            label: t('navigation.raid'),
+            description: t('navigation.raidDesc'),
             icon: navIcon.raid,
             adminOnly: true
           },
           {
             path: '/schedulers',
-            label: 'Schedulers',
-            description: 'Manual tests & triggers',
+            label: t('navigation.scheduler'),
+            description: t('navigation.schedulerDesc'),
             adminOnly: true,
             icon: (
               <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
@@ -213,8 +217,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           },
           {
             path: '/admin-db',
-            label: 'Database',
-            description: 'Inspect DB',
+            label: t('navigation.database'),
+            description: t('navigation.databaseDesc'),
             adminOnly: true,
             icon: (
               <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
@@ -226,15 +230,15 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           },
           {
             path: '/users',
-            label: 'User Access',
-            description: 'Permissions',
+            label: t('navigation.users'),
+            description: t('navigation.usersDesc'),
             adminOnly: true,
             icon: navIcon.users
           },
           {
             path: '/plugins',
-            label: 'Plugins',
-            description: 'Extensions',
+            label: t('navigation.plugins'),
+            description: t('navigation.pluginsDesc'),
             adminOnly: true,
             icon: (
               <Plug className="h-5 w-5" />
@@ -242,8 +246,8 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
           },
           {
             path: '/updates',
-            label: 'System Updates',
-            description: 'Update BaluHost',
+            label: t('navigation.updates'),
+            description: t('navigation.updatesDesc'),
             adminOnly: true,
             icon: (
               <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
@@ -281,7 +285,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               </div>
               <div>
                 <p className="text-lg font-semibold tracking-wide">BalùHost</p>
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">NAS OS v4</p>
+                <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}</p>
               </div>
             </div>
           </div>
@@ -342,7 +346,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               </div>
               <div>
                 <p className="text-base font-semibold tracking-wide">BalùHost</p>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">NAS OS v4</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}</p>
               </div>
             </div>
             <button

@@ -17,11 +17,23 @@ from app.schemas.update import (
     RollbackResponse,
     UpdateConfigResponse,
     UpdateConfigUpdate,
+    VersionInfo,
 )
-from app.services.update_service import get_update_service
+from app.services.update_service import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
 
 router = APIRouter(prefix="/updates", tags=["updates"])
+
+
+@router.get("/version", response_model=VersionInfo)
+async def get_public_version() -> VersionInfo:
+    """Get current version (public endpoint, no auth required).
+
+    Returns the current installed version information including
+    version string, commit hash, and tag.
+    """
+    backend = get_update_backend()
+    return await backend.get_current_version()
 
 
 @router.get("/check", response_model=UpdateCheckResponse)

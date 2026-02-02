@@ -3,6 +3,7 @@
  *
  * Displays documentation about the plugin system, permissions, hooks, and risks.
  */
+import { useTranslation } from 'react-i18next';
 import {
   AlertTriangle,
   FileText,
@@ -21,6 +22,7 @@ import {
   Info,
 } from 'lucide-react';
 import type { PermissionInfo } from '../../api/plugins';
+import { useFormattedVersion } from '../../contexts/VersionContext';
 
 interface PluginDocumentationProps {
   permissions: PermissionInfo[];
@@ -119,8 +121,10 @@ const HOOK_CATEGORY_ICONS: Record<string, React.ElementType> = {
 };
 
 export default function PluginDocumentation({ permissions }: PluginDocumentationProps) {
+  const { t } = useTranslation('plugins');
   // Create a lookup map for permission details
   const permissionMap = new Map(permissions.map((p) => [p.value, p]));
+  const formattedVersion = useFormattedVersion('BaluHost');
 
   return (
     <div className="space-y-6">
@@ -129,15 +133,13 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
         <div className="flex items-start gap-3">
           <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
           <div>
-            <h3 className="font-medium text-amber-200">Sicherheitshinweis</h3>
+            <h3 className="font-medium text-amber-200">{t('docs.securityWarning')}</h3>
             <p className="mt-1 text-sm text-amber-200/80">
-              Plugins werden auf eigenes Risiko aktiviert. Sie können auf Systemressourcen
-              zugreifen basierend auf erteilten Berechtigungen. Aktivieren Sie nur Plugins
-              aus vertrauenswürdigen Quellen.
+              {t('docs.securityWarningDescription')}
             </p>
             <div className="mt-3">
               <p className="text-xs font-medium text-amber-300">
-                Gefährliche Berechtigungen (erfordern explizite Genehmigung):
+                {t('docs.dangerousPermissions')}:
               </p>
               <ul className="mt-1 text-xs text-amber-200/70 space-y-1">
                 <li>• <code className="text-amber-300">file:write</code> - Dateien schreiben/ändern</li>
@@ -155,11 +157,11 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Info className="h-5 w-5 text-sky-400" />
-          <h2 className="text-lg font-medium text-white">Plugin-System Übersicht</h2>
+          <h2 className="text-lg font-medium text-white">{t('docs.systemOverview')}</h2>
         </div>
         <div className="space-y-4 text-sm text-slate-300">
           <div>
-            <h3 className="font-medium text-white mb-2">Installation</h3>
+            <h3 className="font-medium text-white mb-2">{t('docs.installation')}</h3>
             <p className="text-slate-400">
               Plugins werden als Verzeichnisse im Ordner{' '}
               <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">
@@ -173,16 +175,16 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
             </p>
           </div>
           <div>
-            <h3 className="font-medium text-white mb-2">Lifecycle</h3>
+            <h3 className="font-medium text-white mb-2">{t('docs.lifecycle')}</h3>
             <ol className="list-decimal list-inside text-slate-400 space-y-1">
-              <li><span className="text-slate-300">Entdeckung</span> - Backend scannt Plugin-Verzeichnis</li>
-              <li><span className="text-slate-300">Registrierung</span> - Manifest wird geladen und validiert</li>
-              <li><span className="text-slate-300">Permission-Check</span> - Benötigte Berechtigungen werden geprüft</li>
-              <li><span className="text-slate-300">Aktivierung</span> - Plugin wird initialisiert und Hooks registriert</li>
+              <li><span className="text-slate-300">{t('docs.discovery')}</span> - {t('docs.discoveryDesc')}</li>
+              <li><span className="text-slate-300">{t('docs.registration')}</span> - {t('docs.registrationDesc')}</li>
+              <li><span className="text-slate-300">{t('docs.permissionCheck')}</span> - {t('docs.permissionCheckDesc')}</li>
+              <li><span className="text-slate-300">{t('docs.activation')}</span> - {t('docs.activationDesc')}</li>
             </ol>
           </div>
           <div>
-            <h3 className="font-medium text-white mb-2">Plugin-Struktur</h3>
+            <h3 className="font-medium text-white mb-2">{t('docs.pluginStructure')}</h3>
             <pre className="p-3 rounded-lg bg-slate-800/50 text-xs text-slate-400 overflow-x-auto">
 {`my_plugin/
 ├── plugin.json      # Manifest (Name, Version, Permissions)
@@ -199,12 +201,11 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Shield className="h-5 w-5 text-sky-400" />
-          <h2 className="text-lg font-medium text-white">Berechtigungen</h2>
-          <span className="text-xs text-slate-500">({permissions.length} verfügbar)</span>
+          <h2 className="text-lg font-medium text-white">{t('docs.permissions')}</h2>
+          <span className="text-xs text-slate-500">({permissions.length} {t('docs.available')})</span>
         </div>
         <p className="text-sm text-slate-400 mb-4">
-          Plugins müssen die benötigten Berechtigungen in ihrer Manifest-Datei deklarieren.
-          Der Administrator muss diese beim Aktivieren genehmigen.
+          {t('docs.permissionsDescription')}
         </p>
         <div className="grid gap-4 md:grid-cols-2">
           {Object.entries(PERMISSION_CATEGORIES).map(([key, category]) => {
@@ -252,16 +253,15 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <div className="flex items-center gap-2 mb-4">
           <Zap className="h-5 w-5 text-sky-400" />
-          <h2 className="text-lg font-medium text-white">Event Hooks</h2>
+          <h2 className="text-lg font-medium text-white">{t('docs.eventHooks')}</h2>
           <span className="text-xs text-slate-500">
-            ({Object.values(HOOKS_BY_CATEGORY).flat().length} Hooks)
+            ({Object.values(HOOKS_BY_CATEGORY).flat().length} {t('docs.hooks')})
           </span>
         </div>
         <p className="text-sm text-slate-400 mb-4">
-          Plugins können sich auf System-Events registrieren um automatisch auf Änderungen zu reagieren.
-          Dafür wird die Berechtigung{' '}
+          {t('docs.eventHooksDescription')}{' '}
           <code className="px-1.5 py-0.5 rounded bg-slate-800 text-sky-400 text-xs">event:subscribe</code>{' '}
-          benötigt.
+          {t('docs.required')}.
         </p>
         <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
           {Object.entries(HOOKS_BY_CATEGORY).map(([category, hooks]) => {
@@ -291,7 +291,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-4">
         <div className="flex items-center justify-between text-sm">
           <div className="flex items-center gap-4 text-slate-400">
-            <span>BaluHost NAS OS v4</span>
+            <span>{formattedVersion}</span>
             <span className="text-slate-600">|</span>
             <span>Plugin API v1.0</span>
           </div>
@@ -301,7 +301,7 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
             rel="noopener noreferrer"
             className="text-sky-400 hover:underline text-xs"
           >
-            Dokumentation auf GitHub
+            {t('docs.documentationOnGitHub')}
           </a>
         </div>
       </div>
