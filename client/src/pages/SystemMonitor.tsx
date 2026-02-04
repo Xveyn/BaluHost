@@ -7,10 +7,13 @@
  * - Network (download/upload speeds)
  * - Disk I/O (per-disk throughput, IOPS)
  * - Power (from Tapo devices if available)
+ * - Services (backend service status)
+ * - Health (system health overview)
+ * - Logs (audit and file access logs)
  */
 
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { MetricChart, TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
@@ -42,9 +45,12 @@ import {
   Legend,
 } from 'recharts';
 import toast from 'react-hot-toast';
-import { ServicesTab } from '../components/services';
+import { ServicesStatusTab } from '../components/services';
 import { AdminBadge } from '../components/ui/AdminBadge';
 import { BenchmarkPanel } from '../components/benchmark';
+import { HealthTab } from '../components/monitoring/HealthTab';
+import { LogsTab } from '../components/monitoring/LogsTab';
+import { ActivityTab } from '../components/monitoring/ActivityTab';
 
 interface User {
   id: string;
@@ -57,7 +63,7 @@ interface SystemMonitorProps {
   user: User;
 }
 
-type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services';
+type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services' | 'health' | 'logs' | 'activity';
 
 interface TabConfig {
   id: TabType;
@@ -120,11 +126,40 @@ const TABS: TabConfig[] = [
   {
     id: 'services',
     label: 'Services',
-    adminOnly: true,
     icon: (
       <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
         <rect x="2" y="3" width="20" height="14" rx="2" />
         <path d="M8 21h8M12 17v4" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'health',
+    label: 'Gesundheit',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" strokeLinecap="round" strokeLinejoin="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'logs',
+    label: 'Protokolle',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path d="M4 5h16a1 1 0 0 1 1 1v12a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1Z" strokeLinecap="round" strokeLinejoin="round" />
+        <path d="M7 9h10" strokeLinecap="round" />
+        <path d="M7 13h10" strokeLinecap="round" />
+        <path d="M7 17h6" strokeLinecap="round" />
+      </svg>
+    ),
+  },
+  {
+    id: 'activity',
+    label: 'Aktivität',
+    icon: (
+      <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2" strokeLinecap="round" strokeLinejoin="round" />
       </svg>
     ),
   },
@@ -383,7 +418,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   {t('monitor.pCoresPerformance')} - {t('monitor.coresThreadsCount', { cores: current?.p_core_count, threads: (current?.p_core_count ?? 0) * 2 })}
                 </h4>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts
                   .filter(thread => thread.threadType === 'P')
                   .map((thread) => (
@@ -401,11 +436,21 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                         data={thread.chartData}
                         lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
                         yAxisDomain={[0, 100]}
-                        height={80}
+                        height={100}
                         loading={loading}
                         showArea
                         compact
                       />
+                      {/* Progress bar indicator */}
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${thread.currentUsage}%`,
+                            backgroundColor: thread.color,
+                          }}
+                        />
+                      </div>
                     </div>
                   ))}
               </div>
@@ -421,7 +466,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   {t('monitor.eCoresEfficiency')} - {t('monitor.coresThreadsCount', { cores: current?.e_core_count, threads: current?.e_core_count })}
                 </h4>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts
                   .filter(thread => thread.threadType === 'E')
                   .map((thread) => (
@@ -439,11 +484,21 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                         data={thread.chartData}
                         lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
                         yAxisDomain={[0, 100]}
-                        height={80}
+                        height={100}
                         loading={loading}
                         showArea
                         compact
                       />
+                      {/* Progress bar indicator */}
+                      <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                        <div
+                          className="h-full rounded-full transition-all duration-300"
+                          style={{
+                            width: `${thread.currentUsage}%`,
+                            backgroundColor: thread.color,
+                          }}
+                        />
+                      </div>
                     </div>
                   ))}
               </div>
@@ -456,7 +511,7 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
               <h4 className="text-sm sm:text-base font-semibold text-white">
                 {t('monitor.logicalProcessors')} ({individualThreadCharts.length})
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts.map((thread) => (
                   <div
                     key={thread.threadIndex}
@@ -478,10 +533,21 @@ function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                       data={thread.chartData}
                       lines={[{ dataKey: 'usage', name: '', color: thread.color }]}
                       yAxisDomain={[0, 100]}
-                      height={80}
+                      height={100}
                       loading={loading}
                       showArea
+                      compact
                     />
+                    {/* Progress bar indicator */}
+                    <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
+                      <div
+                        className="h-full rounded-full transition-all duration-300"
+                        style={{
+                          width: `${thread.currentUsage}%`,
+                          backgroundColor: thread.color,
+                        }}
+                      />
+                    </div>
                   </div>
                 ))}
               </div>
@@ -838,6 +904,7 @@ function PowerTab() {
   const [cumulativePeriod, setCumulativePeriod] = useState<CumulativePeriod>('today');
   const [cumulativeData, setCumulativeData] = useState<CumulativeEnergyResponse | null>(null);
   const [cumulativeLoading, setCumulativeLoading] = useState(false);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
 
   const fetchPower = useCallback(async () => {
     try {
@@ -868,16 +935,21 @@ function PowerTab() {
     fetchPriceConfig();
   }, []);
 
-  // Fetch cumulative data when period changes or power data updates
+  // Set device ID when powerData becomes available
   useEffect(() => {
-    const fetchCumulative = async () => {
-      if (!powerData || powerData.devices.length === 0) return;
+    if (powerData && powerData.devices.length > 0 && !selectedDeviceId) {
+      setSelectedDeviceId(powerData.devices[0].device_id);
+    }
+  }, [powerData, selectedDeviceId]);
 
+  // Fetch cumulative data with separate interval (60s - matches DB write interval)
+  useEffect(() => {
+    if (!selectedDeviceId) return;
+
+    const fetchCumulative = async () => {
       setCumulativeLoading(true);
       try {
-        // Use first device for now
-        const deviceId = powerData.devices[0].device_id;
-        const data = await getCumulativeEnergy(deviceId, cumulativePeriod);
+        const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
         setCumulativeData(data);
       } catch (err) {
         console.error('Failed to load cumulative data:', err);
@@ -885,8 +957,14 @@ function PowerTab() {
         setCumulativeLoading(false);
       }
     };
+
+    // Initial fetch
     fetchCumulative();
-  }, [powerData, cumulativePeriod]);
+
+    // Separate interval: 60 seconds (matches DB write interval)
+    const interval = setInterval(fetchCumulative, 60000);
+    return () => clearInterval(interval);
+  }, [selectedDeviceId, cumulativePeriod]);
 
   const handleSavePrice = async () => {
     const newPrice = parseFloat(priceInput);
@@ -905,8 +983,8 @@ function PowerTab() {
       setEditingPrice(false);
       toast.success(t('monitor.power.priceUpdated'));
       // Refresh cumulative data with new price
-      if (powerData && powerData.devices.length > 0) {
-        const data = await getCumulativeEnergy(powerData.devices[0].device_id, cumulativePeriod);
+      if (selectedDeviceId) {
+        const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
         setCumulativeData(data);
       }
     } catch (err: any) {
@@ -977,6 +1055,12 @@ function PowerTab() {
         <p className="text-sm text-slate-500 mt-1">
           {t('monitor.power.configureTapoDevice')}
         </p>
+        <Link
+          to="/admin/system-control?tab=smart"
+          className="inline-block mt-4 px-4 py-2 text-sm bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/40 rounded-lg transition-colors"
+        >
+          {t('monitor.power.configureSmartDevices')} →
+        </Link>
       </div>
     );
   }
@@ -1320,6 +1404,9 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
       'disk-io': 'monitor.tabs.diskIo',
       'power': 'monitor.tabs.power',
       'services': 'monitor.tabs.services',
+      'health': 'monitor.tabs.health',
+      'logs': 'monitor.tabs.logs',
+      'activity': 'monitor.tabs.activity',
     };
     return t(tabKeyMap[tabId]);
   };
@@ -1335,7 +1422,9 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
           </p>
         </div>
         <div className="flex items-center gap-2 sm:gap-4">
-          <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+          {['cpu', 'memory', 'network', 'disk-io'].includes(activeTab) && (
+            <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+          )}
           <div className="rounded-full border border-slate-800 bg-slate-900/70 px-3 sm:px-4 py-1.5 sm:py-2 text-xs text-slate-400 shadow-inner">
             <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400 inline-block mr-2" />
             {t('monitor.live')}
@@ -1372,7 +1461,10 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
         {activeTab === 'network' && <NetworkTab timeRange={timeRange} />}
         {activeTab === 'disk-io' && <DiskIoTab timeRange={timeRange} />}
         {activeTab === 'power' && <PowerTab />}
-        {activeTab === 'services' && <ServicesTab isAdmin={isAdmin} />}
+        {activeTab === 'services' && <ServicesStatusTab isAdmin={isAdmin} />}
+        {activeTab === 'health' && <HealthTab />}
+        {activeTab === 'logs' && <LogsTab />}
+        {activeTab === 'activity' && <ActivityTab user={user} />}
       </div>
     </div>
   );

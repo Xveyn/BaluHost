@@ -7,3 +7,7 @@ export type { MetricChartProps, MetricLine, ChartDataPoint } from './MetricChart
 
 export { default as TimeRangeSelector } from './TimeRangeSelector';
 export type { TimeRangeSelectorProps } from './TimeRangeSelector';
+
+export { HealthTab } from './HealthTab';
+export { LogsTab } from './LogsTab';
+export { ActivityTab } from './ActivityTab';

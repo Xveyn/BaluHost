@@ -14,6 +14,7 @@ import {
   ResponsiveContainer,
   Area,
   AreaChart,
+  ReferenceLine,
 } from 'recharts';
 import { parseUtcTimestamp } from '../../lib/dateUtils';
 
@@ -40,6 +41,8 @@ export interface MetricChartProps {
   loading?: boolean;
   emptyMessage?: string;
   compact?: boolean; // Compact mode for mini-charts (no axes, no legend)
+  showCompactTooltip?: boolean; // Show tooltip even in compact mode
+  showReferenceLines?: boolean; // Show subtle reference lines (e.g., 50% line)
 }
 
 const formatTime = (timestamp: string | number): string => {
@@ -64,6 +67,8 @@ export default function MetricChart({
   loading = false,
   emptyMessage,
   compact = false,
+  showCompactTooltip = true,
+  showReferenceLines = true,
 }: MetricChartProps) {
   const { t } = useTranslation(['system', 'admin']);
   const noDataMessage = emptyMessage ?? t('admin:monitoring.noData');
@@ -109,6 +114,13 @@ export default function MetricChart({
 
   const ChartComponent = showArea ? AreaChart : LineChart;
 
+  // Show tooltip in compact mode if enabled
+  const showTooltip = !compact || showCompactTooltip;
+
+  // Show 50% reference line for percentage-based charts in compact mode
+  const show50PercentLine = compact && showReferenceLines &&
+    yAxisDomain[0] === 0 && yAxisDomain[1] === 100;
+
   return (
     <ResponsiveContainer width="100%" height={height}>
       <ChartComponent data={chartData}>
@@ -139,15 +151,26 @@ export default function MetricChart({
               : undefined
           }
         />
-        {!compact && (
+        {show50PercentLine && (
+          <ReferenceLine
+            y={50}
+            stroke="#475569"
+            strokeDasharray="2 4"
+            strokeWidth={1}
+          />
+        )}
+        {showTooltip && (
           <Tooltip
             contentStyle={{
               backgroundColor: '#1e293b',
               border: '1px solid #334155',
               borderRadius: '8px',
               color: '#f1f5f9',
+              padding: compact ? '4px 8px' : undefined,
+              fontSize: compact ? '11px' : undefined,
             }}
-            labelStyle={{ color: '#94a3b8' }}
+            labelStyle={{ color: '#94a3b8', display: compact ? 'none' : undefined }}
+            formatter={(value: number) => compact ? [`${value.toFixed(0)}%`] : [value.toFixed(1)]}
           />
         )}
         {!compact && <Legend wrapperStyle={{ color: '#94a3b8' }} iconType="line" />}
@@ -159,11 +182,11 @@ export default function MetricChart({
               dataKey={line.dataKey}
               stroke={line.color}
               fill={line.color}
-              fillOpacity={compact ? 0.2 : 0.1}
-              strokeWidth={line.strokeWidth || 2}
+              fillOpacity={compact ? 0.25 : 0.1}
+              strokeWidth={line.strokeWidth || (compact ? 1.5 : 2)}
               name={line.name}
               dot={false}
-              animationDuration={300}
+              animationDuration={compact ? 150 : 300}
             />
           ) : (
             <Line
@@ -171,10 +194,10 @@ export default function MetricChart({
               type="monotone"
               dataKey={line.dataKey}
               stroke={line.color}
-              strokeWidth={line.strokeWidth || 2}
+              strokeWidth={line.strokeWidth || (compact ? 1.5 : 2)}
               name={line.name}
               dot={false}
-              animationDuration={300}
+              animationDuration={compact ? 150 : 300}
             />
           )
         )}
