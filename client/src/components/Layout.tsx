@@ -18,6 +18,14 @@ interface LayoutProps {
   onLogout: () => void;
 }
 
+interface NavItem {
+  path: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  adminOnly?: boolean;
+}
+
 const navIcon = {
   dashboard: (
     <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
@@ -109,7 +117,49 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
   const { pluginNavItems } = usePlugins();
   const formattedVersion = useFormattedVersion('');
 
-  const navItems = [
+  // Icons for navigation items
+  const schedulerIcon = (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
+      <circle cx="12" cy="12" r="9" stroke="currentColor" />
+    </svg>
+  );
+
+  const databaseIcon = (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" />
+      <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" />
+      <path stroke="currentColor" strokeLinecap="round" d="M7 10v4" />
+    </svg>
+  );
+
+  const updatesIcon = (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l4-4m-4 4l-4-4" />
+      <path stroke="currentColor" strokeLinecap="round" d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
+    </svg>
+  );
+
+  // System control icon for combined admin page
+  const systemControlIcon = (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 0 0 2.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 0 0 1.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 0 0-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 0 0-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 0 0-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 0 0-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 0 0 1.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065Z" />
+      <circle cx="12" cy="12" r="3" stroke="currentColor" />
+    </svg>
+  );
+
+  // Devices icon for combined devices page
+  const devicesIcon = (
+    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+      <rect x="5" y="2" width="14" height="20" rx="2" stroke="currentColor" />
+      <path stroke="currentColor" strokeLinecap="round" d="M12 18h0" />
+      <rect x="9" y="6" width="6" height="8" rx="1" stroke="currentColor" />
+    </svg>
+  );
+
+  // Flat navigation structure (no sections)
+  const navItems: NavItem[] = [
+    // Main items (everyone)
     {
       path: '/',
       label: t('navigation.dashboard'),
@@ -123,52 +173,22 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       icon: navIcon.files
     },
     {
-      path: '/system',
-      label: t('navigation.system'),
-      description: t('navigation.systemDesc'),
-      icon: navIcon.system
-    },
-    {
-      path: '/power',
-      label: t('navigation.power'),
-      description: t('navigation.powerDesc'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-          <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M13 2L3 14h9l-1 8 10-12h-9l1-8z" />
-        </svg>
-      )
-    },
-    {
-      path: '/logging',
-      label: t('navigation.logs'),
-      description: t('navigation.logsDesc'),
-      icon: navIcon.logging
-    },
-    {
       path: '/shares',
       label: t('navigation.shares'),
       description: t('navigation.sharesDesc'),
       icon: navIcon.shares
     },
     {
-      path: '/sync-prototype',
-      label: t('navigation.devices'),
-      description: t('navigation.devicesDesc'),
-      icon: navIcon.mobile
+      path: '/system',
+      label: t('navigation.system'),
+      description: t('navigation.systemDesc'),
+      icon: navIcon.system
     },
     {
-      path: '/remote-servers',
-      label: t('navigation.remoteServers'),
-      description: t('navigation.remoteServersDesc'),
-      icon: (
-        <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-          <rect x="3" y="4" width="18" height="12" rx="1" stroke="currentColor" />
-          <path stroke="currentColor" strokeLinecap="round" d="M3 16h18" />
-          <circle cx="8" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
-          <circle cx="12" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
-          <circle cx="16" cy="20" r="0.5" fill="currentColor" stroke="currentColor" />
-        </svg>
-      )
+      path: '/devices',
+      label: t('navigation.devices'),
+      description: t('navigation.devicesDesc'),
+      icon: devicesIcon
     },
     {
       path: '/settings',
@@ -182,94 +202,71 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       description: t('navigation.apiCenterDesc'),
       icon: navIcon.docs
     },
-    ...(user.role === 'admin'
-      ? [
-          {
-            path: '/fan-control',
-            label: t('navigation.fanControl'),
-            description: t('navigation.fanControlDesc'),
-            adminOnly: true,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                <circle cx="12" cy="12" r="3" stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" />
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v3m0 14v3M2 12h3m14 0h3M4.93 4.93l2.12 2.12m9.9 9.9l2.12 2.12M4.93 19.07l2.12-2.12m9.9-9.9l2.12-2.12" />
-              </svg>
-            )
-          },
-          {
-            path: '/raid',
-            label: t('navigation.raid'),
-            description: t('navigation.raidDesc'),
-            icon: navIcon.raid,
-            adminOnly: true
-          },
-          {
-            path: '/schedulers',
-            label: t('navigation.scheduler'),
-            description: t('navigation.schedulerDesc'),
-            adminOnly: true,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 6v6l4 2" />
-                <circle cx="12" cy="12" r="9" stroke="currentColor" />
-              </svg>
-            )
-          },
-          {
-            path: '/admin-db',
-            label: t('navigation.database'),
-            description: t('navigation.databaseDesc'),
-            adminOnly: true,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                <rect x="3" y="4" width="18" height="6" rx="1.5" stroke="currentColor" />
-                <rect x="3" y="14" width="18" height="6" rx="1.5" stroke="currentColor" />
-                <path stroke="currentColor" strokeLinecap="round" d="M7 10v4" />
-              </svg>
-            )
-          },
-          {
-            path: '/users',
-            label: t('navigation.users'),
-            description: t('navigation.usersDesc'),
-            adminOnly: true,
-            icon: navIcon.users
-          },
-          {
-            path: '/plugins',
-            label: t('navigation.plugins'),
-            description: t('navigation.pluginsDesc'),
-            adminOnly: true,
-            icon: (
-              <Plug className="h-5 w-5" />
-            )
-          },
-          {
-            path: '/updates',
-            label: t('navigation.updates'),
-            description: t('navigation.updatesDesc'),
-            adminOnly: true,
-            icon: (
-              <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
-                <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 3v12m0 0l4-4m-4 4l-4-4" />
-                <path stroke="currentColor" strokeLinecap="round" d="M4 17v2a2 2 0 002 2h12a2 2 0 002-2v-2" />
-              </svg>
-            )
-          }
-        ]
-      : []),
-    // Add plugin navigation items
-    ...pluginNavItems
-      .filter((item) => !item.admin_only || user.role === 'admin')
-      .map((item) => ({
-        path: `/plugins/${item.path}`,
-        label: item.label,
-        description: 'Plugin',
-        icon: (
-          <Plug className="h-5 w-5" />
-        )
-      }))
+    // Admin items
+    {
+      path: '/admin/system-control',
+      label: t('navigation.systemControl'),
+      description: t('navigation.systemControlDesc'),
+      icon: systemControlIcon,
+      adminOnly: true
+    },
+    {
+      path: '/schedulers',
+      label: t('navigation.scheduler'),
+      description: t('navigation.schedulerDesc'),
+      icon: schedulerIcon,
+      adminOnly: true
+    },
+    {
+      path: '/admin-db',
+      label: t('navigation.database'),
+      description: t('navigation.databaseDesc'),
+      icon: databaseIcon,
+      adminOnly: true
+    },
+    {
+      path: '/users',
+      label: t('navigation.users'),
+      description: t('navigation.usersDesc'),
+      icon: navIcon.users,
+      adminOnly: true
+    },
+    {
+      path: '/plugins',
+      label: t('navigation.plugins'),
+      description: t('navigation.pluginsDesc'),
+      icon: <Plug className="h-5 w-5" />,
+      adminOnly: true
+    },
+    {
+      path: '/updates',
+      label: t('navigation.updates'),
+      description: t('navigation.updatesDesc'),
+      icon: updatesIcon,
+      adminOnly: true
+    }
   ];
+
+  // Add plugin navigation items
+  const pluginItems = pluginNavItems
+    .filter((item) => !item.admin_only || user.role === 'admin')
+    .map((item) => ({
+      path: `/plugins/${item.path}`,
+      label: item.label,
+      description: 'Plugin',
+      icon: <Plug className="h-5 w-5" />,
+      adminOnly: item.admin_only
+    }));
+
+  // Filter nav items based on user role
+  const filteredNavItems = navItems
+    .filter(item => !item.adminOnly || user.role === 'admin');
+
+  // Find where admin items start (for showing separator)
+  const adminStartIndex = filteredNavItems.findIndex(item => item.adminOnly);
+
+  // Combine nav items with plugin items for final list
+  const allNavItems = [...filteredNavItems, ...pluginItems];
 
   const renderLink = (path: string) => location.pathname === path;
 
@@ -290,38 +287,50 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             </div>
           </div>
 
-          <nav className="flex-1 space-y-2 px-4 overflow-y-auto">
-            {navItems.map((item) => {
-              const active = renderLink(item.path);
-              return (
-                <Link
-                  key={item.path}
-                  to={item.path}
-                  className={`group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                    active
-                      ? 'border-sky-500 bg-slate-900-hover text-sky-400'
-                      : 'border-transparent text-slate-300'
-                  }`}
-                >
-                  <span
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
-                      active
-                        ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
-                        : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
-                    }`}
-                  >
-                    {item.icon}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className="flex items-center gap-2">
-                      {item.label}
-                      {'adminOnly' in item && item.adminOnly && <AdminBadge />}
-                    </span>
-                    <span className="text-xs text-slate-100-tertiary">{item.description}</span>
+          <nav className="flex-1 px-4 overflow-y-auto pb-4">
+            <div className="space-y-1">
+              {allNavItems.map((item, index) => {
+                const active = renderLink(item.path);
+                const isFirstAdminItem = adminStartIndex >= 0 && index === adminStartIndex;
+                return (
+                  <div key={item.path}>
+                    {/* Admin separator */}
+                    {isFirstAdminItem && (
+                      <div className="my-3 border-t border-slate-800/50 pt-3">
+                        <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          {t('navigation.admin')}
+                        </div>
+                      </div>
+                    )}
+                    <Link
+                      to={item.path}
+                      className={`group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                        active
+                          ? 'border-sky-500 bg-slate-900-hover text-sky-400'
+                          : 'border-transparent text-slate-300'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
+                          active
+                            ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
+                            : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="flex items-center gap-2">
+                          {item.label}
+                          {item.adminOnly && <AdminBadge />}
+                        </span>
+                        <span className="text-xs text-slate-100-tertiary">{item.description}</span>
+                      </div>
+                    </Link>
                   </div>
-                </Link>
-              );
-            })}
+                );
+              })}
+            </div>
           </nav>
 
 
@@ -359,39 +368,51 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             </button>
           </div>
 
-          <nav className="flex-1 space-y-2 px-4 overflow-y-auto pb-4">
-            {navItems.map((item) => {
-              const active = renderLink(item.path);
-              return (
-                <Link
-                  key={`mobile-nav-${item.path}`}
-                  to={item.path}
-                  onClick={() => setMobileMenuOpen(false)}
-                  className={`group flex items-center gap-3 rounded-xl border px-4 py-3 text-sm font-medium transition-all duration-200 ${
-                    active
-                      ? 'border-sky-500 bg-slate-900-hover text-sky-400'
-                      : 'border-transparent text-slate-300 hover:border-slate-800'
-                  }`}
-                >
-                  <span
-                    className={`flex h-10 w-10 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
-                      active
-                        ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
-                        : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
-                    }`}
-                  >
-                    {item.icon}
-                  </span>
-                  <div className="flex flex-col">
-                    <span className="flex items-center gap-2">
-                      {item.label}
-                      {'adminOnly' in item && item.adminOnly && <AdminBadge />}
-                    </span>
-                    <span className="text-xs text-slate-100-tertiary">{item.description}</span>
+          <nav className="flex-1 px-4 overflow-y-auto pb-4">
+            <div className="space-y-1">
+              {allNavItems.map((item, index) => {
+                const active = renderLink(item.path);
+                const isFirstAdminItem = adminStartIndex >= 0 && index === adminStartIndex;
+                return (
+                  <div key={`mobile-nav-${item.path}`}>
+                    {/* Admin separator */}
+                    {isFirstAdminItem && (
+                      <div className="my-3 border-t border-slate-800/50 pt-3">
+                        <div className="px-2 pb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-500">
+                          {t('navigation.admin')}
+                        </div>
+                      </div>
+                    )}
+                    <Link
+                      to={item.path}
+                      onClick={() => setMobileMenuOpen(false)}
+                      className={`group flex items-center gap-3 rounded-xl border px-4 py-2.5 text-sm font-medium transition-all duration-200 ${
+                        active
+                          ? 'border-sky-500 bg-slate-900-hover text-sky-400'
+                          : 'border-transparent text-slate-300 hover:border-slate-800'
+                      }`}
+                    >
+                      <span
+                        className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base transition-colors duration-200 ${
+                          active
+                            ? 'border-sky-500/40 bg-slate-950-secondary text-sky-400'
+                            : 'border-slate-800 bg-slate-950 text-slate-100-tertiary group-hover:border-sky-500/30 group-hover:text-sky-400'
+                        }`}
+                      >
+                        {item.icon}
+                      </span>
+                      <div className="flex flex-col">
+                        <span className="flex items-center gap-2">
+                          {item.label}
+                          {item.adminOnly && <AdminBadge />}
+                        </span>
+                        <span className="text-xs text-slate-100-tertiary">{item.description}</span>
+                      </div>
+                    </Link>
                   </div>
-                </Link>
-              );
-            })}
+                );
+              })}
+            </div>
           </nav>
 
           <div className="px-4 pb-6">

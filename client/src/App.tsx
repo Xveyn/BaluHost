@@ -5,21 +5,15 @@ import Dashboard from './pages/Dashboard';
 import FileManager from './pages/FileManager';
 import UserManagement from './pages/UserManagement';
 import SystemMonitor from './pages/SystemMonitor';
-import RaidManagement from './pages/RaidManagement';
-import AdminHealth from './pages/AdminHealth';
 import SchedulerDashboard from './pages/SchedulerDashboard';
-import Logging from './pages/Logging';
 import ApiCenterPage from './pages/ApiCenterPage';
 import SharesPage from './pages/SharesPage';
 import SettingsPage from './pages/SettingsPage';
 import PublicSharePage from './pages/PublicSharePage';
 import AdminDatabase from './pages/AdminDatabase';
 import SyncSettings from './components/SyncSettings';
-import DeviceManagement from './pages/DeviceManagement';
-import MobileDevicesPage from './pages/MobileDevicesPage';
-import { RemoteServersPage } from './pages/RemoteServersPage';
-import PowerManagement from './pages/PowerManagement';
-import FanControl from './pages/FanControl';
+import DevicesPage from './pages/DevicesPage';
+import SystemControlPage from './pages/SystemControlPage';
 import PluginsPage from './pages/PluginsPage';
 import PluginPage from './components/PluginPage';
 import NotificationPreferencesPage from './pages/NotificationPreferencesPage';
@@ -297,17 +291,10 @@ function App() {
             )
           }
         />
+        {/* Redirect: /raid -> /admin/system-control?tab=raid */}
         <Route
           path="/raid"
-          element={
-            user?.role === 'admin' ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <RaidManagement />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
+          element={<Navigate to="/admin/system-control?tab=raid" replace />}
         />
         <Route
           path="/schedulers"
@@ -321,17 +308,10 @@ function App() {
             )
           }
         />
+        {/* Redirect: /health -> /system?tab=health */}
         <Route
           path="/health"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <AdminHealth />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/system?tab=health" replace />}
         />
         <Route
           path="/system"
@@ -345,41 +325,20 @@ function App() {
             )
           }
         />
+        {/* Redirect: /power -> /admin/system-control?tab=energy */}
         <Route
           path="/power"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <PowerManagement />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/admin/system-control?tab=energy" replace />}
         />
+        {/* Redirect: /fan-control -> /admin/system-control?tab=fan */}
         <Route
           path="/fan-control"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <FanControl />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/admin/system-control?tab=fan" replace />}
         />
+        {/* Redirect: /logging -> /system?tab=logs */}
         <Route
           path="/logging"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <Logging />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/system?tab=logs" replace />}
         />
         <Route
           path="/shares"
@@ -402,6 +361,30 @@ function App() {
               </Layout>
             ) : (
               <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/devices"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <DevicesPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/admin/system-control"
+          element={
+            user?.role === 'admin' ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <SystemControlPage />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
             )
           }
         />
@@ -441,41 +424,25 @@ function App() {
             )
           }
         />
+        {/* Redirect: /sync-prototype -> /devices?tab=desktop */}
         <Route
           path="/sync-prototype"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <DeviceManagement />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/devices?tab=desktop" replace />}
         />
+        {/* Redirect: /mobile-devices -> /devices?tab=mobile */}
         <Route
           path="/mobile-devices"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <MobileDevicesPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          element={<Navigate to="/devices?tab=mobile" replace />}
         />
+        {/* Redirect: /admin/backup -> /admin/system-control?tab=backup */}
         <Route
-          path="/remote-servers"
-          element={
-            user ? (
-              <Layout user={user} onLogout={handleLogout}>
-                <RemoteServersPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
+          path="/admin/backup"
+          element={<Navigate to="/admin/system-control?tab=backup" replace />}
+        />
+        {/* Redirect: /admin/vpn -> /admin/system-control?tab=vpn */}
+        <Route
+          path="/admin/vpn"
+          element={<Navigate to="/admin/system-control?tab=vpn" replace />}
         />
         <Route
           path="/docs"

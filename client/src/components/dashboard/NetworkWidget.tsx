@@ -6,7 +6,7 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { useNetworkStatus, formatNetworkSpeed } from '../../hooks/useNetworkStatus';
-import { ArrowDown, ArrowUp, Wifi, WifiOff, Cable } from 'lucide-react';
+import { ArrowDown, ArrowUp, Wifi, WifiOff, EthernetPort } from 'lucide-react';
 
 interface NetworkWidgetProps {
   className?: string;
@@ -66,7 +66,7 @@ export const NetworkWidget: React.FC<NetworkWidgetProps> = ({ className = '' }) 
   const isActive = totalMbps > 1;
 
   // Choose icon based on interface type
-  const NetworkIcon = interfaceType === 'ethernet' ? Cable : Wifi;
+  const NetworkIcon = interfaceType === 'ethernet' ? EthernetPort : Wifi;
 
   return (
     <div
