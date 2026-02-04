@@ -56,7 +56,7 @@
     "files": "Dateimanager",
     "filesDesc": "Speicher & Sync",
     "settings": "Einstellungen",
-    "settingsDesc": "Konto",
+    "settingsDesc": "Konto & Präferenzen",
     "users": "Benutzerverwaltung",
     "usersDesc": "Berechtigungen",
     "system": "Systemmonitor",
@@ -90,7 +90,29 @@
     "apiCenterDesc": "Docs & Limits",
     "remoteServers": "Remote-Server",
     "remoteServersDesc": "SSH & VPN",
-    "syncPrototype": "Geräteverwaltung"
+    "syncPrototype": "Geräteverwaltung",
+    "health": "Systemgesundheit",
+    "healthDesc": "Dienste & Status",
+    "mobileDevices": "Mobilgeräte",
+    "mobileDevicesDesc": "Smartphones & Tablets",
+    "desktopSync": "Desktop-Sync",
+    "desktopSyncDesc": "Desktop-Clients",
+    "backupManagement": "Backup",
+    "backupManagementDesc": "Backup & Wiederherstellung",
+    "vpnManagement": "VPN",
+    "vpnManagementDesc": "WireGuard-Konfiguration",
+    "systemControl": "Systemsteuerung",
+    "systemControlDesc": "Energie, Lüfter, RAID, Backup, VPN",
+    "sections": {
+      "main": "Hauptmenü",
+      "monitoring": "Überwachung",
+      "devices": "Geräte",
+      "hardware": "Hardware",
+      "systemSettings": "Systemeinstellungen",
+      "user": "Benutzer",
+      "development": "Entwicklung",
+      "plugins": "Plugins"
+    }
   },
   "status": {
     "loading": "Laden...",
@@ -133,6 +155,25 @@
   "on": "Ein",
   "off": "Aus",
   "notAvailable": "N/V",
+  "systemControl": {
+    "tabs": {
+      "energy": "Energie",
+      "fan": "Lüfter",
+      "raid": "RAID",
+      "backup": "Backup",
+      "vpn": "VPN",
+      "services": "Dienste",
+      "vcl": "Versionskontrolle",
+      "smart": "Smart Devices",
+      "rateLimits": "Rate Limits"
+    }
+  },
+  "devices": {
+    "tabs": {
+      "desktop": "Desktop",
+      "mobile": "Mobil"
+    }
+  },
   "toast": {
     "success": "Erfolgreich",
     "error": "Fehler",
@@ -167,5 +208,6 @@
     "retrySuccess": "{{name}} erfolgreich erneut gestartet",
     "retryFailed": "Erneuter Versuch fehlgeschlagen",
     "revokeFailed": "Widerrufen fehlgeschlagen"
-  }
+  },
+  "adminOnly": "Nur für Admins"
 }

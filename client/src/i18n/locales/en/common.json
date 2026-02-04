@@ -56,7 +56,7 @@
     "files": "File Manager",
     "filesDesc": "Storage & sync",
     "settings": "Settings",
-    "settingsDesc": "Account",
+    "settingsDesc": "Account & preferences",
     "users": "User Access",
     "usersDesc": "Permissions",
     "system": "System Monitor",
@@ -90,7 +90,29 @@
     "apiCenterDesc": "Docs & Limits",
     "remoteServers": "Remote Servers",
     "remoteServersDesc": "SSH & VPN",
-    "syncPrototype": "Device Management"
+    "syncPrototype": "Device Management",
+    "health": "System Health",
+    "healthDesc": "Services & Status",
+    "mobileDevices": "Mobile Devices",
+    "mobileDevicesDesc": "Smartphones & Tablets",
+    "desktopSync": "Desktop Sync",
+    "desktopSyncDesc": "Desktop clients",
+    "backupManagement": "Backup",
+    "backupManagementDesc": "Backup & Restore",
+    "vpnManagement": "VPN",
+    "vpnManagementDesc": "WireGuard Config",
+    "systemControl": "System Control",
+    "systemControlDesc": "Power, Fans, RAID, Backup, VPN",
+    "sections": {
+      "main": "Main Menu",
+      "monitoring": "Monitoring",
+      "devices": "Devices",
+      "hardware": "Hardware",
+      "systemSettings": "System Settings",
+      "user": "User",
+      "development": "Development",
+      "plugins": "Plugins"
+    }
   },
   "status": {
     "loading": "Loading...",
@@ -133,6 +155,25 @@
   "on": "On",
   "off": "Off",
   "notAvailable": "N/A",
+  "systemControl": {
+    "tabs": {
+      "energy": "Energy",
+      "fan": "Fans",
+      "raid": "RAID",
+      "backup": "Backup",
+      "vpn": "VPN",
+      "services": "Services",
+      "vcl": "Version Control",
+      "smart": "Smart Devices",
+      "rateLimits": "Rate Limits"
+    }
+  },
+  "devices": {
+    "tabs": {
+      "desktop": "Desktop",
+      "mobile": "Mobile"
+    }
+  },
   "toast": {
     "success": "Success",
     "error": "Error",
@@ -167,5 +208,6 @@
     "retrySuccess": "{{name}} restarted successfully",
     "retryFailed": "Retry failed",
     "revokeFailed": "Failed to revoke"
-  }
+  },
+  "adminOnly": "Admin only"
 }

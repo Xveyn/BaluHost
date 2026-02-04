@@ -10,7 +10,10 @@
       "network": "Netzwerk",
       "diskIo": "Disk I/O",
       "power": "Strom",
-      "services": "Dienste"
+      "services": "Dienste",
+      "health": "Gesundheit",
+      "logs": "Protokolle",
+      "activity": "Aktivität"
     },
     "cpuUsage": "CPU-Auslastung",
     "cpuUsagePerThread": "CPU-Auslastung (Per Thread)",
@@ -61,6 +64,23 @@
     "waitingForData": "Warte auf erste Messung...",
     "noData": "Keine Daten verfügbar",
     "noDataForPeriod": "Keine Daten für den ausgewählten Zeitraum verfügbar",
+    "activity": {
+      "title": "Aktivität",
+      "description": "Audit-Logs und Benutzeraktivität",
+      "today": "Heute",
+      "yesterday": "Gestern",
+      "thisWeek": "Diese Woche",
+      "earlier": "Früher",
+      "noActivity": "Keine Aktivität gefunden",
+      "showingOfTotal": "Zeige {{shown}} von {{total}} Einträgen",
+      "allActions": "Alle Aktionen",
+      "allUsers": "Alle Benutzer",
+      "success": "Erfolgreich",
+      "failed": "Fehlgeschlagen",
+      "viewDetails": "Details anzeigen",
+      "hideDetails": "Details verbergen",
+      "loadError": "Aktivitätsprotokolle konnten nicht geladen werden"
+    },
     "power": {
       "currentPower": "Aktuelle Leistung",
       "cumulativeSession": "Kumuliert (Sitzung)",
@@ -72,6 +92,7 @@
       "today": "Heute",
       "noTapoDevices": "Keine Tapo-Geräte konfiguriert",
       "configureTapoDevice": "Konfigurieren Sie ein Tapo-Gerät in den Einstellungen, um den Stromverbrauch zu überwachen.",
+      "configureSmartDevices": "Smart Devices konfigurieren",
       "cumulativeConsumptionCosts": "Kumulierter Verbrauch & Kosten",
       "totalConsumption": "Gesamt Verbrauch",
       "totalCosts": "Gesamt Kosten",
@@ -345,7 +366,10 @@
       "cpufreq": "cpufreq",
       "sudo": "Sudo",
       "ok": "OK",
-      "no": "Nein"
+      "no": "Nein",
+      "warningTitle": "Eingeschränkte CPU-Frequenzsteuerung",
+      "warningMessage": "Der Server hat keinen Schreibzugriff auf die CPU-Frequenzeinstellungen. CPU-Profile können nicht geändert werden. Starten Sie den Server mit Administratorrechten (sudo) für volle Kontrolle.",
+      "suggestions": "Vorschläge:"
     },
     "toasts": {
       "statusUpdated": "Status aktualisiert",
@@ -460,6 +484,10 @@
       "pwmRange": "PWM muss zwischen {{min}}% und {{max}}% liegen",
       "invalidCurve": "Ungültige Kurvenkonfiguration"
     }
+  },
+  "servicesStatus": {
+    "viewOnlyHint": "Nur-Lese-Modus. Volle Steuerung in der Systemsteuerung verfügbar.",
+    "goToControl": "Zur Systemsteuerung"
   },
   "services": {
     "title": "Dienststatus",
@@ -681,7 +709,9 @@
       "off": "Aus",
       "enabled": "Rate Limit aktiviert",
       "disabled": "Rate Limit deaktiviert",
-      "seedConfirm": "Standard-Rate-Limit-Konfigurationen werden gesetzt. Fortfahren?"
+      "seedConfirm": "Standard-Rate-Limit-Konfigurationen werden gesetzt. Fortfahren?",
+      "movedDescription": "Rate Limit Konfiguration wurde nach Systemsteuerung verschoben",
+      "goToSystemControl": "Zur Systemsteuerung"
     },
     "modal": {
       "editRateLimit": "Rate Limit bearbeiten",

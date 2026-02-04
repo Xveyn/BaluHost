@@ -10,7 +10,10 @@
       "network": "Network",
       "diskIo": "Disk I/O",
       "power": "Power",
-      "services": "Services"
+      "services": "Services",
+      "health": "Health",
+      "logs": "Logs",
+      "activity": "Activity"
     },
     "cpuUsage": "CPU Usage",
     "cpuUsagePerThread": "CPU Usage (Per Thread)",
@@ -61,6 +64,23 @@
     "waitingForData": "Waiting for first measurement...",
     "noData": "No data available",
     "noDataForPeriod": "No data available for the selected period",
+    "activity": {
+      "title": "Activity",
+      "description": "Audit logs and user activity",
+      "today": "Today",
+      "yesterday": "Yesterday",
+      "thisWeek": "This Week",
+      "earlier": "Earlier",
+      "noActivity": "No activity found",
+      "showingOfTotal": "Showing {{shown}} of {{total}} entries",
+      "allActions": "All Actions",
+      "allUsers": "All Users",
+      "success": "Success",
+      "failed": "Failed",
+      "viewDetails": "View details",
+      "hideDetails": "Hide details",
+      "loadError": "Failed to load activity logs"
+    },
     "power": {
       "currentPower": "Current Power",
       "cumulativeSession": "Cumulative (Session)",
@@ -72,6 +92,7 @@
       "today": "Today",
       "noTapoDevices": "No Tapo devices configured",
       "configureTapoDevice": "Configure a Tapo device in settings to monitor power consumption.",
+      "configureSmartDevices": "Configure Smart Devices",
       "cumulativeConsumptionCosts": "Cumulative Consumption & Costs",
       "totalConsumption": "Total Consumption",
       "totalCosts": "Total Costs",
@@ -345,7 +366,10 @@
       "cpufreq": "cpufreq",
       "sudo": "Sudo",
       "ok": "OK",
-      "no": "No"
+      "no": "No",
+      "warningTitle": "Limited CPU Frequency Control",
+      "warningMessage": "The server does not have write access to CPU frequency settings. CPU profiles cannot be changed. Start the server with administrator privileges (sudo) for full control.",
+      "suggestions": "Suggestions:"
     },
     "toasts": {
       "statusUpdated": "Status updated",
@@ -460,6 +484,10 @@
       "pwmRange": "PWM must be between {{min}}% and {{max}}%",
       "invalidCurve": "Invalid curve configuration"
     }
+  },
+  "servicesStatus": {
+    "viewOnlyHint": "View-only mode. Full controls available in System Control.",
+    "goToControl": "Go to System Control"
   },
   "services": {
     "title": "Service Status",
@@ -681,7 +709,9 @@
       "off": "Off",
       "enabled": "Rate limit enabled",
       "disabled": "Rate limit disabled",
-      "seedConfirm": "This will seed default rate limit configurations. Continue?"
+      "seedConfirm": "This will seed default rate limit configurations. Continue?",
+      "movedDescription": "Rate limit configuration is now in System Control",
+      "goToSystemControl": "Go to System Control"
     },
     "modal": {
       "editRateLimit": "Edit Rate Limit",
