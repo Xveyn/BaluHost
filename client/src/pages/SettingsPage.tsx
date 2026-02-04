@@ -1,12 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
-import { User, Lock, Mail, Image, HardDrive, Clock, Activity, Download, Database, Wifi, History, Globe } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe } from 'lucide-react';
 import { apiClient } from '../lib/api';
-import BackupSettings from '../components/BackupSettings';
 import LanguageSettings from '../components/LanguageSettings';
-import VpnManagement from '../components/VpnManagement';
-import VCLSettings from '../components/vcl/VCLSettings';
-import { AdminBadge } from '../components/ui/AdminBadge';
 
 interface UserProfile {
   id: number;
@@ -23,13 +19,6 @@ interface StorageQuota {
   percentage: number;
 }
 
-interface AuditLog {
-  id: number;
-  action: string;
-  timestamp: string;
-  details: Record<string, any>;
-  success: boolean;
-}
 
 interface Session {
   id: string;
@@ -44,7 +33,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'activity' | 'backup' | 'vpn' | 'vcl' | 'language'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -61,10 +50,6 @@ export default function SettingsPage() {
   // Storage quota
   const [storageQuota, setStorageQuota] = useState<StorageQuota | null>(null);
 
-  // Audit logs
-  const [auditLogs, setAuditLogs] = useState<AuditLog[]>([]);
-  const [logsLoading, setLogsLoading] = useState(false);
-
   // Sessions (mock data for now)
   const [sessions] = useState<Session[]>([
     {
@@ -80,12 +65,6 @@ export default function SettingsPage() {
     loadProfile();
     loadStorageQuota();
   }, []);
-
-  useEffect(() => {
-    if (activeTab === 'activity' && profile) {
-      loadAuditLogs();
-    }
-  }, [activeTab, profile]);
 
   const loadProfile = async () => {
     try {
@@ -118,29 +97,6 @@ export default function SettingsPage() {
       setStorageQuota(response.data);
     } catch (error) {
       console.error('Failed to load storage quota:', error);
-    }
-  };
-
-  const loadAuditLogs = async () => {
-    if (!profile) {
-      console.log('Profile not loaded yet, skipping audit logs');
-      return;
-    }
-    
-    setLogsLoading(true);
-    try {
-      const response = await apiClient.get('/api/logging/audit', {
-        params: {
-          user_filter: profile.username,
-          limit: 20,
-          sort_order: 'desc'
-        }
-      });
-      setAuditLogs(response.data.logs || []);
-    } catch (error) {
-      console.error('Failed to load audit logs:', error);
-    } finally {
-      setLogsLoading(false);
     }
   };
 
@@ -272,13 +228,7 @@ export default function SettingsPage() {
             { id: 'profile', label: t('tabs.profile'), icon: User },
             { id: 'security', label: t('tabs.security'), icon: Lock },
             { id: 'storage', label: t('tabs.storage'), icon: HardDrive },
-            { id: 'activity', label: t('tabs.activity'), icon: Activity },
             { id: 'language', label: t('tabs.language'), icon: Globe },
-            ...(profile?.role === 'admin' ? [
-              { id: 'backup', label: t('tabs.backup'), icon: Database, adminOnly: true },
-              { id: 'vpn', label: t('tabs.vpn'), icon: Wifi, adminOnly: true },
-              { id: 'vcl', label: t('tabs.vcl'), icon: History, adminOnly: true }
-            ] : [])
           ].map(tab => (
             <button
               key={tab.id}
@@ -291,7 +241,6 @@ export default function SettingsPage() {
             >
               <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
               <span className="text-xs sm:text-sm">{tab.label}</span>
-              {'adminOnly' in tab && tab.adminOnly && <AdminBadge />}
             </button>
           ))}
         </div>
@@ -520,21 +469,6 @@ export default function SettingsPage() {
           </>
         )}
 
-        {/* Backup Tab (Admin only) */}
-        {activeTab === 'backup' && profile?.role === 'admin' && (
-          <BackupSettings />
-        )}
-
-        {/* VPN Tab (Admin only) */}
-        {activeTab === 'vpn' && profile?.role === 'admin' && (
-          <VpnManagement />
-        )}
-
-        {/* VCL Tab (Admin only) */}
-        {activeTab === 'vcl' && profile?.role === 'admin' && (
-          <VCLSettings />
-        )}
-
         {/* Language Tab */}
         {activeTab === 'language' && (
           <LanguageSettings />
@@ -610,91 +544,6 @@ export default function SettingsPage() {
           </>
         )}
 
-        {/* Activity Tab */}
-        {activeTab === 'activity' && (
-          <div className="card border-slate-800/60 bg-slate-900/55">
-            <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
-              <Activity className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-              Recent Activity
-            </h3>
-            {logsLoading ? (
-              <p className="text-sm sm:text-base text-slate-100-secondary">Loading activity...</p>
-            ) : auditLogs.length > 0 ? (
-              <div className="space-y-2 sm:space-y-3">
-                {auditLogs.map(log => (
-                  <div
-                    key={log.id}
-                    className="p-3 sm:p-4 rounded border bg-slate-950-secondary border-slate-800"
-                  >
-                    <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start gap-2">
-                      <div className="flex-1 min-w-0">
-                        <p className="font-medium text-sm sm:text-base">{log.action.replace(/_/g, ' ')}</p>
-                        {Object.keys(log.details).length > 0 && (
-                          Array.isArray(log.details.disks) || typeof log.details.disks === 'object' ? (
-                            <div className="mt-2 sm:mt-3">
-                              <div className="overflow-x-auto rounded-lg sm:rounded-xl border border-slate-800/60 bg-slate-950/40 -mx-3 sm:mx-0">
-                                <table className="min-w-full text-[10px] sm:text-xs">
-                                  <thead>
-                                    <tr className="border-b border-slate-800/60">
-                                      <th className="px-4 py-3 text-left text-sky-400 font-semibold">Drive</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_read_mbps</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_write_mbps</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">max_read_mbps</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">max_write_mbps</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_read_iops</th>
-                                      <th className="px-4 py-3 text-left text-slate-400 font-medium">avg_write_iops</th>
-                                    </tr>
-                                  </thead>
-                                  <tbody>
-                                    {Object.entries(log.details.disks).map(([drive, stats]: [string, any]) => (
-                                      <tr
-                                        key={drive}
-                                        className="border-b border-slate-800/40 last:border-0 transition-colors hover:bg-slate-800/30"
-                                      >
-                                        <td className="px-4 py-3 font-mono text-emerald-400 font-semibold">{drive}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.avg_read_mbps}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.avg_write_mbps}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.max_read_mbps}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.max_write_mbps}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.avg_read_iops}</td>
-                                        <td className="px-4 py-3 text-slate-300">{stats.avg_write_iops}</td>
-                                      </tr>
-                                    ))}
-                                  </tbody>
-                                </table>
-                              </div>
-                              {log.details.interval_seconds && (
-                                <div className="text-xs text-slate-500 mt-2">Interval: {log.details.interval_seconds}s</div>
-                              )}
-                            </div>
-                          ) : (
-                            <pre className="text-xs bg-slate-950/60 border border-slate-800/60 rounded-lg p-3 mt-2 overflow-x-auto text-emerald-400">
-                              {JSON.stringify(log.details, null, 2)}
-                            </pre>
-                          )
-                        )}
-                      </div>
-                      <span
-                        className="self-start text-[10px] sm:text-xs px-2 py-1 rounded font-medium whitespace-nowrap"
-                        style={{
-                          backgroundColor: log.success ? '#10b981' : '#ef4444',
-                          color: '#ffffff'
-                        }}
-                      >
-                        {log.success ? 'Success' : 'Failed'}
-                      </span>
-                    </div>
-                    <p className="text-[10px] sm:text-xs mt-1 text-slate-100-tertiary">
-                      {formatDate(log.timestamp)}
-                    </p>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="text-slate-100-secondary">No activity logs found</p>
-            )}
-          </div>
-        )}
       </div>
     </div>
   );

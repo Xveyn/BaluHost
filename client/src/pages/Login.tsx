@@ -2,6 +2,7 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
+import { useVersion } from '../contexts/VersionContext';
 
 interface LoginProps {
   onLogin: (user: any, token: string) => void;
@@ -9,12 +10,14 @@ interface LoginProps {
 
 export default function Login({ onLogin }: LoginProps) {
   const { t } = useTranslation('login');
+  const { version, loading: versionLoading } = useVersion();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [localBackendAvailable, setLocalBackendAvailable] = useState(false);
   const [connectionMode, setConnectionMode] = useState<'checking' | 'local' | 'ipc' | 'fallback'>('checking');
+  const [isDevMode, setIsDevMode] = useState(false);
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -25,6 +28,14 @@ export default function Login({ onLogin }: LoginProps) {
       console.log('[Login] Local backend available:', available);
     };
     checkBackend();
+  }, []);
+
+  // Check if running in dev mode (for showing default credentials)
+  useEffect(() => {
+    fetch('/api/system/mode')
+      .then(res => res.json())
+      .then(data => setIsDevMode(data.dev_mode === true))
+      .catch(() => setIsDevMode(false));
   }, []);
 
   const handleSubmit = async (e: FormEvent) => {
@@ -184,12 +195,14 @@ export default function Login({ onLogin }: LoginProps) {
             </button>
           </form>
 
-          <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
-            {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
-          </div>
+          {isDevMode && (
+            <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
+              {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
+            </div>
+          )}
 
           <div className="mt-4 sm:mt-6 text-center text-[10px] sm:text-[11px] uppercase tracking-[0.3em] sm:tracking-[0.35em] text-slate-100-tertiary">
-            {t('firmware')} v4.2.0 - {t('systemStatus')} <span className="text-sky-400">{t('optimal')}</span>
+            {t('firmware')} v{versionLoading ? '...' : (version || '?.?.?')} - {t('systemStatus')} <span className="text-sky-400">{t('optimal')}</span>
           </div>
         </div>
       </div>

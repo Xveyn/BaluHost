@@ -14,14 +14,12 @@ import {
   Clock,
   Plus,
   RefreshCw,
-  Zap,
 } from 'lucide-react';
 import { getAllDevices, updateMobileDeviceName, updateDesktopDeviceName, deleteMobileDevice, type Device } from '../api/devices';
 import { createSyncSchedule, listSyncSchedules, disableSyncSchedule, type SyncSchedule, type CreateScheduleRequest } from '../api/sync-schedules';
 import { generateMobileToken, type MobileRegistrationToken } from '../lib/api';
-import TapoDeviceSettings from '../components/TapoDeviceSettings';
 
-type Tab = 'devices' | 'register' | 'schedules' | 'smart';
+type Tab = 'devices' | 'register' | 'schedules';
 
 export default function DeviceManagement() {
   const { t } = useTranslation(['devices', 'common']);
@@ -318,18 +316,6 @@ export default function DeviceManagement() {
             <Calendar className="h-4 w-4" />
             <span className="hidden sm:inline">{t('tabs.schedules')}</span>
             <span className="sm:hidden">{t('tabs.schedulesShort')}</span>
-          </button>
-          <button
-            onClick={() => setActiveTab('smart')}
-            className={`flex-1 flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium transition ${
-              activeTab === 'smart'
-                ? 'bg-sky-500/20 text-sky-300 border border-sky-500/30'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800/50'
-            }`}
-          >
-            <Zap className="h-4 w-4" />
-            <span className="hidden sm:inline">{t('tabs.smart')}</span>
-            <span className="sm:hidden">{t('tabs.smartShort')}</span>
           </button>
         </div>
       </div>
@@ -834,11 +820,6 @@ export default function DeviceManagement() {
             </div>
           )}
         </div>
-      )}
-
-      {/* Tab Content: Smart Devices */}
-      {activeTab === 'smart' && (
-        <TapoDeviceSettings />
       )}
 
       {/* QR Code Dialog */}

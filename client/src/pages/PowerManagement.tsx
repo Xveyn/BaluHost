@@ -13,6 +13,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { AlertTriangle } from 'lucide-react';
 import {
   getPowerStatus,
   getPowerDemands,
@@ -1052,6 +1053,30 @@ export default function PowerManagement() {
             {t('system:power.autoScaling.cooldown')}: {autoScaling.cooldown_seconds}s &bull; {t('system:power.autoScaling.cpuMonitor')}:{' '}
             {autoScaling.use_cpu_monitoring ? t('system:power.autoScaling.active') : t('system:power.autoScaling.inactive')}
           </p>
+        </div>
+      )}
+
+      {/* Permission Warning Banner */}
+      {status?.is_using_linux_backend && status.permission_status && !status.permission_status.has_write_access && (
+        <div className="mb-4 rounded-xl border border-amber-500/30 bg-amber-500/10 px-4 py-4">
+          <div className="flex items-start gap-3">
+            <AlertTriangle className="h-5 w-5 text-amber-400 flex-shrink-0 mt-0.5" />
+            <div className="flex-1">
+              <h3 className="font-semibold text-amber-200">
+                {t('system:power.permissions.warningTitle')}
+              </h3>
+              <p className="text-sm text-amber-300 mt-1">
+                {t('system:power.permissions.warningMessage')}
+              </p>
+              <div className="mt-3 text-sm text-amber-300/80">
+                <p className="font-medium mb-1">{t('system:power.permissions.suggestions')}</p>
+                <ul className="list-disc list-inside space-y-1 font-mono text-xs">
+                  <li>sudo systemctl start baluhost-backend</li>
+                  <li>sudo usermod -aG cpufreq $USER</li>
+                </ul>
+              </div>
+            </div>
+          </div>
         </div>
       )}
 
