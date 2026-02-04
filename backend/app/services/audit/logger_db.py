@@ -6,7 +6,7 @@ import logging
 from datetime import datetime, timezone, timedelta
 from typing import Any, Dict, Optional, List
 
-from sqlalchemy import select, desc, and_
+from sqlalchemy import select, desc, and_, not_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -14,6 +14,9 @@ from app.core.database import get_db
 from app.models.audit_log import AuditLog
 
 logger = logging.getLogger(__name__)
+
+# Event types that should be hidden from non-admin users
+ADMIN_ONLY_EVENTS = {'USER_MANAGEMENT', 'ADMIN', 'SYSTEM_CONFIG', 'RAID_OPERATION'}
 
 
 class AuditLoggerDB:
@@ -368,11 +371,12 @@ class AuditLoggerDB:
         action: Optional[str] = None,
         success: Optional[bool] = None,
         days: int = 7,
-        db: Optional[Session] = None
+        db: Optional[Session] = None,
+        is_admin: bool = True
     ) -> Dict[str, Any]:
         """
-        Retrieve paginated audit logs from the database.
-        
+        Retrieve paginated audit logs from the database with role-based filtering.
+
         Args:
             page: Page number (1-indexed)
             page_size: Number of logs per page
@@ -382,24 +386,35 @@ class AuditLoggerDB:
             success: Filter by success status
             days: Number of days to look back
             db: Optional database session
-            
+            is_admin: Whether the requesting user is an admin (affects visibility)
+
         Returns:
-            Dictionary with logs, total count, and pagination info
+            Dictionary with logs, total count, and pagination info.
+            Non-admin users see filtered results with anonymized usernames
+            and no admin-only events.
         """
         if not self._enabled:
             return {"logs": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
-        
+
         should_close = False
         if db is None:
             db = next(get_db())
             should_close = True
-        
+
         try:
             cutoff_time = datetime.now(timezone.utc) - timedelta(days=days)
-            
+
             # Build base query
             base_stmt = select(AuditLog).where(AuditLog.timestamp >= cutoff_time)
-            
+
+            # For non-admins, exclude admin-only event types
+            if not is_admin:
+                base_stmt = base_stmt.where(
+                    not_(AuditLog.event_type.in_(ADMIN_ONLY_EVENTS))
+                )
+                # Non-admins cannot filter by specific user
+                user = None
+
             if event_type:
                 base_stmt = base_stmt.where(AuditLog.event_type == event_type)
             if user:
@@ -408,29 +423,36 @@ class AuditLoggerDB:
                 base_stmt = base_stmt.where(AuditLog.action == action)
             if success is not None:
                 base_stmt = base_stmt.where(AuditLog.success == success)
-            
+
             # Get total count
             from sqlalchemy import func
             count_stmt = select(func.count()).select_from(base_stmt.subquery())
             total = db.execute(count_stmt).scalar() or 0
-            
+
             # Get paginated results
             offset = (page - 1) * page_size
             stmt = base_stmt.order_by(desc(AuditLog.timestamp)).limit(page_size).offset(offset)
-            
+
             result = db.execute(stmt)
             logs = result.scalars().all()
-            
+
             total_pages = (total + page_size - 1) // page_size
-            
+
+            # Convert logs with role-based filtering
+            filtered_logs = []
+            for log in logs:
+                log_dict = self._audit_log_to_dict_filtered(log, is_admin=is_admin)
+                if log_dict is not None:
+                    filtered_logs.append(log_dict)
+
             return {
-                "logs": [self._audit_log_to_dict(log) for log in logs],
+                "logs": filtered_logs,
                 "total": total,
                 "page": page,
                 "page_size": page_size,
                 "total_pages": total_pages
             }
-        
+
         except Exception as e:
             logger.error(f"Failed to retrieve paginated audit logs: {e}")
             return {"logs": [], "total": 0, "page": page, "page_size": page_size, "total_pages": 0}
@@ -559,6 +581,51 @@ class AuditLoggerDB:
             result["ip_address"] = log.ip_address
         if log.user_agent:
             result["user_agent"] = log.user_agent
+
+        return result
+
+    def _audit_log_to_dict_filtered(
+        self,
+        log: AuditLog,
+        is_admin: bool = True
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Convert AuditLog to dict with role-based filtering.
+
+        For non-admin users:
+        - Admin-only events are hidden (returns None)
+        - Usernames are anonymized to "user"
+        - Details JSON is empty (no sensitive data)
+        - IP address and user agent are excluded
+
+        Args:
+            log: AuditLog model instance
+            is_admin: Whether the requesting user is an admin
+
+        Returns:
+            Dictionary representation or None if event should be hidden
+        """
+        if is_admin:
+            return self._audit_log_to_dict(log)
+
+        # Hide admin-only events from non-admins
+        if log.event_type in ADMIN_ONLY_EVENTS:
+            return None
+
+        result = {
+            "id": log.id,
+            "timestamp": log.timestamp.isoformat(),
+            "event_type": log.event_type,
+            "user": "user",  # Anonymized for non-admins
+            "action": log.action,
+            "resource": log.resource,
+            "success": log.success,
+            "details": {}  # Empty for non-admins (may contain sensitive paths/IPs)
+        }
+
+        if log.error_message:
+            result["error"] = log.error_message
+        # ip_address and user_agent excluded for non-admins
 
         return result
 

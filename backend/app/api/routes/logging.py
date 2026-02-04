@@ -293,21 +293,27 @@ async def get_audit_logs(
 ) -> AuditLogResponse:
     """
     Get paginated audit logs with filtering.
-    
+
+    Role-based visibility:
+    - Admins see all events with full details
+    - Non-admins see limited events with anonymized usernames and no details
+
     Args:
         page: Page number (1-indexed)
         page_size: Number of logs per page
         event_type: Filter by event type
-        user: Filter by username
+        user: Filter by username (admin only)
         action: Filter by action
         success: Filter by success status
         days: Number of days to look back
         current_user: Current authenticated user
         db: Database session
-    
+
     Returns:
         Paginated audit log entries
     """
+    is_admin = current_user.role == "admin"
+
     audit = get_audit_logger_db()
     result = audit.get_logs_paginated(
         page=page,
@@ -317,7 +323,8 @@ async def get_audit_logs(
         action=action,
         success=success,
         days=days,
-        db=db
+        db=db,
+        is_admin=is_admin
     )
-    
+
     return AuditLogResponse(**result)
