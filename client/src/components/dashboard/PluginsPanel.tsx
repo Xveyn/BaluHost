@@ -1,6 +1,7 @@
 /**
- * Plugins Panel for Dashboard (Admin Only)
+ * Plugins Panel for Dashboard
  * Shows plugin status in Quick Stats style
+ * Admins can click to navigate to /plugins, non-admins see read-only view
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,15 +18,11 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { summary, loading, error } = usePluginsSummary({
-    enabled: isAdmin,
+    enabled: true,
   });
 
-  // Don't render for non-admins
-  if (!isAdmin) {
-    return null;
-  }
-
   const handleClick = () => {
+    if (!isAdmin) return;
     navigate('/plugins');
   };
 
@@ -124,8 +121,8 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
   if (summary.total === 0) {
     return (
       <div
-        className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(139,92,246,0.15)] active:scale-[0.98] touch-manipulation cursor-pointer ${className}`}
-        onClick={handleClick}
+        className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 ${isAdmin ? 'hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(139,92,246,0.15)] active:scale-[0.98] cursor-pointer' : 'cursor-default'} touch-manipulation ${className}`}
+        onClick={isAdmin ? handleClick : undefined}
       >
         <div className="flex items-center justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -136,17 +133,19 @@ export const PluginsPanel: React.FC<PluginsPanelProps> = ({ isAdmin, className =
             <Plug className="h-6 w-6" />
           </div>
         </div>
-        <div className="mt-3 sm:mt-4 text-xs text-slate-500">
-          {t('dashboard:plugins.browseAvailable')}
-        </div>
+        {isAdmin && (
+          <div className="mt-3 sm:mt-4 text-xs text-slate-500">
+            {t('dashboard:plugins.browseAvailable')}
+          </div>
+        )}
       </div>
     );
   }
 
   return (
     <div
-      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 ${hoverShadow} active:scale-[0.98] touch-manipulation cursor-pointer ${className}`}
-      onClick={handleClick}
+      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 ${isAdmin ? `hover:border-slate-700/60 hover:bg-slate-900/80 ${hoverShadow} active:scale-[0.98] cursor-pointer` : 'cursor-default'} touch-manipulation ${className}`}
+      onClick={isAdmin ? handleClick : undefined}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">

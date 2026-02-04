@@ -486,11 +486,11 @@ export default function Dashboard({ user }: DashboardProps) {
             {/* Network Widget */}
             <NetworkWidget />
 
-            {/* Services Panel (Admin Only) */}
-            {isAdmin && <ServicesPanel isAdmin={isAdmin} />}
+            {/* Services Panel (visible to all, clickable for admins) */}
+            <ServicesPanel isAdmin={isAdmin} />
 
-            {/* Plugins Panel (Admin Only) */}
-            {isAdmin && <PluginsPanel isAdmin={isAdmin} />}
+            {/* Plugins Panel (visible to all, clickable for admins) */}
+            <PluginsPanel isAdmin={isAdmin} />
           </div>
 
           <div className="grid grid-cols-1 gap-6">

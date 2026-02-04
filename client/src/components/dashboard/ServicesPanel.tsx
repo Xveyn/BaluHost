@@ -1,6 +1,7 @@
 /**
- * Services Panel for Dashboard (Admin Only)
+ * Services Panel for Dashboard
  * Shows backend services status in Quick Stats style
+ * Admins navigate to /system?tab=health, non-admins to /system?tab=services
  */
 import React from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -17,16 +18,15 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
   const { t } = useTranslation(['dashboard', 'common']);
   const navigate = useNavigate();
   const { summary, loading, error } = useServicesSummary({
-    enabled: isAdmin,
+    enabled: true,
   });
 
-  // Don't render for non-admins
-  if (!isAdmin) {
-    return null;
-  }
-
   const handleClick = () => {
-    navigate('/health');
+    if (isAdmin) {
+      navigate('/system?tab=health');
+    } else {
+      navigate('/system?tab=services');
+    }
   };
 
   // Calculate percentage of running services
@@ -115,7 +115,7 @@ export const ServicesPanel: React.FC<ServicesPanelProps> = ({ isAdmin, className
 
   return (
     <div
-      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 ${hoverShadow} active:scale-[0.98] touch-manipulation cursor-pointer ${className}`}
+      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 ${hoverShadow} active:scale-[0.98] cursor-pointer touch-manipulation ${className}`}
       onClick={handleClick}
     >
       <div className="flex items-center justify-between gap-3">

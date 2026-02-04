@@ -1,8 +1,8 @@
 /**
- * Hook for getting service status summary (admin only)
+ * Hook for getting service status summary (all authenticated users)
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
-import { getAllServices, type ServiceStatus, ServiceState } from '../api/service-status';
+import { getDebugSnapshot, type ServiceStatus, ServiceState } from '../api/service-status';
 
 export interface ServicesSummary {
   running: number;
@@ -34,16 +34,10 @@ export function useServicesSummary(options: UseServicesSummaryOptions = {}): Use
 
   const loadData = useCallback(async () => {
     try {
-      const response = await getAllServices();
-      setServices(response);
+      const response = await getDebugSnapshot();
+      setServices(response.services);
       setError(null);
     } catch (err: any) {
-      // Don't show error if user is not admin (403)
-      if (err.response?.status === 403) {
-        setServices([]);
-        setError(null);
-        return;
-      }
       const message = err.response?.data?.detail || err.message || 'Failed to load services';
       setError(message);
     }
