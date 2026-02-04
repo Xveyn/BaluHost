@@ -1390,6 +1390,49 @@ async def stop_power_manager() -> None:
     await manager.stop()
 
 
+async def check_and_notify_permissions() -> None:
+    """
+    Check power management permissions and create notification if limited.
+    Called once during server startup.
+    """
+    manager = get_power_manager()
+
+    # Only for Linux backend
+    if not isinstance(manager._backend, LinuxCpuPowerBackend):
+        return
+
+    # Skip if we have write permission
+    if manager._backend.has_write_permission():
+        return
+
+    # Create notification for admins
+    try:
+        from app.core.database import SessionLocal
+        from app.services.notifications.service import get_notification_service
+
+        db = SessionLocal()
+        try:
+            notification_service = get_notification_service()
+            await notification_service.create(
+                db=db,
+                user_id=None,  # System-wide for all admins
+                category="system",
+                notification_type="warning",
+                title="CPU Power Management: Eingeschränkte Berechtigungen",
+                message=(
+                    "Der Server hat keinen Schreibzugriff auf CPU-Frequenzeinstellungen. "
+                    "Starten Sie den Server mit 'sudo' oder fügen Sie den Benutzer zur 'cpufreq'-Gruppe hinzu."
+                ),
+                action_url="/system-control",
+                priority=1,
+            )
+            logger.warning("Created startup notification: power management permissions limited")
+        finally:
+            db.close()
+    except Exception as e:
+        logger.debug(f"Could not create power permission notification: {e}")
+
+
 def get_status() -> dict:
     """
     Get power manager service status.

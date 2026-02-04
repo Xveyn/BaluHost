@@ -243,6 +243,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     if settings.power_management_enabled:
         try:
             await power_manager.start_power_manager()
+            await power_manager.check_and_notify_permissions()
             logger.info("CPU power management started")
         except Exception as e:
             logger.warning(f"CPU power management could not start: {e}")

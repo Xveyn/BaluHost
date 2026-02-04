@@ -40,6 +40,13 @@ from app.services.audit_logger import get_audit_logger
 router = APIRouter()
 
 
+@router.get("/mode")
+async def get_system_mode() -> dict[str, bool]:
+    """Get system mode (dev/prod). Public endpoint for login page."""
+    from app.core.config import settings
+    return {"dev_mode": settings.is_dev_mode}
+
+
 @router.get("/info", response_model=SystemInfo)
 async def get_system_info(_: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
     return system_service.get_system_info()
