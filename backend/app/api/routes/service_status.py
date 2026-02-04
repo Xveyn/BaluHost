@@ -277,12 +277,13 @@ async def get_metrics(
     summary="Get combined debug snapshot"
 )
 async def get_debug_snapshot(
-    current_user=Depends(deps.get_current_admin)
+    current_user=Depends(deps.get_current_user)
 ) -> AdminDebugResponse:
     """
-    Get a complete debug snapshot combining all admin status information.
+    Get a complete debug snapshot combining all status information.
 
-    Admin only. Returns services, dependencies, and metrics in a single response.
+    Available to all authenticated users (read-only).
+    Returns services, dependencies, and metrics in a single response.
     """
     collector = get_service_status_collector()
     return collector.get_debug_snapshot()
