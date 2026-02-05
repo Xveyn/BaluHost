@@ -7,6 +7,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { LoadingOverlay } from '../components/ui/Spinner';
 import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
 import type { FanCurvePoint } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
@@ -87,10 +88,7 @@ export default function FanControl() {
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="inline-block h-12 w-12 sm:h-16 sm:w-16 animate-spin rounded-full border-4 border-slate-600 border-t-sky-500" />
-          <p className="mt-4 text-sm sm:text-base text-slate-400">{t('system:fanControl.loading')}</p>
-        </div>
+        <LoadingOverlay label={t('system:fanControl.loading')} />
       </div>
     );
   }

@@ -17,6 +17,7 @@ import {
   RefreshCw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { Spinner } from '../components/ui/Spinner';
 import {
   getPreferences,
   updatePreferences,
@@ -135,7 +136,7 @@ export default function NotificationPreferencesPage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center py-20">
-        <div className="h-8 w-8 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
+        <Spinner size="lg" />
       </div>
     );
   }

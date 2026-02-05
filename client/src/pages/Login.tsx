@@ -1,11 +1,12 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.svg';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
 
 interface LoginProps {
-  onLogin: (user: any, token: string) => void;
+  onLogin: (user: User, token: string) => void;
 }
 
 export default function Login({ onLogin }: LoginProps) {

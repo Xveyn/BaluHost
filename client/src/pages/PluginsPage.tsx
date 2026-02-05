@@ -19,6 +19,7 @@ import {
 } from '../api/plugins';
 import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen } from 'lucide-react';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 type TabType = 'plugins' | 'documentation';
 
@@ -29,6 +30,7 @@ const TABS = [
 
 export default function PluginsPage() {
   const { t } = useTranslation(['plugins', 'common']);
+  const { confirm, dialog } = useConfirmDialog();
   const { plugins, isLoading, error, refreshPlugins } = usePlugins();
   const [selectedPlugin, setSelectedPlugin] = useState<PluginDetail | null>(null);
   const [allPermissions, setAllPermissions] = useState<PermissionInfo[]>([]);
@@ -104,9 +106,8 @@ export default function PluginsPage() {
   };
 
   const handleUninstall = async (name: string) => {
-    if (!confirm(t('confirm.uninstall', { name }))) {
-      return;
-    }
+    const ok = await confirm(t('confirm.uninstall', { name }), { title: t('buttons.uninstall'), variant: 'danger', confirmLabel: t('buttons.uninstall') });
+    if (!ok) return;
 
     setActionLoading(true);
     setActionError(null);
@@ -485,6 +486,7 @@ export default function PluginsPage() {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

@@ -11,7 +11,7 @@ import { loadPluginComponent, loadPluginStyles } from '../lib/pluginLoader';
 import { AlertTriangle, Plug } from 'lucide-react';
 
 interface PluginUser {
-  id: string;
+  id: number;
   username: string;
   role: string;
 }

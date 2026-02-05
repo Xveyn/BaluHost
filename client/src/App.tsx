@@ -1,34 +1,41 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
-import { useState, useEffect } from 'react';
-import Login from './pages/Login';
-import Dashboard from './pages/Dashboard';
-import FileManager from './pages/FileManager';
-import UserManagement from './pages/UserManagement';
-import SystemMonitor from './pages/SystemMonitor';
-import SchedulerDashboard from './pages/SchedulerDashboard';
-import ApiCenterPage from './pages/ApiCenterPage';
-import SharesPage from './pages/SharesPage';
-import SettingsPage from './pages/SettingsPage';
-import PublicSharePage from './pages/PublicSharePage';
-import AdminDatabase from './pages/AdminDatabase';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import SyncSettings from './components/SyncSettings';
-import DevicesPage from './pages/DevicesPage';
-import SystemControlPage from './pages/SystemControlPage';
-import PluginsPage from './pages/PluginsPage';
 import PluginPage from './components/PluginPage';
-import NotificationPreferencesPage from './pages/NotificationPreferencesPage';
-import UpdatePage from './pages/UpdatePage';
 import Layout from './components/Layout';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';
 import { buildApiUrl } from './lib/api';
+import type { User } from './types/auth';
 import './App.css';
 
-interface User {
-  id: string;
-  username: string;
-  email: string;
-  role: string;
+const Login = lazy(() => import('./pages/Login'));
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const FileManager = lazy(() => import('./pages/FileManager'));
+const UserManagement = lazy(() => import('./pages/UserManagement'));
+const SystemMonitor = lazy(() => import('./pages/SystemMonitor'));
+const SchedulerDashboard = lazy(() => import('./pages/SchedulerDashboard'));
+const ApiCenterPage = lazy(() => import('./pages/ApiCenterPage'));
+const SharesPage = lazy(() => import('./pages/SharesPage'));
+const SettingsPage = lazy(() => import('./pages/SettingsPage'));
+const PublicSharePage = lazy(() => import('./pages/PublicSharePage'));
+const AdminDatabase = lazy(() => import('./pages/AdminDatabase'));
+const DevicesPage = lazy(() => import('./pages/DevicesPage'));
+const SystemControlPage = lazy(() => import('./pages/SystemControlPage'));
+const PluginsPage = lazy(() => import('./pages/PluginsPage'));
+const NotificationPreferencesPage = lazy(() => import('./pages/NotificationPreferencesPage'));
+const UpdatePage = lazy(() => import('./pages/UpdatePage'));
+
+function LoadingFallback() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <div className="flex flex-col items-center gap-3">
+        <div className="h-8 w-8 animate-spin rounded-full border-4 border-slate-600 border-t-sky-500" />
+        <p className="text-sm text-slate-500">Loading...</p>
+      </div>
+    </div>
+  );
 }
 
 function App() {
@@ -233,9 +240,11 @@ function App() {
   if (!backendReady || loading) return <LoadingScreen />;
 
   return (
+    <ErrorBoundary>
     <VersionProvider>
     <PluginProvider>
     <Router>
+      <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route
           path="/login"
@@ -497,9 +506,11 @@ function App() {
           }
         />
       </Routes>
+      </Suspense>
     </Router>
     </PluginProvider>
     </VersionProvider>
+    </ErrorBoundary>
   );
 }
 

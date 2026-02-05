@@ -19,19 +19,10 @@ import {
 } from '../api/raid';
 import RaidSetupWizard from '../components/RaidSetupWizard';
 import MockDiskWizard from '../components/MockDiskWizard';
+import { formatBytes } from '../lib/formatters';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 const REFRESH_INTERVAL_MS = 8000;
-
-const formatBytes = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 B';
-  }
-
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const size = bytes / 1024 ** exponent;
-  return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[exponent]}`;
-};
 
 const statusStyles: Record<string, string> = {
   optimal: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
@@ -64,6 +55,7 @@ const shouldShowFinalize = (array: RaidArray): boolean => ['rebuilding', 'degrad
 
 export default function RaidManagement() {
   const { t } = useTranslation(['system', 'common']);
+  const { confirm, dialog } = useConfirmDialog();
   const [arrays, setArrays] = useState<RaidArray[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -326,9 +318,8 @@ export default function RaidManagement() {
   };
 
   const handleDeleteArray = async (arrayName: string) => {
-    if (!window.confirm(t('system:raid.messages.deleteConfirm', { name: arrayName }))) {
-      return;
-    }
+    const ok = await confirm(t('system:raid.messages.deleteConfirm', { name: arrayName }), { title: t('system:raid.deleteArray'), variant: 'danger', confirmLabel: t('system:raid.deleteArray') });
+    if (!ok) return;
 
     setBusy(true);
     try {
@@ -895,6 +886,7 @@ export default function RaidManagement() {
           }}
         />
       )}
+      {dialog}
     </div>
   );
 }

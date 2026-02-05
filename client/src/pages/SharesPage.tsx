@@ -17,9 +17,11 @@ import CreateShareLinkModal from '../components/CreateShareLinkModal';
 import CreateFileShareModal from '../components/CreateFileShareModal';
 import EditShareLinkModal from '../components/EditShareLinkModal';
 import EditFileShareModal from '../components/EditFileShareModal';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 export default function SharesPage() {
   const { t } = useTranslation(['shares', 'common']);
+  const { confirm, dialog } = useConfirmDialog();
   // User list for modal
   const [users, setUsers] = useState<any[]>([]);
   const [activeTab, setActiveTab] = useState<'links' | 'shares' | 'shared-with-me'>('links');
@@ -88,7 +90,8 @@ export default function SharesPage() {
   };
 
   const handleDeleteShareLink = async (linkId: number) => {
-    if (!confirm(t('confirm.deleteLink'))) return;
+    const ok = await confirm(t('confirm.deleteLink'), { title: t('confirm.deleteLink'), variant: 'danger', confirmLabel: t('common:actions.delete', 'Delete') });
+    if (!ok) return;
 
     try {
       await deleteShareLink(linkId);
@@ -100,7 +103,8 @@ export default function SharesPage() {
   };
 
   const handleDeleteFileShare = async (shareId: number) => {
-    if (!confirm(t('confirm.revokeShare'))) return;
+    const ok = await confirm(t('confirm.revokeShare'), { title: t('confirm.revokeShare'), variant: 'danger', confirmLabel: t('common:actions.revoke', 'Revoke') });
+    if (!ok) return;
 
     try {
       await deleteFileShare(shareId);
@@ -891,6 +895,7 @@ export default function SharesPage() {
           }}
         />
       )}
+      {dialog}
     </div>
   );
 }

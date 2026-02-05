@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
 import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
+import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 interface UserInfo {
   id: string;
@@ -12,6 +13,7 @@ interface UserInfo {
 
 export default function MobileDevicesPage() {
   const { t } = useTranslation('common');
+  const { confirm, dialog } = useConfirmDialog();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [devices, setDevices] = useState<MobileDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -88,9 +90,8 @@ export default function MobileDevicesPage() {
   };
 
   const handleDeleteDevice = async (deviceId: string, deviceName: string) => {
-    if (!confirm(`Gerät "${deviceName}" wirklich löschen?`)) {
-      return;
-    }
+    const ok = await confirm(`Gerät "${deviceName}" wirklich löschen?`, { title: 'Gerät löschen', variant: 'danger', confirmLabel: 'Löschen' });
+    if (!ok) return;
 
     try {
       console.log('Deleting device:', deviceId);
@@ -516,6 +517,7 @@ export default function MobileDevicesPage() {
           </div>
         </div>
       )}
+      {dialog}
     </div>
   );
 }

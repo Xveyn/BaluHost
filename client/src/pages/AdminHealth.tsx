@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { buildApiUrl } from '../lib/api';
+import { formatBytes, formatUptime } from '../lib/formatters';
 import { getAllServices, type ServiceStatus, ServiceState } from '../api/service-status';
 import {
   Server,
@@ -66,22 +67,6 @@ interface HealthData {
     }>;
   };
 }
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes || Number.isNaN(bytes)) return '0 B';
-  const k = 1024;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const value = bytes / Math.pow(k, i);
-  return `${value.toFixed(1)} ${units[i]}`;
-};
-
-const formatUptime = (seconds: number): string => {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-};
 
 const getStateIcon = (state: string) => {
   switch (state) {

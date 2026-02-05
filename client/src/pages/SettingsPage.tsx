@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe } from 'lucide-react';
 import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
+import { formatBytes } from '../lib/formatters';
 
 interface UserProfile {
   id: number;
@@ -191,14 +192,6 @@ export default function SettingsPage() {
     } catch (error) {
       console.error('Failed to export data:', error);
     }
-  };
-
-  const formatBytes = (bytes: number) => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
   const formatDate = (dateString: string) => {

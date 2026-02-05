@@ -5,215 +5,15 @@ import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api'
 import { UploadProgressModal } from '../components/UploadProgressModal';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi } from '../api/vcl';
-
-interface StorageInfo {
-  totalBytes: number;
-  usedBytes: number;
-  availableBytes: number;
-}
-
-interface StorageMountpoint {
-  id: string;
-  name: string;
-  type: string;
-  path: string;
-  size_bytes: number;
-  used_bytes: number;
-  available_bytes: number;
-  raid_level?: string;
-  status: string;
-  is_default: boolean;
-}
-
-interface FileItem {
-  name: string;
-  path: string;
-  size: number;
-  type: 'file' | 'directory';
-  modifiedAt: string;
-  ownerId?: number;
-  ownerName?: string;
-  file_id?: number;
-}
-
-interface ApiFileItem {
-  name: string;
-  path: string;
-  size: number;
-  type: 'file' | 'directory';
-  modified_at?: string;
-  mtime?: string;
-}
-
-interface FileViewerProps {
-  file: FileItem;
-  onClose: () => void;
-}
-
-function FileViewer({ file, onClose }: FileViewerProps) {
-  const [content, setContent] = useState<string>('');
-  const [blobUrl, setBlobUrl] = useState<string>('');
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string>('');
-
-  useEffect(() => {
-    loadFileContent();
-    
-    // Cleanup blob URL when component unmounts
-    return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
-      }
-    };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [file.path]);
-
-  const loadFileContent = async () => {
-    setLoading(true);
-    setError('');
-    const token = localStorage.getItem('token');
-    if (!token) {
-      setError('Not authenticated');
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const response = await fetch(buildApiUrl(`/api/files/download/${encodeURIComponent(file.path)}`), {
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-
-      if (response.ok) {
-        const blob = await response.blob();
-        
-        // For images, videos, audio, PDFs - create blob URL
-        if (isImageFile(file.name) || isVideoFile(file.name) || isAudioFile(file.name) || isPdfFile(file.name)) {
-          const url = URL.createObjectURL(blob);
-          setBlobUrl(url);
-        } else {
-          // For text files - convert to text
-          const text = await blob.text();
-          setContent(text);
-        }
-      } else {
-        setError('Failed to load file');
-      }
-    } catch (err) {
-      console.error('Failed to load file:', err);
-      setError('Failed to load file');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const getFileExtension = (filename: string) => {
-    return filename.split('.').pop()?.toLowerCase() || '';
-  };
-
-  const isTextFile = (filename: string) => {
-    const ext = getFileExtension(filename);
-    const textExtensions = ['txt', 'md', 'json', 'js', 'ts', 'jsx', 'tsx', 'css', 'html', 'xml', 'yaml', 'yml', 'log', 'py', 'java', 'c', 'cpp', 'h', 'cs', 'php', 'rb', 'go', 'rs', 'sh'];
-    return textExtensions.includes(ext);
-  };
-
-  const isImageFile = (filename: string) => {
-    const ext = getFileExtension(filename);
-    const imageExtensions = ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'svg', 'webp'];
-    return imageExtensions.includes(ext);
-  };
-
-  const isVideoFile = (filename: string) => {
-    const ext = getFileExtension(filename);
-    const videoExtensions = ['mp4', 'webm', 'ogg', 'mov', 'avi'];
-    return videoExtensions.includes(ext);
-  };
-
-  const isAudioFile = (filename: string) => {
-    const ext = getFileExtension(filename);
-    const audioExtensions = ['mp3', 'wav', 'ogg', 'flac', 'm4a'];
-    return audioExtensions.includes(ext);
-  };
-
-  const isPdfFile = (filename: string) => {
-    return getFileExtension(filename) === 'pdf';
-  };
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-2 sm:p-4">
-      <div className="card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
-        <div className="flex items-start sm:items-center justify-between gap-3 mb-3 sm:mb-4">
-          <div className="min-w-0 flex-1">
-            <h3 className="text-lg sm:text-xl font-semibold text-white truncate">{file.name}</h3>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 truncate">{file.path}</p>
-          </div>
-          <button
-            onClick={onClose}
-            className="shrink-0 rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 sm:px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white touch-manipulation active:scale-95"
-          >
-            <span className="hidden sm:inline">✕ Close</span>
-            <span className="sm:hidden">✕</span>
-          </button>
-        </div>
-        <div className="flex-1 overflow-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-sm text-slate-500">Loading file...</p>
-            </div>
-          ) : error ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-sm text-rose-400">{error}</p>
-            </div>
-          ) : isImageFile(file.name) ? (
-            <div className="flex items-center justify-center p-4 bg-slate-950/50">
-              <img
-                src={blobUrl}
-                alt={file.name}
-                className="max-w-full max-h-[70vh] rounded-lg"
-              />
-            </div>
-          ) : isVideoFile(file.name) ? (
-            <div className="p-4">
-              <video controls className="w-full max-h-[70vh] rounded-lg bg-black">
-                <source src={blobUrl} type={`video/${getFileExtension(file.name)}`} />
-                Your browser does not support the video tag.
-              </video>
-            </div>
-          ) : isAudioFile(file.name) ? (
-            <div className="flex flex-col items-center justify-center p-8">
-              <div className="mb-4 text-6xl">🎵</div>
-              <audio controls className="w-full max-w-md">
-                <source src={blobUrl} type={`audio/${getFileExtension(file.name)}`} />
-                Your browser does not support the audio tag.
-              </audio>
-            </div>
-          ) : isPdfFile(file.name) ? (
-            <div className="p-4">
-              <iframe
-                src={blobUrl}
-                className="w-full h-[70vh] rounded-lg border border-slate-800"
-                title={file.name}
-              />
-            </div>
-          ) : isTextFile(file.name) ? (
-            <pre className="p-4 text-sm text-slate-300 font-mono whitespace-pre-wrap break-words bg-slate-950/50 rounded-lg">
-              {content}
-            </pre>
-          ) : (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-sm text-slate-500">Preview not available for this file type</p>
-            </div>
-          )}
-        </div>
-      </div>
-    </div>
-  );
-}
+import { formatBytes } from '../lib/formatters';
+import { FileViewer } from '../components/file-manager/FileViewer';
+import { StorageSelector } from '../components/file-manager/StorageSelector';
+import { PermissionEditor } from '../components/file-manager/PermissionEditor';
+import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
 
 interface FileManagerProps {
   user: {
-    id: string;
+    id: number;
     role: string;
   };
 }
@@ -250,7 +50,7 @@ export default function FileManager({ user }: FileManagerProps) {
       const [showEditPermissionsModal, setShowEditPermissionsModal] = useState(false);
       const [fileToEditPermissions, setFileToEditPermissions] = useState<FileItem | null>(null);
       // Neue State für Berechtigungsregeln
-      const [editRules, setEditRules] = useState<Array<{ userId: string; canView: boolean; canEdit: boolean; canDelete: boolean }>>([]);
+      const [editRules, setEditRules] = useState<PermissionRule[]>([]);
       // Nur eine Deklaration von allUsers/setAllUsers!
       // (Deklaration bleibt nur einmal bestehen, doppelte Zeile entfernt)
 
@@ -348,14 +148,6 @@ export default function FileManager({ user }: FileManagerProps) {
       toast.error('Session expired. Please sign in again.');
     }
     return token;
-  };
-
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
   };
 
   const getErrorMessage = (error: any): string => {
@@ -597,7 +389,7 @@ export default function FileManager({ user }: FileManagerProps) {
     // Check storage capacity
     const totalSize = Array.from(fileList).reduce((acc, file) => acc + file.size, 0);
     if (storageInfo && storageInfo.availableBytes !== null && totalSize > storageInfo.availableBytes) {
-      toast.error(`Not enough storage space. Need ${formatFileSize(totalSize)}, but only ${formatFileSize(storageInfo.availableBytes)} available.`);
+      toast.error(`Not enough storage space. Need ${formatBytes(totalSize)}, but only ${formatBytes(storageInfo.availableBytes)} available.`);
       setUploading(false);
       return;
     }
@@ -898,14 +690,6 @@ export default function FileManager({ user }: FileManagerProps) {
     setViewingFile(file);
   };
 
-  const formatFileSize = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return Math.round(bytes / Math.pow(k, i) * 100) / 100 + ' ' + sizes[i];
-  };
-
   const navigateToFolder = (folderPath: string) => {
     // Remove mountpoint prefix if present to get relative path
     if (selectedMountpoint && selectedMountpoint.type !== 'dev-storage') {
@@ -937,8 +721,8 @@ export default function FileManager({ user }: FileManagerProps) {
           {storageInfo && (
             <div className="mt-2 text-xs text-slate-500">
               <span className="hidden sm:inline">Storage: </span>
-              {formatFileSize(storageInfo.usedBytes)} / {formatFileSize(storageInfo.totalBytes)} used
-              <span className="ml-2 text-sky-400">({formatFileSize(storageInfo.availableBytes)} available)</span>
+              {formatBytes(storageInfo.usedBytes)} / {formatBytes(storageInfo.totalBytes)} used
+              <span className="ml-2 text-sky-400">({formatBytes(storageInfo.availableBytes)} available)</span>
             </div>
           )}
           {vclQuota && (
@@ -994,41 +778,14 @@ export default function FileManager({ user }: FileManagerProps) {
       </div>
 
       {/* Storage Drive Selector */}
-      <div className="card border-slate-800/60 bg-slate-900/55">
-        <div className="flex flex-col sm:flex-row sm:flex-wrap sm:items-center gap-3">
-          <span className="text-xs font-semibold uppercase tracking-[0.2em] sm:tracking-[0.25em] text-slate-500">Storage:</span>
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-            {mountpoints.map((mp) => (
-              <button
-                key={mp.id}
-                onClick={() => {
-                  setSelectedMountpoint(mp);
-                  setCurrentPath(''); // Reset to root when switching drives
-                }}
-                className={`flex items-center gap-2 rounded-xl border px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition touch-manipulation active:scale-95 ${
-                  selectedMountpoint?.id === mp.id
-                    ? 'border-sky-500/50 bg-sky-500/10 text-sky-200'
-                    : 'border-slate-700/70 bg-slate-950/70 text-slate-300 hover:border-sky-500/40 hover:text-white'
-                }`}
-              >
-                <span className="text-sm sm:text-base">
-                  {mp.type === 'raid' ? '💾' : mp.type === 'dev-storage' ? '🔧' : '💿'}
-                </span>
-                <div className="flex flex-col items-start">
-                  <span className="font-semibold truncate max-w-[120px] sm:max-w-none">{mp.name}</span>
-                  <span className="text-[10px] sm:text-xs text-slate-400">
-                    {formatFileSize(mp.used_bytes)} / {formatFileSize(mp.size_bytes)}
-                    {mp.raid_level && <span className="hidden sm:inline"> • {mp.raid_level.toUpperCase()}</span>}
-                    {mp.status !== 'optimal' && (
-                      <span className="ml-1 text-amber-400">⚠</span>
-                    )}
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
-        </div>
-      </div>
+      <StorageSelector
+        mountpoints={mountpoints}
+        selectedMountpoint={selectedMountpoint}
+        onSelect={(mp) => {
+          setSelectedMountpoint(mp);
+          setCurrentPath(''); // Reset to root when switching drives
+        }}
+      />
 
       {/* Breadcrumb Navigation */}
       <div className="card border-slate-800/60 bg-slate-900/55">
@@ -1137,7 +894,7 @@ export default function FileManager({ user }: FileManagerProps) {
                         {file.type}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-400">
-                        {file.type === 'file' ? formatFileSize(file.size) : '—'}
+                        {file.type === 'file' ? formatBytes(file.size) : '—'}
                       </td>
                       <td className="px-6 py-4 text-sm text-slate-500">
                         {new Date(file.modifiedAt).toLocaleString()}
@@ -1245,102 +1002,17 @@ export default function FileManager({ user }: FileManagerProps) {
                         </div>
                             {/* Edit Permissions Modal */}
                             {showEditPermissionsModal && fileToEditPermissions && (
-                              <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
-                                <div className="card w-full max-w-xl border-indigo-500/30 bg-slate-900/80">
-                                  <h3 className="text-xl font-semibold text-white">Rechte bearbeiten</h3>
-                                  <p className="mt-2 text-sm text-slate-400">Lege für jeden Nutzer eine Berechtigungsregel fest.</p>
-                                  <div className="mt-5 space-y-4">
-                                    {editRules.length > 0 && editRules.map((rule, idx) => (
-                                      <div key={idx} className="flex items-center gap-4 border-b border-slate-800/40 pb-4 mb-4">
-                                        <select
-                                          value={rule.userId}
-                                          onChange={e => {
-                                            const newRules = [...editRules];
-                                            newRules[idx].userId = e.target.value;
-                                            setEditRules(newRules);
-                                          }}
-                                          className="input w-48"
-                                        >
-                                          <option value="">Nutzer wählen...</option>
-                                          {allUsers.map(u => (
-                                            <option key={u.id} value={u.id}>{u.username}</option>
-                                          ))}
-                                        </select>
-                                        <label className="flex items-center">
-                                          <input
-                                            type="checkbox"
-                                            checked={rule.canView}
-                                            onChange={e => {
-                                              const newRules = [...editRules];
-                                              newRules[idx].canView = e.target.checked;
-                                              setEditRules(newRules);
-                                            }}
-                                            className="mr-2"
-                                          />
-                                          <span className="text-sm">Sehen</span>
-                                        </label>
-                                        <label className="flex items-center">
-                                          <input
-                                            type="checkbox"
-                                            checked={rule.canEdit}
-                                            onChange={e => {
-                                              const newRules = [...editRules];
-                                              newRules[idx].canEdit = e.target.checked;
-                                              setEditRules(newRules);
-                                            }}
-                                            className="mr-2"
-                                          />
-                                          <span className="text-sm">Bearbeiten</span>
-                                        </label>
-                                        <label className="flex items-center">
-                                          <input
-                                            type="checkbox"
-                                            checked={rule.canDelete}
-                                            onChange={e => {
-                                              const newRules = [...editRules];
-                                              newRules[idx].canDelete = e.target.checked;
-                                              setEditRules(newRules);
-                                            }}
-                                            className="mr-2"
-                                          />
-                                          <span className="text-sm">Löschen</span>
-                                        </label>
-                                        <button
-                                          onClick={() => {
-                                            setEditRules(editRules.filter((_, i) => i !== idx));
-                                          }}
-                                          className="ml-2 px-2 py-1 text-xs rounded bg-rose-900/40 text-rose-300 hover:bg-rose-900/60"
-                                        >
-                                          Entfernen
-                                        </button>
-                                      </div>
-                                    ))}
-                                    <button
-                                      onClick={() => setEditRules([...editRules, { userId: '', canView: true, canEdit: false, canDelete: false }])}
-                                      className="rounded-xl border border-indigo-500/40 bg-indigo-500/10 px-4 py-2 text-sm font-medium text-indigo-200 transition hover:border-indigo-400/60 hover:bg-indigo-500/20"
-                                    >
-                                      + Regel hinzufügen
-                                    </button>
-                                  </div>
-                                  <div className="mt-6 flex justify-end gap-3">
-                                    <button
-                                      onClick={() => {
-                                        setShowEditPermissionsModal(false);
-                                        setFileToEditPermissions(null);
-                                      }}
-                                      className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
-                                    >
-                                      Abbrechen
-                                    </button>
-                                    <button
-                                      onClick={handleEditPermissionsSave}
-                                      className="btn btn-primary"
-                                    >
-                                      Speichern
-                                    </button>
-                                  </div>
-                                </div>
-                              </div>
+                              <PermissionEditor
+                                file={fileToEditPermissions}
+                                rules={editRules}
+                                allUsers={allUsers}
+                                onRulesChange={setEditRules}
+                                onSave={handleEditPermissionsSave}
+                                onClose={() => {
+                                  setShowEditPermissionsModal(false);
+                                  setFileToEditPermissions(null);
+                                }}
+                              />
                             )}
                       </td>
                     </tr>
@@ -1391,7 +1063,7 @@ export default function FileManager({ user }: FileManagerProps) {
                         {file.type === 'file' && (
                           <>
                             <span>•</span>
-                            <span>{formatFileSize(file.size)}</span>
+                            <span>{formatBytes(file.size)}</span>
                           </>
                         )}
                       </div>

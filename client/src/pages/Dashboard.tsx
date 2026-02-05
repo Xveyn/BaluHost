@@ -17,6 +17,7 @@ import {
   AlertBanner,
   type Alert,
 } from '../components/dashboard';
+import { formatBytes, formatUptime } from '../lib/formatters';
 
 interface SystemStats {
   cpuUsage: number;
@@ -38,22 +39,6 @@ interface DashboardProps {
     role: string;
   };
 }
-
-const formatBytes = (bytes: number): string => {
-  if (!bytes || Number.isNaN(bytes)) return '0 B';
-  const k = 1024;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const value = bytes / Math.pow(k, i);
-  return `${value.toFixed(value >= 100 || value < 10 ? 1 : 2)} ${units[i]}`;
-};
-
-const formatUptime = (seconds: number): string => {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-};
 
 const RAID_CACHE_KEY = 'raid_status_cache';
 const RAID_CACHE_DURATION = 120000; // 2 minutes

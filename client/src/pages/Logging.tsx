@@ -5,6 +5,7 @@ import type { AuditLoggingStatus, FileAccessLogsResponse } from '../api/logging'
 import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateTime } from '../lib/dateUtils';
+import { formatBytes } from '../lib/formatters';
 
 const Logging: React.FC = () => {
   const { t } = useTranslation(['system', 'common']);
@@ -66,18 +67,6 @@ const Logging: React.FC = () => {
     } finally {
       setTogglingAudit(false);
     }
-  };
-
-  const formatBytes = (bytes: number | undefined): string => {
-    if (!bytes) return '-';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    return `${size.toFixed(2)} ${units[unitIndex]}`;
   };
 
   // Use centralized UTC timestamp formatting
@@ -255,7 +244,7 @@ const Logging: React.FC = () => {
                         {log.resource}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {formatBytes(log.details?.size_bytes)}
+                        {log.details?.size_bytes ? formatBytes(log.details.size_bytes) : '-'}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {log.details?.duration_ms
