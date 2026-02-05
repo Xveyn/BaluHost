@@ -1,8 +1,9 @@
 from typing import List, Optional, Dict, Any
+import json
 import re
 import os
 
-from sqlalchemy import inspect, select, Table, MetaData, text
+from sqlalchemy import inspect, select, Table, MetaData, text, asc, desc, or_, func
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
@@ -12,6 +13,46 @@ from app.core import database
 REDACT_PATTERN = re.compile(r"password|secret|token|private_key|api_key", re.IGNORECASE)
 
 
+# Categorised table whitelist – flat _WHITELIST is derived automatically.
+_TABLE_CATEGORIES: Dict[str, List[str]] = {
+    "Core": ["users", "file_metadata", "audit_logs", "backups"],
+    "Sharing": ["share_links", "file_shares"],
+    "Auth": ["refresh_tokens"],
+    "Mobile": [
+        "mobile_devices", "mobile_registration_tokens", "camera_backups",
+        "upload_queue", "expiration_notifications",
+    ],
+    "Sync": [
+        "sync_states", "sync_metadata", "sync_file_versions", "sync_folders",
+        "chunked_uploads", "sync_bandwidth_limits", "sync_schedules", "selective_syncs",
+    ],
+    "VPN": ["vpn_config", "vpn_clients", "vpn_profiles", "fritzbox_vpn_configs"],
+    "Monitoring": [
+        "cpu_samples", "memory_samples", "network_samples",
+        "disk_io_samples", "process_samples", "monitoring_config",
+    ],
+    "Power": [
+        "power_profile_configs", "power_profile_logs", "power_demand_logs",
+        "power_auto_scaling_config", "power_samples", "power_presets",
+    ],
+    "Fans": ["fan_configs", "fan_samples"],
+    "Scheduler": ["scheduler_executions", "scheduler_configs"],
+    "Version Control": [
+        "version_blobs", "vcl_file_versions", "vcl_settings", "vcl_stats",
+    ],
+    "Benchmarks": ["disk_benchmarks", "benchmark_test_results"],
+    "Notifications": ["notifications", "notification_preferences"],
+    "System": [
+        "server_profiles", "rate_limit_configs", "installed_plugins",
+        "update_history", "update_config",
+    ],
+    "Energy/IoT": ["tapo_devices", "energy_price_configs"],
+}
+
+# Flat set for quick membership checks
+_WHITELIST = {t for tables in _TABLE_CATEGORIES.values() for t in tables}
+
+
 class AdminDBService:
     """Service providing safe, read-only access to selected DB metadata and rows.
 
@@ -19,18 +60,27 @@ class AdminDBService:
     never execute arbitrary SQL supplied by clients.
     """
 
-    # Default whitelist of tables we allow admins to view. Adjust as needed.
-    _WHITELIST = {"users", "file_metadata", "audit_log", "share_link", "file_share", "backup", "vpn"}
-
     @classmethod
     def list_tables(cls) -> List[str]:
         inspector = inspect(database.engine)
         all_tables = inspector.get_table_names()
-        return [t for t in sorted(all_tables) if t in cls._WHITELIST]
+        return [t for t in sorted(all_tables) if t in _WHITELIST]
+
+    @classmethod
+    def list_tables_with_categories(cls) -> Dict[str, List[str]]:
+        """Return category -> table list mapping, only including tables that actually exist."""
+        inspector = inspect(database.engine)
+        existing = set(inspector.get_table_names())
+        result: Dict[str, List[str]] = {}
+        for category, tables in _TABLE_CATEGORIES.items():
+            present = [t for t in tables if t in existing]
+            if present:
+                result[category] = present
+        return result
 
     @classmethod
     def get_table_schema(cls, table_name: str) -> List[Dict[str, Any]]:
-        if table_name not in cls._WHITELIST:
+        if table_name not in _WHITELIST:
             raise ValueError(f"Table not allowed: {table_name}")
 
         inspector = inspect(database.engine)
@@ -60,6 +110,47 @@ class AdminDBService:
         return out
 
     @classmethod
+    def _apply_column_filter(cls, column, filter_spec: Dict[str, Any]):
+        """Build a SQLAlchemy clause from a single column filter spec.
+
+        Supported ops: contains, eq, gt, lt, gte, lte, between, is_null, is_true, is_false
+        """
+        op = filter_spec.get("op", "contains")
+        value = filter_spec.get("value")
+
+        if op == "contains" and value is not None:
+            return column.ilike(f"%{value}%")
+        elif op == "eq" and value is not None:
+            return column == value
+        elif op == "gt" and value is not None:
+            return column > value
+        elif op == "lt" and value is not None:
+            return column < value
+        elif op == "gte" and value is not None:
+            return column >= value
+        elif op == "lte" and value is not None:
+            return column <= value
+        elif op == "between":
+            from_val = filter_spec.get("from")
+            to_val = filter_spec.get("to")
+            clauses = []
+            if from_val is not None:
+                clauses.append(column >= from_val)
+            if to_val is not None:
+                clauses.append(column <= to_val)
+            if clauses:
+                from sqlalchemy import and_
+                return and_(*clauses)
+        elif op == "is_null":
+            return column.is_(None)
+        elif op == "is_true":
+            return column == True  # noqa: E712
+        elif op == "is_false":
+            return column == False  # noqa: E712
+
+        return None
+
+    @classmethod
     def get_table_rows(
         cls,
         db: Session,
@@ -68,12 +159,17 @@ class AdminDBService:
         page_size: int = 50,
         fields: Optional[List[str]] = None,
         q: Optional[str] = None,
+        sort_by: Optional[str] = None,
+        sort_order: Optional[str] = "asc",
+        filters: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """Return paginated rows. `fields` restricts returned columns.
 
         `q` is a simple text match applied across string columns.
+        `sort_by` / `sort_order` control column sorting.
+        `filters` is a dict of column_name -> {op, value, from?, to?} for per-column filtering.
         """
-        if table_name not in cls._WHITELIST:
+        if table_name not in _WHITELIST:
             raise ValueError(f"Table not allowed: {table_name}")
 
         metadata = MetaData()
@@ -89,10 +185,13 @@ class AdminDBService:
                 if f not in available_cols:
                     raise ValueError(f"Unknown column: {f}")
 
+        # Validate sort_by
+        if sort_by and sort_by not in available_cols:
+            raise ValueError(f"Unknown sort column: {sort_by}")
+
         offset = (page - 1) * page_size
         stmt = select(table)
         if fields:
-            # build select of specific columns
             cols = [table.c[f] for f in fields]
             stmt = select(*cols)
 
@@ -104,35 +203,42 @@ class AdminDBService:
                     if hasattr(col.type, "python_type") and col.type.python_type is str:
                         q_clauses.append(col.ilike(f"%{q}%"))
                 except Exception:
-                    # ignore columns that can't be inspected
                     continue
             if q_clauses:
-                from sqlalchemy import or_
-
                 stmt = stmt.where(or_(*q_clauses))
+
+        # Per-column filters
+        if filters:
+            for col_name, filter_spec in filters.items():
+                if col_name not in available_cols:
+                    continue
+                if not isinstance(filter_spec, dict):
+                    continue
+                clause = cls._apply_column_filter(table.c[col_name], filter_spec)
+                if clause is not None:
+                    stmt = stmt.where(clause)
+
+        # Build matching count query (same WHERE clauses)
+        count_stmt = select(func.count()).select_from(table)
+        # Re-apply all WHERE clauses to count query
+        where_clauses = stmt.whereclause
+        if where_clauses is not None:
+            count_stmt = count_stmt.where(where_clauses)
 
         total = None
         try:
-            # Count total rows
-            from sqlalchemy import func
-            count_stmt = select(func.count()).select_from(table)
-            if q:
-                # Apply same filter to count
-                q_clauses = []
-                for col in table.columns:
-                    try:
-                        if hasattr(col.type, "python_type") and col.type.python_type is str:
-                            q_clauses.append(col.ilike(f"%{q}%"))
-                    except Exception:
-                        continue
-                if q_clauses:
-                    from sqlalchemy import or_
-                    count_stmt = count_stmt.where(or_(*q_clauses))
             total = db.execute(count_stmt).scalar()
         except Exception as e:
-            # fallback: None
             print(f"[ADMIN_DB] Failed to count rows: {e}")
             total = None
+
+        # Sorting
+        if sort_by:
+            col = table.c[sort_by]
+            if sort_order and sort_order.lower() == "desc":
+                stmt = stmt.order_by(desc(col))
+            else:
+                stmt = stmt.order_by(asc(col))
 
         stmt = stmt.limit(page_size).offset(offset)
         res = db.execute(stmt)
@@ -142,7 +248,18 @@ class AdminDBService:
             row = cls._redact_row(row)
             rows.append(row)
 
-        return {"table": table_name, "page": page, "page_size": page_size, "rows": rows, "total": total}
+        result = {
+            "table": table_name,
+            "page": page,
+            "page_size": page_size,
+            "rows": rows,
+            "total": total,
+        }
+        if sort_by:
+            result["sort_by"] = sort_by
+            result["sort_order"] = sort_order or "asc"
+
+        return result
 
     @classmethod
     def get_database_health(cls, db: Session) -> Dict[str, Any]:
@@ -214,7 +331,6 @@ class AdminDBService:
                 # Get row count
                 metadata = MetaData()
                 table = Table(table_name, metadata, autoload_with=database.engine)
-                from sqlalchemy import func
                 count_stmt = select(func.count()).select_from(table)
                 row_count = db.execute(count_stmt).scalar() or 0
 

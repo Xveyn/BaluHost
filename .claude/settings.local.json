@@ -52,7 +52,12 @@
       "Bash(then .venv/bin/python -c \"from app.schemas.fans import CURVE_PRESETS, CurvePreset, ApplyPresetRequest, UpdateFanConfigRequest; print\\(''Schemas OK''\\)\")",
       "Bash(else echo \"No venv found\")",
       "Bash(fi)",
-      "Bash(npx eslint:*)"
+      "Bash(npx eslint:*)",
+      "Bash(head:*)",
+      "Bash(journalctl:*)",
+      "Bash(xargs basename:*)",
+      "Bash(xargs:*)",
+      "Bash(git commit:*)"
     ]
   },
   "enabledPlugins": {

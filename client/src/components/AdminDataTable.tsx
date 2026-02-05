@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
+import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 
 interface Column {
   name: string
@@ -15,9 +16,12 @@ interface Props {
   total?: number | null
   onPageChange?: (p: number) => void
   ownerMap?: Record<string, string>
+  sortBy?: string | null
+  sortOrder?: 'asc' | 'desc' | null
+  onSortChange?: (column: string, order: 'asc' | 'desc') => void
 }
 
-export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
+export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOrder, onSortChange }: Props) {
   const { t } = useTranslation('admin')
   const [isMobile, setIsMobile] = useState(false)
 
@@ -114,6 +118,24 @@ export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
     return pcts.map((p) => Math.max(3, Math.round((p / total) * 100)))
   }
 
+  const handleHeaderClick = (colName: string) => {
+    if (!onSortChange) return
+    if (sortBy === colName) {
+      onSortChange(colName, sortOrder === 'asc' ? 'desc' : 'asc')
+    } else {
+      onSortChange(colName, 'asc')
+    }
+  }
+
+  const renderSortIcon = (colName: string) => {
+    if (sortBy === colName) {
+      return sortOrder === 'asc'
+        ? <ArrowUp className="w-3 h-3 text-blue-400" />
+        : <ArrowDown className="w-3 h-3 text-blue-400" />
+    }
+    return <ArrowUpDown className="w-3 h-3 text-slate-600 group-hover/th:text-slate-400 transition-colors" />
+  }
+
   return (
     <div>
       <div className="px-0 sm:px-2 py-4 sm:py-5">
@@ -146,10 +168,14 @@ export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
                     return visibleColumns.map((c, i) => (
                       <th
                         key={c.name}
-                        className={`px-3 sm:px-5 py-2 sm:py-3 text-left`}
+                        className={`px-3 sm:px-5 py-2 sm:py-3 text-left group/th ${onSortChange ? 'cursor-pointer select-none hover:text-slate-300 transition-colors' : ''}`}
                         style={{ width: `${pcts[i]}%` }}
+                        onClick={() => handleHeaderClick(c.name)}
                       >
-                        {c.name.toLowerCase().includes('owner') ? 'OWNER' : c.name}
+                        <div className="flex items-center gap-1.5">
+                          <span>{c.name.toLowerCase().includes('owner') ? 'OWNER' : c.name}</span>
+                          {onSortChange && renderSortIcon(c.name)}
+                        </div>
                       </th>
                     ))
                   })()}
@@ -186,18 +212,10 @@ export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
                         )
                       }
 
-                      // Use truncation with tooltip for all columns; compute content box
+                      // Use truncation with tooltip for all columns
                       const cellContent = (
                         <div className={`overflow-hidden text-ellipsis whitespace-nowrap ${maxclass}`} title={formatted}>{formatted}</div>
                       )
-
-                      if (c.name.toLowerCase().startsWith('is_') || c.name.toLowerCase() === 'is_directory') {
-                        return (
-                          <td key={c.name} className={`px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm ${wclass} ${align}`}>
-                            <span className={`inline-block px-2 py-0.5 rounded-full text-[11px] ${formatted === 'true' ? 'bg-emerald-600 text-white' : 'bg-slate-700 text-slate-300'}`}>{formatted}</span>
-                          </td>
-                        )
-                      }
 
                       return (
                         <td key={c.name} className={`px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm ${wclass} ${align}`}>
@@ -212,8 +230,6 @@ export default function AdminDataTable({ columns, rows, ownerMap }: Props) {
           </div>
         )}
       </div>
-
-      
     </div>
   )
 }

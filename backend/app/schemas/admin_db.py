@@ -1,9 +1,13 @@
-from typing import List, Optional, Any
+from typing import List, Optional, Any, Dict
 from pydantic import BaseModel
 
 
 class AdminTablesResponse(BaseModel):
     tables: List[str]
+
+
+class AdminTableCategoriesResponse(BaseModel):
+    categories: Dict[str, List[str]]
 
 
 class AdminTableSchemaField(BaseModel):
@@ -24,6 +28,8 @@ class AdminTableRowsResponse(BaseModel):
     page_size: int
     rows: List[dict]
     total: Optional[int]
+    sort_by: Optional[str] = None
+    sort_order: Optional[str] = None
 
 
 # Database Info (Storage Analysis)

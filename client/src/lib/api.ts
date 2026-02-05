@@ -162,11 +162,31 @@ export interface AdminTableRowsResponse {
   page_size: number;
   rows: Array<Record<string, any>>;
   total?: number | null;
+  sort_by?: string | null;
+  sort_order?: string | null;
 }
+
+export interface AdminTableCategoriesResponse {
+  categories: Record<string, string[]>;
+}
+
+export interface ColumnFilter {
+  op: 'contains' | 'eq' | 'gt' | 'lt' | 'gte' | 'lte' | 'between' | 'is_null' | 'is_true' | 'is_false';
+  value?: string | number;
+  from?: string | number;
+  to?: string | number;
+}
+
+export type ColumnFilters = Record<string, ColumnFilter>;
 
 export async function getAdminTables(): Promise<string[]> {
   const res = await apiClient.get('/api/admin/db/tables');
   return res.data.tables;
+}
+
+export async function getAdminTableCategories(): Promise<AdminTableCategoriesResponse> {
+  const res = await apiClient.get('/api/admin/db/tables/categories');
+  return res.data;
 }
 
 export async function getAdminTableSchema(table: string): Promise<AdminTableSchemaResponse> {
@@ -179,11 +199,17 @@ export async function getAdminTableRows(
   page: number = 1,
   page_size: number = 50,
   fields?: string[],
-  q?: string
+  q?: string,
+  sort_by?: string,
+  sort_order?: string,
+  filters?: ColumnFilters
 ): Promise<AdminTableRowsResponse> {
   const params: any = { page, page_size };
   if (fields && fields.length) params.fields = fields.join(',');
   if (q) params.q = q;
+  if (sort_by) params.sort_by = sort_by;
+  if (sort_order) params.sort_order = sort_order;
+  if (filters && Object.keys(filters).length > 0) params.filters = JSON.stringify(filters);
   const res = await apiClient.get(`/api/admin/db/table/${encodeURIComponent(table)}`, { params });
   return res.data;
 }
