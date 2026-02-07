@@ -12,6 +12,7 @@ import type { AuditLoggingStatus, FileAccessLogsResponse } from '../../api/loggi
 import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { formatDateTime } from '../../lib/dateUtils';
+import { formatBytes } from '../../lib/formatters';
 
 export function LogsTab() {
   const { t } = useTranslation(['system', 'common']);
@@ -73,16 +74,9 @@ export function LogsTab() {
     }
   };
 
-  const formatBytes = (bytes: number | undefined): string => {
+  const formatBytesDisplay = (bytes: number | undefined): string => {
     if (!bytes) return '-';
-    const units = ['B', 'KB', 'MB', 'GB'];
-    let size = bytes;
-    let unitIndex = 0;
-    while (size >= 1024 && unitIndex < units.length - 1) {
-      size /= 1024;
-      unitIndex++;
-    }
-    return `${size.toFixed(2)} ${units[unitIndex]}`;
+    return formatBytes(bytes);
   };
 
   const formatTimestamp = formatDateTime;
@@ -259,7 +253,7 @@ export function LogsTab() {
                         {log.resource}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
-                        {formatBytes(log.details?.size_bytes)}
+                        {formatBytesDisplay(log.details?.size_bytes)}
                       </td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         {log.details?.duration_ms
@@ -318,7 +312,7 @@ export function LogsTab() {
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-slate-400">
                     <span>{formatTimestamp(log.timestamp)}</span>
                     {log.details?.size_bytes && (
-                      <span>{formatBytes(log.details.size_bytes)}</span>
+                      <span>{formatBytesDisplay(log.details.size_bytes)}</span>
                     )}
                     {log.details?.duration_ms && (
                       <span>{log.details.duration_ms}ms</span>

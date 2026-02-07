@@ -17,8 +17,10 @@ import {
   Legend,
 } from 'recharts';
 import toast from 'react-hot-toast';
+import { extractErrorMessage } from '../../lib/api';
 import { MetricChart } from '../monitoring';
-import { formatTimestamp } from '../../lib/dateUtils';
+import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils';
+import type { ChartTimeRange } from '../../lib/dateUtils';
 import { getPowerHistory } from '../../api/power';
 import type { PowerMonitoringResponse } from '../../api/power';
 import {
@@ -29,11 +31,12 @@ import {
   type CumulativeEnergyResponse,
 } from '../../api/energy';
 import { StatCard } from '../ui/StatCard';
+import { formatNumber } from '../../lib/formatters';
 
 type CumulativePeriod = 'today' | 'week' | 'month';
 
 export function PowerTab() {
-  const { t } = useTranslation(['system', 'common']);
+  const { t, i18n } = useTranslation(['system', 'common']);
   const [powerData, setPowerData] = useState<PowerMonitoringResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -132,7 +135,7 @@ export function PowerTab() {
         setCumulativeData(data);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('monitor.power.saveError'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('monitor.power.saveError')));
     } finally {
       setSavingPrice(false);
     }
@@ -215,21 +218,21 @@ export function PowerTab() {
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={t('monitor.power.currentPower')}
-          value={powerData.total_current_power.toFixed(1)}
+          value={formatNumber(powerData.total_current_power, 1)}
           unit="W"
           color="yellow"
           icon={<span className="text-yellow-400 text-base sm:text-xl">⚡</span>}
         />
         <StatCard
           label={t('monitor.power.cumulativeSession')}
-          value={totalCumulativeEnergy.toFixed(4)}
+          value={formatNumber(totalCumulativeEnergy, 4)}
           unit="kWh"
           color="orange"
           icon={<span className="text-orange-400 text-base sm:text-xl">Σ</span>}
         />
         <StatCard
           label={t('monitor.power.todayTotal')}
-          value={powerData.devices.reduce((sum, d) => sum + (d.latest_sample?.energy_today ?? 0), 0).toFixed(2)}
+          value={formatNumber(powerData.devices.reduce((sum, d) => sum + (d.latest_sample?.energy_today ?? 0), 0), 2)}
           unit="kWh"
           color="green"
           icon={<span className="text-green-400 text-base sm:text-xl">📊</span>}
@@ -253,31 +256,31 @@ export function PowerTab() {
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.powerLabel')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.watts?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
+                  {device.latest_sample?.watts != null ? formatNumber(device.latest_sample.watts, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.voltage')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.voltage?.toFixed(1) ?? '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
+                  {device.latest_sample?.voltage != null ? formatNumber(device.latest_sample.voltage, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.current')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.current?.toFixed(3) ?? '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
+                  {device.latest_sample?.current != null ? formatNumber(device.latest_sample.current, 3) : '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.today')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.energy_today?.toFixed(2) ?? '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
+                  {device.latest_sample?.energy_today != null ? formatNumber(device.latest_sample.energy_today, 2) : '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.cumulativeSession')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-orange-400">
-                  {deviceCumulativeEnergy.toFixed(4)} <span className="text-sm sm:text-base text-slate-400">kWh</span>
+                  {formatNumber(deviceCumulativeEnergy, 4)} <span className="text-sm sm:text-base text-slate-400">kWh</span>
                 </p>
               </div>
             </div>
@@ -287,12 +290,13 @@ export function PowerTab() {
               <div className="mt-3 sm:mt-4">
                 <MetricChart
                   data={device.samples.map((s) => ({
-                    time: formatTimestamp(s.timestamp),
+                    time: s.timestamp,
                     watts: s.watts,
                   }))}
                   lines={[{ dataKey: 'watts', name: t('monitor.power.powerWatts'), color: '#eab308' }]}
                   height={180}
                   showArea
+                  timeRange="1h"
                 />
               </div>
             )}
@@ -346,7 +350,7 @@ export function PowerTab() {
                     onClick={() => setEditingPrice(true)}
                     className="flex items-center gap-1 px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded border border-slate-700"
                   >
-                    <span>{priceConfig.cost_per_kwh.toFixed(2)} {priceConfig.currency}/kWh</span>
+                    <span>{formatNumber(priceConfig.cost_per_kwh, 2)} {priceConfig.currency}/kWh</span>
                     <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
                     </svg>
@@ -380,19 +384,19 @@ export function PowerTab() {
             <div className="bg-slate-800/50 rounded-lg p-3">
               <p className="text-xs text-slate-400">{t('monitor.power.totalConsumption')}</p>
               <p className="text-lg font-semibold text-emerald-400">
-                {cumulativeData.total_kwh.toFixed(3)} <span className="text-sm text-slate-400">kWh</span>
+                {formatNumber(cumulativeData.total_kwh, 3)} <span className="text-sm text-slate-400">kWh</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
               <p className="text-xs text-slate-400">{t('monitor.power.totalCosts')}</p>
               <p className="text-lg font-semibold text-orange-400">
-                {cumulativeData.total_cost.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
+                {formatNumber(cumulativeData.total_cost, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
               <p className="text-xs text-slate-400">{t('monitor.power.electricityPrice')}</p>
               <p className="text-lg font-semibold text-slate-300">
-                {cumulativeData.cost_per_kwh.toFixed(2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
+                {formatNumber(cumulativeData.cost_per_kwh, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
               </p>
             </div>
             <div className="bg-slate-800/50 rounded-lg p-3">
@@ -414,11 +418,8 @@ export function PowerTab() {
             <ResponsiveContainer width="100%" height="100%">
               <ComposedChart
                 data={cumulativeData.data_points.map((dp) => ({
-                  time: new Date(dp.timestamp).toLocaleTimeString('de-DE', {
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  }),
-                  fullTime: new Date(dp.timestamp).toLocaleString('de-DE'),
+                  time: formatTimeForRange(dp.timestamp, cumulativePeriod as ChartTimeRange, i18n.language),
+                  fullTime: parseUtcTimestamp(dp.timestamp).toLocaleString(i18n.language),
                   kwh: dp.cumulative_kwh,
                   cost: dp.cumulative_cost,
                   watts: dp.instant_watts,
@@ -438,6 +439,7 @@ export function PowerTab() {
                   fontSize={11}
                   tickLine={false}
                   interval="preserveStartEnd"
+                  minTickGap={cumulativePeriod === 'week' ? 70 : 40}
                 />
                 <YAxis
                   yAxisId="left"
@@ -445,7 +447,7 @@ export function PowerTab() {
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v) => `${v.toFixed(2)}`}
+                  tickFormatter={(v) => formatNumber(v, 2)}
                   label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: '#10b981', fontSize: 11 }}
                 />
                 <YAxis
@@ -455,7 +457,7 @@ export function PowerTab() {
                   fontSize={11}
                   tickLine={false}
                   axisLine={false}
-                  tickFormatter={(v) => `${v.toFixed(2)}`}
+                  tickFormatter={(v) => formatNumber(v, 2)}
                   label={{ value: cumulativeData.currency, angle: 90, position: 'insideRight', fill: '#f97316', fontSize: 11 }}
                 />
                 <Tooltip
@@ -467,9 +469,9 @@ export function PowerTab() {
                   }}
                   labelStyle={{ color: '#94a3b8' }}
                   formatter={(value: number, name: string) => {
-                    if (name === 'kwh') return [`${value.toFixed(4)} kWh`, t('monitor.power.consumption')];
-                    if (name === 'cost') return [`${value.toFixed(4)} ${cumulativeData.currency}`, t('monitor.power.costsLabel')];
-                    if (name === 'watts') return [`${value.toFixed(1)} W`, t('monitor.power.powerLabel')];
+                    if (name === 'kwh') return [`${formatNumber(value, 4)} kWh`, t('monitor.power.consumption')];
+                    if (name === 'cost') return [`${formatNumber(value, 4)} ${cumulativeData.currency}`, t('monitor.power.costsLabel')];
+                    if (name === 'watts') return [`${formatNumber(value, 1)} W`, t('monitor.power.powerLabel')];
                     return [value, name];
                   }}
                   labelFormatter={(label, payload) => {

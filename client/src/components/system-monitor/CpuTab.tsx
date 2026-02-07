@@ -6,9 +6,9 @@ import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MetricChart } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
-import { formatTimestamp } from '../../lib/dateUtils';
 import { useCpuMonitoring } from '../../hooks/useMonitoring';
 import { StatCard } from '../ui/StatCard';
+import { formatNumber } from '../../lib/formatters';
 
 export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
@@ -19,7 +19,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
     return history
       .filter((s) => s.usage_percent !== undefined && s.usage_percent >= 0)
       .map((s) => ({
-        time: formatTimestamp(s.timestamp),
+        time: s.timestamp,
         usage: s.usage_percent,
       }));
   }, [history]);
@@ -55,7 +55,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
 
       // Create chart data for this specific thread
       const chartData = history.map((sample) => ({
-        time: formatTimestamp(sample.timestamp),
+        time: sample.timestamp,
         usage: sample.thread_usages?.[idx] ?? 0,
       }));
 
@@ -79,7 +79,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
     return history
       .filter((s) => s.temperature_celsius !== null && s.temperature_celsius !== undefined)
       .map((s) => ({
-        time: formatTimestamp(s.timestamp),
+        time: s.timestamp,
         temperature: s.temperature_celsius,
       }));
   }, [history]);
@@ -127,21 +127,21 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
       <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={t('monitor.cpuUsage')}
-          value={current?.usage_percent?.toFixed(1) ?? '0'}
+          value={current?.usage_percent != null ? formatNumber(current.usage_percent, 1) : '0'}
           unit="%"
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">%</span>}
         />
         <StatCard
           label={t('monitor.frequency')}
-          value={current?.frequency_mhz ? (current.frequency_mhz / 1000).toFixed(2) : '-'}
+          value={current?.frequency_mhz ? formatNumber(current.frequency_mhz / 1000, 2) : '-'}
           unit="GHz"
           color="purple"
           icon={<span className="text-purple-400 text-base sm:text-xl">~</span>}
         />
         <StatCard
           label={t('monitor.temperature')}
-          value={current?.temperature_celsius?.toFixed(1) ?? '-'}
+          value={current?.temperature_celsius != null ? formatNumber(current.temperature_celsius, 1) : '-'}
           unit="°C"
           color="orange"
           icon={<span className="text-orange-400 text-base sm:text-xl">🌡</span>}
@@ -209,6 +209,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
             height={250}
             loading={loading}
             showArea
+            timeRange={timeRange}
           />
         </div>
       )}
@@ -236,7 +237,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-300">{thread.label}</span>
                         <span className="text-xs font-bold text-blue-400">
-                          {thread.currentUsage.toFixed(0)}%
+                          {formatNumber(thread.currentUsage, 0)}%
                         </span>
                       </div>
                       <MetricChart
@@ -284,7 +285,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-300">{thread.label}</span>
                         <span className="text-xs font-bold text-green-400">
-                          {thread.currentUsage.toFixed(0)}%
+                          {formatNumber(thread.currentUsage, 0)}%
                         </span>
                       </div>
                       <MetricChart
@@ -333,7 +334,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                         className="text-xs font-bold"
                         style={{ color: thread.color }}
                       >
-                        {thread.currentUsage.toFixed(0)}%
+                        {formatNumber(thread.currentUsage, 0)}%
                       </span>
                     </div>
                     <MetricChart
@@ -375,6 +376,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
             height={250}
             loading={loading}
             showArea
+            timeRange={timeRange}
           />
         </div>
       )}

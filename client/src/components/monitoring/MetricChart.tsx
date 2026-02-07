@@ -16,7 +16,9 @@ import {
   AreaChart,
   ReferenceLine,
 } from 'recharts';
-import { parseUtcTimestamp } from '../../lib/dateUtils';
+import { parseUtcTimestamp, formatTimeForRange } from '../../lib/dateUtils';
+import type { ChartTimeRange } from '../../lib/dateUtils';
+import { formatNumber } from '../../lib/formatters';
 
 export interface ChartDataPoint {
   time: string;
@@ -43,6 +45,7 @@ export interface MetricChartProps {
   compact?: boolean; // Compact mode for mini-charts (no axes, no legend)
   showCompactTooltip?: boolean; // Show tooltip even in compact mode
   showReferenceLines?: boolean; // Show subtle reference lines (e.g., 50% line)
+  timeRange?: ChartTimeRange; // Dynamic X-axis formatting based on time range
 }
 
 const formatTime = (timestamp: string | number): string => {
@@ -69,8 +72,11 @@ export default function MetricChart({
   compact = false,
   showCompactTooltip = true,
   showReferenceLines = true,
+  timeRange,
 }: MetricChartProps) {
-  const { t } = useTranslation(['system', 'admin']);
+  const { t, i18n } = useTranslation(['system', 'admin']);
+  const locale = i18n.language;
+  const minTickGap = timeRange === '7d' || timeRange === 'week' ? 70 : 40;
   const noDataMessage = emptyMessage ?? t('admin:monitoring.noData');
   // Format data with time labels
   const chartData = data.map((point) => ({
@@ -132,6 +138,9 @@ export default function MetricChart({
           tickLine={compact ? false : { stroke: '#334155' }}
           axisLine={!compact}
           hide={compact}
+          tickFormatter={timeRange ? (v) => formatTimeForRange(v, timeRange, locale) : undefined}
+          interval="preserveStartEnd"
+          minTickGap={minTickGap}
         />
         <YAxis
           stroke={compact ? 'transparent' : '#94a3b8'}
@@ -170,7 +179,14 @@ export default function MetricChart({
               fontSize: compact ? '11px' : undefined,
             }}
             labelStyle={{ color: '#94a3b8', display: compact ? 'none' : undefined }}
-            formatter={(value: number) => compact ? [`${value.toFixed(0)}%`] : [value.toFixed(1)]}
+            formatter={(value: number) => compact ? [`${formatNumber(value, 0)}%`] : [formatNumber(value, 1)]}
+            labelFormatter={timeRange && !compact
+              ? (label: string) => {
+                  const d = typeof label === 'string' ? parseUtcTimestamp(label) : new Date(label);
+                  return d.toLocaleString(locale);
+                }
+              : undefined
+            }
           />
         )}
         {!compact && <Legend wrapperStyle={{ color: '#94a3b8' }} iconType="line" />}

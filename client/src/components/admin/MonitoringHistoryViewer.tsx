@@ -13,6 +13,8 @@ import type {
   DiskIoHistoryResponse,
   TimeRange,
 } from '../../api/monitoring'
+import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils'
+import { formatNumber } from '../../lib/formatters'
 import { RefreshCw, Cpu, MemoryStick, Network, HardDrive, Clock } from 'lucide-react'
 import {
   AreaChart,
@@ -41,23 +43,7 @@ const TIME_RANGES: { value: TimeRange; labelKey: string }[] = [
   { value: '7d', labelKey: 'admin:monitoring.timeRanges.7d' },
 ]
 
-function formatDate(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleTimeString('de-DE', {
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
-
-function formatDateFull(dateStr: string): string {
-  const date = new Date(dateStr)
-  return date.toLocaleString('de-DE', {
-    day: '2-digit',
-    month: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-  })
-}
+// formatDate and formatDateFull replaced by shared formatTimeForRange()
 
 interface CustomTooltipProps {
   active?: boolean
@@ -67,12 +53,13 @@ interface CustomTooltipProps {
 
 const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
   if (active && payload && payload.length && label) {
+    const fullDate = parseUtcTimestamp(label).toLocaleString();
     return (
       <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 shadow-xl">
-        <p className="text-slate-400 text-xs mb-1">{formatDateFull(label)}</p>
+        <p className="text-slate-400 text-xs mb-1">{fullDate}</p>
         {payload.map((entry: any, index: number) => (
           <p key={index} className="text-sm" style={{ color: entry.color }}>
-            {entry.name}: {typeof entry.value === 'number' ? entry.value.toFixed(2) : entry.value}
+            {entry.name}: {typeof entry.value === 'number' ? formatNumber(entry.value, 2) : entry.value}
             {entry.unit || ''}
           </p>
         ))}
@@ -83,7 +70,7 @@ const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
 }
 
 export default function MonitoringHistoryViewer() {
-  const { t } = useTranslation(['admin', 'common'])
+  const { t, i18n } = useTranslation(['admin', 'common'])
   const [activeMetric, setActiveMetric] = useState<MetricType>('cpu')
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [loading, setLoading] = useState(true)
@@ -96,6 +83,9 @@ export default function MonitoringHistoryViewer() {
   const [memoryData, setMemoryData] = useState<MemoryHistoryResponse | null>(null)
   const [networkData, setNetworkData] = useState<NetworkHistoryResponse | null>(null)
   const [diskIoData, setDiskIoData] = useState<DiskIoHistoryResponse | null>(null)
+
+  const tickFormatter = (dateStr: string) => formatTimeForRange(dateStr, timeRange, i18n.language)
+  const minTickGap = timeRange === '7d' ? 70 : 40
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -170,9 +160,11 @@ export default function MonitoringHistoryViewer() {
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
           <XAxis
             dataKey="timestamp"
-            tickFormatter={formatDate}
+            tickFormatter={tickFormatter}
             stroke="#64748b"
             tick={{ fill: '#94a3b8', fontSize: 10 }}
+            interval="preserveStartEnd"
+            minTickGap={minTickGap}
           />
           <YAxis
             domain={[0, 100]}
@@ -222,9 +214,11 @@ export default function MonitoringHistoryViewer() {
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
           <XAxis
             dataKey="timestamp"
-            tickFormatter={formatDate}
+            tickFormatter={tickFormatter}
             stroke="#64748b"
             tick={{ fill: '#94a3b8', fontSize: 10 }}
+            interval="preserveStartEnd"
+            minTickGap={minTickGap}
           />
           <YAxis
             domain={[0, 100]}
@@ -278,9 +272,11 @@ export default function MonitoringHistoryViewer() {
           <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
           <XAxis
             dataKey="timestamp"
-            tickFormatter={formatDate}
+            tickFormatter={tickFormatter}
             stroke="#64748b"
             tick={{ fill: '#94a3b8', fontSize: 10 }}
+            interval="preserveStartEnd"
+            minTickGap={minTickGap}
           />
           <YAxis
             stroke="#64748b"
@@ -358,9 +354,11 @@ export default function MonitoringHistoryViewer() {
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
             <XAxis
               dataKey="timestamp"
-              tickFormatter={formatDate}
+              tickFormatter={tickFormatter}
               stroke="#64748b"
               tick={{ fill: '#94a3b8', fontSize: 10 }}
+              interval="preserveStartEnd"
+              minTickGap={minTickGap}
             />
             <YAxis
               stroke="#64748b"

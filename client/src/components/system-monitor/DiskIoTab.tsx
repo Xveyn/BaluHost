@@ -6,10 +6,10 @@ import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MetricChart } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
-import { formatTimestamp } from '../../lib/dateUtils';
 import { useDiskIoMonitoring } from '../../hooks/useMonitoring';
 import { StatCard } from '../ui/StatCard';
 import { BenchmarkPanel } from '../benchmark';
+import { formatNumber } from '../../lib/formatters';
 
 export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
@@ -31,7 +31,7 @@ export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
     return history[selectedDisk]
       .filter((s) => s.read_mbps !== undefined && s.write_mbps !== undefined)
       .map((s) => ({
-        time: formatTimestamp(s.timestamp),
+        time: s.timestamp,
         read: viewMode === 'throughput' ? s.read_mbps : s.read_iops,
         write: viewMode === 'throughput' ? s.write_mbps : s.write_iops,
       }));
@@ -71,40 +71,40 @@ export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
         <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-6">
           <StatCard
             label={t('monitor.read')}
-            value={currentDisk?.read_mbps?.toFixed(2) ?? '0'}
+            value={currentDisk?.read_mbps != null ? formatNumber(currentDisk.read_mbps, 2) : '0'}
             unit="MB/s"
             color="blue"
             icon={<span className="text-blue-400 text-base sm:text-xl">📖</span>}
           />
           <StatCard
             label={t('monitor.write')}
-            value={currentDisk?.write_mbps?.toFixed(2) ?? '0'}
+            value={currentDisk?.write_mbps != null ? formatNumber(currentDisk.write_mbps, 2) : '0'}
             unit="MB/s"
             color="green"
             icon={<span className="text-green-400 text-base sm:text-xl">✏️</span>}
           />
           <StatCard
             label={t('monitor.readIops')}
-            value={currentDisk?.read_iops?.toFixed(0) ?? '0'}
+            value={currentDisk?.read_iops != null ? formatNumber(currentDisk.read_iops, 0) : '0'}
             color="purple"
             icon={<span className="text-purple-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
             label={t('monitor.writeIops')}
-            value={currentDisk?.write_iops?.toFixed(0) ?? '0'}
+            value={currentDisk?.write_iops != null ? formatNumber(currentDisk.write_iops, 0) : '0'}
             color="orange"
             icon={<span className="text-orange-400 text-base sm:text-xl">⚡</span>}
           />
           <StatCard
             label={t('monitor.responseTime')}
-            value={currentDisk?.avg_response_ms?.toFixed(2) ?? '-'}
+            value={currentDisk?.avg_response_ms != null ? formatNumber(currentDisk.avg_response_ms, 2) : '-'}
             unit="ms"
             color="cyan"
             icon={<span className="text-cyan-400 text-base sm:text-xl">⏱</span>}
           />
           <StatCard
             label={t('monitor.activeTime')}
-            value={currentDisk?.active_time_percent?.toFixed(1) ?? '-'}
+            value={currentDisk?.active_time_percent != null ? formatNumber(currentDisk.active_time_percent, 1) : '-'}
             unit="%"
             color="teal"
             icon={<span className="text-teal-400 text-base sm:text-xl">📊</span>}
@@ -157,6 +157,7 @@ export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
             yAxisLabel={viewMode === 'throughput' ? 'MB/s' : 'IOPS'}
             height={300}
             loading={loading}
+            timeRange={timeRange}
           />
         </div>
       )}

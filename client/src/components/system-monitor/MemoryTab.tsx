@@ -6,9 +6,8 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MetricChart } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
-import { formatTimestamp } from '../../lib/dateUtils';
 import { useMemoryMonitoring } from '../../hooks/useMonitoring';
-import { formatBytes } from '../../lib/formatters';
+import { formatBytes, formatNumber } from '../../lib/formatters';
 import { StatCard } from '../ui/StatCard';
 
 export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
@@ -23,7 +22,7 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
     return history
       .filter((s) => s.used_bytes > 0 && s.total_bytes > 0) // Only valid samples
       .map((s) => ({
-        time: formatTimestamp(s.timestamp),
+        time: s.timestamp,
         usedGb: s.used_bytes / (1024 * 1024 * 1024),
         baluhostGb: s.baluhost_memory_bytes && s.baluhost_memory_bytes > 0
           ? s.baluhost_memory_bytes / (1024 * 1024 * 1024)
@@ -61,7 +60,7 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
         />
         <StatCard
           label={t('monitor.utilization')}
-          value={current?.percent?.toFixed(1) ?? '0'}
+          value={current?.percent != null ? formatNumber(current.percent, 1) : '0'}
           unit="%"
           color="orange"
           icon={<span className="text-orange-400 text-base sm:text-xl">%</span>}
@@ -90,6 +89,7 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
           height={300}
           loading={loading}
           showArea
+          timeRange={timeRange}
         />
       </div>
     </div>

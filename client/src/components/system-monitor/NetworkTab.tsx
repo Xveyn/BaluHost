@@ -6,9 +6,9 @@ import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MetricChart } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
-import { formatTimestamp } from '../../lib/dateUtils';
 import { useNetworkMonitoring } from '../../hooks/useMonitoring';
 import { StatCard } from '../ui/StatCard';
+import { formatNumber } from '../../lib/formatters';
 
 export function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
@@ -19,7 +19,7 @@ export function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
     return history
       .filter((s) => s.download_mbps !== undefined && s.upload_mbps !== undefined)
       .map((s) => ({
-        time: formatTimestamp(s.timestamp),
+        time: s.timestamp,
         download: s.download_mbps,
         upload: s.upload_mbps,
       }));
@@ -35,14 +35,14 @@ export function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
       <div className="grid grid-cols-2 gap-3 sm:gap-5">
         <StatCard
           label={t('monitor.download')}
-          value={current?.download_mbps?.toFixed(2) ?? '0'}
+          value={current?.download_mbps != null ? formatNumber(current.download_mbps, 2) : '0'}
           unit="Mbit/s"
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">↓</span>}
         />
         <StatCard
           label={t('monitor.upload')}
-          value={current?.upload_mbps?.toFixed(2) ?? '0'}
+          value={current?.upload_mbps != null ? formatNumber(current.upload_mbps, 2) : '0'}
           unit="Mbit/s"
           color="green"
           icon={<span className="text-green-400 text-base sm:text-xl">↑</span>}
@@ -61,6 +61,7 @@ export function NetworkTab({ timeRange }: { timeRange: TimeRange }) {
           yAxisLabel="Mbit/s"
           height={300}
           loading={loading}
+          timeRange={timeRange}
         />
       </div>
     </div>
