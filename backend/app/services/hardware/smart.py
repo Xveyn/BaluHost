@@ -70,8 +70,11 @@ def _perform_smart_scan_job() -> None:
             execution_id,
             success=True,
             result={
-                "disks_scanned": len(status.disks) if status else 0,
-                "overall_status": status.overall_status if status else "unknown"
+                "disks_scanned": len(status.devices) if status else 0,
+                "overall_status": (
+                    "all_passed" if status and all(d.status == 'PASSED' for d in status.devices)
+                    else "issues_detected"
+                ) if status else "unknown"
             }
         )
     except Exception as exc:
@@ -358,6 +361,46 @@ def _get_windows_disk_capacity(device_name: str) -> int | None:
     return None
 
 
+def _get_model_from_lsblk(device_name: str) -> str | None:
+    """Fallback: read disk model via lsblk when smartctl doesn't provide it."""
+    import subprocess
+    try:
+        result = subprocess.run(
+            ['lsblk', device_name, '--nodeps', '--noheadings', '--output', 'MODEL'],
+            capture_output=True, text=True, check=False, timeout=5
+        )
+        if result.returncode == 0 and result.stdout.strip():
+            return result.stdout.strip()
+    except Exception as e:
+        logger.debug("lsblk model fallback failed for %s: %s", device_name, e)
+    return None
+
+
+def _run_smartctl(smartctl_path: str, dev_type: str, device_name: str) -> tuple[object, dict | None]:
+    """Run smartctl and return (subprocess_result, parsed_json_or_None).
+
+    Uses bitmask return-code check: only bits 0 (command-line error) and
+    1 (device open failed) cause the result to be discarded.  Higher bits
+    (SMART command failed, disk failing, error-log entries, self-test log
+    entries) are informational — the JSON output is still valid.
+    """
+    import json, subprocess, re as _re
+    base_args = [smartctl_path, '-H', '-i', '-j', '-d', dev_type, device_name]
+    if not _re.search(r'nvme', dev_type, _re.IGNORECASE) and 'nvme' not in device_name.lower():
+        base_args.insert(1, '-A')
+    result = subprocess.run(base_args, capture_output=True, text=True, check=False, timeout=20)
+    # Only abort on bit 0 (parse error) or bit 1 (device open failed)
+    if result.returncode & 0b11:
+        logger.warning("smartctl error for %s (code %d, bits 0-1 set) — skipping", device_name, result.returncode)
+        return result, None
+    try:
+        data = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        logger.warning("Failed to parse smartctl JSON for %s", device_name)
+        return result, None
+    return result, data
+
+
 def _read_real_smart_data() -> SmartStatusResponse:
     """Optimierte SMART-Erfassung mit paralleler Verarbeitung und reduzierten Flags."""
     import json, subprocess, re
@@ -380,21 +423,34 @@ def _read_real_smart_data() -> SmartStatusResponse:
     def fetch_device(dev_info: dict) -> SmartDevice | None:
         device_name = dev_info.get('name')
         dev_type = dev_info.get('type', 'auto')
+        protocol = dev_info.get('protocol', '')
         if not device_name:
             return None
-        # Flags reduzieren
-        base_args = [smartctl_path, '-H', '-i', '-j', '-d', dev_type, device_name]
-        # Für ATA zusätzliche Attribute
-        if not re.search(r'nvme', dev_type, re.IGNORECASE) and 'nvme' not in device_name.lower():
-            base_args.insert(1, '-A')
-        result = subprocess.run(base_args, capture_output=True, text=True, check=False, timeout=20)
-        if result.returncode > 64:
+
+        # SATA drives behind Linux SCSI layer: use SAT for correct health status
+        original_type = dev_type
+        if dev_type == 'scsi' and protocol.upper() == 'ATA':
+            dev_type = 'sat'
+            logger.debug("SMART: overriding type scsi→sat for ATA device %s", device_name)
+
+        _result, data = _run_smartctl(smartctl_path, dev_type, device_name)
+        if data is None:
             return None
-        try:
-            data = json.loads(result.stdout)
-        except json.JSONDecodeError:
-            return None
-        model_info = data.get('model_name') or data.get('model_family') or 'Unknown Model'
+
+        # Fallback: if no smart_status.passed and original type was scsi, retry with SAT
+        smart_status_raw = data.get('smart_status', {})
+        if smart_status_raw.get('passed') is None and original_type == 'scsi' and dev_type != 'sat':
+            logger.info("SMART: no health status with -d %s for %s, retrying with -d sat", dev_type, device_name)
+            _result_sat, data_sat = _run_smartctl(smartctl_path, 'sat', device_name)
+            if data_sat is not None:
+                data = data_sat
+
+        logger.debug("SMART raw JSON keys for %s: %s", device_name, list(data.keys()))
+        logger.debug("SMART smart_status for %s: %s", device_name, data.get('smart_status'))
+
+        model_info = data.get('model_name') or data.get('model_family') or _get_model_from_lsblk(device_name) or 'Unknown Model'
+        if model_info == 'Unknown Model':
+            logger.info("SMART: no model found for %s (smartctl + lsblk)", device_name)
         serial = data.get('serial_number', 'Unknown')
         # Capacity
         capacity_bytes = None
@@ -406,13 +462,32 @@ def _read_real_smart_data() -> SmartStatusResponse:
                 capacity_bytes = _get_windows_disk_capacity(device_name)
             except Exception:
                 pass
-        # Temperature
+        # Temperature — primary: JSON temperature object, fallback: ATA attribute 194
         temperature = None
         if isinstance(data.get('temperature'), dict):
             temperature = data['temperature'].get('current')
-        # Status
+        if temperature is None:
+            # Fallback: search ATA attributes for ID 194 (Temperature_Celsius)
+            ata_attrs_raw = data.get('ata_smart_attributes', {})
+            if isinstance(ata_attrs_raw, dict):
+                for attr in ata_attrs_raw.get('table', []):
+                    if isinstance(attr, dict) and attr.get('id') == 194:
+                        raw_val = attr.get('raw', {})
+                        if isinstance(raw_val, dict):
+                            try:
+                                temperature = int(raw_val.get('value', 0))
+                            except (ValueError, TypeError):
+                                pass
+                        break
+        # Status — distinguish between absent (UNKNOWN) and explicitly False (FAILED)
         smart_status = data.get('smart_status', {})
-        status = 'PASSED' if smart_status.get('passed') else 'FAILED'
+        passed_value = smart_status.get('passed')
+        if passed_value is True:
+            status = 'PASSED'
+        elif passed_value is False:
+            status = 'FAILED'
+        else:
+            status = 'UNKNOWN'
         attributes: list[SmartAttribute] = []
         ata_attributes = data.get('ata_smart_attributes', {})
         if isinstance(ata_attributes, dict):
@@ -436,17 +511,19 @@ def _read_real_smart_data() -> SmartStatusResponse:
             if 'temperature' in nvme_log:
                 temp_raw = nvme_log.get('temperature')
                 if temp_raw is None:
-                    temp_val = 0
+                    temp_val = None
                 else:
                     try:
                         temp_val = int(temp_raw)
                     except Exception:
-                        temp_val = 0
+                        temp_val = None
                 if temperature is None:
                     temperature = temp_val
-                attributes.append(SmartAttribute(id=194, name='Temperature', value=temp_val, worst=0, threshold=0, raw=str(temp_val), status='OK'))
+                if temp_val is not None:
+                    attributes.append(SmartAttribute(id=194, name='Temperature', value=temp_val, worst=0, threshold=0, raw=str(temp_val), status='OK'))
             if 'available_spare' in nvme_log:
                 attributes.append(SmartAttribute(id=5, name='Available_Spare', value=nvme_log.get('available_spare', 0), worst=0, threshold=nvme_log.get('available_spare_threshold', 0), raw=str(nvme_log.get('available_spare', 0)), status='OK'))
+        logger.debug("SMART parsed %s: model=%s, status=%s, temp=%s, attrs=%d", device_name, model_info, status, temperature, len(attributes))
         return SmartDevice(name=device_name, model=model_info, serial=serial, temperature=temperature, status=status, capacity_bytes=capacity_bytes, used_bytes=None, used_percent=None, mount_point=None, attributes=attributes)
 
     devices: list[SmartDevice] = []
