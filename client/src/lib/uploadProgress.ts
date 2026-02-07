@@ -43,6 +43,10 @@ export class UploadProgressStream {
       `/api/files/progress/${this.uploadId}`,
       window.location.origin
     );
+    const token = localStorage.getItem('token');
+    if (token) {
+      url.searchParams.set('token', token);
+    }
 
     this.eventSource = new EventSource(url.toString());
 

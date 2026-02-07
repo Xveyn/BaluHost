@@ -10,22 +10,37 @@ import { buildApiUrl } from './lib/api';
 import type { User } from './types/auth';
 import './App.css';
 
-const Login = lazy(() => import('./pages/Login'));
-const Dashboard = lazy(() => import('./pages/Dashboard'));
-const FileManager = lazy(() => import('./pages/FileManager'));
-const UserManagement = lazy(() => import('./pages/UserManagement'));
-const SystemMonitor = lazy(() => import('./pages/SystemMonitor'));
-const SchedulerDashboard = lazy(() => import('./pages/SchedulerDashboard'));
-const ApiCenterPage = lazy(() => import('./pages/ApiCenterPage'));
-const SharesPage = lazy(() => import('./pages/SharesPage'));
-const SettingsPage = lazy(() => import('./pages/SettingsPage'));
-const PublicSharePage = lazy(() => import('./pages/PublicSharePage'));
-const AdminDatabase = lazy(() => import('./pages/AdminDatabase'));
-const DevicesPage = lazy(() => import('./pages/DevicesPage'));
-const SystemControlPage = lazy(() => import('./pages/SystemControlPage'));
-const PluginsPage = lazy(() => import('./pages/PluginsPage'));
-const NotificationPreferencesPage = lazy(() => import('./pages/NotificationPreferencesPage'));
-const UpdatePage = lazy(() => import('./pages/UpdatePage'));
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType<any> }>) {
+  return lazy(async () => {
+    try {
+      return await importFn();
+    } catch (error) {
+      if (!sessionStorage.getItem('chunk-reload')) {
+        sessionStorage.setItem('chunk-reload', '1');
+        window.location.reload();
+      }
+      throw error;
+    }
+  });
+}
+
+const Login = lazyWithRetry(() => import('./pages/Login'));
+const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
+const FileManager = lazyWithRetry(() => import('./pages/FileManager'));
+const UserManagement = lazyWithRetry(() => import('./pages/UserManagement'));
+const SystemMonitor = lazyWithRetry(() => import('./pages/SystemMonitor'));
+const SchedulerDashboard = lazyWithRetry(() => import('./pages/SchedulerDashboard'));
+const ApiCenterPage = lazyWithRetry(() => import('./pages/ApiCenterPage'));
+const SharesPage = lazyWithRetry(() => import('./pages/SharesPage'));
+const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'));
+const PublicSharePage = lazyWithRetry(() => import('./pages/PublicSharePage'));
+const AdminDatabase = lazyWithRetry(() => import('./pages/AdminDatabase'));
+const DevicesPage = lazyWithRetry(() => import('./pages/DevicesPage'));
+const SystemControlPage = lazyWithRetry(() => import('./pages/SystemControlPage'));
+const PluginsPage = lazyWithRetry(() => import('./pages/PluginsPage'));
+const NotificationPreferencesPage = lazyWithRetry(() => import('./pages/NotificationPreferencesPage'));
+const UpdatePage = lazyWithRetry(() => import('./pages/UpdatePage'));
 
 function LoadingFallback() {
   return (
@@ -43,6 +58,9 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [backendReady, setBackendReady] = useState(false);
   const [backendCheckAttempts, setBackendCheckAttempts] = useState(0);
+
+  // Clear stale-chunk reload flag on successful app mount
+  useEffect(() => { sessionStorage.removeItem('chunk-reload'); }, []);
 
   // Check if backend is ready before showing login
   useEffect(() => {

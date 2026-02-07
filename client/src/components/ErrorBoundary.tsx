@@ -21,13 +21,22 @@ export class ErrorBoundary extends Component<Props, State> {
 
   componentDidCatch(error: Error, errorInfo: ErrorInfo) {
     console.error('ErrorBoundary caught:', error, errorInfo);
+    if (
+      error.message.includes('dynamically imported module') ||
+      error.message.includes('Failed to fetch dynamically imported module')
+    ) {
+      if (!sessionStorage.getItem('chunk-reload')) {
+        sessionStorage.setItem('chunk-reload', '1');
+        window.location.reload();
+      }
+    }
   }
 
   render() {
     if (this.state.hasError) {
       return (
         <div className="flex min-h-screen items-center justify-center p-4">
-          <div className="card w-full max-w-md border-rose-500/30 bg-slate-900/80 text-center">
+          <div className="card w-full max-w-md border-rose-500/50 bg-slate-800 text-center">
             <div className="mb-4 text-4xl">&#x26A0;&#xFE0F;</div>
             <h2 className="text-xl font-semibold text-white">Something went wrong</h2>
             <p className="mt-2 text-sm text-slate-400">
