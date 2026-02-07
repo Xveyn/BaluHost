@@ -248,3 +248,11 @@ export async function getDatabaseInfo(): Promise<DatabaseInfoResponse> {
   return res.data;
 }
 
+export function extractErrorMessage(detail: unknown, fallback: string): string {
+  if (typeof detail === 'string') return detail;
+  if (Array.isArray(detail) && detail.length > 0) {
+    return detail.map((e: any) => e.msg ?? String(e)).join('; ');
+  }
+  return fallback;
+}
+

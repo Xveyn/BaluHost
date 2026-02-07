@@ -5,6 +5,17 @@
  * instead of defining local copies.
  */
 
+import i18n from '../i18n';
+
+/** Locale-aware number formatting (de: "1,5" / en: "1.5"). */
+export function formatNumber(value: number, decimals: number, locale?: string): string {
+  return new Intl.NumberFormat(locale ?? i18n.language ?? 'de', {
+    minimumFractionDigits: decimals,
+    maximumFractionDigits: decimals,
+    useGrouping: false,
+  }).format(value);
+}
+
 /**
  * Format a byte count into a human-readable string (e.g. "1.50 GB").
  *
@@ -19,7 +30,7 @@ export const formatBytes = (bytes: number): string => {
     units.length - 1,
   );
   const size = bytes / k ** exponent;
-  return `${size >= 100 ? Math.round(size) : size.toFixed(size < 10 ? 2 : 1)} ${units[exponent]}`;
+  return `${size >= 100 ? Math.round(size) : formatNumber(size, size < 10 ? 2 : 1)} ${units[exponent]}`;
 };
 
 /**
@@ -36,5 +47,5 @@ export const formatUptime = (seconds: number): string => {
  * Format a number as a percentage string (e.g. "42.5%").
  */
 export const formatPercentage = (value: number, decimals = 1): string => {
-  return `${value.toFixed(decimals)}%`;
+  return `${formatNumber(value, decimals)}%`;
 };
