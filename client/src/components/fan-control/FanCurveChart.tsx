@@ -12,6 +12,7 @@ import {
   ReferenceLine,
 } from 'recharts';
 import type { FanCurvePoint } from '../../api/fan-control';
+import { formatNumber } from '../../lib/formatters';
 
 interface FanCurveChartProps {
   points: FanCurvePoint[];
@@ -50,9 +51,25 @@ export default function FanCurveChart({
   const [localPoints, setLocalPoints] = useState<FanCurvePoint[]>(points);
   const chartRef = useRef<HTMLDivElement>(null);
   const localPointsRef = useRef<FanCurvePoint[]>(localPoints);
+  const wasDraggingRef = useRef(false);
 
   // Editing is always enabled when not read-only (FanControl-style behavior)
   const canEdit = !isReadOnly;
+
+  // Refs for stable access in document-level handlers (survive React re-renders)
+  const canEditRef = useRef(canEdit);
+  const maxPointsRef = useRef(maxPoints);
+  const onPointsChangeRef = useRef(onPointsChange);
+
+  // Keep refs in sync with latest values
+  useEffect(() => { canEditRef.current = canEdit; }, [canEdit]);
+  useEffect(() => { maxPointsRef.current = maxPoints; }, [maxPoints]);
+  useEffect(() => { onPointsChangeRef.current = onPointsChange; }, [onPointsChange]);
+
+  // Mount-time version log for production debugging
+  useEffect(() => {
+    console.log('[FanCurveChart] mounted v7');
+  }, []);
 
   // Update local points when external points change (but not while dragging)
   useEffect(() => {
@@ -81,6 +98,9 @@ export default function FanCurveChart({
     ...point,
     isCurrentPoint: false,
   }));
+
+  // Render-time diagnostic: confirms React re-renders with updated data
+  console.log('[FanCurveChart] render', { numPoints: localPoints.length, chartDataLen: chartData.length });
 
   // Handle right-click to remove a point
   const handleRemovePoint = useCallback((index: number) => {
@@ -180,7 +200,7 @@ export default function FanCurveChart({
           {data.isCurrentPoint ? t('system:fanControl.curve.current') : t('system:fanControl.curve.curvePoint')}
         </p>
         <p className="text-sm font-semibold text-white">
-          {data.temp.toFixed(1)}°C → {data.pwm}%
+          {formatNumber(data.temp, 1)}°C → {data.pwm}%
         </p>
       </div>
     );
@@ -196,9 +216,38 @@ export default function FanCurveChart({
   // Get chart area bounds for coordinate calculations
   const getChartBounds = useCallback(() => {
     if (!chartRef.current) return null;
+
+    // Primary: CartesianGrid (exact plot area)
     const cartesianGrid = chartRef.current.querySelector('.recharts-cartesian-grid');
-    if (!cartesianGrid) return null;
-    return cartesianGrid.getBoundingClientRect();
+    if (cartesianGrid) {
+      const rect = cartesianGrid.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) return rect;
+    }
+
+    // Fallback: CartesianGrid horizontal lines
+    const horizontalLines = chartRef.current.querySelector('.recharts-cartesian-grid-horizontal');
+    if (horizontalLines) {
+      const rect = horizontalLines.getBoundingClientRect();
+      if (rect.width > 0 && rect.height > 0) return rect;
+    }
+
+    // Fallback 2: recharts-surface (SVG) minus margins
+    const surface = chartRef.current.querySelector('.recharts-surface');
+    if (surface) {
+      const svgRect = surface.getBoundingClientRect();
+      const margin = { top: 5, right: 20, left: 0, bottom: 55 };
+      const yAxis = chartRef.current.querySelector('.recharts-yAxis');
+      const yAxisWidth = yAxis ? yAxis.getBoundingClientRect().width : 60;
+      return new DOMRect(
+        svgRect.left + margin.left + yAxisWidth,
+        svgRect.top + margin.top,
+        svgRect.width - margin.left - margin.right - yAxisWidth,
+        svgRect.height - margin.top - margin.bottom
+      );
+    }
+
+    console.warn('[FanCurveChart] getChartBounds: no chart elements found');
+    return null;
   }, []);
 
   // Convert pixel coordinates to chart values
@@ -228,7 +277,7 @@ export default function FanCurveChart({
     const x = clientX - bounds.left;
     const y = clientY - bounds.top;
     const tempRange = emergencyTemp + 10;
-    const hitRadius = 15;
+    const hitRadius = 10;
 
     let nearestIndex: number | null = null;
     let nearestDist = Infinity;
@@ -247,43 +296,55 @@ export default function FanCurveChart({
     return nearestIndex;
   }, [sortedPoints, emergencyTemp, getChartBounds]);
 
-  // Overlay mouse down handler
+  // Overlay mouse down handler — drag only
+  // Click-to-add is handled by onClick (atomic event, no timing gap)
   const handleOverlayMouseDown = useCallback((e: React.MouseEvent) => {
     if (!canEdit) return;
 
     const pointIndex = findPointNear(e.clientX, e.clientY);
-    if (pointIndex !== null) {
-      // Start dragging
-      e.preventDefault();
-      setDraggingIndex(pointIndex);
+    if (pointIndex === null) return; // Click-to-add handled by onClick
 
-      const handleMouseMove = (moveEvent: MouseEvent) => {
-        updatePointPosition(moveEvent.clientX, moveEvent.clientY, pointIndex);
-      };
+    // Start dragging an existing point
+    e.preventDefault();
+    setDraggingIndex(pointIndex);
 
-      const handleMouseUp = () => {
-        setDraggingIndex(null);
-        onPointsChange(localPointsRef.current);
-        document.removeEventListener('mousemove', handleMouseMove);
-        document.removeEventListener('mouseup', handleMouseUp);
-      };
+    const handleMouseMove = (moveEvent: MouseEvent) => {
+      updatePointPosition(moveEvent.clientX, moveEvent.clientY, pointIndex);
+    };
 
-      document.addEventListener('mousemove', handleMouseMove);
-      document.addEventListener('mouseup', handleMouseUp);
-    }
-  }, [canEdit, findPointNear, updatePointPosition, onPointsChange]);
+    const handleMouseUp = () => {
+      console.log('[FanCurveChart] drag end');
+      wasDraggingRef.current = true; // Suppress the following onClick
+      setDraggingIndex(null);
+      onPointsChangeRef.current(localPointsRef.current);
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+      // Reset after onClick has checked the flag (requestAnimationFrame = next frame)
+      requestAnimationFrame(() => { wasDraggingRef.current = false; });
+    };
 
-  // Overlay click handler (for adding points)
+    document.addEventListener('mousemove', handleMouseMove);
+    document.addEventListener('mouseup', handleMouseUp);
+  }, [canEdit, findPointNear, updatePointPosition]);
+
+  // Overlay click handler — adds new points (atomic, no timing gap)
+  // Uses wasDraggingRef to suppress click after drag (react-draggable pattern)
   const handleOverlayClick = useCallback((e: React.MouseEvent) => {
-    if (!canEdit || localPoints.length >= maxPoints) return;
+    if (wasDraggingRef.current) {
+      wasDraggingRef.current = false;
+      return;
+    }
+    if (!canEdit) return;
+    if (localPoints.length >= maxPoints) return;
 
-    // Don't add if we clicked on a point
+    // Don't add if clicking on an existing point
     const pointIndex = findPointNear(e.clientX, e.clientY);
     if (pointIndex !== null) return;
 
     const values = pixelToValue(e.clientX, e.clientY);
     if (!values || !values.inBounds) return;
 
+    console.log('[FanCurveChart] click adding point', { temp: values.temp, pwm: values.pwm });
     const newPoint: FanCurvePoint = { temp: values.temp, pwm: values.pwm };
     const updatedPoints = [...localPoints, newPoint];
     setLocalPoints(updatedPoints);
@@ -301,7 +362,7 @@ export default function FanCurveChart({
     }
   }, [canEdit, findPointNear, handleRemovePoint]);
 
-  // Overlay touch handler
+  // Overlay touch handler — handles BOTH drag AND tap-to-add
   const handleOverlayTouchStart = useCallback((e: React.TouchEvent) => {
     if (!canEdit) return;
 
@@ -309,6 +370,7 @@ export default function FanCurveChart({
     const pointIndex = findPointNear(touch.clientX, touch.clientY);
 
     if (pointIndex !== null) {
+      // Drag existing point
       e.preventDefault();
       setDraggingIndex(pointIndex);
 
@@ -319,15 +381,44 @@ export default function FanCurveChart({
 
       const handleTouchEnd = () => {
         setDraggingIndex(null);
-        onPointsChange(localPointsRef.current);
+        onPointsChangeRef.current(localPointsRef.current);
         document.removeEventListener('touchmove', handleTouchMove);
         document.removeEventListener('touchend', handleTouchEnd);
       };
 
       document.addEventListener('touchmove', handleTouchMove);
       document.addEventListener('touchend', handleTouchEnd);
+    } else {
+      // No point hit — register document-level touchend to detect tap-to-add
+      const startX = touch.clientX;
+      const startY = touch.clientY;
+
+      const handleTouchEnd = (endEvent: TouchEvent) => {
+        const endTouch = endEvent.changedTouches[0];
+        if (!endTouch) return;
+
+        const dist = Math.sqrt(
+          Math.pow(endTouch.clientX - startX, 2) + Math.pow(endTouch.clientY - startY, 2)
+        );
+
+        // Larger threshold for touch (10px)
+        if (dist >= 10) return;
+        if (!canEditRef.current) return;
+        if (localPointsRef.current.length >= maxPointsRef.current) return;
+
+        const values = pixelToValue(endTouch.clientX, endTouch.clientY);
+        if (!values || !values.inBounds) return;
+
+        console.log('[FanCurveChart] tap adding point', { temp: values.temp, pwm: values.pwm });
+        const newPoint: FanCurvePoint = { temp: values.temp, pwm: values.pwm };
+        const updatedPoints = [...localPointsRef.current, newPoint];
+        setLocalPoints(updatedPoints);
+        onPointsChangeRef.current(updatedPoints);
+      };
+
+      document.addEventListener('touchend', handleTouchEnd, { once: true });
     }
-  }, [canEdit, findPointNear, updatePointPosition, onPointsChange]);
+  }, [canEdit, findPointNear, updatePointPosition, pixelToValue]);
 
   return (
     <div
@@ -337,6 +428,7 @@ export default function FanCurveChart({
     >
       <ResponsiveContainer width="100%" height={400}>
         <ComposedChart
+          key={`curve-${chartData.length}`}
           data={chartData}
           margin={{ top: 5, right: 20, left: 0, bottom: 55 }}
         >
@@ -402,7 +494,7 @@ export default function FanCurveChart({
               strokeDasharray="3 3"
               strokeWidth={1.5}
               label={{
-                value: `Now: ${currentTemp.toFixed(1)}°C`,
+                value: `Now: ${formatNumber(currentTemp, 1)}°C`,
                 position: 'top',
                 fill: '#34d399',
                 fontSize: 11
@@ -443,18 +535,21 @@ export default function FanCurveChart({
         </ComposedChart>
       </ResponsiveContainer>
 
-      {/* Transparent overlay for event handling - positioned over the chart area */}
-      {canEdit && (
-        <div
-          ref={overlayRef}
-          className="absolute inset-0"
-          style={{ cursor: draggingIndex !== null ? 'grabbing' : 'crosshair' }}
-          onMouseDown={handleOverlayMouseDown}
-          onClick={handleOverlayClick}
-          onContextMenu={handleOverlayContextMenu}
-          onTouchStart={handleOverlayTouchStart}
-        />
-      )}
+      {/* Transparent overlay for event handling - always rendered, disabled via pointerEvents */}
+      <div
+        ref={overlayRef}
+        className="absolute inset-0"
+        style={{
+          zIndex: 10,
+          cursor: canEdit ? (draggingIndex !== null ? 'grabbing' : 'crosshair') : 'default',
+          background: 'rgba(0,0,0,0.001)', // Force browser hit-testing
+          pointerEvents: canEdit ? 'auto' : 'none',
+        }}
+        onMouseDown={handleOverlayMouseDown}
+        onClick={handleOverlayClick}
+        onContextMenu={handleOverlayContextMenu}
+        onTouchStart={handleOverlayTouchStart}
+      />
 
       {/* Legend */}
       <div className="mt-4 flex flex-wrap gap-4 text-xs text-slate-400">

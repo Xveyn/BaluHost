@@ -27,7 +27,7 @@ export interface FanCurvePoint {
 // Preset curve definitions for immediate UI use
 export const CURVE_PRESETS: Record<string, FanCurvePoint[]> = {
   silent: [
-    { temp: 40, pwm: 25 },
+    { temp: 40, pwm: 30 },
     { temp: 55, pwm: 35 },
     { temp: 70, pwm: 55 },
     { temp: 80, pwm: 75 },

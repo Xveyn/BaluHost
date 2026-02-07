@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
@@ -21,6 +21,9 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const [hysteresis, setHysteresis] = useState<number>(fan.hysteresis_celsius ?? 3.0);
   const [isUpdatingHysteresis, setIsUpdatingHysteresis] = useState(false);
 
+  // Tracks whether the user has manually edited the curve (prevents auto-refresh overwrites)
+  const userEditedRef = useRef(false);
+
   // Editing is always enabled when not read-only (FanControl-style)
   const canEdit = !isReadOnly;
 
@@ -34,9 +37,18 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
     );
   }, [curvePoints, fan.curve_points]);
 
+  // Sync curve points from server — but only when user hasn't manually edited
   useEffect(() => {
-    setCurvePoints(fan.curve_points);
+    if (!userEditedRef.current) {
+      setCurvePoints(fan.curve_points);
+    }
   }, [fan.fan_id, fan.curve_points]);
+
+  // Reset userEditedRef when switching to a different fan
+  useEffect(() => {
+    userEditedRef.current = false;
+    setCurvePoints(fan.curve_points);
+  }, [fan.fan_id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     setHysteresis(fan.hysteresis_celsius ?? 3.0);
@@ -80,14 +92,17 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       return;
     }
 
+    userEditedRef.current = false;
     onCurveUpdate(fan.fan_id, curvePoints);
   };
 
   const handleDiscardChanges = () => {
+    userEditedRef.current = false;
     setCurvePoints(fan.curve_points);
   };
 
   const handleAddPoint = () => {
+    userEditedRef.current = true;
     const lastPoint = curvePoints[curvePoints.length - 1];
     const newTemp = lastPoint ? lastPoint.temp + 10 : 40;
     const newPWM = lastPoint ? Math.min(lastPoint.pwm + 10, 100) : 50;
@@ -96,11 +111,13 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
 
   const handleRemovePoint = (index: number) => {
     if (curvePoints.length > 2) {
+      userEditedRef.current = true;
       setCurvePoints(curvePoints.filter((_, i) => i !== index));
     }
   };
 
   const handleUpdatePoint = (index: number, field: 'temp' | 'pwm', value: number) => {
+    userEditedRef.current = true;
     const updated = [...curvePoints];
     updated[index] = { ...updated[index], [field]: value };
     setCurvePoints(updated);
@@ -109,10 +126,17 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
   const handleApplyPreset = (preset: keyof typeof CURVE_PRESETS) => {
     const presetPoints = CURVE_PRESETS[preset];
     if (presetPoints) {
+      userEditedRef.current = true;
       setCurvePoints([...presetPoints]);
       toast.success(t('system:fanControl.curve.presetApplied', { preset }));
     }
   };
+
+  // Wrapper for FanCurveChart's onPointsChange — marks as user-edited
+  const handleChartPointsChange = useCallback((points: FanCurvePoint[]) => {
+    userEditedRef.current = true;
+    setCurvePoints(points);
+  }, []);
 
   const handleHysteresisChange = async (value: number) => {
     setHysteresis(value);
@@ -233,7 +257,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
           <div className="mt-4">
             <FanCurveChart
               points={curvePoints}
-              onPointsChange={setCurvePoints}
+              onPointsChange={handleChartPointsChange}
               currentTemp={fan.temperature_celsius}
               currentPWM={fan.pwm_percent}
               minPWM={fan.min_pwm_percent}
@@ -258,16 +282,17 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                   </tr>
                 </thead>
                 <tbody>
-                  {curvePoints
+                  {[...curvePoints]
+                    .map((point, originalIndex) => ({ ...point, originalIndex }))
                     .sort((a, b) => a.temp - b.temp)
-                    .map((point, index) => (
-                      <tr key={index} className="border-t border-slate-700">
+                    .map((point) => (
+                      <tr key={point.originalIndex} className="border-t border-slate-700">
                         <td className="px-4 py-2">
                           {canEdit ? (
                             <input
                               type="number"
                               value={point.temp}
-                              onChange={(e) => handleUpdatePoint(index, 'temp', parseFloat(e.target.value))}
+                              onChange={(e) => handleUpdatePoint(point.originalIndex, 'temp', parseFloat(e.target.value))}
                               className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-800 text-white"
                               min={0}
                               max={150}
@@ -281,7 +306,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                             <input
                               type="number"
                               value={point.pwm}
-                              onChange={(e) => handleUpdatePoint(index, 'pwm', parseInt(e.target.value))}
+                              onChange={(e) => handleUpdatePoint(point.originalIndex, 'pwm', parseInt(e.target.value))}
                               className="w-20 px-2 py-1 border border-slate-600 rounded bg-slate-800 text-white"
                               min={fan.min_pwm_percent}
                               max={fan.max_pwm_percent}
@@ -293,7 +318,7 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
                         {canEdit && (
                           <td className="px-4 py-2">
                             <button
-                              onClick={() => handleRemovePoint(index)}
+                              onClick={() => handleRemovePoint(point.originalIndex)}
                               disabled={curvePoints.length <= 2}
                               className="text-rose-400 hover:text-rose-300 disabled:opacity-50 disabled:cursor-not-allowed text-sm"
                             >

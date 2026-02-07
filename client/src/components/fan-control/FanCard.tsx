@@ -2,6 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { FanMode } from '../../api/fan-control';
 import type { FanInfo } from '../../api/fan-control';
+import { formatNumber } from '../../lib/formatters';
 
 interface FanCardProps {
   fan: FanInfo;
@@ -109,7 +110,7 @@ export default function FanCard({
         <div className="mb-3">
           <p className="text-xs text-slate-400">{t('system:fanControl.card.temperature')}</p>
           <p className="text-lg font-bold text-white">
-            {fan.temperature_celsius.toFixed(1)}°C
+            {formatNumber(fan.temperature_celsius, 1)}°C
           </p>
         </div>
       )}
