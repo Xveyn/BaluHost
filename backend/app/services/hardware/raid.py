@@ -152,6 +152,7 @@ class _RaidState:
         if payload.trigger_scrub:
             raid_array.sync_action = "check"
             raid_array.resync_progress = 0.0
+            raid_array.status = "checking"
         else:
             if raid_array.sync_action == "check":
                 raid_array.sync_action = "idle"
@@ -299,10 +300,17 @@ def _map_device_state(state_text: str) -> str:
     return text or "unknown"
 
 
-def _derive_array_status(state_text: Optional[str], progress: Optional[float], devices: List[RaidDevice]) -> str:
+def _derive_array_status(
+    state_text: Optional[str],
+    progress: Optional[float],
+    devices: List[RaidDevice],
+    sync_action: Optional[str] = None,
+) -> str:
     if state_text:
         lowered = state_text.lower()
-        if any(keyword in lowered for keyword in ("resync", "recover", "rebuild", "reshape", "check")):
+        if "check" in lowered:
+            return "checking"
+        if any(keyword in lowered for keyword in ("resync", "recover", "rebuild", "reshape")):
             return "rebuilding"
         if "degraded" in lowered or "faulty" in lowered:
             return "degraded"
@@ -310,6 +318,8 @@ def _derive_array_status(state_text: Optional[str], progress: Optional[float], d
             return "inactive"
 
     if progress is not None:
+        if sync_action and sync_action.strip().lower() == "check":
+            return "checking"
         return "rebuilding"
 
     if any(dev.state in {"failed", "removed"} for dev in devices):
@@ -376,26 +386,29 @@ class DevRaidBackend:
         disks = []
         
         # Mock Disks: Konsistent mit SMART-Service (_mock_status)
+        # OS disk (NVMe) — nicht für RAID verwendbar
         # RAID1 Pool 1: 2x5GB (sda, sdb)
         # RAID1 Pool 2: 2x10GB (sdc, sdd)
         # RAID5 Pool: 3x20GB (sde, sdf, sdg)
         base_mock_disks = [
-            ("sda", "sda1", "BaluHost Dev Disk 5GB (Mirror A)", 5),
-            ("sdb", "sdb1", "BaluHost Dev Disk 5GB (Mirror B)", 5),
-            ("sdc", "sdc1", "BaluHost Dev Disk 10GB (Backup A)", 10),
-            ("sdd", "sdd1", "BaluHost Dev Disk 10GB (Backup B)", 10),
-            ("sde", "sde1", "BaluHost Dev Disk 20GB (Archive A)", 20),
-            ("sdf", "sdf1", "BaluHost Dev Disk 20GB (Archive B)", 20),
-            ("sdg", "sdg1", "BaluHost Dev Disk 20GB (Archive C)", 20),
+            ("nvme0n1", "nvme0n1p2", "BaluHost Dev NVMe 500GB (OS)", 500, True),
+            ("sda", "sda1", "BaluHost Dev Disk 5GB (Mirror A)", 5, False),
+            ("sdb", "sdb1", "BaluHost Dev Disk 5GB (Mirror B)", 5, False),
+            ("sdc", "sdc1", "BaluHost Dev Disk 10GB (Backup A)", 10, False),
+            ("sdd", "sdd1", "BaluHost Dev Disk 10GB (Backup B)", 10, False),
+            ("sde", "sde1", "BaluHost Dev Disk 20GB (Archive A)", 20, False),
+            ("sdf", "sdf1", "BaluHost Dev Disk 20GB (Archive B)", 20, False),
+            ("sdg", "sdg1", "BaluHost Dev Disk 20GB (Archive C)", 20, False),
         ]
-        
+
         # Kombiniere base disks mit dynamisch hinzugefügten
-        all_mock_disks = base_mock_disks + self._mock_disks
-        
-        for disk_name, partition_name, model, size_gb in all_mock_disks:
+        # Dynamische Disks haben kein is_os_disk Feld (4-Tupel)
+        all_mock_disks = base_mock_disks + [(d[0], d[1], d[2], d[3], False) for d in self._mock_disks]
+
+        for disk_name, partition_name, model, size_gb, is_os in all_mock_disks:
             in_raid = partition_name in used_devices
             raid_suffix = " (in RAID)" if in_raid else ""
-            
+
             disks.append(
                 AvailableDisk(
                     name=disk_name,
@@ -404,6 +417,7 @@ class DevRaidBackend:
                     is_partitioned=True,
                     partitions=[partition_name],
                     in_raid=in_raid,
+                    is_os_disk=is_os,
                 )
             )
         
@@ -677,7 +691,7 @@ class MdadmRaidBackend:
         return RaidActionResponse(message="; ".join(actions))
 
     def _build_array(self, name: str, info: Optional[MdstatInfo]) -> RaidArray:
-        detail = self._run(["mdadm", f"/dev/{name}", "--detail"]).stdout
+        detail = self._run(["mdadm", "--detail", f"/dev/{name}"]).stdout
 
         level = _extract_detail_value(detail, "Raid Level") or "unknown"
         state_line = _extract_detail_value(detail, "State")
@@ -685,9 +699,9 @@ class MdadmRaidBackend:
         size_bytes = self._resolve_array_size(name, info, detail)
         resync_progress = self._resolve_progress(info, detail)
         devices = self._parse_devices(detail)
-        status = _derive_array_status(state_line, resync_progress, devices)
-        bitmap_info = _extract_detail_value(detail, "Bitmap")
         sync_action = self._read_sync_action(name)
+        status = _derive_array_status(state_line, resync_progress, devices, sync_action)
+        bitmap_info = _extract_detail_value(detail, "Bitmap")
 
         return RaidArray(
             name=name,
@@ -879,55 +893,89 @@ class MdadmRaidBackend:
             raise ValueError(f"Device '{device}' not found on this system")
         return path
 
-    def _run(self, command: List[str], *, check: bool = True, timeout: int = 60) -> subprocess.CompletedProcess[str]:
+    def _run(self, command: List[str], *, check: bool = True, timeout: int = 60,
+             stdin_input: str | None = None) -> subprocess.CompletedProcess[str]:
         logger.debug("Executing command: %s", " ".join(command))
         try:
-            return subprocess.run(command, check=check, capture_output=True, text=True, timeout=timeout)
+            return subprocess.run(command, check=check, capture_output=True, text=True,
+                                  timeout=timeout, input=stdin_input)
         except subprocess.CalledProcessError as exc:
             stderr = (exc.stderr or exc.stdout or "").strip()
             logger.error("Command '%s' failed: %s", " ".join(command), stderr)
             message = stderr or f"Command '{' '.join(command)}' failed with exit code {exc.returncode}"
             raise RuntimeError(message) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError(
+                f"Command timed out after {timeout}s: {' '.join(command)}"
+            ) from exc
         except FileNotFoundError as exc:
             raise RuntimeError(f"Required command not found: {command[0]}") from exc
+
+    @staticmethod
+    def _has_root_mount(node: dict) -> bool:
+        """Recursively check if any descendant is mounted at /."""
+        if node.get("mountpoint") == "/":
+            return True
+        for child in node.get("children", []):
+            if MdadmRaidBackend._has_root_mount(child):
+                return True
+        return False
+
+    def _get_os_disk_name(self) -> str | None:
+        """Return the block device name hosting /. Cached after first call."""
+        if hasattr(self, "_os_disk_cache"):
+            return self._os_disk_cache
+        try:
+            result = self._run(["lsblk", "-J", "-o", "NAME,TYPE,MOUNTPOINT"], timeout=10)
+            data = json.loads(result.stdout)
+            for dev in data.get("blockdevices", []):
+                if dev.get("type") == "disk" and self._has_root_mount(dev):
+                    self._os_disk_cache = dev.get("name")
+                    return self._os_disk_cache
+        except Exception:
+            pass
+        self._os_disk_cache = None
+        return None
 
     def get_available_disks(self) -> AvailableDisksResponse:
         """Get list of available disks using lsblk."""
         if not self._lsblk_available:
             raise RuntimeError("lsblk is not available on this system")
         
-        result = self._run(["lsblk", "-J", "-b", "-o", "NAME,SIZE,MODEL,TYPE,FSTYPE"])
-        import json
+        result = self._run(["lsblk", "-J", "-b", "-o", "NAME,SIZE,MODEL,TYPE,FSTYPE,MOUNTPOINT"])
         data = json.loads(result.stdout)
-        
+
         disks = []
         raid_devices = set()
-        
+
         # Sammle alle Devices die im RAID sind
         status = self.get_status()
         for array in status.arrays:
             for device in array.devices:
                 raid_devices.add(device.name)
-        
+
         # Parse lsblk output
         for device in data.get("blockdevices", []):
             if device.get("type") != "disk":
                 continue
-            
+
             name = device.get("name", "")
             size_bytes = int(device.get("size", 0))
             model = device.get("model") or None
             partitions = []
             is_partitioned = False
-            
+
             # Check for partitions
             if "children" in device:
                 is_partitioned = True
                 partitions = [child.get("name", "") for child in device["children"]]
-            
+
             # Check if any partition is in RAID
             in_raid = any(part in raid_devices for part in partitions) or name in raid_devices
-            
+
+            # Check if this is the OS disk (has / mounted)
+            is_os_disk = self._has_root_mount(device)
+
             disks.append(
                 AvailableDisk(
                     name=name,
@@ -936,16 +984,22 @@ class MdadmRaidBackend:
                     is_partitioned=is_partitioned,
                     partitions=partitions,
                     in_raid=in_raid,
+                    is_os_disk=is_os_disk,
                 )
             )
-        
+
         return AvailableDisksResponse(disks=disks)
 
     def format_disk(self, payload: FormatDiskRequest) -> RaidActionResponse:
         """Format a disk with the specified filesystem."""
         if not payload.disk:
             raise ValueError("Disk name is required")
-        
+
+        # OS-Disk protection
+        os_disk = self._get_os_disk_name()
+        if os_disk and (payload.disk == os_disk or payload.disk.startswith(os_disk)):
+            raise ValueError(f"Cannot format {payload.disk}: it is part of the OS disk ({os_disk})")
+
         device_path = self._normalize_device(payload.disk)
         
         # Validate filesystem type
@@ -979,7 +1033,21 @@ class MdadmRaidBackend:
         """Create a new RAID array using mdadm."""
         if not payload.name or not payload.devices:
             raise ValueError("Array name and devices are required")
-        
+
+        # OS-Disk protection
+        os_disk = self._get_os_disk_name()
+        if os_disk:
+            for dev in payload.devices:
+                if dev == os_disk or dev.startswith(os_disk):
+                    raise ValueError(f"Cannot use {dev} for RAID: it is part of the OS disk ({os_disk})")
+
+        # Validate array name (safety net in case schema validation is bypassed)
+        if not re.fullmatch(r"md([0-9]+|_[a-zA-Z0-9]+)", payload.name) or len(payload.name) > 32:
+            raise ValueError(
+                f"Invalid array name '{payload.name}'. "
+                "Name must match 'md<digits>' or 'md_<alphanumerics>' (max 32 chars)."
+            )
+
         # Validate RAID level
         valid_levels = ["raid0", "raid1", "raid5", "raid6", "raid10"]
         if payload.level not in valid_levels:
@@ -1018,7 +1086,7 @@ class MdadmRaidBackend:
             cmd.append("--assume-clean")
         
         logger.info("Creating RAID array %s with command: %s", payload.name, " ".join(cmd))
-        self._run(cmd, timeout=300)
+        self._run(cmd, timeout=300, stdin_input="y\n" * 3)
         
         return RaidActionResponse(
             message=f"Array {payload.name} ({payload.level}) created with {len(payload.devices)} devices"
@@ -1046,6 +1114,25 @@ class MdadmRaidBackend:
                         logger.warning("Failed to zero superblock on %s", device_path)
         
         return RaidActionResponse(message=f"Array {payload.array} deleted")
+
+
+def find_raid_mountpoint(raid_name: str) -> str | None:
+    """Find mountpoint of a RAID device by reading /proc/mounts.
+
+    More robust than psutil for software-RAID devices (md*).
+    Returns the mountpoint path or None if the device is not mounted.
+    """
+    try:
+        with open("/proc/mounts") as f:
+            for line in f:
+                parts = line.split()
+                if len(parts) >= 2:
+                    device, mountpoint = parts[0], parts[1]
+                    if raid_name in device and "/md" in device:
+                        return mountpoint
+    except (FileNotFoundError, PermissionError):
+        pass
+    return None
 
 
 def _select_backend() -> RaidBackend:

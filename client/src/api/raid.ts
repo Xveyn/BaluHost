@@ -49,6 +49,7 @@ export interface AvailableDisk {
   is_partitioned: boolean;
   partitions: string[];
   in_raid: boolean;
+  is_os_disk?: boolean;
 }
 
 export interface AvailableDisksResponse {

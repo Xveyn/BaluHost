@@ -19,13 +19,15 @@ import {
 } from '../api/raid';
 import RaidSetupWizard from '../components/RaidSetupWizard';
 import MockDiskWizard from '../components/MockDiskWizard';
-import { formatBytes } from '../lib/formatters';
+import { formatBytes, formatNumber } from '../lib/formatters';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { Monitor } from 'lucide-react';
 
 const REFRESH_INTERVAL_MS = 8000;
 
 const statusStyles: Record<string, string> = {
   optimal: 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200',
+  checking: 'border-indigo-500/40 bg-indigo-500/15 text-indigo-100',
   rebuilding: 'border-sky-500/40 bg-sky-500/15 text-sky-100',
   degraded: 'border-amber-500/40 bg-amber-500/15 text-amber-100',
   inactive: 'border-slate-600/50 bg-slate-800/60 text-slate-300',
@@ -415,7 +417,7 @@ export default function RaidManagement() {
                         {upcase(lowerStatus)}
                       </span>
                       <span className="rounded-full border border-slate-700/70 bg-slate-900/60 px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs uppercase tracking-[0.26em] text-slate-400">
-                        {array.level.toUpperCase()}
+                        {array.level.replace(/^raid/i, 'RAID ')}
                       </span>
                       <span className="hidden sm:inline rounded-full border border-slate-800/70 bg-slate-900/60 px-3 py-1 text-xs text-slate-400">
                         {t('system:raid.labels.bitmap')}: {array.bitmap ? array.bitmap : t('system:raid.labels.bitmapOff')}
@@ -427,7 +429,7 @@ export default function RaidManagement() {
                       )}
                     </div>
                     <p className="text-xs sm:text-sm text-slate-400">
-                      {formatBytes(array.size_bytes)} · {array.devices.length} {t('system:raid.labels.drives')}
+                      {formatBytes(array.size_bytes)} · {array.devices.length} {t('system:raid.labels.drives')} · {array.devices.filter(d => ['active', 'write-mostly', 'rebuilding'].includes(d.state.toLowerCase())).length} {t('system:raid.labels.active')}
                     </p>
                     <div className="flex flex-wrap gap-2 text-[10px] sm:text-xs text-slate-500">
                       <span>{t('system:raid.labels.writeMostly')}: {array.devices.filter((device) => device.state === 'write-mostly').length}</span>
@@ -438,7 +440,7 @@ export default function RaidManagement() {
                     {array.resync_progress !== null && array.resync_progress !== undefined && (
                       <div className="flex flex-row sm:flex-col items-center sm:items-end text-xs sm:text-sm text-slate-300">
                         <span className="mr-2 sm:mr-0">{t('system:raid.labels.sync')}:</span>
-                        <span className="text-slate-200 font-medium">{array.resync_progress.toFixed(1)}%</span>
+                        <span className="text-slate-200 font-medium">{formatNumber(array.resync_progress, 1)}%</span>
                       </div>
                     )}
                     <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
@@ -516,7 +518,9 @@ export default function RaidManagement() {
                       />
                     </div>
                     <p className="mt-2 text-xs text-slate-500">
-                      {t('system:raid.labels.rebuildProgress')}
+                      {array.status.toLowerCase() === 'checking'
+                        ? t('system:raid.labels.checkProgress')
+                        : t('system:raid.labels.rebuildProgress')}
                     </p>
                   </div>
                 )}
@@ -706,13 +710,13 @@ export default function RaidManagement() {
               )}
               <button
                 onClick={() => setShowCreateArrayDialog(true)}
-                disabled={busy || availableDisks.filter(d => !d.in_raid).length < 2}
+                disabled={busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2}
                 className={`whitespace-nowrap rounded-xl border px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm transition touch-manipulation active:scale-95 ${
-                  busy || availableDisks.filter(d => !d.in_raid).length < 2
+                  busy || availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2
                     ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                     : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
                 }`}
-                title={availableDisks.filter(d => !d.in_raid).length < 2 ? t('system:raid.diskManagement.minDisksRequired') : ''}
+                title={availableDisks.filter(d => !d.in_raid && !d.is_os_disk).length < 2 ? t('system:raid.diskManagement.minDisksRequired') : ''}
               >
                 {t('system:raid.actions.createNewArray')}
               </button>
@@ -777,6 +781,14 @@ export default function RaidManagement() {
                               {t('system:raid.diskManagement.partitioned')}
                             </span>
                           )}
+                          {disk.is_os_disk && (
+                            <div className="flex items-center gap-1.5 rounded-full border border-violet-400/30 bg-violet-500/10 px-2.5 py-0.5">
+                              <Monitor className="h-3 w-3 text-violet-400" />
+                              <span className="text-xs font-medium text-violet-100">
+                                {t('system:raid.diskManagement.osDisk')}
+                              </span>
+                            </div>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -785,9 +797,9 @@ export default function RaidManagement() {
                             setSelectedDisk(disk);
                             setShowFormatDialog(true);
                           }}
-                          disabled={busy || disk.in_raid}
+                          disabled={busy || disk.in_raid || disk.is_os_disk}
                           className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-                            busy || disk.in_raid
+                            busy || disk.in_raid || disk.is_os_disk
                               ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                               : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                           }`}

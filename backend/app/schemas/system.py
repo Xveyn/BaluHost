@@ -1,6 +1,8 @@
 from datetime import datetime
 
-from pydantic import BaseModel
+import re
+
+from pydantic import BaseModel, field_validator
 
 
 class CPUStats(BaseModel):
@@ -212,6 +214,7 @@ class AvailableDisk(BaseModel):
     is_partitioned: bool = False
     partitions: list[str] = []
     in_raid: bool = False
+    is_os_disk: bool = False
 
 
 class AvailableDisksResponse(BaseModel):
@@ -229,6 +232,19 @@ class CreateArrayRequest(BaseModel):
     level: str  # raid0, raid1, raid5, raid6, raid10
     devices: list[str]
     spare_devices: list[str] = []
+
+    @field_validator("name")
+    @classmethod
+    def validate_mdadm_name(cls, v: str) -> str:
+        if not re.fullmatch(r"md([0-9]+|_[a-zA-Z0-9]+)", v):
+            raise ValueError(
+                f"Invalid array name '{v}'. "
+                "Name must start with 'md' followed by digits (e.g. md0, md127) "
+                "or 'md_' followed by alphanumerics (e.g. md_backup)."
+            )
+        if len(v) > 32:
+            raise ValueError("Array name must not exceed 32 characters.")
+        return v
 
 
 class DeleteArrayRequest(BaseModel):

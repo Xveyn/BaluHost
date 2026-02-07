@@ -329,9 +329,9 @@ async def create_array(
             user=current_admin.username,
             raid_array=payload.name,
             details={
-                "raid_level": payload.raid_level,
+                "raid_level": payload.level,
                 "devices": payload.devices,
-                "mount_point": payload.mount_point
+                "spare_devices": payload.spare_devices,
             },
             success=True
         )

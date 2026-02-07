@@ -2,6 +2,7 @@ import { type FormEvent, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { createArray, type AvailableDisk } from '../api/raid';
+import { formatBytes } from '../lib/formatters';
 
 interface RaidSetupWizardProps {
   availableDisks: AvailableDisk[];
@@ -71,16 +72,6 @@ const RAID_LEVELS: RaidLevelInfo[] = [
   },
 ];
 
-const formatBytes = (bytes: number): string => {
-  if (!Number.isFinite(bytes) || bytes <= 0) {
-    return '0 B';
-  }
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
-  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
-  const size = bytes / 1024 ** exponent;
-  return `${size >= 100 ? Math.round(size) : size.toFixed(1)} ${units[exponent]}`;
-};
-
 export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: RaidSetupWizardProps) {
   const { t } = useTranslation('system');
   const [currentStep, setCurrentStep] = useState<WizardStep>('select-disks');
@@ -89,8 +80,11 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
   const [arrayName, setArrayName] = useState<string>('md1');
   const [busy, setBusy] = useState<boolean>(false);
 
-  // Nur Disks die nicht im RAID sind
-  const freeDisks = availableDisks.filter((disk) => !disk.in_raid);
+  const MDADM_NAME_REGEX = /^md([0-9]+|_[a-zA-Z0-9]+)$/;
+  const isArrayNameValid = MDADM_NAME_REGEX.test(arrayName) && arrayName.length <= 32;
+
+  // Nur Disks die nicht im RAID und keine OS-Disk sind
+  const freeDisks = availableDisks.filter((disk) => !disk.in_raid && !disk.is_os_disk);
 
   const toggleDiskSelection = (diskName: string) => {
     setSelectedDisks((prev) =>
@@ -147,10 +141,10 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
     setBusy(true);
 
     try {
-      // Konvertiere Disk-Namen zu Partition-Namen (z.B. sdc -> sdc1)
+      // Use the first partition if available, otherwise pass the whole disk
       const devices = selectedDisks.map((disk) => {
         const diskObj = freeDisks.find((d) => d.name === disk);
-        return diskObj?.partitions?.[0] || `${disk}1`;
+        return diskObj?.partitions?.[0] || disk;
       });
 
       await createArray({
@@ -425,9 +419,20 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
               value={arrayName}
               onChange={(e) => setArrayName(e.target.value)}
               required
-              placeholder="z.B. md1"
-              className="mt-1 w-full rounded-lg border border-slate-800 bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
+              pattern="^md([0-9]+|_[a-zA-Z0-9]+)$"
+              maxLength={32}
+              placeholder="md0"
+              className={`mt-1 w-full rounded-lg border bg-slate-950/70 px-3 py-2 text-sm text-slate-200 focus:outline-none ${
+                arrayName && !isArrayNameValid
+                  ? 'border-red-500/60 focus:border-red-500'
+                  : 'border-slate-800 focus:border-sky-500'
+              }`}
             />
+            {arrayName && !isArrayNameValid && (
+              <p className="mt-1 text-xs text-red-400">
+                {t('raidWizard.confirm.invalidName', 'Name must be "md" + digits (e.g. md0) or "md_" + alphanumerics (e.g. md_backup).')}
+              </p>
+            )}
           </div>
 
           {/* Configuration Summary */}
@@ -506,9 +511,9 @@ export default function RaidSetupWizard({ availableDisks, onClose, onSuccess }: 
             </button>
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !isArrayNameValid}
               className={`rounded-lg border px-4 py-2 text-sm transition ${
-                busy
+                busy || !isArrayNameValid
                   ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                   : 'border-emerald-500/40 bg-emerald-500/15 text-emerald-100 hover:border-emerald-500/60'
               }`}
