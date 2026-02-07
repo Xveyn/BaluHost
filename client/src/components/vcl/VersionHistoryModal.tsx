@@ -29,6 +29,7 @@ import {
   formatCompressionRatio,
   calculateSavingsPercent,
 } from '../../api/vcl';
+import { formatNumber } from '../../lib/formatters';
 import type { VersionDetail, VersionDiffResponse } from '../../types/vcl';
 
 interface VersionHistoryModalProps {
@@ -75,7 +76,7 @@ export function VersionHistoryModal({
   };
 
   const handleRestore = async (versionId: number, versionNumber: number) => {
-    if (!confirm(`Restore file to version ${versionNumber}?`)) return;
+    if (!confirm(t('versionHistory.actions.restoreConfirm', { number: versionNumber }))) return;
 
     try {
       setActionLoading(versionId);
@@ -92,7 +93,7 @@ export function VersionHistoryModal({
   };
 
   const handleDelete = async (versionId: number, versionNumber: number) => {
-    if (!confirm(`Delete version ${versionNumber}? This cannot be undone.`)) return;
+    if (!confirm(t('versionHistory.actions.deleteConfirm', { number: versionNumber }))) return;
 
     try {
       setActionLoading(versionId);
@@ -187,19 +188,19 @@ export function VersionHistoryModal({
       <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4">
         <div className="card w-full max-w-6xl max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
           <div className="flex items-center justify-between mb-4">
-            <h3 className="text-xl font-semibold text-white">Version Diff: {diffData.file_name}</h3>
+            <h3 className="text-xl font-semibold text-white">{t('versionHistory.diff.title', { fileName: diffData.file_name })}</h3>
             <button
               onClick={closeDiff}
               className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
             >
-              ✕ Close
+              {t('versionHistory.diff.close')}
             </button>
           </div>
           
           <div className="text-sm text-slate-400 mb-4 flex gap-4">
-            <span>Old: v{selectedForDiff[0]} ({formatBytes(diffData.old_size)})</span>
+            <span>{t('versionHistory.diff.old', { version: selectedForDiff[0], size: formatBytes(diffData.old_size) })}</span>
             <span>→</span>
-            <span>New: v{selectedForDiff[1]} ({formatBytes(diffData.new_size)})</span>
+            <span>{t('versionHistory.diff.new', { version: selectedForDiff[1], size: formatBytes(diffData.new_size) })}</span>
           </div>
 
           {diffData.is_binary ? (
@@ -281,7 +282,7 @@ export function VersionHistoryModal({
                 {diffLoading ? (
                   <>
                     <Loader2 className="w-4 h-4 animate-spin" />
-                    Loading...
+                    {t('versionHistory.loading')}
                   </>
                 ) : (
                   <>{t('versionHistory.diff.compare', { v1: selectedForDiff[0], v2: selectedForDiff[1] })}</>
@@ -348,7 +349,7 @@ export function VersionHistoryModal({
                         checked={selectedForDiff.includes(version.id)}
                         onChange={() => handleSelectForDiff(version.id)}
                         className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
-                        title="Select for comparison"
+                        title={t('versionHistory.actions.selectForComparison')}
                       />
                     </div>
 
@@ -393,7 +394,7 @@ export function VersionHistoryModal({
                         </div>
                         <div>
                           <span className="text-slate-500">{t('versionHistory.fields.savings')}:</span>{' '}
-                          {savingsPercent.toFixed(1)}%
+                          {formatNumber(savingsPercent, 1)}%
                         </div>
                         <div>
                           <span className="text-slate-500">{t('versionHistory.fields.storage')}:</span>{' '}

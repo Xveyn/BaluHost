@@ -24,6 +24,7 @@ import {
   triggerCleanup,
   formatBytes,
 } from '../../api/vcl';
+import { formatNumber } from '../../lib/formatters';
 import type { AdminVCLOverview, UserVCLStats, VCLSettingsUpdate } from '../../types/vcl';
 
 export default function VCLSettings() {
@@ -64,7 +65,7 @@ export default function VCLSettings() {
   };
 
   const handleCleanup = async (dryRun: boolean = false) => {
-    if (!dryRun && !confirm('Trigger cleanup for all users exceeding quota?')) return;
+    if (!dryRun && !confirm(t('vcl.maintenance.confirmCleanup'))) return;
 
     try {
       setActionLoading(true);
@@ -167,7 +168,7 @@ export default function VCLSettings() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-slate-400 text-sm">{t('vcl.stats.totalSavings')}</p>
-              <p className="text-2xl font-bold text-white mt-1">{savingsPercent.toFixed(1)}%</p>
+              <p className="text-2xl font-bold text-white mt-1">{formatNumber(savingsPercent, 1)}%</p>
               <p className="text-xs text-slate-500 mt-1">{formatBytes(totalSavings)} {t('vcl.stats.saved')}</p>
             </div>
             <TrendingUp className="w-10 h-10 text-green-400 opacity-50" />
@@ -195,7 +196,7 @@ export default function VCLSettings() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-slate-400">{t('vcl.storageDetails.compressionRatio')}</p>
-            <p className="text-white font-semibold mt-1">{compressionRatio.toFixed(2)}x</p>
+            <p className="text-white font-semibold mt-1">{formatNumber(compressionRatio, 2)}x</p>
           </div>
           <div>
             <p className="text-slate-400">{t('vcl.storageDetails.compressionSavings')}</p>
@@ -250,7 +251,7 @@ export default function VCLSettings() {
             className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors disabled:opacity-50 flex items-center gap-2"
           >
             <RefreshCw className="w-4 h-4" />
-            {t('vcl.maintenance.dryRun')}
+            {t('vcl.maintenance.dryRunCleanup')}
           </button>
           <button
             onClick={() => handleCleanup(false)}
@@ -312,7 +313,7 @@ export default function VCLSettings() {
                           />
                         </div>
                         <span className={`${isCritical ? 'text-red-400' : isWarning ? 'text-amber-400' : 'text-slate-300'}`}>
-                          {usagePercent.toFixed(1)}%
+                          {formatNumber(usagePercent, 1)}%
                         </span>
                       </div>
                     </td>
@@ -362,7 +363,7 @@ export default function VCLSettings() {
             <div className="p-6 space-y-4">
               <div>
                 <label className="block text-sm font-medium text-slate-300 mb-2">
-                  {t('vcl.editModal.maxSizeBytes')}
+                  {t('vcl.editModal.maxSizeLabel')}
                 </label>
                 <input
                   type="number"

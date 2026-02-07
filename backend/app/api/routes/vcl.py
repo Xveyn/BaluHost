@@ -82,10 +82,10 @@ async def list_file_versions(
         404: File not found or user has no access
     """
     # Check if file exists and user has access
-    file_meta = db.query(FileMetadata).filter(
-        FileMetadata.id == file_id,
-        FileMetadata.owner_id == user.id
-    ).first()
+    query_filters = [FileMetadata.id == file_id]
+    if user.role != "admin":
+        query_filters.append(FileMetadata.owner_id == user.id)
+    file_meta = db.query(FileMetadata).filter(*query_filters).first()
     
     if not file_meta:
         raise HTTPException(
@@ -348,8 +348,8 @@ async def get_version_diff(
     # Read content from storage
     vcl_service = VCLService(db)
     try:
-        content_old = vcl_service.read_version_content(version_old)
-        content_new = vcl_service.read_version_content(version_new)
+        content_old = vcl_service.get_version_content(version_old)
+        content_new = vcl_service.get_version_content(version_new)
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -788,7 +788,7 @@ async def admin_update_user_settings(
     from app.services.vcl import VCLService
     
     vcl_service = VCLService(db)
-    settings = vcl_service.get_or_create_settings(user_id)
+    settings = vcl_service.get_or_create_user_settings(user_id)
     
     # Update fields
     if settings_update.max_size_bytes is not None:
@@ -813,11 +813,11 @@ async def admin_update_user_settings(
     
     # Log admin action
     audit_logger = get_audit_logger_db()
-    audit_logger.log_admin_action(
-        admin=admin.username,
+    audit_logger.log_system_config_change(
         action="update_user_vcl_settings",
-        target=f"user_id:{user_id}",
-        metadata=settings_update.model_dump(),
+        user=admin.username,
+        config_key=f"vcl_settings:user_id:{user_id}",
+        new_value=settings_update.model_dump(),
         db=db
     )
     
@@ -901,11 +901,11 @@ async def trigger_manual_cleanup(
                     # Stats recalculation is not critical
                     pass
             
-            audit_logger.log_admin_action(
-                admin=admin.username,
+            audit_logger.log_system_config_change(
                 action="manual_vcl_cleanup" + ("_dry_run" if cleanup_req.dry_run else ""),
-                target=f"user_id:{cleanup_req.user_id}",
-                metadata={"deleted_versions": deleted, "freed_bytes": freed_bytes},
+                user=admin.username,
+                config_key=f"vcl_cleanup:user_id:{cleanup_req.user_id}",
+                new_value={"deleted_versions": deleted, "freed_bytes": freed_bytes},
                 db=db
             )
             
@@ -954,11 +954,11 @@ async def trigger_manual_cleanup(
                     # Stats recalculation is not critical
                     pass
             
-            audit_logger.log_admin_action(
-                admin=admin.username,
+            audit_logger.log_system_config_change(
                 action="manual_vcl_cleanup_all" + ("_dry_run" if cleanup_req.dry_run else ""),
-                target="all_users",
-                metadata={
+                user=admin.username,
+                config_key="vcl_cleanup:all_users",
+                new_value={
                     "deleted_versions": total_deleted,
                     "freed_bytes": total_freed,
                     "affected_users": affected,
@@ -975,11 +975,13 @@ async def trigger_manual_cleanup(
             )
             
     except Exception as e:
-        audit_logger.log_admin_action(
-            admin=admin.username,
+        audit_logger.log_system_config_change(
             action="manual_vcl_cleanup_failed",
-            target=f"user_id:{cleanup_req.user_id}" if cleanup_req.user_id else "all_users",
-            metadata={"error": str(e)},
+            user=admin.username,
+            config_key=f"vcl_cleanup:{f'user_id:{cleanup_req.user_id}' if cleanup_req.user_id else 'all_users'}",
+            new_value={"error": str(e)},
+            success=False,
+            error_message=str(e),
             db=db
         )
         raise HTTPException(

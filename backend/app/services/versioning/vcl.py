@@ -25,7 +25,7 @@ class VCLService:
     
     def __init__(self, db: Session):
         self.db = db
-        self.storage_base = Path(settings.nas_storage_path) / "versions"
+        self.storage_base = Path(settings.nas_storage_path) / ".system" / "versions"
         self.blobs_path = self.storage_base / "blobs"
         self._ensure_storage_dirs()
     
@@ -426,7 +426,7 @@ class VCLService:
             Tuple of (usage_percent, warning_level)
             warning_level: None | 'warning' (>80%) | 'critical' (>95%)
         """
-        settings = self.get_or_create_settings(user_id)
+        settings = self.get_or_create_user_settings(user_id)
         
         if settings.max_size_bytes <= 0:
             return 0.0, None
