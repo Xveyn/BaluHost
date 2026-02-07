@@ -75,6 +75,9 @@ baludesk/frontend/tmp_asar_list.txt
 .env.postgres.generated
 .env.postgres.example
 
+# Production environment with secrets
+.env.production
+
 # Temporary cli artifacts from assistant/debug
 tmpclaude-*
 backend/tmpclaude-*
