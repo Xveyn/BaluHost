@@ -21,7 +21,9 @@
     "type": "Type",
     "path": "Path",
     "selectAll": "Select All",
-    "deselectAll": "Deselect All"
+    "deselectAll": "Deselect All",
+    "home": "Home",
+    "shared": "Shared"
   },
   "types": {
     "folder": "Folder",

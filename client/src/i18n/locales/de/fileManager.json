@@ -21,7 +21,9 @@
     "type": "Typ",
     "path": "Pfad",
     "selectAll": "Alle auswählen",
-    "deselectAll": "Auswahl aufheben"
+    "deselectAll": "Auswahl aufheben",
+    "home": "Startseite",
+    "shared": "Gemeinsam"
   },
   "types": {
     "folder": "Ordner",

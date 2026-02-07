@@ -14,6 +14,21 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.formparsers import MultiPartParser
+from starlette.requests import Request as StarletteRequest
+
+# Individual file size limit — class attribute, works correctly
+MultiPartParser.max_file_size = 10 * 1024 * 1024 * 1024  # 10 GB (matches nginx client_max_body_size)
+
+# Batch upload limits — must patch Request.form() because FastAPI calls it
+# without arguments, and the defaults (1000) are hardcoded in the method signature.
+# Class attributes on MultiPartParser do NOT work (constructor overrides them).
+_orig_form = StarletteRequest.form
+
+def _form_with_limits(self, *, max_files: int | float = float('inf'), max_fields: int | float = float('inf')):
+    return _orig_form(self, max_files=max_files, max_fields=max_fields)
+
+StarletteRequest.form = _form_with_limits  # type: ignore[assignment]
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -232,6 +247,12 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     ensure_admin_user(settings)
     logger.info("Admin user ensured with username '%s'", settings.admin_username)
     seed.seed_dev_data()
+
+    # Ensure home directories for all users and Shared folder
+    from app.services.users import ensure_user_home_directories
+    ensure_user_home_directories()
+    logger.info("User home directories ensured")
+
     await jobs.start_health_monitor()
     await telemetry.start_telemetry_monitor()
     await power_monitor.start_power_monitor(get_db)
@@ -536,7 +557,7 @@ def create_app() -> FastAPI:
     app.include_router(api_router, prefix=settings.api_prefix)
     
     # Mount static files for avatars
-    avatars_path = Path("storage/avatars")
+    avatars_path = Path(settings.nas_storage_path) / ".system" / "avatars"
     avatars_path.mkdir(parents=True, exist_ok=True)
     app.mount("/avatars", StaticFiles(directory=str(avatars_path)), name="avatars")
     

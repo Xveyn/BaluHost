@@ -69,11 +69,11 @@ class Settings(BaseSettings):
     raid_audit_log: str | None = None
     # RAID scrub scheduler options
     # Enable periodic RAID scrubbing (recommended: weekly)
-    raid_scrub_enabled: bool = False
+    raid_scrub_enabled: bool = True
     # Interval in hours between automatic scrubs when enabled (default: 168 = 1 week)
     raid_scrub_interval_hours: int = 168
     # SMART scan scheduler options
-    smart_scan_enabled: bool = False
+    smart_scan_enabled: bool = True
     # Interval in minutes between automatic SMART scans when enabled (default: 60)
     smart_scan_interval_minutes: int = 60
 

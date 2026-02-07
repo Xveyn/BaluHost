@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from typing import List
 
 class FilePermissionRule(BaseModel):
@@ -14,7 +14,7 @@ class FilePermissions(BaseModel):
 
 class FilePermissionsRequest(BaseModel):
     path: str
-    owner_id: int
+    owner_id: int = Field(..., gt=0)
     rules: List[FilePermissionRule]
 from datetime import datetime
 from typing import Literal

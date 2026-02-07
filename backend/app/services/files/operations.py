@@ -18,6 +18,14 @@ from app.services.permissions import PermissionDeniedError, can_view, ensure_own
 ROOT_DIR = Path(settings.nas_storage_path).expanduser().resolve()
 ROOT_DIR.mkdir(parents=True, exist_ok=True)
 
+SHARED_DIR_NAME = "Shared"
+SYSTEM_DIR_NAME = ".system"
+
+
+def is_in_shared_dir(relative_path: str) -> bool:
+    """Check if a relative path is inside (or is) the Shared directory."""
+    return relative_path == SHARED_DIR_NAME or relative_path.startswith(f"{SHARED_DIR_NAME}/")
+
 
 class FileAccessError(Exception):
     """Raised when an operation would leave the permitted storage sandbox."""
@@ -48,6 +56,8 @@ def get_owner(relative_path: str, db: Optional[Session] = None) -> str | None:
 
 def ensure_can_view(relative_path: str, user: UserPublic, db: Optional[Session] = None) -> None:
     """Ensure user can view a file/directory."""
+    if is_in_shared_dir(relative_path):
+        return  # All authenticated users may view Shared content
     if not can_view(user, file_metadata_db.get_owner(relative_path, db=db)):
         raise PermissionDeniedError("Operation not permitted")
 
@@ -67,14 +77,17 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         return []
 
     directory_owner = get_owner(relative_path, db=db)
-    if directory_owner and not can_view(user, directory_owner):
+    if directory_owner and not is_in_shared_dir(relative_path) and not can_view(user, directory_owner):
         raise PermissionDeniedError("Operation not permitted")
 
     items: list[FileItem] = []
     for entry in target.iterdir():
+        # Hide internal system directory from non-admin users
+        if entry.name == SYSTEM_DIR_NAME and user.role != "admin":
+            continue
         relative_entry = str(entry.relative_to(ROOT_DIR).as_posix())
         entry_owner = get_owner(relative_entry, db=db)
-        if not can_view(user, entry_owner):
+        if not is_in_shared_dir(relative_entry) and not can_view(user, entry_owner):
             continue
 
         stats = entry.stat()
@@ -113,7 +126,11 @@ def calculate_used_bytes() -> int:
     if not ROOT_DIR.exists():
         return total
 
+    system_dir = ROOT_DIR / SYSTEM_DIR_NAME
     for entry in ROOT_DIR.rglob("*"):
+        # Skip .system internal directory
+        if entry == system_dir or system_dir in entry.parents:
+            continue
         if entry.is_file():
             total += entry.stat().st_size
     return total
@@ -135,7 +152,7 @@ async def save_uploads(
     folder_paths: list[str] | None = None,
     db: Optional[Session] = None,
     upload_ids: list[str] | None = None,
-) -> int:
+) -> list[str]:
     """
     Save uploaded files, optionally preserving folder structure.
     
@@ -167,12 +184,13 @@ async def save_uploads(
 
     target.mkdir(parents=True, exist_ok=True)
 
-    if relative_path:
+    if relative_path and not is_in_shared_dir(relative_path):
         # Determine ownership rules:
         # - If the provided path refers to a directory (no override filename),
         #   enforce ownership of that destination directory.
         # - If the provided path refers to a file (override_filename set),
         #   enforce ownership of the parent directory (if any).
+        # Shared directory: all authenticated users may upload — skip check.
         from pathlib import PurePosixPath
         path_obj = PurePosixPath(relative_path)
         if override_filename is None:
@@ -215,7 +233,7 @@ async def save_uploads(
             f"with a limit of {quota} bytes. Available: {quota - used_bytes} bytes"
         )
     
-    saved = 0
+    saved_paths: list[str] = []
     for idx, upload in enumerate(uploads):
         data = upload_data_list[idx]
         
@@ -231,13 +249,14 @@ async def save_uploads(
         else:
             filename = override_filename or upload.filename or "upload.bin"
             destination = target / filename
-        
+
+        destination.parent.mkdir(parents=True, exist_ok=True)
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
             destination.write_bytes(data)
-            saved += 1
             used_bytes = used_bytes - existing_size + len(data)
             relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
+            saved_paths.append(relative_destination)
             
             # Create or update file metadata in database
             existing_meta = file_metadata_db.get_metadata(relative_destination, db=db)
@@ -256,7 +275,7 @@ async def save_uploads(
                     is_directory=False,
                     db=db
                 )
-            
+
             # Log file upload
             audit.log_file_access(
                 user=user.username,
@@ -266,6 +285,28 @@ async def save_uploads(
                 success=True,
                 db=db
             )
+
+            # VCL: Create version if enabled
+            try:
+                from app.services.versioning.vcl import VCLService
+                vcl_service = VCLService(db)
+                file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
+                if file_meta:
+                    checksum = VCLService.calculate_checksum(data)
+                    should_create, _reason = vcl_service.should_create_version(file_meta, checksum, int(owner_id))
+                    if should_create:
+                        change_type = "update" if existing_meta else "create"
+                        vcl_service.create_version(
+                            file=file_meta,
+                            content=data,
+                            user_id=int(owner_id),
+                            checksum=checksum,
+                            change_type=change_type,
+                        )
+                        db.commit()
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"VCL version creation failed: {e}")
             
             # Mark upload as completed
             if upload_ids and idx < len(upload_ids):
@@ -277,7 +318,7 @@ async def save_uploads(
                 await progress_manager.fail_upload(upload_ids[idx], str(e))
             raise
     
-    return saved
+    return saved_paths
 
 
 def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional[Session] = None) -> None:
@@ -323,7 +364,7 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
     base = _resolve_path(parent_path)
     base.mkdir(parents=True, exist_ok=True)
 
-    if owner and parent_path:
+    if owner and parent_path and not is_in_shared_dir(parent_path):
         parent_owner = get_owner(parent_path, db=db)
         ensure_owner_or_privileged(owner, parent_owner)
 

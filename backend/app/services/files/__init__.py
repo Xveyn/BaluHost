@@ -39,6 +39,7 @@ from app.services.files.metadata_db import (
     list_children,
     get_owner_id,
     set_owner_id,
+    ensure_metadata,
 )
 from app.services.files.shares import ShareService
 
@@ -72,6 +73,7 @@ __all__ = [
     "list_children",
     "get_owner_id",
     "set_owner_id",
+    "ensure_metadata",
     # Shares
     "ShareService",
 ]

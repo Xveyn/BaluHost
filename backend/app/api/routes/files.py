@@ -1,4 +1,5 @@
 from typing import Optional
+from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, Response, UploadFile, status
 from fastapi import Body
@@ -19,14 +20,58 @@ from app.schemas.files import (
     RenameRequest,
     FilePermissions,
     FilePermissionsRequest,
+    FileItem,
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
-from app.services.permissions import PermissionDeniedError
+from app.services.permissions import PermissionDeniedError, is_privileged
 from app.services.audit_logger_db import get_audit_logger_db
 from app.services.shares import ShareService
 from app.models.file_metadata import FileMetadata
 from app.plugins.emit import emit_hook
+
+SHARED_DIR_NAME = "Shared"
+
+
+def _jail_path(path: str, user: UserPublic) -> str:
+    """Validate and sanitize a user-facing path.
+
+    * Admin: path returned unchanged.
+    * Normal user:
+      - ``"Shared"`` / ``"Shared/..."`` -> passthrough
+      - ``"{username}"`` / ``"{username}/..."`` -> passthrough (own home dir)
+      - ``""`` (root) -> raises 403 (root listing handled separately in list_files)
+      - anything else -> raises 403
+    * Path-traversal components (``..``) are rejected.
+    """
+    if is_privileged(user):
+        return path
+
+    # Sanitize
+    stripped = path.strip("/")
+    if stripped:
+        parts = PurePosixPath(stripped).parts
+        if ".." in parts:
+            raise HTTPException(status_code=400, detail="Invalid path")
+        normalized = PurePosixPath(*parts).as_posix()
+    else:
+        normalized = ""
+
+    # Shared passthrough
+    if normalized == SHARED_DIR_NAME or normalized.startswith(f"{SHARED_DIR_NAME}/"):
+        return normalized
+
+    # User's own home directory
+    if normalized == user.username or normalized.startswith(f"{user.username}/"):
+        return normalized
+
+    # Root or other paths: block (root listing handled separately in list_files)
+    raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
+
+
+def _unjail_path(path: str, user: UserPublic) -> str:
+    """No-op — paths are real storage-relative paths for all users."""
+    return path
 
 
 router = APIRouter()
@@ -44,7 +89,8 @@ async def get_permissions(
 ) -> FilePermissions:
     from app.services import file_metadata_db
     from app.models.file_share import FileShare
-    metadata = file_metadata_db.get_metadata(path, db=db)
+    path = _jail_path(path, user)
+    metadata = file_metadata_db.ensure_metadata(path, requesting_user_id=user.id, db=db)
     if not metadata:
         raise HTTPException(status_code=404, detail="File not found")
     # Alle Berechtigungsregeln für diese Datei auslesen
@@ -77,7 +123,8 @@ async def set_permissions(
     from app.services import file_metadata_db
     from app.models.file_share import FileShare
     # Nur Owner/Admin darf setzen
-    metadata = file_metadata_db.get_metadata(payload.path, db=db)
+    payload.path = _jail_path(payload.path, user)
+    metadata = file_metadata_db.ensure_metadata(payload.path, requesting_user_id=user.id, db=db)
     if not metadata:
         raise HTTPException(status_code=404, detail="File not found")
     from app.services.permissions import ensure_owner_or_privileged
@@ -166,30 +213,83 @@ async def get_mountpoints(
                 is_default=False
             ))
     else:
-        # Production Mode: Show actual RAID arrays
-        for array in raid_status.arrays:
-            # Try to get actual storage usage for this array
-            try:
-                # This would need to be implemented to check actual mount point usage
-                size_bytes = array.size_bytes
-                used_bytes = 0  # TODO: Implement actual usage tracking
-                available_bytes = size_bytes - used_bytes
-            except Exception:
-                size_bytes = array.size_bytes
-                used_bytes = 0
-                available_bytes = size_bytes
-            
+        # Production Mode: Single storage mountpoint at the storage root.
+        import logging as _logging
+        import shutil
+        import psutil
+        from app.services.files.operations import ROOT_DIR
+        from app.services.hardware.raid import find_raid_mountpoint
+
+        _logger = _logging.getLogger(__name__)
+
+        raid_arrays = raid_status.arrays
+        if raid_arrays:
+            primary = raid_arrays[0]
+
+            # Try to find the actual RAID mountpoint via /proc/mounts
+            raid_mountpoint = find_raid_mountpoint(primary.name)
+            if raid_mountpoint:
+                usage = psutil.disk_usage(raid_mountpoint)
+                size_bytes = usage.total
+                used_bytes = usage.used
+                available_bytes = usage.free
+            else:
+                # RAID not mounted — use ROOT_DIR consistently (both total AND used)
+                # to avoid mixing RAID capacity with OS-SSD usage
+                _logger.warning("RAID %s not mounted. Showing ROOT_DIR values.", primary.name)
+                try:
+                    fallback = shutil.disk_usage(ROOT_DIR)
+                    size_bytes = fallback.total
+                    used_bytes = fallback.used
+                    available_bytes = fallback.free
+                except Exception:
+                    size_bytes = 0
+                    used_bytes = 0
+                    available_bytes = 0
+
+            worst_status = "optimal"
+            for a in raid_arrays:
+                if a.status == "degraded":
+                    worst_status = "degraded"
+                    break
+                if a.status == "rebuilding" and worst_status != "degraded":
+                    worst_status = "rebuilding"
+
             mountpoints.append(StorageMountpoint(
-                id=array.name,
-                name=f"{array.level.upper()} Array - {array.name}",
+                id=primary.name,
+                name=f"{primary.level.upper()} Storage - {primary.name}",
                 type="raid",
-                path=f"/{array.name}",
+                path="",
                 size_bytes=size_bytes,
                 used_bytes=used_bytes,
                 available_bytes=available_bytes,
-                raid_level=array.level,
-                status=array.status,
-                is_default=(array.name == "md0")  # md0 is typically the default
+                raid_level=primary.level,
+                status=worst_status,
+                is_default=True,
+            ))
+        else:
+            # No RAID: use shutil.disk_usage on ROOT_DIR
+            try:
+                disk_usage = shutil.disk_usage(ROOT_DIR)
+                size_bytes = disk_usage.total
+                used_bytes = disk_usage.used
+                available_bytes = disk_usage.free
+            except Exception:
+                size_bytes = 0
+                used_bytes = 0
+                available_bytes = 0
+
+            mountpoints.append(StorageMountpoint(
+                id="storage",
+                name="Storage",
+                type="storage",
+                path="",
+                size_bytes=size_bytes,
+                used_bytes=used_bytes,
+                available_bytes=available_bytes,
+                raid_level=None,
+                status="optimal",
+                is_default=True,
             ))
     
     default_id = next((m.id for m in mountpoints if m.is_default), mountpoints[0].id if mountpoints else "dev-storage")
@@ -210,20 +310,71 @@ async def list_files(
     db: Session = Depends(get_db),
 ) -> FileListResponse:
     audit_logger = get_audit_logger_db()
+    original_path = path
+
+    # ── Non-admin root listing: show only Shared + user's home dir ──
+    if not is_privileged(user) and not original_path.strip("/"):
+        from datetime import datetime, timezone
+        from app.services.files.operations import _resolve_path
+        from app.services.users import _create_home_directory
+
+        # Ensure home dir exists
+        try:
+            _create_home_directory(user.username, user.id, db=db)
+        except Exception:
+            pass
+
+        entries: list[FileItem] = []
+
+        # Shared directory
+        shared_path = _resolve_path(SHARED_DIR_NAME)
+        if shared_path.exists():
+            stats = shared_path.stat()
+            entries.append(FileItem(
+                name=SHARED_DIR_NAME,
+                path=SHARED_DIR_NAME,
+                size=0,
+                type="directory",
+                modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+                owner_id=None,
+                mime_type=None,
+                file_id=None,
+            ))
+
+        # User's home directory
+        home_path = _resolve_path(user.username)
+        if home_path.exists():
+            stats = home_path.stat()
+            entries.append(FileItem(
+                name=user.username,
+                path=user.username,
+                size=0,
+                type="directory",
+                modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+                owner_id=str(user.id),
+                mime_type=None,
+                file_id=None,
+            ))
+
+        return FileListResponse(files=entries)
+
+    # ── Admin or non-root path: normal behavior ──
+    jailed_path = _jail_path(path, user)
+
     try:
-        entries = list(file_service.list_directory(path, user=user, db=db))
+        entries = list(file_service.list_directory(jailed_path, user=user, db=db))
     except PermissionDeniedError as exc:
-        # Log unauthorized directory access
         audit_logger.log_authorization_failure(
             user=user.username,
             action="list_directory",
-            resource=path,
+            resource=jailed_path,
             required_permission="read",
             db=db
         )
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
     return FileListResponse(files=entries)
 
 
@@ -237,6 +388,7 @@ async def download_file(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """Legacy download endpoint using file path."""
+    resource_path = _jail_path(resource_path, user)
     audit_logger = get_audit_logger_db()
     try:
         file_service.ensure_can_view(resource_path, user, db=db)
@@ -353,12 +505,13 @@ async def upload_files(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileUploadResponse:
+    path = _jail_path(path, user)
     from app.services.upload_progress import get_upload_progress_manager
-    
+
     # Create upload sessions for progress tracking
     progress_manager = get_upload_progress_manager()
     upload_ids = []
-    
+
     # Normalize incoming file parameters: accept either `files` (list) or `file` (single)
     incoming = files if files is not None else ([file] if file is not None else [])
 
@@ -397,7 +550,7 @@ async def upload_files(
             content_type=None,
         )
 
-    return FileUploadResponse(message="Files uploaded", uploaded=saved, upload_ids=upload_ids)
+    return FileUploadResponse(message="Files uploaded", uploaded=len(saved), upload_ids=upload_ids)
 
 
 @router.get("/storage/available")
@@ -428,6 +581,7 @@ async def delete_path_raw(
     Use the parameterized delete handler defined later which is registered after
     the `/delete` static route so that `DELETE /delete` can accept a JSON body.
     """
+    resource_path = _jail_path(resource_path, user)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(resource_path, user=user, db=db)
@@ -458,6 +612,7 @@ async def delete_path_body(
     path = payload.get("path")
     if not path:
         raise HTTPException(status_code=400, detail="Path required")
+    path = _jail_path(path, user)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(path, user=user, db=db)
@@ -498,8 +653,9 @@ async def create_folder(
     if not payload.name:
         raise HTTPException(status_code=400, detail="Folder name required")
 
+    jailed_parent = _jail_path(payload.path or "", user)
     try:
-        file_service.create_folder(payload.path or "", payload.name, owner=user, db=db)
+        file_service.create_folder(jailed_parent, payload.name, owner=user, db=db)
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
@@ -529,8 +685,9 @@ async def mkdir_compat(
     if parent == "/":
         parent = ""
 
+    jailed_parent = _jail_path(parent or "", user)
     try:
-        file_service.create_folder(parent or "", name, owner=user, db=db)
+        file_service.create_folder(jailed_parent, name, owner=user, db=db)
     except PermissionDeniedError as exc:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
@@ -545,15 +702,16 @@ async def rename_path(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    jailed_old_path = _jail_path(payload.old_path, user)
     audit_logger = get_audit_logger_db()
     try:
-        file_service.rename_path(payload.old_path, payload.new_name, user=user, db=db)
+        file_service.rename_path(jailed_old_path, payload.new_name, user=user, db=db)
     except PermissionDeniedError as exc:
         # Log unauthorized rename attempt
         audit_logger.log_authorization_failure(
             user=user.username,
             action="rename_file",
-            resource=payload.old_path,
+            resource=jailed_old_path,
             required_permission="write",
             db=db
         )
@@ -569,15 +727,17 @@ async def move_path(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
+    jailed_source = _jail_path(payload.source_path, user)
+    jailed_target = _jail_path(payload.target_path, user)
     audit_logger = get_audit_logger_db()
     try:
-        file_service.move_path(payload.source_path, payload.target_path, user=user, db=db)
+        file_service.move_path(jailed_source, jailed_target, user=user, db=db)
     except PermissionDeniedError as exc:
         # Log unauthorized move attempt
         audit_logger.log_authorization_failure(
             user=user.username,
             action="move_file",
-            resource=payload.source_path,
+            resource=jailed_source,
             required_permission="write",
             db=db
         )
@@ -605,6 +765,7 @@ async def delete_path_param(
     """Delete a file or directory by path (registered after `/delete` routes).
     This ensures the static `/delete` endpoint can accept a JSON body without
     being captured by the parameterized route."""
+    resource_path = _jail_path(resource_path, user)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(resource_path, user=user, db=db)

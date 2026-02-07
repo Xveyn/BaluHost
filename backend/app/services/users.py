@@ -1,21 +1,138 @@
 from __future__ import annotations
 
+import logging
+import shutil
+from pathlib import Path
 from typing import Iterable, Optional
 
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from app.core.config import Settings
+from app.core.config import Settings, settings
 from app.core.database import SessionLocal
 from app.models.user import User
 from app.schemas.user import UserCreate, UserPublic, UserUpdate
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
+logger = logging.getLogger(__name__)
+
+SHARED_DIR_NAME = "Shared"
 
 
 def _get_db() -> Session:
     """Get database session for service layer."""
     return SessionLocal()
+
+
+def _get_storage_root() -> Path:
+    """Get the resolved storage root path."""
+    return Path(settings.nas_storage_path).expanduser().resolve()
+
+
+def _create_home_directory(username: str, user_id: int, db: Optional[Session] = None) -> None:
+    """Create a home directory for a user in the storage root.
+
+    Idempotent: skips creation if the directory and metadata already exist.
+    """
+    from app.services.files.metadata_db import get_metadata, create_metadata
+
+    storage_root = _get_storage_root()
+    home_dir = storage_root / username
+    home_dir.mkdir(parents=True, exist_ok=True)
+
+    existing = get_metadata(username, db=db)
+    if not existing:
+        create_metadata(
+            relative_path=username,
+            name=username,
+            owner_id=user_id,
+            size_bytes=0,
+            is_directory=True,
+            db=db,
+        )
+    logger.info("Home directory ensured for user '%s' at %s", username, home_dir)
+
+
+def ensure_user_home_directories(db: Optional[Session] = None) -> None:
+    """Ensure home directories exist for all non-admin users and create the Shared folder."""
+    from app.services.files.metadata_db import get_metadata, create_metadata
+
+    should_close = db is None
+    if db is None:
+        db = _get_db()
+
+    try:
+        storage_root = _get_storage_root()
+
+        # Ensure Shared folder
+        shared_dir = storage_root / SHARED_DIR_NAME
+        shared_dir.mkdir(parents=True, exist_ok=True)
+        existing_shared = get_metadata(SHARED_DIR_NAME, db=db)
+        if not existing_shared:
+            # Shared folder owned by admin (owner_id is NOT NULL in DB)
+            admin_user = db.query(User).filter(User.role == "admin").first()
+            if admin_user:
+                create_metadata(
+                    relative_path=SHARED_DIR_NAME,
+                    name=SHARED_DIR_NAME,
+                    owner_id=admin_user.id,
+                    size_bytes=0,
+                    is_directory=True,
+                    db=db,
+                )
+                logger.info("Shared directory created at %s", shared_dir)
+
+        # Ensure home dirs for all non-admin users
+        users = db.query(User).filter(User.role != "admin").all()
+        for user in users:
+            _create_home_directory(user.username, user.id, db=db)
+    finally:
+        if should_close:
+            db.close()
+
+
+def _rename_home_directory(old_username: str, new_username: str, db: Optional[Session] = None) -> None:
+    """Rename a user's home directory and update all related metadata paths."""
+    from app.services.files.metadata_db import rename_metadata
+    from app.models.file_metadata import FileMetadata
+
+    should_close = db is None
+    if db is None:
+        db = _get_db()
+
+    try:
+        storage_root = _get_storage_root()
+        old_dir = storage_root / old_username
+        new_dir = storage_root / new_username
+
+        if old_dir.exists():
+            old_dir.rename(new_dir)
+
+        # Rename the home directory metadata entry itself
+        rename_metadata(
+            old_path=old_username,
+            new_path=new_username,
+            new_name=new_username,
+            db=db,
+        )
+
+        # Update all child metadata paths with the old prefix
+        old_prefix = f"{old_username}/"
+        new_prefix = f"{new_username}/"
+        children = db.query(FileMetadata).filter(
+            FileMetadata.path.startswith(old_prefix)
+        ).all()
+        for child in children:
+            child.path = new_prefix + child.path[len(old_prefix):]
+            if child.parent_path and child.parent_path.startswith(old_prefix):
+                child.parent_path = new_prefix + child.parent_path[len(old_prefix):]
+            elif child.parent_path == old_username:
+                child.parent_path = new_username
+        db.commit()
+        logger.info("Renamed home directory from '%s' to '%s'", old_username, new_username)
+    finally:
+        if should_close:
+            db.close()
 
 
 def ensure_admin_user(settings: Settings) -> None:
@@ -101,6 +218,14 @@ def create_user(payload: UserCreate, db: Optional[Session] = None) -> User:
         db.add(user)
         db.commit()
         db.refresh(user)
+
+        # Create home directory for non-admin users
+        if user.role != "admin":
+            try:
+                _create_home_directory(user.username, user.id, db=db)
+            except Exception:
+                logger.warning("Failed to create home directory for user '%s'", user.username, exc_info=True)
+
         return user
     finally:
         if should_close:
@@ -118,6 +243,8 @@ def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] =
         if not user:
             return None
 
+        old_username = user.username
+
         if payload.username:
             user.username = payload.username
         if payload.email is not None:
@@ -129,9 +256,20 @@ def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] =
             user.hashed_password = pwd_context.hash(payload.password)
         if payload.is_active is not None:
             user.is_active = payload.is_active
-        
+
         db.commit()
         db.refresh(user)
+
+        # Rename home directory if username changed and user is not admin
+        if payload.username and payload.username != old_username and user.role != "admin":
+            try:
+                _rename_home_directory(old_username, payload.username, db=db)
+            except Exception:
+                logger.warning(
+                    "Failed to rename home directory from '%s' to '%s'",
+                    old_username, payload.username, exc_info=True,
+                )
+
         return user
     finally:
         if should_close:
@@ -148,9 +286,24 @@ def delete_user(user_id: int | str, db: Optional[Session] = None) -> bool:
         user = get_user(user_id, db=db)
         if not user:
             return False
-        
+
+        username = user.username
+        is_admin = user.role == "admin"
+
         db.delete(user)
         db.commit()
+
+        # Remove home directory for non-admin users
+        if not is_admin:
+            try:
+                storage_root = _get_storage_root()
+                home_dir = storage_root / username
+                if home_dir.exists():
+                    shutil.rmtree(home_dir)
+                    logger.info("Deleted home directory for user '%s'", username)
+            except Exception:
+                logger.warning("Failed to delete home directory for user '%s'", username, exc_info=True)
+
         return True
     finally:
         if should_close:

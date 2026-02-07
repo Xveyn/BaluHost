@@ -7,6 +7,7 @@ import uuid
 import shutil
 
 from app.api import deps
+from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.user import UserCreate, UserPublic, UserUpdate, UsersResponse
 from app.services import users as user_service
@@ -286,12 +287,12 @@ async def upload_avatar(
         )
     
     # Create avatars directory if it doesn't exist
-    avatars_dir = Path("storage/avatars")
+    avatars_dir = Path(settings.nas_storage_path) / ".system" / "avatars"
     avatars_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Delete old avatar if exists
     if user.avatar_url and user.avatar_url.startswith("/avatars/"):
-        old_avatar_path = Path("storage") / user.avatar_url.lstrip("/")
+        old_avatar_path = avatars_dir / Path(user.avatar_url).name
         try:
             old_avatar_path.unlink()
         except FileNotFoundError:

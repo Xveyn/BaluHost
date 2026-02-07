@@ -6,14 +6,18 @@ It provides CRUD operations for file metadata with ownership tracking.
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional, List
 
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
 from app.models.file_metadata import FileMetadata
+
+logger = logging.getLogger(__name__)
 
 
 def _normalize_path(relative_path: str) -> str:
@@ -311,6 +315,102 @@ def set_owner_id(relative_path: str, owner_id: int, db: Optional[Session] = None
     except Exception:
         db.rollback()
         raise
+    finally:
+        if should_close:
+            db.close()
+
+
+def _infer_owner_id(
+    normalized_path: str,
+    requesting_user_id: int,
+    db: Session,
+) -> int:
+    """Infer the owner of an untracked path on disk.
+
+    Strategy (in order):
+    1. First path segment matches a username → that user's ID.
+    2. Path starts with ``Shared/`` → requesting user.
+    3. Parent directory has metadata → inherit owner.
+    4. Fallback → requesting user.
+    """
+    parts = Path(normalized_path).parts
+    if parts:
+        first_segment = parts[0]
+
+        # "Shared" directory – attribute to requesting user
+        if first_segment == "Shared":
+            return requesting_user_id
+
+        # Check if first segment is a username
+        from app.services.users import get_user_by_username
+        user = get_user_by_username(first_segment, db=db)
+        if user is not None:
+            return user.id
+
+    # Inherit from parent metadata
+    parent = _get_parent_path(normalized_path)
+    if parent:
+        parent_meta = get_metadata(parent, db=db)
+        if parent_meta is not None:
+            return parent_meta.owner_id
+
+    return requesting_user_id
+
+
+def ensure_metadata(
+    relative_path: str,
+    requesting_user_id: int,
+    db: Optional[Session] = None,
+) -> Optional[FileMetadata]:
+    """Return metadata for *relative_path*, auto-creating it when the path
+    exists on disk but has no database entry yet.
+
+    Returns ``None`` only when the path does not exist on disk **and** has no
+    DB entry (the caller should treat this as a 404).
+    """
+    should_close = db is None
+    if db is None:
+        db = SessionLocal()
+
+    try:
+        # Fast path – entry already tracked
+        meta = get_metadata(relative_path, db=db)
+        if meta is not None:
+            return meta
+
+        # Check whether the path actually exists on disk
+        from app.services.files.operations import _resolve_path
+        try:
+            resolved = _resolve_path(relative_path)
+        except Exception:
+            # Path traversal or invalid – treat as not found
+            return None
+
+        if not resolved.exists():
+            return None
+
+        # Path exists on disk but is untracked – create metadata now
+        normalized = _normalize_path(relative_path)
+        owner_id = _infer_owner_id(normalized, requesting_user_id, db)
+        is_dir = resolved.is_dir()
+        size = 0 if is_dir else resolved.stat().st_size
+        name = resolved.name
+
+        try:
+            meta = create_metadata(
+                relative_path=normalized,
+                name=name,
+                owner_id=owner_id,
+                size_bytes=size,
+                is_directory=is_dir,
+                db=db,
+            )
+            logger.info("Auto-created metadata for untracked path: %s (owner=%s)", normalized, owner_id)
+            return meta
+        except IntegrityError:
+            # Race condition – another request created the row first
+            db.rollback()
+            return get_metadata(relative_path, db=db)
     finally:
         if should_close:
             db.close()

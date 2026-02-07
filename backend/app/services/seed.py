@@ -17,6 +17,11 @@ def seed_dev_data() -> None:
     if not settings.is_dev_mode:
         return
 
+    # Safety: never seed demo data into PostgreSQL (production database)
+    if settings.database_url and "postgresql" in settings.database_url.lower():
+        logger.warning("Skipping dev seed: PostgreSQL database detected")
+        return
+
     # Seed demo users (besides admin) - Always re-seed users since they're in-memory
     demo_users = [
         UserCreate(username="alex", email="alex@example.com", password="Demo1234", role="user"),
@@ -33,10 +38,12 @@ def seed_dev_data() -> None:
         logger.debug("Dev seed files already applied; skipping file creation")
         return
 
-    # Seed demo folders/files once
+    # Seed demo folders/files once — place demo content in Shared folder
     storage_root = Path(settings.nas_storage_path)
-    docs_dir = storage_root / "Demo" / "Documents"
-    media_dir = storage_root / "Demo" / "Media"
+    shared_dir = storage_root / "Shared"
+    shared_dir.mkdir(parents=True, exist_ok=True)
+    docs_dir = shared_dir / "Demo" / "Documents"
+    media_dir = shared_dir / "Demo" / "Media"
     for directory in (docs_dir, media_dir):
         directory.mkdir(parents=True, exist_ok=True)
 
@@ -50,7 +57,7 @@ def seed_dev_data() -> None:
             "# Demo Media\n\nPhotos or videos could be placed here.\n",
         ),
         (
-            storage_root / "Notes.txt",
+            shared_dir / "Notes.txt",
             "Notizen zum NAS Dev Mode. Setup: 2x5GB RAID1 (effektiv 5GB Speicher).\n",
         ),
     )
