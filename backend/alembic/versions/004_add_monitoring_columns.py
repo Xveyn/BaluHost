@@ -28,7 +28,7 @@ def upgrade() -> None:
 
     # Add new column to memory_samples
     with op.batch_alter_table('memory_samples', schema=None) as batch_op:
-        batch_op.add_column(sa.Column('baluhost_memory_bytes', sa.Integer(), nullable=True))
+        batch_op.add_column(sa.Column('baluhost_memory_bytes', sa.BigInteger(), nullable=True))
 
 
 def downgrade() -> None:
