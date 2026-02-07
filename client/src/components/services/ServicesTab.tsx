@@ -5,6 +5,7 @@ import { useTranslation } from 'react-i18next';
 import ServiceCard from './ServiceCard';
 import DependencyList from './DependencyList';
 import AppMetrics from './AppMetrics';
+import { extractErrorMessage } from '../../lib/api';
 import {
   getDebugSnapshot,
   restartService,
@@ -70,7 +71,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       await fetchData();
     } catch (err: any) {
       console.error('Failed to restart service:', err);
-      toast.error(err.response?.data?.detail || t('system:services.toast.restartFailed', { name: serviceName }));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('system:services.toast.restartFailed', { name: serviceName })));
     }
   };
 
@@ -86,7 +87,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       await fetchData();
     } catch (err: any) {
       console.error('Failed to stop service:', err);
-      toast.error(err.response?.data?.detail || t('system:services.toast.stopFailed', { name: serviceName }));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('system:services.toast.stopFailed', { name: serviceName })));
     }
   };
 
@@ -102,7 +103,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       await fetchData();
     } catch (err: any) {
       console.error('Failed to start service:', err);
-      toast.error(err.response?.data?.detail || t('system:services.toast.startFailed', { name: serviceName }));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('system:services.toast.startFailed', { name: serviceName })));
     }
   };
 

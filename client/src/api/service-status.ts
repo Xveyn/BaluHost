@@ -2,6 +2,7 @@
  * Service status API client for admin debugging dashboard
  */
 import { apiClient } from '../lib/api';
+import { formatBytes as sharedFormatBytes } from '../lib/formatters';
 
 // Enums
 export const ServiceState = {
@@ -216,15 +217,9 @@ export function formatUptime(seconds: number | null): string {
 }
 
 /**
- * Format bytes to human-readable string
+ * Format bytes to human-readable string (re-export from shared formatters)
  */
-export function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+export const formatBytes = sharedFormatBytes;
 
 /**
  * Get state color for UI display

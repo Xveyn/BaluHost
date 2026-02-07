@@ -6,6 +6,7 @@
  */
 
 import { apiClient } from '../lib/api';
+import { formatNumber } from '../lib/formatters';
 
 // Power profile enum
 export type PowerProfile = 'idle' | 'low' | 'medium' | 'surge';
@@ -479,7 +480,7 @@ export function getClockForProperty(preset: PowerPreset, property: ServicePowerP
  */
 export function formatClockSpeed(mhz: number): string {
   if (mhz >= 1000) {
-    return `${(mhz / 1000).toFixed(1)} GHz`;
+    return `${formatNumber(mhz / 1000, 1)} GHz`;
   }
   return `${mhz} MHz`;
 }

@@ -9,7 +9,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Zap, Settings, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { buildApiUrl } from '../../lib/api';
+import { buildApiUrl, extractErrorMessage } from '../../lib/api';
 
 // ==================== Types ====================
 
@@ -188,7 +188,7 @@ export default function RateLimitsTab() {
       loadRateLimits();
     } else {
       const error = await response.json();
-      toast.error(error.detail || t('system:apiCenter.toasts.updateFailed'));
+      toast.error(extractErrorMessage(error.detail, t('system:apiCenter.toasts.updateFailed')));
       throw new Error('Failed to save');
     }
   };

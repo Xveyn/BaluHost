@@ -4,6 +4,7 @@
 
 import type { ServicePowerProperty, ServiceIntensityInfo } from '../../api/power-management';
 import { PROPERTY_INFO } from '../../api/power-management';
+import { formatNumber } from '../../lib/formatters';
 
 interface ServiceIntensityListProps {
   services: ServiceIntensityInfo[];
@@ -67,10 +68,10 @@ export function ServiceIntensityList({ services, t }: ServiceIntensityListProps)
                   <span className="text-slate-500">{t('system:power.serviceIntensity.backgroundService')}</span>
                 )}
                 {service.cpu_percent != null && (
-                  <span>CPU: {service.cpu_percent.toFixed(1)}%</span>
+                  <span>CPU: {formatNumber(service.cpu_percent, 1)}%</span>
                 )}
                 {service.memory_mb != null && (
-                  <span>RAM: {service.memory_mb.toFixed(0)} MB</span>
+                  <span>RAM: {formatNumber(service.memory_mb, 0)} MB</span>
                 )}
                 {service.demand_description && (
                   <span className="truncate">{service.demand_description}</span>

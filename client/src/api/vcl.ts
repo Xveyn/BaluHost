@@ -3,6 +3,7 @@
  */
 
 import { apiClient } from '../lib/api';
+import { formatBytes as sharedFormatBytes, formatNumber } from '../lib/formatters';
 import type {
   VersionListResponse,
   RestoreRequest,
@@ -175,25 +176,15 @@ export const downloadVersion = async (versionId: number): Promise<Blob> => {
 };
 
 /**
- * Format bytes to human-readable string
+ * Format bytes to human-readable string (re-export from shared formatters)
  */
-export const formatBytes = (bytes: number, decimals = 2): string => {
-  if (bytes === 0) return '0 Bytes';
-
-  const k = 1024;
-  const dm = decimals < 0 ? 0 : decimals;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
-
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-
-  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(dm))} ${sizes[i]}`;
-};
+export const formatBytes = sharedFormatBytes;
 
 /**
  * Calculate compression ratio display
  */
 export const formatCompressionRatio = (ratio: number): string => {
-  return `${ratio.toFixed(2)}x`;
+  return `${formatNumber(ratio, 2)}x`;
 };
 
 /**

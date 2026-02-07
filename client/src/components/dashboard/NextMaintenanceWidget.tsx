@@ -8,6 +8,7 @@ import { useTranslation } from 'react-i18next';
 import { useNextMaintenance, formatNextRun, formatScheduleWindow } from '../../hooks/useNextMaintenance';
 import { getSchedulerIcon } from '../../api/schedulers';
 import { Clock, Calendar, AlertTriangle, CheckCircle2, XCircle } from 'lucide-react';
+import { formatNumber } from '../../lib/formatters';
 
 interface NextMaintenanceWidgetProps {
   showAllSchedulers?: boolean;
@@ -111,7 +112,7 @@ export const NextMaintenanceWidget: React.FC<NextMaintenanceWidgetProps> = ({
           {getStatusIcon(scheduler.last_status)}
           <span>
             Last run: {scheduler.last_status}
-            {scheduler.last_duration_ms && ` (${(scheduler.last_duration_ms / 1000).toFixed(1)}s)`}
+            {scheduler.last_duration_ms && ` (${formatNumber(scheduler.last_duration_ms / 1000, 1)}s)`}
           </span>
         </div>
       )}

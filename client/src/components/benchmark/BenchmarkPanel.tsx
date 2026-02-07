@@ -39,6 +39,7 @@ import {
 import { formatDuration } from '../../api/benchmark';
 import type { BenchmarkProfile, BenchmarkStatus, BenchmarkResponse } from '../../api/benchmark';
 
+import { formatNumber } from '../../lib/formatters';
 import BenchmarkProgress from './BenchmarkProgress';
 import BenchmarkResults, { BenchmarkResultsCompact } from './BenchmarkResults';
 
@@ -331,7 +332,7 @@ function HistoryItem({ benchmark }: { benchmark: BenchmarkResponse }) {
         </div>
         {benchmark.status === 'completed' && (
           <div className="text-right text-sm">
-            <div className="text-sky-400">{benchmark.summary.seq_read_mbps?.toFixed(0) || '-'} MB/s</div>
+            <div className="text-sky-400">{benchmark.summary.seq_read_mbps != null ? formatNumber(benchmark.summary.seq_read_mbps, 0) : '-'} MB/s</div>
             <div className="text-xs text-slate-500">seq read</div>
           </div>
         )}

@@ -35,12 +35,22 @@ import {
 import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
 import { listTapoDevices, getPowerHistory } from '../api/power';
 import type { TapoDevice } from '../api/power';
-import { parseUtcTimestamp } from '../lib/dateUtils';
+import { formatTimeForRange } from '../lib/dateUtils';
+import type { ChartTimeRange } from '../lib/dateUtils';
+import { formatNumber } from '../lib/formatters';
 
 type TimeWindow = '10min' | '1hour' | '24hours' | '7days';
 
 const EnergyMonitor: React.FC = () => {
-  const { t } = useTranslation('system');
+  const { t, i18n } = useTranslation('system');
+
+  // Map TimeWindow to ChartTimeRange
+  const windowToRange: Record<TimeWindow, ChartTimeRange> = {
+    '10min': '10m',
+    '1hour': '1h',
+    '24hours': '24h',
+    '7days': '7d',
+  };
   const [devices, setDevices] = useState<TapoDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null);
@@ -117,63 +127,55 @@ const EnergyMonitor: React.FC = () => {
       try {
         let data: any[] = [];
 
+        const chartRange = windowToRange[timeWindow];
+
         switch (timeWindow) {
-          case '10min':
+          case '10min': {
             // Use live memory buffer (updates every 5 seconds)
             const powerHistory = await getPowerHistory();
             const deviceHistory = powerHistory.devices.find(d => d.device_id === selectedDeviceId);
             if (deviceHistory && deviceHistory.samples.length > 0) {
               data = deviceHistory.samples.map(sample => ({
-                time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
-                  hour: '2-digit',
-                  minute: '2-digit',
-                  second: '2-digit'
-                }),
+                time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
                 watts: sample.watts,
                 fullTimestamp: sample.timestamp
               }));
             }
             break;
+          }
 
-          case '1hour':
+          case '1hour': {
             // Use hourly samples from DB (last hour)
             const hourSamples = await getHourlySamples(selectedDeviceId, 1);
             data = hourSamples.map(sample => ({
-              time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
+              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
               watts: sample.avg_watts,
               fullTimestamp: sample.timestamp
             }));
             break;
+          }
 
-          case '24hours':
+          case '24hours': {
             // Use hourly samples from DB (last 24 hours)
             const daySamples = await getHourlySamples(selectedDeviceId, 24);
             data = daySamples.map(sample => ({
-              time: parseUtcTimestamp(sample.timestamp).toLocaleTimeString('de-DE', {
-                hour: '2-digit',
-                minute: '2-digit'
-              }),
+              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
               watts: sample.avg_watts,
               fullTimestamp: sample.timestamp
             }));
             break;
+          }
 
-          case '7days':
+          case '7days': {
             // Use hourly samples from DB (last 7 days = 168 hours)
             const weekSamples = await getHourlySamples(selectedDeviceId, 168);
             data = weekSamples.map(sample => ({
-              time: parseUtcTimestamp(sample.timestamp).toLocaleDateString('de-DE', {
-                month: 'short',
-                day: 'numeric',
-                hour: '2-digit'
-              }),
+              time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
               watts: sample.avg_watts,
               fullTimestamp: sample.timestamp
             }));
             break;
+          }
         }
 
         setChartData(data);
@@ -253,7 +255,7 @@ const EnergyMonitor: React.FC = () => {
             <div>
               <p className="text-sm text-slate-400">Current Power</p>
               <p className="text-4xl font-bold text-white">
-                {dashboard?.current_watts.toFixed(1) || '—'} W
+                {dashboard?.current_watts != null ? formatNumber(dashboard.current_watts, 1) : '—'} W
               </p>
             </div>
           </div>
@@ -285,25 +287,25 @@ const EnergyMonitor: React.FC = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
-                    {stats.total_energy_kwh.toFixed(3)} kWh
+                    {formatNumber(stats.total_energy_kwh, 3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
-                    {stats.avg_watts.toFixed(1)} W
+                    {formatNumber(stats.avg_watts, 1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.peak')}</span>
                   <span className="text-white font-semibold">
-                    {stats.max_watts.toFixed(1)} W
+                    {formatNumber(stats.max_watts, 1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
-                    €{costs.today?.estimated_cost.toFixed(2) || '0.00'}
+                    €{costs.today?.estimated_cost != null ? formatNumber(costs.today.estimated_cost, 2) : '0,00'}
                   </span>
                 </div>
               </div>
@@ -325,25 +327,25 @@ const EnergyMonitor: React.FC = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.week.total_energy_kwh.toFixed(3)} kWh
+                    {formatNumber(dashboard.week.total_energy_kwh, 3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.week.avg_watts.toFixed(1)} W
+                    {formatNumber(dashboard.week.avg_watts, 1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.uptime')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.week.uptime_percentage.toFixed(1)}%
+                    {formatNumber(dashboard.week.uptime_percentage, 1)}%
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
-                    €{costs.week?.estimated_cost.toFixed(2) || '0.00'}
+                    €{costs.week?.estimated_cost != null ? formatNumber(costs.week.estimated_cost, 2) : '0,00'}
                   </span>
                 </div>
               </div>
@@ -365,25 +367,25 @@ const EnergyMonitor: React.FC = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.energy')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.month.total_energy_kwh.toFixed(3)} kWh
+                    {formatNumber(dashboard.month.total_energy_kwh, 3)} kWh
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.avgPower')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.month.avg_watts.toFixed(1)} W
+                    {formatNumber(dashboard.month.avg_watts, 1)} W
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.uptime')}</span>
                   <span className="text-white font-semibold">
-                    {dashboard.month.uptime_percentage.toFixed(1)}%
+                    {formatNumber(dashboard.month.uptime_percentage, 1)}%
                   </span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.cost')}</span>
                   <span className="text-emerald-400 font-semibold">
-                    €{costs.month?.estimated_cost.toFixed(2) || '0.00'}
+                    €{costs.month?.estimated_cost != null ? formatNumber(costs.month.estimated_cost, 2) : '0,00'}
                   </span>
                 </div>
               </div>
@@ -423,7 +425,7 @@ const EnergyMonitor: React.FC = () => {
                 <div className="flex justify-between text-sm">
                   <span className="text-slate-400">{t('energyMonitor.uptime')} %</span>
                   <span className={`font-semibold ${stats.uptime_percentage > 99 ? 'text-emerald-400' : stats.uptime_percentage > 95 ? 'text-amber-400' : 'text-red-400'}`}>
-                    {stats.uptime_percentage.toFixed(1)}%
+                    {formatNumber(stats.uptime_percentage, 1)}%
                   </span>
                 </div>
               </div>
@@ -480,6 +482,8 @@ const EnergyMonitor: React.FC = () => {
                   dataKey="time"
                   stroke="#94a3b8"
                   style={{ fontSize: '12px' }}
+                  interval="preserveStartEnd"
+                  minTickGap={timeWindow === '7days' ? 70 : 40}
                 />
                 <YAxis
                   stroke="#94a3b8"
@@ -493,7 +497,7 @@ const EnergyMonitor: React.FC = () => {
                     borderRadius: '8px',
                     color: '#fff'
                   }}
-                  formatter={(value: number) => [`${value.toFixed(1)} W`, 'Power']}
+                  formatter={(value: number) => [`${formatNumber(value, 1)} W`, 'Power']}
                 />
                 <Line
                   type="monotone"
@@ -534,7 +538,7 @@ const EnergyMonitor: React.FC = () => {
             className="input w-32"
           />
           <span className="text-xs text-slate-500">
-            {t('energyMonitor.current')}: €{costPerKwh.toFixed(2)}/kWh
+            {t('energyMonitor.current')}: €{formatNumber(costPerKwh, 2)}/kWh
           </span>
         </div>
       </div>

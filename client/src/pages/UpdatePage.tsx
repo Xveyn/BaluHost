@@ -46,6 +46,7 @@ import {
   type UpdateConfig,
   type UpdateChannel,
 } from '../api/updates';
+import { extractErrorMessage } from '../lib/api';
 import UpdateProgress from '../components/updates/UpdateProgress';
 
 type TabId = 'overview' | 'history' | 'settings';
@@ -91,7 +92,7 @@ export default function UpdatePage() {
       const result = await checkForUpdates();
       setCheckResult(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('common:toast.checkFailed'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.checkFailed')));
     } finally {
       setCheckLoading(false);
     }
@@ -116,7 +117,7 @@ export default function UpdatePage() {
       setHistory(result.updates);
       setHistoryTotal(result.total);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('common:toast.historyFailed'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.historyFailed')));
     }
   }, [historyPage]);
 
@@ -126,7 +127,7 @@ export default function UpdatePage() {
       const result = await getUpdateConfig();
       setConfig(result);
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('common:toast.configFailed'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.configFailed')));
     }
   }, []);
 
@@ -214,7 +215,7 @@ export default function UpdatePage() {
         toast.error(result.message);
       }
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('common:toast.rollbackFailed'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.rollbackFailed')));
     } finally {
       setRollbackLoading(false);
       setRollbackTarget(null);
@@ -230,7 +231,7 @@ export default function UpdatePage() {
       setConfig(updated);
       toast.success(t('common:toast.settingsSaved'));
     } catch (err: any) {
-      toast.error(err.response?.data?.detail || t('common:toast.settingsFailed'));
+      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.settingsFailed')));
     } finally {
       setConfigLoading(false);
     }

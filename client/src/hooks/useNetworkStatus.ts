@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { getNetworkCurrent, type CurrentNetworkResponse, type InterfaceType } from '../api/monitoring';
+import { formatNumber } from '../lib/formatters';
 
 export interface NetworkStatus {
   downloadMbps: number;
@@ -82,13 +83,13 @@ export function formatNetworkSpeed(mbps: number): string {
     return '0 Mbps';
   }
   if (mbps < 1) {
-    return `${(mbps * 1000).toFixed(0)} Kbps`;
+    return `${formatNumber(mbps * 1000, 0)} Kbps`;
   }
   if (mbps < 100) {
-    return `${mbps.toFixed(1)} Mbps`;
+    return `${formatNumber(mbps, 1)} Mbps`;
   }
   if (mbps < 1000) {
-    return `${mbps.toFixed(0)} Mbps`;
+    return `${formatNumber(mbps, 0)} Mbps`;
   }
-  return `${(mbps / 1000).toFixed(2)} Gbps`;
+  return `${formatNumber(mbps / 1000, 2)} Gbps`;
 }

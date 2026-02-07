@@ -3,6 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { loggingApi, type FileAccessLog } from '../api/logging';
+import { formatNumber } from '../lib/formatters';
 
 export interface ActivityItem {
   id: string;
@@ -28,7 +29,7 @@ interface UseActivityFeedReturn {
 }
 
 // Map action to icon
-function getActionIcon(action: string): string {
+export function getActionIcon(action: string): string {
   switch (action.toLowerCase()) {
     case 'upload':
       return 'upload';
@@ -55,7 +56,7 @@ function getActionIcon(action: string): string {
 }
 
 // Map action to human-readable title
-function getActionTitle(action: string): string {
+export function getActionTitle(action: string): string {
   switch (action.toLowerCase()) {
     case 'upload':
       return 'File Uploaded';
@@ -84,7 +85,7 @@ function getActionTitle(action: string): string {
 }
 
 // Format relative time
-function formatRelativeTime(date: Date): string {
+export function formatRelativeTime(date: Date): string {
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffSeconds = Math.floor(diffMs / 1000);
@@ -108,7 +109,7 @@ function formatRelativeTime(date: Date): string {
 }
 
 // Transform log to activity item
-function transformLog(log: FileAccessLog, index: number): ActivityItem {
+export function transformLog(log: FileAccessLog, index: number): ActivityItem {
   const timestamp = new Date(log.timestamp);
   const resourcePath = log.resource || '';
   const fileName = resourcePath.split('/').pop() || resourcePath;
@@ -118,7 +119,7 @@ function transformLog(log: FileAccessLog, index: number): ActivityItem {
     detail = `${log.user} • ${detail}`;
   }
   if (log.details?.size_bytes) {
-    const sizeKb = (log.details.size_bytes / 1024).toFixed(1);
+    const sizeKb = formatNumber(log.details.size_bytes / 1024, 1);
     detail += ` (${sizeKb} KB)`;
   }
 

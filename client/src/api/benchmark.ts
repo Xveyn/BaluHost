@@ -9,6 +9,7 @@
  */
 
 import { apiClient } from '../lib/api';
+import { formatBytes as sharedFormatBytes, formatNumber } from '../lib/formatters';
 
 // ===== Enums =====
 
@@ -244,18 +245,9 @@ export async function getBenchmarkHistory(
 // ===== Helper Functions =====
 
 /**
- * Format bytes to human-readable string
+ * Format bytes to human-readable string (re-export from shared formatters)
  */
-export function formatBytes(bytes: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  let value = bytes;
-  let unitIndex = 0;
-  while (value >= 1024 && unitIndex < units.length - 1) {
-    value /= 1024;
-    unitIndex++;
-  }
-  return `${value.toFixed(1)} ${units[unitIndex]}`;
-}
+export const formatBytes = sharedFormatBytes;
 
 /**
  * Format throughput (MB/s)
@@ -263,9 +255,9 @@ export function formatBytes(bytes: number): string {
 export function formatThroughput(mbps: number | undefined): string {
   if (mbps === undefined || mbps === null) return '-';
   if (mbps >= 1000) {
-    return `${(mbps / 1000).toFixed(2)} GB/s`;
+    return `${formatNumber(mbps / 1000, 2)} GB/s`;
   }
-  return `${mbps.toFixed(1)} MB/s`;
+  return `${formatNumber(mbps, 1)} MB/s`;
 }
 
 /**
@@ -274,12 +266,12 @@ export function formatThroughput(mbps: number | undefined): string {
 export function formatIops(iops: number | undefined): string {
   if (iops === undefined || iops === null) return '-';
   if (iops >= 1000000) {
-    return `${(iops / 1000000).toFixed(2)}M`;
+    return `${formatNumber(iops / 1000000, 2)}M`;
   }
   if (iops >= 1000) {
-    return `${(iops / 1000).toFixed(1)}K`;
+    return `${formatNumber(iops / 1000, 1)}K`;
   }
-  return iops.toFixed(0);
+  return formatNumber(iops, 0);
 }
 
 /**
@@ -288,7 +280,7 @@ export function formatIops(iops: number | undefined): string {
 export function formatDuration(seconds: number | undefined): string {
   if (seconds === undefined || seconds === null) return '-';
   if (seconds < 60) {
-    return `${seconds.toFixed(0)}s`;
+    return `${formatNumber(seconds, 0)}s`;
   }
   const minutes = Math.floor(seconds / 60);
   const remainingSeconds = Math.floor(seconds % 60);
@@ -306,7 +298,7 @@ export function formatDuration(seconds: number | undefined): string {
 export function formatLatency(us: number | undefined): string {
   if (us === undefined || us === null) return '-';
   if (us < 1000) {
-    return `${us.toFixed(0)} µs`;
+    return `${formatNumber(us, 0)} µs`;
   }
-  return `${(us / 1000).toFixed(2)} ms`;
+  return `${formatNumber(us / 1000, 2)} ms`;
 }

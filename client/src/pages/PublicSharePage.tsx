@@ -9,6 +9,7 @@ import {
 } from '../api/shares';
 import { apiClient } from '../lib/api';
 import { Download, Lock, Eye, FileIcon, Calendar, AlertCircle } from 'lucide-react';
+import { formatBytes } from '../lib/formatters';
 
 export default function PublicSharePage() {
   const { t } = useTranslation(['publicShare', 'common']);
@@ -117,9 +118,7 @@ export default function PublicSharePage() {
 
   const formatFileSize = (bytes: number | null) => {
     if (!bytes) return '0 B';
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(1024));
-    return `${(bytes / Math.pow(1024, i)).toFixed(2)} ${sizes[i]}`;
+    return formatBytes(bytes);
   };
 
   const formatDate = (dateString: string | null) => {

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 	import { listBackups, createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
 	import type { Backup, BackupListResponse, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
 import { apiCache } from '../lib/api';
+import { formatNumber } from '../lib/formatters';
 
 export default function BackupSettings() {
 	const { t } = useTranslation('settings');
@@ -194,7 +195,7 @@ export default function BackupSettings() {
 									<div className="flex items-center gap-2">
 										<HardDrive className="w-4 h-4 text-slate-400" />
 										<span className="text-slate-400">{t('backup.totalSize')}:</span>
-										<span className="font-medium text-slate-200">{totalSize.mb.toFixed(2)} MB</span>
+										<span className="font-medium text-slate-200">{formatNumber(totalSize.mb, 2)} MB</span>
 									</div>
 									<div className="flex items-center gap-2">
 										<Database className="w-4 h-4 text-slate-400" />
@@ -271,7 +272,7 @@ export default function BackupSettings() {
 										<td className="px-6 py-4 whitespace-nowrap">
 											<span className="px-2 py-1 text-xs font-medium rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">{backup.backup_type}</span>
 										</td>
-										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{backup.size_mb.toFixed(2)} MB</td>
+										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{formatNumber(backup.size_mb, 2)} MB</td>
 										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">{formatDate(backup.created_at)}</td>
 										<td className="px-6 py-4">
 											<div className="flex items-center gap-2 text-xs">

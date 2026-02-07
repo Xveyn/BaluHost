@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { buildApiUrl } from '../lib/api';
+import { buildApiUrl, extractErrorMessage } from '../lib/api';
 import { 
   Search, 
   ArrowUpDown, 
@@ -17,9 +17,9 @@ import {
 } from 'lucide-react';
 
 interface User {
-  id: string;
+  id: number;
   username: string;
-  email: string;
+  email: string | null;
   role: string;
   is_active: boolean;
   created_at: string;
@@ -56,13 +56,13 @@ export default function UserManagement() {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   
   // Selection & Bulk Actions
-  const [selectedUsers, setSelectedUsers] = useState<Set<string>>(new Set());
+  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
   
   // Modal States
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<string | null>(null);
+  const [userToDelete, setUserToDelete] = useState<number | null>(null);
   
   // Form Data
   const [formData, setFormData] = useState<UserFormData>({
@@ -108,7 +108,7 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        const errorMsg = errorData.detail || errorData.error || `HTTP ${response.status}: Failed to load users`;
+        const errorMsg = extractErrorMessage(errorData.detail, errorData.error || `HTTP ${response.status}: Failed to load users`);
         setError(errorMsg);
         toast.error(errorMsg);
         setLoading(false);
@@ -175,7 +175,7 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || t('users.messages.createFailed'));
+        toast.error(extractErrorMessage(errorData.detail, t('users.messages.createFailed')));
         return;
       }
 
@@ -197,7 +197,7 @@ export default function UserManagement() {
     try {
       const updateData: any = {};
       if (formData.username !== editingUser.username) updateData.username = formData.username;
-      if (formData.email !== editingUser.email) updateData.email = formData.email;
+      if (formData.email !== (editingUser.email ?? '')) updateData.email = formData.email || null;
       if (formData.role !== editingUser.role) updateData.role = formData.role;
       if (formData.is_active !== editingUser.is_active) updateData.is_active = formData.is_active;
       if (formData.password) updateData.password = formData.password;
@@ -213,7 +213,7 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json();
-        toast.error(errorData.detail || t('users.messages.updateFailed'));
+        toast.error(extractErrorMessage(errorData.detail, t('users.messages.updateFailed')));
         return;
       }
 
@@ -228,7 +228,7 @@ export default function UserManagement() {
     }
   };
 
-  const handleDeleteUser = async (userId: string) => {
+  const handleDeleteUser = async (userId: number) => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
@@ -242,7 +242,7 @@ export default function UserManagement() {
 
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
-        toast.error(errorData.detail || t('users.messages.deleteFailed'));
+        toast.error(extractErrorMessage(errorData.detail, t('users.messages.deleteFailed')));
         return;
       }
 
@@ -284,7 +284,7 @@ export default function UserManagement() {
     }
   };
 
-  const handleToggleActive = async (userId: string) => {
+  const handleToggleActive = async (userId: number) => {
     const token = localStorage.getItem('token');
     if (!token) return;
 
@@ -343,7 +343,7 @@ export default function UserManagement() {
   const openEditModal = (user: User) => {
     setFormData({
       username: user.username,
-      email: user.email,
+      email: user.email ?? '',
       password: '',
       role: user.role,
       is_active: user.is_active
@@ -352,7 +352,7 @@ export default function UserManagement() {
     setShowUserModal(true);
   };
 
-  const openDeleteConfirm = (userId: string) => {
+  const openDeleteConfirm = (userId: number) => {
     setUserToDelete(userId);
     setShowDeleteConfirm(true);
   };
@@ -375,7 +375,7 @@ export default function UserManagement() {
     });
   };
 
-  const toggleUserSelection = (userId: string) => {
+  const toggleUserSelection = (userId: number) => {
     const newSelection = new Set(selectedUsers);
     if (newSelection.has(userId)) {
       newSelection.delete(userId);
@@ -612,7 +612,7 @@ export default function UserManagement() {
                         <td className="px-6 py-4 text-sm text-slate-200">
                           <div className="flex items-center gap-3">
                             <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-sm font-semibold text-slate-300">
-                              {user.username.charAt(0).toUpperCase()}
+                              {(user.username ?? '?').charAt(0).toUpperCase()}
                             </span>
                             <span className="font-medium group-hover:text-white">{user.username}</span>
                           </div>
@@ -701,7 +701,7 @@ export default function UserManagement() {
                         className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500 flex-shrink-0"
                       />
                       <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-base font-semibold text-slate-300 flex-shrink-0">
-                        {user.username.charAt(0).toUpperCase()}
+                        {(user.username ?? '?').charAt(0).toUpperCase()}
                       </span>
                       <div className="min-w-0">
                         <p className="font-medium text-white truncate">{user.username}</p>

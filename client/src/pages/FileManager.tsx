@@ -5,7 +5,7 @@ import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api'
 import { UploadProgressModal } from '../components/UploadProgressModal';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi } from '../api/vcl';
-import { formatBytes } from '../lib/formatters';
+import { formatBytes, formatNumber } from '../lib/formatters';
 import { FileViewer } from '../components/file-manager/FileViewer';
 import { StorageSelector } from '../components/file-manager/StorageSelector';
 import { PermissionEditor } from '../components/file-manager/PermissionEditor';
@@ -67,7 +67,7 @@ export default function FileManager({ user }: FileManagerProps) {
           // Sende alle Regeln in einem Request
           await setFilePermissions({
             path: fileToEditPermissions.path,
-            owner_id: fileToEditPermissions.ownerId ?? 0,
+            owner_id: fileToEditPermissions.ownerId ?? user.id,
             rules: editRules.map(rule => ({
               user_id: Number(rule.userId),
               can_view: rule.canView,
@@ -189,12 +189,12 @@ export default function FileManager({ user }: FileManagerProps) {
         // Show toast if warning/critical
         if (warningLevel === 'critical') {
           toast.error(
-            `VCL Storage Critical: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
+            `VCL Storage Critical: ${formatNumber(quota.usage_percent, 1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
             { duration: 8000 }
           );
         } else if (warningLevel === 'warning') {
           toast(
-            `VCL Storage Warning: ${quota.usage_percent.toFixed(1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
+            `VCL Storage Warning: ${formatNumber(quota.usage_percent, 1)}% used (${formatBytes(quota.current_usage_bytes)} / ${formatBytes(quota.max_size_bytes)})`,
             { duration: 6000, icon: '⚠️' }
           );
         }
@@ -429,8 +429,12 @@ export default function FileManager({ user }: FileManagerProps) {
         loadStorageInfo();
         loadVclQuota(); // Reload VCL quota after upload
       } else {
-        const error = await response.json();
-        toast.error(`${t('fileManager:messages.uploadError')}: ${getErrorMessage(error)}`);
+        try {
+          const error = await response.json();
+          toast.error(`${t('fileManager:messages.uploadError')}: ${getErrorMessage(error)}`);
+        } catch {
+          toast.error(`${t('fileManager:messages.uploadError')}: HTTP ${response.status}`);
+        }
       }
     } catch (err) {
       console.error('Upload failed:', err);
@@ -737,7 +741,7 @@ export default function FileManager({ user }: FileManagerProps) {
                 {vclQuota.warning === 'critical' && '🔴'}
                 {vclQuota.warning === 'warning' && '⚠️'}
                 {!vclQuota.warning && '📦'}
-                VCL: {vclQuota.usagePercent.toFixed(1)}% ({formatBytes(vclQuota.current)} / {formatBytes(vclQuota.max)})
+                VCL: {formatNumber(vclQuota.usagePercent, 1)}% ({formatBytes(vclQuota.current)} / {formatBytes(vclQuota.max)})
               </span>
             </div>
           )}
@@ -794,7 +798,7 @@ export default function FileManager({ user }: FileManagerProps) {
             onClick={() => setCurrentPath('')}
             className="rounded-full border border-slate-700/70 bg-slate-950/70 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs font-medium uppercase tracking-[0.15em] sm:tracking-[0.2em] text-slate-300 transition hover:border-sky-500/40 hover:text-white touch-manipulation active:scale-95"
           >
-            Home
+            {t('fileManager:labels.home', 'Home')}
           </button>
           {currentPath && (
             <>
@@ -870,10 +874,12 @@ export default function FileManager({ user }: FileManagerProps) {
                         <div className="flex cursor-pointer items-center gap-3 text-sm text-slate-200">
                           <span className={`flex h-9 w-9 items-center justify-center rounded-xl border text-base ${
                             file.type === 'directory'
-                              ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                              ? file.name === 'Shared'
+                                ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                                : 'border-sky-500/20 bg-sky-500/10 text-sky-200'
                               : 'border-slate-800 bg-slate-900/70 text-slate-400'
                           }`}>
-                            {file.type === 'directory' ? '📁' : '📄'}
+                            {file.type === 'directory' ? (file.name === 'Shared' ? '👥' : '📁') : '📄'}
                           </span>
                           <div className="flex items-center gap-2 min-w-0 flex-1">
                             <span className="truncate font-medium group-hover:text-white">
@@ -1041,10 +1047,12 @@ export default function FileManager({ user }: FileManagerProps) {
                   >
                     <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl border text-lg ${
                       file.type === 'directory'
-                        ? 'border-sky-500/20 bg-sky-500/10 text-sky-200'
+                        ? file.name === 'Shared'
+                          ? 'border-emerald-500/20 bg-emerald-500/10 text-emerald-200'
+                          : 'border-sky-500/20 bg-sky-500/10 text-sky-200'
                         : 'border-slate-800 bg-slate-900/70 text-slate-400'
                     }`}>
-                      {file.type === 'directory' ? '📁' : '📄'}
+                      {file.type === 'directory' ? (file.name === 'Shared' ? '👥' : '📁') : '📄'}
                     </span>
                     <div className="flex-1 min-w-0">
                       <div className="flex items-center gap-2">

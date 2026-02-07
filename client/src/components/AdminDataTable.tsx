@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
+import i18n from '../i18n'
 
 interface Column {
   name: string
@@ -60,9 +61,9 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
     const n = name.toLowerCase()
     // sizes / numbers
     if (n.includes('size') || n.includes('bytes') || n === 'owner_id' || n.endsWith('_id')) {
-      if (typeof raw === 'number') return new Intl.NumberFormat().format(raw)
+      if (typeof raw === 'number') return new Intl.NumberFormat(i18n.language).format(raw)
       const num = Number(raw)
-      return Number.isFinite(num) ? new Intl.NumberFormat().format(num) : String(raw)
+      return Number.isFinite(num) ? new Intl.NumberFormat(i18n.language).format(num) : String(raw)
     }
 
     // booleans

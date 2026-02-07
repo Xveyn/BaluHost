@@ -8,6 +8,7 @@ import React, { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Zap, Plus, Trash2, Power, AlertCircle, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { extractErrorMessage } from '../lib/api';
 import {
   listTapoDevices,
   createTapoDevice,
@@ -77,7 +78,7 @@ const TapoDeviceSettings: React.FC = () => {
       loadDevices();
     } catch (error: any) {
       console.error('Failed to create device:', error);
-      toast.error(error.response?.data?.detail || 'Failed to add device');
+      toast.error(extractErrorMessage(error.response?.data?.detail, 'Failed to add device'));
     }
   };
 

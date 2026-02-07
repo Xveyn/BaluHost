@@ -2,6 +2,7 @@
  * Scheduler API client for the BaluHost Scheduler Dashboard
  */
 import { apiClient } from '../lib/api';
+import { formatNumber } from '../lib/formatters';
 
 // Status constants
 export const SchedulerExecStatus = {
@@ -196,11 +197,11 @@ export function formatDuration(ms: number | null): string {
   if (ms < 1000) {
     return `${ms}ms`;
   } else if (ms < 60000) {
-    return `${(ms / 1000).toFixed(1)}s`;
+    return `${formatNumber(ms / 1000, 1)}s`;
   } else if (ms < 3600000) {
-    return `${(ms / 60000).toFixed(1)}min`;
+    return `${formatNumber(ms / 60000, 1)}min`;
   } else {
-    return `${(ms / 3600000).toFixed(1)}h`;
+    return `${formatNumber(ms / 3600000, 1)}h`;
   }
 }
 

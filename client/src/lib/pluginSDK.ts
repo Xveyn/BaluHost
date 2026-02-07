@@ -24,6 +24,7 @@ import React, {
 import * as LucideIcons from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from './api';
+import { formatNumber } from './formatters';
 
 // Import UI components
 import {
@@ -51,7 +52,8 @@ function formatBytes(bytes: number | null | undefined): string {
   const k = 1024;
   const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
   const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  const value = bytes / Math.pow(k, i);
+  return `${value >= 100 ? Math.round(value) : formatNumber(value, value < 10 ? 2 : 1)} ${sizes[i]}`;
 }
 
 function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {

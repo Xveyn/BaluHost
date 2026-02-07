@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useMemo } from 'react'
 import { Search, ChevronDown, Table, Database } from 'lucide-react'
+import { formatNumber } from '../../lib/formatters'
 
 interface Props {
   tables: string[]
@@ -71,7 +72,7 @@ export default function TableSelector({ tables, categories, selected, onSelect, 
   }
 
   const formatCount = (count: number) => {
-    if (count >= 1000) return `${(count / 1000).toFixed(1)}k`
+    if (count >= 1000) return `${formatNumber(count / 1000, 1)}k`
     return String(count)
   }
 

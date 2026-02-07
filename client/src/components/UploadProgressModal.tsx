@@ -1,5 +1,6 @@
 import { useTranslation } from 'react-i18next';
 import { useMultiUploadProgress } from '../hooks/useUploadProgress';
+import { formatBytes, formatNumber } from '../lib/formatters';
 
 interface UploadProgressModalProps {
   uploadIds: string[] | null;
@@ -27,13 +28,6 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
     return null;
   }
 
-  const formatBytes = (bytes: number): string => {
-    if (bytes === 0) return '0 B';
-    const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
-    const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return `${(bytes / Math.pow(k, i)).toFixed(2)} ${sizes[i]}`;
-  };
 
   return (
     <div className="fixed inset-0 bg-slate-950/70 backdrop-blur-xl flex items-center justify-center z-50">
@@ -56,7 +50,7 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
         <div className="mb-6">
           <div className="flex justify-between text-sm text-slate-300 mb-2">
             <span>{t('shares:upload.overallProgress')}</span>
-            <span>{overallPercentage.toFixed(1)}%</span>
+            <span>{formatNumber(overallPercentage, 1)}%</span>
           </div>
           <div className="w-full bg-slate-800/60 rounded-full h-3 overflow-hidden">
             <div
@@ -120,7 +114,7 @@ export function UploadProgressModal({ uploadIds, onClose }: UploadProgressModalP
 
                 <div className="flex justify-between text-xs text-slate-400">
                   <span>{formatBytes(progress.uploaded_bytes)}</span>
-                  <span>{progress.progress_percentage.toFixed(1)}%</span>
+                  <span>{formatNumber(progress.progress_percentage, 1)}%</span>
                   <span>{formatBytes(progress.total_bytes)}</span>
                 </div>
 

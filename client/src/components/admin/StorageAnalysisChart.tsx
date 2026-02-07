@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getDatabaseInfo } from '../../lib/api'
 import type { DatabaseInfoResponse } from '../../lib/api'
 import { RefreshCw, Database, HardDrive, Table } from 'lucide-react'
+import { formatBytes, formatNumber } from '../../lib/formatters'
 import {
   PieChart,
   Pie,
@@ -30,14 +31,6 @@ const COLORS = [
 
 const MONITORING_TABLES = ['cpu_samples', 'memory_samples', 'network_samples', 'disk_io_samples', 'process_samples']
 
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
-}
-
 interface CustomTooltipProps {
   active?: boolean
   payload?: any[]
@@ -50,7 +43,7 @@ const CustomPieTooltip = ({ active, payload }: CustomTooltipProps) => {
       <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 shadow-xl">
         <p className="text-white text-sm font-medium">{data.name}</p>
         <p className="text-slate-300 text-xs">{formatBytes(data.value)}</p>
-        <p className="text-slate-400 text-xs">{data.payload.percent?.toFixed(1)}%</p>
+        <p className="text-slate-400 text-xs">{data.payload.percent != null ? formatNumber(data.payload.percent, 1) : ''}%</p>
       </div>
     )
   }
@@ -289,7 +282,7 @@ export default function StorageAnalysisChart() {
                 .map((table) => {
                   const isMonitoring = MONITORING_TABLES.includes(table.table_name)
                   const percent = info.total_size_bytes > 0
-                    ? ((table.estimated_size_bytes / info.total_size_bytes) * 100).toFixed(1)
+                    ? formatNumber((table.estimated_size_bytes / info.total_size_bytes) * 100, 1)
                     : '0'
 
                   return (

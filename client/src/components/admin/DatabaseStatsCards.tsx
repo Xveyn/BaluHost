@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next'
 import { getDatabaseStats } from '../../api/monitoring'
 import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
 import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw } from 'lucide-react'
+import { formatBytes } from '../../lib/formatters'
 
 const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType; color: string }> = {
   cpu: { labelKey: 'admin:databaseStats.metrics.cpu', icon: Cpu, color: 'blue' },
@@ -10,14 +11,6 @@ const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType;
   network: { labelKey: 'admin:databaseStats.metrics.network', icon: Network, color: 'purple' },
   disk_io: { labelKey: 'admin:databaseStats.metrics.diskIo', icon: HardDrive, color: 'amber' },
   process: { labelKey: 'admin:databaseStats.metrics.process', icon: Activity, color: 'rose' },
-}
-
-function formatBytes(bytes: number): string {
-  if (bytes === 0) return '0 B'
-  const k = 1024
-  const sizes = ['B', 'KB', 'MB', 'GB']
-  const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
 }
 
 function formatDate(dateStr?: string): string {

@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Zap } from 'lucide-react';
 import { usePowerMonitoring } from '../hooks/usePowerMonitoring';
 import { parseUtcTimestamp } from '../lib/dateUtils';
+import { formatNumber } from '../lib/formatters';
 
 const PowerWidget: React.FC = () => {
   const { t } = useTranslation('system');
@@ -52,9 +53,9 @@ const PowerWidget: React.FC = () => {
       return { label: t('powerWidget.stable'), tone: 'steady' };
     }
     if (trendDelta > 0) {
-      return { label: `+${trendDelta.toFixed(1)}W`, tone: 'increase' };
+      return { label: `+${formatNumber(trendDelta, 1)}W`, tone: 'increase' };
     }
-    return { label: `${trendDelta.toFixed(1)}W`, tone: 'decrease' };
+    return { label: `${formatNumber(trendDelta, 1)}W`, tone: 'decrease' };
   };
 
   const delta = formatDelta();
@@ -133,7 +134,7 @@ const PowerWidget: React.FC = () => {
         <div className="min-w-0 flex-1">
           <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{t('powerWidget.title')}</p>
           <p className="mt-2 text-2xl sm:text-3xl font-semibold text-white truncate">
-            {currentPower.toFixed(1)} W
+            {formatNumber(currentPower, 1)} W
           </p>
         </div>
         <div className="flex h-11 w-11 sm:h-12 sm:w-12 shrink-0 items-center justify-center rounded-2xl bg-gradient-to-br from-amber-500 to-orange-500 text-white shadow-[0_12px_38px_rgba(251,146,60,0.35)]">
@@ -143,7 +144,7 @@ const PowerWidget: React.FC = () => {
       <div className="mt-3 sm:mt-4 flex flex-col gap-1">
         <div className="flex items-center justify-between gap-2 text-xs text-slate-400">
           <span className="truncate flex-1 min-w-0">
-            {t('powerWidget.energyToday')}: {totalEnergyToday.toFixed(2)} kWh
+            {t('powerWidget.energyToday')}: {formatNumber(totalEnergyToday, 2)} kWh
           </span>
           <span className={`${deltaToneClass} shrink-0`}>{delta.label}</span>
         </div>

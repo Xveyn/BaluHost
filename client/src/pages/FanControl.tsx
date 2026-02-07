@@ -7,6 +7,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { extractErrorMessage } from '../lib/api';
 import { LoadingOverlay } from '../components/ui/Spinner';
 import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
 import type { FanCurvePoint } from '../api/fan-control';
@@ -67,7 +68,7 @@ export default function FanControl() {
       toast.success(t('system:fanControl.messages.curveUpdated'));
       refetch();
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || t('system:fanControl.messages.curveFailed'));
+      toast.error(extractErrorMessage(error.response?.data?.detail, t('system:fanControl.messages.curveFailed')));
     }
   }, [refetch, t]);
 
@@ -81,7 +82,7 @@ export default function FanControl() {
         toast.error(result.message || t('system:fanControl.messages.backendFailed'));
       }
     } catch (error: any) {
-      toast.error(error.response?.data?.detail || t('system:fanControl.messages.backendFailed'));
+      toast.error(extractErrorMessage(error.response?.data?.detail, t('system:fanControl.messages.backendFailed')));
     }
   }, [refetch, t]);
 

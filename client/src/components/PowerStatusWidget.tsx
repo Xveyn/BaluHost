@@ -14,13 +14,14 @@ import {
   type PowerStatusResponse,
   type PowerProfile,
 } from '../api/power-management';
+import { formatNumber } from '../lib/formatters';
 
 const REFRESH_INTERVAL_MS = 10000;
 
 // Format frequency for display
 const formatFrequency = (mhz: number | undefined | null): string => {
   if (mhz === undefined || mhz === null) return '-';
-  if (mhz >= 1000) return `${(mhz / 1000).toFixed(1)} GHz`;
+  if (mhz >= 1000) return `${formatNumber(mhz / 1000, 1)} GHz`;
   return `${Math.round(mhz)} MHz`;
 };
 

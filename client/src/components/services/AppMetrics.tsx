@@ -2,6 +2,7 @@ import { Activity, Clock, AlertCircle, Server, Database, Layers } from 'lucide-r
 import { useTranslation } from 'react-i18next';
 import type { ApplicationMetrics } from '../../api/service-status';
 import { formatUptime, formatBytes } from '../../api/service-status';
+import { formatNumber } from '../../lib/formatters';
 
 interface AppMetricsProps {
   metrics: ApplicationMetrics;
@@ -52,7 +53,7 @@ export default function AppMetrics({ metrics }: AppMetricsProps) {
               {formatBytes(metrics.memory_bytes)}
             </p>
             <p className="text-xs text-slate-400">
-              {metrics.memory_percent.toFixed(1)}%
+              {formatNumber(metrics.memory_percent, 1)}%
             </p>
           </div>
 
@@ -124,8 +125,8 @@ export default function AppMetrics({ metrics }: AppMetricsProps) {
           <div className="space-y-3">
             {metrics.cache_stats.map((cache) => {
               const hitRate = cache.hits + cache.misses > 0
-                ? (cache.hits / (cache.hits + cache.misses) * 100).toFixed(1)
-                : '0.0';
+                ? formatNumber(cache.hits / (cache.hits + cache.misses) * 100, 1)
+                : formatNumber(0, 1);
 
               return (
                 <div key={cache.name} className="p-3 bg-slate-800/50 rounded-lg">
