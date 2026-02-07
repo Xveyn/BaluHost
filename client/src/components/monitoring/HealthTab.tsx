@@ -13,6 +13,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildApiUrl } from '../../lib/api';
+import { formatBytes, formatUptime, formatNumber } from '../../lib/formatters';
 import {
   RefreshCw,
   Cpu,
@@ -59,6 +60,7 @@ interface HealthData {
       used_bytes: number;
       used_percent: number;
       mount_point: string;
+      attributes?: Array<{ id: number; name: string; raw: string }>;
     }>;
   };
   raid?: {
@@ -70,21 +72,6 @@ interface HealthData {
   };
 }
 
-const formatBytes = (bytes: number): string => {
-  if (!bytes || Number.isNaN(bytes)) return '0 B';
-  const k = 1024;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const value = bytes / Math.pow(k, i);
-  return `${value.toFixed(1)} ${units[i]}`;
-};
-
-const formatUptime = (seconds: number): string => {
-  const days = Math.floor(seconds / 86400);
-  const hours = Math.floor((seconds % 86400) / 3600);
-  const minutes = Math.floor((seconds % 3600) / 60);
-  return `${days}d ${hours}h ${minutes}m`;
-};
 
 export function HealthTab() {
   const { t } = useTranslation('admin');
@@ -153,16 +140,16 @@ export function HealthTab() {
               </div>
               <div>
                 <p className="text-xs uppercase tracking-wide text-slate-500">CPU</p>
-                <p className="text-lg font-semibold text-white">{health.system.cpu.usage.toFixed(1)}%</p>
+                <p className="text-lg font-semibold text-white">{formatNumber(health.system.cpu.usage, 1)}%</p>
               </div>
             </div>
             <div className="space-y-2 text-xs text-slate-400">
               <p className="truncate" title={health.system.cpu.model}>{health.system.cpu.model}</p>
-              <p>{health.system.cpu.cores} cores @ {(health.system.cpu.frequency_mhz / 1000).toFixed(2)} GHz</p>
+              <p>{health.system.cpu.cores} cores @ {formatNumber(health.system.cpu.frequency_mhz / 1000, 2)} GHz</p>
               {health.system.cpu.temperature_celsius && (
                 <p className="flex items-center gap-1">
                   <Thermometer className="h-3.5 w-3.5" />
-                  {health.system.cpu.temperature_celsius.toFixed(1)}°C
+                  {formatNumber(health.system.cpu.temperature_celsius, 1)}°C
                 </p>
               )}
             </div>
@@ -262,6 +249,8 @@ export function HealthTab() {
                   <span className={`rounded-full border px-2 py-0.5 text-xs ${
                     device.status === 'PASSED'
                       ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                      : device.status === 'UNKNOWN'
+                      ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
                       : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
                   }`}>
                     {device.status}
@@ -274,18 +263,22 @@ export function HealthTab() {
                   </div>
                   <div>
                     <p className="text-slate-500">{t('health.deviceLabels.used')}</p>
-                    <p className="text-slate-200">{device.used_percent.toFixed(1)}%</p>
+                    <p className="text-slate-200">{device.used_percent != null ? formatNumber(device.used_percent, 1) : '-'}%</p>
                   </div>
                   <div>
                     <p className="text-slate-500">{t('health.deviceLabels.mount')}</p>
                     <p className="text-slate-200">{device.mount_point}</p>
                   </div>
-                  {device.temperature !== null && (
-                    <div>
-                      <p className="text-slate-500">{t('health.deviceLabels.temperature')}</p>
-                      <p className="text-slate-200">{device.temperature}°C</p>
-                    </div>
-                  )}
+                  <div>
+                    <p className="text-slate-500">{t('health.deviceLabels.temperature')}</p>
+                    <p className="text-slate-200">
+                      {device.temperature !== null
+                        ? `${device.temperature}°C`
+                        : device.attributes?.find(a => a.id === 194)
+                          ? `${device.attributes.find(a => a.id === 194)!.raw}°C`
+                          : 'N/A'}
+                    </p>
+                  </div>
                 </div>
               </div>
             ))}

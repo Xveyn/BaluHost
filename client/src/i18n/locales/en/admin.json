@@ -305,6 +305,15 @@
       "monitoring": "Monitoring"
     }
   },
+  "common": {
+    "na": "N/A",
+    "enabled": "Enabled",
+    "disabled": "Disabled",
+    "edit": "Edit",
+    "cancel": "Cancel",
+    "save": "Save",
+    "close": "Close"
+  },
   "vcl": {
     "title": "VCL Settings",
     "loading": "Loading...",

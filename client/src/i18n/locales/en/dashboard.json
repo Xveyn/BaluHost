@@ -15,7 +15,7 @@
   "stats": {
     "cpu": "CPU",
     "memory": "Memory",
-    "totalStorage": "Total Storage",
+    "totalStorage": "Total Effective Storage",
     "uptime": "Uptime",
     "totalFiles": "Total Files",
     "totalUsers": "Total Users",
@@ -67,6 +67,10 @@
     "smartFailure": {
       "title": "SMART Health Warning",
       "message": "{{count}} drive(s) reporting issues"
+    },
+    "smartUnknown": {
+      "title": "SMART Status Unknown",
+      "message": "{{count}} drive(s) could not be checked — SMART data unavailable"
     },
     "raidDegraded": {
       "title": "RAID Array Degraded",

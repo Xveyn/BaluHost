@@ -305,6 +305,15 @@
       "monitoring": "Monitoring"
     }
   },
+  "common": {
+    "na": "N/V",
+    "enabled": "Aktiviert",
+    "disabled": "Deaktiviert",
+    "edit": "Bearbeiten",
+    "cancel": "Abbrechen",
+    "save": "Speichern",
+    "close": "Schließen"
+  },
   "vcl": {
     "title": "VCL-Einstellungen",
     "loading": "Lädt...",

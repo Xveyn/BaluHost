@@ -17,7 +17,7 @@ import {
   AlertBanner,
   type Alert,
 } from '../components/dashboard';
-import { formatBytes, formatUptime } from '../lib/formatters';
+import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
 
 interface SystemStats {
   cpuUsage: number;
@@ -150,25 +150,17 @@ export default function Dashboard({ user }: DashboardProps) {
   }, [systemInfo]);
 
   const storageStats = useMemo<StorageStats>(() => {
-    // Berechne Gesamtkapazität und Nutzung aus SMART-Daten (alle Festplatten)
     let total = 0;
     let used = 0;
 
-    if (smartData && smartData.devices.length > 0) {
-      // Summiere alle Festplatten-Kapazitäten
+    if (storageInfo && storageInfo.total > 0) {
+      // Primär: Aggregierte Daten (berücksichtigt RAID-effektive Kapazität)
+      total = storageInfo.total;
+      used = storageInfo.used;
+    } else if (smartData && smartData.devices.length > 0) {
+      // Fallback: SMART-Daten summieren
       total = smartData.devices.reduce((sum, d) => sum + (d.capacity_bytes || 0), 0);
-
-      // Summiere alle genutzten Bytes (falls vorhanden)
       used = smartData.devices.reduce((sum, d) => sum + (d.used_bytes || 0), 0);
-
-      // Fallback: Wenn keine used_bytes vorhanden, verwende storageInfo
-      if (used === 0 && storageInfo?.used) {
-        used = storageInfo.used;
-      }
-    } else {
-      // Fallback auf storageInfo wenn keine SMART-Daten vorhanden
-      used = storageInfo?.used ?? 0;
-      total = storageInfo?.total ?? 0;
     }
 
     const available = Math.max(total - used, 0);
@@ -226,13 +218,13 @@ export default function Dashboard({ user }: DashboardProps) {
 
   const cpuFrequency = useMemo(() => {
     return systemInfo?.cpu?.frequency_mhz
-      ? `${(systemInfo.cpu.frequency_mhz / 1000).toFixed(2)} GHz`
+      ? `${formatNumber(systemInfo.cpu.frequency_mhz / 1000, 2)} GHz`
       : null;
   }, [systemInfo]);
 
   const cpuTemperature = useMemo(() => {
     const t = systemInfo?.cpu?.temperature_celsius;
-    return typeof t === 'number' ? `${t.toFixed(1)}°C` : null;
+    return typeof t === 'number' ? `${formatNumber(t, 1)}°C` : null;
   }, [systemInfo]);
 
   const cpuModel = useMemo(() => {
@@ -257,18 +249,32 @@ export default function Dashboard({ user }: DashboardProps) {
   const alerts = useMemo<Alert[]>(() => {
     const result: Alert[] = [];
 
-    // SMART alerts
-    if (smartData && smartData.devices.some(d => d.status !== 'PASSED')) {
-      const failedDevices = smartData.devices.filter(d => d.status !== 'PASSED');
-      result.push({
-        id: 'smart-failure',
-        type: 'critical',
-        title: t('alerts.smartFailure.title'),
-        message: t('alerts.smartFailure.message', { count: failedDevices.length }),
-        link: '/system',
-        linkText: t('alerts.viewDetails'),
-        source: 'smart',
-      });
+    // SMART alerts — split FAILED (critical) vs UNKNOWN (warning)
+    if (smartData) {
+      const failedDevices = smartData.devices.filter(d => d.status === 'FAILED');
+      const unknownDevices = smartData.devices.filter(d => d.status === 'UNKNOWN');
+      if (failedDevices.length > 0) {
+        result.push({
+          id: 'smart-failure',
+          type: 'critical',
+          title: t('alerts.smartFailure.title'),
+          message: t('alerts.smartFailure.message', { count: failedDevices.length }),
+          link: '/system',
+          linkText: t('alerts.viewDetails'),
+          source: 'smart',
+        });
+      }
+      if (unknownDevices.length > 0) {
+        result.push({
+          id: 'smart-unknown',
+          type: 'warning',
+          title: t('alerts.smartUnknown.title'),
+          message: t('alerts.smartUnknown.message', { count: unknownDevices.length }),
+          link: '/system',
+          linkText: t('alerts.viewDetails'),
+          source: 'smart',
+        });
+      }
     }
 
     // RAID alerts
@@ -320,7 +326,7 @@ export default function Dashboard({ user }: DashboardProps) {
     {
       id: 'cpu',
       title: t('stats.cpu'),
-      value: `${systemStats.cpuUsage.toFixed(1)}%`,
+      value: `${formatNumber(systemStats.cpuUsage, 1)}%`,
       meta: cpuModel
         ? cpuModel
         : (cpuFrequency
@@ -561,7 +567,7 @@ export default function Dashboard({ user }: DashboardProps) {
                               <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
                                 <div>
                                   <p className="text-slate-500">{t('smart.device.status')}</p>
-                                  <p className={`mt-1 font-medium ${device.status === 'PASSED' ? 'text-emerald-300' : 'text-rose-300'}`}>
+                                  <p className={`mt-1 font-medium ${device.status === 'PASSED' ? 'text-emerald-300' : device.status === 'UNKNOWN' ? 'text-amber-300' : 'text-rose-300'}`}>
                                     {device.status}
                                   </p>
                                 </div>
@@ -633,11 +639,15 @@ export default function Dashboard({ user }: DashboardProps) {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-slate-100">{array.name}</p>
-                            <p className="text-xs text-slate-500">RAID {array.level} • {(array.size_bytes / (1024 ** 3)).toFixed(1)} GB</p>
+                            <p className="text-xs text-slate-500">RAID {array.level} • {formatNumber(array.size_bytes / (1024 ** 3), 1)} GB</p>
                           </div>
                           <span className={`rounded-full border px-2 py-0.5 text-xs ${
-                            array.status === 'clean'
+                            array.status === 'clean' || array.status === 'optimal'
                               ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-300'
+                              : array.status === 'checking'
+                              ? 'border-indigo-500/30 bg-indigo-500/10 text-indigo-300'
+                              : array.status === 'rebuilding'
+                              ? 'border-sky-500/30 bg-sky-500/10 text-sky-300'
                               : array.status.includes('degraded')
                               ? 'border-amber-500/30 bg-amber-500/10 text-amber-300'
                               : 'border-rose-500/30 bg-rose-500/10 text-rose-300'
@@ -652,7 +662,7 @@ export default function Dashboard({ user }: DashboardProps) {
                           <div className="mt-2">
                             <div className="flex items-center justify-between text-xs text-slate-400 mb-1">
                               <span>{t('raid.resyncProgress')}</span>
-                              <span>{array.resync_progress.toFixed(1)}%</span>
+                              <span>{formatNumber(array.resync_progress, 1)}%</span>
                             </div>
                             <div className="h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
                               <div
@@ -690,7 +700,7 @@ export default function Dashboard({ user }: DashboardProps) {
                     <span>{t('system.raidStatus')}</span>
                     {raidLoading ? (
                       <span className="text-slate-400">{t('health.checking')}</span>
-                    ) : raidData && raidData.arrays.every(a => a.status === 'clean') ? (
+                    ) : raidData && raidData.arrays.every(a => ['clean', 'optimal', 'checking'].includes(a.status)) ? (
                       <span className="text-emerald-300">{t('health.arraysOptimal')}</span>
                     ) : raidData && raidData.arrays.some(a => a.status.includes('degraded')) ? (
                       <span className="text-amber-300">{t('health.degraded')}</span>
@@ -724,7 +734,7 @@ export default function Dashboard({ user }: DashboardProps) {
                   </li>
                   <li className="flex items-center justify-between">
                     <span>{t('health.storageUsed')}</span>
-                    <span className="text-slate-200">{storageStats.percent.toFixed(1)}%</span>
+                    <span className="text-slate-200">{formatNumber(storageStats.percent, 1)}%</span>
                   </li>
                 </ul>
               </div>

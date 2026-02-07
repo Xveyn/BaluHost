@@ -15,7 +15,7 @@
   "stats": {
     "cpu": "CPU",
     "memory": "Speicher",
-    "totalStorage": "Gesamtspeicher",
+    "totalStorage": "Effektive Gesamtkapazität",
     "uptime": "Betriebszeit",
     "totalFiles": "Dateien gesamt",
     "totalUsers": "Benutzer gesamt",
@@ -67,6 +67,10 @@
     "smartFailure": {
       "title": "SMART-Warnung",
       "message": "{{count}} Festplatte(n) mit Problemen"
+    },
+    "smartUnknown": {
+      "title": "SMART-Status unbekannt",
+      "message": "{{count}} Festplatte(n) konnten nicht geprüft werden — SMART-Daten nicht verfügbar"
     },
     "raidDegraded": {
       "title": "RAID-Array degradiert",
