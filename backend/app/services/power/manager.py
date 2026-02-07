@@ -869,6 +869,23 @@ class PowerManagerService:
                 logger.error(f"Unknown profile: {profile}")
                 return False, f"Unknown profile: {profile}"
 
+        # Validate governor against available governors
+        available_governors = await self._backend.get_available_governors()
+        if available_governors and config.governor not in available_governors:
+            fallback = "powersave" if "powersave" in available_governors else available_governors[0]
+            logger.warning(
+                f"Governor '{config.governor}' not available (available: {available_governors}). "
+                f"Falling back to '{fallback}'"
+            )
+            config = PowerProfileConfig(
+                profile=config.profile,
+                governor=fallback,
+                energy_performance_preference=config.energy_performance_preference,
+                min_freq_mhz=config.min_freq_mhz,
+                max_freq_mhz=config.max_freq_mhz,
+                description=config.description,
+            )
+
         # Apply to hardware
         success, error_msg = await self._backend.apply_profile(config)
 

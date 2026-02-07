@@ -363,7 +363,7 @@ class PowerPresetService:
         if power_property == ServicePowerProperty.SURGE:
             return "performance"
         elif power_property == ServicePowerProperty.MEDIUM:
-            return "schedutil"
+            return "powersave"
         else:
             return "powersave"
 

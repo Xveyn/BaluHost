@@ -339,43 +339,19 @@ def get_aggregated_storage_info() -> StorageInfo:
         raid_effective = False
         
         if has_raid and raid_data and raid_data.arrays:
-            # RAID ist aktiv - verwende RAID-effektive Kapazität
+            # RAID ist aktiv - verwende find_raid_mountpoint() für zuverlässige Erkennung
+            from app.services.hardware.raid import find_raid_mountpoint
             raid_effective = True
-            
+
             for array in raid_data.arrays:
-                total_capacity += array.size_bytes
-                device_count += len(array.devices)
-            
-            # Bei RAID: Verwende psutil für tatsächliche Nutzung des RAID-Volumes
-            # (nicht die Summe der einzelnen Geräte, da RAID Daten spiegelt/verteilt)
-            try:
-                import psutil
-                partitions = psutil.disk_partitions()
-                
-                # Finde RAID mount points (normalerweise /md0, /md1, etc. oder Windows RAID volumes)
-                for partition in partitions:
-                    if '/md' in partition.device or 'raid' in partition.device.lower():
-                        try:
-                            usage = psutil.disk_usage(partition.mountpoint)
-                            total_used += usage.used
-                        except (PermissionError, OSError):
-                            pass
-                
-                # Fallback: Wenn keine RAID-Partitionen gefunden, verwende Durchschnitt der Geräte
-                if total_used == 0:
-                    device_count_with_usage = 0
-                    device_sum_used = 0
-                    for device in smart_data.devices:
-                        if device.used_bytes is not None and device.used_bytes > 0:
-                            device_sum_used += device.used_bytes
-                            device_count_with_usage += 1
-                    
-                    # Für RAID 1/5/6: Nutze den Durchschnitt, nicht die Summe
-                    if device_count_with_usage > 0:
-                        total_used = device_sum_used // device_count_with_usage
-                        
-            except Exception as e:
-                logger.debug("Could not get RAID usage from psutil: %s", e)
+                mountpoint = find_raid_mountpoint(array.name)
+                if mountpoint:
+                    usage = psutil.disk_usage(mountpoint)
+                    total_capacity += usage.total
+                    total_used += usage.used
+                    device_count += len(array.devices)
+                else:
+                    logger.warning("RAID %s not mounted, skipping from aggregated storage", array.name)
         else:
             # Kein RAID - summiere alle einzelnen Festplatten
             logger.info(f"Aggregating {len(smart_data.devices)} devices without RAID")
@@ -403,9 +379,8 @@ def get_aggregated_storage_info() -> StorageInfo:
         if total_capacity > 0 and total_used == 0:
             logger.info("Have capacity but no usage data from SMART, getting usage from psutil")
             try:
-                import psutil
                 partitions = psutil.disk_partitions(all=False)
-                
+
                 for partition in partitions:
                     try:
                         usage = psutil.disk_usage(partition.mountpoint)
@@ -422,7 +397,6 @@ def get_aggregated_storage_info() -> StorageInfo:
         if total_capacity == 0:
             logger.warning("No SMART capacity data available, trying direct psutil approach")
             try:
-                import psutil
                 partitions = psutil.disk_partitions(all=False)
                 seen_devices = set()
                 
