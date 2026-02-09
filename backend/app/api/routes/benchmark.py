@@ -327,6 +327,44 @@ async def cancel_benchmark(
     return {"message": "Benchmark cancellation requested", "benchmark_id": benchmark_id}
 
 
+@router.post("/{benchmark_id}/mark-failed")
+async def mark_benchmark_failed(
+    benchmark_id: int,
+    db: Session = Depends(get_db),
+    current_admin: UserPublic = Depends(get_current_admin),
+) -> dict:
+    """
+    Manually mark a stuck benchmark as failed (admin only).
+
+    Use this when a benchmark is stuck in running/pending status after a server
+    restart or other failure where automatic recovery didn't trigger.
+    """
+    benchmark = benchmark_service.get_benchmark(benchmark_id, db)
+    if benchmark is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Benchmark {benchmark_id} not found",
+        )
+
+    if benchmark.status not in (BenchmarkStatus.RUNNING, BenchmarkStatus.PENDING):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Cannot mark benchmark as failed: current status is {benchmark.status.value}",
+        )
+
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+    benchmark.status = BenchmarkStatus.FAILED
+    benchmark.error_message = "Manually marked as failed by administrator"
+    benchmark.completed_at = now
+    if benchmark.started_at:
+        benchmark.duration_seconds = (now - benchmark.started_at).total_seconds()
+    db.commit()
+
+    return {"message": "Benchmark marked as failed", "benchmark_id": benchmark_id}
+
+
 @router.get("/", response_model=BenchmarkListResponse)
 async def list_benchmarks(
     page: int = 1,

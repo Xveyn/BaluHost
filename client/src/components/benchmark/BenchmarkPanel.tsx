@@ -32,6 +32,7 @@ import {
   useBenchmarkHistory,
   useStartBenchmark,
   useCancelBenchmark,
+  useMarkBenchmarkFailed,
   useBenchmark,
   getBenchmarkStatusBgColor,
   formatBenchmarkStatus,
@@ -291,7 +292,7 @@ export default function BenchmarkPanel() {
             ) : (
               <div className="divide-y divide-slate-700">
                 {historyBenchmarks.map(benchmark => (
-                  <HistoryItem key={benchmark.id} benchmark={benchmark} />
+                  <HistoryItem key={benchmark.id} benchmark={benchmark} onRefetch={refetchHistory} />
                 ))}
               </div>
             )}
@@ -303,11 +304,24 @@ export default function BenchmarkPanel() {
 }
 
 // History item component
-function HistoryItem({ benchmark }: { benchmark: BenchmarkResponse }) {
+function HistoryItem({ benchmark, onRefetch }: { benchmark: BenchmarkResponse; onRefetch: () => Promise<void> }) {
   const [expanded, setExpanded] = useState(false);
+  const { markFailed, loading: markFailedLoading } = useMarkBenchmarkFailed();
 
   const statusIcon = getStatusIcon(benchmark.status);
   const statusColorClass = getBenchmarkStatusBgColor(benchmark.status);
+  const isStuck = benchmark.status === 'running' || benchmark.status === 'pending';
+
+  const handleMarkFailed = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      await markFailed(benchmark.id);
+      toast.success('Benchmark marked as failed');
+      await onRefetch();
+    } catch {
+      toast.error('Failed to mark benchmark as failed');
+    }
+  };
 
   return (
     <div className="px-4 py-3">
@@ -330,12 +344,23 @@ function HistoryItem({ benchmark }: { benchmark: BenchmarkResponse }) {
             </div>
           </div>
         </div>
-        {benchmark.status === 'completed' && (
-          <div className="text-right text-sm">
-            <div className="text-sky-400">{benchmark.summary.seq_read_mbps != null ? formatNumber(benchmark.summary.seq_read_mbps, 0) : '-'} MB/s</div>
-            <div className="text-xs text-slate-500">seq read</div>
-          </div>
-        )}
+        <div className="flex items-center gap-2">
+          {isStuck && (
+            <button
+              onClick={handleMarkFailed}
+              disabled={markFailedLoading}
+              className="text-xs px-2 py-1 bg-red-900/50 hover:bg-red-800/60 border border-red-700 text-red-300 rounded transition-colors disabled:opacity-50"
+            >
+              {markFailedLoading ? 'Marking...' : 'Mark Failed'}
+            </button>
+          )}
+          {benchmark.status === 'completed' && (
+            <div className="text-right text-sm">
+              <div className="text-sky-400">{benchmark.summary.seq_read_mbps != null ? formatNumber(benchmark.summary.seq_read_mbps, 0) : '-'} MB/s</div>
+              <div className="text-xs text-slate-500">seq read</div>
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Expanded results */}

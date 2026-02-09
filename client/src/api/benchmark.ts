@@ -229,6 +229,16 @@ export async function cancelBenchmark(benchmarkId: number): Promise<{ message: s
 }
 
 /**
+ * Mark a stuck benchmark as failed (admin only)
+ */
+export async function markBenchmarkFailed(benchmarkId: number): Promise<{ message: string; benchmark_id: number }> {
+  const response = await apiClient.post<{ message: string; benchmark_id: number }>(
+    `/api/benchmark/${benchmarkId}/mark-failed`
+  );
+  return response.data;
+}
+
+/**
  * Get paginated list of benchmarks (history)
  */
 export async function getBenchmarkHistory(

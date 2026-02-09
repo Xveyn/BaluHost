@@ -10,6 +10,7 @@ import {
   getBenchmarkHistory,
   startBenchmark,
   cancelBenchmark,
+  markBenchmarkFailed,
   type DiskInfo,
   type BenchmarkProfileConfig,
   type BenchmarkResponse,
@@ -70,6 +71,12 @@ export interface UseStartBenchmarkReturn {
 
 export interface UseCancelBenchmarkReturn {
   cancel: (benchmarkId: number) => Promise<void>;
+  loading: boolean;
+  error: string | null;
+}
+
+export interface UseMarkBenchmarkFailedReturn {
+  markFailed: (benchmarkId: number) => Promise<void>;
   loading: boolean;
   error: string | null;
 }
@@ -341,6 +348,30 @@ export function useCancelBenchmark(): UseCancelBenchmarkReturn {
   }, []);
 
   return { cancel, loading, error };
+}
+
+/**
+ * Hook for marking a benchmark as failed (admin only)
+ */
+export function useMarkBenchmarkFailed(): UseMarkBenchmarkFailedReturn {
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const markFailed = useCallback(async (benchmarkId: number) => {
+    try {
+      setLoading(true);
+      setError(null);
+      await markBenchmarkFailed(benchmarkId);
+    } catch (err: any) {
+      const message = err.response?.data?.detail || err.message || 'Failed to mark benchmark as failed';
+      setError(message);
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  return { markFailed, loading, error };
 }
 
 // ===== Helper Functions =====

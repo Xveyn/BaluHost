@@ -13,6 +13,7 @@ import logging
 import os
 import platform
 import secrets
+import signal
 import shutil
 import subprocess
 import tempfile
@@ -45,6 +46,93 @@ _cancellation_flags: Dict[int, bool] = {}
 # Raw device confirmation tokens (token -> (disk_name, profile, expires_at))
 _confirmation_tokens: Dict[str, Tuple[str, str, datetime]] = {}
 _TOKEN_EXPIRY_MINUTES = 5
+
+# Timeout for a single fio test (10 minutes)
+_FIO_TIMEOUT_SECONDS = 600
+
+
+def recover_stale_benchmarks(db: Session) -> int:
+    """Mark any RUNNING/PENDING benchmarks as FAILED after a server restart.
+
+    Returns the number of recovered benchmarks.
+    """
+    stale = (
+        db.query(DiskBenchmark)
+        .filter(DiskBenchmark.status.in_([BenchmarkStatus.RUNNING, BenchmarkStatus.PENDING]))
+        .all()
+    )
+    if not stale:
+        return 0
+
+    now = datetime.now(timezone.utc)
+    for bench in stale:
+        bench.status = BenchmarkStatus.FAILED
+        bench.error_message = "Server restarted while benchmark was in progress"
+        bench.completed_at = now
+        if bench.started_at:
+            started = bench.started_at
+            if started.tzinfo is None:
+                started = started.replace(tzinfo=timezone.utc)
+            bench.duration_seconds = (now - started).total_seconds()
+    db.commit()
+    logger.info("Recovered %d stale benchmark(s) after server restart", len(stale))
+    return len(stale)
+
+
+def kill_orphan_fio_processes() -> None:
+    """Kill any orphaned fio processes left from previous benchmark runs.
+
+    Only runs on Linux. Errors are silently ignored.
+    """
+    if platform.system().lower() != "linux":
+        return
+
+    try:
+        result = subprocess.run(
+            ["pgrep", "-x", "fio"],
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            return  # No fio processes found
+
+        pids = [int(pid.strip()) for pid in result.stdout.strip().split("\n") if pid.strip()]
+        for pid in pids:
+            try:
+                os.kill(pid, signal.SIGKILL)
+                logger.info("Killed orphan fio process (PID %d)", pid)
+            except (ProcessLookupError, PermissionError) as e:
+                logger.debug("Could not kill fio PID %d: %s", pid, e)
+    except FileNotFoundError:
+        logger.debug("pgrep not found, skipping orphan fio cleanup")
+    except Exception as e:
+        logger.debug("Error during orphan fio cleanup: %s", e)
+
+
+async def shutdown_benchmarks(db: Session) -> None:
+    """Gracefully stop all active benchmarks during server shutdown."""
+    # Set cancellation flags for all active benchmarks
+    for bench_id in list(_active_benchmarks.keys()):
+        _cancellation_flags[bench_id] = True
+
+    # Cancel and wait for active tasks
+    for bench_id, task in list(_active_benchmarks.items()):
+        task.cancel()
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=5)
+        except (asyncio.CancelledError, asyncio.TimeoutError, Exception):
+            pass
+
+    # DB cleanup for any still-running benchmarks
+    recover_stale_benchmarks(db)
+
+    # Kill orphan fio processes
+    kill_orphan_fio_processes()
+
+    # Clear tracking dicts
+    _active_benchmarks.clear()
+    _cancellation_flags.clear()
+    logger.info("Benchmark shutdown complete")
 
 
 class BenchmarkBackend(Protocol):
@@ -591,7 +679,19 @@ class FioBenchmarkBackend:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
             )
-            stdout, stderr = await process.communicate()
+
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    process.communicate(), timeout=_FIO_TIMEOUT_SECONDS
+                )
+            except asyncio.TimeoutError:
+                logger.error(
+                    f"fio test timed out after {_FIO_TIMEOUT_SECONDS}s "
+                    f"(benchmark={benchmark_id}, test={test_config.name}_{operation})"
+                )
+                process.kill()
+                await process.wait()
+                return None
 
             if process.returncode != 0:
                 logger.error(f"fio failed: {stderr.decode()}")
@@ -603,6 +703,8 @@ class FioBenchmarkBackend:
                 benchmark_id, test_config, operation, fio_output
             )
 
+        except asyncio.TimeoutError:
+            raise  # Already handled above
         except Exception as e:
             logger.error(f"Error running fio test: {e}")
             return None
