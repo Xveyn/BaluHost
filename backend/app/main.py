@@ -46,8 +46,8 @@ from app.services import fan_control
 from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
-from app.services.notification_scheduler import NotificationScheduler
-from app.services.backup_scheduler import BackupScheduler
+from app.services.notifications.scheduler import NotificationScheduler, start_notification_scheduler, stop_notification_scheduler
+from app.services.backup.scheduler import BackupScheduler, start_backup_scheduler, stop_backup_scheduler
 from app.services.websocket_manager import init_websocket_manager
 from app.services.email_service import init_email_service
 from app.services.event_emitter import init_event_emitter
@@ -68,10 +68,6 @@ logger = logging.getLogger(__name__)
 
 # Network discovery service instance
 _discovery_service = None
-# APScheduler instance for notifications
-_notification_scheduler = None
-# APScheduler instance for backups
-_backup_scheduler = None
 # Plugin manager instance
 _plugin_manager = None
 # WebSocket manager instance
@@ -162,6 +158,7 @@ def _register_services() -> None:
 
     # Notification Scheduler
     def _get_notification_scheduler_status():
+        from app.services.notifications.scheduler import _notification_scheduler
         is_running = _notification_scheduler is not None and _notification_scheduler.running
         return {
             "is_running": is_running,
@@ -173,11 +170,14 @@ def _register_services() -> None:
         name="notification_scheduler",
         display_name="Notification Scheduler",
         get_status_fn=_get_notification_scheduler_status,
+        stop_fn=stop_notification_scheduler,
+        start_fn=start_notification_scheduler,
         config_enabled_fn=FirebaseService.is_available,
     )
 
     # Backup Scheduler
     def _get_backup_scheduler_status():
+        from app.services.backup.scheduler import _backup_scheduler
         is_running = _backup_scheduler is not None and _backup_scheduler.running
         return {
             "is_running": is_running,
@@ -189,6 +189,8 @@ def _register_services() -> None:
         name="backup_scheduler",
         display_name="Backup Scheduler",
         get_status_fn=_get_backup_scheduler_status,
+        stop_fn=stop_backup_scheduler,
+        start_fn=start_backup_scheduler,
         config_enabled_fn=lambda: settings.backup_auto_enabled,
     )
 
@@ -248,6 +250,15 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     logger.info("Admin user ensured with username '%s'", settings.admin_username)
     seed.seed_dev_data()
 
+    # Recover stale benchmarks and kill orphan fio processes from previous runs
+    from app.services.benchmark_service import recover_stale_benchmarks, kill_orphan_fio_processes
+    from app.core.database import SessionLocal
+    with SessionLocal() as bench_db:
+        recovered = recover_stale_benchmarks(bench_db)
+        if recovered:
+            logger.info("Recovered %d stale benchmark(s) from previous run", recovered)
+    kill_orphan_fio_processes()
+
     # Ensure home directories for all users and Shared folder
     from app.services.users import ensure_user_home_directories
     ensure_user_home_directories()
@@ -306,51 +317,16 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         logger.warning(f"Notification system could not initialize: {e}")
     
     # Start notification scheduler (only if Firebase is available)
-    if FirebaseService.is_available():
-        try:
-            from apscheduler.schedulers.background import BackgroundScheduler
-            global _notification_scheduler
-            _notification_scheduler = BackgroundScheduler()
-            
-            # Run every hour to check for expiring devices
-            _notification_scheduler.add_job(
-                func=NotificationScheduler.run_periodic_check,
-                trigger="interval",
-                hours=1,
-                id="device_expiration_check",
-                name="Check and send device expiration warnings",
-                replace_existing=True
-            )
-            
-            _notification_scheduler.start()
-            logger.info("✅ Notification scheduler started (running every hour)")
-        except Exception as e:
-            logger.warning(f"Notification scheduler could not start: {e}")
-    else:
-        logger.info("⏭️  Notification scheduler skipped (Firebase not configured)")
+    try:
+        start_notification_scheduler()
+    except Exception as e:
+        logger.warning(f"Notification scheduler could not start: {e}")
 
     # Start backup scheduler (if enabled in settings)
-    if settings.backup_auto_enabled:
-        try:
-            from apscheduler.schedulers.background import BackgroundScheduler
-            global _backup_scheduler
-            _backup_scheduler = BackgroundScheduler()
-
-            _backup_scheduler.add_job(
-                func=BackupScheduler.run_periodic_backup,
-                trigger="interval",
-                hours=settings.backup_auto_interval_hours,
-                id="automated_backup",
-                name=f"Automated {settings.backup_auto_type} backup",
-                replace_existing=True
-            )
-
-            _backup_scheduler.start()
-            logger.info(f"✅ Backup scheduler started (running every {settings.backup_auto_interval_hours}h, type: {settings.backup_auto_type})")
-        except Exception as e:
-            logger.warning(f"Backup scheduler could not start: {e}")
-    else:
-        logger.info("⏭️  Backup scheduler disabled (enable with BACKUP_AUTO_ENABLED=true)")
+    try:
+        start_backup_scheduler()
+    except Exception as e:
+        logger.warning(f"Backup scheduler could not start: {e}")
 
     # Start RAID scrub scheduler (if enabled in settings)
     try:
@@ -401,6 +377,17 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     try:
         yield
     finally:
+        # Shutdown active benchmarks and kill orphan fio processes
+        try:
+            if not skip_init:
+                from app.services.benchmark_service import shutdown_benchmarks
+                from app.core.database import SessionLocal
+                with SessionLocal() as bench_db:
+                    await shutdown_benchmarks(bench_db)
+                logger.info("Benchmark shutdown complete")
+        except Exception:
+            logger.debug("Error during benchmark shutdown")
+
         # Stop background services if they were started
         try:
             if not skip_init:
@@ -435,20 +422,23 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             await mgr.shutdown()
         except Exception:
             logger.debug("Upload progress manager shutdown skipped or failed")
+
+        # Shutdown chunked upload manager (cancel cleanup loop, remove temp files)
+        try:
+            from app.services.files.chunked_upload import get_chunked_upload_manager
+            await get_chunked_upload_manager().shutdown()
+        except Exception:
+            logger.debug("Chunked upload manager shutdown skipped or failed")
         
         # Stop network discovery
         if _discovery_service:
             _discovery_service.stop()
         
         # Stop notification scheduler
-        if _notification_scheduler:
-            _notification_scheduler.shutdown()
-            logger.info("Notification scheduler stopped")
+        stop_notification_scheduler()
 
         # Stop backup scheduler
-        if _backup_scheduler:
-            _backup_scheduler.shutdown()
-            logger.info("Backup scheduler stopped")
+        stop_backup_scheduler()
         # Stop RAID scrub scheduler
         try:
             raid_service.stop_scrub_scheduler()

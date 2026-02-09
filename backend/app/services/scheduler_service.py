@@ -141,7 +141,7 @@ class SchedulerService:
                 return _smart_scheduler is not None and _smart_scheduler.running
 
             elif name == "backup":
-                from app.services.backup_scheduler import _backup_scheduler
+                from app.services.backup.scheduler import _backup_scheduler
                 return _backup_scheduler is not None and _backup_scheduler.running
 
             elif name == "sync_check":
@@ -150,7 +150,7 @@ class SchedulerService:
                 return scheduler.scheduler.running if scheduler.scheduler else False
 
             elif name == "notification_check":
-                from app.services.notification_scheduler import _notification_scheduler
+                from app.services.notifications.scheduler import _notification_scheduler
                 return _notification_scheduler is not None and _notification_scheduler.running
 
             elif name == "upload_cleanup":
@@ -315,7 +315,7 @@ class SchedulerService:
             }
 
         elif name == "backup":
-            from app.services.backup_scheduler import BackupScheduler
+            from app.services.backup.scheduler import BackupScheduler
             stats = BackupScheduler.create_automated_backup(self.db)
             return stats
 
@@ -332,7 +332,7 @@ class SchedulerService:
             return {"checked": True}
 
         elif name == "notification_check":
-            from app.services.notification_scheduler import NotificationScheduler
+            from app.services.notifications.scheduler import NotificationScheduler
             NotificationScheduler.run_periodic_check()
             return {"checked": True}
 
@@ -445,12 +445,15 @@ class SchedulerService:
             from app.services.smart import start_smart_scheduler
             start_smart_scheduler()
         elif name == "backup":
-            from app.services.backup_scheduler import start_backup_scheduler
+            from app.services.backup.scheduler import start_backup_scheduler
             start_backup_scheduler()
         elif name == "sync_check":
             from app.services.sync_background import get_scheduler
             scheduler = get_scheduler()
             scheduler.start()
+        elif name == "notification_check":
+            from app.services.notifications.scheduler import start_notification_scheduler
+            start_notification_scheduler()
 
     def _stop_scheduler(self, name: str) -> None:
         """Stop a scheduler's background job."""
@@ -461,12 +464,15 @@ class SchedulerService:
             from app.services.smart import stop_smart_scheduler
             stop_smart_scheduler()
         elif name == "backup":
-            from app.services.backup_scheduler import stop_backup_scheduler
+            from app.services.backup.scheduler import stop_backup_scheduler
             stop_backup_scheduler()
         elif name == "sync_check":
             from app.services.sync_background import get_scheduler
             scheduler = get_scheduler()
             scheduler.stop()
+        elif name == "notification_check":
+            from app.services.notifications.scheduler import stop_notification_scheduler
+            stop_notification_scheduler()
 
     def update_scheduler_config(
         self,

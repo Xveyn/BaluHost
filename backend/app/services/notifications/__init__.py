@@ -12,7 +12,12 @@ from app.services.notifications.service import (
     NotificationService,
     get_notification_service,
 )
-from app.services.notifications.scheduler import NotificationScheduler
+from app.services.notifications.scheduler import (
+    NotificationScheduler,
+    _notification_scheduler,
+    start_notification_scheduler,
+    stop_notification_scheduler,
+)
 from app.services.notifications.events import (
     EventType,
     EventConfig,
@@ -36,6 +41,9 @@ __all__ = [
     "get_notification_service",
     # Scheduler
     "NotificationScheduler",
+    "_notification_scheduler",
+    "start_notification_scheduler",
+    "stop_notification_scheduler",
     # Events
     "EventType",
     "EventConfig",

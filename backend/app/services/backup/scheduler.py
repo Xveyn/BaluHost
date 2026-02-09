@@ -2,6 +2,7 @@
 
 from datetime import datetime, timezone
 import logging
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +12,9 @@ from app.schemas.backup import BackupCreate
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Module-level APScheduler instance
+_backup_scheduler: Optional["BackgroundScheduler"] = None
 
 
 class BackupScheduler:
@@ -137,3 +141,42 @@ class BackupScheduler:
             complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()
+
+
+def start_backup_scheduler() -> None:
+    """Start the backup scheduler background job."""
+    global _backup_scheduler
+    if _backup_scheduler is not None:
+        return
+    settings = get_settings()
+    if not settings.backup_auto_enabled:
+        logger.info("Backup scheduler disabled (enable with BACKUP_AUTO_ENABLED=true)")
+        return
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+    except ImportError:
+        logger.warning("APScheduler not installed, backup scheduler disabled")
+        return
+    _backup_scheduler = BackgroundScheduler()
+    _backup_scheduler.add_job(
+        func=BackupScheduler.run_periodic_backup,
+        trigger="interval",
+        hours=settings.backup_auto_interval_hours,
+        id="automated_backup",
+        name=f"Automated {settings.backup_auto_type} backup",
+        replace_existing=True,
+    )
+    _backup_scheduler.start()
+    logger.info(
+        f"Backup scheduler started (every {settings.backup_auto_interval_hours}h, "
+        f"type: {settings.backup_auto_type})"
+    )
+
+
+def stop_backup_scheduler() -> None:
+    """Stop the backup scheduler background job."""
+    global _backup_scheduler
+    if _backup_scheduler:
+        _backup_scheduler.shutdown(wait=False)
+        _backup_scheduler = None
+        logger.info("Backup scheduler stopped")

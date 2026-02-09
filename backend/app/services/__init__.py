@@ -73,11 +73,12 @@ sys.modules["app.services.sensors"] = _sensors
 # Backup services (moved to backup/)
 # ============================================================
 from app.services.backup import service as _backup_service
-from app.services.backup import scheduler as _backup_scheduler
+from app.services.backup import scheduler as _backup_scheduler_mod
 
 # Register backward-compatible module paths in sys.modules
-sys.modules["app.services.backup"] = _backup_service
-sys.modules["app.services.backup_scheduler"] = _backup_scheduler
+# NOTE: Do NOT override "app.services.backup" — it is a real package with __init__.py
+sys.modules["app.services.backup_service"] = _backup_service
+sys.modules["app.services.backup_scheduler"] = _backup_scheduler_mod
 
 # ============================================================
 # Files services (moved to files/)
@@ -88,7 +89,8 @@ from app.services.files import metadata_db as _file_metadata_db
 from app.services.files import shares as _shares
 
 # Register backward-compatible module paths in sys.modules
-sys.modules["app.services.files"] = _files
+# NOTE: Do NOT override "app.services.files" — it is a real package with __init__.py
+sys.modules["app.services.files_operations"] = _files
 sys.modules["app.services.file_metadata"] = _file_metadata
 sys.modules["app.services.file_metadata_db"] = _file_metadata_db
 sys.modules["app.services.shares"] = _shares
@@ -97,13 +99,14 @@ sys.modules["app.services.shares"] = _shares
 # Notifications services (moved to notifications/)
 # ============================================================
 from app.services.notifications import service as _notification_service
-from app.services.notifications import scheduler as _notification_scheduler
+from app.services.notifications import scheduler as _notification_scheduler_mod
 from app.services.notifications import events as _event_emitter
 from app.services.notifications import firebase as _firebase_service
 
 # Register backward-compatible module paths in sys.modules
+# NOTE: Do NOT override "app.services.notifications" — it is a real package with __init__.py
 sys.modules["app.services.notification_service"] = _notification_service
-sys.modules["app.services.notification_scheduler"] = _notification_scheduler
+sys.modules["app.services.notification_scheduler"] = _notification_scheduler_mod
 sys.modules["app.services.event_emitter"] = _event_emitter
 sys.modules["app.services.firebase_service"] = _firebase_service
 

@@ -12,11 +12,19 @@ from app.services.backup.service import (
     get_backup_service,
     RestoreLockedError,
 )
-from app.services.backup.scheduler import BackupScheduler
+from app.services.backup.scheduler import (
+    BackupScheduler,
+    _backup_scheduler,
+    start_backup_scheduler,
+    stop_backup_scheduler,
+)
 
 __all__ = [
     "BackupService",
     "get_backup_service",
     "RestoreLockedError",
     "BackupScheduler",
+    "_backup_scheduler",
+    "start_backup_scheduler",
+    "stop_backup_scheduler",
 ]

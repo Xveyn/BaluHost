@@ -1,7 +1,7 @@
 """Notification scheduler for device expiration warnings."""
 
 from datetime import datetime, timedelta, timezone
-from typing import List, Tuple
+from typing import List, Optional, Tuple
 import logging
 
 from sqlalchemy.orm import Session
@@ -12,6 +12,9 @@ from app.services.notifications.firebase import FirebaseService
 from app.core.config import get_settings
 
 logger = logging.getLogger(__name__)
+
+# Module-level APScheduler instance
+_notification_scheduler: Optional["BackgroundScheduler"] = None
 
 
 class NotificationScheduler:
@@ -248,3 +251,38 @@ class NotificationScheduler:
             complete_scheduler_execution(execution_id, success=False, error=str(e))
         finally:
             db.close()
+
+
+def start_notification_scheduler() -> None:
+    """Start the notification scheduler background job."""
+    global _notification_scheduler
+    if _notification_scheduler is not None:
+        return
+    if not FirebaseService.is_available():
+        logger.info("Notification scheduler skipped (Firebase not configured)")
+        return
+    try:
+        from apscheduler.schedulers.background import BackgroundScheduler
+    except ImportError:
+        logger.warning("APScheduler not installed, notification scheduler disabled")
+        return
+    _notification_scheduler = BackgroundScheduler()
+    _notification_scheduler.add_job(
+        func=NotificationScheduler.run_periodic_check,
+        trigger="interval",
+        hours=1,
+        id="device_expiration_check",
+        name="Check and send device expiration warnings",
+        replace_existing=True,
+    )
+    _notification_scheduler.start()
+    logger.info("Notification scheduler started (running every hour)")
+
+
+def stop_notification_scheduler() -> None:
+    """Stop the notification scheduler background job."""
+    global _notification_scheduler
+    if _notification_scheduler:
+        _notification_scheduler.shutdown(wait=False)
+        _notification_scheduler = None
+        logger.info("Notification scheduler stopped")
