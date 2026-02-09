@@ -23,8 +23,8 @@ class VersionBlob(Base):
     id = Column(Integer, primary_key=True, index=True)
     checksum = Column(String(64), unique=True, nullable=False, index=True)  # SHA256
     storage_path = Column(Text, nullable=False)
-    original_size = Column(Integer, nullable=False)
-    compressed_size = Column(Integer, nullable=False)
+    original_size = Column(BigInteger, nullable=False)
+    compressed_size = Column(BigInteger, nullable=False)
     reference_count = Column(Integer, default=0, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     last_accessed = Column(DateTime, nullable=True)
@@ -56,8 +56,8 @@ class FileVersion(Base):
     # Storage Information
     blob_id = Column(Integer, ForeignKey("version_blobs.id", ondelete="SET NULL"), nullable=True)
     storage_type = Column(String(20), nullable=False)  # 'stored' or 'reference'
-    file_size = Column(Integer, nullable=False)  # Original size (uncompressed)
-    compressed_size = Column(Integer, nullable=False)  # Compressed size
+    file_size = Column(BigInteger, nullable=False)  # Original size (uncompressed)
+    compressed_size = Column(BigInteger, nullable=False)  # Compressed size
     compression_ratio = Column(Float, nullable=True)  # file_size / compressed_size
     
     # Checksums & Integrity

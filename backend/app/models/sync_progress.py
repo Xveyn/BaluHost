@@ -3,7 +3,7 @@
 from pathlib import Path
 from uuid import uuid4
 from datetime import datetime, timedelta
-from sqlalchemy import Column, Integer, String, DateTime, Float, Boolean, ForeignKey
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Float, Boolean, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -24,11 +24,11 @@ class ChunkedUpload(Base):
     # Upload info
     file_name: Mapped[str] = mapped_column(String(255), nullable=False)
     file_path: Mapped[str] = mapped_column(String(1000), nullable=False)
-    total_size: Mapped[int] = mapped_column(Integer, nullable=False)
+    total_size: Mapped[int] = mapped_column(BigInteger, nullable=False)
     chunk_size: Mapped[int] = mapped_column(Integer, default=5 * 1024 * 1024)  # 5MB chunks
     
     # Progress
-    uploaded_bytes: Mapped[int] = mapped_column(Integer, default=0)
+    uploaded_bytes: Mapped[int] = mapped_column(BigInteger, default=0)
     completed_chunks: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, nullable=False)
     
