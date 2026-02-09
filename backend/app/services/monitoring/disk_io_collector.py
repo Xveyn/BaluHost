@@ -157,11 +157,20 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
 
         On Windows: PhysicalDrive0, PhysicalDrive1, etc.
         On Linux: sda, sdb, nvme0n1, etc. (without partition numbers)
+        Also includes software RAID (md0, md127) and LVM/Device-Mapper (dm-0, dm-1).
         """
         disk_lower = disk_name.lower()
 
         # Windows physical disks
         if "physicaldrive" in disk_lower:
+            return True
+
+        # Software RAID (md0, md127)
+        if disk_lower.startswith("md") and disk_lower[2:].isdigit():
+            return True
+
+        # Device-Mapper / LVM (dm-0, dm-1)
+        if disk_lower.startswith("dm-") and disk_lower[3:].isdigit():
             return True
 
         # Linux physical disks

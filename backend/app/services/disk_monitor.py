@@ -161,13 +161,22 @@ def _is_physical_disk(disk_name: str) -> bool:
     Determine if a disk is a physical disk (not a partition).
     On Windows: PhysicalDrive0, PhysicalDrive1, etc.
     On Linux: sda, sdb, nvme0n1, etc. (without partition numbers)
+    Also includes software RAID (md0, md127) and LVM/Device-Mapper (dm-0, dm-1).
     """
     disk_lower = disk_name.lower()
-    
+
     # Windows physical disks
     if 'physicaldrive' in disk_lower:
         return True
-    
+
+    # Software RAID (md0, md127)
+    if disk_lower.startswith('md') and disk_lower[2:].isdigit():
+        return True
+
+    # Device-Mapper / LVM (dm-0, dm-1)
+    if disk_lower.startswith('dm-') and disk_lower[3:].isdigit():
+        return True
+
     # Linux physical disks (exclude partitions like sda1, nvme0n1p1)
     if disk_lower.startswith(('sd', 'hd', 'nvme', 'vd')):
         # Exclude if it ends with a digit (partition)
@@ -177,7 +186,7 @@ def _is_physical_disk(disk_name: str) -> bool:
             return 'p' not in disk_lower or disk_lower.endswith('n1')
         # sda, sdb are physical; sda1, sdb2 are partitions
         return not re.search(r'\d+$', disk_name)
-    
+
     return False
 
 
