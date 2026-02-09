@@ -15,11 +15,13 @@ interface PermissionEditorProps {
 
 export function PermissionEditor({ rules, allUsers, onRulesChange, onSave, onClose }: PermissionEditorProps) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg">
-      <div className="card w-full max-w-xl border-indigo-500/30 bg-slate-900/80">
-        <h3 className="text-xl font-semibold text-white">Rechte bearbeiten</h3>
-        <p className="mt-2 text-sm text-slate-400">Lege für jeden Nutzer eine Berechtigungsregel fest.</p>
-        <div className="mt-5 space-y-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/80 backdrop-blur-lg p-4">
+      <div className="card w-full max-w-xl max-h-[85vh] flex flex-col border-indigo-500/30 bg-slate-900/80">
+        <div className="flex-shrink-0">
+          <h3 className="text-xl font-semibold text-white">Rechte bearbeiten</h3>
+          <p className="mt-2 text-sm text-slate-400">Lege für jeden Nutzer eine Berechtigungsregel fest.</p>
+        </div>
+        <div className="mt-5 space-y-4 flex-1 overflow-y-auto min-h-0">
           {rules.length > 0 && rules.map((rule, idx) => (
             <div key={idx} className="flex items-center gap-4 border-b border-slate-800/40 pb-4 mb-4">
               <select
@@ -92,7 +94,7 @@ export function PermissionEditor({ rules, allUsers, onRulesChange, onSave, onClo
             + Regel hinzufügen
           </button>
         </div>
-        <div className="mt-6 flex justify-end gap-3">
+        <div className="mt-6 flex justify-end gap-3 flex-shrink-0">
           <button
             onClick={onClose}
             className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
