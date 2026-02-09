@@ -25,7 +25,9 @@ import app.services.files.operations as file_ops
 from app.services.files.operations import (
     FileAccessError,
     QuotaExceededError,
+    SystemDirectoryError,
     ROOT_DIR,
+    is_system_directory,
 )
 from app.services.permissions import PermissionDeniedError
 
@@ -566,3 +568,188 @@ class TestGetAbsolutePath:
         """Test that path traversal is blocked in get_absolute_path."""
         with pytest.raises(FileAccessError):
             file_ops.get_absolute_path("../etc/passwd")
+
+
+class TestSystemDirectoryProtection:
+    """Tests for system directory (lost+found, .Trash-*, .system) protection."""
+
+    # --- is_system_directory() ---
+
+    @pytest.mark.parametrize("name,expected", [
+        (".system", True),
+        ("lost+found", True),
+        (".Trash-1000", True),
+        (".Trash-0", True),
+        (".Trash-99999", True),
+        ("documents", False),
+        ("Shared", False),
+        ("system", False),
+        ("lost", False),
+        (".trash", False),
+        ("Trash-1000", False),
+    ])
+    def test_is_system_directory(self, name, expected):
+        """Test is_system_directory identifies system dirs correctly."""
+        assert is_system_directory(name) is expected
+
+    # --- Listing visibility ---
+
+    def test_list_hides_system_dirs_for_non_admin(self, storage_root, db_session, user_public):
+        """System directories are hidden from non-admin users in root listing."""
+        (storage_root / "lost+found").mkdir()
+        (storage_root / ".Trash-1000").mkdir()
+        (storage_root / ".system").mkdir()
+        (storage_root / "normaldir").mkdir()
+
+        items = list(file_ops.list_directory("", user=user_public, db=db_session))
+        names = [item.name for item in items]
+
+        assert "lost+found" not in names
+        assert ".Trash-1000" not in names
+        assert ".system" not in names
+        assert "normaldir" in names
+
+    def test_list_shows_system_dirs_for_admin(self, storage_root, db_session, admin_public):
+        """System directories are visible to admin users."""
+        (storage_root / "lost+found").mkdir()
+        (storage_root / ".Trash-1000").mkdir()
+        (storage_root / ".system").mkdir()
+
+        items = list(file_ops.list_directory("", user=admin_public, db=db_session))
+        names = [item.name for item in items]
+
+        assert "lost+found" in names
+        assert ".Trash-1000" in names
+        assert ".system" in names
+
+    # --- delete_path guards ---
+
+    def test_delete_lost_found_blocked(self, storage_root, db_session):
+        """Deleting root-level lost+found is blocked."""
+        (storage_root / "lost+found").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot delete"):
+            file_ops.delete_path("lost+found", user=None, db=db_session)
+
+    def test_delete_trash_blocked(self, storage_root, db_session):
+        """Deleting root-level .Trash-* is blocked."""
+        (storage_root / ".Trash-1000").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot delete"):
+            file_ops.delete_path(".Trash-1000", user=None, db=db_session)
+
+    def test_delete_system_dir_blocked(self, storage_root, db_session):
+        """Deleting root-level .system is blocked."""
+        (storage_root / ".system").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot delete"):
+            file_ops.delete_path(".system", user=None, db=db_session)
+
+    # --- rename_path guards ---
+
+    def test_rename_lost_found_blocked(self, storage_root, db_session):
+        """Renaming root-level lost+found is blocked."""
+        (storage_root / "lost+found").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot rename"):
+            file_ops.rename_path("lost+found", "renamed", user=None, db=db_session)
+
+    def test_rename_trash_blocked(self, storage_root, db_session):
+        """Renaming root-level .Trash-1000 is blocked."""
+        (storage_root / ".Trash-1000").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot rename"):
+            file_ops.rename_path(".Trash-1000", "renamed", user=None, db=db_session)
+
+    # --- move_path guards ---
+
+    def test_move_lost_found_blocked(self, storage_root, db_session):
+        """Moving root-level lost+found is blocked."""
+        (storage_root / "lost+found").mkdir()
+        (storage_root / "target").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot move"):
+            file_ops.move_path("lost+found", "target", user=None, db=db_session)
+
+    def test_move_trash_blocked(self, storage_root, db_session):
+        """Moving root-level .Trash-1000 is blocked."""
+        (storage_root / ".Trash-1000").mkdir()
+        (storage_root / "target").mkdir()
+
+        with pytest.raises(SystemDirectoryError, match="Cannot move"):
+            file_ops.move_path(".Trash-1000", "target", user=None, db=db_session)
+
+    # --- create_folder guards ---
+
+    def test_create_lost_found_blocked(self, storage_root, db_session, user_public):
+        """Creating folder named lost+found at root is blocked."""
+        with pytest.raises(SystemDirectoryError, match="Cannot create"):
+            file_ops.create_folder("", "lost+found", owner=user_public, db=db_session)
+
+    def test_create_trash_blocked(self, storage_root, db_session, user_public):
+        """Creating folder named .Trash-1000 at root is blocked."""
+        with pytest.raises(SystemDirectoryError, match="Cannot create"):
+            file_ops.create_folder("", ".Trash-1000", owner=user_public, db=db_session)
+
+    def test_create_system_dir_blocked(self, storage_root, db_session, user_public):
+        """Creating folder named .system at root is blocked."""
+        with pytest.raises(SystemDirectoryError, match="Cannot create"):
+            file_ops.create_folder("", ".system", owner=user_public, db=db_session)
+
+    # --- Nested system-dir names are allowed ---
+
+    def test_nested_lost_found_allowed(self, storage_root, db_session, user_public, regular_user):
+        """A lost+found inside a user directory is not protected."""
+        from app.services import file_metadata_db
+
+        userdir = storage_root / "userdir"
+        userdir.mkdir()
+        file_metadata_db.create_metadata(
+            relative_path="userdir",
+            name="userdir",
+            owner_id=regular_user.id,
+            is_directory=True,
+            db=db_session,
+        )
+
+        result = file_ops.create_folder("userdir", "lost+found", owner=user_public, db=db_session)
+        assert result.exists()
+
+    def test_delete_nested_lost_found_allowed(self, storage_root, db_session):
+        """Deleting a nested lost+found directory is allowed."""
+        userdir = storage_root / "userdir"
+        userdir.mkdir()
+        nested = userdir / "lost+found"
+        nested.mkdir()
+
+        file_ops.delete_path("userdir/lost+found", user=None, db=db_session)
+        assert not nested.exists()
+
+    # --- Quota excludes system directories ---
+
+    def test_quota_excludes_system_dirs(self, storage_root):
+        """calculate_used_bytes excludes files inside system directories."""
+        # Create system dirs with content
+        lf = storage_root / "lost+found"
+        lf.mkdir()
+        (lf / "recovered.dat").write_bytes(b"x" * 500)
+
+        trash = storage_root / ".Trash-1000"
+        trash.mkdir()
+        (trash / "deleted.txt").write_bytes(b"y" * 300)
+
+        sys_dir = storage_root / ".system"
+        sys_dir.mkdir()
+        (sys_dir / "meta.json").write_bytes(b"z" * 200)
+
+        # Create normal file
+        (storage_root / "normal.txt").write_bytes(b"a" * 100)
+
+        used = file_ops.calculate_used_bytes()
+        assert used == 100
+
+    # --- SystemDirectoryError inherits from FileAccessError ---
+
+    def test_system_directory_error_is_file_access_error(self):
+        """SystemDirectoryError is a subclass of FileAccessError for HTTP 403 handling."""
+        assert issubclass(SystemDirectoryError, FileAccessError)

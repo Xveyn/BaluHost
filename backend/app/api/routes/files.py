@@ -3,6 +3,7 @@ from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, Response, UploadFile, status
 from fastapi import Body
+from pydantic import BaseModel
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -24,6 +25,7 @@ from app.schemas.files import (
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
+from app.services.files.operations import is_path_shared_with_user, SHARED_WITH_ME_DIR
 from app.services.permissions import PermissionDeniedError, is_privileged
 from app.services.audit_logger_db import get_audit_logger_db
 from app.services.shares import ShareService
@@ -33,13 +35,15 @@ from app.plugins.emit import emit_hook
 SHARED_DIR_NAME = "Shared"
 
 
-def _jail_path(path: str, user: UserPublic) -> str:
+def _jail_path(path: str, user: UserPublic, db: Session | None = None) -> str:
     """Validate and sanitize a user-facing path.
 
     * Admin: path returned unchanged.
     * Normal user:
       - ``"Shared"`` / ``"Shared/..."`` -> passthrough
+      - ``"Shared with me"`` -> passthrough (virtual folder)
       - ``"{username}"`` / ``"{username}/..."`` -> passthrough (own home dir)
+      - paths shared via FileShare -> passthrough
       - ``""`` (root) -> raises 403 (root listing handled separately in list_files)
       - anything else -> raises 403
     * Path-traversal components (``..``) are rejected.
@@ -57,12 +61,20 @@ def _jail_path(path: str, user: UserPublic) -> str:
     else:
         normalized = ""
 
+    # "Shared with me" virtual folder
+    if normalized == SHARED_WITH_ME_DIR:
+        return normalized
+
     # Shared passthrough
     if normalized == SHARED_DIR_NAME or normalized.startswith(f"{SHARED_DIR_NAME}/"):
         return normalized
 
     # User's own home directory
     if normalized == user.username or normalized.startswith(f"{user.username}/"):
+        return normalized
+
+    # Check if path is shared with user via FileShare
+    if normalized and db is not None and is_path_shared_with_user(db, normalized, user.id):
         return normalized
 
     # Root or other paths: block (root listing handled separately in list_files)
@@ -75,6 +87,55 @@ def _unjail_path(path: str, user: UserPublic) -> str:
 
 
 router = APIRouter()
+
+
+# --- Duplicate Check Endpoint ---
+
+class CheckExistsRequest(BaseModel):
+    filenames: list[str]
+    target_path: str = ""
+
+
+class ExistingFileInfo(BaseModel):
+    filename: str
+    size_bytes: int
+    modified_at: str
+    checksum: str | None = None
+
+
+@router.post("/check-exists")
+async def check_files_exist(
+    payload: CheckExistsRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Check which files already exist in the target directory."""
+    from datetime import datetime as dt, timezone as tz
+    from app.services.files.operations import _resolve_path, ROOT_DIR
+    from app.services import file_metadata_db
+
+    jailed = _jail_path(payload.target_path, user, db)
+    target_dir = _resolve_path(jailed)
+
+    duplicates: list[dict] = []
+    for filename in payload.filenames:
+        # Reject path traversal attempts
+        if "/" in filename or "\\" in filename or ".." in filename:
+            continue
+        file_path = target_dir / filename
+        if file_path.exists() and file_path.is_file():
+            rel = file_path.relative_to(ROOT_DIR).as_posix()
+            meta = file_metadata_db.get_metadata(rel, db=db)
+            stat = file_path.stat()
+            duplicates.append(ExistingFileInfo(
+                filename=filename,
+                size_bytes=stat.st_size,
+                modified_at=dt.fromtimestamp(stat.st_mtime, tz=tz.utc).isoformat(),
+                checksum=meta.checksum if meta else None,
+            ).model_dump())
+    return {"duplicates": duplicates}
+
+
 # ...existing code...
 
 # --- Permissions Endpoints ---
@@ -89,7 +150,7 @@ async def get_permissions(
 ) -> FilePermissions:
     from app.services import file_metadata_db
     from app.models.file_share import FileShare
-    path = _jail_path(path, user)
+    path = _jail_path(path, user, db)
     metadata = file_metadata_db.ensure_metadata(path, requesting_user_id=user.id, db=db)
     if not metadata:
         raise HTTPException(status_code=404, detail="File not found")
@@ -123,7 +184,7 @@ async def set_permissions(
     from app.services import file_metadata_db
     from app.models.file_share import FileShare
     # Nur Owner/Admin darf setzen
-    payload.path = _jail_path(payload.path, user)
+    payload.path = _jail_path(payload.path, user, db)
     metadata = file_metadata_db.ensure_metadata(payload.path, requesting_user_id=user.id, db=db)
     if not metadata:
         raise HTTPException(status_code=404, detail="File not found")
@@ -312,11 +373,13 @@ async def list_files(
     audit_logger = get_audit_logger_db()
     original_path = path
 
-    # ── Non-admin root listing: show only Shared + user's home dir ──
+    # ── Non-admin root listing: show only Shared + user's home dir + Shared with me ──
     if not is_privileged(user) and not original_path.strip("/"):
         from datetime import datetime, timezone
+        from sqlalchemy import select, func, or_
         from app.services.files.operations import _resolve_path
         from app.services.users import _create_home_directory
+        from app.models.file_share import FileShare
 
         # Ensure home dir exists
         try:
@@ -356,10 +419,75 @@ async def list_files(
                 file_id=None,
             ))
 
+        # "Shared with me" virtual folder — only show if user has active shares
+        now = datetime.now(timezone.utc)
+        share_count = db.execute(
+            select(func.count(FileShare.id)).where(
+                FileShare.shared_with_user_id == user.id,
+                FileShare.owner_id != user.id,
+                FileShare.can_read.is_(True),
+                or_(
+                    FileShare.expires_at.is_(None),
+                    FileShare.expires_at > now,
+                ),
+            )
+        ).scalar_one()
+        if share_count > 0:
+            entries.append(FileItem(
+                name=SHARED_WITH_ME_DIR,
+                path=SHARED_WITH_ME_DIR,
+                size=0,
+                type="directory",
+                modified_at=datetime.now(timezone.utc),
+                owner_id=None,
+                mime_type=None,
+                file_id=None,
+            ))
+
+        return FileListResponse(files=entries)
+
+    # ── "Shared with me" virtual listing ──
+    if not is_privileged(user) and original_path.strip("/") == SHARED_WITH_ME_DIR:
+        from datetime import datetime, timezone
+        from sqlalchemy import select, or_
+        from app.models.file_share import FileShare
+
+        now = datetime.now(timezone.utc)
+        shares = db.execute(
+            select(FileShare).where(
+                FileShare.shared_with_user_id == user.id,
+                FileShare.owner_id != user.id,
+                FileShare.can_read.is_(True),
+                or_(
+                    FileShare.expires_at.is_(None),
+                    FileShare.expires_at > now,
+                ),
+            )
+        ).scalars().all()
+
+        entries: list[FileItem] = []
+        for share in shares:
+            file_meta = db.get(FileMetadata, share.file_id)
+            if not file_meta:
+                continue
+            from app.models.user import User as UserModel
+            owner = db.get(UserModel, share.owner_id)
+            owner_name = owner.username if owner else str(share.owner_id)
+            entries.append(FileItem(
+                name=f"{file_meta.name} (from {owner_name})",
+                path=file_meta.path,
+                size=file_meta.size_bytes,
+                type="directory" if file_meta.is_directory else "file",
+                modified_at=file_meta.updated_at or file_meta.created_at,
+                owner_id=str(share.owner_id),
+                mime_type=file_meta.mime_type,
+                file_id=file_meta.id,
+            ))
+
         return FileListResponse(files=entries)
 
     # ── Admin or non-root path: normal behavior ──
-    jailed_path = _jail_path(path, user)
+    jailed_path = _jail_path(path, user, db)
 
     try:
         entries = list(file_service.list_directory(jailed_path, user=user, db=db))
@@ -388,7 +516,7 @@ async def download_file(
     db: Session = Depends(get_db),
 ) -> FileResponse:
     """Legacy download endpoint using file path."""
-    resource_path = _jail_path(resource_path, user)
+    resource_path = _jail_path(resource_path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.ensure_can_view(resource_path, user, db=db)
@@ -505,7 +633,7 @@ async def upload_files(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileUploadResponse:
-    path = _jail_path(path, user)
+    path = _jail_path(path, user, db)
     from app.services.upload_progress import get_upload_progress_manager
 
     # Create upload sessions for progress tracking
@@ -581,7 +709,7 @@ async def delete_path_raw(
     Use the parameterized delete handler defined later which is registered after
     the `/delete` static route so that `DELETE /delete` can accept a JSON body.
     """
-    resource_path = _jail_path(resource_path, user)
+    resource_path = _jail_path(resource_path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(resource_path, user=user, db=db)
@@ -612,7 +740,7 @@ async def delete_path_body(
     path = payload.get("path")
     if not path:
         raise HTTPException(status_code=400, detail="Path required")
-    path = _jail_path(path, user)
+    path = _jail_path(path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(path, user=user, db=db)
@@ -653,7 +781,7 @@ async def create_folder(
     if not payload.name:
         raise HTTPException(status_code=400, detail="Folder name required")
 
-    jailed_parent = _jail_path(payload.path or "", user)
+    jailed_parent = _jail_path(payload.path or "", user, db)
     try:
         file_service.create_folder(jailed_parent, payload.name, owner=user, db=db)
     except PermissionDeniedError as exc:
@@ -685,7 +813,7 @@ async def mkdir_compat(
     if parent == "/":
         parent = ""
 
-    jailed_parent = _jail_path(parent or "", user)
+    jailed_parent = _jail_path(parent or "", user, db)
     try:
         file_service.create_folder(jailed_parent, name, owner=user, db=db)
     except PermissionDeniedError as exc:
@@ -702,7 +830,7 @@ async def rename_path(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
-    jailed_old_path = _jail_path(payload.old_path, user)
+    jailed_old_path = _jail_path(payload.old_path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.rename_path(jailed_old_path, payload.new_name, user=user, db=db)
@@ -727,8 +855,8 @@ async def move_path(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
-    jailed_source = _jail_path(payload.source_path, user)
-    jailed_target = _jail_path(payload.target_path, user)
+    jailed_source = _jail_path(payload.source_path, user, db)
+    jailed_target = _jail_path(payload.target_path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.move_path(jailed_source, jailed_target, user=user, db=db)
@@ -765,7 +893,7 @@ async def delete_path_param(
     """Delete a file or directory by path (registered after `/delete` routes).
     This ensures the static `/delete` endpoint can accept a JSON body without
     being captured by the parameterized route."""
-    resource_path = _jail_path(resource_path, user)
+    resource_path = _jail_path(resource_path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(resource_path, user=user, db=db)

@@ -6,6 +6,7 @@ import Layout from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';
+import { UploadProvider } from './contexts/UploadContext';
 import { buildApiUrl } from './lib/api';
 import type { User } from './types/auth';
 import './App.css';
@@ -262,6 +263,7 @@ function App() {
     <VersionProvider>
     <PluginProvider>
     <Router>
+      <UploadProvider>
       <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route
@@ -525,6 +527,7 @@ function App() {
         />
       </Routes>
       </Suspense>
+      </UploadProvider>
     </Router>
     </PluginProvider>
     </VersionProvider>

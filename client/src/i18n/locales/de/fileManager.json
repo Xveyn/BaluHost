@@ -75,5 +75,18 @@
     "size": "Nach Größe",
     "date": "Nach Datum",
     "type": "Nach Typ"
+  },
+  "duplicates": {
+    "title": "Doppelte Dateien gefunden",
+    "description": "Diese Dateien existieren bereits im Zielordner:",
+    "overwrite": "Überschreiben",
+    "skip": "Überspringen",
+    "keepBoth": "Beide behalten",
+    "applyToAll": "Auf alle anwenden",
+    "likelyIdentical": "Vermutlich identisch",
+    "proceed": "Fortfahren",
+    "cancel": "Abbrechen",
+    "existingSize": "Vorhanden: {{size}}",
+    "existingModified": "Geändert: {{date}}"
   }
 }

@@ -69,6 +69,7 @@ def create_metadata(
     size_bytes: int = 0,
     is_directory: bool = False,
     mime_type: Optional[str] = None,
+    checksum: Optional[str] = None,
     db: Optional[Session] = None
 ) -> FileMetadata:
     """
@@ -101,6 +102,7 @@ def create_metadata(
             size_bytes=size_bytes,
             is_directory=is_directory,
             mime_type=mime_type,
+            checksum=checksum,
             parent_path=parent_path,
             created_at=datetime.now(timezone.utc)
         )
@@ -121,6 +123,7 @@ def update_metadata(
     relative_path: str,
     size_bytes: Optional[int] = None,
     mime_type: Optional[str] = None,
+    checksum: Optional[str] = None,
     db: Optional[Session] = None
 ) -> Optional[FileMetadata]:
     """
@@ -150,7 +153,9 @@ def update_metadata(
             metadata.size_bytes = size_bytes
         if mime_type is not None:
             metadata.mime_type = mime_type
-        
+        if checksum is not None:
+            metadata.checksum = checksum
+
         # updated_at is set automatically by onupdate
         db.commit()
         db.refresh(metadata)

@@ -75,5 +75,18 @@
     "size": "By Size",
     "date": "By Date",
     "type": "By Type"
+  },
+  "duplicates": {
+    "title": "Duplicate Files Found",
+    "description": "These files already exist in the target folder:",
+    "overwrite": "Overwrite",
+    "skip": "Skip",
+    "keepBoth": "Keep Both",
+    "applyToAll": "Apply to all",
+    "likelyIdentical": "Likely identical",
+    "proceed": "Proceed",
+    "cancel": "Cancel",
+    "existingSize": "Existing: {{size}}",
+    "existingModified": "Modified: {{date}}"
   }
 }

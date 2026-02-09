@@ -2,18 +2,19 @@ import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl, getFilePermissions, setFilePermissions } from '../lib/api';
-import { UploadProgressModal } from '../components/UploadProgressModal';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi } from '../api/vcl';
 import { formatBytes, formatNumber } from '../lib/formatters';
 import { FileViewer } from '../components/file-manager/FileViewer';
 import { StorageSelector } from '../components/file-manager/StorageSelector';
 import { PermissionEditor } from '../components/file-manager/PermissionEditor';
+import { useUpload } from '../contexts/UploadContext';
 import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
 
 interface FileManagerProps {
   user: {
     id: number;
+    username: string;
     role: string;
   };
 }
@@ -115,7 +116,7 @@ export default function FileManager({ user }: FileManagerProps) {
     }, [files]);
   const [currentPath, setCurrentPath] = useState('');
   const [loading, setLoading] = useState(false);
-  const [uploading, setUploading] = useState(false);
+  const { startUpload, isUploading, onUploadsComplete } = useUpload();
   const [showNewFolderDialog, setShowNewFolderDialog] = useState(false);
   const [newFolderName, setNewFolderName] = useState('');
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -126,11 +127,11 @@ export default function FileManager({ user }: FileManagerProps) {
   const [dragActive, setDragActive] = useState(false);
   const [viewingFile, setViewingFile] = useState<FileItem | null>(null);
   const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
-  const [uploadIds, setUploadIds] = useState<string[] | null>(null);
   const [mountpoints, setMountpoints] = useState<StorageMountpoint[]>([]);
   const [selectedMountpoint, setSelectedMountpoint] = useState<StorageMountpoint | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const folderInputRef = useRef<HTMLInputElement>(null);
+
   // VCL State
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
@@ -159,6 +160,17 @@ export default function FileManager({ user }: FileManagerProps) {
       loadMountpoints();
       loadVclQuota(); // Load quota on mount
     }, []);
+
+    // Reload files + storage when uploads complete
+    useEffect(() => {
+      return onUploadsComplete(() => {
+        sessionStorage.removeItem(`files_cache_${currentPath}`);
+        sessionStorage.removeItem('storage_info_cache');
+        loadFiles(currentPath, false);
+        loadStorageInfo();
+        loadVclQuota();
+      });
+    }, [currentPath, onUploadsComplete]);
 
     useEffect(() => {
       if (selectedMountpoint) {
@@ -378,85 +390,17 @@ export default function FileManager({ user }: FileManagerProps) {
     }
   };
 
-  const handleFilesUpload = async (fileList: FileList) => {
-    setUploading(true);
-    const token = getToken();
-    if (!token) {
-      setUploading(false);
-      return;
-    }
-
-    // Check storage capacity
-    const totalSize = Array.from(fileList).reduce((acc, file) => acc + file.size, 0);
-    if (storageInfo && storageInfo.availableBytes !== null && totalSize > storageInfo.availableBytes) {
-      toast.error(`Not enough storage space. Need ${formatBytes(totalSize)}, but only ${formatBytes(storageInfo.availableBytes)} available.`);
-      setUploading(false);
-      return;
-    }
-
-    const formData = new FormData();
-
-    Array.from(fileList).forEach(file => {
-      formData.append('files', file);
-    });
-    // Use full path with mountpoint
-    formData.append('path', getFullPath());
-
-    try {
-      const response = await fetch(buildApiUrl('/api/files/upload'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        },
-        body: formData
-      });
-
-      if (response.ok) {
-        const result = await response.json();
-        const ids = result.upload_ids || [];
-        
-        // Show progress modal if upload IDs are available
-        if (ids.length > 0) {
-          setUploadIds(ids);
-        } else {
-          toast.success(t('fileManager:messages.uploadSuccess'));
-        }
-        
-        // Invalidate cache and reload
-        sessionStorage.removeItem(`files_cache_${currentPath}`);
-        sessionStorage.removeItem('storage_info_cache');
-        loadFiles(currentPath, false);
-        loadStorageInfo();
-        loadVclQuota(); // Reload VCL quota after upload
-      } else {
-        try {
-          const error = await response.json();
-          toast.error(`${t('fileManager:messages.uploadError')}: ${getErrorMessage(error)}`);
-        } catch {
-          toast.error(`${t('fileManager:messages.uploadError')}: HTTP ${response.status}`);
-        }
-      }
-    } catch (err) {
-      console.error('Upload failed:', err);
-      toast.error(t('fileManager:messages.uploadError'));
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList) return;
-
-    await handleFilesUpload(fileList);
+    startUpload(fileList, getFullPath(), storageInfo?.availableBytes);
     e.target.value = '';
   };
 
-  const handleFolderUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFolderUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const fileList = e.target.files;
     if (!fileList) return;
-
-    await handleFilesUpload(fileList);
+    startUpload(fileList, getFullPath(), storageInfo?.availableBytes);
     e.target.value = '';
   };
 
@@ -685,8 +629,7 @@ export default function FileManager({ user }: FileManagerProps) {
     if (allFiles.length > 0) {
       const dt = new DataTransfer();
       allFiles.forEach(file => dt.items.add(file));
-      
-      await handleFilesUpload(dt.files);
+      startUpload(dt.files, getFullPath(), storageInfo?.availableBytes);
     }
   };
 
@@ -711,7 +654,27 @@ export default function FileManager({ user }: FileManagerProps) {
   const goBack = () => {
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
-    setCurrentPath(parts.join('/'));
+    const parentPath = parts.join('/');
+
+    // If navigating up from a shared folder (not own home, not Shared),
+    // redirect to "Shared with me" instead of going to a foreign root
+    if (
+      currentPath &&
+      !currentPath.startsWith(user.username + '/') &&
+      currentPath !== user.username &&
+      !currentPath.startsWith('Shared/') &&
+      currentPath !== 'Shared' &&
+      currentPath !== 'Shared with me'
+    ) {
+      // We're inside a shared path — check if parent would leave the shared tree
+      const topLevel = parts[0] || '';
+      if (!topLevel || (topLevel !== user.username && topLevel !== 'Shared' && topLevel !== 'Shared with me')) {
+        setCurrentPath('Shared with me');
+        return;
+      }
+    }
+
+    setCurrentPath(parentPath);
   };
 
   return (
@@ -754,8 +717,8 @@ export default function FileManager({ user }: FileManagerProps) {
             <span className="hidden sm:inline">+ New Folder</span>
             <span className="sm:hidden">+ Folder</span>
           </button>
-          <label className={`btn btn-primary cursor-pointer text-xs sm:text-sm px-3 sm:px-5 py-2 sm:py-2.5 touch-manipulation active:scale-95 ${uploading ? 'opacity-70' : ''}`}>
-            <span className="hidden sm:inline">{uploading ? 'Uploading...' : '↑ Upload Files'}</span>
+          <label className={`btn btn-primary cursor-pointer text-xs sm:text-sm px-3 sm:px-5 py-2 sm:py-2.5 touch-manipulation active:scale-95 ${isUploading ? 'opacity-70' : ''}`}>
+            <span className="hidden sm:inline">{isUploading ? 'Uploading...' : '↑ Upload Files'}</span>
             <span className="sm:hidden">↑ Files</span>
             <input
               ref={fileInputRef}
@@ -763,10 +726,10 @@ export default function FileManager({ user }: FileManagerProps) {
               multiple
               className="hidden"
               onChange={handleUpload}
-              disabled={uploading}
+              disabled={isUploading}
             />
           </label>
-          <label className={`hidden sm:flex rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white cursor-pointer touch-manipulation active:scale-95 ${uploading ? 'opacity-70' : ''}`}>
+          <label className={`hidden sm:flex rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-200 transition hover:border-sky-500/40 hover:text-white cursor-pointer touch-manipulation active:scale-95 ${isUploading ? 'opacity-70' : ''}`}>
             📁 Upload Folder
             <input
               ref={folderInputRef}
@@ -775,7 +738,7 @@ export default function FileManager({ user }: FileManagerProps) {
               multiple
               className="hidden"
               onChange={handleFolderUpload}
-              disabled={uploading}
+              disabled={isUploading}
             />
           </label>
         </div>
@@ -1006,20 +969,6 @@ export default function FileManager({ user }: FileManagerProps) {
                             </button>
                           )}
                         </div>
-                            {/* Edit Permissions Modal */}
-                            {showEditPermissionsModal && fileToEditPermissions && (
-                              <PermissionEditor
-                                file={fileToEditPermissions}
-                                rules={editRules}
-                                allUsers={allUsers}
-                                onRulesChange={setEditRules}
-                                onSave={handleEditPermissionsSave}
-                                onClose={() => {
-                                  setShowEditPermissionsModal(false);
-                                  setFileToEditPermissions(null);
-                                }}
-                              />
-                            )}
                       </td>
                     </tr>
                   ))
@@ -1279,13 +1228,17 @@ export default function FileManager({ user }: FileManagerProps) {
         />
       )}
 
-      {/* Upload Progress Modal */}
-      {uploadIds && uploadIds.length > 0 && (
-        <UploadProgressModal
-          uploadIds={uploadIds}
+      {/* Edit Permissions Modal */}
+      {showEditPermissionsModal && fileToEditPermissions && (
+        <PermissionEditor
+          file={fileToEditPermissions}
+          rules={editRules}
+          allUsers={allUsers}
+          onRulesChange={setEditRules}
+          onSave={handleEditPermissionsSave}
           onClose={() => {
-            setUploadIds(null);
-            toast.success('Files uploaded successfully!');
+            setShowEditPermissionsModal(false);
+            setFileToEditPermissions(null);
           }}
         />
       )}

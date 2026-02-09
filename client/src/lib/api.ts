@@ -85,6 +85,25 @@ export async function getDeviceNotifications(deviceId: string, limit: number = 1
   return res.data;
 }
 
+// --- Duplicate Check API ---
+export interface ExistingFileInfo {
+  filename: string;
+  size_bytes: number;
+  modified_at: string;
+  checksum: string | null;
+}
+
+export async function checkFilesExist(
+  filenames: string[],
+  targetPath: string,
+): Promise<{ duplicates: ExistingFileInfo[] }> {
+  const res = await apiClient.post('/api/files/check-exists', {
+    filenames,
+    target_path: targetPath,
+  });
+  return res.data;
+}
+
 // --- File Permissions API ---
 export async function getFilePermissions(path: string) {
   // Memoized GET: Permissions werden für 60s gecached

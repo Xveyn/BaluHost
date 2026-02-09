@@ -5,7 +5,7 @@ from app.api.routes import (
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
     vcl, server_profiles, vpn_profiles, metrics, tapo, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
-    notifications, updates
+    notifications, updates, chunked_upload,
 )
 
 api_router = APIRouter()
@@ -13,6 +13,7 @@ api_router.include_router(health.router, tags=["health"])  # Health check endpoi
 api_router.include_router(auth.router, prefix="/auth", tags=["auth"])
 api_router.include_router(files.router, prefix="/files", tags=["files"])
 api_router.include_router(upload_progress.router, prefix="/files", tags=["files"])
+api_router.include_router(chunked_upload.router, prefix="/files", tags=["files"])
 api_router.include_router(logging.router, prefix="/logging", tags=["logging"])
 api_router.include_router(system.router, prefix="/system", tags=["system"])
 api_router.include_router(users.router, prefix="/users", tags=["users"])

@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import String, DateTime, Integer, Boolean, ForeignKey, Text
+from sqlalchemy import String, DateTime, Integer, BigInteger, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -18,7 +18,7 @@ class FileMetadata(Base):
     path: Mapped[str] = mapped_column(String(1000), unique=True, index=True, nullable=False)
     name: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
     owner_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    size_bytes: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
     is_directory: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, index=True)
     mime_type: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
     parent_path: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True, index=True)
@@ -31,6 +31,9 @@ class FileMetadata(Base):
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True
+    )
+    checksum: Mapped[Optional[str]] = mapped_column(
+        String(64), nullable=True, index=True
     )
     
     # VCL Relationship

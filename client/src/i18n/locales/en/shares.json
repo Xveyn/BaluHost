@@ -67,7 +67,8 @@
     "passwordProtected": "Password protected",
     "done": "Done",
     "failed": "Failed",
-    "uploading": "Uploading..."
+    "uploading": "Uploading...",
+    "pending": "Pending"
   },
   "permissions": {
     "read": "Read",

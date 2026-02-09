@@ -8,6 +8,8 @@ from typing import Iterable, Optional
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
+from sqlalchemy import select, or_
+
 from app.core.config import settings
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
@@ -19,12 +21,63 @@ ROOT_DIR = Path(settings.nas_storage_path).expanduser().resolve()
 ROOT_DIR.mkdir(parents=True, exist_ok=True)
 
 SHARED_DIR_NAME = "Shared"
+SHARED_WITH_ME_DIR = "Shared with me"
 SYSTEM_DIR_NAME = ".system"
+SYSTEM_DIRS = {".system", "lost+found"}
+SYSTEM_DIR_PREFIXES = (".Trash-",)
+
+
+def is_system_directory(name: str) -> bool:
+    """Check if a directory name is a filesystem-managed system directory."""
+    return name in SYSTEM_DIRS or any(name.startswith(p) for p in SYSTEM_DIR_PREFIXES)
 
 
 def is_in_shared_dir(relative_path: str) -> bool:
     """Check if a relative path is inside (or is) the Shared directory."""
     return relative_path == SHARED_DIR_NAME or relative_path.startswith(f"{SHARED_DIR_NAME}/")
+
+
+def is_path_shared_with_user(db: Session, relative_path: str, user_id: int) -> bool:
+    """Check if path or any parent is shared with user via FileShare.
+
+    Returns True when *relative_path* itself — or any ancestor directory — has
+    an active (non-expired) FileShare granting ``can_read`` to *user_id*.
+    """
+    if db is None:
+        return False
+
+    from app.models.file_share import FileShare
+    from app.models.file_metadata import FileMetadata
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    # Build list of candidate paths: the path itself + all parent paths
+    candidates: list[str] = []
+    parts = PurePosixPath(relative_path).parts
+    for i in range(len(parts), 0, -1):
+        candidates.append(str(PurePosixPath(*parts[:i])))
+
+    if not candidates:
+        return False
+
+    # Single query: join FileShare → FileMetadata, filter by path candidates + user
+    stmt = (
+        select(FileShare.id)
+        .join(FileMetadata, FileShare.file_id == FileMetadata.id)
+        .where(
+            FileShare.shared_with_user_id == user_id,
+            FileShare.owner_id != user_id,
+            FileShare.can_read.is_(True),
+            FileMetadata.path.in_(candidates),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+        .limit(1)
+    )
+    return db.execute(stmt).first() is not None
 
 
 class FileAccessError(Exception):
@@ -33,6 +86,10 @@ class FileAccessError(Exception):
 
 class QuotaExceededError(Exception):
     """Raised when an operation would exceed the configured NAS quota."""
+
+
+class SystemDirectoryError(FileAccessError):
+    """Raised when an operation targets a protected system directory."""
 
 
 def _resolve_path(relative_path: str) -> Path:
@@ -59,6 +116,9 @@ def ensure_can_view(relative_path: str, user: UserPublic, db: Optional[Session] 
     if is_in_shared_dir(relative_path):
         return  # All authenticated users may view Shared content
     if not can_view(user, file_metadata_db.get_owner(relative_path, db=db)):
+        # Fallback: check if the path is shared with this user
+        if db and is_path_shared_with_user(db, relative_path, user.id):
+            return
         raise PermissionDeniedError("Operation not permitted")
 
 
@@ -78,17 +138,21 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
 
     directory_owner = get_owner(relative_path, db=db)
     if directory_owner and not is_in_shared_dir(relative_path) and not can_view(user, directory_owner):
-        raise PermissionDeniedError("Operation not permitted")
+        # Fallback: allow if path is shared with this user
+        if not (db and is_path_shared_with_user(db, relative_path, user.id)):
+            raise PermissionDeniedError("Operation not permitted")
 
     items: list[FileItem] = []
     for entry in target.iterdir():
-        # Hide internal system directory from non-admin users
-        if entry.name == SYSTEM_DIR_NAME and user.role != "admin":
+        # Hide system directories from non-admin users
+        if is_system_directory(entry.name) and user.role != "admin":
             continue
         relative_entry = str(entry.relative_to(ROOT_DIR).as_posix())
         entry_owner = get_owner(relative_entry, db=db)
         if not is_in_shared_dir(relative_entry) and not can_view(user, entry_owner):
-            continue
+            # Fallback: show entry if it (or a parent) is shared with user
+            if not (db and is_path_shared_with_user(db, relative_entry, user.id)):
+                continue
 
         stats = entry.stat()
         
@@ -126,10 +190,13 @@ def calculate_used_bytes() -> int:
     if not ROOT_DIR.exists():
         return total
 
-    system_dir = ROOT_DIR / SYSTEM_DIR_NAME
+    excluded_dirs: set[Path] = set()
+    for child in ROOT_DIR.iterdir():
+        if child.is_dir() and is_system_directory(child.name):
+            excluded_dirs.add(child)
+
     for entry in ROOT_DIR.rglob("*"):
-        # Skip .system internal directory
-        if entry == system_dir or system_dir in entry.parents:
+        if any(entry == d or d in entry.parents for d in excluded_dirs):
             continue
         if entry.is_file():
             total += entry.stat().st_size
@@ -208,23 +275,27 @@ async def save_uploads(
 
     quota = settings.nas_quota_bytes
     used_bytes = calculate_used_bytes()
-    
-    # Calculate total size of all uploads first
+
+    # Pre-check total size using seek on the underlying file object.
+    # This avoids reading the entire file into memory just to measure it.
     total_upload_size = 0
-    upload_data_list = []
-    for idx, upload in enumerate(uploads):
-        data = await upload.read()
-        upload_data_list.append(data)
-        total_upload_size += len(data)
-        await upload.close()
-        
-        # Update progress after reading each file
-        if upload_ids and idx < len(upload_ids):
-            await progress_manager.update_progress(upload_ids[idx], len(data))
-    
-    # Check if we have enough space for all files
-    if quota is not None and used_bytes + total_upload_size > quota:
-        # Mark all uploads as failed
+    upload_sizes: list[int] = []
+    can_stream: list[bool] = []
+    for upload in uploads:
+        sz = 0
+        seekable = False
+        try:
+            upload.file.seek(0, 2)
+            sz = upload.file.tell()
+            upload.file.seek(0)
+            seekable = True
+        except (AttributeError, OSError):
+            pass  # Mock or non-seekable — will fall back to full read
+        upload_sizes.append(sz)
+        can_stream.append(seekable)
+        total_upload_size += sz
+
+    if quota is not None and total_upload_size > 0 and used_bytes + total_upload_size > quota:
         if upload_ids:
             for upload_id in upload_ids:
                 await progress_manager.fail_upload(upload_id, "Quota exceeded")
@@ -232,11 +303,11 @@ async def save_uploads(
             f"Quota exceeded: attempting to store {used_bytes + total_upload_size} bytes "
             f"with a limit of {quota} bytes. Available: {quota - used_bytes} bytes"
         )
-    
+
+    STREAM_CHUNK = 8 * 1024 * 1024  # 8 MB read/write buffer
+
     saved_paths: list[str] = []
     for idx, upload in enumerate(uploads):
-        data = upload_data_list[idx]
-        
         # Use folder path if provided (for folder uploads)
         if folder_paths and idx < len(folder_paths) and folder_paths[idx]:
             # Create subdirectories as needed
@@ -253,17 +324,61 @@ async def save_uploads(
         destination.parent.mkdir(parents=True, exist_ok=True)
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
-            destination.write_bytes(data)
-            used_bytes = used_bytes - existing_size + len(data)
+
+            if can_stream[idx]:
+                # Stream file to disk — only one STREAM_CHUNK in memory at a time.
+                written = 0
+                with open(destination, 'wb') as f:
+                    while True:
+                        chunk = await upload.read(STREAM_CHUNK)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+                        written += len(chunk)
+                await upload.close()
+            else:
+                # Fallback: read entire content at once (small files or test mocks).
+                data = await upload.read()
+                destination.write_bytes(data)
+                written = len(data)
+                await upload.close()
+
+            # Post-write quota check for uploads where size was unknown
+            if not can_stream[idx] and quota is not None and used_bytes + written > quota:
+                destination.unlink(missing_ok=True)
+                if upload_ids and idx < len(upload_ids):
+                    await progress_manager.fail_upload(upload_ids[idx], "Quota exceeded")
+                raise QuotaExceededError(
+                    f"Quota exceeded: attempting to store {used_bytes + written} bytes "
+                    f"with a limit of {quota} bytes. Available: {quota - used_bytes} bytes"
+                )
+
+            # Update progress after writing each file
+            if upload_ids and idx < len(upload_ids):
+                await progress_manager.update_progress(upload_ids[idx], written)
+
+            used_bytes = used_bytes - existing_size + written
             relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
             saved_paths.append(relative_destination)
-            
+
+            # Compute SHA-256 checksum
+            import hashlib
+            sha256 = hashlib.sha256()
+            with open(destination, 'rb') as f:
+                while True:
+                    hash_chunk = f.read(8 * 1024 * 1024)
+                    if not hash_chunk:
+                        break
+                    sha256.update(hash_chunk)
+            file_checksum = sha256.hexdigest()
+
             # Create or update file metadata in database
             existing_meta = file_metadata_db.get_metadata(relative_destination, db=db)
             if existing_meta:
                 file_metadata_db.update_metadata(
                     relative_destination,
-                    size_bytes=len(data),
+                    size_bytes=written,
+                    checksum=file_checksum,
                     db=db
                 )
             else:
@@ -271,8 +386,9 @@ async def save_uploads(
                     relative_path=relative_destination,
                     name=destination.name,
                     owner_id=int(owner_id),
-                    size_bytes=len(data),
+                    size_bytes=written,
                     is_directory=False,
+                    checksum=file_checksum,
                     db=db
                 )
 
@@ -281,24 +397,25 @@ async def save_uploads(
                 user=user.username,
                 action="upload",
                 file_path=relative_destination,
-                size_bytes=len(data),
+                size_bytes=written,
                 success=True,
                 db=db
             )
 
-            # VCL: Create version if enabled
+            # VCL: Create version from file on disk (avoids loading full file into RAM)
             try:
                 from app.services.versioning.vcl import VCLService
                 vcl_service = VCLService(db)
                 file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
                 if file_meta:
-                    checksum = VCLService.calculate_checksum(data)
+                    checksum = VCLService.calculate_checksum_from_file(destination)
                     should_create, _reason = vcl_service.should_create_version(file_meta, checksum, int(owner_id))
                     if should_create:
                         change_type = "update" if existing_meta else "create"
+                        content = destination.read_bytes()
                         vcl_service.create_version(
                             file=file_meta,
-                            content=data,
+                            content=content,
                             user_id=int(owner_id),
                             checksum=checksum,
                             change_type=change_type,
@@ -307,17 +424,17 @@ async def save_uploads(
             except Exception as e:
                 import logging
                 logging.getLogger(__name__).warning(f"VCL version creation failed: {e}")
-            
+
             # Mark upload as completed
             if upload_ids and idx < len(upload_ids):
                 await progress_manager.complete_upload(upload_ids[idx])
-                
+
         except Exception as e:
             # Mark upload as failed
             if upload_ids and idx < len(upload_ids):
                 await progress_manager.fail_upload(upload_ids[idx], str(e))
             raise
-    
+
     return saved_paths
 
 
@@ -328,9 +445,12 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
     target = _resolve_path(relative_path)
     if not target.exists():
         return
-    
+
+    if target.parent == ROOT_DIR and is_system_directory(target.name):
+        raise SystemDirectoryError(f"Cannot delete system directory '{target.name}'")
+
     is_directory = target.is_dir()
-    
+
     if is_directory:
         target_relative = _relative_posix(target)
         if user:
@@ -363,6 +483,9 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
     
     base = _resolve_path(parent_path)
     base.mkdir(parents=True, exist_ok=True)
+
+    if base == ROOT_DIR and is_system_directory(name):
+        raise SystemDirectoryError(f"Cannot create folder with reserved name '{name}'")
 
     if owner and parent_path and not is_in_shared_dir(parent_path):
         parent_owner = get_owner(parent_path, db=db)
@@ -401,6 +524,10 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
 def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db: Optional[Session] = None) -> Path:
     """Rename a file or directory and update metadata."""
     source = _resolve_path(old_path)
+
+    if source.parent == ROOT_DIR and is_system_directory(source.name):
+        raise SystemDirectoryError(f"Cannot rename system directory '{source.name}'")
+
     source_relative = _relative_posix(source)
 
     if user:
@@ -425,8 +552,12 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
 def move_path(source_path: str, target_path: str, user: UserPublic | None = None, db: Optional[Session] = None) -> Path:
     """Move a file or directory and update metadata."""
     audit = get_audit_logger_db()
-    
+
     source = _resolve_path(source_path)
+
+    if source.parent == ROOT_DIR and is_system_directory(source.name):
+        raise SystemDirectoryError(f"Cannot move system directory '{source.name}'")
+
     source_relative = _relative_posix(source)
 
     if user:

@@ -8,6 +8,7 @@ import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
 import { Plug } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
+import { UploadProgressBar } from './UploadProgressBar';
 
 interface LayoutProps {
   children: ReactNode;
@@ -540,6 +541,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               {children}
             </div>
           </main>
+          <UploadProgressBar />
         </div>
       </div>
     </div>

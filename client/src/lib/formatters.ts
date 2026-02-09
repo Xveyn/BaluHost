@@ -49,3 +49,14 @@ export const formatUptime = (seconds: number): string => {
 export const formatPercentage = (value: number, decimals = 1): string => {
   return `${formatNumber(value, decimals)}%`;
 };
+
+/**
+ * Format an ETA given in seconds into a compact string (e.g. "5s", "2m 30s", "1h 15m").
+ */
+export function formatEta(seconds: number): string {
+  if (seconds < 60) return `${Math.ceil(seconds)}s`;
+  if (seconds < 3600) return `${Math.floor(seconds / 60)}m ${Math.ceil(seconds % 60)}s`;
+  const h = Math.floor(seconds / 3600);
+  const m = Math.floor((seconds % 3600) / 60);
+  return `${h}h ${m}m`;
+}

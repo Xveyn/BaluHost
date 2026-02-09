@@ -11,6 +11,10 @@ Provides file management with:
 from app.services.files.operations import (
     FileAccessError,
     QuotaExceededError,
+    SystemDirectoryError,
+    is_system_directory,
+    is_path_shared_with_user,
+    SHARED_WITH_ME_DIR,
     get_owner,
     ensure_can_view,
     get_absolute_path,
@@ -47,6 +51,10 @@ __all__ = [
     # Operations
     "FileAccessError",
     "QuotaExceededError",
+    "SystemDirectoryError",
+    "is_system_directory",
+    "is_path_shared_with_user",
+    "SHARED_WITH_ME_DIR",
     "get_owner",
     "ensure_can_view",
     "get_absolute_path",
