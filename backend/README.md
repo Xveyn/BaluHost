@@ -399,9 +399,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 - **API Docs**: http://localhost:3001/docs (Swagger UI)
 - **ReDoc**: http://localhost:3001/redoc
-- **Database Migration**: `docs/DATABASE_MIGRATION.md`
-- **Integration Complete**: `docs/DATABASE_INTEGRATION_COMPLETE.md`
-- **Migration Summary**: `MIGRATION_SUMMARY.md`
+- **Deployment**: `docs/DEPLOYMENT.md`
 
 ## Nächste Schritte
 - SQLite/PostgreSQL anbinden und Mock-Daten ablösen

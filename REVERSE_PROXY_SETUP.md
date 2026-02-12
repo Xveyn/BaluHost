@@ -439,7 +439,6 @@ Before going live:
 ## Resources
 
 - **Full Guide**: See `docs/SSL_SETUP.md` for comprehensive documentation
-- **Docker Deployment**: See `DOCKER_QUICKSTART.md`
 - **Production Readiness**: See `PRODUCTION_READINESS.md`
 - **Nginx Docs**: https://nginx.org/en/docs/
 - **Let's Encrypt**: https://letsencrypt.org/docs/

@@ -259,8 +259,6 @@ This will:
 - ✅ Set up WebDAV server for network drive mapping
 - ✅ Display your local IP for connecting other devices
 
-**📖 Full Home Network Setup Guide**: [docs/HEIMNETZ_SETUP.md](docs/HEIMNETZ_SETUP.md)
-
 **Access your private cloud:**
 - 🌐 Web Interface: `https://YOUR-PC-IP:5173` (frontend) / `https://YOUR-PC-IP:8000` (backend)
 - 💾 Network Drive: `\\YOUR-PC-IP@8080\webdav`
@@ -281,8 +279,6 @@ BaluHost uses **mkcert** for locally-trusted HTTPS certificates (no browser warn
 Then install the CA certificate on your mobile device:
 - **Android**: Settings → Security → Install certificate
 - **iOS**: Open file → Install Profile → Trust Certificate
-
-**📖 Full Mobile Setup Guide**: [docs/MKCERT_MOBILE_SETUP.md](docs/MKCERT_MOBILE_SETUP.md)
 
 ### Legacy Express Backend (optional)
 
@@ -412,7 +408,6 @@ baluhost/
 - [Disk I/O Monitor](docs/DISK_IO_MONITOR.md) - Real-time disk monitoring
 - [RAID Setup Wizard](docs/RAID_SETUP_WIZARD.md) - RAID configuration guide
 - [Network Drive Setup](docs/NETWORK_DRIVE_SETUP.md) - Mount as network drive
-- [Performance Analysis](docs/PERFORMANCE_ANALYSIS.md) - System optimization
 - [Telemetry Configuration](docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md) - Monitoring setup
 
 ### Auto-Generated API Documentation
@@ -431,7 +426,6 @@ docs/
 ├── DISK_IO_MONITOR.md      # Disk monitoring
 ├── RAID_SETUP_WIZARD.md    # RAID configuration
 ├── NETWORK_DRIVE_SETUP.md  # Network drive mounting
-├── PERFORMANCE_ANALYSIS.md # Performance tuning
 └── TELEMETRY_CONFIG_RECOMMENDATIONS.md
 ```
 

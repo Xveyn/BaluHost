@@ -503,7 +503,6 @@ sudo systemctl restart avahi-daemon
 
 ## Related Documentation
 
-- [HEIMNETZ_SETUP.md](./HEIMNETZ_SETUP.md) - Complete home network setup guide
 - [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment with Nginx
 - [../deploy/scripts/install-avahi.sh](../deploy/scripts/install-avahi.sh) - Server-side Avahi installation
 - [../deploy/scripts/setup-hostname.sh](../deploy/scripts/setup-hostname.sh) - Complete hostname setup script

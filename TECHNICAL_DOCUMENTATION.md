@@ -152,7 +152,7 @@ Dokumentation & Referenzen
 - RAID-Setup: `docs/RAID_SETUP_WIZARD.md`
 - Telemetrie-Empfehlungen: `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`
 - Audit Logging: `docs/AUDIT_LOGGING.md`
-- Mobile/VPN: `docs/MOBILE_TOKEN_SECURITY.md`, `docs/ANDROID_APP_GUIDE.md`, `docs/IOS_APP_GUIDE.md`
+- VPN: `docs/VPN_INTEGRATION.md`
 
 Was ist neu / Highlights (Kurz)
 -
@@ -186,7 +186,7 @@ Weitere Schritte (optional)
 - VPN / Mobile: QR-Code-basierte VPN-Registrierung, 30-Tage-Refresh-Tokens für mobile Geräte und verbesserte Pairing-Flows.
 - Audit-Logging: Verbesserte Ereignistypen und JSON-Format, API-Zugriff auf Audit-Daten.
 - Dev-Mode & Windows: Verbesserter Sandbox-Modus mit Windows-Kompatibilität und Seed-Daten für Entwickler (`start_dev.py`, `backend/dev-storage/`).
-- Neue/aktualisierte Dokumentation: `docs/RAID_SETUP_WIZARD.md`, `docs/UPLOAD_PROGRESS.md`, `docs/MOBILE_TOKEN_SECURITY.md`, `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`.
+- Neue/aktualisierte Dokumentation: `docs/RAID_SETUP_WIZARD.md`, `docs/UPLOAD_PROGRESS.md`, `docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md`.
 
 ## Änderungen (Kurzüberblick)
 
@@ -442,10 +442,6 @@ POST /api/sync/force                          - Force sync
 **Service:** `app/services/mobile.py`  
 **API Route:** `app/api/routes/mobile.py`  
 **Schemas:** `app/schemas/mobile.py`
-
-#### Mobile Applications:
-- **iOS:** See `docs/IOS_APP_GUIDE.md` - Swift/SwiftUI implementation guide
-- **Android:** See `docs/ANDROID_APP_GUIDE.md` - Kotlin/Jetpack Compose implementation guide
 
 #### Implemented Features:
 - **Device Registration**
@@ -2074,7 +2070,6 @@ Comprehensive user settings interface with multiple tabs:
 
 - `AUDIT_LOGGING.md` - Audit system details
 - `DISK_IO_MONITOR.md` - Disk I/O monitor
-- `PERFORMANCE_ANALYSIS.md` - Telemetry performance
 - `TELEMETRY_CONFIG_RECOMMENDATIONS.md` - Telemetry configuration
 - `DEV_CHECKLIST.md` - Dev-Mode checklist
 

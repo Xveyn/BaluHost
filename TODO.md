@@ -83,7 +83,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🟢 Low | Backend | GraphQL-Alternative zu REST | ⏳ Pending | API Alternative |
 | 🟢 Low | Backend | Webhooks für externe Integrationen | ⏳ Pending | Integration |
 | 🟢 Low | Frontend | Media-Seite: Musik/Video-Bibliothek mit Player | ⏳ Pending | Media Library |
-| 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform (see docs/IOS_APP_GUIDE.md for native Swift guide) |
+| 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform |
 | 🟢 Low | Frontend | Mobile App (React Native) oder Progressive Web App | ⏳ Pending | Mobile |
 | � Medium | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ⏳ Pending | Remote Access UI (Backend ready, frontend pending) |
 | 🟢 Low | Frontend | Datei-Versionierung UI (History, Rollback, Diff) | 🟡 Partial | Version History Modal done, FileManager integration pending |
@@ -197,7 +197,6 @@ Below are the most relevant, actionable TODOs found in the repository (excluded 
 - **Low**: `docs/STORAGE_MOUNTPOINTS.md` — Implement actual per-array usage tracking documentation and examples.
 - **Low**: `CONTRIBUTING.md` — Add community link (Discord/Matrix) and update contact points.
 - **Low**: `README.md` — Add runnable `npm run test` and `npm run test:e2e` instructions or CI configuration.
-- **Docs/Medium**: `docs/DESKTOP_SYNC_CLIENT.md` — Phase 2/3 sections need concrete implementation plans and test steps.
 
 Suggested next steps:
 

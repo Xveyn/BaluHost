@@ -184,7 +184,7 @@ baluhost/
 │   ├── AUDIT_LOGGING.md
 │   ├── DISK_IO_MONITOR.md
 │   ├── NETWORK_DRIVE_SETUP.md
-│   ├── PERFORMANCE_ANALYSIS.md
+│   ├── TELEMETRY_CONFIG_RECOMMENDATIONS.md
 │   ├── RAID_SETUP_WIZARD.md
 │   └── ...
 │

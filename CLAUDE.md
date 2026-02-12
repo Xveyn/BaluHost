@@ -379,7 +379,6 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 
 ### Mobile Apps
 - **Android**: Full native app in `android-app/` (175+ Kotlin files)
-- **iOS**: Implementation guide in `docs/IOS_APP_GUIDE.md`
 - Both use QR code pairing with VPN config embedded
 - 30-day refresh tokens for mobile sessions
 
