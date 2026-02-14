@@ -22,6 +22,7 @@ export function SchedulerConfigModal({
   const [intervalValue, setIntervalValue] = useState(1);
   const [intervalUnit, setIntervalUnit] = useState<IntervalUnit>('hours');
   const [isEnabled, setIsEnabled] = useState(true);
+  const [backupType, setBackupType] = useState('full');
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -45,6 +46,13 @@ export function SchedulerConfigModal({
       } else {
         setIntervalValue(seconds);
         setIntervalUnit('seconds');
+      }
+
+      // Initialize backup type from extra_config
+      if (scheduler.name === 'backup' && scheduler.extra_config?.backup_type) {
+        setBackupType(scheduler.extra_config.backup_type);
+      } else {
+        setBackupType('full');
       }
     }
   }, [scheduler]);
@@ -80,6 +88,9 @@ export function SchedulerConfigModal({
       const config: SchedulerConfigUpdate = {
         interval_seconds: intervalSeconds,
         is_enabled: isEnabled,
+        ...(scheduler.name === 'backup' && {
+          extra_config: { backup_type: backupType },
+        }),
       };
 
       const success = await onSave(scheduler.name, config);
@@ -158,6 +169,25 @@ export function SchedulerConfigModal({
               {t('scheduler:configModal.minIntervalHint')}
             </p>
           </div>
+
+          {/* Backup Type (only for backup scheduler) */}
+          {scheduler.name === 'backup' && (
+            <div>
+              <label className="block text-sm font-medium text-slate-300 mb-2">
+                {t('scheduler:configModal.backupType')}
+              </label>
+              <select
+                value={backupType}
+                onChange={(e) => setBackupType(e.target.value)}
+                className="w-full rounded-md border border-slate-700 bg-slate-800 px-3 py-2 text-white focus:border-sky-500 focus:ring-1 focus:ring-sky-500 outline-none"
+              >
+                <option value="full">{t('scheduler:configModal.backupTypes.full')}</option>
+                <option value="database_only">{t('scheduler:configModal.backupTypes.database_only')}</option>
+                <option value="files_only">{t('scheduler:configModal.backupTypes.files_only')}</option>
+                <option value="incremental">{t('scheduler:configModal.backupTypes.incremental')}</option>
+              </select>
+            </div>
+          )}
 
           {/* Enabled toggle */}
           <div className="flex items-center justify-between">

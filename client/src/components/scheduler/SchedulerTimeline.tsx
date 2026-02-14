@@ -139,7 +139,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
   }
 
   return (
-    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-6">
+    <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4 sm:p-6">
       {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">

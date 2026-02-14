@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import {
   getSchedulers,
   getSchedulerHistory,
@@ -36,6 +36,10 @@ interface UseSchedulersReturn {
   updateConfig: (name: string, config: SchedulerConfigUpdate) => Promise<boolean>;
 }
 
+// Fast polling duration (ms) after a "Run Now" action
+const FAST_POLL_DURATION = 30_000;
+const FAST_POLL_INTERVAL = 3_000;
+
 /**
  * Hook for managing all schedulers
  */
@@ -45,6 +49,7 @@ export function useSchedulers(options: UseSchedulersOptions = {}): UseSchedulers
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [hasLoadedOnce, setHasLoadedOnce] = useState(false);
+  const fastPollUntilRef = useRef<number>(0);
 
   const loadData = useCallback(async () => {
     try {
@@ -68,18 +73,36 @@ export function useSchedulers(options: UseSchedulersOptions = {}): UseSchedulers
     });
   }, [enabled, hasLoadedOnce, loadData]);
 
-  // Auto-refresh
+  // Auto-refresh (respects fast-poll mode after Run Now)
   useEffect(() => {
     if (!enabled || !hasLoadedOnce) return;
-    if (refreshInterval <= 0 || pauseRefresh) return;
+    if (pauseRefresh) return;
 
-    const interval = setInterval(loadData, refreshInterval);
-    return () => clearInterval(interval);
+    const tick = () => {
+      const now = Date.now();
+      const isFastPolling = now < fastPollUntilRef.current;
+      const interval = isFastPolling ? FAST_POLL_INTERVAL : refreshInterval;
+
+      if (interval <= 0) return;
+
+      loadData();
+      timerId = window.setTimeout(tick, interval);
+    };
+
+    const initialInterval =
+      Date.now() < fastPollUntilRef.current ? FAST_POLL_INTERVAL : refreshInterval;
+    let timerId = window.setTimeout(tick, initialInterval);
+
+    return () => window.clearTimeout(timerId);
   }, [enabled, hasLoadedOnce, refreshInterval, pauseRefresh, loadData]);
 
   const runNow = useCallback(async (name: string, force: boolean = false): Promise<RunNowResponse> => {
     const response = await runSchedulerNow(name, force);
-    // Refresh data after running
+    // Enable fast polling for 30s so the user sees requested → running → completed
+    if (response.success) {
+      fastPollUntilRef.current = Date.now() + FAST_POLL_DURATION;
+    }
+    // Refresh data immediately
     await loadData();
     return response;
   }, [loadData]);

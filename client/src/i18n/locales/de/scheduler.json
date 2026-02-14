@@ -80,6 +80,7 @@
     "completed": "Abgeschlossen",
     "failed": "Fehlgeschlagen",
     "running": "Läuft",
+    "requested": "Angefordert",
     "cancelled": "Abgebrochen",
     "pending": "Ausstehend"
   },
@@ -94,6 +95,13 @@
     "minIntervalHint": "Minimum: 60 Sekunden",
     "minIntervalError": "Mindestintervall beträgt 60 Sekunden",
     "saveFailed": "Konfiguration konnte nicht gespeichert werden",
+    "backupType": "Backup-Typ",
+    "backupTypes": {
+      "full": "Vollständig (Datenbank + Dateien)",
+      "database_only": "Nur Datenbank",
+      "files_only": "Nur Dateien",
+      "incremental": "Inkrementell"
+    },
     "envVar": "Umgebungsvariable",
     "envVarNote": "Änderungen hier überschreiben die Standardkonfiguration, können aber beim Serverneustart zurückgesetzt werden.",
     "units": {

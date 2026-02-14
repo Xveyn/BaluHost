@@ -80,6 +80,7 @@
     "completed": "Completed",
     "failed": "Failed",
     "running": "Running",
+    "requested": "Requested",
     "cancelled": "Cancelled",
     "pending": "Pending"
   },
@@ -94,6 +95,13 @@
     "minIntervalHint": "Minimum: 60 seconds",
     "minIntervalError": "Minimum interval is 60 seconds",
     "saveFailed": "Failed to save configuration",
+    "backupType": "Backup Type",
+    "backupTypes": {
+      "full": "Full (Database + Files)",
+      "database_only": "Database Only",
+      "files_only": "Files Only",
+      "incremental": "Incremental"
+    },
     "envVar": "Environment variable",
     "envVarNote": "Changes here override the default configuration but may be reset on server restart.",
     "units": {

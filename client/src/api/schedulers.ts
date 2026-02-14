@@ -6,6 +6,7 @@ import { formatNumber } from '../lib/formatters';
 
 // Status constants
 export const SchedulerExecStatus = {
+  REQUESTED: 'requested',
   RUNNING: 'running',
   COMPLETED: 'completed',
   FAILED: 'failed',
@@ -35,6 +36,8 @@ export interface SchedulerStatus {
   last_duration_ms: number | null;
   config_key: string | null;
   can_run_manually: boolean;
+  extra_config: Record<string, any> | null;
+  worker_healthy: boolean | null;
 }
 
 export interface SchedulerListResponse {
@@ -71,7 +74,7 @@ export interface RunNowResponse {
   message: string;
   execution_id: number | null;
   scheduler_name: string;
-  status: 'started' | 'already_running' | 'disabled' | 'error';
+  status: 'requested' | 'started' | 'already_running' | 'disabled' | 'error';
 }
 
 export interface SchedulerToggleResponse {
@@ -84,6 +87,7 @@ export interface SchedulerToggleResponse {
 export interface SchedulerConfigUpdate {
   interval_seconds?: number;
   is_enabled?: boolean;
+  extra_config?: Record<string, any>;
 }
 
 // API Functions
@@ -261,6 +265,8 @@ export function formatRelativeTime(isoString: string | null): string {
  */
 export function getStatusColor(status: SchedulerExecStatus | null): string {
   switch (status) {
+    case SchedulerExecStatus.REQUESTED:
+      return 'text-amber-500';
     case SchedulerExecStatus.RUNNING:
       return 'text-blue-500';
     case SchedulerExecStatus.COMPLETED:
@@ -279,6 +285,8 @@ export function getStatusColor(status: SchedulerExecStatus | null): string {
  */
 export function getStatusBadgeClasses(status: SchedulerExecStatus | null): string {
   switch (status) {
+    case SchedulerExecStatus.REQUESTED:
+      return 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200';
     case SchedulerExecStatus.RUNNING:
       return 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200';
     case SchedulerExecStatus.COMPLETED:
