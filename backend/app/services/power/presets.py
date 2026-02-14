@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from sqlalchemy import select, and_
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -30,30 +30,8 @@ class PowerPresetService:
     Service for managing power presets.
 
     Provides CRUD operations and clock lookup for service power properties.
+    Each method manages its own database session to avoid stale session issues.
     """
-
-    def __init__(self, db: Optional[Session] = None):
-        """
-        Initialize the preset service.
-
-        Args:
-            db: Optional database session. If not provided, creates one internally.
-        """
-        self._db = db
-        self._owns_db = db is None
-
-    def _get_db(self) -> Session:
-        """Get or create database session."""
-        if self._db is None:
-            self._db = SessionLocal()
-            self._owns_db = True
-        return self._db
-
-    def _close_db(self) -> None:
-        """Close database session if we own it."""
-        if self._owns_db and self._db is not None:
-            self._db.close()
-            self._db = None
 
     async def get_active_preset(self) -> Optional[PowerPreset]:
         """
@@ -62,14 +40,13 @@ class PowerPresetService:
         Returns:
             The active PowerPreset or None if no preset is active.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).where(PowerPreset.is_active == True)
             result = db.execute(stmt)
             return result.scalar_one_or_none()
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def get_preset_by_id(self, preset_id: int) -> Optional[PowerPreset]:
         """
@@ -81,14 +58,13 @@ class PowerPresetService:
         Returns:
             The PowerPreset or None if not found.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).where(PowerPreset.id == preset_id)
             result = db.execute(stmt)
             return result.scalar_one_or_none()
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def get_preset_by_name(self, name: str) -> Optional[PowerPreset]:
         """
@@ -100,14 +76,13 @@ class PowerPresetService:
         Returns:
             The PowerPreset or None if not found.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).where(PowerPreset.name == name)
             result = db.execute(stmt)
             return result.scalar_one_or_none()
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def list_presets(self) -> List[PowerPreset]:
         """
@@ -116,7 +91,7 @@ class PowerPresetService:
         Returns:
             List of all PowerPreset objects.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).order_by(
                 PowerPreset.is_system_preset.desc(),
@@ -125,8 +100,7 @@ class PowerPresetService:
             result = db.execute(stmt)
             return list(result.scalars().all())
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def activate_preset(self, preset_id: int) -> bool:
         """
@@ -138,7 +112,7 @@ class PowerPresetService:
         Returns:
             True if successful, False if preset not found.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             # Get the preset to activate
             stmt = select(PowerPreset).where(PowerPreset.id == preset_id)
@@ -166,8 +140,7 @@ class PowerPresetService:
             logger.error(f"Error activating preset {preset_id}: {e}")
             return False
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def create_preset(self, data: PowerPresetCreate) -> Optional[PowerPreset]:
         """
@@ -179,10 +152,11 @@ class PowerPresetService:
         Returns:
             The created PowerPreset or None on error.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
-            # Check for duplicate name
-            existing = await self.get_preset_by_name(data.name)
+            # Check for duplicate name (inline, same session)
+            stmt = select(PowerPreset).where(PowerPreset.name == data.name)
+            existing = db.execute(stmt).scalar_one_or_none()
             if existing:
                 logger.warning(f"Preset with name '{data.name}' already exists")
                 return None
@@ -211,8 +185,7 @@ class PowerPresetService:
             logger.error(f"Error creating preset: {e}")
             return None
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def update_preset(
         self,
@@ -231,7 +204,7 @@ class PowerPresetService:
         Returns:
             The updated PowerPreset or None on error.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).where(PowerPreset.id == preset_id)
             result = db.execute(stmt)
@@ -246,8 +219,9 @@ class PowerPresetService:
                 if preset.is_system_preset:
                     logger.warning(f"Cannot change name of system preset: {preset.name}")
                 else:
-                    # Check for duplicate name
-                    existing = await self.get_preset_by_name(data.name)
+                    # Check for duplicate name (inline, same session)
+                    dup_stmt = select(PowerPreset).where(PowerPreset.name == data.name)
+                    existing = db.execute(dup_stmt).scalar_one_or_none()
                     if existing and existing.id != preset_id:
                         logger.warning(f"Preset with name '{data.name}' already exists")
                         return None
@@ -279,8 +253,7 @@ class PowerPresetService:
             logger.error(f"Error updating preset {preset_id}: {e}")
             return None
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     async def delete_preset(self, preset_id: int) -> bool:
         """
@@ -294,7 +267,7 @@ class PowerPresetService:
         Returns:
             True if deleted, False if not found or is system preset.
         """
-        db = self._get_db()
+        db = SessionLocal()
         try:
             stmt = select(PowerPreset).where(PowerPreset.id == preset_id)
             result = db.execute(stmt)
@@ -323,8 +296,7 @@ class PowerPresetService:
             logger.error(f"Error deleting preset {preset_id}: {e}")
             return False
         finally:
-            if self._owns_db:
-                self._close_db()
+            db.close()
 
     @staticmethod
     def get_clock_for_property(

@@ -4,16 +4,69 @@ Power Management API Routes.
 Provides endpoints for CPU power profile management and monitoring.
 """
 
+import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi.security import OAuth2PasswordBearer
 
 from app.api import deps
 from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+_oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False)
+
+
+async def _get_admin_or_service_token(
+    request: Request,
+    token: Optional[str] = Depends(_oauth2_scheme),
+) -> None:
+    """
+    Accept either a valid admin JWT or the scheduler service token.
+
+    The service token is sent as ``X-Service-Token`` header by the
+    scheduler worker process.  This avoids having to create a fake
+    user session for internal IPC.
+    """
+    # 1. Check X-Service-Token header
+    service_token = request.headers.get("X-Service-Token")
+    if service_token and service_token == settings.scheduler_service_token:
+        return  # Service token valid
+
+    # 2. Fall back to normal admin JWT auth
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication required",
+        )
+    # Delegate to the standard admin dependency (re-uses get_current_admin logic)
+    from app.services import auth as auth_service, users as user_service
+    from app.core.database import SessionLocal
+    try:
+        payload = auth_service.decode_token(token)
+    except auth_service.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid token",
+        )
+    db = SessionLocal()
+    try:
+        user = user_service.get_user(payload.sub, db=db)
+        if not user:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+        user_pub = user_service.serialize_user(user)
+        if user_pub.role != "admin":
+            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin required")
+    finally:
+        db.close()
 from app.schemas.power import (
     AutoScalingConfig,
     AutoScalingConfigResponse,
+    DynamicModeConfig,
+    DynamicModeConfigResponse,
+    DynamicModeUpdateRequest,
     PowerDemandInfo,
     PowerHistoryResponse,
     PowerProfile,
@@ -123,10 +176,10 @@ async def get_power_demands(
 @router.post("/demands", response_model=RegisterDemandResponse)
 async def register_power_demand(
     request: RegisterDemandRequest,
-    user: UserPublic = Depends(deps.get_current_admin)
+    _auth: None = Depends(_get_admin_or_service_token),
 ) -> RegisterDemandResponse:
     """
-    Register a power demand programmatically (admin only).
+    Register a power demand programmatically (admin or service token).
 
     Use this for custom integrations that need to request
     specific power levels for their operations.
@@ -153,10 +206,10 @@ async def register_power_demand(
 @router.delete("/demands", response_model=UnregisterDemandResponse)
 async def unregister_power_demand(
     request: UnregisterDemandRequest,
-    user: UserPublic = Depends(deps.get_current_admin)
+    _auth: None = Depends(_get_admin_or_service_token),
 ) -> UnregisterDemandResponse:
     """
-    Unregister a power demand (admin only).
+    Unregister a power demand (admin or service token).
 
     Removes a previously registered demand, potentially allowing
     the system to scale down to a lower power profile.
@@ -274,6 +327,86 @@ async def update_auto_scaling_config(
         config=config,
         current_cpu_usage=None
     )
+
+
+@router.get("/dynamic-mode", response_model=DynamicModeConfigResponse)
+async def get_dynamic_mode_config(
+    _: UserPublic = Depends(deps.get_current_user)
+) -> DynamicModeConfigResponse:
+    """
+    Get dynamic mode configuration.
+
+    Returns the current dynamic mode settings including available
+    governors and system frequency range.
+    """
+    manager = get_power_manager()
+    return await manager.get_dynamic_mode_config()
+
+
+@router.put("/dynamic-mode", response_model=DynamicModeConfigResponse)
+async def update_dynamic_mode(
+    request: DynamicModeUpdateRequest,
+    user: UserPublic = Depends(deps.get_current_admin)
+) -> DynamicModeConfigResponse:
+    """
+    Update dynamic mode configuration (admin only).
+
+    Handles enable/disable and config changes in a single call.
+    When enabling, validates governor availability and freq bounds.
+    """
+    manager = get_power_manager()
+
+    # Get current config as base
+    current = await manager.get_dynamic_mode_config()
+    config = current.config
+
+    # Apply partial updates
+    if request.governor is not None:
+        if request.governor not in current.available_governors:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Governor '{request.governor}' not available. Available: {', '.join(current.available_governors)}"
+            )
+        config.governor = request.governor
+    if request.min_freq_mhz is not None:
+        config.min_freq_mhz = request.min_freq_mhz
+    if request.max_freq_mhz is not None:
+        config.max_freq_mhz = request.max_freq_mhz
+
+    # Validate freq range
+    if config.min_freq_mhz > config.max_freq_mhz:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="min_freq_mhz must be <= max_freq_mhz"
+        )
+
+    # Enable or disable
+    if request.enabled is not None:
+        if request.enabled:
+            config.enabled = True
+            success, error = await manager.enable_dynamic_mode(config)
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=error or "Failed to enable dynamic mode"
+                )
+        else:
+            success, error = await manager.disable_dynamic_mode()
+            if not success:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail=error or "Failed to disable dynamic mode"
+                )
+    elif config.enabled:
+        # Config update while already enabled - re-apply
+        success, error = await manager.enable_dynamic_mode(config)
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=error or "Failed to update dynamic mode"
+            )
+
+    return await manager.get_dynamic_mode_config()
 
 
 @router.post("/backend", response_model=SwitchBackendResponse)

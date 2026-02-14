@@ -29,8 +29,11 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.core.database import SessionLocal
+from app.models.power import PowerProfileLog, PowerDemandLog
 from app.schemas.power import (
     AutoScalingConfig,
+    DynamicModeConfig,
+    DynamicModeConfigResponse,
     PermissionStatus,
     PowerDemandInfo,
     PowerHistoryEntry,
@@ -118,6 +121,10 @@ class CpuPowerBackend(ABC):
         """Check if this backend can be used on the current system."""
         pass
 
+    async def get_system_freq_range(self) -> Tuple[int, int]:
+        """Get system min/max CPU frequency in MHz. Returns (min_mhz, max_mhz)."""
+        return (400, 4600)
+
 
 class DevCpuPowerBackend(CpuPowerBackend):
     """
@@ -161,7 +168,7 @@ class DevCpuPowerBackend(CpuPowerBackend):
 
     async def get_available_governors(self) -> List[str]:
         """Return typical Linux governors for simulation."""
-        return ["powersave", "performance", "schedutil"]
+        return ["powersave", "performance", "schedutil", "conservative", "ondemand"]
 
     async def get_current_governor(self) -> Optional[str]:
         """Return the simulated current governor."""
@@ -373,9 +380,60 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
             logger.debug(f"Error reading {path}: {e}")
             return None
 
+    async def _apply_profile_to_cpu(
+        self, cpu_path: Path, config: PowerProfileConfig
+    ) -> Tuple[bool, bool]:
+        """
+        Apply power profile to a single CPU core.
+
+        Returns:
+            Tuple of (cpu_success, permission_denied)
+        """
+        cpu_success = True
+        permission_denied = False
+
+        # Set governor
+        governor_path = cpu_path / "scaling_governor"
+        result = await self._write_sysfs(governor_path, config.governor)
+        if not result[0]:
+            cpu_success = False
+            if result[1] == "permission_denied":
+                permission_denied = True
+
+        # Set EPP if supported (amd-pstate or intel_pstate)
+        epp_path = cpu_path / "energy_performance_preference"
+        if epp_path.exists():
+            result = await self._write_sysfs(epp_path, config.energy_performance_preference)
+            if not result[0]:
+                cpu_success = False
+
+        # Set frequency limits if specified
+        if config.min_freq_mhz is not None:
+            min_freq_path = cpu_path / "scaling_min_freq"
+            freq_khz = str(config.min_freq_mhz * 1000)
+            result = await self._write_sysfs(min_freq_path, freq_khz)
+            if not result[0]:
+                cpu_success = False
+
+        if config.max_freq_mhz is not None:
+            max_freq_path = cpu_path / "scaling_max_freq"
+            freq_khz = str(config.max_freq_mhz * 1000)
+            result = await self._write_sysfs(max_freq_path, freq_khz)
+            if not result[0]:
+                cpu_success = False
+        else:
+            # Reset to maximum available
+            max_avail_path = cpu_path / "cpuinfo_max_freq"
+            max_avail = await self._read_sysfs(max_avail_path)
+            if max_avail:
+                max_freq_path = cpu_path / "scaling_max_freq"
+                await self._write_sysfs(max_freq_path, max_avail)
+
+        return cpu_success, permission_denied
+
     async def apply_profile(self, config: PowerProfileConfig) -> Tuple[bool, Optional[str]]:
         """
-        Apply power profile to all CPU cores.
+        Apply power profile to all CPU cores in parallel.
 
         Returns:
             Tuple of (success, error_message). error_message is None on success.
@@ -386,55 +444,28 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
             return False, "No CPU cpufreq paths found"
 
         self._permission_errors.clear()
-        success = True
+
+        # Apply to all cores in parallel
+        results = await asyncio.gather(
+            *(self._apply_profile_to_cpu(cpu_path, config) for cpu_path in cpu_paths),
+            return_exceptions=True,
+        )
+
         failed_cpus = []
         permission_denied = False
 
-        for cpu_path in cpu_paths:
-            cpu_success = True
-
-            # Set governor
-            governor_path = cpu_path / "scaling_governor"
-            result = await self._write_sysfs(governor_path, config.governor)
-            if not result[0]:
-                cpu_success = False
-                if result[1] == "permission_denied":
-                    permission_denied = True
-
-            # Set EPP if supported (amd-pstate or intel_pstate)
-            epp_path = cpu_path / "energy_performance_preference"
-            if epp_path.exists():
-                result = await self._write_sysfs(epp_path, config.energy_performance_preference)
-                if not result[0]:
-                    cpu_success = False
-
-            # Set frequency limits if specified
-            if config.min_freq_mhz is not None:
-                min_freq_path = cpu_path / "scaling_min_freq"
-                freq_khz = str(config.min_freq_mhz * 1000)
-                result = await self._write_sysfs(min_freq_path, freq_khz)
-                if not result[0]:
-                    cpu_success = False
-
-            if config.max_freq_mhz is not None:
-                max_freq_path = cpu_path / "scaling_max_freq"
-                freq_khz = str(config.max_freq_mhz * 1000)
-                result = await self._write_sysfs(max_freq_path, freq_khz)
-                if not result[0]:
-                    cpu_success = False
-            else:
-                # Reset to maximum available
-                max_avail_path = cpu_path / "cpuinfo_max_freq"
-                max_avail = await self._read_sysfs(max_avail_path)
-                if max_avail:
-                    max_freq_path = cpu_path / "scaling_max_freq"
-                    await self._write_sysfs(max_freq_path, max_avail)
-
+        for cpu_path, result in zip(cpu_paths, results):
+            if isinstance(result, Exception):
+                logger.error(f"Exception applying profile to {cpu_path.parent.name}: {result}")
+                failed_cpus.append(cpu_path.parent.name)
+                continue
+            cpu_success, perm_denied = result
             if not cpu_success:
                 failed_cpus.append(cpu_path.parent.name)
-                success = False
+                if perm_denied:
+                    permission_denied = True
 
-        if success:
+        if not failed_cpus:
             logger.info(
                 f"Applied profile '{config.profile.value}': "
                 f"governor={config.governor}, EPP={config.energy_performance_preference}"
@@ -494,6 +525,15 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
         cpu0_path = cls.CPUFREQ_PATH / "cpu0" / "cpufreq"
         return cpu0_path.exists()
 
+    async def get_system_freq_range(self) -> Tuple[int, int]:
+        """Get system min/max CPU frequency from sysfs."""
+        cpu0_path = self.CPUFREQ_PATH / "cpu0" / "cpufreq"
+        min_str = await self._read_sysfs(cpu0_path / "cpuinfo_min_freq")
+        max_str = await self._read_sysfs(cpu0_path / "cpuinfo_max_freq")
+        min_mhz = int(min_str) // 1000 if min_str and min_str.isdigit() else 400
+        max_mhz = int(max_str) // 1000 if max_str and max_str.isdigit() else 4600
+        return (min_mhz, max_mhz)
+
     def has_write_permission(self) -> bool:
         """Check if we have write permission (direct or via sudo)."""
         perms = self.check_permissions()
@@ -541,6 +581,8 @@ class PowerManagerService:
         self._is_running = False
         self._profiles = DEFAULT_PROFILES.copy()
         self._state_lock = asyncio.Lock()
+        self._dynamic_mode_enabled: bool = False
+        self._dynamic_mode_config: Optional[DynamicModeConfig] = None
 
         logger.info("PowerManagerService initialized")
 
@@ -620,6 +662,178 @@ class PowerManagerService:
         except Exception as e:
             logger.error(f"Error saving auto-scaling config to DB: {e}")
             return False
+
+    def _load_dynamic_mode_config_from_db(self) -> Optional[DynamicModeConfig]:
+        """Load dynamic mode config from database."""
+        try:
+            from app.models.power import PowerDynamicModeConfig
+
+            db = SessionLocal()
+            try:
+                db_config = db.query(PowerDynamicModeConfig).filter(
+                    PowerDynamicModeConfig.id == 1
+                ).first()
+
+                if db_config:
+                    config = DynamicModeConfig(
+                        enabled=db_config.enabled,
+                        governor=db_config.governor,
+                        min_freq_mhz=db_config.min_freq_mhz,
+                        max_freq_mhz=db_config.max_freq_mhz,
+                    )
+                    logger.info(f"Loaded dynamic mode config from DB: enabled={config.enabled}")
+                    return config
+                else:
+                    logger.info("No dynamic mode config in DB, using defaults")
+                    return DynamicModeConfig()
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error loading dynamic mode config from DB: {e}")
+            return DynamicModeConfig()
+
+    def _save_dynamic_mode_config_to_db(self, config: DynamicModeConfig) -> bool:
+        """Save dynamic mode config to database."""
+        try:
+            from app.models.power import PowerDynamicModeConfig
+
+            db = SessionLocal()
+            try:
+                db_config = db.query(PowerDynamicModeConfig).filter(
+                    PowerDynamicModeConfig.id == 1
+                ).first()
+
+                if db_config:
+                    db_config.enabled = config.enabled
+                    db_config.governor = config.governor
+                    db_config.min_freq_mhz = config.min_freq_mhz
+                    db_config.max_freq_mhz = config.max_freq_mhz
+                else:
+                    db_config = PowerDynamicModeConfig(
+                        id=1,
+                        enabled=config.enabled,
+                        governor=config.governor,
+                        min_freq_mhz=config.min_freq_mhz,
+                        max_freq_mhz=config.max_freq_mhz,
+                    )
+                    db.add(db_config)
+
+                db.commit()
+                logger.info(f"Saved dynamic mode config to DB: enabled={config.enabled}")
+                return True
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Error saving dynamic mode config to DB: {e}")
+                return False
+            finally:
+                db.close()
+        except Exception as e:
+            logger.error(f"Error saving dynamic mode config to DB: {e}")
+            return False
+
+    async def enable_dynamic_mode(self, config: DynamicModeConfig) -> Tuple[bool, Optional[str]]:
+        """
+        Enable dynamic mode with kernel governor-based scaling.
+
+        Validates the governor and freq bounds, applies settings directly,
+        and pauses profile-based/auto-scaling.
+        """
+        if self._backend is None:
+            return False, "Power backend not initialized"
+
+        # Validate governor
+        available = await self._backend.get_available_governors()
+        if available and config.governor not in available:
+            return False, f"Governor '{config.governor}' not available (available: {', '.join(available)})"
+
+        # Validate freq range
+        if config.min_freq_mhz > config.max_freq_mhz:
+            return False, "min_freq_mhz must be <= max_freq_mhz"
+
+        # EPP mapping per governor
+        epp_map = {
+            "schedutil": "balance_performance",
+            "conservative": "balance_power",
+            "ondemand": "balance_performance",
+            "powersave": "balance_power",
+            "performance": "performance",
+        }
+        epp = epp_map.get(config.governor, "balance_performance")
+
+        # Build synthetic profile config and apply
+        synthetic = PowerProfileConfig(
+            profile=PowerProfile.MEDIUM,  # placeholder
+            governor=config.governor,
+            energy_performance_preference=epp,
+            min_freq_mhz=config.min_freq_mhz,
+            max_freq_mhz=config.max_freq_mhz,
+            description=f"Dynamic Mode: {config.governor} ({config.min_freq_mhz}-{config.max_freq_mhz} MHz)",
+        )
+
+        success, error = await self._backend.apply_profile(synthetic)
+        if not success:
+            return False, error
+
+        async with self._state_lock:
+            self._dynamic_mode_enabled = True
+            self._dynamic_mode_config = config
+
+        self._save_dynamic_mode_config_to_db(DynamicModeConfig(
+            enabled=True,
+            governor=config.governor,
+            min_freq_mhz=config.min_freq_mhz,
+            max_freq_mhz=config.max_freq_mhz,
+        ))
+
+        # Record in history
+        freq = await self._backend.get_current_frequency_mhz()
+        entry = PowerHistoryEntry(
+            timestamp=datetime.utcnow(),
+            profile=self._current_profile,
+            reason="dynamic_mode_enabled",
+            source="admin",
+            frequency_mhz=freq,
+        )
+        self._history.append(entry)
+
+        logger.info(f"Dynamic mode enabled: {config.governor}, {config.min_freq_mhz}-{config.max_freq_mhz} MHz")
+        return True, None
+
+    async def disable_dynamic_mode(self) -> Tuple[bool, Optional[str]]:
+        """Disable dynamic mode and return to profile-based scaling."""
+        async with self._state_lock:
+            self._dynamic_mode_enabled = False
+            self._dynamic_mode_config = None
+
+        # Save disabled state
+        saved_config = self._load_dynamic_mode_config_from_db()
+        if saved_config:
+            saved_config.enabled = False
+            self._save_dynamic_mode_config_to_db(saved_config)
+
+        # Recalculate and apply the appropriate profile
+        async with self._state_lock:
+            await self._recalculate_profile("dynamic_mode_disabled")
+
+        logger.info("Dynamic mode disabled, returned to profile-based scaling")
+        return True, None
+
+    async def get_dynamic_mode_config(self) -> DynamicModeConfigResponse:
+        """Get dynamic mode configuration and system capabilities."""
+        config = self._dynamic_mode_config or self._load_dynamic_mode_config_from_db() or DynamicModeConfig()
+
+        available_governors = []
+        sys_min, sys_max = 400, 4600
+        if self._backend:
+            available_governors = await self._backend.get_available_governors()
+            sys_min, sys_max = await self._backend.get_system_freq_range()
+
+        return DynamicModeConfigResponse(
+            config=config,
+            available_governors=available_governors,
+            system_min_freq_mhz=sys_min,
+            system_max_freq_mhz=sys_max,
+        )
 
     def _select_backend(self, force_linux: Optional[bool] = None) -> CpuPowerBackend:
         """
@@ -730,14 +944,21 @@ class PowerManagerService:
             logger.warning("PowerManagerService already running")
             return
 
-        # Load auto-scaling config from database
+        # Load configs from database
         self._auto_scaling_config = self._load_auto_scaling_config_from_db()
+        dynamic_config = self._load_dynamic_mode_config_from_db()
 
         self._backend = self._select_backend()
         self._is_running = True
 
-        # Apply initial profile
-        await self.apply_profile(PowerProfile.IDLE, reason="service_start")
+        # Apply initial state: dynamic mode or IDLE profile
+        if dynamic_config and dynamic_config.enabled:
+            success, error = await self.enable_dynamic_mode(dynamic_config)
+            if not success:
+                logger.warning(f"Failed to restore dynamic mode on start: {error}, falling back to IDLE")
+                await self.apply_profile(PowerProfile.IDLE, reason="service_start")
+        else:
+            await self.apply_profile(PowerProfile.IDLE, reason="service_start")
 
         # Start background monitor for demand expiration
         self._monitor_task = asyncio.create_task(self._monitor_loop())
@@ -781,14 +1002,40 @@ class PowerManagerService:
             ]
 
             if expired:
+                expired_demands = {source: self._demands[source] for source in expired}
                 for source in expired:
                     logger.info(f"Power demand '{source}' expired")
                     del self._demands[source]
 
                 await self._recalculate_profile("demand_expired")
 
+                # Persist expired demands to DB
+                try:
+                    db = SessionLocal()
+                    try:
+                        for source, demand in expired_demands.items():
+                            log = PowerDemandLog(
+                                action="expired",
+                                source=source,
+                                level=demand.level.value,
+                                description=demand.description,
+                                resulting_profile=self._current_profile.value,
+                            )
+                            db.add(log)
+                        db.commit()
+                    except Exception as db_err:
+                        db.rollback()
+                        logger.warning(f"Failed to persist expired demands to DB: {db_err}")
+                    finally:
+                        db.close()
+                except Exception as db_err:
+                    logger.warning(f"Failed to create DB session for expired demand logs: {db_err}")
+
     async def _check_auto_scaling(self) -> None:
         """Auto-scale based on CPU usage if enabled."""
+        if self._dynamic_mode_enabled:
+            return
+
         if not self._auto_scaling_config.enabled:
             return
 
@@ -855,6 +1102,11 @@ class PowerManagerService:
             logger.error("Power backend not initialized")
             return False, "Power backend not initialized"
 
+        # Skip profile changes while dynamic mode is active
+        if self._dynamic_mode_enabled:
+            logger.debug(f"Skipping profile change to {profile.value} - dynamic mode active")
+            return True, None
+
         if profile == self._current_profile:
             return True, None
 
@@ -915,6 +1167,28 @@ class PowerManagerService:
                 self._history.pop(0)
 
             logger.info(f"Profile changed: {old_profile.value} -> {profile.value} ({reason})")
+
+            # Persist to DB
+            try:
+                db = SessionLocal()
+                try:
+                    log = PowerProfileLog(
+                        profile=profile.value,
+                        previous_profile=old_profile.value,
+                        reason=reason,
+                        source=source,
+                        frequency_mhz=freq,
+                    )
+                    db.add(log)
+                    db.commit()
+                except Exception as db_err:
+                    db.rollback()
+                    logger.warning(f"Failed to persist profile change to DB: {db_err}")
+                finally:
+                    db.close()
+            except Exception as db_err:
+                logger.warning(f"Failed to create DB session for profile log: {db_err}")
+
             return True, None
 
         return False, error_msg
@@ -1044,6 +1318,28 @@ class PowerManagerService:
 
             await self._recalculate_profile(f"demand_registered:{source}")
 
+            # Persist to DB
+            try:
+                db = SessionLocal()
+                try:
+                    log = PowerDemandLog(
+                        action="registered",
+                        source=source,
+                        level=level.value,
+                        description=description,
+                        timeout_seconds=timeout_seconds,
+                        resulting_profile=self._current_profile.value,
+                    )
+                    db.add(log)
+                    db.commit()
+                except Exception as db_err:
+                    db.rollback()
+                    logger.warning(f"Failed to persist demand registration to DB: {db_err}")
+                finally:
+                    db.close()
+            except Exception as db_err:
+                logger.warning(f"Failed to create DB session for demand log: {db_err}")
+
         return source
 
     async def unregister_demand(self, source: str) -> bool:
@@ -1060,10 +1356,32 @@ class PowerManagerService:
             if source not in self._demands:
                 return False
 
+            demand = self._demands[source]
             del self._demands[source]
             logger.info(f"Unregistered power demand: {source}")
 
             await self._recalculate_profile(f"demand_unregistered:{source}")
+
+            # Persist to DB
+            try:
+                db = SessionLocal()
+                try:
+                    log = PowerDemandLog(
+                        action="unregistered",
+                        source=source,
+                        level=demand.level.value,
+                        description=demand.description,
+                        resulting_profile=self._current_profile.value,
+                    )
+                    db.add(log)
+                    db.commit()
+                except Exception as db_err:
+                    db.rollback()
+                    logger.warning(f"Failed to persist demand unregistration to DB: {db_err}")
+                finally:
+                    db.close()
+            except Exception as db_err:
+                logger.warning(f"Failed to create DB session for demand log: {db_err}")
 
         return True
 
@@ -1127,6 +1445,11 @@ class PowerManagerService:
         except Exception as e:
             logger.debug(f"Could not get active preset: {e}")
 
+        # Override display when dynamic mode is active
+        if self._dynamic_mode_enabled and self._dynamic_mode_config:
+            dm = self._dynamic_mode_config
+            freq_range = f"{dm.min_freq_mhz}-{dm.max_freq_mhz} MHz"
+
         return PowerStatusResponse(
             current_profile=self._current_profile,
             current_property=self._current_property,
@@ -1137,11 +1460,13 @@ class PowerManagerService:
             is_dev_mode=isinstance(self._backend, DevCpuPowerBackend),
             is_using_linux_backend=is_linux,
             linux_backend_available=linux_available,
-            can_switch_backend=linux_available or is_linux,  # Can switch if Linux available or currently using it
+            can_switch_backend=linux_available or is_linux,
             permission_status=permission_status,
             last_profile_change=self._last_profile_change,
             cooldown_remaining_seconds=cooldown_remaining,
-            active_preset=active_preset
+            active_preset=active_preset,
+            dynamic_mode_enabled=self._dynamic_mode_enabled,
+            dynamic_mode_config=self._dynamic_mode_config,
         )
 
     def get_profiles(self) -> Dict[PowerProfile, PowerProfileConfig]:
@@ -1154,7 +1479,7 @@ class PowerManagerService:
         offset: int = 0
     ) -> Tuple[List[PowerHistoryEntry], int]:
         """
-        Get profile change history.
+        Get profile change history from DB (with in-memory fallback).
 
         Args:
             limit: Maximum entries to return
@@ -1163,10 +1488,38 @@ class PowerManagerService:
         Returns:
             Tuple of (entries, total_count)
         """
-        total = len(self._history)
-        # Return most recent first
-        entries = list(reversed(self._history))[offset:offset + limit]
-        return entries, total
+        try:
+            db = SessionLocal()
+            try:
+                from sqlalchemy import func as sa_func
+                total = db.query(sa_func.count(PowerProfileLog.id)).scalar() or 0
+
+                rows = (
+                    db.query(PowerProfileLog)
+                    .order_by(PowerProfileLog.timestamp.desc())
+                    .offset(offset)
+                    .limit(limit)
+                    .all()
+                )
+
+                entries = [
+                    PowerHistoryEntry(
+                        timestamp=row.timestamp,
+                        profile=PowerProfile(row.profile),
+                        reason=row.reason,
+                        source=row.source,
+                        frequency_mhz=row.frequency_mhz,
+                    )
+                    for row in rows
+                ]
+                return entries, total
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning(f"Failed to read history from DB, falling back to in-memory: {e}")
+            total = len(self._history)
+            entries = list(reversed(self._history))[offset:offset + limit]
+            return entries, total
 
     def get_active_demands(self) -> List[PowerDemandInfo]:
         """Get all active power demands."""

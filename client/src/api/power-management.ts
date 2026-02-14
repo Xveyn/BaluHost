@@ -66,7 +66,39 @@ export interface PowerStatusResponse {
   last_profile_change?: string;
   cooldown_remaining_seconds?: number;
   active_preset?: PowerPresetSummary;
+  dynamic_mode_enabled: boolean;
+  dynamic_mode_config?: DynamicModeConfig;
 }
+
+// Dynamic Mode types
+export interface DynamicModeConfig {
+  enabled: boolean;
+  governor: string;
+  min_freq_mhz: number;
+  max_freq_mhz: number;
+}
+
+export interface DynamicModeConfigResponse {
+  config: DynamicModeConfig;
+  available_governors: string[];
+  system_min_freq_mhz: number;
+  system_max_freq_mhz: number;
+}
+
+export interface DynamicModeUpdateRequest {
+  enabled?: boolean;
+  governor?: string;
+  min_freq_mhz?: number;
+  max_freq_mhz?: number;
+}
+
+export const GOVERNOR_INFO: Record<string, { name: string; description: string; recommended: boolean }> = {
+  powersave: { name: 'Powersave', description: 'Dynamic scaling via EPP, best for amd-pstate', recommended: true },
+  performance: { name: 'Performance', description: 'Always max frequency, highest power', recommended: false },
+  schedutil: { name: 'Schedutil', description: 'Kernel-integrated, fastest response (~1ms)', recommended: false },
+  conservative: { name: 'Conservative', description: 'Gradual frequency changes, power-saving focus', recommended: false },
+  ondemand: { name: 'On Demand', description: 'Jumps to max on load, classic governor', recommended: false },
+};
 
 export interface PowerProfilesResponse {
   profiles: PowerProfileConfig[];
@@ -292,6 +324,28 @@ export async function getServiceIntensities(): Promise<ServiceIntensityResponse>
 }
 
 // ============================================================================
+// Dynamic Mode
+// ============================================================================
+
+/**
+ * Get dynamic mode configuration
+ */
+export async function getDynamicModeConfig(): Promise<DynamicModeConfigResponse> {
+  const response = await apiClient.get<DynamicModeConfigResponse>('/api/power/dynamic-mode');
+  return response.data;
+}
+
+/**
+ * Update dynamic mode configuration (admin only)
+ */
+export async function updateDynamicMode(
+  request: DynamicModeUpdateRequest
+): Promise<DynamicModeConfigResponse> {
+  const response = await apiClient.put<DynamicModeConfigResponse>('/api/power/dynamic-mode', request);
+  return response.data;
+}
+
+// ============================================================================
 // Power Presets (consolidated from power-presets.ts)
 // ============================================================================
 
@@ -342,54 +396,19 @@ export interface ActivatePresetResponse {
   new_preset: PowerPresetSummary;
 }
 
-// Preset display info
-export const PRESET_INFO: Record<string, { name: string; color: string; icon: string; description: string }> = {
-  'Energy Saver': {
-    name: 'Energy Saver',
-    color: 'emerald',
-    icon: '\u{1F331}',
-    description: 'Minimaler Stromverbrauch',
-  },
-  'Balanced': {
-    name: 'Balanced',
-    color: 'blue',
-    icon: '\u{2696}\u{FE0F}',
-    description: 'Ausgewogene Balance',
-  },
-  'Performance': {
-    name: 'Performance',
-    color: 'red',
-    icon: '\u{1F680}',
-    description: 'Maximale Leistung',
-  },
+// Preset display info (descriptions via i18n: system:power.presetDescription.*)
+export const PRESET_INFO: Record<string, { name: string; color: string; icon: string }> = {
+  'Energy Saver': { name: 'Energy Saver', color: 'emerald', icon: '\u{1F331}' },
+  'Balanced': { name: 'Balanced', color: 'blue', icon: '\u{2696}\u{FE0F}' },
+  'Performance': { name: 'Performance', color: 'red', icon: '\u{1F680}' },
 };
 
-// Property display info
-export const PROPERTY_INFO: Record<ServicePowerProperty, { name: string; color: string; icon: string; description: string }> = {
-  idle: {
-    name: 'Idle',
-    color: 'emerald',
-    icon: '\u{1F319}',
-    description: 'Leerlauf, Monitoring',
-  },
-  low: {
-    name: 'Low',
-    color: 'blue',
-    icon: '\u{1F50B}',
-    description: 'CRUD, Konfiguration',
-  },
-  medium: {
-    name: 'Medium',
-    color: 'yellow',
-    icon: '\u{26A1}',
-    description: 'File-Ops, Sync, SMART',
-  },
-  surge: {
-    name: 'Surge',
-    color: 'red',
-    icon: '\u{1F525}',
-    description: 'Backup, RAID Rebuild',
-  },
+// Property display info (descriptions via i18n: system:power.propertyDescription.*)
+export const PROPERTY_INFO: Record<ServicePowerProperty, { name: string; color: string; icon: string }> = {
+  idle: { name: 'Idle', color: 'emerald', icon: '\u{1F319}' },
+  low: { name: 'Low', color: 'blue', icon: '\u{1F50B}' },
+  medium: { name: 'Medium', color: 'yellow', icon: '\u{26A1}' },
+  surge: { name: 'Surge', color: 'red', icon: '\u{1F525}' },
 };
 
 // Preset API Functions

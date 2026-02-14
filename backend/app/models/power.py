@@ -164,3 +164,30 @@ class PowerAutoScalingConfig(Base):
 
     def __repr__(self) -> str:
         return f"<PowerAutoScalingConfig(enabled={self.enabled}, surge={self.cpu_surge_threshold}%)>"
+
+
+class PowerDynamicModeConfig(Base):
+    """
+    Dynamic mode configuration for kernel-governor-based CPU scaling.
+
+    When enabled, bypasses the discrete profile system and lets the
+    kernel governor (schedutil/conservative/ondemand) handle frequency
+    scaling natively. Only one row should exist (singleton pattern).
+    """
+
+    __tablename__ = "power_dynamic_mode_config"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    governor: Mapped[str] = mapped_column(String(30), nullable=False, default="powersave")
+    min_freq_mhz: Mapped[int] = mapped_column(Integer, nullable=False, default=400)
+    max_freq_mhz: Mapped[int] = mapped_column(Integer, nullable=False, default=4600)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<PowerDynamicModeConfig(enabled={self.enabled}, governor='{self.governor}')>"

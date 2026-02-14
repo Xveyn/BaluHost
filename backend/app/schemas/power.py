@@ -82,6 +82,32 @@ class PermissionStatus(BaseModel):
     has_write_access: bool = Field(False, description="Whether we can write to cpufreq (direct or sudo)")
 
 
+# Dynamic Mode Schemas
+
+class DynamicModeConfig(BaseModel):
+    """Configuration for dynamic kernel-governor mode."""
+    enabled: bool = Field(False, description="Whether dynamic mode is active")
+    governor: str = Field("powersave", description="Kernel governor (powersave/performance/schedutil/conservative/ondemand)")
+    min_freq_mhz: int = Field(400, description="Minimum CPU frequency in MHz")
+    max_freq_mhz: int = Field(4600, description="Maximum CPU frequency in MHz")
+
+
+class DynamicModeConfigResponse(BaseModel):
+    """Response for dynamic mode configuration endpoint."""
+    config: DynamicModeConfig
+    available_governors: list[str] = Field(default_factory=list, description="Governors available on this system")
+    system_min_freq_mhz: int = Field(400, description="System minimum CPU frequency")
+    system_max_freq_mhz: int = Field(4600, description="System maximum CPU frequency")
+
+
+class DynamicModeUpdateRequest(BaseModel):
+    """Request to update dynamic mode configuration (all fields optional)."""
+    enabled: Optional[bool] = Field(None, description="Enable or disable dynamic mode")
+    governor: Optional[str] = Field(None, description="Kernel governor to use")
+    min_freq_mhz: Optional[int] = Field(None, description="Minimum CPU frequency in MHz")
+    max_freq_mhz: Optional[int] = Field(None, description="Maximum CPU frequency in MHz")
+
+
 class PowerStatusResponse(BaseModel):
     """Response for power status endpoint."""
     current_profile: PowerProfile = Field(..., description="Currently active power profile")
@@ -99,6 +125,9 @@ class PowerStatusResponse(BaseModel):
     cooldown_remaining_seconds: Optional[int] = Field(None, description="Seconds until next downgrade allowed")
     # Preset info
     active_preset: Optional["PowerPresetSummary"] = Field(None, description="Currently active preset")
+    # Dynamic mode
+    dynamic_mode_enabled: bool = Field(False, description="Whether dynamic kernel-governor mode is active")
+    dynamic_mode_config: Optional[DynamicModeConfig] = Field(None, description="Dynamic mode configuration if enabled")
 
 
 class PowerProfilesResponse(BaseModel):

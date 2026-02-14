@@ -23,6 +23,7 @@ import { PresetClockVisualization } from '../components/power/PresetClockVisuali
 import { ServiceIntensityList } from '../components/power/ServiceIntensityList';
 import { DemandList } from '../components/power/DemandList';
 import { HistoryTable } from '../components/power/HistoryTable';
+import { DynamicModeSection } from '../components/power/DynamicModeSection';
 import { getPresetIcon } from '../components/power/utils';
 import {
   getPowerStatus,
@@ -34,6 +35,7 @@ import {
   switchPowerBackend,
   getServiceIntensities,
   PROFILE_INFO,
+  getDynamicModeConfig,
   listPresets,
   activatePreset,
   createPreset,
@@ -49,12 +51,17 @@ import {
   type ServiceIntensityInfo,
   type PowerPreset,
   type CreatePresetRequest,
+  type DynamicModeConfigResponse,
 } from '../api/power-management';
 
 const REFRESH_INTERVAL_MS = 5000;
 
+interface PowerManagementProps {
+  isAdmin: boolean;
+}
+
 // Main component
-export default function PowerManagement() {
+export default function PowerManagement({ isAdmin }: PowerManagementProps) {
   const { t } = useTranslation(['system', 'common']);
   const [status, setStatus] = useState<PowerStatusResponse | null>(null);
   const [presets, setPresets] = useState<PowerPreset[]>([]);
@@ -66,20 +73,21 @@ export default function PowerManagement() {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [dynamicConfig, setDynamicConfig] = useState<DynamicModeConfigResponse | null>(null);
   const [editorPreset, setEditorPreset] = useState<PowerPreset | null | 'new'>(null);
-
-  // TODO: Get actual admin status from auth context
-  const isAdmin = true;
+  const [editingAutoScaling, setEditingAutoScaling] = useState(false);
+  const [editAutoScaling, setEditAutoScaling] = useState<AutoScalingConfig | null>(null);
 
   const loadData = useCallback(async (showSuccess = false) => {
     try {
-      const [statusRes, presetsRes, demandsRes, intensitiesRes, historyRes, autoScalingRes] = await Promise.all([
+      const [statusRes, presetsRes, demandsRes, intensitiesRes, historyRes, autoScalingRes, dynamicRes] = await Promise.all([
         getPowerStatus(),
         listPresets(),
         getPowerDemands(),
         getServiceIntensities(),
         getPowerMgmtHistory(50),
         getAutoScalingConfig(),
+        getDynamicModeConfig(),
       ]);
 
       setStatus(statusRes);
@@ -88,6 +96,7 @@ export default function PowerManagement() {
       setIntensities(intensitiesRes.services);
       setHistory(historyRes.entries);
       setAutoScaling(autoScalingRes.config);
+      setDynamicConfig(dynamicRes);
       setError(null);
       setLastUpdated(new Date());
 
@@ -152,6 +161,49 @@ export default function PowerManagement() {
       toast.success(newConfig.enabled ? t('system:power.toasts.autoScalingEnabled') : t('system:power.toasts.autoScalingDisabled'));
     } catch (err) {
       const message = err instanceof Error ? err.message : t('system:power.toasts.settingChangeFailed');
+      toast.error(message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleStartEditAutoScaling = () => {
+    if (autoScaling) {
+      setEditAutoScaling({ ...autoScaling });
+      setEditingAutoScaling(true);
+    }
+  };
+
+  const handleCancelEditAutoScaling = () => {
+    setEditingAutoScaling(false);
+    setEditAutoScaling(null);
+  };
+
+  const handleSaveAutoScaling = async () => {
+    if (!editAutoScaling || busy) return;
+
+    // Validate: surge > medium > low, all 0-100
+    if (
+      editAutoScaling.cpu_surge_threshold <= editAutoScaling.cpu_medium_threshold ||
+      editAutoScaling.cpu_medium_threshold <= editAutoScaling.cpu_low_threshold ||
+      editAutoScaling.cpu_surge_threshold < 0 || editAutoScaling.cpu_surge_threshold > 100 ||
+      editAutoScaling.cpu_medium_threshold < 0 || editAutoScaling.cpu_medium_threshold > 100 ||
+      editAutoScaling.cpu_low_threshold < 0 || editAutoScaling.cpu_low_threshold > 100 ||
+      editAutoScaling.cooldown_seconds < 0
+    ) {
+      toast.error(t('system:power.autoScaling.validationError'));
+      return;
+    }
+
+    setBusy(true);
+    try {
+      await updateAutoScalingConfig(editAutoScaling);
+      setAutoScaling(editAutoScaling);
+      setEditingAutoScaling(false);
+      setEditAutoScaling(null);
+      toast.success(t('system:power.autoScaling.thresholdsSaved'));
+    } catch (err) {
+      const message = err instanceof Error ? err.message : t('system:power.autoScaling.thresholdsSaveFailed');
       toast.error(message);
     } finally {
       setBusy(false);
@@ -240,7 +292,7 @@ export default function PowerManagement() {
   const currentProperty = status?.current_property || status?.current_profile as ServicePowerProperty;
 
   return (
-    <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
+    <div className="space-y-4 sm:space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
@@ -293,10 +345,10 @@ export default function PowerManagement() {
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <StatCard
           label={t('system:power.statusCards.activePreset')}
-          value={activePreset?.name || '-'}
-          subValue={activePreset?.description}
-          color={activePreset?.name.includes('Performance') ? 'red' : activePreset?.name.includes('Energy') ? 'emerald' : 'blue'}
-          icon={<span className="text-2xl">{activePreset ? getPresetIcon(activePreset.name) : '⚡'}</span>}
+          value={status?.dynamic_mode_enabled ? t('system:power.dynamicMode.title') : (activePreset?.name || '-')}
+          subValue={status?.dynamic_mode_enabled ? status.target_frequency_range : activePreset?.description}
+          color={status?.dynamic_mode_enabled ? 'teal' : activePreset?.name.includes('Performance') ? 'red' : activePreset?.name.includes('Energy') ? 'emerald' : 'blue'}
+          icon={<span className="text-2xl">{status?.dynamic_mode_enabled ? '\u{26A1}' : activePreset ? getPresetIcon(activePreset.name) : '\u{26A1}'}</span>}
         />
         <StatCard
           label={t('system:power.statusCards.currentProperty')}
@@ -332,8 +384,19 @@ export default function PowerManagement() {
         />
       </div>
 
+      {/* Dynamic Mode Section */}
+      {dynamicConfig && (
+        <DynamicModeSection
+          config={dynamicConfig}
+          isAdmin={isAdmin}
+          busy={busy}
+          onBusyChange={setBusy}
+          onRefresh={() => void loadData()}
+        />
+      )}
+
       {/* Preset Selection */}
-      <div className="card border-slate-700/50 p-4 sm:p-6">
+      <div className={`card border-slate-700/50 p-4 sm:p-6 ${status?.dynamic_mode_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
         <div className="mb-3 sm:mb-4 flex flex-col sm:flex-row sm:items-center justify-between gap-2 sm:gap-4">
           <h2 className="text-base sm:text-lg font-medium text-white">{t('system:power.presetSection.selectPreset')}</h2>
           {isAdmin && (
@@ -378,7 +441,7 @@ export default function PowerManagement() {
 
       {/* Preset Details */}
       {activePreset && (
-        <div className="card border-slate-700/50 p-4 sm:p-6">
+        <div className={`card border-slate-700/50 p-4 sm:p-6 ${status?.dynamic_mode_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base sm:text-lg font-medium text-white">
               {t('system:power.presetSection.preset')}: {activePreset.name}
@@ -424,29 +487,127 @@ export default function PowerManagement() {
 
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (
-        <div className="card border-slate-700/50 p-4 sm:p-6">
-          <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white flex items-center gap-2">
-            {t('system:power.autoScaling.title')}
-            <AdminBadge />
-          </h2>
-          <div className="grid grid-cols-3 gap-2 sm:gap-4">
-            <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.surge')}</p>
-              <p className="text-sm sm:text-xl font-semibold text-red-300">&gt;{autoScaling.cpu_surge_threshold}%</p>
-            </div>
-            <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.medium')}</p>
-              <p className="text-sm sm:text-xl font-semibold text-yellow-300">&gt;{autoScaling.cpu_medium_threshold}%</p>
-            </div>
-            <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
-              <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.low')}</p>
-              <p className="text-sm sm:text-xl font-semibold text-blue-300">&gt;{autoScaling.cpu_low_threshold}%</p>
-            </div>
+        <div className={`card border-slate-700/50 p-4 sm:p-6 ${status?.dynamic_mode_enabled ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="mb-3 sm:mb-4 flex items-center justify-between">
+            <h2 className="text-base sm:text-lg font-medium text-white flex items-center gap-2">
+              {t('system:power.autoScaling.title')}
+              <AdminBadge />
+            </h2>
+            {!editingAutoScaling ? (
+              <button
+                onClick={handleStartEditAutoScaling}
+                disabled={busy}
+                className="text-xs text-slate-400 hover:text-white flex items-center gap-1"
+              >
+                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                </svg>
+                {t('system:power.autoScaling.editButton')}
+              </button>
+            ) : (
+              <div className="flex gap-2">
+                <button
+                  onClick={handleCancelEditAutoScaling}
+                  disabled={busy}
+                  className="rounded px-3 py-1 text-xs bg-slate-700 text-slate-300 hover:bg-slate-600"
+                >
+                  {t('system:power.autoScaling.cancelButton')}
+                </button>
+                <button
+                  onClick={handleSaveAutoScaling}
+                  disabled={busy}
+                  className="rounded px-3 py-1 text-xs bg-blue-500/20 text-blue-300 hover:bg-blue-500/30"
+                >
+                  {t('system:power.autoScaling.saveButton')}
+                </button>
+              </div>
+            )}
           </div>
-          <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-slate-500">
-            {t('system:power.autoScaling.cooldown')}: {autoScaling.cooldown_seconds}s &bull; {t('system:power.autoScaling.cpuMonitor')}:{' '}
-            {autoScaling.use_cpu_monitoring ? t('system:power.autoScaling.active') : t('system:power.autoScaling.inactive')}
-          </p>
+          {editingAutoScaling && editAutoScaling ? (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <label className="block text-[10px] sm:text-sm text-slate-400 mb-1">{t('system:power.autoScaling.surge')}</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-red-300 text-sm">&gt;</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editAutoScaling.cpu_surge_threshold}
+                      onChange={(e) => setEditAutoScaling({ ...editAutoScaling, cpu_surge_threshold: Number(e.target.value) })}
+                      className="w-full rounded bg-slate-900 border border-slate-600 px-2 py-1 text-sm sm:text-xl font-semibold text-red-300 focus:border-red-400 focus:outline-none"
+                    />
+                    <span className="text-red-300 text-sm">%</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <label className="block text-[10px] sm:text-sm text-slate-400 mb-1">{t('system:power.autoScaling.medium')}</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-yellow-300 text-sm">&gt;</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editAutoScaling.cpu_medium_threshold}
+                      onChange={(e) => setEditAutoScaling({ ...editAutoScaling, cpu_medium_threshold: Number(e.target.value) })}
+                      className="w-full rounded bg-slate-900 border border-slate-600 px-2 py-1 text-sm sm:text-xl font-semibold text-yellow-300 focus:border-yellow-400 focus:outline-none"
+                    />
+                    <span className="text-yellow-300 text-sm">%</span>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <label className="block text-[10px] sm:text-sm text-slate-400 mb-1">{t('system:power.autoScaling.low')}</label>
+                  <div className="flex items-center gap-1">
+                    <span className="text-blue-300 text-sm">&gt;</span>
+                    <input
+                      type="number"
+                      min={0}
+                      max={100}
+                      value={editAutoScaling.cpu_low_threshold}
+                      onChange={(e) => setEditAutoScaling({ ...editAutoScaling, cpu_low_threshold: Number(e.target.value) })}
+                      className="w-full rounded bg-slate-900 border border-slate-600 px-2 py-1 text-sm sm:text-xl font-semibold text-blue-300 focus:border-blue-400 focus:outline-none"
+                    />
+                    <span className="text-blue-300 text-sm">%</span>
+                  </div>
+                </div>
+              </div>
+              <div className="mt-2 sm:mt-3 flex items-center gap-4">
+                <div className="flex items-center gap-2">
+                  <span className="text-xs sm:text-sm text-slate-500">{t('system:power.autoScaling.cooldown')}:</span>
+                  <input
+                    type="number"
+                    min={0}
+                    value={editAutoScaling.cooldown_seconds}
+                    onChange={(e) => setEditAutoScaling({ ...editAutoScaling, cooldown_seconds: Number(e.target.value) })}
+                    className="w-20 rounded bg-slate-900 border border-slate-600 px-2 py-1 text-xs sm:text-sm text-white focus:border-blue-400 focus:outline-none"
+                  />
+                  <span className="text-xs sm:text-sm text-slate-500">s</span>
+                </div>
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.surge')}</p>
+                  <p className="text-sm sm:text-xl font-semibold text-red-300">&gt;{autoScaling.cpu_surge_threshold}%</p>
+                </div>
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.medium')}</p>
+                  <p className="text-sm sm:text-xl font-semibold text-yellow-300">&gt;{autoScaling.cpu_medium_threshold}%</p>
+                </div>
+                <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
+                  <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.low')}</p>
+                  <p className="text-sm sm:text-xl font-semibold text-blue-300">&gt;{autoScaling.cpu_low_threshold}%</p>
+                </div>
+              </div>
+              <p className="mt-2 sm:mt-3 text-xs sm:text-sm text-slate-500">
+                {t('system:power.autoScaling.cooldown')}: {autoScaling.cooldown_seconds}s &bull; {t('system:power.autoScaling.cpuMonitor')}:{' '}
+                {autoScaling.use_cpu_monitoring ? t('system:power.autoScaling.active') : t('system:power.autoScaling.inactive')}
+              </p>
+            </>
+          )}
         </div>
       )}
 
