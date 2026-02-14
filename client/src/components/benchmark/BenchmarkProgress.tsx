@@ -70,7 +70,7 @@ export default function BenchmarkProgress({
       </div>
 
       {/* Current test and remaining time */}
-      <div className="flex items-center justify-between text-sm">
+      <div className="flex flex-wrap items-center justify-between gap-y-1 text-sm">
         <div className="flex items-center gap-2 text-slate-400">
           <span>{t('benchmark.current')}:</span>
           <span className="text-white font-mono">{currentTest}</span>

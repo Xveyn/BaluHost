@@ -115,11 +115,10 @@ export default function FanCurveChart({
     onPointsChange(updatedPoints);
   }, [canEdit, localPoints, minPoints, onPointsChange, sortedPoints]);
 
-  // Custom dot component - events are handled by the overlay
-  const CustomDot = (props: any) => {
+  // Stable render function for dot prop (useCallback keeps reference identity across renders)
+  const renderDot = useCallback((props: any) => {
     const { cx, cy, payload, index } = props;
 
-    // Guard clauses - früh returnen wenn Props fehlen
     if (cx === undefined || cy === undefined) return null;
     if (!payload) return null;
     if (payload.isCurrentPoint) return null;
@@ -129,21 +128,29 @@ export default function FanCurveChart({
     const fill = isHovered ? '#38bdf8' : '#0ea5e9'; // sky-400 / sky-500
 
     return (
-      <circle
-        cx={cx}
-        cy={cy}
-        r={radius}
-        fill={fill}
-        stroke="#1e293b"
-        strokeWidth={2}
-        style={{
-          cursor: canEdit ? 'grab' : 'default',
-          transition: 'r 0.15s ease',
-          pointerEvents: 'none', // Events handled by overlay
-        }}
-      />
+      <g>
+        <circle
+          cx={cx}
+          cy={cy}
+          r={radius}
+          fill={fill}
+          stroke="#1e293b"
+          strokeWidth={2}
+          style={{
+            cursor: canEdit ? 'grab' : 'default',
+            transition: 'r 0.15s ease',
+            pointerEvents: 'none', // Events handled by overlay
+          }}
+        />
+        {isHovered && (
+          <text x={cx} y={cy - 16} textAnchor="middle" fill="#e2e8f0"
+            fontSize={12} fontWeight={600} style={{ pointerEvents: 'none' }}>
+            {payload.temp.toFixed(1)}°C / {payload.pwm.toFixed(1)}%
+          </text>
+        )}
+      </g>
     );
-  };
+  }, [draggingIndex, canEdit]);
 
   const updatePointPosition = useCallback((clientX: number, clientY: number, index: number) => {
     if (!chartRef.current) return;
@@ -166,8 +173,8 @@ export default function FanCurveChart({
     const tempRange = emergencyTemp + 10 - 0; // 0 to emergencyTemp + 10
     const pwmRange = 100 - 0; // 0 to 100
 
-    const newTemp = Math.round((x / chartWidth) * tempRange);
-    const newPWM = Math.round(100 - (y / chartHeight) * pwmRange);
+    const newTemp = Math.round(((x / chartWidth) * tempRange) * 10) / 10;
+    const newPWM = Math.round((100 - (y / chartHeight) * pwmRange) * 10) / 10;
 
     // Clamp values
     const clampedTemp = Math.max(0, Math.min(emergencyTemp + 10, newTemp));
@@ -428,7 +435,6 @@ export default function FanCurveChart({
     >
       <ResponsiveContainer width="100%" height={400}>
         <ComposedChart
-          key={`curve-${chartData.length}`}
           data={chartData}
           margin={{ top: 5, right: 20, left: 0, bottom: 55 }}
         >
@@ -452,12 +458,10 @@ export default function FanCurveChart({
             }}
             tick={{ fill: '#94a3b8', fontSize: 11 }}
             stroke="#475569"
-            allowDuplicatedCategory={false}
           />
 
           {/* Y Axis - PWM */}
           <YAxis
-            dataKey="pwm"
             type="number"
             domain={[0, 100]}
             label={{
@@ -506,9 +510,10 @@ export default function FanCurveChart({
           <Line
             type="linear"
             dataKey="pwm"
+            data={chartData}
             stroke="#0ea5e9"
             strokeWidth={3}
-            dot={<CustomDot />}
+            dot={renderDot}
             activeDot={false}
             isAnimationActive={false}
           />

@@ -28,10 +28,10 @@ function ResultRow({ label, readValue, writeValue }: ResultRowProps) {
     <div className="grid grid-cols-3 gap-2">
       <div className="text-sm text-slate-400 font-medium py-2">{label}</div>
       <div className="bg-slate-700/50 rounded-lg py-2 px-3 text-center">
-        <span className="text-sky-400 font-mono text-lg font-semibold">{readValue}</span>
+        <span className="text-sky-400 font-mono text-base sm:text-lg font-semibold">{readValue}</span>
       </div>
       <div className="bg-slate-700/50 rounded-lg py-2 px-3 text-center">
-        <span className="text-rose-400 font-mono text-lg font-semibold">{writeValue}</span>
+        <span className="text-rose-400 font-mono text-base sm:text-lg font-semibold">{writeValue}</span>
       </div>
     </div>
   );

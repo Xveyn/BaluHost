@@ -193,7 +193,7 @@ export default function VCLSettings() {
           <Database className="w-5 h-5 text-sky-400" />
           {t('vcl.storageDetails.title')}
         </h3>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
           <div>
             <p className="text-slate-400">{t('vcl.storageDetails.compressionRatio')}</p>
             <p className="text-white font-semibold mt-1">{formatNumber(compressionRatio, 2)}x</p>

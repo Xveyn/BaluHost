@@ -197,7 +197,7 @@ export function VersionHistoryModal({
             </button>
           </div>
           
-          <div className="text-sm text-slate-400 mb-4 flex gap-4">
+          <div className="text-sm text-slate-400 mb-4 flex flex-wrap gap-2 sm:gap-4">
             <span>{t('versionHistory.diff.old', { version: selectedForDiff[0], size: formatBytes(diffData.old_size) })}</span>
             <span>→</span>
             <span>{t('versionHistory.diff.new', { version: selectedForDiff[1], size: formatBytes(diffData.new_size) })}</span>
@@ -262,9 +262,9 @@ export function VersionHistoryModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-4xl max-h-[85vh] flex flex-col">
+      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-[95vw] sm:max-w-4xl max-h-[85vh] flex flex-col">
         {/* Header */}
-        <div className="flex items-center justify-between p-6 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 sm:p-6 border-b border-slate-800">
           <div>
             <h2 className="text-xl font-bold text-white flex items-center gap-2">
               <Clock className="w-5 h-5 text-sky-400" />
@@ -375,7 +375,7 @@ export function VersionHistoryModal({
                       </div>
 
                       {/* Metadata */}
-                      <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-400 mb-2">
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1 text-sm text-slate-400 mb-2">
                         <div>
                           <span className="text-slate-500">{t('versionHistory.fields.created')}:</span>{' '}
                           {new Date(version.created_at).toLocaleString()}

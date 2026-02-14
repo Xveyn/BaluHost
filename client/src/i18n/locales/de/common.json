@@ -165,7 +165,9 @@
       "services": "Dienste",
       "vcl": "Versionskontrolle",
       "smart": "Smart Devices",
-      "rateLimits": "Rate Limits"
+      "rateLimits": "Rate Limits",
+      "webdav": "WebDAV",
+      "samba": "SMB/CIFS"
     }
   },
   "devices": {

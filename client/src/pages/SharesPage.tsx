@@ -260,7 +260,7 @@ export default function SharesPage() {
           <div className="flex min-w-max">
             <button
               onClick={() => setActiveTab('links')}
-              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+              className={`flex-1 min-w-[100px] sm:min-w-[120px] px-3 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
                 activeTab === 'links'
                   ? 'text-sky-400 bg-slate-800/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -277,7 +277,7 @@ export default function SharesPage() {
             </button>
             <button
               onClick={() => setActiveTab('shares')}
-              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+              className={`flex-1 min-w-[100px] sm:min-w-[120px] px-3 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
                 activeTab === 'shares'
                   ? 'text-sky-400 bg-slate-800/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'
@@ -294,7 +294,7 @@ export default function SharesPage() {
             </button>
             <button
               onClick={() => setActiveTab('shared-with-me')}
-              className={`flex-1 min-w-[120px] px-4 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
+              className={`flex-1 min-w-[100px] sm:min-w-[120px] px-3 sm:px-6 py-3 sm:py-4 font-medium transition-all relative text-sm sm:text-base ${
                 activeTab === 'shared-with-me'
                   ? 'text-sky-400 bg-slate-800/30'
                   : 'text-slate-400 hover:text-slate-200 hover:bg-slate-800/30'

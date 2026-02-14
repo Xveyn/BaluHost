@@ -439,7 +439,7 @@ See `PRODUCTION_READINESS.md` for complete checklist.
 2. **Check logs** in terminal where `start_dev.py` is running
 3. **API testing**: Use Swagger UI at `http://localhost:3001/docs`
 4. **Database inspection**: Use SQLite browser on `backend/baluhost.db`
-5. **Reset dev environment**: `python backend/scripts/reset_dev_storage.py`
+5. **Reset dev environment**: `python backend/scripts/debug/reset_dev_storage.py`
 6. **Test a specific feature**: Write pytest test, then implement feature (TDD)
 
 ## Common Issues & Solutions

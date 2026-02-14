@@ -289,7 +289,7 @@ export default function SettingsPage() {
                     <img
                       src={avatarPreview}
                       alt="Avatar preview"
-                      className="w-32 h-32 rounded-full object-cover"
+                      className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover"
                     />
                     <button
                       onClick={handleAvatarUpload}

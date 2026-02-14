@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types/auth';
-import logoMark from '../assets/baluhost-logo.svg';
+import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
 

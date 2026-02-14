@@ -13,6 +13,7 @@ __pycache__/
 backend/dev-storage/
 backend/dev-tmp/
 backend/tmp/
+backend/backups/
 backend/.mypy_cache/
 backend/.pytest_cache/
 backend/.ruff_cache/
@@ -92,3 +93,4 @@ backend/nul
 /user_input
 test_*.env.production
 test_*
+image.png

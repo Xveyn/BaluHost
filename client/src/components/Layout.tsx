@@ -1,7 +1,7 @@
 import { Link, useLocation } from 'react-router-dom';
 import { type ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import logoMark from '../assets/baluhost-logo.svg';
+import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
 import { usePlugins } from '../contexts/PluginContext';
