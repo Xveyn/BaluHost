@@ -14,7 +14,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2 } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -24,8 +24,10 @@ import { ServicesTab } from '../components/services';
 import VCLSettings from '../components/vcl/VCLSettings';
 import TapoDeviceSettings from '../components/TapoDeviceSettings';
 import { RateLimitsTab } from '../components/rate-limits';
+import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
+import SambaManagementCard from '../components/samba/SambaManagementCard';
 
-type TabType = 'energy' | 'fan' | 'raid' | 'backup' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits';
+type TabType = 'energy' | 'fan' | 'raid' | 'backup' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
 
 interface TabConfig {
   id: TabType;
@@ -79,6 +81,16 @@ const TABS: TabConfig[] = [
     labelKey: 'systemControl.tabs.rateLimits',
     icon: <Gauge className="h-5 w-5" />,
   },
+  {
+    id: 'webdav',
+    labelKey: 'systemControl.tabs.webdav',
+    icon: <FolderOpen className="h-5 w-5" />,
+  },
+  {
+    id: 'samba',
+    labelKey: 'systemControl.tabs.samba',
+    icon: <Share2 className="h-5 w-5" />,
+  },
 ];
 
 export default function SystemControlPage() {
@@ -94,7 +106,7 @@ export default function SystemControlPage() {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
@@ -108,28 +120,32 @@ export default function SystemControlPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
-                activeTab === tab.id
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
-              }`}
-            >
-              {tab.icon}
-              <span>{t(tab.labelKey)}</span>
-            </button>
-          ))}
+      <div className="relative">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+            {TABS.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                  activeTab === tab.id
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                }`}
+              >
+                {tab.icon}
+                <span className="hidden sm:inline">{t(tab.labelKey)}</span>
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Fade-Gradient rechts — nur mobile */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
       </div>
 
       {/* Tab Content */}
-      <div>
-        {activeTab === 'energy' && <PowerManagement />}
+      <div className="min-w-0">
+        {activeTab === 'energy' && <PowerManagement isAdmin={true} />}
         {activeTab === 'fan' && <FanControl />}
         {activeTab === 'raid' && <RaidManagement />}
         {activeTab === 'backup' && <BackupSettings />}
@@ -138,6 +154,8 @@ export default function SystemControlPage() {
         {activeTab === 'vcl' && <VCLSettings />}
         {activeTab === 'smart' && <TapoDeviceSettings />}
         {activeTab === 'ratelimits' && <RateLimitsTab />}
+        {activeTab === 'webdav' && <WebdavConnectionCard />}
+        {activeTab === 'samba' && <SambaManagementCard />}
       </div>
     </div>
   );
