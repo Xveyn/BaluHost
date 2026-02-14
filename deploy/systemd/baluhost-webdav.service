@@ -1,0 +1,35 @@
+[Unit]
+Description=BaluHost WebDAV Server
+After=network.target postgresql.service baluhost-backend.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=sven
+Group=sven
+WorkingDirectory=/home/sven/projects/BaluHost/backend
+
+# Load production environment variables
+EnvironmentFile=/home/sven/projects/BaluHost/.env.production
+
+# Run the WebDAV worker process
+ExecStart=/home/sven/projects/BaluHost/backend/.venv/bin/python scripts/webdav_worker.py
+
+# Restart policy
+Restart=always
+RestartSec=10s
+
+# Security hardening
+NoNewPrivileges=true
+PrivateTmp=true
+
+# Resource limits
+LimitNOFILE=65536
+
+# Logging
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=baluhost-webdav
+
+[Install]
+WantedBy=multi-user.target

@@ -20,6 +20,9 @@ backend/.ruff_cache/
 # Dev HTTPS Certificates
 dev-certs/
 
+# WebDAV self-signed SSL certs (generated at runtime)
+backend/webdav-certs/
+
 # Node/React
 client/node_modules/
 client/dist/

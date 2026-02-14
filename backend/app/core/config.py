@@ -124,6 +124,15 @@ class Settings(BaseSettings):
     fan_sample_interval_seconds: float = 5.0  # Monitoring interval
     fan_curve_interpolation: str = "linear"  # Curve interpolation method
 
+    # WebDAV configuration
+    webdav_enabled: bool = True
+    webdav_port: int = 8080
+    webdav_ssl_enabled: bool = True
+    webdav_verbose_logging: bool = False
+
+    # Samba (SMB/CIFS) configuration
+    samba_shares_conf_path: str = "/etc/samba/baluhost-shares.conf"
+
     # Database configuration
     database_url: str | None = None
     database_type: str = "sqlite"

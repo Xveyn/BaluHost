@@ -1,527 +1,364 @@
-# WebDAV Network Drive - Complete Setup Guide
+# WebDAV Network Drive
 
-**Status:** ✅ **READY FOR TESTING**  
-**Date:** December 5, 2024  
-**Component:** WebDAV Server for Network Drive Mounting
+Mount your BaluHost storage as a network drive on Windows, macOS, and Linux.
 
-## Overview
+## Architecture
 
-Mount your BaluHost NAS as a network drive on Windows, macOS, and Linux using the WebDAV protocol.
+The WebDAV server runs as a **separate worker process** alongside the main backend:
 
-## Quick Start
+```
+┌─────────────────────┐     ┌─────────────────────────┐
+│  FastAPI Backend     │     │  WebDAV Worker           │
+│  (Uvicorn, Port 8000)│     │  (cheroot WSGI, Port 8080)│
+│                     │     │                         │
+│  /api/webdav/status ─┼──── │  webdav_state (DB)      │
+│  /api/webdav/        │ IPC │                         │
+│    connection-info   │     │  WsgiDAV + BaluHost Auth│
+└─────────────────────┘     └─────────────────────────┘
+```
 
-### 1. Start WebDAV Server
+- **Server**: cheroot WSGI hosting a WsgiDAV application
+- **Authentication**: HTTP Basic Auth verified against the BaluHost user database (bcrypt)
+- **User Isolation**: Admin sees entire storage, regular users see only `<storage>/<username>/`
+- **IPC**: Worker writes heartbeat to `webdav_state` table every 10s; web API reads it for status
+- **SSL**: Self-signed certificate auto-generated on first start (enabled by default)
+
+## Configuration
+
+Environment variables (or `Settings` in `backend/app/core/config.py`):
+
+| Variable | Default | Description |
+|---|---|---|
+| `WEBDAV_ENABLED` | `true` | Enable/disable the WebDAV server |
+| `WEBDAV_PORT` | `8080` | Listening port |
+| `WEBDAV_SSL_ENABLED` | `true` | HTTPS with self-signed certificate |
+| `WEBDAV_VERBOSE_LOGGING` | `false` | Log every request (method, path, auth) |
+
+## Starting the Server
+
+### Development
 
 ```bash
-cd backend
-python start_webdav.py
+python start_dev.py
+# Starts backend, scheduler, webdav worker, and frontend
 ```
 
-Output:
-```
-============================================================
-BaluHost WebDAV Server
-============================================================
+The WebDAV worker is launched automatically as a subprocess.
 
-Network Drive Mount Points:
-  Windows:  \\localhost:8080\
-  macOS:    http://localhost:8080/
-  Linux:    http://localhost:8080/
+### Production
 
-Default Credentials:
-  Username: admin
-  Password: password
+**Systemd service** (`deploy/systemd/baluhost-webdav.service`):
 
-============================================================
+```bash
+sudo systemctl enable baluhost-webdav
+sudo systemctl start baluhost-webdav
 
-Starting WebDAV server on http://0.0.0.0:8080
+# Check status
+sudo systemctl status baluhost-webdav
+sudo journalctl -u baluhost-webdav -f
 ```
 
-### 2. Mount on Your OS
+Or via the launcher:
 
-Choose your operating system below for detailed instructions.
+```bash
+python start_prod.py    # Starts backend + scheduler + webdav
+python kill_prod.py     # Stops all
+```
 
----
+## Connecting from Clients
 
-## Windows - Map Network Drive
+Use your **BaluHost login credentials** (username + password). The WebDAV tab in the BaluHost UI (System Control Page) shows the exact commands for your username.
 
-### Method 1: File Explorer (GUI)
+Default connection URL: `https://<NAS-IP>:8080/`
 
-1. **Open File Explorer** (Win + E)
+### Windows
 
-2. **Click "This PC"** in left sidebar
-
-3. **Click "Map network drive"** in toolbar
-
-4. **Configure:**
-   - **Drive letter:** Z: (or any available)
-   - **Folder:** `\\localhost@8080\DavWWWRoot`
-   - ✅ **Check:** "Reconnect at sign-in"
-   - ✅ **Check:** "Connect using different credentials"
-
-5. **Click "Finish"**
-
-6. **Enter credentials:**
-   - Username: `admin`
-   - Password: `password`
-   - ✅ **Check:** "Remember my credentials"
-
-7. **Click "OK"**
-
-### Method 2: Command Line
+#### Method 1: Command Line
 
 ```cmd
-net use Z: \\localhost@8080\DavWWWRoot /user:admin password /persistent:yes
+net use Z: https://192.168.178.53:8080/ /user:admin *
 ```
 
-### Method 3: PowerShell
+#### Method 2: File Explorer (GUI)
+
+1. Open File Explorer (Win+E) → "This PC"
+2. Click "Map network drive" in toolbar
+3. Drive letter: `Z:` (or any available)
+4. Folder: `https://192.168.178.53:8080/`
+5. Check "Connect using different credentials" → Finish
+6. Enter BaluHost username and password
+
+#### Windows: SSL Certificate Trust
+
+With self-signed certificates, Windows requires you to import the cert:
+
+1. Copy `backend/webdav-certs/webdav.crt` from the NAS to your Windows PC
+2. Double-click the `.crt` file → "Install Certificate"
+3. Store Location: **Local Machine**
+4. Place in: **Trusted Root Certification Authorities**
+5. Finish → restart `WebClient` service:
 
 ```powershell
-$cred = Get-Credential -UserName admin -Message "BaluHost WebDAV"
-New-PSDrive -Name "Z" -PSProvider FileSystem -Root "\\localhost@8080\DavWWWRoot" -Credential $cred -Persist
+Restart-Service WebClient
 ```
 
-### Troubleshooting Windows
+#### Windows: WebClient Service
 
-#### Error: "The network path was not found"
-**Fix:** Ensure WebDAV Client service is running
+The `WebClient` service must be running:
+
 ```powershell
-# Check service status
+# Check status
 Get-Service WebClient
 
-# Start service if stopped
+# Start and set to auto-start
 Start-Service WebClient
-
-# Set to auto-start
 Set-Service WebClient -StartupType Automatic
 ```
 
-#### Error: "The folder you entered does not appear to be valid"
-**Fix:** Use `\\localhost@8080\DavWWWRoot` format (note `@` instead of `:`)
+#### Windows: Performance Tuning
 
-#### Error: "Windows cannot access..."
-**Fix:** Disable Basic Auth restriction (Windows 10/11)
 ```powershell
-# Run as Administrator
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "BasicAuthLevel" -Value 2
+# Increase file size limit (default 50 MB → 4 GB)
+Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" `
+  -Name "FileSizeLimitInBytes" -Value 4294967295
+
 Restart-Service WebClient
 ```
 
-#### Slow Performance
-**Fix:** Increase file size limit
-```powershell
-# Allow larger files (50MB default → 500MB)
-Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "FileSizeLimitInBytes" -Value 524288000
-Restart-Service WebClient
-```
+### macOS
 
----
+#### Finder (GUI)
 
-## macOS - Connect to Server
+1. Finder → Go → Connect to Server (Cmd+K)
+2. Enter: `https://192.168.178.53:8080/`
+3. Click "Connect"
+4. Choose "Registered User" → enter BaluHost credentials
+5. Volume mounts at `/Volumes/<hostname>`
 
-### Method 1: Finder (GUI)
-
-1. **Open Finder**
-
-2. **Press Cmd + K** or **Go → Connect to Server**
-
-3. **Enter server address:**
-   ```
-   http://localhost:8080/
-   ```
-
-4. **Click "Connect"**
-
-5. **Choose "Registered User"**
-
-6. **Enter credentials:**
-   - Name: `admin`
-   - Password: `password`
-   - ✅ **Check:** "Remember this password in my keychain"
-
-7. **Click "Connect"**
-
-8. **Volume mounts** at `/Volumes/localhost`
-
-### Method 2: Command Line
+#### Command Line
 
 ```bash
-# Create mount point
 sudo mkdir -p /Volumes/baluhost
-
-# Mount WebDAV
-mount -t webdav http://localhost:8080/ /Volumes/baluhost
-# Enter password when prompted
+mount -t webdav https://192.168.178.53:8080/ /Volumes/baluhost
 ```
 
-### Method 3: Auto-mount at Login
+#### Disable .DS_Store on Network Volumes
 
 ```bash
-# Edit /etc/fstab (requires sudo)
-echo "http://admin:password@localhost:8080/ /Volumes/baluhost webdav rw,noauto 0 0" | sudo tee -a /etc/fstab
-
-# Create mount script
-cat > ~/mount-baluhost.sh << 'EOF'
-#!/bin/bash
-mkdir -p /Volumes/baluhost
-mount -t webdav http://localhost:8080/ /Volumes/baluhost
-EOF
-
-chmod +x ~/mount-baluhost.sh
+defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
 ```
 
-### Troubleshooting macOS
+### Linux
 
-#### Error: "Connection failed"
-**Fix:** Check server is running on port 8080
+#### Install davfs2
+
 ```bash
-curl http://localhost:8080/
-# Should return WebDAV response
-```
-
-#### Error: "The operation can't be completed"
-**Fix:** Try with IP address instead of localhost
-```
-http://127.0.0.1:8080/
-```
-
-#### Unmount Volume
-```bash
-diskutil unmount /Volumes/localhost
-# or
-umount /Volumes/baluhost
-```
-
----
-
-## Linux - mount.davfs
-
-### Install davfs2
-
-**Ubuntu/Debian:**
-```bash
-sudo apt update
+# Debian/Ubuntu
 sudo apt install davfs2
-```
 
-**Fedora/RHEL:**
-```bash
+# Fedora/RHEL
 sudo dnf install davfs2
-```
 
-**Arch Linux:**
-```bash
+# Arch
 sudo pacman -S davfs2
 ```
 
-### Configure davfs2
+#### Mount
 
-1. **Add user to davfs2 group:**
-   ```bash
-   sudo usermod -a -G davfs2 $USER
-   # Logout and login for changes to take effect
-   ```
-
-2. **Create secrets file:**
-   ```bash
-   sudo nano /etc/davfs2/secrets
-   # Add line:
-   http://localhost:8080/ admin password
-   
-   # Secure the file
-   sudo chmod 600 /etc/davfs2/secrets
-   ```
-
-### Mount WebDAV
-
-**Temporary Mount:**
 ```bash
-# Create mount point
 sudo mkdir -p /mnt/baluhost
-
-# Mount
-sudo mount -t davfs http://localhost:8080/ /mnt/baluhost
-# Password will be read from secrets file
+sudo mount -t davfs https://192.168.178.53:8080/ /mnt/baluhost
+# Enter username + password when prompted
 ```
 
-**Permanent Mount (fstab):**
+#### Self-Signed Certificate Trust
+
+Add to `/etc/davfs2/davfs2.conf`:
+
+```
+trust_server_cert /path/to/webdav.crt
+```
+
+Or copy the cert to the system trust store:
+
 ```bash
-# Edit /etc/fstab
-sudo nano /etc/fstab
+sudo cp webdav.crt /usr/local/share/ca-certificates/baluhost-webdav.crt
+sudo update-ca-certificates
+```
 
-# Add line:
-http://localhost:8080/ /mnt/baluhost davfs user,noauto,uid=1000,gid=1000 0 0
+#### Permanent Mount (fstab)
 
-# Mount
+```bash
+# Add credentials
+echo "https://192.168.178.53:8080/ admin yourpassword" | sudo tee -a /etc/davfs2/secrets
+sudo chmod 600 /etc/davfs2/secrets
+
+# Add to fstab
+echo "https://192.168.178.53:8080/ /mnt/baluhost davfs user,noauto,uid=1000,gid=1000 0 0" | sudo tee -a /etc/fstab
+
+# Mount (no sudo needed after fstab entry)
 mount /mnt/baluhost
 ```
 
-**User-space Mount (no sudo):**
+## SSL / HTTPS
+
+SSL is **enabled by default**. On first start, the WebDAV worker auto-generates a self-signed certificate:
+
+- **Location**: `backend/webdav-certs/webdav.crt` + `webdav.key`
+- **Validity**: 10 years
+- **SAN**: `localhost`, `127.0.0.1`, and the server's detected LAN IP
+- **Algorithm**: RSA 2048-bit, SHA256
+
+To regenerate the certificate (e.g., after IP change):
+
 ```bash
-# Create user config
-mkdir -p ~/.davfs2
-echo "http://localhost:8080/ admin password" > ~/.davfs2/secrets
-chmod 600 ~/.davfs2/secrets
-
-# Create mount point in home
-mkdir -p ~/baluhost
-
-# Add to fstab (one-time, requires sudo)
-echo "http://localhost:8080/ $HOME/baluhost davfs user,noauto,uid=$UID,gid=$UID 0 0" | sudo tee -a /etc/fstab
-
-# Mount (no sudo needed after fstab entry)
-mount ~/baluhost
+rm -rf backend/webdav-certs/
+sudo systemctl restart baluhost-webdav
 ```
 
-### Troubleshooting Linux
+To disable SSL:
 
-#### Error: "mount.davfs: mounting failed"
-**Fix:** Check davfs2 is installed and user is in davfs2 group
 ```bash
-groups $USER
-# Should include: davfs2
+export WEBDAV_SSL_ENABLED=false
 ```
 
-#### Error: "Network is unreachable"
-**Fix:** Ensure server is accessible
-```bash
-ping localhost
-curl http://localhost:8080/
-```
+## User Isolation
 
-#### Unmount
-```bash
-fusermount -u /mnt/baluhost
-# or
-umount /mnt/baluhost
-```
+Storage access is enforced per-request in `BaluHostDAVProvider`:
 
-#### Mount on Boot
-```bash
-# Enable systemd mount
-sudo systemctl daemon-reload
-sudo systemctl enable mnt-baluhost.mount
-sudo systemctl start mnt-baluhost.mount
-```
+| Role | Sees | Path |
+|---|---|---|
+| `admin` | Entire storage | `<NAS_STORAGE_PATH>/` |
+| `user` | Home directory only | `<NAS_STORAGE_PATH>/<username>/` |
 
----
+- Home directories are created automatically on first WebDAV access
+- Path traversal is prevented via `os.path.normpath()` validation
+- Thread-safe: user context is read from the WSGI environ per request
 
-## Testing the Mount
+## API Endpoints
 
-### Windows
-```cmd
-Z:
-dir
-type test.txt
-echo "Hello from Windows" > windows_test.txt
-```
+### `GET /api/webdav/status` (Admin only)
 
-### macOS
-```bash
-cd /Volumes/localhost
-ls -la
-cat test.txt
-echo "Hello from macOS" > mac_test.txt
-```
+Returns detailed server status including heartbeat and PID.
 
-### Linux
-```bash
-cd /mnt/baluhost
-ls -la
-cat test.txt
-echo "Hello from Linux" > linux_test.txt
-```
-
-### Verify in Web UI
-
-1. Open http://localhost:3000
-2. Login as admin
-3. Navigate to File Manager
-4. You should see `windows_test.txt`, `mac_test.txt`, `linux_test.txt`
-
----
-
-## Advanced Configuration
-
-### Custom Port
-
-Edit `backend/start_webdav.py`:
-```python
-server = wsgi.Server(
-    bind_addr=('0.0.0.0', 9090),  # Change port
-    wsgi_app=app
-)
-```
-
-Update mount points accordingly:
-- Windows: `\\localhost@9090\DavWWWRoot`
-- macOS: `http://localhost:9090/`
-- Linux: `http://localhost:9090/`
-
-### HTTPS/SSL
-
-For secure connections, use reverse proxy (nginx/Apache):
-
-**nginx configuration:**
-```nginx
-server {
-    listen 443 ssl;
-    server_name baluhost.local;
-    
-    ssl_certificate /path/to/cert.pem;
-    ssl_certificate_key /path/to/key.pem;
-    
-    location / {
-        proxy_pass http://localhost:8080;
-        proxy_set_header Host $host;
-        proxy_set_header X-Real-IP $remote_addr;
-    }
+```json
+{
+  "is_running": true,
+  "port": 8080,
+  "ssl_enabled": true,
+  "started_at": "2026-02-14T10:30:00+00:00",
+  "worker_pid": 12345,
+  "last_heartbeat": "2026-02-14T10:35:45+00:00",
+  "error_message": null,
+  "connection_url": "https://192.168.178.53:8080/"
 }
 ```
 
-Then mount using `https://baluhost.local/`
+### `GET /api/webdav/connection-info` (Authenticated users)
 
-### External Access
+Returns OS-specific mount instructions with the current user's username.
 
-To access from other computers on network:
-
-1. **Get your IP address:**
-   ```bash
-   # Windows
-   ipconfig
-   
-   # macOS/Linux
-   ifconfig
-   # or
-   ip addr show
-   ```
-
-2. **Start WebDAV on all interfaces** (already configured in `start_webdav.py`):
-   ```python
-   bind_addr=('0.0.0.0', 8080)  # Listen on all IPs
-   ```
-
-3. **Mount from remote computer:**
-   - Windows: `\\192.168.1.100@8080\DavWWWRoot`
-   - macOS: `http://192.168.1.100:8080/`
-   - Linux: `http://192.168.1.100:8080/`
-
-4. **Configure firewall** to allow port 8080:
-   ```bash
-   # Windows (Run as Administrator)
-   netsh advfirewall firewall add rule name="BaluHost WebDAV" dir=in action=allow protocol=TCP localport=8080
-   
-   # Linux (ufw)
-   sudo ufw allow 8080/tcp
-   
-   # Linux (firewalld)
-   sudo firewall-cmd --add-port=8080/tcp --permanent
-   sudo firewall-cmd --reload
-   ```
-
----
-
-## Performance Tuning
-
-### WebDAV Server (backend/app/compat/webdav_asgi.py)
-
-```python
-config.update({
-    "verbose": 1,  # Reduce logging (0-5, lower = less verbose)
-    "dir_browser": {
-        "enable": True,  # Web interface
-        "response_trailer": "",
-    },
-    "chunked_write": True,  # Better for large files
-    "block_size": 8192,  # Read/write block size (bytes)
-})
+```json
+{
+  "is_running": true,
+  "port": 8080,
+  "ssl_enabled": true,
+  "username": "admin",
+  "connection_url": "https://192.168.178.53:8080/",
+  "instructions": [
+    {
+      "os": "windows",
+      "label": "Windows",
+      "command": "net use Z: https://192.168.178.53:8080/ /user:admin *",
+      "notes": "Or use File Explorer..."
+    }
+  ]
+}
 ```
 
-### Windows Performance
+## Health Monitoring
 
-Increase buffer sizes:
-```powershell
-# Registry tweaks (Run as Administrator)
-New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "FileAttributesLimitInBytes" -Value 10000000 -PropertyType DWord -Force
-New-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "FileSizeLimitInBytes" -Value 4294967295 -PropertyType DWord -Force
+The WebDAV server registers with BaluHost's service status system:
 
-Restart-Service WebClient
+- Heartbeat interval: **10 seconds**
+- Staleness threshold: **30 seconds** (no heartbeat = considered offline)
+- Visible in: Admin Dashboard → Services tab
+- Systemd: auto-restart on crash (`Restart=always`, `RestartSec=10s`)
+
+## Frontend UI
+
+The WebDAV tab is part of the **System Control Page** (`client/src/pages/SystemControlPage.tsx`):
+
+- `WebdavConnectionCard` — shows status, connection URL, and OS-specific mount instructions with copy buttons
+- Fetches data from `/api/webdav/connection-info`
+- i18n keys: `system.webdav.*` (English + German)
+
+## Key Files
+
+| File | Purpose |
+|---|---|
+| `backend/app/core/config.py` | Configuration (port, SSL, enabled) |
+| `backend/scripts/webdav_worker.py` | Worker entry point |
+| `backend/app/services/webdav_service.py` | cheroot server, SSL cert generation, heartbeat |
+| `backend/app/compat/webdav_asgi.py` | WsgiDAV app, auth controller |
+| `backend/app/compat/webdav_provider.py` | Storage provider with user isolation |
+| `backend/app/api/routes/webdav.py` | REST API endpoints |
+| `backend/app/schemas/webdav.py` | Pydantic response models |
+| `backend/app/models/webdav_state.py` | Database model |
+| `deploy/systemd/baluhost-webdav.service` | Systemd unit file |
+| `client/src/components/webdav/WebdavConnectionCard.tsx` | Frontend component |
+| `client/src/api/webdav.ts` | Frontend API client |
+
+## Troubleshooting
+
+### Server won't start
+
+```bash
+# Check if port 8080 is already in use
+ss -tlnp | grep 8080
+
+# Check worker logs
+journalctl -u baluhost-webdav --no-pager -n 50
 ```
 
----
+### Windows Error 67: "The network name was not found"
 
-## Security Considerations
-
-### Production Deployment
-
-1. **Change default credentials** in `backend/app/compat/webdav_asgi.py`:
-   ```python
-   "simple_dc": {
-       "user_mapping": {
-           "*": {
-               "your_username": {"password": "strong_password"},
-           }
-       }
-   }
+1. Ensure the WebDAV worker is running on the NAS
+2. Ensure the `WebClient` service is running on Windows
+3. If using HTTP (not HTTPS): set `BasicAuthLevel` to `2`:
+   ```powershell
+   Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "BasicAuthLevel" -Value 2
+   Restart-Service WebClient
    ```
 
-2. **Enable HTTPS** using reverse proxy
+### Windows: Certificate error with self-signed cert
 
-3. **Restrict access** by IP:
-   ```python
-   # In start_webdav.py
-   bind_addr=('192.168.1.100', 8080)  # Specific IP only
-   ```
+Import `webdav.crt` into Trusted Root Certification Authorities (see [SSL Certificate Trust](#windows-ssl-certificate-trust) above).
 
-4. **Use JWT authentication** instead of basic auth (future enhancement)
+### macOS: "Connection failed"
 
----
+Try IP address instead of hostname. Check the server is reachable:
 
-## Known Issues
+```bash
+curl -k https://192.168.178.53:8080/
+```
 
-### Windows
+### Linux: mount.davfs fails with SSL error
 
-- **Issue:** Large files (>50MB) fail to upload
-  - **Fix:** Increase `FileSizeLimitInBytes` registry key
+Add `trust_server_cert` directive to davfs2.conf or install the cert system-wide (see [Linux SSL section](#self-signed-certificate-trust) above).
 
-- **Issue:** Slow directory listing
-  - **Fix:** Disable Windows Search indexing for network drives
+### Stale status in UI (shows "Not Running" even though worker runs)
 
-### macOS
+The heartbeat may be stale. Restart the worker:
 
-- **Issue:** ".DS_Store" files created everywhere
-  - **Fix:** Disable for network volumes:
-    ```bash
-    defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
-    ```
+```bash
+sudo systemctl restart baluhost-webdav
+```
 
-### Linux
+### Regenerate SSL certificate
 
-- **Issue:** Permission denied errors
-  - **Fix:** Ensure correct UID/GID in fstab mount options
-
----
-
-## Next Steps
-
-- [ ] **JWT Authentication:** Replace basic auth with JWT tokens
-- [ ] **Multi-user Support:** Per-user home directories
-- [ ] **Quota Enforcement:** Integrate with BaluHost quota system
-- [ ] **Audit Logging:** Log all WebDAV operations
-- [ ] **Encryption:** Built-in TLS/SSL support
-- [ ] **Caching:** Improve performance with client-side caching
-
----
-
-## Support
-
-For issues or questions, check:
-- WebDAV server logs in terminal
-- Backend logs in `backend/tmp/audit/`
-- System logs (Event Viewer/Console.app/syslog)
-
-## References
-
-- [WsgiDAV Documentation](https://wsgidav.readthedocs.io/)
-- [WebDAV RFC 4918](https://tools.ietf.org/html/rfc4918)
-- [Windows WebClient Service](https://docs.microsoft.com/en-us/windows-server/storage/webdav/)
+```bash
+rm -rf backend/webdav-certs/
+sudo systemctl restart baluhost-webdav
+# New cert generated with current LAN IP in SAN
+```
