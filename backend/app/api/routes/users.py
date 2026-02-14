@@ -94,6 +94,13 @@ async def create_user(
 
     record = user_service.create_user(payload, db=db)
 
+    # Sync Samba password if SMB is enabled for this user
+    if record.smb_enabled:
+        from app.services import samba_service
+        await samba_service.sync_smb_password(record.username, payload.password)
+        await samba_service.regenerate_shares_config()
+        await samba_service.reload_samba()
+
     audit_logger.log_user_management(
         action="user_created",
         admin_user=current_admin.username,
@@ -129,6 +136,11 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     record = user_service.update_user(user_id, payload, db=db)
+
+    # Sync Samba password if changed and SMB is enabled
+    if payload.password and record.smb_enabled:
+        from app.services import samba_service
+        await samba_service.sync_smb_password(record.username, payload.password)
 
     # Log changes
     details = {}
@@ -171,6 +183,13 @@ async def delete_user(
             db=db
         )
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    # Remove Samba access before deleting the user
+    if user.smb_enabled:
+        from app.services import samba_service
+        await samba_service.remove_smb_user(user.username)
+        await samba_service.regenerate_shares_config()
+        await samba_service.reload_samba()
 
     username = user.username
     deleted = user_service.delete_user(user_id, db=db)

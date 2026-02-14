@@ -353,6 +353,33 @@
     "history": {
       "title": "Property History"
     },
+    "propertyDescription": {
+      "idle": "Idle, Monitoring",
+      "low": "CRUD, Configuration",
+      "medium": "File-Ops, Sync, SMART",
+      "surge": "Backup, RAID Rebuild"
+    },
+    "presetDescription": {
+      "energySaver": "Minimal power consumption",
+      "balanced": "Balanced performance",
+      "performance": "Maximum performance"
+    },
+    "dynamicMode": {
+      "title": "Dynamic Mode",
+      "description": "Let the kernel governor handle CPU frequency scaling natively with ~1ms response time, instead of discrete profile switching.",
+      "active": "Active",
+      "governor": "Governor",
+      "minFrequency": "Min Frequency",
+      "maxFrequency": "Max Frequency",
+      "systemMin": "System Min",
+      "systemMax": "System Max",
+      "recommended": "Recommended",
+      "save": "Apply",
+      "enabled": "Dynamic Mode enabled",
+      "disabled": "Dynamic Mode disabled",
+      "profilesPaused": "Profile-based scaling and Auto-Scaling are paused while Dynamic Mode is active. Demands are still tracked.",
+      "validationError": "Min frequency must be less than or equal to Max frequency"
+    },
     "autoScaling": {
       "title": "Auto-Scaling Configuration",
       "surge": "SURGE",
@@ -361,7 +388,13 @@
       "cooldown": "Cooldown",
       "cpuMonitor": "CPU Monitor",
       "active": "Active",
-      "inactive": "Inactive"
+      "inactive": "Inactive",
+      "editButton": "Edit",
+      "saveButton": "Save",
+      "cancelButton": "Cancel",
+      "thresholdsSaved": "Auto-scaling thresholds saved",
+      "thresholdsSaveFailed": "Failed to save thresholds",
+      "validationError": "Surge must be > Medium > Low (all 0-100)"
     },
     "permissions": {
       "title": "Permission Status",
@@ -997,5 +1030,58 @@
     "addMockDisk": "Add Mock Disk",
     "successMessage": "Mock disk successfully added",
     "errorMessage": "Error adding mock disk"
+  },
+  "webdav": {
+    "title": "WebDAV Network Drive",
+    "subtitle": "Mount your BaluHost storage as a network drive on any OS",
+    "loading": "Loading WebDAV status...",
+    "status": "Status",
+    "running": "Running",
+    "notRunning": "Not Running",
+    "notRunningHint": "The WebDAV server is not running. Check the Services tab or restart the server.",
+    "port": "Port",
+    "ssl": "Protocol",
+    "copyPath": "Copy",
+    "copied": "Copied!",
+    "mountInstructions": "Mount Instructions",
+    "authenticateAs": "Authenticate with your BaluHost username '{{username}}' and password.",
+    "connectionInfo": "Connection Info"
+  },
+  "samba": {
+    "title": "SMB/CIFS Network Drive",
+    "subtitle": "Mount your BaluHost storage as a Windows-compatible network drive (SMB/CIFS)",
+    "loading": "Loading Samba status...",
+    "refresh": "Refresh",
+    "running": "Running",
+    "notRunning": "Not Running",
+    "notRunningHint": "The Samba server (smbd) is not running. Install and start Samba on the server to enable SMB shares.",
+    "version": "Version",
+    "connections": "Connections",
+    "enabledUsers": "SMB Users",
+    "activeConnections": "Active Connections",
+    "userManagement": "User SMB Access",
+    "username": "Username",
+    "role": "Role",
+    "status": "Status",
+    "smbAccess": "SMB Access",
+    "active": "Active",
+    "inactive": "Inactive",
+    "inactiveUserHint": "User account is inactive",
+    "userEnabled": "SMB access enabled for {{username}}",
+    "userDisabled": "SMB access disabled for {{username}}",
+    "toggleFailed": "Failed to toggle SMB access",
+    "mountInstructions": "Mount Instructions",
+    "shareName": "Share Name",
+    "authenticateAs": "Authenticate with your BaluHost username '{{username}}' and password.",
+    "capacityHint": "Windows displays the full RAID capacity correctly with SMB (unlike WebDAV).",
+    "copy": "Copy",
+    "copied": "Copied!",
+    "enableSmbTitle": "Enable SMB for {{username}}",
+    "enableSmbDescription": "Optionally provide the user's password to sync it with Samba immediately. Without a password, the user must change their BaluHost password for SMB to work.",
+    "passwordLabel": "Password (optional)",
+    "passwordPlaceholder": "Enter user's current password...",
+    "passwordHint": "Leave empty if you don't know the password. The user can change their password later to sync it.",
+    "cancel": "Cancel",
+    "enable": "Enable SMB"
   }
 }

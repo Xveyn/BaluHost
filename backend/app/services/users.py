@@ -342,6 +342,7 @@ def serialize_user(user: User) -> UserPublic:
         email=user.email if user.email else None,  # Return None instead of empty string
         role=user.role,
         is_active=user.is_active,
+        smb_enabled=user.smb_enabled,
         created_at=user.created_at.isoformat() if user.created_at else "",
         updated_at=user.updated_at.isoformat() if user.updated_at else None
     )

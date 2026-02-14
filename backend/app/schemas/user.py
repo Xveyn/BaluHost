@@ -63,6 +63,7 @@ class UserPublic(UserBase):
     id: int
     role: str
     is_active: bool
+    smb_enabled: bool = False
     created_at: str
     updated_at: str | None = None
     # email is already inherited as EmailStr | None from UserBase

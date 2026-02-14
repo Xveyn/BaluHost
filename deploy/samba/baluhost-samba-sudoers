@@ -1,0 +1,9 @@
+# BaluHost Samba sudoers rules
+# Install: sudo cp baluhost-samba-sudoers /etc/sudoers.d/baluhost-samba
+# Verify:  sudo visudo -c
+
+sven ALL=(ALL) NOPASSWD: /usr/bin/smbpasswd
+sven ALL=(ALL) NOPASSWD: /usr/bin/smbcontrol
+sven ALL=(ALL) NOPASSWD: /usr/bin/smbstatus
+sven ALL=(ALL) NOPASSWD: /usr/sbin/useradd
+sven ALL=(ALL) NOPASSWD: /usr/sbin/userdel

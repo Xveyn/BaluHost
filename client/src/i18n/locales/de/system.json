@@ -353,6 +353,33 @@
     "history": {
       "title": "Property-Historie"
     },
+    "propertyDescription": {
+      "idle": "Leerlauf, Monitoring",
+      "low": "CRUD, Konfiguration",
+      "medium": "File-Ops, Sync, SMART",
+      "surge": "Backup, RAID Rebuild"
+    },
+    "presetDescription": {
+      "energySaver": "Minimaler Stromverbrauch",
+      "balanced": "Ausgewogene Balance",
+      "performance": "Maximale Leistung"
+    },
+    "dynamicMode": {
+      "title": "Dynamic Mode",
+      "description": "Der Kernel-Governor übernimmt die CPU-Frequenzskalierung nativ mit ~1ms Reaktionszeit, statt diskreter Profilumschaltung.",
+      "active": "Aktiv",
+      "governor": "Governor",
+      "minFrequency": "Min-Frequenz",
+      "maxFrequency": "Max-Frequenz",
+      "systemMin": "System-Min",
+      "systemMax": "System-Max",
+      "recommended": "Empfohlen",
+      "save": "Anwenden",
+      "enabled": "Dynamic Mode aktiviert",
+      "disabled": "Dynamic Mode deaktiviert",
+      "profilesPaused": "Profil-basiertes Scaling und Auto-Scaling sind pausiert, solange Dynamic Mode aktiv ist. Demands werden weiterhin erfasst.",
+      "validationError": "Min-Frequenz muss kleiner oder gleich Max-Frequenz sein"
+    },
     "autoScaling": {
       "title": "Auto-Scaling Konfiguration",
       "surge": "SURGE",
@@ -361,7 +388,13 @@
       "cooldown": "Cooldown",
       "cpuMonitor": "CPU-Monitor",
       "active": "Aktiv",
-      "inactive": "Inaktiv"
+      "inactive": "Inaktiv",
+      "editButton": "Bearbeiten",
+      "saveButton": "Speichern",
+      "cancelButton": "Abbrechen",
+      "thresholdsSaved": "Auto-Scaling Schwellwerte gespeichert",
+      "thresholdsSaveFailed": "Schwellwerte konnten nicht gespeichert werden",
+      "validationError": "Surge muss > Medium > Low sein (alle 0-100)"
     },
     "permissions": {
       "title": "Berechtigungsstatus",
@@ -997,5 +1030,58 @@
     "addMockDisk": "Mock-Disk hinzufügen",
     "successMessage": "Mock-Disk erfolgreich hinzugefügt",
     "errorMessage": "Fehler beim Hinzufügen der Mock-Disk"
+  },
+  "webdav": {
+    "title": "WebDAV-Netzlaufwerk",
+    "subtitle": "BaluHost-Speicher als Netzlaufwerk auf jedem Betriebssystem einbinden",
+    "loading": "WebDAV-Status wird geladen...",
+    "status": "Status",
+    "running": "Aktiv",
+    "notRunning": "Nicht aktiv",
+    "notRunningHint": "Der WebDAV-Server läuft nicht. Prüfen Sie den Dienste-Tab oder starten Sie den Server neu.",
+    "port": "Port",
+    "ssl": "Protokoll",
+    "copyPath": "Kopieren",
+    "copied": "Kopiert!",
+    "mountInstructions": "Einbindungsanleitung",
+    "authenticateAs": "Melden Sie sich mit Ihrem BaluHost-Benutzernamen '{{username}}' und Passwort an.",
+    "connectionInfo": "Verbindungsinfo"
+  },
+  "samba": {
+    "title": "SMB/CIFS-Netzlaufwerk",
+    "subtitle": "BaluHost-Speicher als Windows-kompatibles Netzlaufwerk einbinden (SMB/CIFS)",
+    "loading": "Samba-Status wird geladen...",
+    "refresh": "Aktualisieren",
+    "running": "Aktiv",
+    "notRunning": "Nicht aktiv",
+    "notRunningHint": "Der Samba-Server (smbd) läuft nicht. Installieren und starten Sie Samba auf dem Server, um SMB-Freigaben zu aktivieren.",
+    "version": "Version",
+    "connections": "Verbindungen",
+    "enabledUsers": "SMB-Benutzer",
+    "activeConnections": "Aktive Verbindungen",
+    "userManagement": "SMB-Benutzerzugriff",
+    "username": "Benutzername",
+    "role": "Rolle",
+    "status": "Status",
+    "smbAccess": "SMB-Zugriff",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "inactiveUserHint": "Benutzerkonto ist inaktiv",
+    "userEnabled": "SMB-Zugriff für {{username}} aktiviert",
+    "userDisabled": "SMB-Zugriff für {{username}} deaktiviert",
+    "toggleFailed": "SMB-Zugriff konnte nicht umgeschaltet werden",
+    "mountInstructions": "Einbindungsanleitung",
+    "shareName": "Freigabename",
+    "authenticateAs": "Melden Sie sich mit Ihrem BaluHost-Benutzernamen '{{username}}' und Passwort an.",
+    "capacityHint": "Windows zeigt die volle RAID-Kapazität bei SMB korrekt an (im Gegensatz zu WebDAV).",
+    "copy": "Kopieren",
+    "copied": "Kopiert!",
+    "enableSmbTitle": "SMB für {{username}} aktivieren",
+    "enableSmbDescription": "Optional können Sie das Passwort des Benutzers angeben, um es sofort mit Samba zu synchronisieren. Ohne Passwort muss der Benutzer sein BaluHost-Passwort ändern, damit SMB funktioniert.",
+    "passwordLabel": "Passwort (optional)",
+    "passwordPlaceholder": "Aktuelles Passwort des Benutzers eingeben...",
+    "passwordHint": "Leer lassen, wenn Sie das Passwort nicht kennen. Der Benutzer kann sein Passwort später ändern, um es zu synchronisieren.",
+    "cancel": "Abbrechen",
+    "enable": "SMB aktivieren"
   }
 }

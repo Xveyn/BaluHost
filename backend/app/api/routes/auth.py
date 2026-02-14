@@ -147,7 +147,14 @@ async def change_password(
     
     # Update password
     user_service.update_user_password(current_user.id, new_password, db=db)
-    
+
+    # Sync Samba password if SMB is enabled for this user
+    from app.models.user import User as UserModel
+    user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
+    if user_record and user_record.smb_enabled:
+        from app.services import samba_service
+        await samba_service.sync_smb_password(current_user.username, new_password)
+
     # Log successful password change
     audit_logger.log_security_event(
         action="password_changed",

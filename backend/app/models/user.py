@@ -21,6 +21,7 @@ class User(Base):
     email: Mapped[Optional[str]] = mapped_column(String(255), unique=True, index=True, nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_active: Mapped[bool] = mapped_column(nullable=False, default=True, server_default="1")
+    smb_enabled: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
