@@ -14,6 +14,7 @@ Protocol
 from __future__ import annotations
 
 import logging
+from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
@@ -107,6 +108,14 @@ async def chunked_init(
     except FileAccessError as exc:
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
 
+    # Sanitize filename: strip all directory components to prevent path traversal
+    safe_filename = PurePosixPath(payload.filename).name
+    if not safe_filename or safe_filename in ('.', '..'):
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename",
+        )
+
     # Quota pre-check
     if settings.nas_quota_bytes is not None:
         available = calculate_available_bytes()
@@ -119,7 +128,7 @@ async def chunked_init(
     mgr = get_chunked_upload_manager()
     session = await mgr.create_session(
         target_path=jailed_path,
-        filename=payload.filename,
+        filename=safe_filename,
         total_size=payload.total_size,
         user_id=user.id,
         username=user.username,
@@ -128,7 +137,7 @@ async def chunked_init(
     # Also create an SSE progress session so the modal can track it
     progress_mgr = get_upload_progress_manager()
     progress_mgr.create_upload_session(
-        filename=payload.filename,
+        filename=safe_filename,
         total_bytes=payload.total_size,
     )
 

@@ -1,67 +1,101 @@
-"""Upload progress SSE endpoint."""
+"""Upload progress SSE endpoint with scoped token auth."""
 import asyncio
 import json
 import logging
 from typing import AsyncGenerator
 
+import jwt
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from sqlalchemy.orm import Session
+from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
-from app.core.database import get_db
-from app.services import auth as auth_service
-from app.services import users as user_service
+from app.api import deps
+from app.core import security
+from app.schemas.user import UserPublic
 from app.services.upload_progress import get_upload_progress_manager
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+class SSETokenResponse(BaseModel):
+    token: str
+
+
+@router.post("/progress-token/{upload_id}", response_model=SSETokenResponse)
+async def create_progress_token(
+    upload_id: str,
+    user: UserPublic = Depends(deps.get_current_user),
+) -> SSETokenResponse:
+    """Issue a short-lived, scoped token for the SSE progress stream.
+
+    The returned token is valid for 60 seconds and only grants access
+    to the progress stream for the specified ``upload_id``.  Pass it as
+    the ``token`` query parameter when opening the EventSource.
+    """
+    manager = get_upload_progress_manager()
+    progress = manager.get_progress(upload_id)
+    if not progress:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Upload session not found",
+        )
+
+    token = security.create_sse_token(user_id=user.id, upload_id=upload_id)
+    return SSETokenResponse(token=token)
+
+
 @router.get("/progress/{upload_id}")
 async def upload_progress_stream(
     upload_id: str,
-    token: str = Query(..., description="JWT auth token (EventSource cannot send headers)"),
-    db: Session = Depends(get_db),
+    token: str = Query(..., description="Scoped SSE token from POST /progress-token/{upload_id}"),
 ) -> EventSourceResponse:
     """
     Server-Sent Events endpoint for real-time upload progress.
 
-    Uses query-param token auth because the browser EventSource API
-    cannot send custom HTTP headers (Authorization: Bearer).
+    Requires a scoped SSE token (60 s TTL) obtained via
+    ``POST /api/files/progress-token/{upload_id}``.  The token is
+    intentionally short-lived so that it is safe to pass as a query
+    parameter (which may appear in server access logs).
 
-    Client usage:
-    ```javascript
-    const token = localStorage.getItem('token');
-    const eventSource = new EventSource(`/api/files/progress/{upload_id}?token=${token}`);
-    eventSource.addEventListener('progress', (event) => {
-        const progress = JSON.parse(event.data);
-        console.log(`Progress: ${progress.progress_percentage}%`);
-    });
-    ```
+    Client usage::
+
+        // 1. Obtain scoped token (normal Bearer auth)
+        const res = await api.post(`/files/progress-token/${uploadId}`);
+        const sseToken = res.data.token;
+
+        // 2. Open SSE stream
+        const es = new EventSource(
+            `/api/files/progress/${uploadId}?token=${sseToken}`
+        );
+        es.addEventListener('progress', (e) => {
+            console.log(JSON.parse(e.data));
+        });
     """
-    # Manually validate JWT (EventSource can't send Authorization header)
+    # Validate scoped SSE token
     try:
-        payload = auth_service.decode_token(token)
-    except auth_service.InvalidTokenError:
+        payload = security.decode_token(token, token_type="sse")
+    except (jwt.PyJWTError, jwt.InvalidTokenError):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired token",
+            detail="Invalid or expired SSE token",
         )
-    user = user_service.get_user(payload.sub, db=db)
-    if not user:
+
+    # Ensure the token was issued for this specific upload
+    if payload.get("upload_id") != upload_id:
         raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="User not found",
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Token not valid for this upload",
         )
 
     manager = get_upload_progress_manager()
-    
+
     # Verify upload exists
     progress = manager.get_progress(upload_id)
     if not progress:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Upload session not found"
+            detail="Upload session not found",
         )
 
     async def event_generator() -> AsyncGenerator[dict, None]:
@@ -70,23 +104,23 @@ async def upload_progress_stream(
             while True:
                 # Wait for progress update
                 progress = await queue.get()
-                
+
                 # None signals end of stream
                 if progress is None:
                     break
-                
+
                 # Send progress update as SSE event
                 yield {
                     "event": "progress",
-                    "data": json.dumps(progress.to_dict())
+                    "data": json.dumps(progress.to_dict()),
                 }
-                
+
                 # Stop streaming after completion or failure
-                if progress.status in ('completed', 'failed'):
+                if progress.status in ("completed", "failed"):
                     break
-                    
+
         except asyncio.CancelledError:
-            logger.debug(f"SSE connection cancelled for upload {upload_id}")
+            logger.debug("SSE connection cancelled for upload %s", upload_id)
         finally:
             await manager.unsubscribe(upload_id, queue)
 

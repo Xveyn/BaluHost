@@ -109,6 +109,33 @@ def create_refresh_token(user: User | dict, expires_delta: timedelta | None = No
     return encoded_jwt, jti
 
 
+def create_sse_token(user_id: int | str, upload_id: str, expires_seconds: int = 60) -> str:
+    """
+    Create a short-lived, scoped token for SSE upload progress streaming.
+
+    This token is intentionally minimal — it only grants access to a single
+    SSE progress stream and expires quickly, so it is safe to pass as a
+    query parameter (which gets logged by reverse proxies).
+
+    Args:
+        user_id: The authenticated user's ID.
+        upload_id: The specific upload session this token grants access to.
+        expires_seconds: Token lifetime in seconds (default 60).
+
+    Returns:
+        Encoded JWT token string.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "upload_id": upload_id,
+        "type": "sse",
+        "exp": now + timedelta(seconds=expires_seconds),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
 def decode_token(token: str, token_type: str = "access") -> dict:
     """
     Decode and verify a JWT token.
