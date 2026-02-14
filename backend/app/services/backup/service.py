@@ -86,7 +86,7 @@ class BackupService:
         )
         try:
             # Create temporary directory for staging
-            with tempfile.TemporaryDirectory() as temp_dir:
+            with tempfile.TemporaryDirectory(dir=str(backup_dir)) as temp_dir:
                 temp_path = Path(temp_dir)
                 logger.log_event(
                     event_type="BACKUP",
@@ -375,9 +375,9 @@ class BackupService:
         
         try:
             # Extract backup to temporary directory
-            with tempfile.TemporaryDirectory() as temp_dir:
+            with tempfile.TemporaryDirectory(dir=str(self.backup_dir)) as temp_dir:
                 temp_path = Path(temp_dir)
-                
+
                 # Extract tar.gz
                 with tarfile.open(filepath, "r:gz") as tar:
                     tar.extractall(temp_path)

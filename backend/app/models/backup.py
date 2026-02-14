@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import String, DateTime, Integer, BigInteger, Index
+from sqlalchemy import String, Text, DateTime, Integer, BigInteger, Index
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.sql import func
 
@@ -36,7 +36,7 @@ class Backup(Base):
     )
     
     creator_id: Mapped[int] = mapped_column(Integer, nullable=False, index=True)
-    error_message: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     
     # Metadata about what's included
     includes_database: Mapped[bool] = mapped_column(nullable=False, default=True)
