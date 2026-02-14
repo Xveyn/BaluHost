@@ -37,9 +37,9 @@ export function MemoryTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Current Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-5">
         <StatCard
           label={t('monitor.used')}
           value={current ? formatBytes(current.used_bytes) : '-'}

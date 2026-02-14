@@ -20,7 +20,7 @@ export default function AppMetrics({ metrics }: AppMetricsProps) {
           {t('system:services.metrics.title')}
         </h3>
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
           {/* Server Uptime */}
           <div className="p-3 bg-slate-800/50 rounded-lg">
             <div className="flex items-center gap-2 text-slate-400 mb-1">
@@ -85,7 +85,7 @@ export default function AppMetrics({ metrics }: AppMetricsProps) {
             {t('system:services.metrics.dbPool')}
           </h3>
 
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-4">
             <div className="p-3 bg-slate-800/50 rounded-lg">
               <p className="text-xs text-slate-400 mb-1">{t('system:services.metrics.poolSize')}</p>
               <p className="text-lg font-bold text-white">
@@ -134,7 +134,7 @@ export default function AppMetrics({ metrics }: AppMetricsProps) {
                     <span className="font-medium text-white">{cache.name}</span>
                     <span className="text-sm text-green-400">{hitRate}% {t('system:services.metrics.hitRate')}</span>
                   </div>
-                  <div className="grid grid-cols-4 gap-2 text-sm">
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-sm">
                     <div>
                       <p className="text-xs text-slate-400">{t('system:services.metrics.hits')}</p>
                       <p className="text-white">{cache.hits.toLocaleString()}</p>

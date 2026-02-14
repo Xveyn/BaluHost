@@ -213,9 +213,9 @@ export function PowerTab() {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Total Power Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={t('monitor.power.currentPower')}
           value={formatNumber(powerData.total_current_power, 1)}
@@ -252,7 +252,7 @@ export function PowerTab() {
         return (
           <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
             <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
-            <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.powerLabel')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
@@ -380,7 +380,7 @@ export function PowerTab() {
 
         {/* Summary Stats */}
         {cumulativeData && (
-          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
             <div className="bg-slate-800/50 rounded-lg p-3">
               <p className="text-xs text-slate-400">{t('monitor.power.totalConsumption')}</p>
               <p className="text-lg font-semibold text-emerald-400">

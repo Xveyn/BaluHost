@@ -510,7 +510,7 @@ export default function RaidManagement() {
                 </div>
 
                 {array.resync_progress !== null && array.resync_progress !== undefined && (
-                  <div className="border-b border-slate-800/60 px-6 py-4">
+                  <div className="border-b border-slate-800/60 px-4 sm:px-6 py-4">
                     <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
                       <div
                         className="h-full rounded-full bg-gradient-to-r from-sky-500 to-indigo-500"
@@ -526,13 +526,14 @@ export default function RaidManagement() {
                 )}
 
                 <div className="px-4 sm:px-6 py-4 sm:py-5">
-                  <div className="overflow-x-auto -mx-4 sm:mx-0">
+                  {/* Desktop device table */}
+                  <div className="hidden lg:block overflow-x-auto">
                     <table className="min-w-full divide-y divide-slate-800/60">
                       <thead>
-                        <tr className="text-left text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.device')}</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.status')}</th>
-                          <th className="px-3 sm:px-5 py-2 sm:py-3">{t('system:raid.tableHeaders.actions')}</th>
+                        <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
+                          <th className="px-5 py-3">{t('system:raid.tableHeaders.device')}</th>
+                          <th className="px-5 py-3">{t('system:raid.tableHeaders.status')}</th>
+                          <th className="px-5 py-3">{t('system:raid.tableHeaders.actions')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-800/60">
@@ -543,44 +544,42 @@ export default function RaidManagement() {
 
                           return (
                             <tr key={`${array.name}-${device.name}`} className="group transition hover:bg-slate-900/65">
-                              <td className="px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm font-medium text-slate-200">
+                              <td className="px-5 py-4 text-sm font-medium text-slate-200">
                                 /dev/{device.name}
                               </td>
-                              <td className="px-3 sm:px-5 py-3 sm:py-4">
-                                <span className={`rounded-full border px-2 sm:px-3 py-0.5 sm:py-1 text-[10px] sm:text-xs font-medium ${getDeviceStyle(lowerState)}`}>
+                              <td className="px-5 py-4">
+                                <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getDeviceStyle(lowerState)}`}>
                                   {upcase(lowerState)}
                                 </span>
                               </td>
-                              <td className="px-3 sm:px-5 py-3 sm:py-4 text-xs sm:text-sm">
-                                <div className="flex gap-2 overflow-x-auto pb-2 sm:pb-0">
+                              <td className="px-5 py-4 text-sm">
+                                <div className="flex gap-2">
                                   <button
                                     onClick={() => handleSimulateFailure(array, device)}
                                     disabled={busy || !allowFailure}
-                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
+                                    className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !allowFailure
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-amber-500/40 bg-amber-500/10 text-amber-100 hover:border-amber-500/60'
                                     }`}
                                   >
-                                    <span className="hidden sm:inline">{t('system:raid.actions.degradeDevice')}</span>
-                                    <span className="sm:hidden">Degrade</span>
+                                    {t('system:raid.actions.degradeDevice')}
                                   </button>
                                   <button
                                     onClick={() => handleStartRebuild(array, device)}
                                     disabled={busy || !allowRebuild}
-                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
+                                    className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !allowRebuild
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-sky-500/50 bg-sky-500/10 text-sky-100 hover:border-sky-500/60'
                                     }`}
                                   >
-                                    <span className="hidden sm:inline">{t('system:raid.actions.startRebuild')}</span>
-                                    <span className="sm:hidden">Rebuild</span>
+                                    {t('system:raid.actions.startRebuild')}
                                   </button>
                                   <button
                                     onClick={() => handleWriteMostly(array, device)}
                                     disabled={busy || !['active', 'write-mostly'].includes(lowerState)}
-                                    className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
+                                    className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
                                       busy || !['active', 'write-mostly'].includes(lowerState)
                                         ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                         : 'border-slate-700/70 bg-slate-900/60 text-slate-200 hover:border-slate-600'
@@ -592,14 +591,13 @@ export default function RaidManagement() {
                                     <button
                                       onClick={() => handleRemoveDevice(array, device)}
                                       disabled={busy}
-                                      className={`whitespace-nowrap rounded-lg border px-2 sm:px-3 py-1 sm:py-1.5 text-[10px] sm:text-xs transition touch-manipulation active:scale-95 ${
+                                      className={`whitespace-nowrap rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
                                         busy
                                           ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                                           : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                                       }`}
                                     >
-                                      <span className="hidden sm:inline">{t('system:raid.actions.removeSpare')}</span>
-                                      <span className="sm:hidden">{t('system:raid.actions.remove')}</span>
+                                      {t('system:raid.actions.removeSpare')}
                                     </button>
                                   )}
                                 </div>
@@ -609,6 +607,74 @@ export default function RaidManagement() {
                         })}
                       </tbody>
                     </table>
+                  </div>
+
+                  {/* Mobile device cards */}
+                  <div className="lg:hidden space-y-3">
+                    {array.devices.map((device) => {
+                      const lowerState = device.state.toLowerCase();
+                      const allowFailure = canSimulateFailure(device);
+                      const allowRebuild = canStartRebuild(device);
+
+                      return (
+                        <div key={`${array.name}-${device.name}-mobile`} className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-3">
+                          <div className="flex items-center justify-between">
+                            <span className="text-sm font-medium text-slate-200">/dev/{device.name}</span>
+                            <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getDeviceStyle(lowerState)}`}>
+                              {upcase(lowerState)}
+                            </span>
+                          </div>
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            <button
+                              onClick={() => handleSimulateFailure(array, device)}
+                              disabled={busy || !allowFailure}
+                              className={`rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                                busy || !allowFailure
+                                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                                  : 'border-amber-500/40 bg-amber-500/10 text-amber-100'
+                              }`}
+                            >
+                              Degrade
+                            </button>
+                            <button
+                              onClick={() => handleStartRebuild(array, device)}
+                              disabled={busy || !allowRebuild}
+                              className={`rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                                busy || !allowRebuild
+                                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                                  : 'border-sky-500/50 bg-sky-500/10 text-sky-100'
+                              }`}
+                            >
+                              Rebuild
+                            </button>
+                            <button
+                              onClick={() => handleWriteMostly(array, device)}
+                              disabled={busy || !['active', 'write-mostly'].includes(lowerState)}
+                              className={`rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                                busy || !['active', 'write-mostly'].includes(lowerState)
+                                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                                  : 'border-slate-700/70 bg-slate-900/60 text-slate-200'
+                              }`}
+                            >
+                              {lowerState === 'write-mostly' ? 'RW' : 'WM'}
+                            </button>
+                            {lowerState === 'spare' && (
+                              <button
+                                onClick={() => handleRemoveDevice(array, device)}
+                                disabled={busy}
+                                className={`rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                                  busy
+                                    ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                                    : 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                                }`}
+                              >
+                                {t('system:raid.actions.remove')}
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
                   </div>
                 </div>
 
@@ -724,8 +790,9 @@ export default function RaidManagement() {
           </div>
         </div>
 
-        <div className="px-6 py-5">
-          <div className="overflow-x-auto">
+        <div className="px-4 sm:px-6 py-4 sm:py-5">
+          {/* Desktop disk table */}
+          <div className="hidden lg:block overflow-x-auto">
             <table className="min-w-full divide-y divide-slate-800/60">
               <thead>
                 <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
@@ -753,8 +820,7 @@ export default function RaidManagement() {
                         <div className="flex flex-wrap items-center gap-2">
                           {disk.in_raid ? (
                             (() => {
-                              // Finde das Array, in dem diese Disk ist
-                              const diskArray = arrays.find(arr => 
+                              const diskArray = arrays.find(arr =>
                                 arr.devices.some(dev => dev.name === `${disk.name}1` || dev.name === disk.name)
                               );
                               return diskArray ? (
@@ -813,13 +879,87 @@ export default function RaidManagement() {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile disk cards */}
+          <div className="lg:hidden space-y-3">
+            {availableDisks.length === 0 ? (
+              <p className="py-6 text-center text-sm text-slate-400">
+                {t('system:raid.diskManagement.noDisks')}
+              </p>
+            ) : (
+              availableDisks.map((disk) => {
+                const diskArray = disk.in_raid
+                  ? arrays.find(arr => arr.devices.some(dev => dev.name === `${disk.name}1` || dev.name === disk.name))
+                  : null;
+
+                return (
+                  <div key={`${disk.name}-mobile`} className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-3">
+                    <div className="flex items-center justify-between">
+                      <span className="text-sm font-medium text-slate-200">/dev/{disk.name}</span>
+                      <span className="text-xs text-slate-400">{formatBytes(disk.size_bytes)}</span>
+                    </div>
+                    {disk.model && (
+                      <p className="mt-1 text-xs text-slate-500 truncate">{disk.model}</p>
+                    )}
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                      {disk.in_raid ? (
+                        diskArray ? (
+                          <div className="flex items-center gap-1.5 rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5">
+                            <span className="text-[10px] font-medium text-sky-100">{diskArray.name}</span>
+                            <span className="text-[10px] uppercase text-sky-300/70">{diskArray.level}</span>
+                          </div>
+                        ) : (
+                          <span className="rounded-full border border-sky-400/30 bg-sky-500/10 px-2 py-0.5 text-[10px] text-sky-100">
+                            {t('system:raid.diskManagement.inRaid')}
+                          </span>
+                        )
+                      ) : (
+                        <span className="rounded-full border border-slate-700/50 bg-slate-800/40 px-2 py-0.5 text-[10px] text-slate-400">
+                          {t('system:raid.diskManagement.free')}
+                        </span>
+                      )}
+                      {disk.is_partitioned && (
+                        <span className="rounded-full border border-amber-400/30 bg-amber-500/10 px-2 py-0.5 text-[10px] text-amber-100">
+                          {t('system:raid.diskManagement.partitioned')}
+                        </span>
+                      )}
+                      {disk.is_os_disk && (
+                        <div className="flex items-center gap-1 rounded-full border border-violet-400/30 bg-violet-500/10 px-2 py-0.5">
+                          <Monitor className="h-2.5 w-2.5 text-violet-400" />
+                          <span className="text-[10px] font-medium text-violet-100">
+                            {t('system:raid.diskManagement.osDisk')}
+                          </span>
+                        </div>
+                      )}
+                      {!disk.in_raid && !disk.is_os_disk && (
+                        <button
+                          onClick={() => {
+                            setSelectedDisk(disk);
+                            setShowFormatDialog(true);
+                          }}
+                          disabled={busy}
+                          className={`ml-auto rounded-lg border px-2 py-1 text-[10px] transition touch-manipulation active:scale-95 ${
+                            busy
+                              ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                              : 'border-rose-500/40 bg-rose-500/10 text-rose-200'
+                          }`}
+                        >
+                          {t('system:raid.actions.format')}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
+          </div>
         </div>
       </div>
 
       {/* Format Dialog */}
       {showFormatDialog && selectedDisk && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl" onClick={() => setShowFormatDialog(false)}>
-          <div className="card w-full max-w-md border-rose-500/40 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(220,38,38,0.3)]" onClick={(e) => e.stopPropagation()}>
+          <div className="card w-full max-w-[95vw] sm:max-w-md border-rose-500/40 bg-slate-900/80 backdrop-blur-2xl shadow-[0_20px_70px_rgba(220,38,38,0.3)]" onClick={(e) => e.stopPropagation()}>
             <h3 className="text-xl font-semibold text-white">{t('system:raid.formatDialog.title')}</h3>
             <p className="mt-2 text-sm text-slate-400">
               {t('system:raid.formatDialog.formatDisk')} <span className="font-medium text-slate-200">/dev/{selectedDisk.name}</span>

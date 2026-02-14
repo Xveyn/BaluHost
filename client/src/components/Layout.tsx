@@ -346,7 +346,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
         )}
 
         {/* Mobile Sidebar */}
-        <aside className={`fixed left-0 top-0 z-50 h-screen w-80 flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
+        <aside className={`fixed left-0 top-0 z-50 h-screen w-72 flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}>
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
@@ -536,7 +536,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 mt-[72px]">
+          <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 lg:px-10 mt-[72px] pb-[env(safe-area-inset-bottom)]">
             <div className={`${location.pathname === '/admin-db' ? 'w-full max-w-none mx-0' : 'mx-auto w-full max-w-7xl'} space-y-6 sm:space-y-8`}>
               {children}
             </div>

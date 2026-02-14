@@ -106,7 +106,7 @@ export function HealthTab() {
   }, [fetchHealth]);
 
   return (
-    <div className="space-y-8">
+    <div className="space-y-8 min-w-0">
       {/* Header with Refresh */}
       <div className="flex items-center justify-between">
         <div>
@@ -131,7 +131,7 @@ export function HealthTab() {
 
       {/* System Stats */}
       {health && (
-        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-5">
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-3 sm:gap-5">
           {/* CPU Card */}
           <div className="card border-slate-800/40 bg-slate-900/60">
             <div className="flex items-center gap-3 mb-4">
@@ -256,7 +256,7 @@ export function HealthTab() {
                     {device.status}
                   </span>
                 </div>
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div className="mt-3 grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
                   <div>
                     <p className="text-slate-500">{t('health.deviceLabels.capacity')}</p>
                     <p className="text-slate-200">{formatBytes(device.capacity_bytes)}</p>

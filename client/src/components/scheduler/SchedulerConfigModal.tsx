@@ -107,7 +107,7 @@ export function SchedulerConfigModal({
 
       {/* Modal */}
       <div
-        className="relative z-10 w-full max-w-md rounded-lg bg-slate-900 shadow-xl"
+        className="relative z-10 w-full max-w-[95vw] sm:max-w-md max-h-[90vh] overflow-y-auto rounded-lg bg-slate-900 shadow-xl"
         role="dialog"
         aria-modal="true"
         aria-labelledby="config-modal-title"

@@ -393,7 +393,7 @@ export default function Dashboard({ user }: DashboardProps) {
     <div className="space-y-8">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h1 className="text-3xl font-semibold text-white">{t('title')}</h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
           <p className="mt-1 text-sm text-slate-400">{t('subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900/60 px-4 py-2 text-xs text-slate-400 shadow-inner">
@@ -593,17 +593,17 @@ export default function Dashboard({ user }: DashboardProps) {
                                 ))}
                               </div>
                             </div>
-                            <div className="flex flex-col items-center justify-center">
-                              <div className="relative flex h-20 w-20 items-center justify-center">
-                                <div className="glow-ring h-20 w-20">
+                            <div className="flex flex-col items-center justify-center flex-shrink-0">
+                              <div className="relative flex h-16 w-16 sm:h-20 sm:w-20 items-center justify-center">
+                                <div className="glow-ring h-16 w-16 sm:h-20 sm:w-20">
                                   <div className="absolute inset-1 rounded-full border border-slate-900/80 bg-slate-950/80" />
-                                  <div className="glow-ring h-16 w-16 border-none" style={circleStyle}>
-                                    <div className="h-12 w-12 rounded-full bg-slate-950/90" />
+                                  <div className="glow-ring h-12 w-12 sm:h-16 sm:w-16 border-none" style={circleStyle}>
+                                    <div className="h-8 w-8 sm:h-12 sm:w-12 rounded-full bg-slate-950/90" />
                                   </div>
                                 </div>
                                 <div className="absolute text-center">
-                                  <p className="text-base font-semibold text-white">{Math.round(usagePercent)}%</p>
-                                  <p className="text-[0.55rem] text-slate-400">{formatBytes(usedBytes)}</p>
+                                  <p className="text-sm sm:text-base font-semibold text-white">{Math.round(usagePercent)}%</p>
+                                  <p className="text-[0.5rem] sm:text-[0.55rem] text-slate-400">{formatBytes(usedBytes)}</p>
                                 </div>
                               </div>
                               <p className="mt-1 text-[0.65rem] text-slate-500">{t('smart.device.used')}</p>

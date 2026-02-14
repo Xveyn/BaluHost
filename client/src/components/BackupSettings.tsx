@@ -241,7 +241,9 @@ export default function BackupSettings() {
 						<p className="text-sm mt-1">{t('backup.createFirstBackup')}</p>
 					</div>
 				) : (
-					<div className="overflow-x-auto">
+					<>
+					{/* Desktop table */}
+					<div className="hidden lg:block overflow-x-auto">
 						<table className="w-full">
 							<thead className="bg-slate-800/50">
 								<tr>
@@ -303,11 +305,58 @@ export default function BackupSettings() {
 							</tbody>
 						</table>
 					</div>
+
+					{/* Mobile backup cards */}
+					<div className="lg:hidden space-y-3 p-4">
+						{backups && backups.map((backup) => (
+							<div key={`${backup.id}-mobile`} className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-3">
+								<div className="flex items-center justify-between">
+									<div className="flex items-center gap-2">
+										{getStatusIcon(backup.status)}
+										<span className={`text-sm font-medium ${getStatusColor(backup.status)}`}>{backup.status}</span>
+									</div>
+									<span className="px-2 py-0.5 text-[10px] font-medium rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">{backup.backup_type}</span>
+								</div>
+								<p className="mt-2 text-sm font-medium text-slate-200 truncate">{backup.filename}</p>
+								{backup.error_message && (
+									<p className="text-xs text-red-400 mt-1">{backup.error_message}</p>
+								)}
+								<div className="mt-2 flex items-center justify-between text-xs text-slate-400">
+									<span>{formatNumber(backup.size_mb, 2)} MB</span>
+									<span>{formatDate(backup.created_at)}</span>
+								</div>
+								<div className="mt-2 flex items-center justify-between">
+									<div className="flex items-center gap-2 text-xs">
+										{backup.includes_database && (<span className="flex items-center gap-1 text-slate-400"><Database className="w-3 h-3" />DB</span>)}
+										{backup.includes_files && (<span className="flex items-center gap-1 text-slate-400"><FolderOpen className="w-3 h-3" />Files</span>)}
+										{backup.includes_config && (<span className="flex items-center gap-1 text-slate-400"><Settings className="w-3 h-3" />Config</span>)}
+									</div>
+									<div className="flex items-center gap-1">
+										{backup.status === 'completed' && (
+											<>
+												<button onClick={() => handleDownload(backup)} className="p-1.5 text-slate-400 hover:text-sky-400 rounded-lg transition-colors touch-manipulation" title="Download">
+													<Download className="w-4 h-4" />
+												</button>
+												<button onClick={() => { setSelectedBackup(backup); setRestoreDialogOpen(true); }} className="p-1.5 text-slate-400 hover:text-emerald-400 rounded-lg transition-colors touch-manipulation" title="Restore">
+													<RotateCcw className="w-4 h-4" />
+												</button>
+											</>
+										)}
+										<button onClick={() => { setBackupToDelete(backup); setDeleteDialogOpen(true); }} className="p-1.5 text-slate-400 hover:text-red-400 rounded-lg transition-colors touch-manipulation" title="Delete">
+											<Trash2 className="w-4 h-4" />
+										</button>
+									</div>
+								</div>
+							</div>
+						))}
+					</div>
+					</>
+
 				)}
 			</div>
 			{deleteDialogOpen && backupToDelete && (
 				<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-					<div className="bg-slate-900 rounded-lg shadow-xl max-w-md w-full p-6 border border-slate-800">
+					<div className="bg-slate-900 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full p-4 sm:p-6 border border-slate-800">
 						<div className="flex items-start gap-4 mb-4">
 							<div className="p-3 bg-red-500/10 rounded-full">
 								<AlertTriangle className="w-6 h-6 text-red-400" />
@@ -326,7 +375,7 @@ export default function BackupSettings() {
 			)}
 			{restoreDialogOpen && selectedBackup && (
 				<div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-					<div className="bg-slate-900 rounded-lg shadow-xl max-w-md w-full p-6 border border-slate-800">
+					<div className="bg-slate-900 rounded-lg shadow-xl max-w-[95vw] sm:max-w-md w-full p-4 sm:p-6 border border-slate-800">
 						<div className="flex items-start gap-4 mb-4">
 							<div className="p-3 bg-yellow-500/10 rounded-full">
 								<AlertTriangle className="w-6 h-6 text-yellow-400" />

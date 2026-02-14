@@ -237,8 +237,8 @@ export function ExecutionHistoryTable({
         </div>
       )}
 
-      {/* Table */}
-      <div className="overflow-x-auto">
+      {/* Desktop table */}
+      <div className="hidden lg:block overflow-x-auto">
         <table className="w-full">
           <thead>
             <tr className="border-b border-slate-800 bg-slate-800/30">
@@ -280,6 +280,66 @@ export function ExecutionHistoryTable({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile card view */}
+      <div className="lg:hidden">
+        {loading && !history ? (
+          <div className="py-8 text-center">
+            <Loader2 className="h-6 w-6 animate-spin mx-auto text-slate-400" />
+          </div>
+        ) : history?.executions.length === 0 ? (
+          <div className="py-8 text-center text-slate-400">
+            {t('scheduler:history.noExecutions')}
+          </div>
+        ) : (
+          <div className="divide-y divide-slate-800">
+            {history?.executions.map((execution) => (
+                <div key={`${execution.id}-mobile`} className="px-4 py-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-lg">{getSchedulerIcon(execution.scheduler_name)}</span>
+                      <span className="text-sm text-slate-200">
+                        {t('scheduler:schedulers.' + execution.scheduler_name + '.name', { defaultValue: execution.scheduler_name.replace(/_/g, ' ').replace(/\b\w/g, (c: string) => c.toUpperCase()) })}
+                      </span>
+                    </div>
+                    <span className={`inline-flex items-center rounded px-2 py-0.5 text-[10px] font-medium ${getStatusBadgeClasses(execution.status)}`}>
+                      {t('scheduler:status.' + execution.status)}
+                    </span>
+                  </div>
+                  <div className="mt-1.5 flex items-center justify-between text-xs text-slate-500">
+                    <span>{new Date(execution.started_at).toLocaleString()}</span>
+                    <div className="flex items-center gap-2">
+                      {execution.duration_display && (
+                        <span>{execution.duration_display}</span>
+                      )}
+                      <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                        execution.trigger_type === 'manual'
+                          ? 'bg-purple-900/50 text-purple-300'
+                          : 'bg-slate-800 text-slate-400'
+                      }`}>
+                        {t('scheduler:trigger.' + execution.trigger_type)}
+                      </span>
+                    </div>
+                  </div>
+                  {execution.error_message && (
+                    <div className="mt-1.5 text-xs text-red-400 bg-red-900/20 rounded p-2 truncate">
+                      {execution.error_message}
+                    </div>
+                  )}
+                  {execution.status === 'failed' && onRetry && (
+                    <button
+                      onClick={() => onRetry(execution.scheduler_name)}
+                      className="mt-2 inline-flex items-center gap-1 rounded px-2 py-1 text-xs bg-amber-600 hover:bg-amber-700 text-white transition-colors touch-manipulation"
+                    >
+                      <RotateCcw className="h-3 w-3" />
+                      {t('scheduler:buttons.retry')}
+                    </button>
+                  )}
+                </div>
+            ))}
+          </div>
+        )}
       </div>
 
       {/* Pagination */}

@@ -122,9 +122,9 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Current Stats */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
+      <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={t('monitor.cpuUsage')}
           value={current?.usage_percent != null ? formatNumber(current.usage_percent, 1) : '0'}
@@ -226,7 +226,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   {t('monitor.pCoresPerformance')} - {t('monitor.coresThreadsCount', { cores: current?.p_core_count, threads: (current?.p_core_count ?? 0) * 2 })}
                 </h4>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts
                   .filter(thread => thread.threadType === 'P')
                   .map((thread) => (
@@ -274,7 +274,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   {t('monitor.eCoresEfficiency')} - {t('monitor.coresThreadsCount', { cores: current?.e_core_count, threads: current?.e_core_count })}
                 </h4>
               </div>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts
                   .filter(thread => thread.threadType === 'E')
                   .map((thread) => (
@@ -319,7 +319,7 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
               <h4 className="text-sm sm:text-base font-semibold text-white">
                 {t('monitor.logicalProcessors')} ({individualThreadCharts.length})
               </h4>
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 2xl:grid-cols-6 gap-3">
                 {individualThreadCharts.map((thread) => (
                   <div
                     key={thread.threadIndex}

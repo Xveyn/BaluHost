@@ -136,7 +136,7 @@ export function DuplicateDialog({ duplicates, uploadFiles, onConfirm, onCancel }
                 </div>
 
                 {/* Resolution buttons */}
-                <div className="flex gap-1.5">
+                <div className="flex flex-wrap gap-1.5">
                   {resolutionOptions.map(opt => (
                     <button
                       key={opt.value}

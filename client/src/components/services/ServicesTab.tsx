@@ -155,7 +155,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
   const availableDeps = snapshot.dependencies.filter(d => d.available).length;
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -180,7 +180,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       </div>
 
       {/* Summary Bar */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-4">
         <div className="card border-slate-800/40 flex items-center gap-3">
           <div className="p-2 bg-green-500/20 rounded-lg">
             <CheckCircle className="w-5 h-5 text-green-500" />
@@ -231,7 +231,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       {/* Services Grid */}
       <div>
         <h3 className="text-lg font-semibold text-white mb-4">{t('system:services.backgroundServices')}</h3>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 sm:gap-4">
           {snapshot.services.map((service) => (
             <ServiceCard
               key={service.name}
@@ -245,7 +245,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       </div>
 
       {/* Two Column Layout: Dependencies & Metrics */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
         {/* Dependencies */}
         <DependencyList dependencies={snapshot.dependencies} />
 

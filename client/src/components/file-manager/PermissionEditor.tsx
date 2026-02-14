@@ -23,7 +23,7 @@ export function PermissionEditor({ rules, allUsers, onRulesChange, onSave, onClo
         </div>
         <div className="mt-5 space-y-4 flex-1 overflow-y-auto min-h-0">
           {rules.length > 0 && rules.map((rule, idx) => (
-            <div key={idx} className="flex items-center gap-4 border-b border-slate-800/40 pb-4 mb-4">
+            <div key={idx} className="flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-4 border-b border-slate-800/40 pb-4 mb-4">
               <select
                 value={rule.userId}
                 onChange={e => {
@@ -31,60 +31,62 @@ export function PermissionEditor({ rules, allUsers, onRulesChange, onSave, onClo
                   newRules[idx].userId = e.target.value;
                   onRulesChange(newRules);
                 }}
-                className="input w-48"
+                className="input w-full sm:w-48"
               >
                 <option value="">Nutzer wählen...</option>
                 {allUsers.map(u => (
                   <option key={u.id} value={u.id}>{u.username}</option>
                 ))}
               </select>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={rule.canView}
-                  onChange={e => {
-                    const newRules = [...rules];
-                    newRules[idx].canView = e.target.checked;
-                    onRulesChange(newRules);
+              <div className="flex flex-wrap items-center gap-3 sm:gap-4">
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={rule.canView}
+                    onChange={e => {
+                      const newRules = [...rules];
+                      newRules[idx].canView = e.target.checked;
+                      onRulesChange(newRules);
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Sehen</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={rule.canEdit}
+                    onChange={e => {
+                      const newRules = [...rules];
+                      newRules[idx].canEdit = e.target.checked;
+                      onRulesChange(newRules);
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Bearbeiten</span>
+                </label>
+                <label className="flex items-center">
+                  <input
+                    type="checkbox"
+                    checked={rule.canDelete}
+                    onChange={e => {
+                      const newRules = [...rules];
+                      newRules[idx].canDelete = e.target.checked;
+                      onRulesChange(newRules);
+                    }}
+                    className="mr-2"
+                  />
+                  <span className="text-sm">Löschen</span>
+                </label>
+                <button
+                  onClick={() => {
+                    onRulesChange(rules.filter((_, i) => i !== idx));
                   }}
-                  className="mr-2"
-                />
-                <span className="text-sm">Sehen</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={rule.canEdit}
-                  onChange={e => {
-                    const newRules = [...rules];
-                    newRules[idx].canEdit = e.target.checked;
-                    onRulesChange(newRules);
-                  }}
-                  className="mr-2"
-                />
-                <span className="text-sm">Bearbeiten</span>
-              </label>
-              <label className="flex items-center">
-                <input
-                  type="checkbox"
-                  checked={rule.canDelete}
-                  onChange={e => {
-                    const newRules = [...rules];
-                    newRules[idx].canDelete = e.target.checked;
-                    onRulesChange(newRules);
-                  }}
-                  className="mr-2"
-                />
-                <span className="text-sm">Löschen</span>
-              </label>
-              <button
-                onClick={() => {
-                  onRulesChange(rules.filter((_, i) => i !== idx));
-                }}
-                className="ml-2 px-2 py-1 text-xs rounded bg-rose-900/40 text-rose-300 hover:bg-rose-900/60"
-              >
-                Entfernen
-              </button>
+                  className="ml-2 px-2 py-1 text-xs rounded bg-rose-900/40 text-rose-300 hover:bg-rose-900/60"
+                >
+                  Entfernen
+                </button>
+              </div>
             </div>
           ))}
           <button

@@ -174,7 +174,7 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
   };
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
@@ -195,29 +195,33 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
       </div>
 
       {/* Tab Navigation */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
-        <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
-          {visibleTabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
-                activeTab === tab.id
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
-                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
-              }`}
-            >
-              {tab.icon}
-              <span className="hidden sm:inline">{getTabLabel(tab.id)}</span>
-              <span className="sm:hidden">{getTabLabel(tab.id).slice(0, 3)}</span>
-              {tab.adminOnly && <AdminBadge />}
-            </button>
-          ))}
+      <div className="relative">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+            {visibleTabs.map((tab) => (
+              <button
+                key={tab.id}
+                onClick={() => handleTabChange(tab.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                  activeTab === tab.id
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                }`}
+              >
+                {tab.icon}
+                <span className="hidden sm:inline">{getTabLabel(tab.id)}</span>
+                <span className="sm:hidden">{getTabLabel(tab.id).slice(0, 3)}</span>
+                {tab.adminOnly && <AdminBadge />}
+              </button>
+            ))}
+          </div>
         </div>
+        {/* Fade-Gradient rechts — nur mobile */}
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
       </div>
 
       {/* Tab Content */}
-      <div>
+      <div className="min-w-0">
         {activeTab === 'cpu' && <CpuTab timeRange={timeRange} />}
         {activeTab === 'memory' && <MemoryTab timeRange={timeRange} />}
         {activeTab === 'network' && <NetworkTab timeRange={timeRange} />}

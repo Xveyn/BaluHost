@@ -44,7 +44,7 @@ export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
   }
 
   return (
-    <div className="space-y-4 sm:space-y-6">
+    <div className="space-y-4 sm:space-y-6 min-w-0">
       {/* Disk Selector */}
       {availableDisks.length > 0 && (
         <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0">
@@ -68,7 +68,7 @@ export function DiskIoTab({ timeRange }: { timeRange: TimeRange }) {
 
       {/* Current Stats */}
       {selectedDisk && (
-        <div className="grid grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-6">
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-6">
           <StatCard
             label={t('monitor.read')}
             value={currentDisk?.read_mbps != null ? formatNumber(currentDisk.read_mbps, 2) : '0'}

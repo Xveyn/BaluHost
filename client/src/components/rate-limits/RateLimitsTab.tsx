@@ -314,15 +314,15 @@ export default function RateLimitsTab() {
               <span className="text-xs text-slate-500">({configs.length})</span>
             </div>
 
-            {/* Table */}
-            <div className="overflow-x-auto">
+            {/* Desktop table */}
+            <div className="hidden sm:block overflow-x-auto">
               <table className="w-full">
                 <thead>
                   <tr className="text-left text-xs text-slate-400 border-b border-slate-700/30">
-                    <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.endpoint')}</th>
-                    <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.limit')}</th>
-                    <th className="px-3 sm:px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.status')}</th>
-                    <th className="px-3 sm:px-4 py-2 font-medium text-right">{t('system:apiCenter.rateLimits.actions')}</th>
+                    <th className="px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.endpoint')}</th>
+                    <th className="px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.limit')}</th>
+                    <th className="px-4 py-2 font-medium">{t('system:apiCenter.rateLimits.status')}</th>
+                    <th className="px-4 py-2 font-medium text-right">{t('system:apiCenter.rateLimits.actions')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -332,16 +332,16 @@ export default function RateLimitsTab() {
                       className="border-b border-slate-700/20 last:border-b-0 hover:bg-slate-700/20 transition-colors"
                       title={config.description || undefined}
                     >
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3">
-                        <code className="text-cyan-400 font-mono text-xs sm:text-sm">{config.endpoint_type}</code>
+                      <td className="px-4 py-3">
+                        <code className="text-cyan-400 font-mono text-sm">{config.endpoint_type}</code>
                       </td>
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3">
-                        <span className="text-emerald-400 font-semibold text-xs sm:text-sm font-mono">{config.limit_string}</span>
+                      <td className="px-4 py-3">
+                        <span className="text-emerald-400 font-semibold text-sm font-mono">{config.limit_string}</span>
                       </td>
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3">
+                      <td className="px-4 py-3">
                         <button
                           onClick={() => handleToggleEnabled(config)}
-                          className={`px-2 py-1 rounded text-[10px] sm:text-xs font-medium transition-colors touch-manipulation active:scale-95 ${
+                          className={`px-2 py-1 rounded text-xs font-medium transition-colors touch-manipulation active:scale-95 ${
                             config.enabled
                               ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
                               : 'bg-slate-600/30 text-slate-400 hover:bg-slate-600/50'
@@ -350,19 +350,52 @@ export default function RateLimitsTab() {
                           {config.enabled ? `✓ ${t('system:apiCenter.rateLimits.active')}` : `✗ ${t('system:apiCenter.rateLimits.off')}`}
                         </button>
                       </td>
-                      <td className="px-3 sm:px-4 py-2.5 sm:py-3 text-right">
+                      <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => setEditingConfig(config)}
-                          className="p-1.5 sm:p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition-colors touch-manipulation active:scale-95"
+                          className="p-2 bg-blue-600/20 hover:bg-blue-600/40 text-blue-400 rounded-lg transition-colors touch-manipulation active:scale-95"
                           title={t('system:apiCenter.buttons.editRateLimit')}
                         >
-                          <Settings className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
+                          <Settings className="w-4 h-4" />
                         </button>
                       </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
+            </div>
+
+            {/* Mobile card view */}
+            <div className="sm:hidden space-y-2 px-2">
+              {configs.map((config) => (
+                <div
+                  key={`${config.id}-mobile`}
+                  className="rounded-lg border border-slate-800/60 bg-slate-900/60 p-3"
+                >
+                  <div className="flex items-center justify-between">
+                    <code className="text-cyan-400 font-mono text-xs truncate flex-1 min-w-0">{config.endpoint_type}</code>
+                    <div className="flex items-center gap-1.5 ml-2 flex-shrink-0">
+                      <button
+                        onClick={() => handleToggleEnabled(config)}
+                        className={`px-2 py-0.5 rounded text-[10px] font-medium transition-colors touch-manipulation ${
+                          config.enabled
+                            ? 'bg-emerald-500/20 text-emerald-400'
+                            : 'bg-slate-600/30 text-slate-400'
+                        }`}
+                      >
+                        {config.enabled ? '✓' : '✗'}
+                      </button>
+                      <button
+                        onClick={() => setEditingConfig(config)}
+                        className="p-1.5 bg-blue-600/20 text-blue-400 rounded-lg touch-manipulation"
+                      >
+                        <Settings className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-1 text-xs text-emerald-400 font-mono">{config.limit_string}</div>
+                </div>
+              ))}
             </div>
           </div>
         ))
