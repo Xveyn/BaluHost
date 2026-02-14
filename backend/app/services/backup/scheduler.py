@@ -1,5 +1,6 @@
 """Backup scheduler for automated periodic backups."""
 
+import json
 from datetime import datetime, timezone
 import logging
 from typing import Optional
@@ -35,13 +36,26 @@ class BackupScheduler:
         """
         settings = get_settings()
 
+        # Read backup_type from DB scheduler config, fallback to env var
+        backup_type = settings.backup_auto_type
+        try:
+            from app.models.scheduler_history import SchedulerConfig
+            db_config = db.query(SchedulerConfig).filter(
+                SchedulerConfig.scheduler_name == "backup"
+            ).first()
+            if db_config and db_config.extra_config:
+                extra = json.loads(db_config.extra_config)
+                backup_type = extra.get("backup_type", backup_type)
+        except Exception as e:
+            logger.warning(f"[BackupScheduler] Could not read extra_config: {e}")
+
         logger.info(f"[BackupScheduler] Starting automated backup at {datetime.now(timezone.utc)}")
-        logger.info(f"[BackupScheduler] Backup type: {settings.backup_auto_type}")
+        logger.info(f"[BackupScheduler] Backup type: {backup_type}")
 
         stats = {
-            "started_at": datetime.now(timezone.utc),
+            "started_at": datetime.now(timezone.utc).isoformat(),
             "completed_at": None,
-            "backup_type": settings.backup_auto_type,
+            "backup_type": backup_type,
             "status": "in_progress",
             "backup_id": None,
             "filename": None,
@@ -54,7 +68,6 @@ class BackupScheduler:
             backup_service = BackupService(db)
 
             # Determine backup parameters based on type
-            backup_type = settings.backup_auto_type
             includes_database = backup_type in ["full", "database_only", "incremental"]
             includes_files = backup_type in ["full", "files_only", "incremental"]
 
@@ -75,7 +88,7 @@ class BackupScheduler:
 
             # Update stats
             stats["status"] = "completed"
-            stats["completed_at"] = datetime.now(timezone.utc)
+            stats["completed_at"] = datetime.now(timezone.utc).isoformat()
             stats["backup_id"] = backup.id
             stats["filename"] = backup.filename
             stats["size_bytes"] = backup.size_bytes
@@ -85,7 +98,7 @@ class BackupScheduler:
 
         except Exception as e:
             stats["status"] = "failed"
-            stats["completed_at"] = datetime.now(timezone.utc)
+            stats["completed_at"] = datetime.now(timezone.utc).isoformat()
             stats["error"] = str(e)
             logger.error(f"[BackupScheduler] ❌ Backup failed: {e}", exc_info=True)
 

@@ -1,6 +1,6 @@
 [Unit]
-Description=BaluHost NAS Backend (FastAPI/Uvicorn)
-After=network.target postgresql.service
+Description=BaluHost Scheduler Worker
+After=network.target postgresql.service baluhost-backend.service
 Wants=postgresql.service
 
 [Service]
@@ -12,13 +12,8 @@ WorkingDirectory=/home/sven/projects/BaluHost/backend
 # Load production environment variables
 EnvironmentFile=/home/sven/projects/BaluHost/.env.production
 
-# Virtual environment activation and uvicorn start
-ExecStart=/home/sven/projects/BaluHost/backend/.venv/bin/uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --workers 1 \
-    --log-level info \
-    --no-access-log
+# Run the scheduler worker process
+ExecStart=/home/sven/projects/BaluHost/backend/.venv/bin/python scripts/scheduler_worker.py
 
 # Restart policy
 Restart=always
@@ -34,7 +29,7 @@ LimitNOFILE=65536
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=baluhost-backend
+SyslogIdentifier=baluhost-scheduler
 
 [Install]
 WantedBy=multi-user.target

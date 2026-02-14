@@ -373,9 +373,29 @@ def main() -> int:
         frontend_dist = CLIENT_DIR / "dist"
         frontend_built = frontend_dist.exists() and (frontend_dist / "index.html").exists()
 
+        # Scheduler worker runs all APScheduler jobs in a separate process
+        scheduler_cmd = [
+            backend_python,
+            "scripts/scheduler_worker.py",
+        ]
+
+        # WebDAV worker runs the cheroot-based WebDAV server in a separate process
+        webdav_cmd = [
+            backend_python,
+            "scripts/webdav_worker.py",
+        ]
+
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "scheduler": {
+                "cmd": scheduler_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "webdav": {
+                "cmd": webdav_cmd,
                 "cwd": BACKEND_DIR,
             },
         }

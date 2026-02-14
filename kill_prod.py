@@ -142,7 +142,7 @@ def stop_systemd_services() -> bool:
     if not systemctl:
         return False
 
-    services = ["baluhost-backend", "baluhost-frontend", "baluhost"]
+    services = ["baluhost-backend", "baluhost-scheduler", "baluhost-webdav", "baluhost-frontend", "baluhost"]
     stopped_any = False
 
     for service in services:
@@ -207,6 +207,10 @@ def main() -> int:
         "uvicorn.*app.main:app",           # Uvicorn with args
         "gunicorn.*app.main:app",          # Gunicorn WSGI server
         "python.*uvicorn.*app.main",       # Python running uvicorn
+        # Scheduler worker
+        "python.*scheduler_worker",        # Scheduler worker process
+        # WebDAV worker
+        "python.*webdav_worker",           # WebDAV server process
         # Frontend patterns (in case preview server is running)
         "npm run preview",                 # Production preview
         "vite preview",                    # Vite preview mode

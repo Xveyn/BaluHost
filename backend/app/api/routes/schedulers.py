@@ -75,12 +75,12 @@ async def run_scheduler_now(
     """
     Trigger a scheduler to run immediately (Admin only).
 
-    This will execute the scheduler's job synchronously and track
-    the execution in history. Use force=true to run even if
-    the scheduler is already running.
+    Creates a "requested" execution record. The scheduler worker
+    process picks it up and executes the job asynchronously.
+    Use force=true to run even if the scheduler is already running.
     """
     service = get_scheduler_service(db)
-    result = service.run_scheduler_now(name, current_user.id, request.force)
+    result = await service.run_scheduler_now(name, current_user.id, request.force)
 
     if not result.success and result.status == "error":
         raise HTTPException(
@@ -165,6 +165,7 @@ async def update_scheduler_config(
         interval_seconds=config.interval_seconds,
         is_enabled=config.is_enabled,
         user_id=current_user.id,
+        extra_config=config.extra_config,
     )
 
     if not success:

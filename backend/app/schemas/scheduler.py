@@ -27,8 +27,13 @@ class SchedulerStatusResponse(BaseModel):
     )
 
     # Last execution result
-    last_status: Optional[Literal["completed", "failed", "running", "cancelled"]] = Field(
+    last_status: Optional[Literal["requested", "completed", "failed", "running", "cancelled"]] = Field(
         default=None, description="Status of the last execution"
+    )
+
+    # Worker health (heartbeat-based)
+    worker_healthy: Optional[bool] = Field(
+        default=None, description="Whether the scheduler worker process is healthy (heartbeat < 60s)"
     )
     last_error: Optional[str] = Field(
         default=None, description="Error message if last execution failed"
@@ -43,6 +48,9 @@ class SchedulerStatusResponse(BaseModel):
     )
     can_run_manually: bool = Field(
         default=True, description="Whether this scheduler can be triggered manually"
+    )
+    extra_config: Optional[dict[str, Any]] = Field(
+        default=None, description="Scheduler-specific configuration (e.g. backup_type)"
     )
 
 
@@ -62,7 +70,7 @@ class SchedulerExecutionResponse(BaseModel):
     job_id: Optional[str] = None
     started_at: datetime
     completed_at: Optional[datetime] = None
-    status: Literal["running", "completed", "failed", "cancelled"]
+    status: Literal["requested", "running", "completed", "failed", "cancelled"]
     trigger_type: Literal["scheduled", "manual"]
     result_summary: Optional[str] = None
     error_message: Optional[str] = None
@@ -127,6 +135,10 @@ class SchedulerConfigUpdate(BaseModel):
         default=None,
         description="Enable or disable the scheduler"
     )
+    extra_config: Optional[dict[str, Any]] = Field(
+        default=None,
+        description="Scheduler-specific configuration (e.g. backup_type)"
+    )
 
 
 class RunNowRequest(BaseModel):
@@ -147,7 +159,7 @@ class RunNowResponse(BaseModel):
         default=None, description="ID of the new execution record"
     )
     scheduler_name: str
-    status: Literal["started", "already_running", "disabled", "error"]
+    status: Literal["requested", "started", "already_running", "disabled", "error"]
 
 
 class SchedulerToggleRequest(BaseModel):

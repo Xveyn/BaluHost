@@ -38,16 +38,13 @@ from app.core.config import settings
 from app.core.database import init_db, get_db
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.services.users import ensure_admin_user
-from app.services import disk_monitor, jobs, seed, telemetry, sync_background, raid as raid_service
-from app.services import smart as smart_service
+from app.services import disk_monitor, jobs, seed, telemetry
 from app.services import power_monitor
 from app.services import power_manager
 from app.services import fan_control
 from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
-from app.services.notifications.scheduler import NotificationScheduler, start_notification_scheduler, stop_notification_scheduler
-from app.services.backup.scheduler import BackupScheduler, start_backup_scheduler, stop_backup_scheduler
 from app.services.websocket_manager import init_websocket_manager
 from app.services.email_service import init_email_service
 from app.services.event_emitter import init_event_emitter
@@ -72,6 +69,32 @@ _discovery_service = None
 _plugin_manager = None
 # WebSocket manager instance
 _websocket_manager = None
+
+
+def _get_worker_scheduler_status(scheduler_name: str) -> dict:
+    """Read scheduler status from scheduler_state table (written by worker process)."""
+    from app.models.scheduler_state import SchedulerState
+    from app.core.database import SessionLocal as _SL
+    db = _SL()
+    try:
+        state = (
+            db.query(SchedulerState)
+            .filter(SchedulerState.scheduler_name == scheduler_name)
+            .first()
+        )
+        if state is None:
+            return {"is_running": False}
+        return {
+            "is_running": state.is_running,
+            "is_executing": state.is_executing,
+            "next_run": state.next_run_at.isoformat() if state.next_run_at else None,
+            "last_heartbeat": state.last_heartbeat.isoformat() if state.last_heartbeat else None,
+            "worker_pid": state.worker_pid,
+        }
+    except Exception:
+        return {"is_running": False}
+    finally:
+        db.close()
 
 
 def _register_services() -> None:
@@ -133,13 +156,11 @@ def _register_services() -> None:
         config_enabled_fn=lambda: settings.fan_control_enabled,
     )
 
-    # Sync Scheduler
+    # Sync Scheduler (managed by scheduler_worker process)
     register_service(
         name="sync_scheduler",
         display_name="Sync Scheduler",
-        get_status_fn=sync_background.get_status,
-        stop_fn=sync_background.stop_sync_scheduler,
-        start_fn=sync_background.start_sync_scheduler,
+        get_status_fn=lambda: _get_worker_scheduler_status("sync_check"),
     )
 
     # Network Discovery
@@ -156,41 +177,19 @@ def _register_services() -> None:
         start_fn=lambda: _discovery_service.start() if _discovery_service else None,
     )
 
-    # Notification Scheduler
-    def _get_notification_scheduler_status():
-        from app.services.notifications.scheduler import _notification_scheduler
-        is_running = _notification_scheduler is not None and _notification_scheduler.running
-        return {
-            "is_running": is_running,
-            "interval_seconds": 3600,  # 1 hour
-            "config_enabled": FirebaseService.is_available(),
-        }
-
+    # Notification Scheduler (managed by scheduler_worker process)
     register_service(
         name="notification_scheduler",
         display_name="Notification Scheduler",
-        get_status_fn=_get_notification_scheduler_status,
-        stop_fn=stop_notification_scheduler,
-        start_fn=start_notification_scheduler,
+        get_status_fn=lambda: _get_worker_scheduler_status("notification_check"),
         config_enabled_fn=FirebaseService.is_available,
     )
 
-    # Backup Scheduler
-    def _get_backup_scheduler_status():
-        from app.services.backup.scheduler import _backup_scheduler
-        is_running = _backup_scheduler is not None and _backup_scheduler.running
-        return {
-            "is_running": is_running,
-            "interval_seconds": settings.backup_auto_interval_hours * 3600 if settings.backup_auto_enabled else None,
-            "config_enabled": settings.backup_auto_enabled,
-        }
-
+    # Backup Scheduler (managed by scheduler_worker process)
     register_service(
         name="backup_scheduler",
         display_name="Backup Scheduler",
-        get_status_fn=_get_backup_scheduler_status,
-        stop_fn=stop_backup_scheduler,
-        start_fn=start_backup_scheduler,
+        get_status_fn=lambda: _get_worker_scheduler_status("backup"),
         config_enabled_fn=lambda: settings.backup_auto_enabled,
     )
 
@@ -204,24 +203,70 @@ def _register_services() -> None:
         config_enabled_fn=lambda: not settings.is_dev_mode,
     )
 
-    # RAID Scrub Scheduler
+    # RAID Scrub Scheduler (managed by scheduler_worker process)
     register_service(
         name="raid_scrub_scheduler",
         display_name="RAID Scrub Scheduler",
-        get_status_fn=raid_service.get_scrub_scheduler_status,
-        stop_fn=raid_service.stop_scrub_scheduler,
-        start_fn=raid_service.start_scrub_scheduler,
+        get_status_fn=lambda: _get_worker_scheduler_status("raid_scrub"),
         config_enabled_fn=lambda: getattr(settings, "raid_scrub_enabled", False),
     )
 
-    # SMART Scan Scheduler
+    # SMART Scan Scheduler (managed by scheduler_worker process)
     register_service(
         name="smart_scan_scheduler",
         display_name="SMART Scan Scheduler",
-        get_status_fn=smart_service.get_smart_scheduler_status,
-        stop_fn=smart_service.stop_smart_scheduler,
-        start_fn=smart_service.start_smart_scheduler,
+        get_status_fn=lambda: _get_worker_scheduler_status("smart_scan"),
         config_enabled_fn=lambda: getattr(settings, "smart_scan_enabled", False),
+    )
+
+    # WebDAV Server (managed by webdav_worker process)
+    def _get_webdav_status():
+        from app.models.webdav_state import WebdavState
+        from app.core.database import SessionLocal as _SL
+        from datetime import datetime, timezone
+        db = _SL()
+        try:
+            state = db.query(WebdavState).first()
+            if state is None:
+                return {"is_running": False}
+            # Consider stale if heartbeat is older than 30s
+            is_fresh = False
+            if state.last_heartbeat:
+                age = (datetime.now(timezone.utc) - state.last_heartbeat).total_seconds()
+                is_fresh = age < 30
+            return {
+                "is_running": state.is_running and is_fresh,
+                "port": state.port,
+                "ssl_enabled": state.ssl_enabled,
+                "started_at": state.started_at.isoformat() if state.started_at else None,
+                "worker_pid": state.worker_pid,
+                "error_message": state.error_message,
+            }
+        except Exception:
+            return {"is_running": False}
+        finally:
+            db.close()
+
+    register_service(
+        name="webdav_server",
+        display_name="WebDAV Server",
+        get_status_fn=_get_webdav_status,
+        config_enabled_fn=lambda: settings.webdav_enabled,
+    )
+
+    # Scheduler Worker Process Health
+    def _get_scheduler_worker_status():
+        from app.services.scheduler_service import is_worker_healthy_global
+        healthy = is_worker_healthy_global()
+        return {
+            "is_running": healthy is True,
+            "config_enabled": True,
+        }
+
+    register_service(
+        name="scheduler_worker",
+        display_name="Scheduler Worker",
+        get_status_fn=_get_scheduler_worker_status,
     )
 
 
@@ -259,6 +304,13 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             logger.info("Recovered %d stale benchmark(s) from previous run", recovered)
     kill_orphan_fio_processes()
 
+    # Recover stale scheduler executions from previous run
+    from app.services.scheduler_service import recover_stale_executions
+    with SessionLocal() as sched_db:
+        recovered = recover_stale_executions(sched_db)
+        if recovered:
+            logger.info("Recovered %d stale scheduler execution(s) from previous run", recovered)
+
     # Ensure home directories for all users and Shared folder
     from app.services.users import ensure_user_home_directories
     ensure_user_home_directories()
@@ -288,15 +340,17 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         except Exception as e:
             logger.warning(f"Fan control could not start: {e}")
 
-    await sync_background.start_sync_scheduler()
-    logger.info("Sync scheduler started")
-    
+    # NOTE: Sync/backup/RAID-scrub/SMART/notification schedulers are now
+    # managed by the separate scheduler_worker process (scheduler_worker.py).
+    # The web process no longer starts APScheduler instances for these jobs.
+
     # Start network discovery (mDNS/Bonjour)
     try:
         port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
         _discovery_service = NetworkDiscoveryService(
             port=port,
-            hostname=settings.mdns_hostname
+            webdav_port=settings.webdav_port,
+            hostname=settings.mdns_hostname,
         )
         _discovery_service.start()
     except Exception as e:
@@ -316,28 +370,8 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     except Exception as e:
         logger.warning(f"Notification system could not initialize: {e}")
     
-    # Start notification scheduler (only if Firebase is available)
-    try:
-        start_notification_scheduler()
-    except Exception as e:
-        logger.warning(f"Notification scheduler could not start: {e}")
-
-    # Start backup scheduler (if enabled in settings)
-    try:
-        start_backup_scheduler()
-    except Exception as e:
-        logger.warning(f"Backup scheduler could not start: {e}")
-
-    # Start RAID scrub scheduler (if enabled in settings)
-    try:
-        raid_service.start_scrub_scheduler()
-    except Exception as e:
-        logger.warning(f"RAID scrub scheduler could not start: {e}")
-    # Start SMART scheduler (if enabled in settings)
-    try:
-        smart_service.start_smart_scheduler()
-    except Exception as e:
-        logger.warning(f"SMART scheduler could not start: {e}")
+    # Scheduler jobs (backup, RAID scrub, SMART, notification, sync)
+    # are now handled by the scheduler_worker process.
 
     # Set server start time for uptime tracking
     set_server_start_time()
@@ -397,8 +431,6 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
                 disk_monitor.stop_monitoring()
                 await stop_monitoring()
                 logger.info("System monitoring stopped")
-                await sync_background.stop_sync_scheduler()
-                logger.info("Sync scheduler stopped")
                 # Stop CPU power management
                 try:
                     await power_manager.stop_power_manager()
@@ -434,21 +466,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         if _discovery_service:
             _discovery_service.stop()
         
-        # Stop notification scheduler
-        stop_notification_scheduler()
-
-        # Stop backup scheduler
-        stop_backup_scheduler()
-        # Stop RAID scrub scheduler
-        try:
-            raid_service.stop_scrub_scheduler()
-        except Exception:
-            logger.debug("Error while stopping RAID scrub scheduler")
-        # Stop SMART scheduler
-        try:
-            smart_service.stop_smart_scheduler()
-        except Exception:
-            logger.debug("Error while stopping SMART scheduler")
+        # Scheduler jobs are stopped by the scheduler_worker process.
 
         # Shutdown plugin system
         if _plugin_manager:

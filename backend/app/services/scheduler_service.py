@@ -3,14 +3,14 @@ Unified Scheduler Service for BaluHost.
 
 Manages all system schedulers with:
 - Execution history tracking
-- Run-now functionality
+- Run-now functionality (fire-and-forget via DB)
 - Configuration updates
-- Status monitoring
+- Status monitoring (reads scheduler_state table written by worker)
 """
 import json
 import logging
 from datetime import datetime, timezone, timedelta
-from typing import Optional, Callable, Any
+from typing import Optional, Any
 
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -23,6 +23,7 @@ from app.models.scheduler_history import (
     SchedulerStatus,
     TriggerType,
 )
+from app.models.scheduler_state import SchedulerState
 from app.schemas.scheduler import (
     SchedulerStatusResponse,
     SchedulerListResponse,
@@ -34,6 +35,9 @@ from app.schemas.scheduler import (
 )
 
 logger = logging.getLogger(__name__)
+
+# Max age (seconds) for a worker heartbeat to be considered healthy
+WORKER_HEARTBEAT_MAX_AGE = 60
 
 
 def _format_interval(seconds: int) -> str:
@@ -49,6 +53,14 @@ def _format_interval(seconds: int) -> str:
     else:
         days = seconds // 86400
         return f"Every {days} days" if days > 1 else "Daily"
+
+
+def _is_worker_healthy(state: Optional[SchedulerState]) -> Optional[bool]:
+    """Check if the worker heartbeat is recent enough."""
+    if state is None or state.last_heartbeat is None:
+        return None
+    age = (datetime.now(timezone.utc) - state.last_heartbeat).total_seconds()
+    return age < WORKER_HEARTBEAT_MAX_AGE
 
 
 class SchedulerService:
@@ -86,10 +98,20 @@ class SchedulerService:
         self, name: str, info: dict[str, Any]
     ) -> SchedulerStatusResponse:
         """Build status response for a scheduler."""
-        # Get runtime status
-        is_running = self._check_scheduler_running(name)
+        # Read state from scheduler_state table (written by worker process)
+        state = (
+            self.db.query(SchedulerState)
+            .filter(SchedulerState.scheduler_name == name)
+            .first()
+        )
+
+        worker_healthy = _is_worker_healthy(state)
+        is_running = state.is_running if state else False
         is_enabled = self._check_scheduler_enabled(name)
         interval = self._get_scheduler_interval(name, info)
+
+        # next_run_at from worker state (accurate, from APScheduler)
+        next_run_at = state.next_run_at if state else None
 
         # Get last execution from DB
         last_exec = (
@@ -104,13 +126,22 @@ class SchedulerService:
         last_error = last_exec.error_message if last_exec else None
         last_duration = last_exec.duration_ms if last_exec else None
 
-        # Calculate next run time
-        next_run_at = None
-        if is_running and is_enabled and last_run_at:
+        # Load extra_config from DB
+        db_config = (
+            self.db.query(SchedulerConfig)
+            .filter(SchedulerConfig.scheduler_name == name)
+            .first()
+        )
+        extra_config = None
+        if db_config and db_config.extra_config:
+            try:
+                extra_config = json.loads(db_config.extra_config)
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        # Fallback: estimate next_run_at if worker hasn't written state yet
+        if next_run_at is None and is_enabled and last_run_at:
             next_run_at = last_run_at + timedelta(seconds=interval)
-        elif is_running and is_enabled:
-            # No last run, estimate from now
-            next_run_at = datetime.now(timezone.utc) + timedelta(seconds=interval)
 
         return SchedulerStatusResponse(
             name=name,
@@ -127,45 +158,22 @@ class SchedulerService:
             last_duration_ms=last_duration,
             config_key=info.get("config_key"),
             can_run_manually=info.get("can_run_manually", True),
+            extra_config=extra_config,
+            worker_healthy=worker_healthy,
         )
 
-    def _check_scheduler_running(self, name: str) -> bool:
-        """Check if a scheduler's background job is currently running."""
-        try:
-            if name == "raid_scrub":
-                from app.services.raid import _scrub_scheduler
-                return _scrub_scheduler is not None and _scrub_scheduler.running
-
-            elif name == "smart_scan":
-                from app.services.smart import _smart_scheduler
-                return _smart_scheduler is not None and _smart_scheduler.running
-
-            elif name == "backup":
-                from app.services.backup.scheduler import _backup_scheduler
-                return _backup_scheduler is not None and _backup_scheduler.running
-
-            elif name == "sync_check":
-                from app.services.sync_background import get_scheduler
-                scheduler = get_scheduler()
-                return scheduler.scheduler.running if scheduler.scheduler else False
-
-            elif name == "notification_check":
-                from app.services.notifications.scheduler import _notification_scheduler
-                return _notification_scheduler is not None and _notification_scheduler.running
-
-            elif name == "upload_cleanup":
-                # Upload cleanup is part of sync_check scheduler
-                from app.services.sync_background import get_scheduler
-                scheduler = get_scheduler()
-                return scheduler.scheduler.running if scheduler.scheduler else False
-
-        except Exception as e:
-            logger.warning(f"Error checking scheduler {name} status: {e}")
-
-        return False
-
     def _check_scheduler_enabled(self, name: str) -> bool:
-        """Check if a scheduler is enabled in configuration."""
+        """Check if a scheduler is enabled — reads DB config with settings fallback."""
+        # Check DB config first (source of truth for toggle)
+        config = (
+            self.db.query(SchedulerConfig)
+            .filter(SchedulerConfig.scheduler_name == name)
+            .first()
+        )
+        if config is not None:
+            return config.is_enabled
+
+        # Fall back to settings
         if name == "raid_scrub":
             return getattr(settings, "raid_scrub_enabled", False)
         elif name == "smart_scan":
@@ -173,19 +181,22 @@ class SchedulerService:
         elif name == "backup":
             return getattr(settings, "backup_auto_enabled", False)
         elif name in ("sync_check", "upload_cleanup", "notification_check"):
-            # These are always enabled when running
             return True
 
-        # Check DB config as fallback
+        return True
+
+    def _get_scheduler_interval(self, name: str, info: dict[str, Any]) -> int:
+        """Get the current interval for a scheduler in seconds."""
+        # Check DB config first
         config = (
             self.db.query(SchedulerConfig)
             .filter(SchedulerConfig.scheduler_name == name)
             .first()
         )
-        return config.is_enabled if config else True
+        if config and config.interval_seconds:
+            return config.interval_seconds
 
-    def _get_scheduler_interval(self, name: str, info: dict[str, Any]) -> int:
-        """Get the current interval for a scheduler in seconds."""
+        # Fall back to settings / defaults
         if name == "raid_scrub":
             hours = getattr(settings, "raid_scrub_interval_hours", 168)
             return hours * 3600
@@ -196,18 +207,24 @@ class SchedulerService:
             hours = getattr(settings, "backup_auto_interval_hours", 24)
             return hours * 3600
         elif name == "sync_check":
-            return 300  # 5 minutes
+            return 300
         elif name == "notification_check":
-            return 3600  # 1 hour
+            return 3600
         elif name == "upload_cleanup":
-            return 86400  # Daily
+            return 86400
 
         return info.get("default_interval", 3600)
 
-    def run_scheduler_now(
+    async def run_scheduler_now(
         self, name: str, user_id: int, force: bool = False
     ) -> RunNowResponse:
-        """Trigger a scheduler to run immediately."""
+        """
+        Trigger a scheduler to run immediately.
+
+        Creates a "requested" execution row in the DB.
+        The worker process polls for these and executes them.
+        Returns immediately (fire-and-forget).
+        """
         if name not in SCHEDULER_REGISTRY:
             return RunNowResponse(
                 success=False,
@@ -226,128 +243,49 @@ class SchedulerService:
                 status="error",
             )
 
-        # Check if already running (unless force)
+        # Check if already running or requested (unless force)
         if not force:
-            running_exec = (
+            active_exec = (
                 self.db.query(SchedulerExecution)
                 .filter(
                     SchedulerExecution.scheduler_name == name,
-                    SchedulerExecution.status == SchedulerStatus.RUNNING.value,
+                    SchedulerExecution.status.in_([
+                        SchedulerStatus.RUNNING.value,
+                        SchedulerStatus.REQUESTED.value,
+                    ]),
                 )
                 .first()
             )
-            if running_exec:
+            if active_exec:
                 return RunNowResponse(
                     success=False,
-                    message=f"{info['display_name']} is already running",
-                    execution_id=running_exec.id,
+                    message=f"{info['display_name']} is already {'running' if active_exec.status == SchedulerStatus.RUNNING.value else 'requested'}",
+                    execution_id=active_exec.id,
                     scheduler_name=name,
                     status="already_running",
                 )
 
-        # Create execution record
+        # Create execution record with status="requested"
         execution = SchedulerExecution(
             scheduler_name=name,
             trigger_type=TriggerType.MANUAL.value,
             user_id=user_id,
             started_at=datetime.now(timezone.utc),
-            status=SchedulerStatus.RUNNING.value,
+            status=SchedulerStatus.REQUESTED.value,
         )
         self.db.add(execution)
         self.db.commit()
         self.db.refresh(execution)
 
-        # Execute the scheduler job
-        try:
-            result = self._execute_scheduler(name)
-            execution.status = SchedulerStatus.COMPLETED.value
-            execution.completed_at = datetime.now(timezone.utc)
-            execution.result_summary = json.dumps(result) if result else None
+        logger.info("Scheduler %s run requested (execution_id=%d, user=%d)", name, execution.id, user_id)
 
-            if execution.started_at:
-                delta = execution.completed_at - execution.started_at
-                execution.duration_ms = int(delta.total_seconds() * 1000)
-
-            self.db.commit()
-
-            return RunNowResponse(
-                success=True,
-                message=f"{info['display_name']} completed successfully",
-                execution_id=execution.id,
-                scheduler_name=name,
-                status="started",
-            )
-
-        except Exception as e:
-            logger.exception(f"Error running scheduler {name}: {e}")
-            execution.status = SchedulerStatus.FAILED.value
-            execution.completed_at = datetime.now(timezone.utc)
-            execution.error_message = str(e)
-
-            if execution.started_at:
-                delta = execution.completed_at - execution.started_at
-                execution.duration_ms = int(delta.total_seconds() * 1000)
-
-            self.db.commit()
-
-            return RunNowResponse(
-                success=False,
-                message=f"{info['display_name']} failed: {str(e)}",
-                execution_id=execution.id,
-                scheduler_name=name,
-                status="error",
-            )
-
-    def _execute_scheduler(self, name: str) -> Optional[dict]:
-        """Execute the actual scheduler job."""
-        if name == "raid_scrub":
-            from app.services.raid import scrub_now
-            result = scrub_now(None)
-            return {"message": result.message}
-
-        elif name == "smart_scan":
-            from app.services.smart import invalidate_smart_cache, get_smart_status
-            invalidate_smart_cache()
-            status = get_smart_status()
-            return {
-                "disks_scanned": len(status.disks) if status else 0,
-                "overall_status": status.overall_status if status else "unknown",
-            }
-
-        elif name == "backup":
-            from app.services.backup.scheduler import BackupScheduler
-            stats = BackupScheduler.create_automated_backup(self.db)
-            return stats
-
-        elif name == "sync_check":
-            from app.services.sync_background import get_scheduler
-            scheduler = get_scheduler()
-            # Run synchronously for manual trigger
-            import asyncio
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(scheduler.check_and_run_due_syncs())
-            finally:
-                loop.close()
-            return {"checked": True}
-
-        elif name == "notification_check":
-            from app.services.notifications.scheduler import NotificationScheduler
-            NotificationScheduler.run_periodic_check()
-            return {"checked": True}
-
-        elif name == "upload_cleanup":
-            from app.services.sync_background import get_scheduler
-            scheduler = get_scheduler()
-            import asyncio
-            loop = asyncio.new_event_loop()
-            try:
-                loop.run_until_complete(scheduler.cleanup_expired_uploads())
-            finally:
-                loop.close()
-            return {"cleaned": True}
-
-        return None
+        return RunNowResponse(
+            success=True,
+            message=f"{info['display_name']} run requested — worker will pick it up shortly",
+            execution_id=execution.id,
+            scheduler_name=name,
+            status="requested",
+        )
 
     def get_scheduler_history(
         self,
@@ -388,7 +326,11 @@ class SchedulerService:
     def toggle_scheduler(
         self, name: str, enabled: bool, user_id: int
     ) -> SchedulerToggleResponse:
-        """Enable or disable a scheduler."""
+        """Enable or disable a scheduler.
+
+        Writes to scheduler_configs in DB. The worker process polls for
+        config changes and adjusts its APScheduler jobs accordingly.
+        """
         if name not in SCHEDULER_REGISTRY:
             return SchedulerToggleResponse(
                 success=False,
@@ -399,7 +341,7 @@ class SchedulerService:
 
         info = SCHEDULER_REGISTRY[name]
 
-        # Update DB config
+        # Update DB config (worker polls this)
         config = (
             self.db.query(SchedulerConfig)
             .filter(SchedulerConfig.scheduler_name == name)
@@ -420,15 +362,6 @@ class SchedulerService:
 
         self.db.commit()
 
-        # Try to start/stop the actual scheduler
-        try:
-            if enabled:
-                self._start_scheduler(name)
-            else:
-                self._stop_scheduler(name)
-        except Exception as e:
-            logger.warning(f"Could not toggle scheduler {name}: {e}")
-
         return SchedulerToggleResponse(
             success=True,
             scheduler_name=name,
@@ -436,52 +369,19 @@ class SchedulerService:
             message=f"{info['display_name']} {'enabled' if enabled else 'disabled'}",
         )
 
-    def _start_scheduler(self, name: str) -> None:
-        """Start a scheduler's background job."""
-        if name == "raid_scrub":
-            from app.services.raid import start_scrub_scheduler
-            start_scrub_scheduler()
-        elif name == "smart_scan":
-            from app.services.smart import start_smart_scheduler
-            start_smart_scheduler()
-        elif name == "backup":
-            from app.services.backup.scheduler import start_backup_scheduler
-            start_backup_scheduler()
-        elif name == "sync_check":
-            from app.services.sync_background import get_scheduler
-            scheduler = get_scheduler()
-            scheduler.start()
-        elif name == "notification_check":
-            from app.services.notifications.scheduler import start_notification_scheduler
-            start_notification_scheduler()
-
-    def _stop_scheduler(self, name: str) -> None:
-        """Stop a scheduler's background job."""
-        if name == "raid_scrub":
-            from app.services.raid import stop_scrub_scheduler
-            stop_scrub_scheduler()
-        elif name == "smart_scan":
-            from app.services.smart import stop_smart_scheduler
-            stop_smart_scheduler()
-        elif name == "backup":
-            from app.services.backup.scheduler import stop_backup_scheduler
-            stop_backup_scheduler()
-        elif name == "sync_check":
-            from app.services.sync_background import get_scheduler
-            scheduler = get_scheduler()
-            scheduler.stop()
-        elif name == "notification_check":
-            from app.services.notifications.scheduler import stop_notification_scheduler
-            stop_notification_scheduler()
-
     def update_scheduler_config(
         self,
         name: str,
         interval_seconds: Optional[int],
         is_enabled: Optional[bool],
         user_id: int,
+        extra_config: Optional[dict] = None,
     ) -> bool:
-        """Update scheduler configuration."""
+        """Update scheduler configuration.
+
+        Changes are written to DB and the worker picks them up
+        on its next config check cycle.
+        """
         if name not in SCHEDULER_REGISTRY:
             return False
 
@@ -504,19 +404,41 @@ class SchedulerService:
                 ),
                 updated_by=user_id,
             )
+            if extra_config is not None:
+                config.extra_config = json.dumps(extra_config)
             self.db.add(config)
         else:
             if interval_seconds is not None:
                 config.interval_seconds = interval_seconds
             if is_enabled is not None:
                 config.is_enabled = is_enabled
+            if extra_config is not None:
+                config.extra_config = json.dumps(extra_config)
             config.updated_by = user_id
 
         self.db.commit()
-
-        # Note: Changing interval requires scheduler restart
-        # which would be handled by stopping and starting the scheduler
         return True
+
+
+def recover_stale_executions(db: Session) -> int:
+    """Mark any RUNNING scheduler executions as FAILED after a server restart."""
+    stale = (
+        db.query(SchedulerExecution)
+        .filter(SchedulerExecution.status == SchedulerStatus.RUNNING.value)
+        .all()
+    )
+    if not stale:
+        return 0
+    now = datetime.now(timezone.utc)
+    for execution in stale:
+        execution.status = SchedulerStatus.FAILED.value
+        execution.error_message = "Server restarted during execution"
+        execution.completed_at = now
+        if execution.started_at:
+            delta = now - execution.started_at
+            execution.duration_ms = int(delta.total_seconds() * 1000)
+    db.commit()
+    return len(stale)
 
 
 def get_scheduler_service(db: Session) -> SchedulerService:
@@ -584,5 +506,24 @@ def complete_scheduler_execution(
                 execution.duration_ms = int(delta.total_seconds() * 1000)
 
             db.commit()
+    finally:
+        db.close()
+
+
+def is_worker_healthy_global() -> Optional[bool]:
+    """Check if the scheduler worker process is healthy (any scheduler has recent heartbeat)."""
+    db = SessionLocal()
+    try:
+        # Check if any scheduler_state has a recent heartbeat
+        states = db.query(SchedulerState).all()
+        if not states:
+            return None  # No state rows = worker never ran
+
+        for state in states:
+            healthy = _is_worker_healthy(state)
+            if healthy:
+                return True
+
+        return False
     finally:
         db.close()

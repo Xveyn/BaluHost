@@ -29,6 +29,7 @@ from app.models.power import (
     PowerDemandLog,
     PowerProfileConfig as PowerProfileConfigModel,
     PowerAutoScalingConfig,
+    PowerDynamicModeConfig,
 )
 from app.models.fans import FanConfig, FanSample
 from app.models.scheduler_history import (
@@ -37,6 +38,8 @@ from app.models.scheduler_history import (
     SchedulerStatus,
     TriggerType,
 )
+from app.models.scheduler_state import SchedulerState
+from app.models.webdav_state import WebdavState
 from app.models.power_preset import PowerPreset
 from app.models.plugin import InstalledPlugin
 from app.models.benchmark import (
@@ -93,12 +96,15 @@ __all__ = [
     "PowerDemandLog",
     "PowerProfileConfigModel",
     "PowerAutoScalingConfig",
+    "PowerDynamicModeConfig",
     "FanConfig",
     "FanSample",
     "SchedulerExecution",
     "SchedulerConfig",
     "SchedulerStatus",
     "TriggerType",
+    "SchedulerState",
+    "WebdavState",
     "PowerPreset",
     "InstalledPlugin",
     "DiskBenchmark",

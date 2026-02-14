@@ -12,6 +12,7 @@ from app.models.base import Base
 
 class SchedulerStatus(str, enum.Enum):
     """Status of a scheduler execution."""
+    REQUESTED = "requested"
     RUNNING = "running"
     COMPLETED = "completed"
     FAILED = "failed"
@@ -157,6 +158,12 @@ class SchedulerConfig(Base):
     interval_seconds: Mapped[int] = mapped_column(
         Integer,
         nullable=False
+    )
+
+    # JSON-encoded scheduler-specific configuration (e.g. {"backup_type": "full"})
+    extra_config: Mapped[Optional[str]] = mapped_column(
+        Text,
+        nullable=True,
     )
 
     # Last time config was updated

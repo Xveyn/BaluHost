@@ -251,7 +251,7 @@ def main() -> int:
 
     # Only run the kill step on POSIX/Linux to avoid Windows side effects
     if os.name != "nt":
-        kill_patterns = ["uvicorn", "vite", "npm run dev", "node .*vite", "node .*@vite"]
+        kill_patterns = ["uvicorn", "scheduler_worker", "webdav_worker", "vite", "npm run dev", "node .*vite", "node .*@vite"]
         try:
             kill_conflicting_processes(kill_patterns, grace_seconds=3)
         except Exception as e:
@@ -316,6 +316,14 @@ def main() -> int:
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "scheduler": {
+                "cmd": [backend_python, "scripts/scheduler_worker.py"],
+                "cwd": BACKEND_DIR,
+            },
+            "webdav": {
+                "cmd": [backend_python, "scripts/webdav_worker.py"],
                 "cwd": BACKEND_DIR,
             },
             "frontend": {
