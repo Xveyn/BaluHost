@@ -168,14 +168,15 @@
     "smartMode": "SMART-Modus: {{mode}}",
     "toggleFailed": "Umschalten fehlgeschlagen",
     "noDeviceSelected": "Kein Gerät für SMART-Test ausgewählt",
-    "confirmTokenCreated": "Bestätigungstoken erstellt. Bestätigen zum Ausführen.",
-    "confirmRequestFailed": "Bestätigungsanfrage fehlgeschlagen",
-    "actionExecuted": "Aktion ausgeführt",
-    "executionFailed": "Ausführung fehlgeschlagen",
-    "confirm": "Bestätigen",
-    "confirmDescription": "Ein einmaliges Bestätigungstoken wurde erstellt. Klicken Sie auf Bestätigen, um die Aktion jetzt auszuführen.",
-    "token": "Token",
-    "expiresAt": "Läuft ab am",
-    "confirmExecute": "Ausführung bestätigen"
+    "lastScrub": "Letzter Scrub",
+    "lastSmartScan": "Letzter SMART-Scan",
+    "attrName": "Name",
+    "attrValue": "Wert",
+    "attrWorst": "Schlechtester",
+    "attrThreshold": "Schwellwert",
+    "attrRaw": "Roh",
+    "attrStatus": "Status",
+    "lastSelfTest": "Letzter Selbsttest",
+    "powerOnHours": "Betriebsstunden"
   }
 }

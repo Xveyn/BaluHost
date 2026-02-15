@@ -168,14 +168,15 @@
     "smartMode": "SMART mode: {{mode}}",
     "toggleFailed": "Toggle failed",
     "noDeviceSelected": "No device selected for SMART test",
-    "confirmTokenCreated": "Confirmation token created. Confirm to execute.",
-    "confirmRequestFailed": "Failed to request confirmation",
-    "actionExecuted": "Action executed",
-    "executionFailed": "Execution failed",
-    "confirm": "Confirm",
-    "confirmDescription": "A one-time confirmation token was created. Click Confirm to execute the action now.",
-    "token": "Token",
-    "expiresAt": "Expires at",
-    "confirmExecute": "Confirm Execute"
+    "lastScrub": "Last Scrub",
+    "lastSmartScan": "Last SMART Scan",
+    "attrName": "Name",
+    "attrValue": "Value",
+    "attrWorst": "Worst",
+    "attrThreshold": "Threshold",
+    "attrRaw": "Raw",
+    "attrStatus": "Status",
+    "lastSelfTest": "Last Self-Test",
+    "powerOnHours": "Power-on hours"
   }
 }

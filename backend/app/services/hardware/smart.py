@@ -5,7 +5,7 @@ import platform
 from datetime import datetime, timezone
 
 from app.core.config import settings
-from app.schemas.system import SmartAttribute, SmartDevice, SmartStatusResponse
+from app.schemas.system import SmartAttribute, SmartDevice, SmartSelfTest, SmartStatusResponse
 
 logger = logging.getLogger(__name__)
 from typing import Optional, TYPE_CHECKING
@@ -101,12 +101,18 @@ def run_smart_self_test(device: str, test_type: str = "short") -> str:
     smartctl = _get_smartctl_path()
     import subprocess
     try:
-        subprocess.run([smartctl, "-t", test_type, device], check=True, capture_output=True, text=True, timeout=10)
+        result = subprocess.run([smartctl, "-t", test_type, device], check=False, capture_output=True, text=True, timeout=10)
+        # Bits 0-1: command-line parse error / device open failed → fatal
+        if result.returncode & 0b11:
+            logger.error("smartctl -t failed (code %d): %s", result.returncode, result.stderr or result.stdout)
+            raise RuntimeError(f"Failed to start SMART test for {device}: exit code {result.returncode}")
+        # Bit 2+: informational (SMART command issue, disk failing, etc.) → test was still sent
+        if result.returncode:
+            logger.warning("smartctl -t returned code %d for %s (non-fatal)", result.returncode, device)
         invalidate_smart_cache()
         return f"SMART {test_type} test started for {device}"
-    except subprocess.CalledProcessError as exc:
-        logger.error("smartctl -t failed: %s", exc.stderr or exc.stdout)
-        raise RuntimeError(f"Failed to start SMART test for {device}: {exc}") from exc
+    except subprocess.TimeoutExpired as exc:
+        raise RuntimeError(f"SMART test command timed out for {device}") from exc
 
 
 def start_smart_scheduler() -> None:
@@ -385,7 +391,7 @@ def _run_smartctl(smartctl_path: str, dev_type: str, device_name: str) -> tuple[
     entries) are informational — the JSON output is still valid.
     """
     import json, subprocess, re as _re
-    base_args = [smartctl_path, '-H', '-i', '-j', '-d', dev_type, device_name]
+    base_args = [smartctl_path, '-H', '-i', '-l', 'selftest', '-j', '-d', dev_type, device_name]
     if not _re.search(r'nvme', dev_type, _re.IGNORECASE) and 'nvme' not in device_name.lower():
         base_args.insert(1, '-A')
     result = subprocess.run(base_args, capture_output=True, text=True, check=False, timeout=20)
@@ -399,6 +405,47 @@ def _run_smartctl(smartctl_path: str, dev_type: str, device_name: str) -> tuple[
         logger.warning("Failed to parse smartctl JSON for %s", device_name)
         return result, None
     return result, data
+
+
+def _parse_self_test_log(data: dict) -> SmartSelfTest | None:
+    """Parse the most recent self-test result from smartctl JSON output.
+
+    Supports both ATA (ata_smart_self_test_log.standard.table) and
+    NVMe (nvme_self_test_log.table) formats.
+    """
+    # ATA format
+    ata_log = data.get('ata_smart_self_test_log', {})
+    if isinstance(ata_log, dict):
+        table = ata_log.get('standard', {}).get('table', [])
+        if table and isinstance(table, list) and isinstance(table[0], dict):
+            entry = table[0]
+            status = entry.get('status', {})
+            status_str = status.get('string', 'Unknown') if isinstance(status, dict) else str(status)
+            passed = status.get('passed', False) if isinstance(status, dict) else False
+            return SmartSelfTest(
+                test_type=entry.get('type', {}).get('string', 'Unknown') if isinstance(entry.get('type'), dict) else str(entry.get('type', 'Unknown')),
+                status=status_str,
+                passed=passed,
+                power_on_hours=int(entry.get('lifetime_hours', 0)),
+            )
+
+    # NVMe format
+    nvme_log = data.get('nvme_self_test_log', {})
+    if isinstance(nvme_log, dict):
+        table = nvme_log.get('table', [])
+        if table and isinstance(table, list) and isinstance(table[0], dict):
+            entry = table[0]
+            status = entry.get('status', {})
+            status_str = status.get('string', 'Unknown') if isinstance(status, dict) else str(status)
+            passed = 'completed without error' in status_str.lower() if status_str else False
+            return SmartSelfTest(
+                test_type=entry.get('type', {}).get('string', 'Short') if isinstance(entry.get('type'), dict) else str(entry.get('type', 'Short')),
+                status=status_str,
+                passed=passed,
+                power_on_hours=int(entry.get('power_on_hours', 0)),
+            )
+
+    return None
 
 
 def _read_real_smart_data() -> SmartStatusResponse:
@@ -524,7 +571,7 @@ def _read_real_smart_data() -> SmartStatusResponse:
             if 'available_spare' in nvme_log:
                 attributes.append(SmartAttribute(id=5, name='Available_Spare', value=nvme_log.get('available_spare', 0), worst=0, threshold=nvme_log.get('available_spare_threshold', 0), raw=str(nvme_log.get('available_spare', 0)), status='OK'))
         logger.debug("SMART parsed %s: model=%s, status=%s, temp=%s, attrs=%d", device_name, model_info, status, temperature, len(attributes))
-        return SmartDevice(name=device_name, model=model_info, serial=serial, temperature=temperature, status=status, capacity_bytes=capacity_bytes, used_bytes=None, used_percent=None, mount_point=None, attributes=attributes)
+        return SmartDevice(name=device_name, model=model_info, serial=serial, temperature=temperature, status=status, capacity_bytes=capacity_bytes, used_bytes=None, used_percent=None, mount_point=None, last_self_test=_parse_self_test_log(data), attributes=attributes)
 
     devices: list[SmartDevice] = []
     with ThreadPoolExecutor(max_workers=min(8, max(1, len(device_list)))) as executor:
@@ -580,6 +627,12 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=disk_used,
             used_percent=disk_used_percent,
             mount_point=None,
+            last_self_test=SmartSelfTest(
+                test_type="Short offline",
+                status="Completed without error",
+                passed=True,
+                power_on_hours=1234,
+            ),
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -680,6 +733,12 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_10gb * 0.45),  # 45% genutzt
             used_percent=45.0,
             mount_point=None,
+            last_self_test=SmartSelfTest(
+                test_type="Extended offline",
+                status="Completed without error",
+                passed=True,
+                power_on_hours=5678,
+            ),
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -829,6 +888,12 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
             used_percent=28.0,
             mount_point=None,
+            last_self_test=SmartSelfTest(
+                test_type="Short offline",
+                status="Completed: read failure",
+                passed=False,
+                power_on_hours=9012,
+            ),
             attributes=[
                 SmartAttribute(
                     id=5,

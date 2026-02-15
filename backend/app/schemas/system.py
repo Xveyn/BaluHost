@@ -126,6 +126,13 @@ class SmartAttribute(BaseModel):
     status: str
 
 
+class SmartSelfTest(BaseModel):
+    test_type: str
+    status: str
+    passed: bool
+    power_on_hours: int
+
+
 class SmartDevice(BaseModel):
     name: str
     model: str
@@ -136,6 +143,7 @@ class SmartDevice(BaseModel):
     used_bytes: int | None = None  # Genutzte Bytes auf dieser Festplatte
     used_percent: float | None = None  # Prozentsatz der Nutzung
     mount_point: str | None = None  # Mount-Punkt, falls gemountet
+    last_self_test: SmartSelfTest | None = None
     attributes: list[SmartAttribute]
 
 

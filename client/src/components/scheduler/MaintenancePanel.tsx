@@ -1,20 +1,20 @@
-import { useEffect, useState, useRef } from 'react';
+import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { getRaidStatus, triggerRaidScrub } from '../../api/raid';
+import { getRaidStatus } from '../../api/raid';
 import { fetchSmartStatus, getSmartMode, toggleSmartMode, runSmartTest } from '../../api/smart';
-import { requestConfirmation, executeConfirmation } from '../../api/raid';
-import { HardDrive, Activity, RefreshCw, Trash2 } from 'lucide-react';
+import type { RaidStatusResponse, RaidArray, RaidDevice } from '../../api/raid';
+import type { SmartStatusResponse, SmartDevice, SmartAttribute, SmartModeResponse } from '../../api/smart';
+import type { SchedulerStatus } from '../../api/schedulers';
+import { formatRelativeTime, getStatusColor } from '../../api/schedulers';
+import { useAsyncData } from '../../hooks/useAsyncData';
+import { inferStatusLevel, getStatusClasses } from '../../lib/statusColors';
+import { formatBytes } from '../../lib/formatters';
+import { HardDrive, Activity, RefreshCw, Loader2, ChevronDown, ChevronUp, Database, Search, CheckCircle2, XCircle } from 'lucide-react';
 
 function StatusBadge({ status }: { status?: string }) {
-  const s = (status || '').toLowerCase();
-  const className = s.includes('ok') || s === 'optimal' || s === 'active' || s === 'passed' || s === 'online'
-    ? 'bg-emerald-600 text-white'
-    : s.includes('degrad') || s.includes('warning') || s === 'idle' || s === 'info'
-    ? 'bg-amber-500 text-slate-900'
-    : 'bg-red-600 text-white';
-
+  const level = inferStatusLevel(status || 'unknown');
   return (
-    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${className}`}>
+    <span className={`inline-flex items-center rounded-full border px-2 py-0.5 text-xs font-medium ${getStatusClasses(level)}`}>
       {status ?? 'unknown'}
     </span>
   );
@@ -29,115 +29,152 @@ function ProgressBar({ value }: { value?: number | null }) {
   );
 }
 
-interface MaintenancePanelProps {
-  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+function LastRunInfo({ scheduler }: { scheduler: SchedulerStatus | undefined }) {
+  const { t } = useTranslation('scheduler');
+  if (!scheduler) return null;
+
+  return (
+    <span className="text-xs text-slate-400">
+      {scheduler.last_run_at ? (
+        <>
+          {formatRelativeTime(scheduler.last_run_at)}
+          {scheduler.last_status && (
+            <span className={`ml-1.5 ${getStatusColor(scheduler.last_status)}`}>
+              ({t(`status.${scheduler.last_status}`)})
+            </span>
+          )}
+        </>
+      ) : (
+        t('card.neverRun')
+      )}
+    </span>
+  );
 }
 
-export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
+function SmartAttributeRow({ attr }: { attr: SmartAttribute }) {
+  const { t } = useTranslation('scheduler');
+  const [expanded, setExpanded] = useState(false);
+
+  return (
+    <>
+      <button
+        onClick={() => setExpanded(!expanded)}
+        className="flex w-full items-center justify-between rounded-md px-2 py-1.5 text-left text-xs hover:bg-slate-800/60 transition-colors"
+      >
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-slate-500 w-6 text-right shrink-0">#{attr.id}</span>
+          <span className="text-slate-200 truncate">{attr.name}</span>
+        </div>
+        <div className="flex items-center gap-2 shrink-0">
+          <StatusBadge status={attr.status} />
+          {expanded ? <ChevronUp className="h-3 w-3 text-slate-400" /> : <ChevronDown className="h-3 w-3 text-slate-400" />}
+        </div>
+      </button>
+      {expanded && (
+        <div className="mb-1 ml-2 rounded-md border border-slate-800 bg-slate-950/40 p-2">
+          <table className="w-full text-xs">
+            <tbody className="divide-y divide-slate-800/50">
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrName')}</td>
+                <td className="py-1 text-slate-200">{attr.name}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrValue')}</td>
+                <td className="py-1 text-slate-200">{attr.value}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrWorst')}</td>
+                <td className="py-1 text-slate-200">{attr.worst}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrThreshold')}</td>
+                <td className="py-1 text-slate-200">{attr.threshold}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrRaw')}</td>
+                <td className="py-1 font-mono text-slate-200">{attr.raw}</td>
+              </tr>
+              <tr>
+                <td className="py-1 pr-3 text-slate-400">{t('maintenance.attrStatus')}</td>
+                <td className="py-1"><StatusBadge status={attr.status} /></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  );
+}
+
+interface MaintenancePanelProps {
+  addToast: (message: string, type: 'success' | 'error' | 'info') => void;
+  schedulers: SchedulerStatus[];
+  onRunNow: (name: string) => Promise<void>;
+}
+
+export function MaintenancePanel({ addToast, schedulers, onRunNow }: MaintenancePanelProps) {
   const { t } = useTranslation(['scheduler', 'common']);
-  const [raid, setRaid] = useState<any>(null);
-  const [smart, setSmart] = useState<any>(null);
   const [selectedDevice, setSelectedDevice] = useState<string | null>(null);
-  const [smartMode, setSmartMode] = useState<any>(null);
   const [busy, setBusy] = useState(false);
-  const [confirmModal, setConfirmModal] = useState<{
-    visible: boolean;
-    token?: string;
-    expires_at?: number;
-    action?: string;
-    payload?: any;
-    loading?: boolean;
-  }>({ visible: false });
-  const confirmButtonRef = useRef<HTMLButtonElement | null>(null);
 
-  const load = async () => {
-    try {
-      const [r, s, m] = await Promise.all([getRaidStatus(), fetchSmartStatus(), getSmartMode()]);
-      setRaid(r);
-      setSmart(s);
-      setSelectedDevice(s?.devices?.[0]?.name ?? null);
-      setSmartMode(m);
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.loadFailed'), 'error');
-    }
-  };
+  // Dev-mode detection
+  const { data: modeData } = useAsyncData<{ dev_mode: boolean }>(
+    () => fetch('/api/system/mode').then(r => r.json()),
+  );
+  const isDevMode = modeData?.dev_mode === true;
 
-  useEffect(() => {
-    load();
-  }, []);
+  // RAID status with auto-refresh
+  const { data: raidData, loading: raidLoading } = useAsyncData<RaidStatusResponse>(
+    () => getRaidStatus(),
+    { refreshInterval: 30000 },
+  );
+
+  // SMART status with auto-refresh
+  const { data: smartData, loading: smartLoading } = useAsyncData<SmartStatusResponse>(
+    () => fetchSmartStatus(),
+    { refreshInterval: 30000 },
+  );
+
+  // SMART mode only in dev mode
+  const { data: smartModeData } = useAsyncData<SmartModeResponse>(
+    () => getSmartMode(),
+    { enabled: isDevMode },
+  );
+
+  // Auto-select first device when smart data loads
+  const effectiveDevice = selectedDevice ?? smartData?.devices?.[0]?.name ?? null;
+
+  // Find scheduler info for last-run display
+  const scrubScheduler = useMemo(
+    () => schedulers.find(s => s.name === 'raid_scrub'),
+    [schedulers],
+  );
+  const smartScanScheduler = useMemo(
+    () => schedulers.find(s => s.name === 'smart_scan'),
+    [schedulers],
+  );
+
+  const initialLoading = raidLoading && !raidData && smartLoading && !smartData;
 
   const handleRaidScrub = async () => {
     setBusy(true);
     try {
-      const res = await triggerRaidScrub();
-      addToast(res.message || t('scheduler:maintenance.scrubStarted'), 'success');
-      await load();
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.scrubFailed'), 'error');
+      await onRunNow('raid_scrub');
     } finally {
       setBusy(false);
     }
   };
-
-  const requestDeleteArray = async (arrayName: string) => {
-    setBusy(true);
-    try {
-      const res = await requestConfirmation('delete_array', { array: arrayName, force: false });
-      setConfirmModal({
-        visible: true,
-        token: res.token,
-        expires_at: res.expires_at,
-        action: 'delete_array',
-        payload: { array: arrayName },
-      });
-      addToast(t('scheduler:maintenance.confirmTokenCreated'), 'info');
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.confirmRequestFailed'), 'error');
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const executeToken = async () => {
-    if (!confirmModal.token) return;
-    setConfirmModal((s) => ({ ...s, loading: true }));
-    try {
-      const resp = await executeConfirmation(confirmModal.token!);
-      addToast(resp.message || t('scheduler:maintenance.actionExecuted'), 'success');
-      setConfirmModal({ visible: false });
-      await load();
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.executionFailed'), 'error');
-      setConfirmModal({ visible: false });
-    }
-  };
-
-  // Accessibility: focus management & keyboard handling for modal
-  useEffect(() => {
-    if (confirmModal.visible) {
-      setTimeout(() => confirmButtonRef.current?.focus(), 0);
-
-      const onKey = (e: KeyboardEvent) => {
-        if (e.key === 'Escape') {
-          setConfirmModal({ visible: false });
-        }
-      };
-
-      document.addEventListener('keydown', onKey);
-      return () => document.removeEventListener('keydown', onKey);
-    }
-  }, [confirmModal.visible]);
 
   const handleSmartTest = async () => {
     setBusy(true);
     try {
-      const device = selectedDevice || smart?.devices?.[0]?.name;
+      const device = effectiveDevice;
       if (!device) throw new Error(t('scheduler:maintenance.noDeviceSelected'));
       const res = await runSmartTest({ device, type: 'short' });
       addToast(res.message || t('scheduler:maintenance.smartTestStarted'), 'success');
-      await load();
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.smartTestFailed'), 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('scheduler:maintenance.smartTestFailed');
+      addToast(message, 'error');
     } finally {
       setBusy(false);
     }
@@ -147,14 +184,22 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
     setBusy(true);
     try {
       const res = await toggleSmartMode();
-      setSmartMode(res);
       addToast(res.message || t('scheduler:maintenance.smartMode', { mode: res.mode }), 'success');
-    } catch (err: any) {
-      addToast(err?.message || t('scheduler:maintenance.toggleFailed'), 'error');
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : t('scheduler:maintenance.toggleFailed');
+      addToast(message, 'error');
     } finally {
       setBusy(false);
     }
   };
+
+  if (initialLoading) {
+    return (
+      <div className="flex items-center justify-center py-12">
+        <Loader2 className="h-8 w-8 animate-spin text-slate-400" />
+      </div>
+    );
+  }
 
   return (
     <>
@@ -176,26 +221,31 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
           <Activity className="h-4 w-4" />
           {t('scheduler:maintenance.runSmartShort')}
         </button>
-        <button
-          onClick={handleToggleSmart}
-          disabled={busy}
-          className="inline-flex items-center gap-2 min-h-[44px] rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors"
-        >
-          <RefreshCw className="h-4 w-4" />
-          {t('scheduler:maintenance.toggleSmartMode')}
-        </button>
+        {isDevMode && (
+          <button
+            onClick={handleToggleSmart}
+            disabled={busy}
+            className="inline-flex items-center gap-2 min-h-[44px] rounded-md bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-700 disabled:opacity-50 transition-colors"
+          >
+            <RefreshCw className="h-4 w-4" />
+            {t('scheduler:maintenance.toggleSmartMode')}
+          </button>
+        )}
       </div>
 
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         {/* RAID Status */}
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-lg font-medium text-white flex items-center gap-2">
-            <HardDrive className="h-5 w-5" />
-            {t('scheduler:maintenance.raidStatus')}
-          </h3>
-          <div className="mt-4 space-y-4">
-            {raid?.arrays?.length ? (
-              raid.arrays.map((a: any) => (
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-white flex items-center gap-2">
+              <HardDrive className="h-5 w-5" />
+              {t('scheduler:maintenance.raidStatus')}
+            </h3>
+            <LastRunInfo scheduler={scrubScheduler} />
+          </div>
+          <div className="space-y-4">
+            {raidData?.arrays?.length ? (
+              raidData.arrays.map((a: RaidArray) => (
                 <div key={a.name} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
                     <div>
@@ -203,20 +253,10 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                         {a.name} <span className="text-xs text-slate-400">({a.level})</span>
                       </div>
                       <div className="text-xs text-slate-400">
-                        {t('scheduler:maintenance.size')}: {a.size_bytes ? Math.round(a.size_bytes / (1024 * 1024 * 1024)) + ' GB' : 'n/a'}
+                        {t('scheduler:maintenance.size')}: {a.size_bytes ? formatBytes(a.size_bytes) : 'n/a'}
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <StatusBadge status={a.status || a.sync_action} />
-                      <button
-                        onClick={() => requestDeleteArray(a.name)}
-                        disabled={busy}
-                        className="inline-flex items-center gap-1 rounded-md bg-red-600 px-2 py-1 text-xs font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-                      >
-                        <Trash2 className="h-3 w-3" />
-                        {t('common:buttons.delete')}
-                      </button>
-                    </div>
+                    <StatusBadge status={a.status || a.sync_action || undefined} />
                   </div>
 
                   {a.resync_progress != null && (
@@ -232,7 +272,7 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                   <div className="mt-3 text-xs">
                     <div className="text-slate-400 mb-1">{t('scheduler:maintenance.devices')}</div>
                     <div className="flex flex-wrap gap-2">
-                      {a.devices?.map((d: any) => (
+                      {a.devices?.map((d: RaidDevice) => (
                         <div
                           key={d.name}
                           className="rounded-md border border-slate-800 bg-slate-900/60 px-2 py-1 text-xs"
@@ -246,27 +286,33 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                 </div>
               ))
             ) : (
-              <div className="text-sm text-slate-400">{t('scheduler:maintenance.noArrays')}</div>
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                <Database className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm">{t('scheduler:maintenance.noArrays')}</p>
+              </div>
             )}
           </div>
         </div>
 
         {/* SMART Status */}
         <div className="rounded-lg border border-slate-800 bg-slate-900/60 p-4">
-          <h3 className="text-lg font-medium text-white flex items-center gap-2">
-            <Activity className="h-5 w-5" />
-            {t('scheduler:maintenance.smartStatus')}
-          </h3>
-          <div className="mt-4 space-y-3">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-lg font-medium text-white flex items-center gap-2">
+              <Activity className="h-5 w-5" />
+              {t('scheduler:maintenance.smartStatus')}
+            </h3>
+            <LastRunInfo scheduler={smartScanScheduler} />
+          </div>
+          <div className="space-y-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <label className="text-xs text-slate-400">{t('scheduler:maintenance.device')}:</label>
                 <select
-                  value={selectedDevice ?? ''}
+                  value={effectiveDevice ?? ''}
                   onChange={(e) => setSelectedDevice(e.target.value || null)}
                   className="rounded-md border border-slate-700 bg-slate-800 px-2 py-1 text-sm text-white"
                 >
-                  {(smart?.devices ?? []).map((d: any) => (
+                  {(smartData?.devices ?? []).map((d: SmartDevice) => (
                     <option key={d.name} value={d.name}>
                       {d.name}
                       {d.model ? ` - ${d.model}` : ''}
@@ -274,88 +320,98 @@ export function MaintenancePanel({ addToast }: MaintenancePanelProps) {
                   ))}
                 </select>
               </div>
-              <div className="text-xs text-slate-400">
-                {t('scheduler:maintenance.mode')}: <span className="text-slate-100">{smartMode?.mode ?? t('common:status.unknown')}</span>
-              </div>
+              {isDevMode && (
+                <div className="text-xs text-slate-400">
+                  {t('scheduler:maintenance.mode')}: <span className="text-slate-100">{smartModeData?.mode ?? t('common:status.unknown')}</span>
+                </div>
+              )}
             </div>
 
-            {smart?.devices?.length ? (
-              smart.devices.map((dev: any) => (
-                <div key={dev.name} className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-                  <div className="flex items-start justify-between gap-4">
-                    <div>
-                      <div className="text-sm font-medium text-white">{dev.model ?? dev.name}</div>
-                      <div className="text-xs text-slate-400">
-                        {dev.name} {dev.serial ? `- ${dev.serial}` : ''}
-                      </div>
-                    </div>
-                    <div className="flex flex-col items-end gap-2">
-                      <div className="text-xs">
-                        {t('scheduler:maintenance.temp')}: <span className="font-medium">{dev.temperature ?? 'n/a'}</span>
-                        {dev.temperature ? 'C' : ''}
-                      </div>
-                      <StatusBadge status={dev.status} />
-                    </div>
-                  </div>
-                  <div className="mt-3 text-xs text-slate-400">
-                    {t('scheduler:maintenance.attributes')}: {dev.attributes?.length ?? 0}
-                  </div>
-                </div>
+            {smartData?.devices?.length ? (
+              smartData.devices.map((dev: SmartDevice) => (
+                <SmartDeviceCard key={dev.name} dev={dev} />
               ))
             ) : (
-              <div className="text-sm text-slate-400">{t('scheduler:maintenance.noSmartDevices')}</div>
+              <div className="flex flex-col items-center justify-center py-8 text-slate-400">
+                <Search className="h-8 w-8 mb-2 opacity-40" />
+                <p className="text-sm">{t('scheduler:maintenance.noSmartDevices')}</p>
+              </div>
             )}
           </div>
         </div>
       </div>
+    </>
+  );
+}
 
-      {/* Confirmation Modal */}
-      {confirmModal.visible && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div
-            className="absolute inset-0 bg-black/60"
-            onClick={() => setConfirmModal({ visible: false })}
-          />
-          <div
-            className="relative z-10 w-full max-w-lg rounded-lg bg-slate-900 p-6 shadow-lg"
-            role="dialog"
-            aria-modal="true"
-          >
-            <h3 className="text-lg font-medium text-white">{t('scheduler:maintenance.confirm')} {confirmModal.action}</h3>
-            <p className="mt-2 text-sm text-slate-400">
-              {t('scheduler:maintenance.confirmDescription')}
-            </p>
-            <div className="mt-4 rounded-lg border border-slate-800 bg-slate-950/40 p-3">
-              <div className="text-xs text-slate-400">{t('scheduler:maintenance.token')}</div>
-              <div className="mt-1 font-mono text-sm break-all text-slate-100">
-                {confirmModal.token}
-              </div>
-              <div className="mt-2 text-xs text-slate-400">
-                {t('scheduler:maintenance.expiresAt')}:{' '}
-                {confirmModal.expires_at
-                  ? new Date(confirmModal.expires_at * 1000).toLocaleString()
-                  : 'n/a'}
-              </div>
-            </div>
-            <div className="mt-4 flex justify-end gap-2">
-              <button
-                onClick={() => setConfirmModal({ visible: false })}
-                className="rounded-md px-4 py-2 text-sm text-slate-300 hover:bg-slate-800 transition-colors"
-              >
-                {t('common:buttons.cancel')}
-              </button>
-              <button
-                ref={confirmButtonRef}
-                onClick={executeToken}
-                disabled={confirmModal.loading}
-                className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50 transition-colors"
-              >
-                {t('scheduler:maintenance.confirmExecute')}
-              </button>
-            </div>
+function SmartDeviceCard({ dev }: { dev: SmartDevice }) {
+  const { t } = useTranslation('scheduler');
+  const [expanded, setExpanded] = useState(false);
+  const hasAttributes = dev.attributes && dev.attributes.length > 0;
+
+  return (
+    <div className="rounded-lg border border-slate-800 bg-slate-950/40 p-3">
+      <div className="flex items-start justify-between gap-4">
+        <div>
+          <div className="text-sm font-medium text-white">{dev.model ?? dev.name}</div>
+          <div className="text-xs text-slate-400">
+            {dev.name} {dev.serial ? `- ${dev.serial}` : ''}
+          </div>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+          <div className="text-xs">
+            {t('maintenance.temp')}: <span className="font-medium">{dev.temperature ?? 'n/a'}</span>
+            {dev.temperature != null ? 'C' : ''}
+          </div>
+          <StatusBadge status={dev.status} />
+        </div>
+      </div>
+
+      {/* Last self-test result */}
+      {dev.last_self_test && (
+        <div className="mt-3 rounded-md border border-slate-800 bg-slate-900/40 px-3 py-2">
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-medium text-slate-300">{t('maintenance.lastSelfTest')}</span>
+            {dev.last_self_test.passed ? (
+              <span className="inline-flex items-center gap-1 rounded-full border border-emerald-500/30 bg-emerald-500/10 px-2 py-0.5 text-[10px] font-medium text-emerald-400">
+                <CheckCircle2 className="h-3 w-3" />
+                PASSED
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 rounded-full border border-red-500/30 bg-red-500/10 px-2 py-0.5 text-[10px] font-medium text-red-400">
+                <XCircle className="h-3 w-3" />
+                FAILED
+              </span>
+            )}
+          </div>
+          <div className="mt-1.5 flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+            <span>{dev.last_self_test.test_type}</span>
+            <span>{dev.last_self_test.status}</span>
+            <span>{t('maintenance.powerOnHours')}: {dev.last_self_test.power_on_hours.toLocaleString()}h</span>
           </div>
         </div>
       )}
-    </>
+
+      {/* Expandable attributes */}
+      <div className="mt-3">
+        <button
+          onClick={() => setExpanded(!expanded)}
+          disabled={!hasAttributes}
+          className="flex items-center gap-1 text-xs text-slate-400 hover:text-slate-300 transition-colors disabled:opacity-50 disabled:cursor-default"
+        >
+          {t('maintenance.attributes')}: {dev.attributes?.length ?? 0}
+          {hasAttributes && (
+            expanded ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
+          )}
+        </button>
+        {expanded && hasAttributes && (
+          <div className="mt-2 space-y-0.5">
+            {dev.attributes.map((attr: SmartAttribute) => (
+              <SmartAttributeRow key={attr.id} attr={attr} />
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
   );
 }

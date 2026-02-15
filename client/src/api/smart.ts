@@ -10,6 +10,13 @@ export interface SmartAttribute {
   status: string;
 }
 
+export interface SmartSelfTest {
+  test_type: string;
+  status: string;
+  passed: boolean;
+  power_on_hours: number;
+}
+
 export interface SmartDevice {
   name: string;
   model: string;
@@ -20,6 +27,7 @@ export interface SmartDevice {
   used_bytes: number | null;
   used_percent: number | null;
   mount_point: string | null;
+  last_self_test: SmartSelfTest | null;
   attributes: SmartAttribute[];
 }
 
