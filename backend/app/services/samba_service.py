@@ -195,6 +195,7 @@ async def regenerate_shares_config() -> bool:
                     f"   force group = {service_user}",
                     "   create mask = 0664",
                     "   directory mask = 0775",
+                    "   strict locking = auto",
                     "",
                 ])
                 admin_share_written = True
@@ -210,6 +211,7 @@ async def regenerate_shares_config() -> bool:
                 f"   force group = {service_user}",
                 "   create mask = 0664",
                 "   directory mask = 0775",
+                "   strict locking = auto",
                 "",
             ])
 
