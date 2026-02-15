@@ -10,7 +10,6 @@ BaluHost is a full-stack NAS management platform with multiple components:
 - **TUI**: Terminal UI (Textual), located in `backend/baluhost_tui/`
 - **BaluDesk**: Desktop sync client (C++ backend + Electron frontend), located in `baludesk/`
 - **Mobile Apps**: Native Android (Kotlin), iOS implementation guide available
-- **Legacy**: Express/TypeScript backend in `server/` (deprecated, do not modify)
 
 **Current Production Status**: ~99% production-ready, deployed in production (Jan 2026). PostgreSQL, security hardening, and deployment complete.
 
@@ -335,7 +334,6 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 ## Project-Specific Considerations
 
 ### DO NOT Modify
-- `server/` directory (legacy Express backend)
 - `.metadata.json` files (managed by file service)
 - `dev-storage/` contents (recreated on startup in dev mode)
 

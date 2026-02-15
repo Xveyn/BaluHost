@@ -480,7 +480,6 @@ Any other relevant information.
 
 ### Do NOT:
 - ❌ Commit sensitive data (passwords, tokens, keys)
-- ❌ Change the Express backend in `server/` (legacy code)
 - ❌ Submit PRs without tests
 - ❌ Use `any` type in TypeScript
 - ❌ Add dependencies without discussion

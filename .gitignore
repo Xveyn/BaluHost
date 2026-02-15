@@ -45,7 +45,6 @@ htmlcov/
 
 # Local data
 storage/
-server/storage/
 
 # Database files (local/dev) - do not commit
 backend/*.db

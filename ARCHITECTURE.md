@@ -177,9 +177,6 @@ baluhost/
 │   ├── package.json
 │   └── README.md
 │
-├── server/                    # Legacy Express Backend (deprecated)
-│   └── ... (not actively developed)
-│
 ├── docs/                      # Documentation
 │   ├── AUDIT_LOGGING.md
 │   ├── DISK_IO_MONITOR.md

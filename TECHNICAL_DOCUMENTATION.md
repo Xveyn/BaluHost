@@ -1885,8 +1885,6 @@ Baluhost/
 │   ├── tailwind.config.js
 │   └── README.md
 │
-├── server/                       # [LEGACY] Express Backend (no longer active)
-│
 ├── start_dev.py                  # Combined dev start
 ├── TODO.md                       # Global TODO list
 ├── TECHNICAL_DOCUMENTATION.md    # This file

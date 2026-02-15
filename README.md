@@ -140,7 +140,6 @@ BaluHost is a full-stack NAS management application built with modern web techno
 - **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
 - **Backend (active):** FastAPI (Python 3.11+), Pydantic, SQLAlchemy, `uvicorn`, background jobs for telemetry
 - **Database:** SQLite (dev) / PostgreSQL (production) with Alembic migrations
-- **Legacy Backend:** Express/TypeScript (located in `server/`, no longer actively developed)
 - **Start Script:** `python start_dev.py` boots FastAPI (Port 3001) and Vite Dev Server (Port 5173)
 
 ## API Overview (FastAPI)
@@ -280,18 +279,6 @@ Then install the CA certificate on your mobile device:
 - **Android**: Settings → Security → Install certificate
 - **iOS**: Open file → Install Profile → Trust Certificate
 
-### Legacy Express Backend (optional)
-
-The `server/` folder contains the former Express server. It is no longer actively used. If you still need to start it:
-
-```bash
-cd server
-npm install
-npm run dev
-```
-
-The Express variant only offers basic endpoints without RAID/SMART/Quota features.
-
 ## Configuration
 
 ### Backend `.env` (FastAPI)
@@ -376,17 +363,9 @@ baluhost/
 ├── client/           # React Frontend
 │   ├── src/
 │   └── vite.config.ts
-├── server/           # Legacy Express Backend (deprecated)
 ├── start_dev.py      # Dev orchestration
 └── README.md
 ```
-
-## Express Legacy Migration
-
-- New features are exclusively implemented in the FastAPI backend.
-- The React frontend uses the FastAPI proxy (`/api`, `/auth`).
-- Deployment documentation should designate FastAPI as standard; Express remains only as an example or short-term comparison baseline.
-- As part of the migration, tests, docs, and CI are consolidated on the Python backend.
 
 ## 📚 Documentation
 
