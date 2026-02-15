@@ -351,6 +351,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             port=port,
             webdav_port=settings.webdav_port,
             hostname=settings.mdns_hostname,
+            webdav_ssl_enabled=settings.webdav_ssl_enabled,
         )
         _discovery_service.start()
     except Exception as e:
