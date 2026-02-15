@@ -62,6 +62,7 @@ from app.models.update_history import (
     UpdateChannel,
 )
 from app.models.energy_price_config import EnergyPriceConfig
+from app.models.ssd_cache import SsdCacheConfig
 
 __all__ = [
     "Base",
@@ -121,4 +122,5 @@ __all__ = [
     "UpdateStatus",
     "UpdateChannel",
     "EnergyPriceConfig",
+    "SsdCacheConfig",
 ]

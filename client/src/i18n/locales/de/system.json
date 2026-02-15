@@ -258,7 +258,57 @@
       "minDisksRequired": "Mindestens 2 freie Festplatten erforderlich",
       "devModeAddMock": "Dev-Mode: Mock-Disk hinzufügen",
       "na": "N/A",
-      "osDisk": "Systemfestplatte"
+      "osDisk": "Systemfestplatte",
+      "cacheDevice": "Cache"
+    },
+    "cache": {
+      "title": "SSD-Cache",
+      "noCache": "Kein SSD-Cache konfiguriert",
+      "labels": {
+        "device": "Gerät",
+        "hitRate": "Trefferquote",
+        "usage": "Nutzung",
+        "dirtyData": "Unsync. Daten",
+        "safe": "Sicher",
+        "fast": "Schnell",
+        "recommended": "Empfohlen",
+        "riskWarning": "Risiko"
+      },
+      "actions": {
+        "setup": "SSD-Cache einrichten",
+        "changeMode": "Modus ändern",
+        "detach": "Cache trennen"
+      },
+      "messages": {
+        "configureFailed": "Cache-Konfiguration fehlgeschlagen.",
+        "detachConfirm": "SSD-Cache von Array \"{{array}}\" trennen? Gecachte Daten werden geflusht.",
+        "detachFailed": "Cache konnte nicht getrennt werden.",
+        "attachFailed": "SSD-Cache konnte nicht angehängt werden."
+      },
+      "modeInfo": {
+        "writethroughBenefit": "Lese-Cache: häufig genutzte Daten von SSD. Kein Datenverlustrisiko.",
+        "writethroughRisk": "Keine Schreibbeschleunigung — Writes gehen direkt auf HDD.",
+        "writebackBenefit": "Voll-Cache: deutlich schnellere Random-Writes.",
+        "writebackRisk": "Warnung: SSD-Ausfall kann Datenverlust nicht geflusher Writes verursachen.",
+        "writearoundBenefit": "Nur Reads werden gecacht, Writes umgehen SSD.",
+        "writearoundRisk": "Minimales Risiko, moderate Leseverbesserung."
+      },
+      "wizard": {
+        "title": "SSD-Cache einrichten",
+        "subtitle": "SSD-Cache an Array {{array}} anhängen",
+        "selectSsd": "SSD als Cache-Gerät auswählen:",
+        "noSsds": "Keine geeigneten SSDs verfügbar. SSDs dürfen nicht OS-Disk, im RAID oder bereits Cache-Gerät sein.",
+        "selectMode": "Cache-Modus auswählen:",
+        "confirmTitle": "Konfiguration überprüfen:",
+        "array": "Array",
+        "ssd": "SSD",
+        "mode": "Modus",
+        "writebackWarning": "Writeback-Modus cached Writes auf SSD. Bei SSD-Ausfall gehen nicht geflushe Daten verloren. Nur mit redundanten SSDs oder unkritischen Daten verwenden.",
+        "back": "Zurück",
+        "next": "Weiter",
+        "attach": "Cache anhängen",
+        "attaching": "Wird angehängt..."
+      }
     },
     "formatDialog": {
       "title": "Festplatte formatieren",

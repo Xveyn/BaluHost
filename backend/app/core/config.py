@@ -116,6 +116,11 @@ class Settings(BaseSettings):
     power_cpu_medium_threshold: float = 50.0  # CPU % to trigger MEDIUM
     power_cpu_low_threshold: float = 20.0  # CPU % to trigger LOW
 
+    # SSD cache (bcache) configuration
+    ssd_cache_enabled: bool = True  # Enable/disable SSD cache management
+    ssd_cache_default_mode: str = "writethrough"  # Default cache mode (writethrough|writeback|writearound)
+    ssd_cache_force_dev_backend: bool = False  # Force dev backend even on Linux
+
     # Fan control configuration (PWM fan management)
     fan_control_enabled: bool = True  # Enable/disable fan control
     fan_force_dev_backend: bool = False  # Force dev backend even on Linux

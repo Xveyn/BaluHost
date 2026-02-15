@@ -7,6 +7,13 @@ import signal
 from app.api import deps
 from app.core.power_rating import requires_power
 from app.schemas.power import ServicePowerProperty
+from app.schemas.ssd_cache import (
+    CacheAttachRequest,
+    CacheConfigureRequest,
+    CacheDetachRequest,
+    CacheStatus,
+    ExternalBitmapRequest,
+)
 from app.schemas.system import (
     AuditLoggingStatus,
     AuditLoggingToggle,
@@ -32,6 +39,7 @@ from app.schemas.user import UserPublic
 from app.services import disk_monitor
 from app.services import raid as raid_service
 from app.services import smart as smart_service
+from app.services import ssd_cache as ssd_cache_service
 from app.services.audit_logger_db import get_audit_logger_db
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
@@ -549,6 +557,126 @@ async def execute_raid_confirmation(
     except KeyError as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
     except Exception as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+# ============================================================
+# SSD Cache Endpoints
+# ============================================================
+
+@router.get("/raid/cache/status", response_model=list[CacheStatus])
+async def get_all_cache_statuses(
+    _: UserPublic = Depends(deps.get_current_user),
+) -> list[CacheStatus]:
+    """Get SSD cache status for all arrays."""
+    return ssd_cache_service.get_all_cache_statuses()
+
+
+@router.get("/raid/cache/status/{array}", response_model=CacheStatus)
+async def get_cache_status(
+    array: str,
+    _: UserPublic = Depends(deps.get_current_user),
+) -> CacheStatus:
+    """Get SSD cache status for a specific array."""
+    result = ssd_cache_service.get_cache_status(array)
+    if result is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"No SSD cache found for array '{array}'",
+        )
+    return result
+
+
+@router.post("/raid/cache/attach", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Attaching SSD cache")
+async def attach_cache(
+    payload: CacheAttachRequest,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Attach an SSD cache to a RAID array (admin only)."""
+    audit_logger = get_audit_logger_db()
+    try:
+        result = ssd_cache_service.attach_cache(payload)
+        audit_logger.log_raid_operation(
+            action="ssd_cache_attached",
+            user=current_admin.username,
+            raid_array=payload.array,
+            details={"cache_device": payload.cache_device, "mode": payload.mode.value},
+            success=True,
+        )
+        return result
+    except ValueError as exc:
+        audit_logger.log_raid_operation(
+            action="ssd_cache_attach_failed",
+            user=current_admin.username,
+            raid_array=payload.array,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc),
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/cache/detach", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Detaching SSD cache")
+async def detach_cache(
+    payload: CacheDetachRequest,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Detach SSD cache from a RAID array (admin only)."""
+    audit_logger = get_audit_logger_db()
+    try:
+        result = ssd_cache_service.detach_cache(payload)
+        audit_logger.log_raid_operation(
+            action="ssd_cache_detached",
+            user=current_admin.username,
+            raid_array=payload.array,
+            details={"force": payload.force},
+            success=True,
+        )
+        return result
+    except ValueError as exc:
+        audit_logger.log_raid_operation(
+            action="ssd_cache_detach_failed",
+            user=current_admin.username,
+            raid_array=payload.array,
+            details={"error": str(exc)},
+            success=False,
+            error_message=str(exc),
+        )
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/cache/configure", response_model=RaidActionResponse)
+async def configure_cache(
+    payload: CacheConfigureRequest,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Configure SSD cache parameters (admin only)."""
+    try:
+        return ssd_cache_service.configure_cache(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
+
+
+@router.post("/raid/cache/external-bitmap", response_model=RaidActionResponse)
+@requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=600, description="Setting external bitmap")
+async def set_external_bitmap(
+    payload: ExternalBitmapRequest,
+    _: UserPublic = Depends(deps.get_current_admin),
+) -> RaidActionResponse:
+    """Move RAID bitmap to SSD for faster resync (admin only)."""
+    try:
+        return ssd_cache_service.set_external_bitmap(payload)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+    except RuntimeError as exc:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc)) from exc
 
 

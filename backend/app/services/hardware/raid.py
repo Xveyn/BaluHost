@@ -336,8 +336,20 @@ class DevRaidBackend:
 
     def get_status(self) -> RaidStatusResponse:
         self._state.ensure_default()
+        arrays = list(self._state.arrays.values())
+
+        # Enrich arrays with SSD cache status
+        try:
+            from app.services.hardware.ssd_cache import get_cache_status
+            for arr in arrays:
+                cache = get_cache_status(arr.name)
+                if cache:
+                    arr.cache = cache
+        except Exception:
+            pass
+
         return RaidStatusResponse(
-            arrays=list(self._state.arrays.values()),
+            arrays=arrays,
             speed_limits=RaidSpeedLimits(
                 minimum=self._state.speed_limit_min,
                 maximum=self._state.speed_limit_max,
@@ -390,24 +402,34 @@ class DevRaidBackend:
         # RAID1 Pool 1: 2x5GB (sda, sdb)
         # RAID1 Pool 2: 2x10GB (sdc, sdd)
         # RAID5 Pool: 3x20GB (sde, sdf, sdg)
+        # is_os, is_ssd
         base_mock_disks = [
-            ("nvme0n1", "nvme0n1p2", "BaluHost Dev NVMe 500GB (OS)", 500, True),
-            ("sda", "sda1", "BaluHost Dev Disk 5GB (Mirror A)", 5, False),
-            ("sdb", "sdb1", "BaluHost Dev Disk 5GB (Mirror B)", 5, False),
-            ("sdc", "sdc1", "BaluHost Dev Disk 10GB (Backup A)", 10, False),
-            ("sdd", "sdd1", "BaluHost Dev Disk 10GB (Backup B)", 10, False),
-            ("sde", "sde1", "BaluHost Dev Disk 20GB (Archive A)", 20, False),
-            ("sdf", "sdf1", "BaluHost Dev Disk 20GB (Archive B)", 20, False),
-            ("sdg", "sdg1", "BaluHost Dev Disk 20GB (Archive C)", 20, False),
+            ("nvme0n1", "nvme0n1p2", "BaluHost Dev NVMe 500GB (OS)", 500, True, True),
+            ("sda", "sda1", "BaluHost Dev Disk 5GB (Mirror A)", 5, False, False),
+            ("sdb", "sdb1", "BaluHost Dev Disk 5GB (Mirror B)", 5, False, False),
+            ("sdc", "sdc1", "BaluHost Dev Disk 10GB (Backup A)", 10, False, False),
+            ("sdd", "sdd1", "BaluHost Dev Disk 10GB (Backup B)", 10, False, False),
+            ("sde", "sde1", "BaluHost Dev Disk 20GB (Archive A)", 20, False, False),
+            ("sdf", "sdf1", "BaluHost Dev Disk 20GB (Archive B)", 20, False, False),
+            ("sdg", "sdg1", "BaluHost Dev Disk 20GB (Archive C)", 20, False, False),
+            ("nvme1n1", "nvme1n1p1", "BaluHost Dev SSD Cache 120GB", 120, False, True),
         ]
 
         # Kombiniere base disks mit dynamisch hinzugefügten
-        # Dynamische Disks haben kein is_os_disk Feld (4-Tupel)
-        all_mock_disks = base_mock_disks + [(d[0], d[1], d[2], d[3], False) for d in self._mock_disks]
+        # Dynamische Disks haben kein is_os_disk/is_ssd Feld (4-Tupel)
+        all_mock_disks = base_mock_disks + [(d[0], d[1], d[2], d[3], False, False) for d in self._mock_disks]
 
-        for disk_name, partition_name, model, size_gb, is_os in all_mock_disks:
+        # Get SSD cache device names for is_cache_device flag
+        try:
+            from app.services.hardware.ssd_cache import get_cache_devices
+            cache_device_names = get_cache_devices()
+        except Exception:
+            cache_device_names = set()
+
+        for disk_name, partition_name, model, size_gb, is_os, is_ssd in all_mock_disks:
             in_raid = partition_name in used_devices
             raid_suffix = " (in RAID)" if in_raid else ""
+            is_cache = partition_name in cache_device_names or disk_name in cache_device_names
 
             disks.append(
                 AvailableDisk(
@@ -418,6 +440,8 @@ class DevRaidBackend:
                     partitions=[partition_name],
                     in_raid=in_raid,
                     is_os_disk=is_os,
+                    is_ssd=is_ssd,
+                    is_cache_device=is_cache,
                 )
             )
         
@@ -582,7 +606,6 @@ class MdadmRaidBackend:
         array_names = set(mdstat_info.keys()) | set(self._scan_arrays())
 
         if not array_names:
-            # No RAID arrays configured - return empty response instead of crashing
             return RaidStatusResponse(
                 arrays=[],
                 speed_limits=self._read_speed_limits(),
@@ -592,6 +615,16 @@ class MdadmRaidBackend:
         for name in sorted(array_names):
             info = mdstat_info.get(name)
             arrays.append(self._build_array(name, info))
+
+        # Enrich arrays with SSD cache status
+        try:
+            from app.services.hardware.ssd_cache import get_cache_status as _get_cache
+            for arr in arrays:
+                cache = _get_cache(arr.name)
+                if cache:
+                    arr.cache = cache
+        except Exception:
+            pass
 
         speed_limits = self._read_speed_limits()
 
@@ -941,8 +974,8 @@ class MdadmRaidBackend:
         """Get list of available disks using lsblk."""
         if not self._lsblk_available:
             raise RuntimeError("lsblk is not available on this system")
-        
-        result = self._run(["lsblk", "-J", "-b", "-o", "NAME,SIZE,MODEL,TYPE,FSTYPE,MOUNTPOINT"])
+
+        result = self._run(["lsblk", "-J", "-b", "-o", "NAME,SIZE,MODEL,TYPE,FSTYPE,MOUNTPOINT,ROTA"])
         data = json.loads(result.stdout)
 
         disks = []
@@ -953,6 +986,13 @@ class MdadmRaidBackend:
         for array in status.arrays:
             for device in array.devices:
                 raid_devices.add(device.name)
+
+        # Get SSD cache device names
+        try:
+            from app.services.hardware.ssd_cache import get_cache_devices
+            cache_device_names = get_cache_devices()
+        except Exception:
+            cache_device_names = set()
 
         # Parse lsblk output
         for device in data.get("blockdevices", []):
@@ -976,6 +1016,13 @@ class MdadmRaidBackend:
             # Check if this is the OS disk (has / mounted)
             is_os_disk = self._has_root_mount(device)
 
+            # SSD detection: ROTA=0 means non-rotational (SSD/NVMe)
+            rota = device.get("rota")
+            is_ssd = rota is not None and str(rota) == "0"
+
+            # Check if used as SSD cache device
+            is_cache = name in cache_device_names or any(p in cache_device_names for p in partitions)
+
             disks.append(
                 AvailableDisk(
                     name=name,
@@ -985,6 +1032,8 @@ class MdadmRaidBackend:
                     partitions=partitions,
                     in_raid=in_raid,
                     is_os_disk=is_os_disk,
+                    is_ssd=is_ssd,
+                    is_cache_device=is_cache,
                 )
             )
 

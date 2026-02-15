@@ -258,7 +258,57 @@
       "minDisksRequired": "At least 2 free disks required",
       "devModeAddMock": "Dev-Mode: Add Mock Disk",
       "na": "N/A",
-      "osDisk": "System Disk"
+      "osDisk": "System Disk",
+      "cacheDevice": "Cache"
+    },
+    "cache": {
+      "title": "SSD Cache",
+      "noCache": "No SSD cache configured",
+      "labels": {
+        "device": "Device",
+        "hitRate": "Hit Rate",
+        "usage": "Usage",
+        "dirtyData": "Dirty Data",
+        "safe": "Safe",
+        "fast": "Fast",
+        "recommended": "Recommended",
+        "riskWarning": "Risk"
+      },
+      "actions": {
+        "setup": "Setup SSD Cache",
+        "changeMode": "Change Mode",
+        "detach": "Detach Cache"
+      },
+      "messages": {
+        "configureFailed": "Failed to configure cache.",
+        "detachConfirm": "Detach SSD cache from array \"{{array}}\"? Cached data will be flushed.",
+        "detachFailed": "Failed to detach cache.",
+        "attachFailed": "Failed to attach SSD cache."
+      },
+      "modeInfo": {
+        "writethroughBenefit": "Read cache: frequently accessed data served from SSD. No data loss risk.",
+        "writethroughRisk": "No write acceleration — writes go directly to HDD.",
+        "writebackBenefit": "Full read+write cache: significantly faster random writes.",
+        "writebackRisk": "Warning: SSD failure may cause data loss of unflushed writes.",
+        "writearoundBenefit": "Only reads are cached, writes bypass SSD entirely.",
+        "writearoundRisk": "Minimal risk, moderate read improvement."
+      },
+      "wizard": {
+        "title": "Setup SSD Cache",
+        "subtitle": "Attach SSD cache to array {{array}}",
+        "selectSsd": "Select an SSD to use as cache device:",
+        "noSsds": "No eligible SSDs available. SSDs must not be OS disk, in RAID, or already a cache device.",
+        "selectMode": "Select cache mode:",
+        "confirmTitle": "Review your configuration:",
+        "array": "Array",
+        "ssd": "SSD",
+        "mode": "Mode",
+        "writebackWarning": "Writeback mode caches writes on SSD. If the SSD fails, unflushed data will be lost. Only use with redundant SSDs or non-critical data.",
+        "back": "Back",
+        "next": "Next",
+        "attach": "Attach Cache",
+        "attaching": "Attaching..."
+      }
     },
     "formatDialog": {
       "title": "Format Disk",

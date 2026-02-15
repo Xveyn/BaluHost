@@ -63,11 +63,13 @@ sys.modules["app.services.admin_db"] = _admin_db
 from app.services.hardware import raid as _raid
 from app.services.hardware import smart as _smart
 from app.services.hardware import sensors as _sensors
+from app.services.hardware import ssd_cache as _ssd_cache
 
 # Register backward-compatible module paths in sys.modules
 sys.modules["app.services.raid"] = _raid
 sys.modules["app.services.smart"] = _smart
 sys.modules["app.services.sensors"] = _sensors
+sys.modules["app.services.ssd_cache"] = _ssd_cache
 
 # ============================================================
 # Backup services (moved to backup/)

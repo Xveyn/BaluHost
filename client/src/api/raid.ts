@@ -14,6 +14,7 @@ export interface RaidArray {
   resync_progress?: number | null;
   bitmap?: string | null;
   sync_action?: string | null;
+  cache?: import('./ssd-cache').CacheStatus | null;
 }
 
 export interface RaidStatusResponse {
@@ -50,6 +51,8 @@ export interface AvailableDisk {
   partitions: string[];
   in_raid: boolean;
   is_os_disk?: boolean;
+  is_ssd?: boolean;
+  is_cache_device?: boolean;
 }
 
 export interface AvailableDisksResponse {

@@ -19,9 +19,11 @@ import {
 } from '../api/raid';
 import RaidSetupWizard from '../components/RaidSetupWizard';
 import MockDiskWizard from '../components/MockDiskWizard';
+import SsdCachePanel from '../components/SsdCachePanel';
+import CacheSetupWizard from '../components/CacheSetupWizard';
 import { formatBytes, formatNumber } from '../lib/formatters';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
-import { Monitor } from 'lucide-react';
+import { Monitor, Zap } from 'lucide-react';
 
 const REFRESH_INTERVAL_MS = 8000;
 
@@ -72,6 +74,7 @@ export default function RaidManagement() {
   const [showMockDiskWizard, setShowMockDiskWizard] = useState<boolean>(false);
   const [selectedDisk, setSelectedDisk] = useState<AvailableDisk | null>(null);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
+  const [cacheWizardArray, setCacheWizardArray] = useState<string | null>(null);
 
   const loadStatus = async (notifySuccess = false) => {
     try {
@@ -678,6 +681,37 @@ export default function RaidManagement() {
                   </div>
                 </div>
 
+                {/* SSD Cache Panel */}
+                {array.cache ? (
+                  <SsdCachePanel
+                    cache={array.cache}
+                    onRefresh={async () => {
+                      await loadStatus();
+                      await loadAvailableDisks();
+                    }}
+                  />
+                ) : (
+                  <div className="border-t border-slate-800/60 px-4 sm:px-6 py-3 sm:py-4">
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-2 text-xs text-slate-500">
+                        <Zap className="h-3.5 w-3.5" />
+                        <span>{t('system:raid.cache.noCache')}</span>
+                      </div>
+                      <button
+                        onClick={() => setCacheWizardArray(array.name)}
+                        disabled={busy || availableDisks.filter(d => d.is_ssd && !d.is_os_disk && !d.in_raid && !d.is_cache_device).length === 0}
+                        className={`rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
+                          busy || availableDisks.filter(d => d.is_ssd && !d.is_os_disk && !d.in_raid && !d.is_cache_device).length === 0
+                            ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
+                            : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:border-cyan-500/50'
+                        }`}
+                      >
+                        {t('system:raid.cache.actions.setup')}
+                      </button>
+                    </div>
+                  </div>
+                )}
+
                 <div className="border-t border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
                   <div className="grid gap-3 sm:gap-5 md:grid-cols-2">
                     <form onSubmit={(event) => handleAddSpare(event, array)} className="rounded-xl border border-slate-800 bg-slate-900/60 px-3 sm:px-4 py-3 sm:py-4 text-xs sm:text-sm text-slate-300">
@@ -855,6 +889,17 @@ export default function RaidManagement() {
                               </span>
                             </div>
                           )}
+                          {disk.is_ssd && !disk.is_os_disk && (
+                            <div className="flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5">
+                              <Zap className="h-3 w-3 text-cyan-400" />
+                              <span className="text-xs font-medium text-cyan-100">SSD</span>
+                            </div>
+                          )}
+                          {disk.is_cache_device && (
+                            <span className="rounded-full border border-teal-400/30 bg-teal-500/10 px-2 py-0.5 text-xs text-teal-100">
+                              {t('system:raid.diskManagement.cacheDevice')}
+                            </span>
+                          )}
                         </div>
                       </td>
                       <td className="px-5 py-4">
@@ -863,9 +908,9 @@ export default function RaidManagement() {
                             setSelectedDisk(disk);
                             setShowFormatDialog(true);
                           }}
-                          disabled={busy || disk.in_raid || disk.is_os_disk}
+                          disabled={busy || disk.in_raid || disk.is_os_disk || !!disk.is_cache_device}
                           className={`rounded-lg border px-3 py-1.5 text-xs transition ${
-                            busy || disk.in_raid || disk.is_os_disk
+                            busy || disk.in_raid || disk.is_os_disk || disk.is_cache_device
                               ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
                               : 'border-rose-500/40 bg-rose-500/10 text-rose-200 hover:border-rose-500/60'
                           }`}
@@ -930,6 +975,17 @@ export default function RaidManagement() {
                             {t('system:raid.diskManagement.osDisk')}
                           </span>
                         </div>
+                      )}
+                      {disk.is_ssd && !disk.is_os_disk && (
+                        <div className="flex items-center gap-1 rounded-full border border-cyan-400/30 bg-cyan-500/10 px-2 py-0.5">
+                          <Zap className="h-2.5 w-2.5 text-cyan-400" />
+                          <span className="text-[10px] font-medium text-cyan-100">SSD</span>
+                        </div>
+                      )}
+                      {disk.is_cache_device && (
+                        <span className="rounded-full border border-teal-400/30 bg-teal-500/10 px-2 py-0.5 text-[10px] text-teal-100">
+                          {t('system:raid.diskManagement.cacheDevice')}
+                        </span>
                       )}
                       {!disk.in_raid && !disk.is_os_disk && (
                         <button
@@ -1020,6 +1076,19 @@ export default function RaidManagement() {
         <RaidSetupWizard
           availableDisks={availableDisks}
           onClose={() => setShowCreateArrayDialog(false)}
+          onSuccess={async () => {
+            await loadStatus();
+            await loadAvailableDisks();
+          }}
+        />
+      )}
+
+      {/* Cache Setup Wizard */}
+      {cacheWizardArray && (
+        <CacheSetupWizard
+          arrayName={cacheWizardArray}
+          availableDisks={availableDisks}
+          onClose={() => setCacheWizardArray(null)}
           onSuccess={async () => {
             await loadStatus();
             await loadAvailableDisks();
