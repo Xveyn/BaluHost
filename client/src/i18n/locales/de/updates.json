@@ -33,6 +33,11 @@
     "prerelease": "Vorabversion",
     "breakingChanges": "Breaking Changes:"
   },
+  "releaseNotes": {
+    "title": "Versionshinweise",
+    "since": "Änderungen seit v{{version}}",
+    "empty": "Keine Versionshinweise verfügbar"
+  },
   "history": {
     "title": "Update-Verlauf",
     "noHistory": "Kein Update-Verlauf",

@@ -36,6 +36,8 @@ from app.schemas.update import (
     RollbackResponse,
     UpdateConfigResponse,
     UpdateConfigUpdate,
+    ReleaseNoteCategory,
+    ReleaseNotesResponse,
 )
 from app.services.service_status import register_service
 
@@ -66,6 +68,75 @@ def version_to_string(version: tuple[int, int, int, str]) -> str:
     major, minor, patch, prerelease = version
     base = f"{major}.{minor}.{patch}"
     return f"{base}-{prerelease}" if prerelease else base
+
+
+# Mapping from conventional commit type to display name + icon
+COMMIT_TYPE_MAP: dict[str, tuple[str, str]] = {
+    "feat": ("Features", "sparkles"),
+    "fix": ("Bug Fixes", "bug"),
+    "perf": ("Performance", "zap"),
+    "refactor": ("Refactoring", "wrench"),
+    "chore": ("Maintenance", "cog"),
+    "docs": ("Documentation", "book-open"),
+    "test": ("Tests", "test-tube"),
+    "style": ("Style", "paintbrush"),
+    "ci": ("CI/CD", "cog"),
+    "build": ("Build", "cog"),
+}
+
+# Regex for conventional commits: type(scope): description  OR  type: description
+_CONVENTIONAL_RE = re.compile(r"^(\w+)(?:\([^)]*\))?:\s*(.+)$")
+
+
+def _parse_conventional_commits(messages: list[str]) -> list[ReleaseNoteCategory]:
+    """Parse conventional commit messages into categorized release notes.
+
+    Groups commits by type (feat, fix, perf, etc.) and returns
+    a list of ReleaseNoteCategory with cleaned-up descriptions.
+    """
+    grouped: dict[str, list[str]] = {}
+
+    for msg in messages:
+        match = _CONVENTIONAL_RE.match(msg)
+        if match:
+            commit_type = match.group(1).lower()
+            description = match.group(2).strip()
+        else:
+            commit_type = "other"
+            description = msg.strip()
+
+        # Capitalize first letter
+        if description:
+            description = description[0].upper() + description[1:]
+
+        category_name, _ = COMMIT_TYPE_MAP.get(commit_type, ("Other", "circle-dot"))
+
+        if category_name not in grouped:
+            grouped[category_name] = []
+        grouped[category_name].append(description)
+
+    # Build result in a stable order matching COMMIT_TYPE_MAP
+    seen = set()
+    categories: list[ReleaseNoteCategory] = []
+
+    for _type, (name, icon) in COMMIT_TYPE_MAP.items():
+        if name in grouped and name not in seen:
+            seen.add(name)
+            categories.append(ReleaseNoteCategory(
+                name=name,
+                icon=icon,
+                changes=grouped[name],
+            ))
+
+    # Add "Other" at the end if present
+    if "Other" in grouped:
+        categories.append(ReleaseNoteCategory(
+            name="Other",
+            icon="circle-dot",
+            changes=grouped["Other"],
+        ))
+
+    return categories
 
 
 class UpdateBackend(ABC):
@@ -116,6 +187,11 @@ class UpdateBackend(ABC):
     @abstractmethod
     async def rollback(self, commit: str) -> tuple[bool, Optional[str]]:
         """Rollback to a specific commit. Returns (success, error_message)."""
+        pass
+
+    @abstractmethod
+    async def get_release_notes(self) -> ReleaseNotesResponse:
+        """Get release notes for the current version (commits since previous tag)."""
         pass
 
     @abstractmethod
@@ -183,6 +259,40 @@ class DevUpdateBackend(UpdateBackend):
             tag=f"v{version_to_string(self._latest_version)}",
             date=datetime.now(timezone.utc),
         ), changelog
+
+    async def get_release_notes(self) -> ReleaseNotesResponse:
+        """Return mock release notes for dev mode."""
+        return ReleaseNotesResponse(
+            version=version_to_string(self._simulated_version),
+            previous_version="1.1.0-alpha",
+            date=datetime.now(timezone.utc),
+            categories=[
+                ReleaseNoteCategory(
+                    name="Features",
+                    icon="sparkles",
+                    changes=[
+                        "Add SSD cache management with bcache support",
+                        "Add SMB and WebDAV service discovery",
+                        "Add WSDD deployment script for Windows network discovery",
+                    ],
+                ),
+                ReleaseNoteCategory(
+                    name="Bug Fixes",
+                    icon="bug",
+                    changes=[
+                        "Skip create_all for PostgreSQL (managed by Alembic)",
+                        "Fix storage aggregation for RAID fallback path",
+                    ],
+                ),
+                ReleaseNoteCategory(
+                    name="Performance",
+                    icon="zap",
+                    changes=[
+                        "Optimize Samba config for small-file transfers",
+                    ],
+                ),
+            ],
+        )
 
     async def fetch_updates(self, callback: Optional[ProgressCallback] = None) -> bool:
         """Simulate fetching updates."""
@@ -401,6 +511,71 @@ class ProdUpdateBackend(UpdateBackend):
                 is_prerelease=False,
             )
         ]
+
+    async def get_release_notes(self) -> ReleaseNotesResponse:
+        """Get release notes by comparing current tag with the previous tag."""
+        # Get all tags sorted by semver
+        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
+        if not success or not tags_output:
+            return ReleaseNotesResponse(version="unknown", categories=[])
+
+        tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
+        if not tags:
+            return ReleaseNotesResponse(version="unknown", categories=[])
+
+        # Sort tags by semver properly
+        sorted_tags = sorted(tags, key=lambda t: parse_version(t), reverse=True)
+
+        # Get current version info
+        current = await self.get_current_version()
+        current_version = parse_version(current.version)
+
+        # Find current tag and the one before it
+        current_tag: Optional[str] = None
+        previous_tag: Optional[str] = None
+
+        for i, tag in enumerate(sorted_tags):
+            if parse_version(tag) <= current_version:
+                current_tag = tag
+                if i + 1 < len(sorted_tags):
+                    previous_tag = sorted_tags[i + 1]
+                break
+
+        if not current_tag:
+            return ReleaseNotesResponse(version=current.version, categories=[])
+
+        # Get tag date
+        success, date_str, _ = self._run_git("log", "-1", "--format=%cI", current_tag)
+        tag_date = datetime.fromisoformat(date_str) if success and date_str else None
+
+        if not previous_tag:
+            # No previous tag — list all commits up to current tag
+            success, log_output, _ = self._run_git(
+                "log", current_tag, "--pretty=format:%s", "--no-merges"
+            )
+        else:
+            success, log_output, _ = self._run_git(
+                "log", f"{previous_tag}..{current_tag}",
+                "--pretty=format:%s", "--no-merges"
+            )
+
+        if not success or not log_output:
+            return ReleaseNotesResponse(
+                version=current.version,
+                previous_version=previous_tag.lstrip("v") if previous_tag else None,
+                date=tag_date,
+                categories=[],
+            )
+
+        messages = [line.strip() for line in log_output.split("\n") if line.strip()]
+        categories = _parse_conventional_commits(messages)
+
+        return ReleaseNotesResponse(
+            version=current.version,
+            previous_version=previous_tag.lstrip("v") if previous_tag else None,
+            date=tag_date,
+            categories=categories,
+        )
 
     async def fetch_updates(self, callback: Optional[ProgressCallback] = None) -> bool:
         if callback:
@@ -696,6 +871,10 @@ class UpdateService:
             blockers=blockers,
             can_update=available and len(blockers) == 0,
         )
+
+    async def get_release_notes(self) -> ReleaseNotesResponse:
+        """Get release notes for the current version."""
+        return await self.backend.get_release_notes()
 
     async def _check_blockers(self) -> list[str]:
         """Check for conditions that block updates."""

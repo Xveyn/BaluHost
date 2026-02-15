@@ -145,6 +145,20 @@ export interface UpdateConfigUpdate {
   auto_update_window_end?: string | null;
 }
 
+// Release notes
+export interface ReleaseNoteCategory {
+  name: string;
+  icon: string;
+  changes: string[];
+}
+
+export interface ReleaseNotesResponse {
+  version: string;
+  previous_version: string | null;
+  date: string | null;
+  categories: ReleaseNoteCategory[];
+}
+
 // API Functions
 
 /**
@@ -152,6 +166,14 @@ export interface UpdateConfigUpdate {
  */
 export async function getPublicVersion(): Promise<VersionInfo> {
   const response = await apiClient.get<VersionInfo>('/api/updates/version');
+  return response.data;
+}
+
+/**
+ * Get release notes for the current version (public endpoint, no auth required)
+ */
+export async function getReleaseNotes(): Promise<ReleaseNotesResponse> {
+  const response = await apiClient.get<ReleaseNotesResponse>('/api/updates/release-notes');
   return response.data;
 }
 

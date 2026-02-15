@@ -262,6 +262,23 @@ class UpdateWebSocketMessage(BaseModel):
     payload: Any = Field(description="Message payload")
 
 
+class ReleaseNoteCategory(BaseModel):
+    """Single category of release notes (e.g. Features, Bug Fixes)."""
+
+    name: str = Field(description="Category name (e.g. 'Features', 'Bug Fixes')")
+    icon: str = Field(description="Lucide icon name (e.g. 'sparkles', 'bug')")
+    changes: list[str] = Field(default_factory=list, description="List of changes in this category")
+
+
+class ReleaseNotesResponse(BaseModel):
+    """Response for release notes of the current version."""
+
+    version: str = Field(description="Current version (e.g. '1.5.0-alpha')")
+    previous_version: Optional[str] = Field(default=None, description="Previous version (e.g. '1.1.0-alpha')")
+    date: Optional[datetime] = Field(default=None, description="Release date")
+    categories: list[ReleaseNoteCategory] = Field(default_factory=list, description="Categorized changes")
+
+
 class UpdateAvailablePayload(BaseModel):
     """Payload for update_available message."""
 

@@ -33,6 +33,11 @@
     "prerelease": "Pre-release",
     "breakingChanges": "Breaking Changes:"
   },
+  "releaseNotes": {
+    "title": "Release Notes",
+    "since": "Changes since v{{version}}",
+    "empty": "No release notes available"
+  },
   "history": {
     "title": "Update History",
     "noHistory": "No update history",

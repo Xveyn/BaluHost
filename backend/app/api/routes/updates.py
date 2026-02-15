@@ -18,6 +18,7 @@ from app.schemas.update import (
     UpdateConfigResponse,
     UpdateConfigUpdate,
     VersionInfo,
+    ReleaseNotesResponse,
 )
 from app.services.update_service import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
@@ -34,6 +35,16 @@ async def get_public_version() -> VersionInfo:
     """
     backend = get_update_backend()
     return await backend.get_current_version()
+
+
+@router.get("/release-notes", response_model=ReleaseNotesResponse)
+async def get_release_notes() -> ReleaseNotesResponse:
+    """Get release notes for the current version (public endpoint, no auth required).
+
+    Returns categorized changes between the previous and current version tag.
+    """
+    backend = get_update_backend()
+    return await backend.get_release_notes()
 
 
 @router.get("/check", response_model=UpdateCheckResponse)

@@ -26,6 +26,15 @@ import {
   RotateCcw,
   ArrowRight,
   Zap,
+  Sparkles,
+  Bug,
+  Wrench,
+  Cog,
+  BookOpen,
+  TestTube,
+  Paintbrush,
+  CircleDot,
+  FileText,
 } from 'lucide-react';
 import {
   checkForUpdates,
@@ -36,6 +45,7 @@ import {
   getUpdateHistory,
   getUpdateConfig,
   updateConfig,
+  getReleaseNotes,
   getStatusInfo,
   formatDuration,
   isUpdateInProgress,
@@ -45,6 +55,7 @@ import {
   type UpdateHistoryEntry,
   type UpdateConfig,
   type UpdateChannel,
+  type ReleaseNotesResponse,
 } from '../api/updates';
 import { extractErrorMessage } from '../lib/api';
 import UpdateProgress from '../components/updates/UpdateProgress';
@@ -63,6 +74,29 @@ const tabs: Tab[] = [
   { id: 'settings', label: 'tabs.settings', icon: <Settings className="h-4 w-4" /> },
 ];
 
+const CATEGORY_ICONS: Record<string, React.ReactNode> = {
+  sparkles: <Sparkles className="h-4 w-4" />,
+  bug: <Bug className="h-4 w-4" />,
+  zap: <Zap className="h-4 w-4" />,
+  wrench: <Wrench className="h-4 w-4" />,
+  cog: <Cog className="h-4 w-4" />,
+  'book-open': <BookOpen className="h-4 w-4" />,
+  'test-tube': <TestTube className="h-4 w-4" />,
+  paintbrush: <Paintbrush className="h-4 w-4" />,
+  'circle-dot': <CircleDot className="h-4 w-4" />,
+};
+
+const CATEGORY_COLORS: Record<string, string> = {
+  Features: 'text-emerald-400',
+  'Bug Fixes': 'text-rose-400',
+  Performance: 'text-amber-400',
+  Refactoring: 'text-sky-400',
+  Maintenance: 'text-slate-400',
+  Documentation: 'text-violet-400',
+  Tests: 'text-cyan-400',
+  Other: 'text-slate-400',
+};
+
 export default function UpdatePage() {
   const { t } = useTranslation(['updates', 'common']);
   const [activeTab, setActiveTab] = useState<TabId>('overview');
@@ -79,6 +113,7 @@ export default function UpdatePage() {
   const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
   const [config, setConfig] = useState<UpdateConfig | null>(null);
+  const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesResponse | null>(null);
 
   // Confirmation states
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
@@ -121,6 +156,17 @@ export default function UpdatePage() {
     }
   }, [historyPage]);
 
+  // Fetch release notes
+  const fetchReleaseNotes = useCallback(async () => {
+    try {
+      const result = await getReleaseNotes();
+      setReleaseNotes(result);
+    } catch (err) {
+      // Non-critical, don't show error toast
+      console.warn('Failed to fetch release notes', err);
+    }
+  }, []);
+
   // Fetch config
   const fetchConfig = useCallback(async () => {
     try {
@@ -135,11 +181,11 @@ export default function UpdatePage() {
   useEffect(() => {
     const loadAll = async () => {
       setLoading(true);
-      await Promise.all([fetchCheck(), fetchCurrentUpdate(), fetchConfig()]);
+      await Promise.all([fetchCheck(), fetchCurrentUpdate(), fetchConfig(), fetchReleaseNotes()]);
       setLoading(false);
     };
     loadAll();
-  }, [fetchCheck, fetchCurrentUpdate, fetchConfig]);
+  }, [fetchCheck, fetchCurrentUpdate, fetchConfig, fetchReleaseNotes]);
 
   // Fetch history when tab changes
   useEffect(() => {
@@ -388,6 +434,41 @@ export default function UpdatePage() {
                     ))}
                   </ul>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* Release Notes */}
+          {releaseNotes && releaseNotes.categories.length > 0 && (
+            <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
+              <div className="flex items-center gap-3 mb-1">
+                <FileText className="h-5 w-5 text-sky-400" />
+                <h3 className="font-medium text-white">{t('releaseNotes.title')}</h3>
+                <span className="text-sm font-mono text-slate-400">v{releaseNotes.version}</span>
+              </div>
+              {releaseNotes.previous_version && (
+                <p className="text-sm text-slate-500 mb-4 ml-8">
+                  {t('releaseNotes.since', { version: releaseNotes.previous_version })}
+                </p>
+              )}
+              <div className="space-y-4 ml-8">
+                {releaseNotes.categories.map((category) => (
+                  <div key={category.name}>
+                    <div className="flex items-center gap-2 mb-2">
+                      <span className={CATEGORY_COLORS[category.name] || 'text-slate-400'}>
+                        {CATEGORY_ICONS[category.icon] || <CircleDot className="h-4 w-4" />}
+                      </span>
+                      <h4 className={`text-sm font-medium ${CATEGORY_COLORS[category.name] || 'text-slate-400'}`}>
+                        {category.name}
+                      </h4>
+                    </div>
+                    <ul className="space-y-1 text-sm text-slate-300 ml-6">
+                      {category.changes.map((change, j) => (
+                        <li key={j}>• {change}</li>
+                      ))}
+                    </ul>
+                  </div>
+                ))}
               </div>
             </div>
           )}
