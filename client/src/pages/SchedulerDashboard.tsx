@@ -248,7 +248,7 @@ export default function SchedulerDashboard() {
 
         {/* Maintenance Tab */}
         {activeTab === 'maintenance' && (
-          <MaintenancePanel addToast={addToast} />
+          <MaintenancePanel addToast={addToast} schedulers={schedulers} onRunNow={handleRunNow} />
         )}
 
         {/* History Tab */}

@@ -113,11 +113,14 @@ export default function Dashboard({ user }: DashboardProps) {
   useEffect(() => {
     const loadSmartMode = async () => {
       try {
+        const modeRes = await fetch('/api/system/mode');
+        const modeData = await modeRes.json();
+        if (!modeData?.dev_mode) return;
+
         const { getSmartMode } = await import('../api/smart');
         const response = await getSmartMode();
         setSmartMode(response.mode);
       } catch (err) {
-        // Dev-Mode Toggle nicht verfügbar (Production oder Fehler)
         console.debug('SMART mode toggle not available:', err);
       }
     };
