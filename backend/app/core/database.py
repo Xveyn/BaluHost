@@ -133,8 +133,12 @@ def get_db() -> Generator[Session, None, None]:
 
 
 def init_db() -> None:
+    """Initialize database tables.
+
+    For PostgreSQL (production), schema is managed by Alembic migrations.
+    For SQLite (dev mode), create_all ensures tables exist without migrations.
     """
-    Initialize database tables.
-    Should be called on application startup.
-    """
+    if DATABASE_URL.startswith("postgresql"):
+        logger.debug("PostgreSQL detected — schema managed by Alembic, skipping create_all()")
+        return
     Base.metadata.create_all(bind=engine)
