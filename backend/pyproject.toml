@@ -1,6 +1,6 @@
 [project]
 name = "baluhost-backend"
-version = "1.5.1-alpha"
+version = "1.5.2-alpha"
 description = "Mocked NAS management backend built with FastAPI"
 authors = [{ name = "Baluhost" }]
 requires-python = ">=3.11"
