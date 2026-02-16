@@ -4,6 +4,12 @@
     "subtitle": "Echtzeit-Systemüberwachung",
     "subtitleLong": "Echtzeit-Überwachung von CPU, RAM, Netzwerk, Festplatten und Stromverbrauch",
     "live": "Live",
+    "categories": {
+      "hardware": "Hardware",
+      "io": "I/O",
+      "system": "System",
+      "logs": "Protokolle"
+    },
     "tabs": {
       "cpu": "CPU",
       "memory": "Arbeitsspeicher",

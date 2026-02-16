@@ -4,6 +4,12 @@
     "subtitle": "Real-time system monitoring",
     "subtitleLong": "Real-time monitoring of CPU, RAM, network, disks and power consumption",
     "live": "Live",
+    "categories": {
+      "hardware": "Hardware",
+      "io": "I/O",
+      "system": "System",
+      "logs": "Logs"
+    },
     "tabs": {
       "cpu": "CPU",
       "memory": "Memory",
