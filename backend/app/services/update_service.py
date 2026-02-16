@@ -38,6 +38,11 @@ from app.schemas.update import (
     UpdateConfigUpdate,
     ReleaseNoteCategory,
     ReleaseNotesResponse,
+    CommitInfo,
+    VersionGroup,
+    CommitHistoryResponse,
+    DiffFile,
+    CommitDiffResponse,
 )
 from app.services.service_status import register_service
 
@@ -197,6 +202,16 @@ class UpdateBackend(ABC):
     @abstractmethod
     async def health_check(self) -> tuple[bool, list[str]]:
         """Check if services are healthy. Returns (healthy, issues)."""
+        pass
+
+    @abstractmethod
+    async def get_commit_history(self) -> CommitHistoryResponse:
+        """Get full commit history grouped by version tags."""
+        pass
+
+    @abstractmethod
+    async def get_commit_diff(self, commit_hash: str) -> CommitDiffResponse:
+        """Get diff details for a specific commit."""
         pass
 
 
@@ -370,6 +385,48 @@ class DevUpdateBackend(UpdateBackend):
     async def health_check(self) -> tuple[bool, list[str]]:
         """Simulate health check."""
         return True, []
+
+    async def get_commit_history(self) -> CommitHistoryResponse:
+        """Return mock commit history for dev mode."""
+        now = datetime.now(timezone.utc).isoformat()
+        commits_v2 = [
+            CommitInfo(hash="aaa1111111111111111111111111111111111111", hash_short="aaa1111", message="feat(dashboard): add real-time CPU chart", date=now, author="Dev User", type="feat", scope="dashboard"),
+            CommitInfo(hash="bbb2222222222222222222222222222222222222", hash_short="bbb2222", message="fix(auth): resolve token refresh race condition", date=now, author="Dev User", type="fix", scope="auth"),
+            CommitInfo(hash="ccc3333333333333333333333333333333333333", hash_short="ccc3333", message="chore: bump dependencies", date=now, author="Dev User", type="chore", scope=None),
+        ]
+        commits_v1 = [
+            CommitInfo(hash="ddd4444444444444444444444444444444444444", hash_short="ddd4444", message="feat: initial project setup", date=now, author="Dev User", type="feat", scope=None),
+            CommitInfo(hash="eee5555555555555555555555555555555555555", hash_short="eee5555", message="docs: add README", date=now, author="Dev User", type="docs", scope=None),
+        ]
+        commits_unreleased = [
+            CommitInfo(hash="fff6666666666666666666666666666666666666", hash_short="fff6666", message="feat(updates): add versions tab with commit history", date=now, author="Dev User", type="feat", scope="updates"),
+            CommitInfo(hash="ggg7777777777777777777777777777777777777", hash_short="ggg7777", message="refactor(api): consolidate error handling", date=now, author="Dev User", type="refactor", scope="api"),
+        ]
+        return CommitHistoryResponse(
+            total_commits=7,
+            groups=[
+                VersionGroup(tag=None, version="Unreleased", date=None, commit_count=2, commits=commits_unreleased),
+                VersionGroup(tag="v1.5.0-alpha", version="1.5.0-alpha", date=now, commit_count=3, commits=commits_v2),
+                VersionGroup(tag="v1.0.0-alpha", version="1.0.0-alpha", date=now, commit_count=2, commits=commits_v1),
+            ],
+        )
+
+    async def get_commit_diff(self, commit_hash: str) -> CommitDiffResponse:
+        """Return mock diff for dev mode."""
+        now = datetime.now(timezone.utc).isoformat()
+        return CommitDiffResponse(
+            hash=commit_hash,
+            hash_short=commit_hash[:7],
+            message="feat(dashboard): add real-time CPU chart",
+            date=now,
+            author="Dev User",
+            stats="2 files changed, 45 insertions(+), 3 deletions(-)",
+            files=[
+                DiffFile(path="client/src/pages/Dashboard.tsx", status="modified", additions=40, deletions=3),
+                DiffFile(path="client/src/components/CpuChart.tsx", status="added", additions=5, deletions=0),
+            ],
+            diff="diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx\n--- a/client/src/pages/Dashboard.tsx\n+++ b/client/src/pages/Dashboard.tsx\n@@ -1,5 +1,10 @@\n import React from 'react';\n+import { CpuChart } from '../components/CpuChart';\n \n export default function Dashboard() {\n-  return <div>Dashboard</div>;\n+  return (\n+    <div>\n+      <CpuChart />\n+    </div>\n+  );\n }\n",
+        )
 
 
 class ProdUpdateBackend(UpdateBackend):
@@ -759,6 +816,184 @@ class ProdUpdateBackend(UpdateBackend):
             issues.append(f"Health check failed: {e}")
 
         return len(issues) == 0, issues
+
+    # --- Commit History ---
+
+    _SCOPE_RE = re.compile(r"^(\w+)\(([^)]*)\):\s*(.+)$")
+
+    def _parse_commit_lines(self, output: str) -> list[CommitInfo]:
+        """Parse git log output (pipe-separated) into CommitInfo objects."""
+        commits: list[CommitInfo] = []
+        for line in output.strip().split("\n"):
+            if not line.strip():
+                continue
+            parts = line.split("|", 4)
+            if len(parts) < 5:
+                continue
+            full_hash, short_hash, subject, date_str, author = parts
+
+            # Extract conventional commit type and scope
+            commit_type: Optional[str] = None
+            scope: Optional[str] = None
+            scope_match = self._SCOPE_RE.match(subject)
+            if scope_match:
+                commit_type = scope_match.group(1).lower()
+                scope = scope_match.group(2) or None
+            else:
+                conv_match = _CONVENTIONAL_RE.match(subject)
+                if conv_match:
+                    commit_type = conv_match.group(1).lower()
+
+            commits.append(CommitInfo(
+                hash=full_hash,
+                hash_short=short_hash,
+                message=subject,
+                date=date_str,
+                author=author,
+                type=commit_type,
+                scope=scope,
+            ))
+        return commits
+
+    async def get_commit_history(self) -> CommitHistoryResponse:
+        """Get full commit history grouped by version tags."""
+        # Get all tags sorted by semver
+        success, tags_output, _ = self._run_git("tag", "-l", "--sort=version:refname")
+        if not success:
+            return CommitHistoryResponse(total_commits=0, groups=[])
+
+        tags = [t.strip() for t in tags_output.strip().split("\n") if t.strip()]
+
+        groups: list[VersionGroup] = []
+        total = 0
+        log_format = "%H|%h|%s|%aI|%an"
+
+        # Build groups for each tag pair
+        prev_ref: Optional[str] = None
+        for tag in tags:
+            if prev_ref is None:
+                # First tag: all commits up to this tag
+                success, log_output, _ = self._run_git(
+                    "log", tag, f"--pretty=format:{log_format}", "--no-merges"
+                )
+            else:
+                success, log_output, _ = self._run_git(
+                    "log", f"{prev_ref}..{tag}", f"--pretty=format:{log_format}", "--no-merges"
+                )
+
+            if success and log_output.strip():
+                commits = self._parse_commit_lines(log_output)
+            else:
+                commits = []
+
+            # Get tag date
+            ok, date_str, _ = self._run_git("log", "-1", "--format=%aI", tag)
+            tag_date = date_str if ok and date_str else None
+
+            total += len(commits)
+            groups.append(VersionGroup(
+                tag=tag,
+                version=tag.lstrip("v"),
+                date=tag_date,
+                commit_count=len(commits),
+                commits=commits,
+            ))
+            prev_ref = tag
+
+        # Check for unreleased commits (last tag → HEAD)
+        if tags:
+            success, log_output, _ = self._run_git(
+                "log", f"{tags[-1]}..HEAD", f"--pretty=format:{log_format}", "--no-merges"
+            )
+            if success and log_output.strip():
+                commits = self._parse_commit_lines(log_output)
+                if commits:
+                    total += len(commits)
+                    groups.append(VersionGroup(
+                        tag=None,
+                        version="Unreleased",
+                        date=None,
+                        commit_count=len(commits),
+                        commits=commits,
+                    ))
+
+        # Reverse so newest group is first
+        groups.reverse()
+
+        return CommitHistoryResponse(total_commits=total, groups=groups)
+
+    async def get_commit_diff(self, commit_hash: str) -> CommitDiffResponse:
+        """Get diff details for a specific commit."""
+        # Validate hash format
+        if not re.match(r"^[0-9a-fA-F]{7,40}$", commit_hash):
+            raise ValueError(f"Invalid commit hash format: {commit_hash}")
+
+        # Get commit info
+        success, info_output, _ = self._run_git(
+            "log", "-1", "--pretty=format:%H|%h|%s|%aI|%an", commit_hash
+        )
+        if not success or not info_output.strip():
+            raise ValueError(f"Commit not found: {commit_hash}")
+
+        parts = info_output.split("|", 4)
+        if len(parts) < 5:
+            raise ValueError(f"Failed to parse commit info: {commit_hash}")
+
+        full_hash, short_hash, subject, date_str, author = parts
+
+        # Get diff stat
+        success, stat_output, _ = self._run_git("diff", "--stat", f"{commit_hash}~1", commit_hash)
+        stats = stat_output.strip().split("\n")[-1].strip() if success and stat_output.strip() else ""
+
+        # Get changed files with status
+        success, ns_output, _ = self._run_git("diff", "--name-status", f"{commit_hash}~1", commit_hash)
+        files: list[DiffFile] = []
+        if success and ns_output.strip():
+            # Also get numstat for additions/deletions
+            ok_num, numstat_output, _ = self._run_git("diff", "--numstat", f"{commit_hash}~1", commit_hash)
+            numstat_map: dict[str, tuple[int, int]] = {}
+            if ok_num and numstat_output.strip():
+                for ns_line in numstat_output.strip().split("\n"):
+                    ns_parts = ns_line.split("\t")
+                    if len(ns_parts) >= 3:
+                        adds = int(ns_parts[0]) if ns_parts[0] != "-" else 0
+                        dels = int(ns_parts[1]) if ns_parts[1] != "-" else 0
+                        numstat_map[ns_parts[2]] = (adds, dels)
+
+            status_map = {"A": "added", "M": "modified", "D": "deleted", "R": "renamed"}
+            for line in ns_output.strip().split("\n"):
+                if not line.strip():
+                    continue
+                line_parts = line.split("\t")
+                if len(line_parts) < 2:
+                    continue
+                raw_status = line_parts[0][0]  # First char (R100 → R)
+                file_path = line_parts[-1]  # Last part (handles renames)
+                adds, dels = numstat_map.get(file_path, (0, 0))
+                files.append(DiffFile(
+                    path=file_path,
+                    status=status_map.get(raw_status, "modified"),
+                    additions=adds,
+                    deletions=dels,
+                ))
+
+        # Get raw diff (truncated to 500KB)
+        success, diff_output, _ = self._run_git("diff", f"{commit_hash}~1", commit_hash)
+        diff_text = diff_output if success else ""
+        max_diff_size = 500 * 1024
+        if len(diff_text) > max_diff_size:
+            diff_text = diff_text[:max_diff_size] + "\n\n... (diff truncated at 500KB)"
+
+        return CommitDiffResponse(
+            hash=full_hash,
+            hash_short=short_hash,
+            message=subject,
+            date=date_str,
+            author=author,
+            stats=stats,
+            files=files,
+            diff=diff_text,
+        )
 
 
 # Global singleton for the update service

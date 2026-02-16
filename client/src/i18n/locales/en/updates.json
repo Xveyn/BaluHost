@@ -4,7 +4,8 @@
   "tabs": {
     "overview": "Overview",
     "history": "History",
-    "settings": "Settings"
+    "settings": "Settings",
+    "versions": "Versions"
   },
   "buttons": {
     "checkForUpdates": "Check for Updates",

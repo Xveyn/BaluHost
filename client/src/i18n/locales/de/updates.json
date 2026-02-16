@@ -4,7 +4,8 @@
   "tabs": {
     "overview": "Übersicht",
     "history": "Verlauf",
-    "settings": "Einstellungen"
+    "settings": "Einstellungen",
+    "versions": "Versionen"
   },
   "buttons": {
     "checkForUpdates": "Nach Updates suchen",

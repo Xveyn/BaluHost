@@ -9,7 +9,7 @@
  * - Configure auto-update settings
  * - Rollback to previous versions
  */
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { toast } from 'react-hot-toast';
 import {
@@ -21,6 +21,7 @@ import {
   Settings,
   Package,
   GitBranch,
+  GitCommit,
   Clock,
   Loader2,
   RotateCcw,
@@ -60,7 +61,9 @@ import {
 import { extractErrorMessage } from '../lib/api';
 import UpdateProgress from '../components/updates/UpdateProgress';
 
-type TabId = 'overview' | 'history' | 'settings';
+const VersionsTab = lazy(() => import('../components/updates/VersionsTab'));
+
+type TabId = 'overview' | 'history' | 'settings' | 'versions';
 
 interface Tab {
   id: TabId;
@@ -68,11 +71,15 @@ interface Tab {
   icon: React.ReactNode;
 }
 
-const tabs: Tab[] = [
+const baseTabs: Tab[] = [
   { id: 'overview', label: 'tabs.overview', icon: <Package className="h-4 w-4" /> },
   { id: 'history', label: 'tabs.history', icon: <History className="h-4 w-4" /> },
   { id: 'settings', label: 'tabs.settings', icon: <Settings className="h-4 w-4" /> },
 ];
+
+const tabs: Tab[] = __BUILD_TYPE__ === 'dev'
+  ? [...baseTabs, { id: 'versions' as TabId, label: 'tabs.versions', icon: <GitCommit className="h-4 w-4" /> }]
+  : baseTabs;
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   sparkles: <Sparkles className="h-4 w-4" />,
@@ -788,6 +795,18 @@ export default function UpdatePage() {
             </div>
           )}
         </div>
+      )}
+
+      {activeTab === 'versions' && (
+        <Suspense
+          fallback={
+            <div className="flex items-center justify-center h-64">
+              <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+            </div>
+          }
+        >
+          <VersionsTab />
+        </Suspense>
       )}
 
       {/* Rollback Confirmation Modal */}

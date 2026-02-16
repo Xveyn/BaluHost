@@ -313,3 +313,57 @@ class UpdateFailedPayload(BaseModel):
     update_id: int
     error_message: str
     can_rollback: bool
+
+
+# --- Commit History Schemas (Versions Tab) ---
+
+
+class CommitInfo(BaseModel):
+    """Single commit entry with conventional commit metadata."""
+
+    hash: str = Field(description="Full commit hash")
+    hash_short: str = Field(description="Short commit hash (7 chars)")
+    message: str = Field(description="Commit message (subject line)")
+    date: str = Field(description="Commit date (ISO 8601)")
+    author: str = Field(description="Author name")
+    type: Optional[str] = Field(default=None, description="Conventional commit type (feat, fix, ...)")
+    scope: Optional[str] = Field(default=None, description="Conventional commit scope")
+
+
+class VersionGroup(BaseModel):
+    """Group of commits under a version tag."""
+
+    tag: Optional[str] = Field(default=None, description="Git tag (e.g. 'v1.5.0-alpha'), None for unreleased")
+    version: str = Field(description="Version string (e.g. '1.5.0-alpha' or 'Unreleased')")
+    date: Optional[str] = Field(default=None, description="Tag date (ISO 8601)")
+    commit_count: int = Field(description="Number of commits in this group")
+    commits: list[CommitInfo] = Field(default_factory=list, description="Commits in this group")
+
+
+class CommitHistoryResponse(BaseModel):
+    """Full commit history grouped by version tags."""
+
+    total_commits: int = Field(description="Total number of commits across all groups")
+    groups: list[VersionGroup] = Field(default_factory=list, description="Version groups (newest first)")
+
+
+class DiffFile(BaseModel):
+    """Single file changed in a commit diff."""
+
+    path: str = Field(description="File path")
+    status: str = Field(description="Change status: added, modified, deleted, renamed")
+    additions: int = Field(default=0, description="Lines added")
+    deletions: int = Field(default=0, description="Lines deleted")
+
+
+class CommitDiffResponse(BaseModel):
+    """Diff details for a single commit."""
+
+    hash: str = Field(description="Full commit hash")
+    hash_short: str = Field(description="Short commit hash")
+    message: str = Field(description="Commit message")
+    date: str = Field(description="Commit date (ISO 8601)")
+    author: str = Field(description="Author name")
+    stats: str = Field(default="", description="Diff stat summary")
+    files: list[DiffFile] = Field(default_factory=list, description="Changed files")
+    diff: str = Field(default="", description="Raw unified diff (truncated to 500KB)")

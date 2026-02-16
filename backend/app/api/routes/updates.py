@@ -1,4 +1,5 @@
 """Update service API endpoints."""
+import re
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
@@ -20,6 +21,8 @@ from app.schemas.update import (
     UpdateConfigUpdate,
     VersionInfo,
     ReleaseNotesResponse,
+    CommitHistoryResponse,
+    CommitDiffResponse,
 )
 from app.services.update_service import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
@@ -327,3 +330,45 @@ async def update_config(
     )
 
     return result
+
+
+@router.get("/commits", response_model=CommitHistoryResponse)
+@limiter.limit(get_limit("admin_operations"))
+async def get_commit_history(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+) -> CommitHistoryResponse:
+    """Get full commit history grouped by version tags.
+
+    Returns all commits since the first tag, grouped by version.
+    Used by the dev-only Versions tab.
+    """
+    backend = get_update_backend()
+    return await backend.get_commit_history()
+
+
+@router.get("/commits/{commit_hash}/diff", response_model=CommitDiffResponse)
+@limiter.limit(get_limit("admin_operations"))
+async def get_commit_diff(
+    request: Request, response: Response,
+    commit_hash: str,
+    current_user: UserPublic = Depends(deps.get_current_user),
+) -> CommitDiffResponse:
+    """Get diff details for a specific commit.
+
+    Returns changed files, stats, and the raw unified diff.
+    """
+    if not re.match(r"^[0-9a-fA-F]{7,40}$", commit_hash):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid commit hash format",
+        )
+
+    backend = get_update_backend()
+    try:
+        return await backend.get_commit_diff(commit_hash)
+    except ValueError as e:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=str(e),
+        )

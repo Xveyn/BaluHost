@@ -159,6 +159,48 @@ export interface ReleaseNotesResponse {
   categories: ReleaseNoteCategory[];
 }
 
+// Commit history types (Versions tab)
+export interface CommitInfo {
+  hash: string;
+  hash_short: string;
+  message: string;
+  date: string;
+  author: string;
+  type: string | null;
+  scope: string | null;
+}
+
+export interface VersionGroup {
+  tag: string | null;
+  version: string;
+  date: string | null;
+  commit_count: number;
+  commits: CommitInfo[];
+}
+
+export interface CommitHistoryResponse {
+  total_commits: number;
+  groups: VersionGroup[];
+}
+
+export interface DiffFile {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface CommitDiffResponse {
+  hash: string;
+  hash_short: string;
+  message: string;
+  date: string;
+  author: string;
+  stats: string;
+  files: DiffFile[];
+  diff: string;
+}
+
 // API Functions
 
 /**
@@ -245,6 +287,22 @@ export async function getUpdateConfig(): Promise<UpdateConfig> {
  */
 export async function updateConfig(config: UpdateConfigUpdate): Promise<UpdateConfig> {
   const response = await apiClient.put<UpdateConfig>('/api/updates/config', config);
+  return response.data;
+}
+
+/**
+ * Get full commit history grouped by version tags
+ */
+export async function getCommitHistory(): Promise<CommitHistoryResponse> {
+  const response = await apiClient.get<CommitHistoryResponse>('/api/updates/commits');
+  return response.data;
+}
+
+/**
+ * Get diff details for a specific commit
+ */
+export async function getCommitDiff(commitHash: string): Promise<CommitDiffResponse> {
+  const response = await apiClient.get<CommitDiffResponse>(`/api/updates/commits/${commitHash}/diff`);
   return response.data;
 }
 
