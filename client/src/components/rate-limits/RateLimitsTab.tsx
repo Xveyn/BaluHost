@@ -245,6 +245,8 @@ export default function RateLimitsTab() {
     if (endpoint.startsWith('share_')) return t('system:apiCenter.categories.sharing');
     if (endpoint.startsWith('mobile_')) return t('system:apiCenter.categories.mobile');
     if (endpoint.startsWith('vpn_')) return t('system:apiCenter.categories.vpn');
+    if (endpoint.startsWith('backup_')) return t('system:apiCenter.categories.backup', 'Backup');
+    if (endpoint.startsWith('sync_')) return t('system:apiCenter.categories.sync', 'Sync');
     if (endpoint.includes('admin')) return t('system:apiCenter.categories.admin');
     if (endpoint.includes('user')) return t('system:apiCenter.categories.users');
     if (endpoint.includes('system')) return t('system:apiCenter.categories.system');
