@@ -3,26 +3,18 @@ import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
   Code,
-  Lock,
-  FileText,
-  Terminal,
-  Activity,
   Shield,
   ChevronDown,
   ChevronRight,
   Copy,
   Check,
   Zap,
-  Users,
-  Smartphone,
-  Database,
-  HardDrive,
-  Wifi,
-  Power,
-  Cloud
+  Search,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
+import { apiSections, apiCategories, methodColors } from '../data/api-endpoints';
+import type { ApiEndpoint } from '../data/api-endpoints';
 
 // ==================== Types ====================
 
@@ -30,24 +22,6 @@ interface User {
   id: string;
   username: string;
   role: string;
-}
-
-interface ApiEndpoint {
-  method: 'GET' | 'POST' | 'PUT' | 'DELETE' | 'PATCH';
-  path: string;
-  description: string;
-  requiresAuth?: boolean;
-  params?: { name: string; type: string; required: boolean; description: string }[];
-  body?: { field: string; type: string; required: boolean; description: string }[];
-  bodyExample?: string;
-  response?: string;
-  rateLimit?: string;
-}
-
-interface ApiSection {
-  title: string;
-  icon: React.ReactNode;
-  endpoints: ApiEndpoint[];
 }
 
 interface RateLimitConfig {
@@ -61,770 +35,20 @@ interface RateLimitConfig {
   updated_by: number | null;
 }
 
-// ==================== API Sections Data ====================
+// ==================== Rate Limit Mapping ====================
 
-const getApiSections = (t: (key: string) => string): ApiSection[] => [
-  {
-    title: t('system:apiCenter.docs.authentication.title'),
-    icon: <Lock className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/auth/login',
-        description: t('system:apiCenter.docs.authentication.login'),
-        rateLimit: 'auth_login',
-        body: [
-          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
-          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') }
-        ],
-        bodyExample: `{
-  "username": "admin",
-  "password": "your_password"
-}`,
-        response: `{
-  "access_token": "eyJhbGc...",
-  "token_type": "bearer",
-  "user": { "id": 1, "username": "admin", "role": "admin" }
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/auth/register',
-        description: t('system:apiCenter.docs.authentication.register'),
-        rateLimit: 'auth_register',
-        body: [
-          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
-          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.email') },
-          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') }
-        ],
-        bodyExample: `{
-  "username": "newuser",
-  "email": "user@example.com",
-  "password": "secure_password123"
-}`,
-        response: `{
-  "id": 2,
-  "username": "newuser",
-  "email": "user@example.com",
-  "role": "user"
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/auth/me',
-        description: t('system:apiCenter.docs.authentication.me'),
-        requiresAuth: true,
-        response: `{
-  "user": { "id": 1, "username": "admin", "role": "admin" }
-}`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.files.title'),
-    icon: <FileText className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/files/list',
-        description: t('system:apiCenter.docs.files.list'),
-        requiresAuth: true,
-        rateLimit: 'file_list',
-        params: [
-          { name: 'path', type: 'string', required: false, description: t('system:apiCenter.docs.params.directoryPath') }
-        ],
-        response: `{
-  "files": [
-    { "name": "doc.pdf", "size": 1048576, "is_directory": false }
-  ]
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/files/upload',
-        description: t('system:apiCenter.docs.files.upload'),
-        requiresAuth: true,
-        rateLimit: 'file_upload',
-        body: [
-          { field: 'file', type: 'file', required: true, description: t('system:apiCenter.docs.params.fileToUpload') },
-          { field: 'path', type: 'string', required: false, description: t('system:apiCenter.docs.params.targetDirectory') }
-        ],
-        bodyExample: `// FormData request:
-// file: <binary file data>
-// path: "/documents"`,
-        response: `{ "filename": "uploaded.txt", "path": "/uploaded.txt", "size": 2048 }`
-      },
-      {
-        method: 'GET',
-        path: '/api/files/download/{path}',
-        description: t('system:apiCenter.docs.files.download'),
-        requiresAuth: true,
-        rateLimit: 'file_download',
-        params: [
-          { name: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.filePath') }
-        ],
-        response: t('system:apiCenter.docs.responses.binaryFileContent')
-      },
-      {
-        method: 'DELETE',
-        path: '/api/files/{path}',
-        description: t('system:apiCenter.docs.files.delete'),
-        requiresAuth: true,
-        rateLimit: 'file_delete',
-        params: [
-          { name: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.pathToDelete') }
-        ],
-        response: `{ "message": "Path deleted successfully" }`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.shares.title'),
-    icon: <Shield className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/shares',
-        description: t('system:apiCenter.docs.shares.list'),
-        requiresAuth: true,
-        rateLimit: 'share_list',
-        response: `{
-  "shares": [
-    { "id": 1, "path": "/shared", "token": "abc123", "expires_at": null }
-  ]
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/shares',
-        description: t('system:apiCenter.docs.shares.create'),
-        requiresAuth: true,
-        rateLimit: 'share_create',
-        body: [
-          { field: 'path', type: 'string', required: true, description: t('system:apiCenter.docs.params.pathToShare') },
-          { field: 'expires_in_hours', type: 'number', required: false, description: t('system:apiCenter.docs.params.expirationHours') }
-        ],
-        bodyExample: `{
-  "path": "/documents/report.pdf",
-  "expires_in_hours": 24
-}`,
-        response: `{ "token": "abc123", "url": "/share/abc123" }`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.system.title'),
-    icon: <Activity className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/system/info',
-        description: t('system:apiCenter.docs.system.info'),
-        requiresAuth: true,
-        rateLimit: 'system_monitor',
-        response: `{
-  "hostname": "baluhost-nas",
-  "os": "Linux",
-  "cpu_count": 8,
-  "total_memory": 17179869184
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/system/telemetry',
-        description: t('system:apiCenter.docs.system.telemetry'),
-        requiresAuth: true,
-        rateLimit: 'system_monitor',
-        response: `{
-  "cpu_usage": 25.5,
-  "memory_used": 8589934592,
-  "uptime": 86400
-}`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.logging.title'),
-    icon: <Terminal className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/logging/disk-io',
-        description: t('system:apiCenter.docs.logging.diskIo'),
-        requiresAuth: true,
-        response: `{
-  "logs": [{ "timestamp": "...", "operation": "read", "bytes": 4096 }]
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/logging/file-access',
-        description: t('system:apiCenter.docs.logging.fileAccess'),
-        requiresAuth: true,
-        response: `{
-  "logs": [{ "timestamp": "...", "user": "admin", "action": "download" }]
-}`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.users.title'),
-    icon: <Users className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/users',
-        description: t('system:apiCenter.docs.users.list'),
-        requiresAuth: true,
-        params: [
-          { name: 'search', type: 'string', required: false, description: t('system:apiCenter.docs.params.searchByUsernameEmail') },
-          { name: 'role', type: 'string', required: false, description: t('system:apiCenter.docs.params.filterByRole') },
-          { name: 'is_active', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.filterByActiveStatus') }
-        ],
-        response: `{
-  "users": [...],
-  "total": 10,
-  "active": 8,
-  "inactive": 2,
-  "admins": 2
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/users',
-        description: t('system:apiCenter.docs.users.create'),
-        requiresAuth: true,
-        rateLimit: 'user_create',
-        body: [
-          { field: 'username', type: 'string', required: true, description: t('system:apiCenter.docs.params.username') },
-          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.email') },
-          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.password') },
-          { field: 'role', type: 'string', required: true, description: t('system:apiCenter.docs.params.filterByRole') }
-        ],
-        bodyExample: `{
-  "username": "newuser",
-  "email": "user@example.com",
-  "password": "secure_password123",
-  "role": "user"
-}`,
-        response: `{
-  "id": 3,
-  "username": "newuser",
-  "email": "user@example.com",
-  "role": "user"
-}`
-      },
-      {
-        method: 'PUT',
-        path: '/api/users/{user_id}',
-        description: t('system:apiCenter.docs.users.update'),
-        requiresAuth: true,
-        params: [
-          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userId') }
-        ],
-        body: [
-          { field: 'email', type: 'string', required: false, description: t('system:apiCenter.docs.params.newEmail') },
-          { field: 'role', type: 'string', required: false, description: t('system:apiCenter.docs.params.newRole') },
-          { field: 'password', type: 'string', required: false, description: t('system:apiCenter.docs.params.newPassword') }
-        ],
-        bodyExample: `{
-  "email": "newemail@example.com",
-  "role": "admin"
-}`
-      },
-      {
-        method: 'DELETE',
-        path: '/api/users/{user_id}',
-        description: t('system:apiCenter.docs.users.delete'),
-        requiresAuth: true,
-        params: [
-          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userIdToDelete') }
-        ]
-      },
-      {
-        method: 'POST',
-        path: '/api/users/{user_id}/avatar',
-        description: t('system:apiCenter.docs.users.avatar'),
-        requiresAuth: true,
-        params: [
-          { name: 'user_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.userId') }
-        ],
-        body: [
-          { field: 'avatar', type: 'file', required: true, description: t('system:apiCenter.docs.params.avatarImage') }
-        ]
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.vpn.title'),
-    icon: <Wifi className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/vpn/generate-config',
-        description: t('system:apiCenter.docs.vpn.generateConfig'),
-        requiresAuth: true,
-        body: [
-          { field: 'device_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceNameForVpn') },
-          { field: 'server_public_endpoint', type: 'string', required: true, description: t('system:apiCenter.docs.params.serverEndpoint') }
-        ],
-        bodyExample: `{
-  "device_name": "iPhone-Work",
-  "server_public_endpoint": "vpn.example.com:51820"
-}`,
-        response: `{
-  "config_file": "...",
-  "qr_code_data": "..."
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/vpn/clients',
-        description: t('system:apiCenter.docs.vpn.listClients'),
-        requiresAuth: true,
-        response: `{
-  "clients": [
-    { "id": 1, "device_name": "iPhone", "is_active": true }
-  ]
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/vpn/clients/{client_id}',
-        description: t('system:apiCenter.docs.vpn.getClient'),
-        requiresAuth: true,
-        params: [
-          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
-        ]
-      },
-      {
-        method: 'PATCH',
-        path: '/api/vpn/clients/{client_id}',
-        description: t('system:apiCenter.docs.vpn.updateClient'),
-        requiresAuth: true,
-        params: [
-          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
-        ],
-        body: [
-          { field: 'device_name', type: 'string', required: false, description: t('system:apiCenter.docs.params.newDeviceName') },
-          { field: 'is_active', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.activeStatus') }
-        ],
-        bodyExample: `{
-  "device_name": "iPhone-Personal",
-  "is_active": true
-}`
-      },
-      {
-        method: 'DELETE',
-        path: '/api/vpn/clients/{client_id}',
-        description: t('system:apiCenter.docs.vpn.deleteClient'),
-        requiresAuth: true,
-        params: [
-          { name: 'client_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.clientId') }
-        ]
-      },
-      {
-        method: 'POST',
-        path: '/api/vpn/fritzbox/upload',
-        description: t('system:apiCenter.docs.vpn.fritzboxUpload'),
-        requiresAuth: true,
-        body: [
-          { field: 'config_content', type: 'string', required: true, description: t('system:apiCenter.docs.params.wireguardConfig') },
-          { field: 'public_endpoint', type: 'string', required: true, description: t('system:apiCenter.docs.params.fritzboxEndpoint') }
-        ],
-        bodyExample: `{
-  "config_content": "[Interface]\\nPrivateKey = ...\\n...",
-  "public_endpoint": "myfritz.dyndns.org:51820"
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/vpn/fritzbox/qr',
-        description: t('system:apiCenter.docs.vpn.fritzboxQr'),
-        requiresAuth: true,
-        response: `{ "config_base64": "..." }`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.mobile.title'),
-    icon: <Smartphone className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/mobile/token/generate',
-        description: t('system:apiCenter.docs.mobile.generateToken'),
-        requiresAuth: true,
-        params: [
-          { name: 'include_vpn', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeVpn') },
-          { name: 'device_name', type: 'string', required: false, description: t('system:apiCenter.docs.params.defaultIosDevice') },
-          { name: 'token_validity_days', type: 'integer', required: false, description: t('system:apiCenter.docs.params.tokenValidity') }
-        ],
-        response: `{
-  "token": "...",
-  "qr_code_data": "...",
-  "expires_at": "..."
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/mobile/register',
-        description: t('system:apiCenter.docs.mobile.register'),
-        body: [
-          { field: 'registration_token', type: 'string', required: true, description: t('system:apiCenter.docs.params.tokenFromQr') },
-          { field: 'device_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceName') },
-          { field: 'platform', type: 'string', required: true, description: t('system:apiCenter.docs.params.platform') }
-        ],
-        bodyExample: `{
-  "registration_token": "abc123xyz...",
-  "device_name": "iPhone 15 Pro",
-  "platform": "ios"
-}`,
-        response: `{
-  "access_token": "...",
-  "device_id": "...",
-  "user": {...}
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/mobile/devices',
-        description: t('system:apiCenter.docs.mobile.listDevices'),
-        requiresAuth: true,
-        response: `{
-  "devices": [
-    { "id": "...", "device_name": "iPhone", "platform": "ios", "is_active": true }
-  ]
-}`
-      },
-      {
-        method: 'DELETE',
-        path: '/api/mobile/devices/{device_id}',
-        description: t('system:apiCenter.docs.mobile.deleteDevice'),
-        requiresAuth: true,
-        params: [
-          { name: 'device_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceId') }
-        ]
-      },
-      {
-        method: 'POST',
-        path: '/api/mobile/devices/{device_id}/push-token',
-        description: t('system:apiCenter.docs.mobile.pushToken'),
-        requiresAuth: true,
-        params: [
-          { name: 'device_id', type: 'string', required: true, description: t('system:apiCenter.docs.params.deviceId') }
-        ],
-        body: [
-          { field: 'push_token', type: 'string', required: true, description: t('system:apiCenter.docs.params.fcmToken') }
-        ],
-        bodyExample: `{
-  "push_token": "fcm_token_string..."
-}`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.backup.title'),
-    icon: <Database className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/backup',
-        description: t('system:apiCenter.docs.backup.create'),
-        requiresAuth: true,
-        body: [
-          { field: 'includes_database', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeDatabase') },
-          { field: 'includes_files', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeFiles') },
-          { field: 'includes_config', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.includeConfig') },
-          { field: 'description', type: 'string', required: false, description: t('system:apiCenter.docs.params.backupDescription') }
-        ],
-        bodyExample: `{
-  "includes_database": true,
-  "includes_files": true,
-  "includes_config": true,
-  "description": "Weekly backup"
-}`,
-        response: `{
-  "id": 1,
-  "filename": "backup_2025-01-25.tar.gz",
-  "size_bytes": 1048576,
-  "created_at": "..."
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/backup',
-        description: t('system:apiCenter.docs.backup.list'),
-        requiresAuth: true,
-        response: `{
-  "backups": [...],
-  "total_size_bytes": 5242880,
-  "total_size_mb": 5.0
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/backup/{backup_id}',
-        description: t('system:apiCenter.docs.backup.get'),
-        requiresAuth: true,
-        params: [
-          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
-        ]
-      },
-      {
-        method: 'DELETE',
-        path: '/api/backup/{backup_id}',
-        description: t('system:apiCenter.docs.backup.delete'),
-        requiresAuth: true,
-        params: [
-          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
-        ]
-      },
-      {
-        method: 'POST',
-        path: '/api/backup/{backup_id}/restore',
-        description: t('system:apiCenter.docs.backup.restore'),
-        requiresAuth: true,
-        params: [
-          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
-        ],
-        body: [
-          { field: 'confirm', type: 'boolean', required: true, description: t('system:apiCenter.docs.params.confirmTrue') },
-          { field: 'restore_database', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreDatabase') },
-          { field: 'restore_files', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreFiles') },
-          { field: 'restore_config', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.restoreConfig') }
-        ],
-        bodyExample: `{
-  "confirm": true,
-  "restore_database": true,
-  "restore_files": true,
-  "restore_config": false
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/backup/{backup_id}/download',
-        description: t('system:apiCenter.docs.backup.download'),
-        requiresAuth: true,
-        params: [
-          { name: 'backup_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.backupId') }
-        ],
-        response: t('system:apiCenter.docs.responses.binaryBackupFile')
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.power.title'),
-    icon: <Power className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/power/status',
-        description: t('system:apiCenter.docs.power.status'),
-        requiresAuth: true,
-        response: `{
-  "current_profile": "balanced",
-  "cpu_frequency_mhz": 2400,
-  "active_demands": [],
-  "auto_scaling_enabled": true
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/power/profiles',
-        description: t('system:apiCenter.docs.power.profiles'),
-        requiresAuth: true,
-        response: `{
-  "profiles": [
-    { "name": "power-save", "governor": "powersave", "epp": "power" },
-    { "name": "balanced", "governor": "schedutil", "epp": "balance_performance" },
-    { "name": "performance", "governor": "performance", "epp": "performance" }
-  ],
-  "current_profile": "balanced"
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/power/profile',
-        description: t('system:apiCenter.docs.power.setProfile'),
-        requiresAuth: true,
-        body: [
-          { field: 'profile', type: 'string', required: true, description: t('system:apiCenter.docs.params.profileName') },
-          { field: 'reason', type: 'string', required: false, description: t('system:apiCenter.docs.params.reasonForChange') },
-          { field: 'duration_seconds', type: 'integer', required: false, description: t('system:apiCenter.docs.params.overrideDuration') }
-        ],
-        bodyExample: `{
-  "profile": "performance",
-  "reason": "Heavy workload",
-  "duration_seconds": 3600
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/power/demand/register',
-        description: t('system:apiCenter.docs.power.registerDemand'),
-        requiresAuth: true,
-        body: [
-          { field: 'source', type: 'string', required: true, description: t('system:apiCenter.docs.params.demandSource') },
-          { field: 'priority', type: 'integer', required: true, description: t('system:apiCenter.docs.params.priority') },
-          { field: 'description', type: 'string', required: false, description: t('system:apiCenter.docs.params.demandDescription') }
-        ],
-        bodyExample: `{
-  "source": "video_transcode",
-  "priority": 8,
-  "description": "Video transcoding job"
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/power/demand/unregister',
-        description: t('system:apiCenter.docs.power.unregisterDemand'),
-        requiresAuth: true,
-        body: [
-          { field: 'source', type: 'string', required: true, description: t('system:apiCenter.docs.params.demandSource') }
-        ],
-        bodyExample: `{
-  "source": "video_transcode"
-}`
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.tapo.title'),
-    icon: <Cloud className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'POST',
-        path: '/api/tapo/devices',
-        description: t('system:apiCenter.docs.tapo.add'),
-        requiresAuth: true,
-        body: [
-          { field: 'name', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoDeviceName') },
-          { field: 'device_type', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoDeviceType') },
-          { field: 'ip_address', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoIpAddress') },
-          { field: 'email', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoEmail') },
-          { field: 'password', type: 'string', required: true, description: t('system:apiCenter.docs.params.tapoPassword') },
-          { field: 'is_monitoring', type: 'boolean', required: false, description: t('system:apiCenter.docs.params.enableMonitoring') }
-        ],
-        bodyExample: `{
-  "name": "Server Power",
-  "device_type": "P115",
-  "ip_address": "192.168.1.50",
-  "email": "user@example.com",
-  "password": "tapo_password",
-  "is_monitoring": true
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/tapo/devices',
-        description: t('system:apiCenter.docs.tapo.list'),
-        requiresAuth: true,
-        response: `{
-  "devices": [
-    { "id": 1, "name": "Server Power", "device_type": "P115", "is_active": true }
-  ]
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/tapo/devices/{device_id}/current-power',
-        description: t('system:apiCenter.docs.tapo.currentPower'),
-        requiresAuth: true,
-        params: [
-          { name: 'device_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.tapoDeviceId') }
-        ],
-        response: `{
-  "current_power_w": 45.2,
-  "voltage_v": 230.1,
-  "current_a": 0.196,
-  "timestamp": "..."
-}`
-      },
-      {
-        method: 'DELETE',
-        path: '/api/tapo/devices/{device_id}',
-        description: t('system:apiCenter.docs.tapo.remove'),
-        requiresAuth: true,
-        params: [
-          { name: 'device_id', type: 'integer', required: true, description: t('system:apiCenter.docs.params.tapoDeviceId') }
-        ]
-      }
-    ]
-  },
-  {
-    title: t('system:apiCenter.docs.raid.title'),
-    icon: <HardDrive className="w-5 h-5" />,
-    endpoints: [
-      {
-        method: 'GET',
-        path: '/api/system/raid/status',
-        description: t('system:apiCenter.docs.raid.status'),
-        requiresAuth: true,
-        response: `{
-  "arrays": [
-    { "name": "md0", "level": "raid1", "state": "active", "devices": [...] }
-  ]
-}`
-      },
-      {
-        method: 'POST',
-        path: '/api/system/raid/create',
-        description: t('system:apiCenter.docs.raid.create'),
-        requiresAuth: true,
-        body: [
-          { field: 'name', type: 'string', required: true, description: t('system:apiCenter.docs.params.arrayName') },
-          { field: 'level', type: 'string', required: true, description: t('system:apiCenter.docs.params.raidLevel') },
-          { field: 'devices', type: 'array', required: true, description: t('system:apiCenter.docs.params.devicePaths') }
-        ],
-        bodyExample: `{
-  "name": "md0",
-  "level": "1",
-  "devices": ["/dev/sda", "/dev/sdb"]
-}`
-      },
-      {
-        method: 'DELETE',
-        path: '/api/system/raid/{array_name}',
-        description: t('system:apiCenter.docs.raid.delete'),
-        requiresAuth: true,
-        params: [
-          { name: 'array_name', type: 'string', required: true, description: t('system:apiCenter.docs.params.arrayNameParam') }
-        ]
-      },
-      {
-        method: 'GET',
-        path: '/api/system/smart',
-        description: t('system:apiCenter.docs.raid.smart'),
-        requiresAuth: true,
-        response: `{
-  "disks": [
-    { "device": "/dev/sda", "model": "...", "health": "PASSED", "temp": 35 }
-  ]
-}`
-      },
-      {
-        method: 'GET',
-        path: '/api/system/available-disks',
-        description: t('system:apiCenter.docs.raid.availableDisks'),
-        requiresAuth: true,
-        response: `{
-  "disks": [
-    { "path": "/dev/sda", "size_gb": 500, "model": "..." }
-  ]
-}`
-      }
-    ]
-  }
-];
-
-// ==================== Method Colors ====================
-
-const methodColors: Record<string, string> = {
-  GET: 'bg-blue-500/20 text-blue-400 border-blue-500/30',
-  POST: 'bg-emerald-500/20 text-emerald-400 border-emerald-500/30',
-  PUT: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
-  DELETE: 'bg-red-500/20 text-red-400 border-red-500/30'
+const rateLimitMap: Record<string, string> = {
+  'POST /api/auth/login': 'auth_login',
+  'POST /api/auth/register': 'auth_register',
+  'GET /api/files/list': 'file_list',
+  'POST /api/files/upload': 'file_upload',
+  'GET /api/files/download/{path}': 'file_download',
+  'DELETE /api/files/{path}': 'file_delete',
+  'GET /api/shares': 'share_list',
+  'POST /api/shares': 'share_create',
+  'GET /api/system/info': 'system_monitor',
+  'GET /api/system/telemetry': 'system_monitor',
+  'POST /api/users': 'user_create',
 };
 
 // ==================== Endpoint Card Component ====================
@@ -839,7 +63,8 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const rateLimit = endpoint.rateLimit ? rateLimits[endpoint.rateLimit] : null;
+  const rateLimitKey = rateLimitMap[`${endpoint.method} ${endpoint.path}`];
+  const rateLimit = rateLimitKey ? rateLimits[rateLimitKey] : null;
 
   const copyToClipboard = (text: string) => {
     navigator.clipboard.writeText(text);
@@ -918,25 +143,6 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
                   </div>
                 ))}
               </div>
-              {endpoint.bodyExample && (
-                <div className="mt-3">
-                  <div className="flex items-center justify-between mb-2">
-                    <h5 className="text-xs font-semibold text-slate-400">{t('system:apiCenter.example')}</h5>
-                    <button
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        copyToClipboard(endpoint.bodyExample!);
-                      }}
-                      className="text-slate-400 hover:text-cyan-400 transition-colors p-1 touch-manipulation active:scale-95"
-                    >
-                      {copied ? <Check className="w-3 h-3 text-emerald-400" /> : <Copy className="w-3 h-3" />}
-                    </button>
-                  </div>
-                  <pre className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-2 sm:p-3 text-[10px] sm:text-xs overflow-x-auto">
-                    <code className="text-violet-300">{endpoint.bodyExample}</code>
-                  </pre>
-                </div>
-              )}
             </div>
           )}
 
@@ -970,14 +176,13 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
 export default function ApiCenterPage() {
   const { t } = useTranslation(['system', 'common']);
   const [user, setUser] = useState<User | null>(null);
+  const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [rateLimits, setRateLimits] = useState<Record<string, RateLimitConfig>>({});
   const [loading, setLoading] = useState(true);
 
   const isAdmin = user?.role === 'admin';
-
-  // Memoize API sections with translations
-  const apiSections = useMemo(() => getApiSections(t), [t]);
 
   // Dynamically determine API base URL based on current location
   const getApiBaseUrl = (): string => {
@@ -1054,9 +259,32 @@ export default function ApiCenterPage() {
     }
   };
 
-  const filteredSections = selectedSection
-    ? apiSections.filter(s => s.title === selectedSection)
-    : apiSections;
+  const visibleSections = useMemo(() => {
+    if (searchQuery.trim()) {
+      const q = searchQuery.toLowerCase();
+      return apiSections
+        .map(s => ({
+          ...s,
+          endpoints: s.endpoints.filter(e =>
+            e.path.toLowerCase().includes(q) ||
+            e.description.toLowerCase().includes(q)
+          ),
+        }))
+        .filter(s => s.endpoints.length > 0);
+    }
+
+    const categorySections = selectedCategory
+      ? apiCategories.find(c => c.id === selectedCategory)?.sections ?? []
+      : apiSections;
+
+    return selectedSection
+      ? categorySections.filter(s => s.title === selectedSection)
+      : categorySections;
+  }, [searchQuery, selectedCategory, selectedSection]);
+
+  const currentCategorySections = selectedCategory
+    ? apiCategories.find(c => c.id === selectedCategory)?.sections ?? []
+    : [];
 
   return (
     <div className="space-y-4 sm:space-y-6 p-4 sm:p-6">
@@ -1125,33 +353,92 @@ export default function ApiCenterPage() {
         </div>
       </div>
 
-      {/* Section Filter */}
-      <div className="flex gap-1.5 sm:gap-2 flex-wrap overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 sm:pb-0">
-        <button
-          onClick={() => setSelectedSection(null)}
-          className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
-            !selectedSection
-              ? 'bg-cyan-600 text-white'
-              : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-          }`}
-        >
-          {t('system:apiCenter.all')}
-        </button>
-        {apiSections.map((section) => (
+      {/* Search Field */}
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400 pointer-events-none" />
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder={t('system:apiCenter.searchPlaceholder', 'Search endpoints...')}
+          className="w-full pl-10 pr-4 py-2.5 bg-slate-800/40 border border-slate-700/50 rounded-xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 focus:ring-1 focus:ring-cyan-500/30 transition-all"
+        />
+        {searchQuery && (
           <button
-            key={section.title}
-            onClick={() => setSelectedSection(section.title)}
-            className={`px-2.5 sm:px-3 py-1.5 sm:py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all flex items-center gap-1.5 sm:gap-2 touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
-              selectedSection === section.title
-                ? 'bg-cyan-600 text-white'
-                : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-            }`}
+            onClick={() => setSearchQuery('')}
+            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition-colors text-xs"
           >
-            {section.icon}
-            <span className="hidden sm:inline">{section.title}</span>
+            ✕
           </button>
-        ))}
+        )}
       </div>
+
+      {/* Category Tabs */}
+      {!searchQuery.trim() && (
+        <div className="space-y-2 sm:space-y-3">
+          <div className="flex gap-1.5 sm:gap-2 flex-wrap">
+            <button
+              onClick={() => { setSelectedCategory(null); setSelectedSection(null); }}
+              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
+                !selectedCategory
+                  ? 'bg-cyan-600 text-white'
+                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+              }`}
+            >
+              {t('system:apiCenter.all')}
+              <span className="ml-1.5 text-[10px] opacity-70">({apiSections.reduce((sum, s) => sum + s.endpoints.length, 0)})</span>
+            </button>
+            {apiCategories.map((cat) => {
+              const endpointCount = cat.sections.reduce((sum, s) => sum + s.endpoints.length, 0);
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => { setSelectedCategory(cat.id); setSelectedSection(null); }}
+                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
+                    selectedCategory === cat.id
+                      ? 'bg-cyan-600 text-white'
+                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  {cat.label}
+                  <span className="ml-1.5 text-[10px] opacity-70">({endpointCount})</span>
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Section Sub-Filter (only when a category is selected) */}
+          {selectedCategory && currentCategorySections.length > 0 && (
+            <div className="flex gap-1.5 sm:gap-2 flex-wrap pl-2 border-l-2 border-cyan-500/30">
+              <button
+                onClick={() => setSelectedSection(null)}
+                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all touch-manipulation active:scale-95 min-h-[32px] whitespace-nowrap ${
+                  !selectedSection
+                    ? 'bg-violet-600 text-white'
+                    : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                }`}
+              >
+                {t('system:apiCenter.all')}
+              </button>
+              {currentCategorySections.map((section) => (
+                <button
+                  key={section.title}
+                  onClick={() => setSelectedSection(section.title)}
+                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 min-h-[32px] whitespace-nowrap ${
+                    selectedSection === section.title
+                      ? 'bg-violet-600 text-white'
+                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                  }`}
+                >
+                  {section.icon}
+                  {section.title}
+                  <span className="text-[10px] opacity-70">({section.endpoints.length})</span>
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Loading State */}
       {loading && (
@@ -1159,7 +446,7 @@ export default function ApiCenterPage() {
       )}
 
       {/* API Sections */}
-      {!loading && filteredSections.map((section) => (
+      {!loading && visibleSections.map((section) => (
         <div key={section.title}>
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="p-1.5 sm:p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
