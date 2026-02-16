@@ -375,66 +375,75 @@ export default function ApiCenterPage() {
 
       {/* Category Tabs */}
       {!searchQuery.trim() && (
-        <div className="space-y-2 sm:space-y-3">
-          <div className="flex gap-1.5 sm:gap-2 flex-wrap">
-            <button
-              onClick={() => { setSelectedCategory(null); setSelectedSection(null); }}
-              className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
-                !selectedCategory
-                  ? 'bg-cyan-600 text-white'
-                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-              }`}
-            >
-              {t('system:apiCenter.all')}
-              <span className="ml-1.5 text-[10px] opacity-70">({apiSections.reduce((sum, s) => sum + s.endpoints.length, 0)})</span>
-            </button>
-            {apiCategories.map((cat) => {
-              const endpointCount = cat.sections.reduce((sum, s) => sum + s.endpoints.length, 0);
-              return (
-                <button
-                  key={cat.id}
-                  onClick={() => { setSelectedCategory(cat.id); setSelectedSection(null); }}
-                  className={`px-3 py-1.5 rounded-lg text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 min-h-[36px] sm:min-h-0 whitespace-nowrap ${
-                    selectedCategory === cat.id
-                      ? 'bg-cyan-600 text-white'
-                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-                  }`}
-                >
-                  {cat.label}
-                  <span className="ml-1.5 text-[10px] opacity-70">({endpointCount})</span>
-                </button>
-              );
-            })}
-          </div>
-
-          {/* Section Sub-Filter (only when a category is selected) */}
-          {selectedCategory && currentCategorySections.length > 0 && (
-            <div className="flex gap-1.5 sm:gap-2 flex-wrap pl-2 border-l-2 border-cyan-500/30">
+        <div className="space-y-3">
+          {/* Category Pills */}
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+            <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
               <button
-                onClick={() => setSelectedSection(null)}
-                className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all touch-manipulation active:scale-95 min-h-[32px] whitespace-nowrap ${
-                  !selectedSection
-                    ? 'bg-violet-600 text-white'
-                    : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
+                onClick={() => { setSelectedCategory(null); setSelectedSection(null); }}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                  !selectedCategory
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                    : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
                 }`}
               >
-                {t('system:apiCenter.all')}
+                <span>{t('system:apiCenter.all')}</span>
+                <span className="text-[10px] opacity-70">({apiSections.reduce((sum, s) => sum + s.endpoints.length, 0)})</span>
               </button>
-              {currentCategorySections.map((section) => (
-                <button
-                  key={section.title}
-                  onClick={() => setSelectedSection(section.title)}
-                  className={`px-2.5 py-1 rounded-lg text-xs font-medium transition-all flex items-center gap-1.5 touch-manipulation active:scale-95 min-h-[32px] whitespace-nowrap ${
-                    selectedSection === section.title
-                      ? 'bg-violet-600 text-white'
-                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-700/50 hover:text-white'
-                  }`}
-                >
-                  {section.icon}
-                  {section.title}
-                  <span className="text-[10px] opacity-70">({section.endpoints.length})</span>
-                </button>
-              ))}
+              {apiCategories.map((cat) => {
+                const endpointCount = cat.sections.reduce((sum, s) => sum + s.endpoints.length, 0);
+                return (
+                  <button
+                    key={cat.id}
+                    onClick={() => { setSelectedCategory(cat.id); setSelectedSection(null); }}
+                    className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                      selectedCategory === cat.id
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                        : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+                    }`}
+                  >
+                    <span>{cat.label}</span>
+                    <span className="text-[10px] opacity-70">({endpointCount})</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Sub-Tabs (only for active category) */}
+          {selectedCategory && currentCategorySections.length > 0 && (
+            <div className="relative">
+              <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+                <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+                  <button
+                    onClick={() => setSelectedSection(null)}
+                    className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                      !selectedSection
+                        ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                        : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                    }`}
+                  >
+                    <span>{t('system:apiCenter.all')}</span>
+                  </button>
+                  {currentCategorySections.map((section) => (
+                    <button
+                      key={section.title}
+                      onClick={() => setSelectedSection(section.title)}
+                      className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                        selectedSection === section.title
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                          : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      {section.icon}
+                      <span>{section.title}</span>
+                      <span className="text-[10px] opacity-70">({section.endpoints.length})</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+              {/* Fade gradient right - mobile only */}
+              <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
             </div>
           )}
         </div>

@@ -215,8 +215,8 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-4 sm:mb-6 -mx-4 sm:mx-0 px-4 sm:px-0">
-        <div className="flex gap-1 sm:gap-2 overflow-x-auto border-b border-slate-800 scrollbar-hide">
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+        <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
           {[
             { id: 'profile', label: t('tabs.profile'), icon: User },
             { id: 'security', label: t('tabs.security'), icon: Lock },
@@ -226,14 +226,14 @@ export default function SettingsPage() {
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}
-              className={`flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2.5 sm:py-3 text-sm sm:text-base font-medium transition-colors whitespace-nowrap border-b-2 touch-manipulation active:scale-95 ${
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
                 activeTab === tab.id
-                  ? 'text-sky-400 border-sky-500'
-                  : 'text-slate-100-secondary border-transparent hover:text-slate-100'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
               }`}
             >
-              <tab.icon className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
-              <span className="text-xs sm:text-sm">{tab.label}</span>
+              <tab.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+              <span>{tab.label}</span>
             </button>
           ))}
         </div>
