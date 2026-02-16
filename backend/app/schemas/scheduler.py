@@ -228,4 +228,11 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "default_interval": 86400,  # 24 hours
         "can_run_manually": True,
     },
+    "cloud_sync": {
+        "display_name": "Cloud Sync",
+        "description": "Synchronizes files from connected cloud storage providers",
+        "config_key": None,
+        "default_interval": 3600,  # 1 hour
+        "can_run_manually": True,
+    },
 }

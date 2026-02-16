@@ -17,7 +17,7 @@ class Settings(BaseSettings):
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
     api_prefix: str = "/api"
     host: str = "0.0.0.0"
-    port: int = 3001
+    port: int = 8000
 
     cors_origins: list[AnyHttpUrl] | list[str] = [
         "http://localhost:5173",
@@ -137,6 +137,16 @@ class Settings(BaseSettings):
 
     # Samba (SMB/CIFS) configuration
     samba_shares_conf_path: str = "/etc/samba/baluhost-shares.conf"
+
+    # Cloud / OAuth
+    public_url: str | None = None  # e.g. "http://baluhost.local"
+
+    # Cloud import configuration
+    cloud_import_enabled: bool = True
+    google_client_id: str = ""
+    google_client_secret: str = ""
+    microsoft_client_id: str = ""
+    microsoft_client_secret: str = ""
 
     # Database configuration
     database_url: str | None = None

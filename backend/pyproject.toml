@@ -55,6 +55,9 @@ dev = [
 scheduler = [
   "apscheduler>=3.10.0,<4.0.0"
 ]
+cloud = [
+  "pyicloud>=1.0.0"
+]
 
 [project.scripts]
 baluhost-backend = "app.main:run"

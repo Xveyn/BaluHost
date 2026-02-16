@@ -41,6 +41,7 @@ SCHEDULER_POWER_LEVELS: dict[str, str] = {
     "notification_check": "idle",
     "upload_cleanup": "low",
     "auto_update": "low",
+    "cloud_sync": "medium",
 }
 
 # How often to poll for requested executions (seconds)
@@ -344,6 +345,14 @@ class SchedulerWorker:
             # Auto-update check is on-demand only, not periodic
             return {"checked": True}
 
+        elif name == "cloud_sync":
+            from app.services.cloud.scheduler import CloudSyncScheduler
+            db = SessionLocal()
+            try:
+                return CloudSyncScheduler.run_sync(db)
+            finally:
+                db.close()
+
         return None
 
     # ─── APScheduler Job Callbacks ────────────────────────────────
@@ -463,6 +472,8 @@ class SchedulerWorker:
             return True
         elif name == "auto_update":
             return getattr(settings, "auto_update_check_enabled", True)
+        elif name == "cloud_sync":
+            return getattr(settings, "cloud_import_enabled", True)
 
         return True
 
@@ -495,6 +506,8 @@ class SchedulerWorker:
             return 86400
         elif name == "auto_update":
             return 86400
+        elif name == "cloud_sync":
+            return 3600
 
         return info.get("default_interval", 3600)
 

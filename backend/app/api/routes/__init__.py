@@ -5,7 +5,7 @@ from app.api.routes import (
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
     vcl, server_profiles, vpn_profiles, metrics, tapo, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
-    notifications, updates, chunked_upload, webdav, samba,
+    notifications, updates, chunked_upload, webdav, samba, cloud,
 )
 
 api_router = APIRouter()
@@ -45,5 +45,6 @@ api_router.include_router(notifications.router, tags=["notifications"])
 api_router.include_router(updates.router, tags=["updates"])
 api_router.include_router(webdav.router, tags=["webdav"])
 api_router.include_router(samba.router, tags=["samba"])
+api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
 
 __all__ = ["api_router"]

@@ -63,6 +63,7 @@ from app.models.update_history import (
 )
 from app.models.energy_price_config import EnergyPriceConfig
 from app.models.ssd_cache import SsdCacheConfig
+from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 
 __all__ = [
     "Base",
@@ -123,4 +124,7 @@ __all__ = [
     "UpdateChannel",
     "EnergyPriceConfig",
     "SsdCacheConfig",
+    "CloudOAuthConfig",
+    "CloudConnection",
+    "CloudImportJob",
 ]
