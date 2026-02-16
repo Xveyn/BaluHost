@@ -6,7 +6,7 @@ import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
-import { Plug } from 'lucide-react';
+import { Plug, CloudDownload } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { UploadProgressBar } from './UploadProgressBar';
 
@@ -202,6 +202,12 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
       label: t('navigation.apiCenter'),
       description: t('navigation.apiCenterDesc'),
       icon: navIcon.docs
+    },
+    {
+      path: '/cloud-import',
+      label: t('navigation.cloudImport'),
+      description: t('navigation.cloudImportDesc'),
+      icon: <CloudDownload className="h-5 w-5" />
     },
     // Admin items
     {

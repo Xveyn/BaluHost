@@ -101,6 +101,8 @@
     "backupManagementDesc": "Backup & Restore",
     "vpnManagement": "VPN",
     "vpnManagementDesc": "WireGuard Config",
+    "cloudImport": "Cloud Import",
+    "cloudImportDesc": "Google Drive, OneDrive, iCloud",
     "systemControl": "System Control",
     "systemControlDesc": "Power, Fans, RAID, Backup, VPN",
     "sections": {

@@ -42,6 +42,7 @@ const SystemControlPage = lazyWithRetry(() => import('./pages/SystemControlPage'
 const PluginsPage = lazyWithRetry(() => import('./pages/PluginsPage'));
 const NotificationPreferencesPage = lazyWithRetry(() => import('./pages/NotificationPreferencesPage'));
 const UpdatePage = lazyWithRetry(() => import('./pages/UpdatePage'));
+const CloudImportPage = lazyWithRetry(() => import('./pages/CloudImportPage'));
 
 function LoadingFallback() {
   return (
@@ -522,6 +523,18 @@ function App() {
               </Layout>
             ) : (
               <Navigate to="/" />
+            )
+          }
+        />
+        <Route
+          path="/cloud-import"
+          element={
+            user ? (
+              <Layout user={user} onLogout={handleLogout}>
+                <CloudImportPage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
             )
           }
         />
