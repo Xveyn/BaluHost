@@ -20,11 +20,11 @@ interface Tab {
 }
 
 const tabs: Tab[] = [
-  { id: 'overview', label: 'tabs.overview', icon: <Clock className="h-4 w-4" /> },
-  { id: 'timeline', label: 'tabs.timeline', icon: <BarChart3 className="h-4 w-4" /> },
-  { id: 'sync', label: 'tabs.syncSchedules', icon: <Calendar className="h-4 w-4" /> },
-  { id: 'maintenance', label: 'tabs.maintenance', icon: <Wrench className="h-4 w-4" /> },
-  { id: 'history', label: 'tabs.history', icon: <History className="h-4 w-4" /> },
+  { id: 'overview', label: 'tabs.overview', icon: <Clock className="h-5 w-5" /> },
+  { id: 'timeline', label: 'tabs.timeline', icon: <BarChart3 className="h-5 w-5" /> },
+  { id: 'sync', label: 'tabs.syncSchedules', icon: <Calendar className="h-5 w-5" /> },
+  { id: 'maintenance', label: 'tabs.maintenance', icon: <Wrench className="h-5 w-5" /> },
+  { id: 'history', label: 'tabs.history', icon: <History className="h-5 w-5" /> },
 ];
 
 export default function SchedulerDashboard() {
@@ -168,23 +168,28 @@ export default function SchedulerDashboard() {
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-slate-800">
-        <nav className="flex gap-1 -mb-px overflow-x-auto" aria-label="Tabs">
-          {tabs.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`inline-flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
-                activeTab === tab.id
-                  ? 'border-sky-500 text-sky-400'
-                  : 'border-transparent text-slate-400 hover:text-slate-300 hover:border-slate-700'
-              }`}
-            >
-              {tab.icon}
-              {t(tab.label)}
-            </button>
-          ))}
-        </nav>
+      <div className="relative">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap" role="tablist" aria-label="Tabs">
+            {tabs.map((tab) => (
+              <button
+                key={tab.id}
+                role="tab"
+                aria-selected={activeTab === tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                  activeTab === tab.id
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                    : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                }`}
+              >
+                {tab.icon}
+                {t(tab.label)}
+              </button>
+            ))}
+          </div>
+        </div>
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
       </div>
 
       {/* Tab content */}
