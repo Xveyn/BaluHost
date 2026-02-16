@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
+import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
 import { Plug, CloudDownload } from 'lucide-react';
@@ -290,6 +291,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               <div>
                 <p className="text-lg font-semibold tracking-wide">BalùHost</p>
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}</p>
+                <DeveloperBadge />
               </div>
             </div>
           </div>
@@ -363,6 +365,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               <div>
                 <p className="text-base font-semibold tracking-wide">BalùHost</p>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}</p>
+                <DeveloperBadge />
               </div>
             </div>
             <button

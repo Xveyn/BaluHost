@@ -3,10 +3,38 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import fs from 'fs'
 import path from 'path'
+import { execSync } from 'child_process'
+
+// Get git branch name at build time
+function getGitBranch(): string {
+  try {
+    return execSync('git branch --show-current', { encoding: 'utf-8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+// Get git commit hash at build time
+function getGitCommit(): string {
+  try {
+    return execSync('git rev-parse --short HEAD', { encoding: 'utf-8' }).trim();
+  } catch {
+    return 'unknown';
+  }
+}
+
+const gitBranch = getGitBranch();
+const gitCommit = getGitCommit();
+const isDevelopmentBranch = gitBranch === 'development' || gitBranch === 'develop';
 
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
+  define: {
+    '__BUILD_TYPE__': JSON.stringify(isDevelopmentBranch ? 'dev' : 'release'),
+    '__GIT_BRANCH__': JSON.stringify(gitBranch),
+    '__GIT_COMMIT__': JSON.stringify(gitCommit),
+  },
   test: {
     environment: 'jsdom',
     globals: true,

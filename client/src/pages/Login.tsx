@@ -4,6 +4,7 @@ import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
+import { DeveloperBadge } from '../components/ui/DeveloperBadge';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -131,6 +132,9 @@ export default function Login({ onLogin }: LoginProps) {
             </div>
             <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">{t('title')}</h1>
             <p className="mt-2 text-sm text-slate-100-tertiary">{t('subtitle')}</p>
+            
+            {/* Developer Build Badge */}
+            <DeveloperBadge size="md" className="mt-3" />
             
             {/* Connection mode indicator */}
             {connectionMode !== 'checking' && (
