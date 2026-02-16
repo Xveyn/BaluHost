@@ -104,7 +104,7 @@
     "cloudImport": "Cloud Import",
     "cloudImportDesc": "Google Drive, OneDrive, iCloud",
     "systemControl": "System Control",
-    "systemControlDesc": "Power, Fans, RAID, Backup, VPN",
+    "systemControlDesc": "Hardware, Storage, Network & System",
     "sections": {
       "main": "Main Menu",
       "monitoring": "Monitoring",
@@ -158,6 +158,12 @@
   "off": "Off",
   "notAvailable": "N/A",
   "systemControl": {
+    "categories": {
+      "hardware": "Hardware",
+      "storage": "Storage",
+      "network": "Network",
+      "system": "System"
+    },
     "tabs": {
       "energy": "Energy",
       "fan": "Fans",
