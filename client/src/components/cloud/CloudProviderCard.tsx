@@ -32,10 +32,10 @@ export function CloudProviderCard({ connection, selected, onSelect, onDelete }: 
 
   return (
     <div
-      className={`group relative flex items-center gap-3 rounded-xl border p-4 transition-all cursor-pointer ${
+      className={`group relative flex items-center gap-3 rounded-2xl border p-4 transition-all cursor-pointer backdrop-blur-xl ${
         selected
-          ? 'border-sky-500/50 bg-sky-500/5 ring-1 ring-sky-500/30'
-          : 'border-slate-700/50 bg-slate-800/40 hover:border-slate-600/50 hover:bg-slate-800/60'
+          ? 'border-sky-500/60 bg-sky-500/5 shadow-[0_14px_44px_rgba(56,189,248,0.15)]'
+          : 'border-slate-800/60 bg-slate-900/55 shadow-[0_20px_60px_rgba(2,6,23,0.55)] hover:border-slate-700/60 hover:bg-slate-900/80'
       }`}
       onClick={onSelect}
     >

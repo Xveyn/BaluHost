@@ -48,7 +48,7 @@ export function CloudFileBrowser({ connectionId, selectedPaths, onTogglePath }: 
   const breadcrumbs = currentPath.split('/').filter(Boolean);
 
   return (
-    <div className="flex flex-col rounded-xl border border-slate-700/50 bg-slate-800/30">
+    <div className="flex flex-col rounded-2xl border border-slate-800/60 bg-slate-900/55 backdrop-blur-xl shadow-[0_20px_60px_rgba(2,6,23,0.55)]">
       {/* Breadcrumb bar */}
       <div className="flex items-center gap-1 border-b border-slate-700/30 px-3 py-2 text-sm">
         {currentPath !== '/' && (

@@ -168,7 +168,7 @@ export default function CloudImportPage() {
             Connections
           </h2>
           {connections.length === 0 ? (
-            <div className="rounded-xl border border-dashed border-slate-700/50 py-12 text-center">
+            <div className="rounded-2xl border border-dashed border-slate-600/50 bg-slate-800/30 py-12 text-center">
               <Cloud className="mx-auto mb-3 h-8 w-8 text-slate-600" />
               <p className="text-sm text-slate-500">No cloud connections yet</p>
               <button
@@ -219,8 +219,8 @@ export default function CloudImportPage() {
               />
             </>
           ) : (
-            <div className="flex h-64 items-center justify-center rounded-xl border border-dashed border-slate-700/50">
-              <p className="text-sm text-slate-600">
+            <div className="flex h-64 items-center justify-center rounded-2xl border border-dashed border-slate-600/50 bg-slate-800/30">
+              <p className="text-sm text-slate-400">
                 {connections.length > 0
                   ? 'Select a connection to browse files'
                   : 'Add a cloud connection to get started'}
@@ -236,7 +236,7 @@ export default function CloudImportPage() {
           Import Jobs
         </h2>
         {jobs.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-slate-700/50 py-8 text-center">
+          <div className="rounded-2xl border border-dashed border-slate-600/50 bg-slate-800/30 py-8 text-center">
             <Download className="mx-auto mb-2 h-6 w-6 text-slate-600" />
             <p className="text-sm text-slate-500">No import jobs yet</p>
           </div>
@@ -251,7 +251,7 @@ export default function CloudImportPage() {
               return (
                 <div
                   key={job.id}
-                  className="flex items-center gap-4 rounded-xl border border-slate-700/50 bg-slate-800/30 p-4"
+                  className="flex items-center gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/55 backdrop-blur-xl shadow-[0_20px_60px_rgba(2,6,23,0.55)] p-4"
                 >
                   {/* Status badge */}
                   <div className={`flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium ${cfg.color}`}>
