@@ -290,7 +290,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               </div>
               <div>
                 <p className="text-lg font-semibold tracking-wide">BalùHost</p>
-                <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}</p>
+                <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
             </div>
@@ -364,7 +364,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               </div>
               <div>
                 <p className="text-base font-semibold tracking-wide">BalùHost</p>
-                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}</p>
+                <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
             </div>

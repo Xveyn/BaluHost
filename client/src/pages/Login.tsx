@@ -207,7 +207,7 @@ export default function Login({ onLogin }: LoginProps) {
           )}
 
           <div className="mt-4 sm:mt-6 text-center text-[10px] sm:text-[11px] uppercase tracking-[0.3em] sm:tracking-[0.35em] text-slate-100-tertiary">
-            {t('firmware')} v{versionLoading ? '...' : (version || '?.?.?')} - {t('systemStatus')} <span className="text-sky-400">{t('optimal')}</span>
+            {t('firmware')} v{versionLoading ? '...' : (version || '?.?.?')}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>} - {t('systemStatus')} <span className="text-sky-400">{t('optimal')}</span>
           </div>
         </div>
       </div>
