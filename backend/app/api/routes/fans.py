@@ -4,10 +4,11 @@ Fan control API endpoints.
 import logging
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_current_admin, get_db
+from app.core.rate_limiter import user_limiter, get_limit
 from app.core.config import get_settings
 from app.models.user import User
 from app.schemas.fans import (
@@ -47,7 +48,9 @@ def get_fan_service() -> FanControlService:
 
 
 @router.get("/status", response_model=FanStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_fan_status(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -76,7 +79,9 @@ async def get_fan_status(
 
 
 @router.get("/list", response_model=list[FanInfo])
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_fans(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -96,8 +101,10 @@ async def list_fans(
 
 
 @router.post("/mode", response_model=SetFanModeResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def set_fan_mode(
-    request: SetFanModeRequest,
+    request: Request, response: Response,
+    body: SetFanModeRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -108,22 +115,22 @@ async def set_fan_mode(
     """
     try:
         # Don't allow setting emergency mode directly
-        if request.mode == FanMode.EMERGENCY:
+        if body.mode == FanMode.EMERGENCY:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot manually set emergency mode (triggered automatically)"
             )
 
-        success = await service.set_fan_mode(request.fan_id, request.mode)
+        success = await service.set_fan_mode(body.fan_id, body.mode)
 
         if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
         return SetFanModeResponse(
             success=True,
-            fan_id=request.fan_id,
-            mode=request.mode,
-            message=f"Fan mode set to {request.mode.value}",
+            fan_id=body.fan_id,
+            mode=body.mode,
+            message=f"Fan mode set to {body.mode.value}",
         )
 
     except HTTPException:
@@ -134,8 +141,10 @@ async def set_fan_mode(
 
 
 @router.post("/pwm", response_model=SetFanPWMResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def set_fan_pwm(
-    request: SetFanPWMRequest,
+    request: Request, response: Response,
+    body: SetFanPWMRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -146,7 +155,7 @@ async def set_fan_pwm(
     Requires admin role.
     """
     try:
-        success, rpm = await service.set_fan_pwm(request.fan_id, request.pwm_percent)
+        success, rpm = await service.set_fan_pwm(body.fan_id, body.pwm_percent)
 
         if not success:
             raise HTTPException(
@@ -156,10 +165,10 @@ async def set_fan_pwm(
 
         return SetFanPWMResponse(
             success=True,
-            fan_id=request.fan_id,
-            pwm_percent=request.pwm_percent,
+            fan_id=body.fan_id,
+            pwm_percent=body.pwm_percent,
             actual_rpm=rpm,
-            message=f"PWM set to {request.pwm_percent}%",
+            message=f"PWM set to {body.pwm_percent}%",
         )
 
     except HTTPException:
@@ -170,8 +179,10 @@ async def set_fan_pwm(
 
 
 @router.put("/curve", response_model=UpdateFanCurveResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_fan_curve(
-    request: UpdateFanCurveRequest,
+    request: Request, response: Response,
+    body: UpdateFanCurveRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -181,16 +192,16 @@ async def update_fan_curve(
     Requires admin role.
     """
     try:
-        success = await service.update_fan_curve(request.fan_id, request.curve_points)
+        success = await service.update_fan_curve(body.fan_id, body.curve_points)
 
         if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
         return UpdateFanCurveResponse(
             success=True,
-            fan_id=request.fan_id,
-            curve_points=request.curve_points,
-            message=f"Curve updated with {len(request.curve_points)} points",
+            fan_id=body.fan_id,
+            curve_points=body.curve_points,
+            message=f"Curve updated with {len(body.curve_points)} points",
         )
 
     except HTTPException:
@@ -201,7 +212,9 @@ async def update_fan_curve(
 
 
 @router.get("/history", response_model=FanHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_fan_history(
+    request: Request, response: Response,
     fan_id: Optional[str] = Query(None, description="Filter by fan ID"),
     limit: int = Query(100, ge=1, le=1000, description="Maximum samples to return"),
     offset: int = Query(0, ge=0, description="Offset for pagination"),
@@ -240,8 +253,10 @@ async def get_fan_history(
 
 
 @router.post("/backend", response_model=SwitchBackendResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def switch_backend(
-    request: SwitchBackendRequest,
+    request: Request, response: Response,
+    body: SwitchBackendRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -251,7 +266,7 @@ async def switch_backend(
     Requires admin role.
     """
     try:
-        success, is_using_linux = await service.switch_backend(request.use_linux_backend)
+        success, is_using_linux = await service.switch_backend(body.use_linux_backend)
 
         message = ""
         if success:
@@ -260,7 +275,7 @@ async def switch_backend(
             else:
                 message = "Switched to dev simulation backend"
         else:
-            if request.use_linux_backend:
+            if body.use_linux_backend:
                 message = "Linux backend not available, staying on current backend"
             else:
                 message = "Failed to switch backend"
@@ -278,7 +293,9 @@ async def switch_backend(
 
 
 @router.get("/permissions", response_model=PermissionStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_permission_status(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -326,7 +343,9 @@ async def get_permission_status(
 
 
 @router.get("/presets", response_model=PresetsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_presets(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """
@@ -359,8 +378,10 @@ async def get_presets(
 
 
 @router.post("/preset", response_model=ApplyPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def apply_preset(
-    request: ApplyPresetRequest,
+    request: Request, response: Response,
+    body: ApplyPresetRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -371,23 +392,23 @@ async def apply_preset(
     """
     try:
         # Can't apply "custom" preset
-        if request.preset == CurvePreset.CUSTOM:
+        if body.preset == CurvePreset.CUSTOM:
             raise HTTPException(
                 status_code=400,
                 detail="Cannot apply 'custom' preset - use curve update instead"
             )
 
-        success, curve_points = await service.apply_preset(request.fan_id, request.preset.value)
+        success, curve_points = await service.apply_preset(body.fan_id, body.preset.value)
 
         if not success:
-            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
         return ApplyPresetResponse(
             success=True,
-            fan_id=request.fan_id,
-            preset=request.preset.value,
+            fan_id=body.fan_id,
+            preset=body.preset.value,
             curve_points=curve_points,
-            message=f"Applied {request.preset.value} preset",
+            message=f"Applied {body.preset.value} preset",
         )
 
     except HTTPException:
@@ -398,8 +419,10 @@ async def apply_preset(
 
 
 @router.patch("/config", response_model=UpdateFanConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_fan_config(
-    request: UpdateFanConfigRequest,
+    request: Request, response: Response,
+    body: UpdateFanConfigRequest,
     current_user: User = Depends(get_current_admin),  # Admin only
     service: FanControlService = Depends(get_fan_service),
 ):
@@ -410,15 +433,15 @@ async def update_fan_config(
     """
     try:
         result = await service.update_fan_config(
-            fan_id=request.fan_id,
-            hysteresis_celsius=request.hysteresis_celsius,
-            min_pwm_percent=request.min_pwm_percent,
-            max_pwm_percent=request.max_pwm_percent,
-            emergency_temp_celsius=request.emergency_temp_celsius,
+            fan_id=body.fan_id,
+            hysteresis_celsius=body.hysteresis_celsius,
+            min_pwm_percent=body.min_pwm_percent,
+            max_pwm_percent=body.max_pwm_percent,
+            emergency_temp_celsius=body.emergency_temp_celsius,
         )
 
         if result is None:
-            raise HTTPException(status_code=404, detail=f"Fan {request.fan_id} not found")
+            raise HTTPException(status_code=404, detail=f"Fan {body.fan_id} not found")
 
         return UpdateFanConfigResponse(
             success=True,

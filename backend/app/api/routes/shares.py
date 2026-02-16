@@ -120,8 +120,11 @@ async def list_share_links(
 
 
 @router.get("/links/{link_id}", response_model=ShareLinkResponse)
+@user_limiter.limit(get_limit("share_list"))
 async def get_share_link(
     link_id: int,
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -155,10 +158,12 @@ async def get_share_link(
 
 
 @router.patch("/links/{link_id}", response_model=ShareLinkResponse)
+@user_limiter.limit(get_limit("share_create"))
 async def update_share_link(
     link_id: int,
     data: ShareLinkUpdate,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -205,9 +210,11 @@ async def update_share_link(
 
 
 @router.delete("/links/{link_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("share_create"))
 async def delete_share_link(
     link_id: int,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -279,8 +286,11 @@ async def access_share_link(
 
 
 @router.get("/public/{token}/info")
+@limiter.limit(get_limit("public_share"))
 async def get_share_link_info(
     token: str,
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db)
 ):
     """Get basic info about a share link (without authentication)."""
@@ -309,9 +319,11 @@ async def get_share_link_info(
 # ===========================
 
 @router.post("/user-shares", response_model=FileShareResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("share_create"))
 async def create_file_share(
     data: FileShareCreate,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -364,7 +376,10 @@ async def create_file_share(
 
 
 @router.get("/user-shares", response_model=List[FileShareResponse])
+@user_limiter.limit(get_limit("share_list"))
 async def list_file_shares(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -401,8 +416,11 @@ async def list_file_shares(
 
 
 @router.get("/user-shares/file/{file_id}", response_model=List[FileShareResponse])
+@user_limiter.limit(get_limit("share_list"))
 async def list_file_shares_for_file(
     file_id: int,
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -439,7 +457,10 @@ async def list_file_shares_for_file(
 
 
 @router.get("/shared-with-me", response_model=List[SharedWithMeResponse])
+@user_limiter.limit(get_limit("share_list"))
 async def list_files_shared_with_me(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -474,10 +495,12 @@ async def list_files_shared_with_me(
 
 
 @router.patch("/user-shares/{share_id}", response_model=FileShareResponse)
+@user_limiter.limit(get_limit("share_create"))
 async def update_file_share(
     share_id: int,
     data: FileShareUpdate,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -526,9 +549,11 @@ async def update_file_share(
 
 
 @router.delete("/user-shares/{share_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("share_create"))
 async def delete_file_share(
     share_id: int,
     request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):
@@ -559,7 +584,10 @@ async def delete_file_share(
 
 
 @router.get("/statistics", response_model=ShareStatistics)
+@user_limiter.limit(get_limit("share_list"))
 async def get_share_statistics(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db)
 ):

@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
-from app.core.rate_limiter import limiter, get_limit
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
 from app.schemas.user import UserPublic, UserCreate
 from app.services import auth as auth_service
@@ -110,7 +110,8 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
 
 
 @router.get("/me", response_model=UserPublic)
-async def read_current_user(current_user: UserPublic = Depends(deps.get_current_user)) -> UserPublic:
+@user_limiter.limit(get_limit("user_operations"))
+async def read_current_user(request: Request, response: Response, current_user: UserPublic = Depends(deps.get_current_user)) -> UserPublic:
     return current_user
 
 
@@ -168,7 +169,8 @@ async def change_password(
 
 
 @router.post("/logout")
-async def logout() -> dict[str, str]:
+@limiter.limit(get_limit("user_operations"))
+async def logout(request: Request, response: Response) -> dict[str, str]:
     return {"message": "Logged out"}
 
 

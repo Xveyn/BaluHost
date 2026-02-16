@@ -11,12 +11,11 @@ Protocol
 3. ``POST /{id}/complete`` — finalise (move temp → target, metadata, audit)
 4. ``DELETE /{id}``       — abort and clean up
 """
-from __future__ import annotations
 
 import logging
 from pathlib import PurePosixPath
 
-from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -37,6 +36,7 @@ from app.services.files.operations import (
 )
 from app.services.permissions import PermissionDeniedError, ensure_owner_or_privileged
 from app.services.upload_progress import get_upload_progress_manager
+from app.core.rate_limiter import user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +95,10 @@ def _validate_target(target_path: str, user: UserPublic, db: Session) -> str:
 # ---------------------------------------------------------------------------
 
 @router.post("/upload/chunked/init", response_model=ChunkedInitResponse)
+@user_limiter.limit(get_limit("file_chunked"))
 async def chunked_init(
+    request: Request,
+    response: Response,
     payload: ChunkedInitRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -148,9 +151,11 @@ async def chunked_init(
 
 
 @router.post("/upload/chunked/{upload_id}/chunk", response_model=ChunkedChunkResponse)
+@user_limiter.limit(get_limit("file_chunked"))
 async def chunked_chunk(
     upload_id: str,
     request: Request,
+    response: Response,
     chunk_index: int = Query(...),
     user: UserPublic = Depends(deps.get_current_user),
 ) -> ChunkedChunkResponse:
@@ -184,7 +189,10 @@ async def chunked_chunk(
 
 
 @router.post("/upload/chunked/{upload_id}/complete", response_model=ChunkedCompleteResponse)
+@user_limiter.limit(get_limit("file_chunked"))
 async def chunked_complete(
+    request: Request,
+    response: Response,
     upload_id: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -309,7 +317,10 @@ async def chunked_complete(
 
 
 @router.delete("/upload/chunked/{upload_id}")
+@user_limiter.limit(get_limit("file_chunked"))
 async def chunked_abort(
+    request: Request,
+    response: Response,
     upload_id: str,
     user: UserPublic = Depends(deps.get_current_user),
 ) -> dict:

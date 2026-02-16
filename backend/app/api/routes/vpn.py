@@ -1,10 +1,11 @@
 """API routes for VPN configuration and management."""
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limiter import user_limiter, get_limit
 from app.api.deps import get_current_user, get_current_admin
 from app.schemas.user import UserPublic
 from app.schemas.vpn import (
@@ -25,8 +26,10 @@ router = APIRouter(prefix="/vpn", tags=["vpn"])
 
 
 @router.post("/generate-config", response_model=VPNConfigResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def generate_vpn_config(
     request: Request,
+    response: Response,
     config_data: VPNClientCreate,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -75,7 +78,10 @@ async def generate_vpn_config(
 
 
 @router.get("/clients", response_model=List[VPNClientSchema])
+@user_limiter.limit(get_limit("vpn_operations"))
 async def list_vpn_clients(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):
@@ -87,7 +93,10 @@ async def list_vpn_clients(
 
 
 @router.get("/clients/{client_id}", response_model=VPNClientSchema)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def get_vpn_client(
+    request: Request,
+    response: Response,
     client_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -113,7 +122,10 @@ async def get_vpn_client(
 
 
 @router.patch("/clients/{client_id}", response_model=VPNClientSchema)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def update_vpn_client(
+    request: Request,
+    response: Response,
     client_id: int,
     update_data: VPNClientUpdate,
     db: Session = Depends(get_db),
@@ -166,7 +178,10 @@ async def update_vpn_client(
 
 
 @router.delete("/clients/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def delete_vpn_client(
+    request: Request,
+    response: Response,
     client_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -218,7 +233,10 @@ async def delete_vpn_client(
 
 
 @router.post("/clients/{client_id}/revoke", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def revoke_vpn_client(
+    request: Request,
+    response: Response,
     client_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -249,7 +267,10 @@ async def revoke_vpn_client(
 
 
 @router.get("/server-config", response_model=VPNServerConfig)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def get_server_config(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):
@@ -282,7 +303,10 @@ async def get_server_config(
 
 
 @router.post("/handshake/{client_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def update_handshake(
+    request: Request,
+    response: Response,
     client_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -310,7 +334,10 @@ async def update_handshake(
 # Fritz!Box VPN Configuration Routes
 
 @router.post("/fritzbox/upload", response_model=FritzBoxConfigResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def upload_fritzbox_config(
+    request: Request,
+    response: Response,
     config_data: FritzBoxConfigUpload,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_admin)  # Admin only!
@@ -344,7 +371,10 @@ async def upload_fritzbox_config(
 
 
 @router.get("/fritzbox/config", response_model=FritzBoxConfigSummary)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def get_fritzbox_config(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):
@@ -369,7 +399,10 @@ async def get_fritzbox_config(
 
 
 @router.delete("/fritzbox/config/{config_id}")
+@user_limiter.limit(get_limit("vpn_operations"))
 async def delete_fritzbox_config(
+    request: Request,
+    response: Response,
     config_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_admin)  # Admin only!
@@ -389,7 +422,10 @@ async def delete_fritzbox_config(
 
 
 @router.get("/fritzbox/qr")
+@user_limiter.limit(get_limit("vpn_operations"))
 async def get_fritzbox_qr_code(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):

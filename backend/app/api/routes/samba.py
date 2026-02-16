@@ -3,10 +3,11 @@
 import logging
 import socket
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.core.config import settings
 from app.core.database import get_db
 from app.models.user import User
@@ -37,7 +38,9 @@ def _get_local_ip() -> str:
 
 
 @router.get("/status", response_model=SambaStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_samba_status(
+    request: Request, response: Response,
     _admin=Depends(deps.get_current_admin),
 ):
     """Get Samba server status (admin only)."""
@@ -51,7 +54,9 @@ async def get_samba_status(
 
 
 @router.get("/users", response_model=SambaUsersResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_samba_users(
+    request: Request, response: Response,
     _admin=Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -72,7 +77,9 @@ async def get_samba_users(
 
 
 @router.post("/users/{user_id}/toggle")
+@user_limiter.limit(get_limit("admin_operations"))
 async def toggle_smb_user(
+    request: Request, response: Response,
     user_id: int,
     payload: SambaUserToggleRequest,
     _admin=Depends(deps.get_current_admin),
@@ -111,7 +118,9 @@ async def toggle_smb_user(
 
 
 @router.get("/connection-info", response_model=SambaConnectionInfo)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_samba_connection_info(
+    request: Request, response: Response,
     current_user=Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):

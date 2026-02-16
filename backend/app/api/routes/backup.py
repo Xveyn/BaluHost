@@ -1,5 +1,5 @@
 """Backup API routes."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
@@ -17,14 +17,18 @@ from app.schemas.backup import (
 )
 from app.services.backup import get_backup_service, BackupService
 from app.plugins.emit import emit_hook
+from app.core.rate_limiter import user_limiter, get_limit
 
 
 router = APIRouter()
 
 
 @router.post("/", response_model=BackupResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("backup_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Creating system backup")
 async def create_backup(
+    request: Request,
+    response: Response,
     backup_data: BackupCreate,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
@@ -79,7 +83,10 @@ async def create_backup(
 
 
 @router.get("/", response_model=BackupListResponse)
+@user_limiter.limit(get_limit("backup_operations"))
 async def list_backups(
+    request: Request,
+    response: Response,
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -101,7 +108,10 @@ async def list_backups(
 
 
 @router.get("/{backup_id}", response_model=BackupResponse)
+@user_limiter.limit(get_limit("backup_operations"))
 async def get_backup(
+    request: Request,
+    response: Response,
     backup_id: int,
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
@@ -120,7 +130,10 @@ async def get_backup(
 
 
 @router.delete("/{backup_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("backup_operations"))
 async def delete_backup(
+    request: Request,
+    response: Response,
     backup_id: int,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
@@ -143,8 +156,11 @@ async def delete_backup(
 
 
 @router.post("/{backup_id}/restore", response_model=BackupRestoreResponse)
+@user_limiter.limit(get_limit("backup_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Restoring from backup")
 async def restore_backup(
+    request: Request,
+    response: Response,
     backup_id: int,
     restore_request: BackupRestoreRequest,
     current_user: UserPublic = Depends(deps.get_current_admin),
@@ -213,7 +229,10 @@ async def restore_backup(
 
 
 @router.get("/{backup_id}/download")
+@user_limiter.limit(get_limit("backup_operations"))
 async def download_backup(
+    request: Request,
+    response: Response,
     backup_id: int,
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)

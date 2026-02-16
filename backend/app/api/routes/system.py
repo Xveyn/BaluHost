@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 import threading
 import os
 import logging
 import signal
 
 from app.api import deps
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.core.power_rating import requires_power
 from app.schemas.power import ServicePowerProperty
 from app.schemas.ssd_cache import (
@@ -49,19 +50,22 @@ router = APIRouter()
 
 
 @router.get("/mode")
-async def get_system_mode() -> dict[str, bool]:
+@limiter.limit(get_limit("system_monitor"))
+async def get_system_mode(request: Request, response: Response) -> dict[str, bool]:
     """Get system mode (dev/prod). Public endpoint for login page."""
     from app.core.config import settings
     return {"dev_mode": settings.is_dev_mode}
 
 
 @router.get("/info", response_model=SystemInfo)
-async def get_system_info(_: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_system_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
     return system_service.get_system_info()
 
 
 @router.get("/info/local", response_model=SystemInfo)
-def get_system_info_local(request: Request) -> SystemInfo:
+@limiter.limit(get_limit("system_monitor"))
+def get_system_info_local(request: Request, response: Response) -> SystemInfo:
     """Local-only unauthenticated access for trusted localhost clients.
 
     This endpoint is intended for desktop integrations running on the same
@@ -77,12 +81,14 @@ def get_system_info_local(request: Request) -> SystemInfo:
 
 
 @router.get("/storage", response_model=StorageInfo)
-async def get_storage_info(_: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
     return system_service.get_storage_info()
 
 
 @router.get("/storage/aggregated", response_model=StorageInfo)
-async def get_aggregated_storage_info(_: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_aggregated_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
     """Gibt aggregierte Speicherinformationen über alle Festplatten zurück.
     
     Berücksichtigt SMART-Daten aller Festplatten und RAID-Arrays.
@@ -92,12 +98,16 @@ async def get_aggregated_storage_info(_: UserPublic = Depends(deps.get_current_u
 
 
 @router.get("/quota", response_model=QuotaStatus)
-async def get_quota(_: UserPublic = Depends(deps.get_current_user)) -> QuotaStatus:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_quota(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> QuotaStatus:
     return system_service.get_quota_status()
 
 
 @router.get("/processes", response_model=ProcessListResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_process_list(
+    request: Request,
+    response: Response,
     limit: int = 20,
     _: UserPublic = Depends(deps.get_current_user),
 ) -> ProcessListResponse:
@@ -105,14 +115,20 @@ async def get_process_list(
 
 
 @router.get("/telemetry/history", response_model=TelemetryHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_telemetry_history(
+    request: Request,
+    response: Response,
     _: UserPublic = Depends(deps.get_current_user),
 ) -> TelemetryHistoryResponse:
     return telemetry_service.get_history()
 
 
 @router.post("/shutdown")
+@user_limiter.limit(get_limit("admin_operations"))
 async def shutdown_system(
+    request: Request,
+    response: Response,
     user: UserPublic = Depends(deps.get_current_admin),
 ) -> dict:
     """Schedule a graceful application shutdown (admin only).
@@ -164,12 +180,14 @@ async def shutdown_system(
 
 
 @router.get("/smart/status", response_model=SmartStatusResponse)
-async def get_smart_status(_: UserPublic = Depends(deps.get_current_user)) -> SmartStatusResponse:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_smart_status(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SmartStatusResponse:
     return smart_service.get_smart_status()
 
 
 @router.get("/smart/mode")
-async def get_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_smart_mode(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
     """Get current SMART data mode in Dev-Mode (mock or real)."""
     from app.core.config import settings
     if not settings.is_dev_mode:
@@ -182,7 +200,8 @@ async def get_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> dict
 
 
 @router.post("/smart/toggle-mode")
-async def toggle_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
+@user_limiter.limit(get_limit("system_monitor"))
+async def toggle_smart_mode(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> dict[str, str]:
     """Toggle between mock and real SMART data in Dev-Mode."""
     from app.core.config import settings
     if not settings.is_dev_mode:
@@ -195,12 +214,16 @@ async def toggle_smart_mode(_: UserPublic = Depends(deps.get_current_user)) -> d
 
 
 @router.get("/raid/status", response_model=RaidStatusResponse)
-async def get_raid_status(_: UserPublic = Depends(deps.get_current_user)) -> RaidStatusResponse:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_raid_status(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> RaidStatusResponse:
     return raid_service.get_status()
 
 
 @router.post("/raid/degrade", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def simulate_raid_failure(
+    request: Request,
+    response: Response,
     payload: RaidSimulationRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -211,8 +234,11 @@ async def simulate_raid_failure(
 
 
 @router.post("/raid/rebuild", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=86400, description="RAID rebuild")
 async def simulate_raid_rebuild(
+    request: Request,
+    response: Response,
     payload: RaidSimulationRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -223,8 +249,11 @@ async def simulate_raid_rebuild(
 
 
 @router.post("/raid/finalize", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Finalizing RAID rebuild")
 async def finalize_raid_rebuild(
+    request: Request,
+    response: Response,
     payload: RaidSimulationRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -235,7 +264,8 @@ async def finalize_raid_rebuild(
 
 
 @router.get("/disk-io/history", response_model=DiskIOResponse)
-async def get_disk_io_history(_: UserPublic = Depends(deps.get_current_user)) -> DiskIOResponse:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_disk_io_history(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> DiskIOResponse:
     """Get real-time disk I/O history for all physical disks."""
     history = disk_monitor.get_disk_io_history()
     from app.schemas.system import DiskIOHistory, DiskIOSample
@@ -284,7 +314,10 @@ async def get_disk_io_history(_: UserPublic = Depends(deps.get_current_user)) ->
 
 
 @router.post("/raid/options", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def configure_raid_options(
+    request: Request,
+    response: Response,
     payload: RaidOptionsRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -297,7 +330,8 @@ async def configure_raid_options(
 
 
 @router.get("/raid/available-disks", response_model=AvailableDisksResponse)
-async def get_available_disks(_: UserPublic = Depends(deps.get_current_admin)) -> AvailableDisksResponse:
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_available_disks(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_admin)) -> AvailableDisksResponse:
     """Get list of available disks for RAID or formatting."""
     try:
         return raid_service.get_available_disks()
@@ -306,8 +340,11 @@ async def get_available_disks(_: UserPublic = Depends(deps.get_current_admin)) -
 
 
 @router.post("/raid/format-disk", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Formatting disk")
 async def format_disk(
+    request: Request,
+    response: Response,
     payload: FormatDiskRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -321,8 +358,11 @@ async def format_disk(
 
 
 @router.post("/raid/create-array", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=7200, description="Creating RAID array")
 async def create_array(
+    request: Request,
+    response: Response,
     payload: CreateArrayRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -368,7 +408,10 @@ async def create_array(
 
 
 @router.post("/raid/delete-array", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_array(
+    request: Request,
+    response: Response,
     payload: DeleteArrayRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -410,7 +453,8 @@ async def delete_array(
 
 
 @router.get("/health", response_model=SystemHealthResponse)
-async def get_system_health(_: UserPublic = Depends(deps.get_current_user)) -> SystemHealthResponse:
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_system_health(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemHealthResponse:
     """Aggregated health summary combining system, SMART, RAID and disk I/O info."""
     from app.services import disk_monitor
 
@@ -448,7 +492,10 @@ class AddMockDiskRequest(BaseModel):
 
 
 @router.post("/raid/dev/add-mock-disk", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def add_mock_disk(
+    request: Request,
+    response: Response,
     payload: AddMockDiskRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -475,8 +522,11 @@ class SmartTestRequest(BaseModel):
 
 
 @router.post("/smart/test")
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=3600, description="Running SMART self-test")
 async def trigger_smart_test(
+    request: Request,
+    response: Response,
     payload: SmartTestRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> dict:
@@ -495,8 +545,11 @@ class ScrubRequest(BaseModel):
 
 
 @router.post("/raid/scrub", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.SURGE, timeout_seconds=3600, description="Running RAID scrub")
 async def trigger_raid_scrub(
+    request: Request,
+    response: Response,
     payload: ScrubRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -522,7 +575,10 @@ class ConfirmResponse(BaseModel):
 
 
 @router.post("/raid/confirm/request", response_model=ConfirmResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def request_raid_confirmation(
+    request: Request,
+    response: Response,
     payload: ConfirmRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> ConfirmResponse:
@@ -545,7 +601,10 @@ class ExecuteConfirmRequest(BaseModel):
 
 
 @router.post("/raid/confirm/execute", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def execute_raid_confirmation(
+    request: Request,
+    response: Response,
     payload: ExecuteConfirmRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -565,7 +624,10 @@ async def execute_raid_confirmation(
 # ============================================================
 
 @router.get("/raid/cache/status", response_model=list[CacheStatus])
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_all_cache_statuses(
+    request: Request,
+    response: Response,
     _: UserPublic = Depends(deps.get_current_user),
 ) -> list[CacheStatus]:
     """Get SSD cache status for all arrays."""
@@ -573,7 +635,10 @@ async def get_all_cache_statuses(
 
 
 @router.get("/raid/cache/status/{array}", response_model=CacheStatus)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_cache_status(
+    request: Request,
+    response: Response,
     array: str,
     _: UserPublic = Depends(deps.get_current_user),
 ) -> CacheStatus:
@@ -588,8 +653,11 @@ async def get_cache_status(
 
 
 @router.post("/raid/cache/attach", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Attaching SSD cache")
 async def attach_cache(
+    request: Request,
+    response: Response,
     payload: CacheAttachRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -620,8 +688,11 @@ async def attach_cache(
 
 
 @router.post("/raid/cache/detach", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=1800, description="Detaching SSD cache")
 async def detach_cache(
+    request: Request,
+    response: Response,
     payload: CacheDetachRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -652,7 +723,10 @@ async def detach_cache(
 
 
 @router.post("/raid/cache/configure", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def configure_cache(
+    request: Request,
+    response: Response,
     payload: CacheConfigureRequest,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -666,8 +740,11 @@ async def configure_cache(
 
 
 @router.post("/raid/cache/external-bitmap", response_model=RaidActionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 @requires_power(ServicePowerProperty.MEDIUM, timeout_seconds=600, description="Setting external bitmap")
 async def set_external_bitmap(
+    request: Request,
+    response: Response,
     payload: ExternalBitmapRequest,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> RaidActionResponse:
@@ -681,7 +758,10 @@ async def set_external_bitmap(
 
 
 @router.get("/audit-logging", response_model=AuditLoggingStatus)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_audit_logging_status(
+    request: Request,
+    response: Response,
     _: UserPublic = Depends(deps.get_current_admin),
 ) -> AuditLoggingStatus:
     """Get audit logging status (admin only)."""
@@ -696,7 +776,10 @@ async def get_audit_logging_status(
 
 
 @router.post("/audit-logging", response_model=AuditLoggingStatus)
+@user_limiter.limit(get_limit("admin_operations"))
 async def toggle_audit_logging(
+    request: Request,
+    response: Response,
     payload: AuditLoggingToggle,
     current_admin: UserPublic = Depends(deps.get_current_admin),
 ) -> AuditLoggingStatus:

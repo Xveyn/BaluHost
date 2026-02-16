@@ -1,6 +1,6 @@
 """API endpoints for progressive sync, scheduling, and selective sync."""
 
-from fastapi import APIRouter, Depends, HTTPException, File, UploadFile, status
+from fastapi import APIRouter, Depends, HTTPException, File, Request, Response, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app import api
@@ -9,6 +9,7 @@ from app.core.database import get_db
 from app.models.user import User
 from app.services.progressive_sync import ProgressiveSyncService
 from app.services.sync_scheduler import SyncSchedulerService
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
     RegisterDeviceRequest,
     SyncStatusResponse,
@@ -42,8 +43,11 @@ def get_sync_scheduler_service(db: Session = Depends(get_db)) -> SyncSchedulerSe
 # ============================================================================
 
 @router.post("/upload/start")
+@user_limiter.limit(get_limit("sync_operations"))
 async def start_chunked_upload(
-    request: StartChunkedUploadRequest,
+    request: Request,
+    response: Response,
+    payload: StartChunkedUploadRequest,
     device_id: str,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
@@ -52,16 +56,19 @@ async def start_chunked_upload(
     result = sync_service.start_chunked_upload(
         user_id=current_user.id,
         device_id=device_id,
-        file_path=request.file_path,
-        file_name=request.file_name,
-        total_size=request.total_size,
-        chunk_size=request.chunk_size
+        file_path=payload.file_path,
+        file_name=payload.file_name,
+        total_size=payload.total_size,
+        chunk_size=payload.chunk_size
     )
     return result
 
 
 @router.post("/upload/{upload_id}/chunk/{chunk_number}")
+@user_limiter.limit(get_limit("sync_operations"))
 async def upload_chunk(
+    request: Request,
+    response: Response,
     upload_id: str,
     chunk_number: int,
     chunk_hash: str,
@@ -86,7 +93,10 @@ async def upload_chunk(
 
 
 @router.get("/upload/{upload_id}/progress")
+@user_limiter.limit(get_limit("sync_operations"))
 async def get_upload_progress(
+    request: Request,
+    response: Response,
     upload_id: str,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
@@ -101,7 +111,10 @@ async def get_upload_progress(
 
 
 @router.post("/upload/{upload_id}/resume")
+@user_limiter.limit(get_limit("sync_operations"))
 async def resume_upload(
+    request: Request,
+    response: Response,
     upload_id: str,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
@@ -116,7 +129,10 @@ async def resume_upload(
 
 
 @router.delete("/upload/{upload_id}")
+@user_limiter.limit(get_limit("sync_operations"))
 async def cancel_upload(
+    request: Request,
+    response: Response,
     upload_id: str,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
@@ -135,16 +151,19 @@ async def cancel_upload(
 # ============================================================================
 
 @router.post("/bandwidth/limit")
+@user_limiter.limit(get_limit("sync_operations"))
 async def set_bandwidth_limit(
-    request: SetBandwidthLimitRequest,
+    request: Request,
+    response: Response,
+    payload: SetBandwidthLimitRequest,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
 ):
     """Set bandwidth limits for sync."""
     success = sync_service.set_bandwidth_limit(
         user_id=current_user.id,
-        upload_speed_limit=request.upload_speed_limit,
-        download_speed_limit=request.download_speed_limit
+        upload_speed_limit=payload.upload_speed_limit,
+        download_speed_limit=payload.download_speed_limit
     )
     
     if not success:
@@ -154,7 +173,10 @@ async def set_bandwidth_limit(
 
 
 @router.get("/bandwidth/limit")
+@user_limiter.limit(get_limit("sync_operations"))
 async def get_bandwidth_limit(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
 ):
@@ -172,27 +194,33 @@ async def get_bandwidth_limit(
 # ============================================================================
 
 @router.post("/schedule/create")
+@user_limiter.limit(get_limit("sync_operations"))
 async def create_sync_schedule(
-    request: CreateSyncScheduleRequest,
+    request: Request,
+    response: Response,
+    payload: CreateSyncScheduleRequest,
     current_user: User = Depends(deps.get_current_user),
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
     """Create a new sync schedule."""
     result = scheduler.create_schedule(
         user_id=current_user.id,
-        device_id=request.device_id,
-        schedule_type=request.schedule_type,
-        time_of_day=request.time_of_day,
-        day_of_week=request.day_of_week,
-        day_of_month=request.day_of_month,
-        sync_deletions=request.sync_deletions,
-        resolve_conflicts=request.resolve_conflicts
+        device_id=payload.device_id,
+        schedule_type=payload.schedule_type,
+        time_of_day=payload.time_of_day,
+        day_of_week=payload.day_of_week,
+        day_of_month=payload.day_of_month,
+        sync_deletions=payload.sync_deletions,
+        resolve_conflicts=payload.resolve_conflicts
     )
     return result
 
 
 @router.get("/schedule/list")
+@user_limiter.limit(get_limit("sync_operations"))
 async def list_sync_schedules(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
@@ -202,7 +230,10 @@ async def list_sync_schedules(
 
 
 @router.post("/schedule/{schedule_id}/disable")
+@user_limiter.limit(get_limit("sync_operations"))
 async def disable_sync_schedule(
+    request: Request,
+    response: Response,
     schedule_id: int,
     current_user: User = Depends(deps.get_current_user),
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
@@ -217,9 +248,12 @@ async def disable_sync_schedule(
 
 
 @router.put("/schedule/{schedule_id}")
+@user_limiter.limit(get_limit("sync_operations"))
 async def update_sync_schedule(
+    request: Request,
+    response: Response,
     schedule_id: int,
-    request: UpdateSyncScheduleRequest,
+    payload: UpdateSyncScheduleRequest,
     current_user: User = Depends(deps.get_current_user),
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
@@ -227,13 +261,13 @@ async def update_sync_schedule(
     result = scheduler.update_schedule(
         schedule_id=schedule_id,
         user_id=current_user.id,
-        schedule_type=request.schedule_type,
-        time_of_day=request.time_of_day,
-        day_of_week=request.day_of_week,
-        day_of_month=request.day_of_month,
-        sync_deletions=request.sync_deletions,
-        resolve_conflicts=request.resolve_conflicts,
-        is_active=request.is_active,
+        schedule_type=payload.schedule_type,
+        time_of_day=payload.time_of_day,
+        day_of_week=payload.day_of_week,
+        day_of_month=payload.day_of_month,
+        sync_deletions=payload.sync_deletions,
+        resolve_conflicts=payload.resolve_conflicts,
+        is_active=payload.is_active,
     )
 
     if not result:
@@ -247,25 +281,28 @@ async def update_sync_schedule(
 # ============================================================================
 
 @router.post("/selective/configure")
+@user_limiter.limit(get_limit("sync_operations"))
 async def configure_selective_sync(
-    request: SelectiveSyncRequest,
+    request: Request,
+    response: Response,
+    payload: SelectiveSyncRequest,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db)
 ):
     """Configure selective sync for a device."""
     from app.models.sync_progress import SelectiveSync
-    
+
     # Clear existing
     db.query(SelectiveSync).filter(
         SelectiveSync.user_id == current_user.id,
-        SelectiveSync.device_id == request.device_id
+        SelectiveSync.device_id == payload.device_id
     ).delete()
-    
+
     # Add new preferences
-    for folder in request.folders:
+    for folder in payload.folders:
         sync = SelectiveSync(
             user_id=current_user.id,
-            device_id=request.device_id,
+            device_id=payload.device_id,
             folder_path=folder["path"],
             include_subfolders=folder.get("include_subfolders", True),
             is_enabled=folder.get("enabled", True)
@@ -273,15 +310,18 @@ async def configure_selective_sync(
         db.add(sync)
     
     db.commit()
-    
+
     return {
-        "device_id": request.device_id,
-        "folders_configured": len(request.folders)
+        "device_id": payload.device_id,
+        "folders_configured": len(payload.folders)
     }
 
 
 @router.get("/selective/list/{device_id}")
+@user_limiter.limit(get_limit("sync_operations"))
 async def list_selective_sync(
+    request: Request,
+    response: Response,
     device_id: str,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db)

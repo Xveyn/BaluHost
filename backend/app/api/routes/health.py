@@ -1,7 +1,8 @@
 """Health check endpoint for server connectivity testing."""
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Request, Response
 from pydantic import BaseModel
+from app.core.rate_limiter import limiter, get_limit
 
 router = APIRouter()
 
@@ -13,7 +14,8 @@ class HealthResponse(BaseModel):
 
 
 @router.get("/health", response_model=HealthResponse)
-async def health_check():
+@limiter.limit(get_limit("system_monitor"))
+async def health_check(request: Request, response: Response):
     """
     Simple health check endpoint.
     
@@ -24,7 +26,8 @@ async def health_check():
 
 
 @router.get("/ping", response_model=HealthResponse)
-async def ping():
+@limiter.limit(get_limit("system_monitor"))
+async def ping(request: Request, response: Response):
     """
     Alias for health check.
     Ultra-lightweight endpoint for connectivity testing.

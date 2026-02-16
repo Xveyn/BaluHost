@@ -6,7 +6,7 @@ and historical analysis based on Tapo device power measurements.
 """
 
 from typing import List, Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -24,12 +24,15 @@ from app.schemas.energy import (
 )
 from app.services import energy_stats, power_monitor
 from app.core.config import settings
+from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter()
 
 
 @router.get("/dashboard/{device_id}", response_model=EnergyDashboard)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_energy_dashboard(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -125,7 +128,9 @@ async def get_energy_dashboard(
 
 
 @router.get("/stats/{device_id}/today", response_model=Optional[EnergyPeriodStats])
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_today_energy_stats(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -151,7 +156,9 @@ async def get_today_energy_stats(
 
 
 @router.get("/stats/{device_id}/week", response_model=Optional[EnergyPeriodStats])
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_week_energy_stats(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -177,7 +184,9 @@ async def get_week_energy_stats(
 
 
 @router.get("/stats/{device_id}/month", response_model=Optional[EnergyPeriodStats])
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_month_energy_stats(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -203,7 +212,9 @@ async def get_month_energy_stats(
 
 
 @router.get("/cost/{device_id}", response_model=EnergyCostEstimate)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_energy_cost_estimate(
+    request: Request, response: Response,
     device_id: int,
     period: str = Query("today", regex="^(today|week|month)$"),
     cost_per_kwh: float = Query(0.40, gt=0, description="Cost per kWh"),
@@ -265,7 +276,9 @@ async def get_energy_cost_estimate(
 
 
 @router.get("/hourly/{device_id}", response_model=List[HourlySample])
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_hourly_samples(
+    request: Request, response: Response,
     device_id: int,
     hours: int = Query(24, ge=1, le=168, description="Hours to look back (max 7 days)"),
     db: Session = Depends(deps.get_db),
@@ -283,7 +296,9 @@ async def get_hourly_samples(
 
 
 @router.get("/price", response_model=EnergyPriceConfigRead)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_energy_price(
+    request: Request, response: Response,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> EnergyPriceConfigRead:
@@ -297,7 +312,9 @@ async def get_energy_price(
 
 
 @router.put("/price", response_model=EnergyPriceConfigRead)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_energy_price(
+    request: Request, response: Response,
     update_data: EnergyPriceConfigUpdate,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
@@ -320,7 +337,9 @@ async def update_energy_price(
 
 
 @router.get("/cumulative/{device_id}", response_model=CumulativeEnergyResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_cumulative_energy(
+    request: Request, response: Response,
     device_id: int,
     period: str = Query("today", pattern="^(today|week|month)$"),
     db: Session = Depends(deps.get_db),

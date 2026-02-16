@@ -7,9 +7,10 @@ CPU clock speeds for each service power property level.
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.power import (
     PowerPresetCreate,
     PowerPresetUpdate,
@@ -25,7 +26,9 @@ router = APIRouter(prefix="/power/presets", tags=["power-presets"])
 
 
 @router.get("/", response_model=PowerPresetListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_presets(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> PowerPresetListResponse:
     """
@@ -80,7 +83,9 @@ async def list_presets(
 
 
 @router.get("/active", response_model=PowerPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_active_preset(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> PowerPresetResponse:
     """
@@ -112,7 +117,9 @@ async def get_active_preset(
 
 
 @router.get("/{preset_id}", response_model=PowerPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_preset(
+    request: Request, response: Response,
     preset_id: int,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> PowerPresetResponse:
@@ -145,7 +152,9 @@ async def get_preset(
 
 
 @router.post("/{preset_id}/activate", response_model=ActivatePresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def activate_preset(
+    request: Request, response: Response,
     preset_id: int,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> ActivatePresetResponse:
@@ -195,7 +204,9 @@ async def activate_preset(
 
 
 @router.post("/", response_model=PowerPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def create_preset(
+    request: Request, response: Response,
     data: PowerPresetCreate,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> PowerPresetResponse:
@@ -231,7 +242,9 @@ async def create_preset(
 
 
 @router.put("/{preset_id}", response_model=PowerPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_preset(
+    request: Request, response: Response,
     preset_id: int,
     data: PowerPresetUpdate,
     user: UserPublic = Depends(deps.get_current_admin)
@@ -268,7 +281,9 @@ async def update_preset(
 
 
 @router.delete("/{preset_id}")
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_preset(
+    request: Request, response: Response,
     preset_id: int,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> dict:

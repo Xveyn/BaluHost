@@ -1,10 +1,11 @@
 """API routes for mobile device management (BaluMobile)."""
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.api.deps import get_current_user
 from app.schemas.user import UserPublic
 from app.schemas.mobile import (
@@ -25,8 +26,10 @@ router = APIRouter(prefix="/mobile", tags=["mobile"])
 
 
 @router.post("/token/generate", response_model=MobileRegistrationToken)
+@user_limiter.limit(get_limit("mobile_register"))
 async def generate_registration_token(
     request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
     include_vpn: bool = False,
@@ -95,7 +98,10 @@ async def generate_registration_token(
 
 
 @router.post("/register", response_model=MobileRegistrationResponse)
+@limiter.limit(get_limit("mobile_register"))
 async def register_device(
+    request: Request,
+    response: Response,
     device_data: MobileDeviceCreate,
     db: Session = Depends(get_db)
 ):
@@ -109,7 +115,10 @@ async def register_device(
 
 
 @router.get("/devices", response_model=List[MobileDeviceSchema])
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_devices(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):
@@ -134,7 +143,10 @@ async def get_devices(
 
 
 @router.get("/devices/{device_id}", response_model=MobileDeviceSchema)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_device(
+    request: Request,
+    response: Response,
     device_id: str,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -156,7 +168,10 @@ async def get_device(
 
 
 @router.patch("/devices/{device_id}", response_model=MobileDeviceSchema)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_device(
+    request: Request,
+    response: Response,
     device_id: str,
     device_update: MobileDeviceUpdate,
     db: Session = Depends(get_db),
@@ -174,7 +189,10 @@ async def update_device(
 
 
 @router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_device(
+    request: Request,
+    response: Response,
     device_id: str,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -204,7 +222,10 @@ async def delete_device(
 
 
 @router.post("/devices/{device_id}/push-token", response_model=dict)
+@user_limiter.limit(get_limit("admin_operations"))
 async def register_push_token(
+    request: Request,
+    response: Response,
     device_id: str,
     push_token: str,
     db: Session = Depends(get_db),
@@ -259,7 +280,10 @@ async def register_push_token(
 
 
 @router.get("/devices/{device_id}/notifications", response_model=List[dict])
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_device_notifications(
+    request: Request,
+    response: Response,
     device_id: str,
     limit: int = 10,
     db: Session = Depends(get_db),
@@ -318,7 +342,10 @@ async def get_device_notifications(
 
 
 @router.get("/camera/settings/{device_id}", response_model=CameraBackupSettings)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_camera_backup_settings(
+    request: Request,
+    response: Response,
     device_id: str,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -336,7 +363,10 @@ async def get_camera_backup_settings(
 
 
 @router.put("/camera/settings/{device_id}", response_model=CameraBackupSettings)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_camera_backup_settings(
+    request: Request,
+    response: Response,
     device_id: str,
     settings: CameraBackupSettings,
     db: Session = Depends(get_db),
@@ -356,7 +386,10 @@ async def update_camera_backup_settings(
 
 
 @router.get("/sync/folders/{device_id}", response_model=List[SyncFolderSchema])
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_sync_folders(
+    request: Request,
+    response: Response,
     device_id: str,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
@@ -368,7 +401,10 @@ async def get_sync_folders(
 
 
 @router.post("/sync/folders/{device_id}", response_model=SyncFolderSchema)
+@user_limiter.limit(get_limit("admin_operations"))
 async def create_sync_folder(
+    request: Request,
+    response: Response,
     device_id: str,
     folder_data: SyncFolderCreate,
     db: Session = Depends(get_db),

@@ -2,7 +2,7 @@ from typing import List, Optional
 import json
 import re
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy import inspect, select, Table, MetaData
 from sqlalchemy.orm import Session
 from starlette import status
@@ -17,26 +17,30 @@ from app.schemas.admin_db import (
     DatabaseInfoResponse,
 )
 from app.services.admin_db import AdminDBService
+from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter()
 
 
 @router.get("/admin/db/tables", response_model=AdminTablesResponse, tags=["admin"])
-def list_tables(current_user=Depends(deps.get_current_admin)) -> AdminTablesResponse:
+@user_limiter.limit(get_limit("admin_operations"))
+def list_tables(request: Request, response: Response, current_user=Depends(deps.get_current_admin)) -> AdminTablesResponse:
     """List whitelisted database tables (admin only)."""
     tables = AdminDBService.list_tables()
     return AdminTablesResponse(tables=tables)
 
 
 @router.get("/admin/db/tables/categories", response_model=AdminTableCategoriesResponse, tags=["admin"])
-def list_table_categories(current_user=Depends(deps.get_current_admin)) -> AdminTableCategoriesResponse:
+@user_limiter.limit(get_limit("admin_operations"))
+def list_table_categories(request: Request, response: Response, current_user=Depends(deps.get_current_admin)) -> AdminTableCategoriesResponse:
     """List whitelisted database tables grouped by category (admin only)."""
     categories = AdminDBService.list_tables_with_categories()
     return AdminTableCategoriesResponse(categories=categories)
 
 
 @router.get("/admin/db/table/{table_name}/schema", response_model=AdminTableSchemaResponse, tags=["admin"])
-def table_schema(table_name: str, current_user=Depends(deps.get_current_admin)) -> AdminTableSchemaResponse:
+@user_limiter.limit(get_limit("admin_operations"))
+def table_schema(request: Request, response: Response, table_name: str, current_user=Depends(deps.get_current_admin)) -> AdminTableSchemaResponse:
     """Return column metadata for a whitelisted table."""
     try:
         schema = AdminDBService.get_table_schema(table_name)
@@ -46,7 +50,10 @@ def table_schema(table_name: str, current_user=Depends(deps.get_current_admin)) 
 
 
 @router.get("/admin/db/table/{table_name}", response_model=AdminTableRowsResponse, tags=["admin"])
+@user_limiter.limit(get_limit("admin_operations"))
 def table_rows(
+    request: Request,
+    response: Response,
     table_name: str,
     page: int = Query(1, ge=1),
     page_size: int = Query(50, ge=1, le=200),
@@ -98,7 +105,10 @@ def table_rows(
 
 
 @router.get("/admin/db/health", response_model=DatabaseHealthResponse, tags=["admin"])
+@user_limiter.limit(get_limit("admin_operations"))
 def database_health(
+    request: Request,
+    response: Response,
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_admin),
 ) -> DatabaseHealthResponse:
@@ -111,7 +121,10 @@ def database_health(
 
 
 @router.get("/admin/db/info", response_model=DatabaseInfoResponse, tags=["admin"])
+@user_limiter.limit(get_limit("admin_operations"))
 def database_info(
+    request: Request,
+    response: Response,
     db: Session = Depends(deps.get_db),
     current_user=Depends(deps.get_current_admin),
 ) -> DatabaseInfoResponse:

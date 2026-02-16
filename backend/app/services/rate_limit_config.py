@@ -110,6 +110,13 @@ class RateLimitConfigService:
             ("user_operations", "30/minute", "User management operations"),
             ("system_monitor", "120/minute", "System monitoring endpoints"),
             ("vpn_operations", "10/minute", "VPN configuration operations"),
+            ("auth_password_change", "5/minute", "Password change endpoint"),
+            ("auth_refresh", "10/minute", "Token refresh endpoint"),
+            ("file_write", "30/minute", "File write operations (rename, move, mkdir)"),
+            ("file_chunked", "20/minute", "Chunked upload operations"),
+            ("backup_operations", "10/minute", "Backup create/restore operations"),
+            ("sync_operations", "30/minute", "Sync management operations"),
+            ("admin_benchmark", "3/minute", "Benchmark operations (resource intensive)"),
         ]
         
         for endpoint_type, limit_string, description in defaults:

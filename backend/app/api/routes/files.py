@@ -104,7 +104,10 @@ class ExistingFileInfo(BaseModel):
 
 
 @router.post("/check-exists")
+@user_limiter.limit(get_limit("file_list"))
 async def check_files_exist(
+    request: Request,
+    response: Response,
     payload: CheckExistsRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -227,7 +230,10 @@ async def set_permissions(
 
 
 @router.get("/mountpoints")
+@user_limiter.limit(get_limit("file_list"))
 async def get_mountpoints(
+    request: Request,
+    response: Response,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -541,9 +547,11 @@ async def download_file(
 
 
 @router.get("/download/{file_id}")
+@user_limiter.limit(get_limit("file_download"))
 async def download_file_by_id(
     file_id: int,
     request: Request,
+    response: Response,
     x_share_token: Optional[str] = Header(None),
     x_share_password: Optional[str] = Header(None),
     user: Optional[UserPublic] = Depends(deps.get_current_user_optional),
@@ -682,7 +690,10 @@ async def upload_files(
 
 
 @router.get("/storage/available")
+@user_limiter.limit(get_limit("file_list"))
 async def get_available_storage(
+    request: Request,
+    response: Response,
     user: UserPublic = Depends(deps.get_current_user),
 ) -> dict[str, int | None]:
     """Get remaining storage capacity in bytes. Returns None if no quota is set."""
@@ -732,7 +743,10 @@ async def delete_path_raw(
 
 
 @router.delete("/delete", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_delete"))
 async def delete_path_body(
+    request: Request,
+    response: Response,
     payload: dict = Body(...),
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -763,17 +777,23 @@ async def delete_path_body(
 
 
 @router.post("/delete", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_delete"))
 async def delete_path_post(
+    request: Request,
+    response: Response,
     payload: dict = Body(...),
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
     # Delegate to delete_by_body logic
-    return await delete_path_body(payload=payload, user=user, db=db)
+    return await delete_path_body(request=request, response=response, payload=payload, user=user, db=db)
 
 
 @router.post("/folder", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_write"))
 async def create_folder(
+    request: Request,
+    response: Response,
     payload: FolderCreateRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -793,7 +813,10 @@ async def create_folder(
 
 
 @router.post("/mkdir", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_write"))
 async def mkdir_compat(
+    request: Request,
+    response: Response,
     payload: dict = Body(...),
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -825,7 +848,10 @@ async def mkdir_compat(
 
 
 @router.put("/rename", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_write"))
 async def rename_path(
+    request: Request,
+    response: Response,
     payload: RenameRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -850,7 +876,10 @@ async def rename_path(
 
 
 @router.put("/move", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_write"))
 async def move_path(
+    request: Request,
+    response: Response,
     payload: MoveRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -885,7 +914,10 @@ async def move_path(
 
 
 @router.delete("/{resource_path:path}", response_model=FileOperationResponse)
+@user_limiter.limit(get_limit("file_delete"))
 async def delete_path_param(
+    request: Request,
+    response: Response,
     resource_path: str,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),

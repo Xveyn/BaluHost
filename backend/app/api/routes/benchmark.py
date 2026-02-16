@@ -7,7 +7,7 @@ Provides CrystalDiskMark-style disk performance benchmarks using fio.
 from typing import Optional
 import math
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_current_user
@@ -31,6 +31,7 @@ from app.schemas.benchmark import (
 )
 from app.schemas.user import UserPublic
 from app.services import benchmark_service
+from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter(prefix="/benchmark", tags=["benchmark"])
 
@@ -70,7 +71,10 @@ def _benchmark_to_response(benchmark) -> BenchmarkResponse:
 
 
 @router.get("/disks", response_model=AvailableDisksResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_available_disks(
+    request: Request,
+    response: Response,
     current_user: UserPublic = Depends(get_current_user),
 ) -> AvailableDisksResponse:
     """
@@ -83,7 +87,10 @@ async def get_available_disks(
 
 
 @router.get("/profiles", response_model=ProfileListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_benchmark_profiles(
+    request: Request,
+    response: Response,
     current_user: UserPublic = Depends(get_current_user),
 ) -> ProfileListResponse:
     """
@@ -96,8 +103,11 @@ async def get_benchmark_profiles(
 
 
 @router.post("/start", response_model=BenchmarkResponse)
+@user_limiter.limit(get_limit("admin_benchmark"))
 async def start_benchmark(
-    request: BenchmarkStartRequest,
+    request: Request,
+    response: Response,
+    payload: BenchmarkStartRequest,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
 ) -> BenchmarkResponse:
@@ -110,11 +120,11 @@ async def start_benchmark(
     try:
         benchmark = await benchmark_service.start_benchmark(
             db=db,
-            disk_name=request.disk_name,
-            profile=BenchmarkProfile(request.profile.value),
+            disk_name=payload.disk_name,
+            profile=BenchmarkProfile(payload.profile.value),
             target_type=BenchmarkTargetType.TEST_FILE,
             user_id=current_user.id,
-            test_directory=request.test_directory,
+            test_directory=payload.test_directory,
         )
         return _benchmark_to_response(benchmark)
     except ValueError as e:
@@ -130,8 +140,11 @@ async def start_benchmark(
 
 
 @router.post("/prepare", response_model=BenchmarkPrepareResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def prepare_raw_benchmark(
-    request: BenchmarkPrepareRequest,
+    request: Request,
+    response: Response,
+    payload: BenchmarkPrepareRequest,
     db: Session = Depends(get_db),
     current_admin: UserPublic = Depends(get_current_admin),
 ) -> BenchmarkPrepareResponse:
@@ -143,12 +156,12 @@ async def prepare_raw_benchmark(
     """
     # Validate disk exists and is not system disk
     disks = benchmark_service.get_available_disks()
-    disk_info = next((d for d in disks if d.name == request.disk_name), None)
+    disk_info = next((d for d in disks if d.name == payload.disk_name), None)
 
     if disk_info is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Disk '{request.disk_name}' not found",
+            detail=f"Disk '{payload.disk_name}' not found",
         )
 
     if disk_info.is_system_disk:
@@ -165,27 +178,30 @@ async def prepare_raw_benchmark(
 
     # Generate confirmation token
     token, expires_at = benchmark_service.generate_confirmation_token(
-        request.disk_name, request.profile.value
+        payload.disk_name, payload.profile.value
     )
 
     return BenchmarkPrepareResponse(
         confirmation_token=token,
         expires_at=expires_at,
-        disk_name=request.disk_name,
+        disk_name=payload.disk_name,
         disk_model=disk_info.model,
         disk_size_bytes=disk_info.size_bytes,
         warning_message=(
-            f"WARNING: This will write directly to /dev/{request.disk_name}. "
+            f"WARNING: This will write directly to /dev/{payload.disk_name}. "
             "Any existing data on this device will be destroyed. "
             "Only proceed if you are absolutely certain this is the correct disk."
         ),
-        profile=request.profile,
+        profile=payload.profile,
     )
 
 
 @router.post("/start-confirmed", response_model=BenchmarkResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_confirmed_benchmark(
-    request: BenchmarkConfirmRequest,
+    request: Request,
+    response: Response,
+    payload: BenchmarkConfirmRequest,
     db: Session = Depends(get_db),
     current_admin: UserPublic = Depends(get_current_admin),
 ) -> BenchmarkResponse:
@@ -196,7 +212,7 @@ async def start_confirmed_benchmark(
     """
     # Validate confirmation token
     if not benchmark_service.validate_confirmation_token(
-        request.confirmation_token, request.disk_name, request.profile.value
+        payload.confirmation_token, payload.disk_name, payload.profile.value
     ):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -206,8 +222,8 @@ async def start_confirmed_benchmark(
     try:
         benchmark = await benchmark_service.start_benchmark(
             db=db,
-            disk_name=request.disk_name,
-            profile=BenchmarkProfile(request.profile.value),
+            disk_name=payload.disk_name,
+            profile=BenchmarkProfile(payload.profile.value),
             target_type=BenchmarkTargetType.RAW_DEVICE,
             user_id=current_admin.id,
         )
@@ -225,7 +241,10 @@ async def start_confirmed_benchmark(
 
 
 @router.get("/{benchmark_id}", response_model=BenchmarkResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_benchmark(
+    request: Request,
+    response: Response,
     benchmark_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
@@ -245,7 +264,10 @@ async def get_benchmark(
 
 
 @router.get("/{benchmark_id}/progress", response_model=BenchmarkProgressResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_benchmark_progress(
+    request: Request,
+    response: Response,
     benchmark_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
@@ -287,7 +309,10 @@ async def get_benchmark_progress(
 
 
 @router.post("/{benchmark_id}/cancel")
+@user_limiter.limit(get_limit("admin_operations"))
 async def cancel_benchmark(
+    request: Request,
+    response: Response,
     benchmark_id: int,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user),
@@ -328,7 +353,10 @@ async def cancel_benchmark(
 
 
 @router.post("/{benchmark_id}/mark-failed")
+@user_limiter.limit(get_limit("admin_operations"))
 async def mark_benchmark_failed(
+    request: Request,
+    response: Response,
     benchmark_id: int,
     db: Session = Depends(get_db),
     current_admin: UserPublic = Depends(get_current_admin),
@@ -366,7 +394,10 @@ async def mark_benchmark_failed(
 
 
 @router.get("/", response_model=BenchmarkListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_benchmarks(
+    request: Request,
+    response: Response,
     page: int = 1,
     page_size: int = 10,
     disk_name: Optional[str] = None,

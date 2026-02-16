@@ -622,7 +622,7 @@ async def update_vcl_settings(
 # ============================================================================
 
 @router.get("/admin/overview", response_model=AdminVCLOverview)
-@user_limiter.limit(get_limit("admin"))
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_vcl_overview(
     request: Request,
     response: Response,
@@ -690,7 +690,7 @@ async def get_vcl_overview(
 
 
 @router.get("/admin/users", response_model=List[AdminUserQuota])
-@user_limiter.limit(get_limit("admin"))
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_user_quotas(
     request: Request,
     response: Response,
@@ -766,7 +766,7 @@ async def list_user_quotas(
 
 
 @router.put("/admin/settings/{user_id}", response_model=VCLSettingsResponse)
-@user_limiter.limit(get_limit("admin"))
+@user_limiter.limit(get_limit("admin_operations"))
 async def admin_update_user_settings(
     request: Request,
     response: Response,
@@ -838,7 +838,7 @@ async def admin_update_user_settings(
 
 
 @router.post("/admin/cleanup", response_model=CleanupResponse)
-@user_limiter.limit(get_limit("admin"))
+@user_limiter.limit(get_limit("admin_operations"))
 async def trigger_manual_cleanup(
     request: Request,
     response: Response,
@@ -991,7 +991,7 @@ async def trigger_manual_cleanup(
 
 
 @router.get("/admin/stats", response_model=AdminStatsResponse)
-@user_limiter.limit(get_limit("admin"))
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_detailed_stats(
     request: Request,
     response: Response,

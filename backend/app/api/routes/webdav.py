@@ -3,9 +3,10 @@
 import logging
 import socket
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request, Response
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.webdav import (
     WebdavStatusResponse,
     WebdavConnectionInfo,
@@ -40,7 +41,9 @@ def _read_webdav_state() -> WebdavState | None:
 
 
 @router.get("/status", response_model=WebdavStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_webdav_status(
+    request: Request, response: Response,
     _admin=Depends(deps.get_current_admin),
 ):
     """Get detailed WebDAV server status (admin only)."""
@@ -71,7 +74,9 @@ async def get_webdav_status(
 
 
 @router.get("/connection-info", response_model=WebdavConnectionInfo)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_webdav_connection_info(
+    request: Request, response: Response,
     current_user=Depends(deps.get_current_user),
 ):
     """Get OS-specific mount instructions with the authenticated user's name."""

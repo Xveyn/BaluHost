@@ -5,7 +5,7 @@ import logging
 from typing import AsyncGenerator
 
 import jwt
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
 from pydantic import BaseModel
 from sse_starlette.sse import EventSourceResponse
 
@@ -13,6 +13,7 @@ from app.api import deps
 from app.core import security
 from app.schemas.user import UserPublic
 from app.services.upload_progress import get_upload_progress_manager
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -23,7 +24,10 @@ class SSETokenResponse(BaseModel):
 
 
 @router.post("/progress-token/{upload_id}", response_model=SSETokenResponse)
+@user_limiter.limit(get_limit("file_chunked"))
 async def create_progress_token(
+    request: Request,
+    response: Response,
     upload_id: str,
     user: UserPublic = Depends(deps.get_current_user),
 ) -> SSETokenResponse:
@@ -46,7 +50,10 @@ async def create_progress_token(
 
 
 @router.get("/progress/{upload_id}")
+@limiter.limit(get_limit("file_chunked"))
 async def upload_progress_stream(
+    request: Request,
+    response: Response,
     upload_id: str,
     token: str = Query(..., description="Scoped SSE token from POST /progress-token/{upload_id}"),
 ) -> EventSourceResponse:

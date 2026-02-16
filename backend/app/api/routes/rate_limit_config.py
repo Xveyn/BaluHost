@@ -1,7 +1,7 @@
 """API routes for rate limit configuration (admin only)."""
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -15,12 +15,16 @@ from app.schemas.rate_limit_config import (
 )
 from app.services.rate_limit_config import RateLimitConfigService
 from app.services.audit_logger_db import get_audit_logger_db
+from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter(prefix="/rate-limits", tags=["admin", "rate-limits"])
 
 
 @router.get("", response_model=RateLimitConfigList)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_rate_limits(
+    request: Request,
+    response: Response,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):
@@ -34,7 +38,10 @@ async def get_rate_limits(
 
 
 @router.get("/{endpoint_type}", response_model=RateLimitConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_rate_limit(
+    request: Request,
+    response: Response,
     endpoint_type: str,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -52,7 +59,10 @@ async def get_rate_limit(
 
 
 @router.post("", response_model=RateLimitConfigResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("admin_operations"))
 async def create_rate_limit(
+    request: Request,
+    response: Response,
     config: RateLimitConfigCreate,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -88,7 +98,10 @@ async def create_rate_limit(
 
 
 @router.put("/{endpoint_type}", response_model=RateLimitConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_rate_limit(
+    request: Request,
+    response: Response,
     endpoint_type: str,
     config_update: RateLimitConfigUpdate,
     current_user: UserPublic = Depends(get_current_admin),
@@ -134,7 +147,10 @@ async def update_rate_limit(
 
 
 @router.delete("/{endpoint_type}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_rate_limit(
+    request: Request,
+    response: Response,
     endpoint_type: str,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db)
@@ -163,7 +179,10 @@ async def delete_rate_limit(
 
 
 @router.post("/seed-defaults", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
 async def seed_default_rate_limits(
+    request: Request,
+    response: Response,
     current_user: UserPublic = Depends(get_current_admin),
     db: Session = Depends(get_db)
 ):

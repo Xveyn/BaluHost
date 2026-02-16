@@ -7,10 +7,11 @@ dependencies, and accessing application metrics for debugging.
 
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from starlette import status
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.service_status import (
     ServiceStatusResponse,
     DependencyStatusResponse,
@@ -34,7 +35,10 @@ router = APIRouter()
     tags=["admin"],
     summary="Get all service statuses"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_all_services(
+    request: Request,
+    response: Response,
     current_user=Depends(deps.get_current_admin)
 ) -> List[ServiceStatusResponse]:
     """
@@ -53,7 +57,10 @@ async def get_all_services(
     tags=["admin"],
     summary="Get single service status"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_service(
+    request: Request,
+    response: Response,
     service_name: str,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceStatusResponse:
@@ -80,9 +87,12 @@ async def get_service(
     tags=["admin"],
     summary="Restart a service"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def restart_service(
+    request: Request,
+    response: Response,
     service_name: str,
-    request: ServiceRestartRequest = None,
+    restart_request: ServiceRestartRequest = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceRestartResponse:
     """
@@ -104,7 +114,7 @@ async def restart_service(
         )
 
     # Perform restart
-    force = request.force if request else False
+    force = restart_request.force if restart_request else False
     result = await collector.restart_service(service_name, force=force)
 
     # Audit log
@@ -133,9 +143,12 @@ async def restart_service(
     tags=["admin"],
     summary="Stop a service"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def stop_service(
+    request: Request,
+    response: Response,
     service_name: str,
-    request: ServiceStopRequest = None,
+    stop_request: ServiceStopRequest = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceStopResponse:
     """
@@ -157,7 +170,7 @@ async def stop_service(
         )
 
     # Perform stop
-    force = request.force if request else False
+    force = stop_request.force if stop_request else False
     result = await collector.stop_service(service_name, force=force)
 
     # Audit log
@@ -186,9 +199,12 @@ async def stop_service(
     tags=["admin"],
     summary="Start a service"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_service(
+    request: Request,
+    response: Response,
     service_name: str,
-    request: ServiceStartRequest = None,
+    start_request: ServiceStartRequest = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceStartResponse:
     """
@@ -210,7 +226,7 @@ async def start_service(
         )
 
     # Perform start
-    force = request.force if request else False
+    force = start_request.force if start_request else False
     result = await collector.start_service(service_name, force=force)
 
     # Audit log
@@ -239,7 +255,10 @@ async def start_service(
     tags=["admin"],
     summary="Get system dependencies"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_dependencies(
+    request: Request,
+    response: Response,
     current_user=Depends(deps.get_current_admin)
 ) -> List[DependencyStatusResponse]:
     """
@@ -257,7 +276,10 @@ async def get_dependencies(
     tags=["admin"],
     summary="Get application metrics"
 )
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_metrics(
+    request: Request,
+    response: Response,
     current_user=Depends(deps.get_current_admin)
 ) -> ApplicationMetricsResponse:
     """
@@ -276,7 +298,10 @@ async def get_metrics(
     tags=["admin"],
     summary="Get combined debug snapshot"
 )
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_debug_snapshot(
+    request: Request,
+    response: Response,
     current_user=Depends(deps.get_current_user)
 ) -> AdminDebugResponse:
     """

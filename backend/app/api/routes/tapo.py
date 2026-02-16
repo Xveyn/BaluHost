@@ -6,10 +6,11 @@ Power monitoring data is accessible to all authenticated users.
 """
 
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.models.tapo_device import TapoDevice
 from app.schemas.tapo import (
@@ -29,7 +30,9 @@ router = APIRouter()
 # Device Configuration Endpoints (Admin only)
 
 @router.post("/devices", response_model=TapoDeviceResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("admin_operations"))
 def create_tapo_device(
+    request: Request, response: Response,
     device_data: TapoDeviceCreate,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
@@ -91,7 +94,9 @@ def create_tapo_device(
 
 
 @router.get("/devices", response_model=List[TapoDeviceResponse])
+@user_limiter.limit(get_limit("admin_operations"))
 def list_tapo_devices(
+    request: Request, response: Response,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
 ) -> List[TapoDevice]:
@@ -105,7 +110,9 @@ def list_tapo_devices(
 
 
 @router.get("/devices/{device_id}", response_model=TapoDeviceResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 def get_tapo_device(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
@@ -127,7 +134,9 @@ def get_tapo_device(
 
 
 @router.patch("/devices/{device_id}", response_model=TapoDeviceResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 def update_tapo_device(
+    request: Request, response: Response,
     device_id: int,
     device_data: TapoDeviceUpdate,
     db: Session = Depends(deps.get_db),
@@ -192,7 +201,9 @@ def update_tapo_device(
 
 
 @router.delete("/devices/{device_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
 def delete_tapo_device(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_admin),
@@ -231,7 +242,9 @@ def delete_tapo_device(
 # Power Monitoring Endpoints (All authenticated users)
 
 @router.get("/power/history", response_model=PowerMonitoringResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_power_history(
+    request: Request, response: Response,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> PowerMonitoringResponse:
@@ -245,7 +258,9 @@ async def get_power_history(
 
 
 @router.get("/power/current/{device_id}", response_model=CurrentPowerResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_current_power(
+    request: Request, response: Response,
     device_id: int,
     db: Session = Depends(deps.get_db),
     current_user: User = Depends(deps.get_current_user),

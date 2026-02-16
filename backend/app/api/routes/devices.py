@@ -1,11 +1,12 @@
 """API routes for unified device management (Mobile + Desktop/Sync devices)."""
 
 from typing import List, Dict, Any
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
 from app.api.deps import get_current_user
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.user import UserPublic
 from app.models.mobile import MobileDevice
 from app.models.sync_state import SyncState
@@ -15,7 +16,9 @@ router = APIRouter(prefix="/devices", tags=["devices"])
 
 
 @router.get("/all")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_all_devices(
+    request: Request, response: Response,
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ) -> List[Dict[str, Any]]:
@@ -141,7 +144,9 @@ async def get_all_devices(
 
 
 @router.patch("/mobile/{device_id}/name")
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_mobile_device_name(
+    request: Request, response: Response,
     device_id: str,
     name: str,
     db: Session = Depends(get_db),
@@ -175,7 +180,9 @@ async def update_mobile_device_name(
 
 
 @router.patch("/desktop/{device_id}/name")
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_desktop_device_name(
+    request: Request, response: Response,
     device_id: str,
     name: str,
     db: Session = Depends(get_db),

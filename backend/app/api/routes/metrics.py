@@ -12,7 +12,7 @@ Exposes custom metrics for:
 Metrics are exposed in Prometheus format at /api/metrics
 """
 
-from fastapi import APIRouter, Depends, Response
+from fastapi import APIRouter, Depends, Request, Response
 from sqlalchemy.orm import Session
 from prometheus_client import (
     CollectorRegistry,
@@ -30,6 +30,7 @@ from app.api import deps
 from app.core.config import settings
 from app.models.user import User
 from app.services.sensors import get_cpu_sensor_data
+from app.core.rate_limiter import limiter, get_limit
 
 # Create router
 router = APIRouter()
@@ -480,7 +481,9 @@ def collect_app_metrics():
 # ===================================
 
 @router.get("/metrics", include_in_schema=False)
+@limiter.limit(get_limit("system_monitor"))
 async def metrics(
+    request: Request,
     db: Session = Depends(deps.get_db),
     current_user: Optional[User] = Depends(deps.get_current_user_optional)
 ):

@@ -8,11 +8,12 @@ import logging
 from datetime import datetime
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import OAuth2PasswordBearer
 
 from app.api import deps
 from app.core.config import settings
+from app.core.rate_limiter import user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 
@@ -90,7 +91,9 @@ router = APIRouter(prefix="/power", tags=["power-management"])
 
 
 @router.get("/status", response_model=PowerStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_power_status(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> PowerStatusResponse:
     """
@@ -104,7 +107,9 @@ async def get_power_status(
 
 
 @router.get("/profiles", response_model=PowerProfilesResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_power_profiles(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> PowerProfilesResponse:
     """
@@ -124,8 +129,10 @@ async def get_power_profiles(
 
 
 @router.post("/profile", response_model=SetProfileResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def set_power_profile(
-    request: SetProfileRequest,
+    request: Request, response: Response,
+    body: SetProfileRequest,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> SetProfileResponse:
     """
@@ -137,11 +144,11 @@ async def set_power_profile(
     manager = get_power_manager()
     status_before = await manager.get_power_status()
 
-    reason = request.reason or f"Manual override by {user.username}"
+    reason = body.reason or f"Manual override by {user.username}"
     success, error_msg = await manager.apply_profile(
-        profile=request.profile,
+        profile=body.profile,
         reason=reason,
-        duration_seconds=request.duration_seconds
+        duration_seconds=body.duration_seconds
     )
 
     if not success:
@@ -152,15 +159,17 @@ async def set_power_profile(
 
     return SetProfileResponse(
         success=True,
-        message=f"Profile changed to {request.profile.value}",
+        message=f"Profile changed to {body.profile.value}",
         previous_profile=status_before.current_profile,
-        new_profile=request.profile,
+        new_profile=body.profile,
         applied_at=datetime.utcnow()
     )
 
 
 @router.get("/demands", response_model=list[PowerDemandInfo])
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_power_demands(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> list[PowerDemandInfo]:
     """
@@ -174,8 +183,10 @@ async def get_power_demands(
 
 
 @router.post("/demands", response_model=RegisterDemandResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def register_power_demand(
-    request: RegisterDemandRequest,
+    request: Request, response: Response,
+    body: RegisterDemandRequest,
     _auth: None = Depends(_get_admin_or_service_token),
 ) -> RegisterDemandResponse:
     """
@@ -187,25 +198,27 @@ async def register_power_demand(
     manager = get_power_manager()
 
     demand_id = await manager.register_demand(
-        source=request.source,
-        level=request.level,
-        timeout_seconds=request.timeout_seconds,
-        description=request.description
+        source=body.source,
+        level=body.level,
+        timeout_seconds=body.timeout_seconds,
+        description=body.description
     )
 
     status_after = await manager.get_power_status()
 
     return RegisterDemandResponse(
         success=True,
-        message=f"Demand registered: {request.source} -> {request.level.value}",
+        message=f"Demand registered: {body.source} -> {body.level.value}",
         demand_id=demand_id,
         resulting_profile=status_after.current_profile
     )
 
 
 @router.delete("/demands", response_model=UnregisterDemandResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def unregister_power_demand(
-    request: UnregisterDemandRequest,
+    request: Request, response: Response,
+    body: UnregisterDemandRequest,
     _auth: None = Depends(_get_admin_or_service_token),
 ) -> UnregisterDemandResponse:
     """
@@ -216,25 +229,27 @@ async def unregister_power_demand(
     """
     manager = get_power_manager()
 
-    success = await manager.unregister_demand(request.source)
+    success = await manager.unregister_demand(body.source)
 
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Demand not found: {request.source}"
+            detail=f"Demand not found: {body.source}"
         )
 
     status_after = await manager.get_power_status()
 
     return UnregisterDemandResponse(
         success=True,
-        message=f"Demand unregistered: {request.source}",
+        message=f"Demand unregistered: {body.source}",
         resulting_profile=status_after.current_profile
     )
 
 
 @router.get("/intensities", response_model=ServiceIntensityResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_service_intensities(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> ServiceIntensityResponse:
     """
@@ -253,7 +268,9 @@ async def get_service_intensities(
 
 
 @router.get("/history", response_model=PowerHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_power_history(
+    request: Request, response: Response,
     limit: int = 100,
     offset: int = 0,
     _: UserPublic = Depends(deps.get_current_user)
@@ -279,7 +296,9 @@ async def get_power_history(
 
 
 @router.get("/auto-scaling", response_model=AutoScalingConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_auto_scaling_config(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> AutoScalingConfigResponse:
     """
@@ -310,7 +329,9 @@ async def get_auto_scaling_config(
 
 
 @router.put("/auto-scaling", response_model=AutoScalingConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_auto_scaling_config(
+    request: Request, response: Response,
     config: AutoScalingConfig,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> AutoScalingConfigResponse:
@@ -330,7 +351,9 @@ async def update_auto_scaling_config(
 
 
 @router.get("/dynamic-mode", response_model=DynamicModeConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_dynamic_mode_config(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_user)
 ) -> DynamicModeConfigResponse:
     """
@@ -344,8 +367,10 @@ async def get_dynamic_mode_config(
 
 
 @router.put("/dynamic-mode", response_model=DynamicModeConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_dynamic_mode(
-    request: DynamicModeUpdateRequest,
+    request: Request, response: Response,
+    body: DynamicModeUpdateRequest,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> DynamicModeConfigResponse:
     """
@@ -361,17 +386,17 @@ async def update_dynamic_mode(
     config = current.config
 
     # Apply partial updates
-    if request.governor is not None:
-        if request.governor not in current.available_governors:
+    if body.governor is not None:
+        if body.governor not in current.available_governors:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Governor '{request.governor}' not available. Available: {', '.join(current.available_governors)}"
+                detail=f"Governor '{body.governor}' not available. Available: {', '.join(current.available_governors)}"
             )
-        config.governor = request.governor
-    if request.min_freq_mhz is not None:
-        config.min_freq_mhz = request.min_freq_mhz
-    if request.max_freq_mhz is not None:
-        config.max_freq_mhz = request.max_freq_mhz
+        config.governor = body.governor
+    if body.min_freq_mhz is not None:
+        config.min_freq_mhz = body.min_freq_mhz
+    if body.max_freq_mhz is not None:
+        config.max_freq_mhz = body.max_freq_mhz
 
     # Validate freq range
     if config.min_freq_mhz > config.max_freq_mhz:
@@ -381,8 +406,8 @@ async def update_dynamic_mode(
         )
 
     # Enable or disable
-    if request.enabled is not None:
-        if request.enabled:
+    if body.enabled is not None:
+        if body.enabled:
             config.enabled = True
             success, error = await manager.enable_dynamic_mode(config)
             if not success:
@@ -410,8 +435,10 @@ async def update_dynamic_mode(
 
 
 @router.post("/backend", response_model=SwitchBackendResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def switch_power_backend(
-    request: SwitchBackendRequest,
+    request: Request, response: Response,
+    body: SwitchBackendRequest,
     user: UserPublic = Depends(deps.get_current_admin)
 ) -> SwitchBackendResponse:
     """
@@ -429,7 +456,7 @@ async def switch_power_backend(
     # Check if Linux backend is available when requesting it
     try:
         linux_available = manager.is_linux_backend_available()
-        logger.info(f"Linux backend available: {linux_available}, requested: {request.use_linux_backend}")
+        logger.info(f"Linux backend available: {linux_available}, requested: {body.use_linux_backend}")
     except Exception as e:
         logger.error(f"Error checking Linux backend availability: {e}")
         raise HTTPException(
@@ -437,14 +464,14 @@ async def switch_power_backend(
             detail=f"Error checking backend availability: {str(e)}"
         )
 
-    if request.use_linux_backend and not linux_available:
+    if body.use_linux_backend and not linux_available:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Linux cpufreq backend not available. Check if running on Linux with cpufreq support."
         )
 
     try:
-        success, previous, new = await manager.switch_backend(request.use_linux_backend)
+        success, previous, new = await manager.switch_backend(body.use_linux_backend)
         logger.info(f"Backend switch result: success={success}, {previous} -> {new}")
     except Exception as e:
         logger.error(f"Error switching backend: {e}", exc_info=True)

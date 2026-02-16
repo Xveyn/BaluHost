@@ -11,10 +11,11 @@ Provides endpoints for:
 from datetime import datetime, timedelta
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db, get_current_admin
+from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.models.monitoring import MetricType
 from app.schemas.monitoring import (
@@ -56,7 +57,10 @@ def _parse_time_range(time_range: TimeRangeEnum) -> timedelta:
 # ===== CPU Endpoints =====
 
 @router.get("/cpu/current", response_model=CurrentCpuResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_cpu_current(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get current CPU metrics."""
@@ -80,7 +84,10 @@ async def get_cpu_current(
 
 
 @router.get("/cpu/history", response_model=CpuHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_cpu_history(
+    request: Request,
+    response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
     source: DataSource = Query(default=DataSource.AUTO),
     limit: int = Query(default=1000, ge=1, le=10000),
@@ -113,7 +120,10 @@ async def get_cpu_history(
 # ===== Memory Endpoints =====
 
 @router.get("/memory/current", response_model=CurrentMemoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_memory_current(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get current memory metrics."""
@@ -134,7 +144,10 @@ async def get_memory_current(
 
 
 @router.get("/memory/history", response_model=MemoryHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_memory_history(
+    request: Request,
+    response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
     source: DataSource = Query(default=DataSource.AUTO),
     limit: int = Query(default=1000, ge=1, le=10000),
@@ -167,7 +180,10 @@ async def get_memory_history(
 # ===== Network Endpoints =====
 
 @router.get("/network/current", response_model=CurrentNetworkResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_network_current(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get current network metrics."""
@@ -189,7 +205,10 @@ async def get_network_current(
 
 
 @router.get("/network/history", response_model=NetworkHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_network_history(
+    request: Request,
+    response: Response,
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
     source: DataSource = Query(default=DataSource.AUTO),
     limit: int = Query(default=1000, ge=1, le=10000),
@@ -222,7 +241,10 @@ async def get_network_history(
 # ===== Disk I/O Endpoints =====
 
 @router.get("/disk-io/current", response_model=CurrentDiskIoResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_disk_io_current(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get current disk I/O metrics for all disks."""
@@ -233,7 +255,10 @@ async def get_disk_io_current(
 
 
 @router.get("/disk-io/history", response_model=DiskIoHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_disk_io_history(
+    request: Request,
+    response: Response,
     disk_name: Optional[str] = Query(default=None, description="Filter by disk name"),
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
     source: DataSource = Query(default=DataSource.AUTO),
@@ -287,7 +312,10 @@ async def get_disk_io_history(
 # ===== Process Endpoints =====
 
 @router.get("/processes/current", response_model=CurrentProcessResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_processes_current(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get current BaluHost process status."""
@@ -298,7 +326,10 @@ async def get_processes_current(
 
 
 @router.get("/processes/history", response_model=ProcessHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_processes_history(
+    request: Request,
+    response: Response,
     process_name: Optional[str] = Query(default=None, description="Filter by process name"),
     time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
     source: DataSource = Query(default=DataSource.AUTO),
@@ -356,7 +387,10 @@ async def get_processes_history(
 # ===== Retention Configuration (Admin Only) =====
 
 @router.get("/config/retention", response_model=RetentionConfigListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_retention_config(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ):
@@ -379,7 +413,10 @@ async def get_retention_config(
 
 
 @router.put("/config/retention/{metric_type}", response_model=RetentionConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_retention_config(
+    request: Request,
+    response: Response,
     metric_type: str,
     update: RetentionConfigUpdate,
     db: Session = Depends(get_db),
@@ -408,7 +445,10 @@ async def update_retention_config(
 # ===== Database Statistics (Admin Only) =====
 
 @router.get("/stats/database", response_model=DatabaseStatsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_database_stats(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ):
@@ -447,7 +487,10 @@ async def get_database_stats(
 # ===== Monitoring Status =====
 
 @router.get("/status", response_model=MonitoringStatusResponse)
+@user_limiter.limit(get_limit("system_monitor"))
 async def get_monitoring_status(
+    request: Request,
+    response: Response,
     current_user: User = Depends(get_current_user),
 ):
     """Get overall monitoring status."""
@@ -468,7 +511,10 @@ async def get_monitoring_status(
 # ===== Manual Cleanup Trigger (Admin Only) =====
 
 @router.post("/cleanup", response_model=dict)
+@user_limiter.limit(get_limit("admin_operations"))
 async def trigger_cleanup(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ):

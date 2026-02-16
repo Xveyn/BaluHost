@@ -3,10 +3,11 @@ import asyncio
 import json
 import logging
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
+from app.core.rate_limiter import user_limiter, get_limit
 from app.core.config import settings
 from app.models.user import User
 from app.schemas.cloud import (
@@ -34,7 +35,9 @@ router = APIRouter()
 # ─── Provider Status ──────────────────────────────────────────────
 
 @router.get("/providers")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_providers(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -65,17 +68,19 @@ async def get_providers(
 # ─── OAuth Config (Per-User) ─────────────────────────────────────
 
 @router.put("/oauth-config", response_model=CloudOAuthConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def save_oauth_config(
-    request: CloudOAuthConfigCreate,
+    request: Request, response: Response,
+    body: CloudOAuthConfigCreate,
     current_user: UserPublic = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
     """Save or update OAuth credentials for a cloud provider (per-user)."""
     svc = CloudOAuthConfigService(db)
     config = svc.save_credentials(
-        provider=request.provider,
-        client_id=request.client_id,
-        client_secret=request.client_secret,
+        provider=body.provider,
+        client_id=body.client_id,
+        client_secret=body.client_secret,
         user_id=current_user.id,
     )
 
@@ -84,7 +89,7 @@ async def save_oauth_config(
         event_type="SYSTEM_CONFIG",
         action="cloud_oauth_config_updated",
         user=current_user.username,
-        resource=f"provider:{request.provider}",
+        resource=f"provider:{body.provider}",
         db=db,
     )
 
@@ -98,7 +103,9 @@ async def save_oauth_config(
 
 
 @router.delete("/oauth-config/{provider}")
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_oauth_config(
+    request: Request, response: Response,
     provider: str,
     current_user: UserPublic = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -127,7 +134,9 @@ async def delete_oauth_config(
 # ─── Connections ──────────────────────────────────────────────────
 
 @router.get("/connections", response_model=list[CloudConnectionResponse])
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_connections(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -138,7 +147,9 @@ async def list_connections(
 
 
 @router.delete("/connections/{connection_id}")
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_connection(
+    request: Request, response: Response,
     connection_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -155,7 +166,9 @@ async def delete_connection(
 # ─── OAuth Flow ───────────────────────────────────────────────────
 
 @router.get("/oauth/{provider}/start")
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_oauth(
+    request: Request, response: Response,
     provider: str,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -170,7 +183,9 @@ async def start_oauth(
 
 
 @router.get("/oauth/callback")
+@user_limiter.limit(get_limit("admin_operations"))
 async def oauth_callback_redirect(
+    request: Request, response: Response,
     code: str,
     state: str,
     db: Session = Depends(get_db),
@@ -197,13 +212,15 @@ async def oauth_callback_redirect(
 
 
 @router.post("/oauth/callback", response_model=CloudConnectionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def oauth_callback(
-    request: OAuthCallbackRequest,
+    request: Request, response: Response,
+    body: OAuthCallbackRequest,
     db: Session = Depends(get_db),
 ):
     """Handle OAuth callback via POST (programmatic use)."""
     try:
-        state_data = json.loads(request.state)
+        state_data = json.loads(body.state)
         provider = state_data["provider"]
         user_id = state_data["user_id"]
     except (json.JSONDecodeError, KeyError):
@@ -211,7 +228,7 @@ async def oauth_callback(
 
     service = CloudService(db)
     try:
-        conn = service.handle_oauth_callback(provider, request.code, user_id)
+        conn = service.handle_oauth_callback(provider, body.code, user_id)
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
         raise HTTPException(status_code=400, detail=f"OAuth failed: {e}")
@@ -222,8 +239,10 @@ async def oauth_callback(
 # ─── iCloud Connection ───────────────────────────────────────────
 
 @router.post("/icloud/connect")
+@user_limiter.limit(get_limit("admin_operations"))
 async def connect_icloud(
-    request: ICloudConnectRequest,
+    request: Request, response: Response,
+    body: ICloudConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -231,7 +250,7 @@ async def connect_icloud(
     service = CloudService(db)
     try:
         conn, requires_2fa = service.connect_icloud(
-            current_user.id, request.apple_id, request.password
+            current_user.id, body.apple_id, body.password
         )
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -243,8 +262,10 @@ async def connect_icloud(
 
 
 @router.post("/icloud/2fa")
+@user_limiter.limit(get_limit("admin_operations"))
 async def icloud_2fa(
-    request: ICloud2FARequest,
+    request: Request, response: Response,
+    body: ICloud2FARequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -252,7 +273,7 @@ async def icloud_2fa(
     service = CloudService(db)
     try:
         success = service.validate_icloud_2fa(
-            request.connection_id, current_user.id, request.code
+            body.connection_id, current_user.id, body.code
         )
     except ValueError as e:
         raise HTTPException(status_code=404, detail=str(e))
@@ -266,8 +287,10 @@ async def icloud_2fa(
 # ─── Dev Mode Connection ─────────────────────────────────────────
 
 @router.post("/dev/connect", response_model=CloudConnectionResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def dev_connect(
-    request: DevConnectRequest,
+    request: Request, response: Response,
+    body: DevConnectRequest,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
@@ -276,14 +299,16 @@ async def dev_connect(
         raise HTTPException(status_code=403, detail="Only available in dev mode")
 
     service = CloudService(db)
-    conn = service.create_dev_connection(current_user.id, request.provider)
+    conn = service.create_dev_connection(current_user.id, body.provider)
     return CloudConnectionResponse.model_validate(conn)
 
 
 # ─── File Browser ─────────────────────────────────────────────────
 
 @router.get("/browse/{connection_id}", response_model=list[CloudFileResponse])
+@user_limiter.limit(get_limit("admin_operations"))
 async def browse_files(
+    request: Request, response: Response,
     connection_id: int,
     path: str = Query(default="/", description="Path to browse"),
     current_user: User = Depends(get_current_user),
@@ -314,8 +339,10 @@ async def browse_files(
 # ─── Import Jobs ──────────────────────────────────────────────────
 
 @router.post("/import", response_model=CloudImportJobResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_import(
-    request: CloudImportRequest,
+    request: Request, response: Response,
+    body: CloudImportRequest,
     background_tasks: BackgroundTasks,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -324,11 +351,11 @@ async def start_import(
     job_service = CloudImportJobService(db)
     try:
         job = job_service.start_import(
-            connection_id=request.connection_id,
+            connection_id=body.connection_id,
             user_id=current_user.id,
-            source_path=request.source_path,
-            destination_path=request.destination_path,
-            job_type=request.job_type,
+            source_path=body.source_path,
+            destination_path=body.destination_path,
+            job_type=body.job_type,
         )
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
@@ -340,7 +367,9 @@ async def start_import(
 
 
 @router.get("/jobs", response_model=list[CloudImportJobResponse])
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_jobs(
+    request: Request, response: Response,
     limit: int = Query(default=50, ge=1, le=200),
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -352,7 +381,9 @@ async def list_jobs(
 
 
 @router.get("/jobs/{job_id}", response_model=CloudImportJobResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_job(
+    request: Request, response: Response,
     job_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -366,7 +397,9 @@ async def get_job(
 
 
 @router.post("/jobs/{job_id}/cancel")
+@user_limiter.limit(get_limit("admin_operations"))
 async def cancel_job(
+    request: Request, response: Response,
     job_id: int,
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db),

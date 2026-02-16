@@ -2,10 +2,11 @@
 from datetime import time
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query, WebSocket, WebSocketDisconnect
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.core.database import get_db
 from app.schemas.user import UserPublic
 from app.schemas.notification import (
@@ -26,7 +27,9 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 
 
 @router.get("", response_model=NotificationListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_notifications(
+    request: Request, response: Response,
     unread_only: bool = Query(False, description="Only return unread notifications"),
     include_dismissed: bool = Query(False, description="Include dismissed notifications"),
     category: Optional[NotificationCategoryEnum] = Query(None, description="Filter by category"),
@@ -77,7 +80,9 @@ async def get_notifications(
 
 
 @router.get("/unread-count", response_model=UnreadCountResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_unread_count(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> UnreadCountResponse:
@@ -103,7 +108,9 @@ async def get_unread_count(
 
 
 @router.post("/{notification_id}/read", response_model=NotificationResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def mark_notification_as_read(
+    request: Request, response: Response,
     notification_id: int,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -122,8 +129,10 @@ async def mark_notification_as_read(
 
 
 @router.post("/read-all", response_model=MarkReadResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def mark_all_as_read(
-    request: Optional[MarkReadRequest] = None,
+    request: Request, response: Response,
+    body: Optional[MarkReadRequest] = None,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> MarkReadResponse:
@@ -132,7 +141,7 @@ async def mark_all_as_read(
     Optionally filter by category.
     """
     service = get_notification_service()
-    category = request.category if request else None
+    category = body.category if body else None
 
     count = service.mark_all_as_read(db, current_user.id, category=category)
 
@@ -140,7 +149,9 @@ async def mark_all_as_read(
 
 
 @router.post("/{notification_id}/dismiss", response_model=NotificationResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def dismiss_notification(
+    request: Request, response: Response,
     notification_id: int,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
@@ -163,7 +174,9 @@ async def dismiss_notification(
 
 # Preferences endpoints
 @router.get("/preferences", response_model=NotificationPreferencesResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_notification_preferences(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
@@ -182,8 +195,10 @@ async def get_notification_preferences(
 
 
 @router.put("/preferences", response_model=NotificationPreferencesResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_notification_preferences(
-    request: NotificationPreferencesUpdate,
+    request: Request, response: Response,
+    body: NotificationPreferencesUpdate,
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationPreferencesResponse:
@@ -193,18 +208,18 @@ async def update_notification_preferences(
     # Parse quiet hours if provided
     quiet_start = None
     quiet_end = None
-    if request.quiet_hours_start:
+    if body.quiet_hours_start:
         try:
-            parts = request.quiet_hours_start.split(":")
+            parts = body.quiet_hours_start.split(":")
             quiet_start = time(int(parts[0]), int(parts[1]))
         except (ValueError, IndexError):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid quiet_hours_start format. Use HH:MM",
             )
-    if request.quiet_hours_end:
+    if body.quiet_hours_end:
         try:
-            parts = request.quiet_hours_end.split(":")
+            parts = body.quiet_hours_end.split(":")
             quiet_end = time(int(parts[0]), int(parts[1]))
         except (ValueError, IndexError):
             raise HTTPException(
@@ -214,22 +229,22 @@ async def update_notification_preferences(
 
     # Convert category preferences if provided
     cat_prefs = None
-    if request.category_preferences:
+    if body.category_preferences:
         cat_prefs = {
-            cat: pref.model_dump() for cat, pref in request.category_preferences.items()
+            cat: pref.model_dump() for cat, pref in body.category_preferences.items()
         }
 
     prefs = service.update_user_preferences(
         db=db,
         user_id=current_user.id,
-        email_enabled=request.email_enabled,
-        push_enabled=request.push_enabled,
-        in_app_enabled=request.in_app_enabled,
+        email_enabled=body.email_enabled,
+        push_enabled=body.push_enabled,
+        in_app_enabled=body.in_app_enabled,
         category_preferences=cat_prefs,
-        quiet_hours_enabled=request.quiet_hours_enabled,
+        quiet_hours_enabled=body.quiet_hours_enabled,
         quiet_hours_start=quiet_start,
         quiet_hours_end=quiet_end,
-        min_priority=request.min_priority,
+        min_priority=body.min_priority,
     )
 
     return NotificationPreferencesResponse.from_db(prefs)
@@ -237,8 +252,10 @@ async def update_notification_preferences(
 
 # Admin endpoints for creating notifications
 @router.post("", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("admin_operations"))
 async def create_notification(
-    request: NotificationCreate,
+    request: Request, response: Response,
+    body: NotificationCreate,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> NotificationResponse:
@@ -250,14 +267,14 @@ async def create_notification(
 
     notification = await service.create(
         db=db,
-        user_id=request.user_id,
-        category=request.category,
-        notification_type=request.notification_type,
-        title=request.title,
-        message=request.message,
-        action_url=request.action_url,
-        metadata=request.metadata,
-        priority=request.priority,
+        user_id=body.user_id,
+        category=body.category,
+        notification_type=body.notification_type,
+        title=body.title,
+        message=body.message,
+        action_url=body.action_url,
+        metadata=body.metadata,
+        priority=body.priority,
     )
 
     return NotificationResponse.from_db(notification)

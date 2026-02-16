@@ -4,11 +4,12 @@ from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_current_user, get_db
+from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
 from app.models.plugin import InstalledPlugin
 from app.plugins.manager import PluginManager, PluginLoadError
@@ -40,7 +41,9 @@ def get_plugin_manager() -> PluginManager:
 
 
 @router.get("", response_model=PluginListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_plugins(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginListResponse:
@@ -73,7 +76,9 @@ async def list_plugins(
 
 
 @router.get("/permissions", response_model=PermissionListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_permissions(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_admin),
 ) -> PermissionListResponse:
     """List all available plugin permissions.
@@ -87,7 +92,9 @@ async def list_permissions(
 
 
 @router.get("/ui/manifest", response_model=PluginUIManifestResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_ui_manifest(
+    request: Request, response: Response,
     current_user: User = Depends(get_current_user),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
 ) -> PluginUIManifestResponse:
@@ -100,7 +107,9 @@ async def get_ui_manifest(
 
 
 @router.get("/{name}", response_model=PluginDetailResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_plugin_details(
+    request: Request, response: Response,
     name: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -168,9 +177,11 @@ async def get_plugin_details(
 
 
 @router.post("/{name}/toggle", response_model=PluginToggleResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def toggle_plugin(
+    request: Request, response: Response,
     name: str,
-    request: PluginToggleRequest,
+    body: PluginToggleRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
@@ -197,9 +208,9 @@ async def toggle_plugin(
         InstalledPlugin.name == name
     ).first()
 
-    if request.enabled:
+    if body.enabled:
         # Enabling plugin
-        permissions_to_grant = request.grant_permissions
+        permissions_to_grant = body.grant_permissions
 
         # Validate all required permissions are granted
         if not PermissionManager.validate_permissions(
@@ -277,7 +288,9 @@ async def toggle_plugin(
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_plugin_config(
+    request: Request, response: Response,
     name: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
@@ -317,9 +330,11 @@ async def get_plugin_config(
 
 
 @router.put("/{name}/config", response_model=PluginConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_plugin_config(
+    request: Request, response: Response,
     name: str,
-    request: PluginConfigUpdateRequest,
+    body: PluginConfigUpdateRequest,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
     plugin_manager: PluginManager = Depends(get_plugin_manager),
@@ -337,7 +352,7 @@ async def update_plugin_config(
 
     # Validate configuration
     try:
-        validated_config = plugin.validate_config(request.config)
+        validated_config = plugin.validate_config(body.config)
     except ValueError as e:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -377,7 +392,9 @@ async def update_plugin_config(
 
 
 @router.get("/{name}/ui/{file_path:path}")
+@user_limiter.limit(get_limit("admin_operations"))
 async def serve_plugin_asset(
+    request: Request, response: Response,
     name: str,
     file_path: str,
     db: Session = Depends(get_db),
@@ -444,7 +461,9 @@ async def serve_plugin_asset(
 
 
 @router.delete("/{name}")
+@user_limiter.limit(get_limit("admin_operations"))
 async def uninstall_plugin(
+    request: Request, response: Response,
     name: str,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),

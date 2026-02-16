@@ -3,11 +3,12 @@
 import logging
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.database import get_db
+from app.core.rate_limiter import user_limiter, get_limit
 from app.models import VPNProfile, User, VPNType, ServerProfile
 from app.schemas.vpn_profile import (
     VPNProfileCreate,
@@ -25,7 +26,10 @@ router = APIRouter(prefix="/vpn-profiles", tags=["vpn-profiles"])
 
 
 @router.post("", response_model=VPNProfileResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def create_vpn_profile(
+    request: Request,
+    response: Response,
     name: str = Form(...),
     vpn_type: str = Form(...),
     config_file: UploadFile = File(...),
@@ -103,7 +107,10 @@ async def create_vpn_profile(
 
 
 @router.get("", response_model=List[VPNProfileList])
+@user_limiter.limit(get_limit("vpn_operations"))
 async def list_vpn_profiles(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> List[VPNProfileList]:
@@ -116,7 +123,10 @@ async def list_vpn_profiles(
 
 
 @router.get("/{profile_id}", response_model=VPNProfileResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def get_vpn_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -137,7 +147,10 @@ async def get_vpn_profile(
 
 
 @router.put("/{profile_id}", response_model=VPNProfileResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def update_vpn_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     name: str = Form(None),
     description: str = Form(None),
@@ -208,7 +221,10 @@ async def update_vpn_profile(
 
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def delete_vpn_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -239,7 +255,10 @@ async def delete_vpn_profile(
 
 
 @router.post("/{profile_id}/test-connection", response_model=VPNConnectionTest)
+@user_limiter.limit(get_limit("vpn_operations"))
 async def test_vpn_connection(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),

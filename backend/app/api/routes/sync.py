@@ -1,6 +1,6 @@
 """Sync API endpoints for local network file synchronization."""
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 import logging
 
@@ -12,6 +12,7 @@ from app.models.sync_state import SyncFileVersion
 from app.models.mobile import MobileRegistrationToken
 from app.models.file_metadata import FileMetadata
 from app.services.file_sync import FileSyncService
+from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
     RegisterDeviceRequest,
     SyncChangesRequest,
@@ -33,21 +34,23 @@ def get_sync_service(db: Session = Depends(get_db)) -> FileSyncService:
 
 
 @router.post("/register")
+@user_limiter.limit(get_limit("sync_operations"))
 async def register_device(
-    request: RegisterDeviceRequest,
+    request: Request,
+    response: Response,
+    payload: RegisterDeviceRequest,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db),
     sync_service: FileSyncService = Depends(get_sync_service),
-    http_request: Request = None
 ):
     """Register a device for synchronization."""
     # Enforce token-only registration: require a one-time registration token
     token = None
-    if hasattr(request, 'registration_token') and request.registration_token:
-        token = request.registration_token
+    if hasattr(payload, 'registration_token') and payload.registration_token:
+        token = payload.registration_token
     # Also allow token via header for non-JSON clients
-    if not token and http_request is not None:
-        token = http_request.headers.get('x-registration-token')
+    if not token:
+        token = request.headers.get('x-registration-token')
 
     if not token:
         raise HTTPException(
@@ -73,8 +76,8 @@ async def register_device(
 
     sync_state = sync_service.register_device(
         user_id=current_user.id,
-        device_id=request.device_id,
-        device_name=request.device_name or request.device_id
+        device_id=payload.device_id,
+        device_name=payload.device_name or payload.device_id
     )
     
     return {
@@ -86,8 +89,11 @@ async def register_device(
 
 
 @router.post("/register-desktop")
+@user_limiter.limit(get_limit("sync_operations"))
 async def register_desktop_device(
-    request: RegisterDeviceRequest,
+    request: Request,
+    response: Response,
+    payload: RegisterDeviceRequest,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db),
     sync_service: FileSyncService = Depends(get_sync_service)
@@ -102,13 +108,13 @@ async def register_desktop_device(
     # Check if device already registered
     from app.models.sync_state import SyncState
     existing_device = db.query(SyncState).filter(
-        SyncState.device_id == request.device_id,
+        SyncState.device_id == payload.device_id,
         SyncState.user_id == current_user.id
     ).first()
 
     if existing_device:
         # Device already registered, return existing info
-        Logger.info(f"Desktop device {request.device_id} already registered for user {current_user.username}")
+        Logger.info(f"Desktop device {payload.device_id} already registered for user {current_user.username}")
         return {
             "device_id": existing_device.device_id,
             "device_name": existing_device.device_name,
@@ -119,11 +125,11 @@ async def register_desktop_device(
     # Register new device
     sync_state = sync_service.register_device(
         user_id=current_user.id,
-        device_id=request.device_id,
-        device_name=request.device_name or request.device_id
+        device_id=payload.device_id,
+        device_name=payload.device_name or payload.device_id
     )
 
-    Logger.info(f"Registered desktop device {request.device_id} for user {current_user.username}")
+    Logger.info(f"Registered desktop device {payload.device_id} for user {current_user.username}")
 
     return {
         "device_id": sync_state.device_id,
@@ -134,7 +140,10 @@ async def register_desktop_device(
 
 
 @router.get("/status/{device_id}", response_model=SyncStatusResponse)
+@user_limiter.limit(get_limit("sync_operations"))
 async def get_sync_status(
+    request: Request,
+    response: Response,
     device_id: str,
     current_user: User = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service)
@@ -152,14 +161,17 @@ async def get_sync_status(
 
 
 @router.post("/changes", response_model=SyncChangesResponse)
+@user_limiter.limit(get_limit("sync_operations"))
 async def detect_changes(
-    request: SyncChangesRequest,
+    request: Request,
+    response: Response,
+    payload: SyncChangesRequest,
     current_user: User = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service)
 ):
     """
     Detect changes and return delta sync data.
-    
+
     The client sends its current file list, and the server returns:
     - Files to download (new/updated on server)
     - Files to delete (removed on server)
@@ -167,8 +179,8 @@ async def detect_changes(
     """
     changes = sync_service.detect_changes(
         user_id=current_user.id,
-        device_id=request.device_id,
-        file_list=[f.dict() for f in request.file_list]
+        device_id=payload.device_id,
+        file_list=[f.dict() for f in payload.file_list]
     )
     
     if "error" in changes:
@@ -181,14 +193,17 @@ async def detect_changes(
 
 
 @router.post("/conflicts/{file_path}/resolve", response_model=ResolveConflictResponse)
+@user_limiter.limit(get_limit("sync_operations"))
 async def resolve_conflict(
+    request: Request,
+    response: Response,
     file_path: str,
-    request: ResolveConflictRequest,
+    payload: ResolveConflictRequest,
     current_user: User = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service)
 ):
     """Resolve a file conflict."""
-    if request.resolution not in ["keep_local", "keep_server", "create_version"]:
+    if payload.resolution not in ["keep_local", "keep_server", "create_version"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid resolution method"
@@ -197,24 +212,27 @@ async def resolve_conflict(
     success = sync_service.resolve_conflict(
         user_id=current_user.id,
         file_path=file_path,
-        resolution=request.resolution
+        resolution=payload.resolution
     )
-    
+
     if not success:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Conflict not found"
         )
-    
+
     return {
         "file_path": file_path,
-        "resolution": request.resolution,
+        "resolution": payload.resolution,
         "resolved": True
     }
 
 
 @router.get("/history/{file_path}", response_model=FileHistoryResponse)
+@user_limiter.limit(get_limit("sync_operations"))
 async def get_file_history(
+    request: Request,
+    response: Response,
     file_path: str,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(deps.get_db)
@@ -251,7 +269,10 @@ async def get_file_history(
 
 
 @router.get("/state")
+@user_limiter.limit(get_limit("sync_operations"))
 async def get_sync_state(
+    request: Request,
+    response: Response,
     current_user: User = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
     sync_service: FileSyncService = Depends(get_sync_service),

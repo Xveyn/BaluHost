@@ -67,6 +67,7 @@ RATE_LIMITS = {
     "file_download": "100/minute",
     "file_list": "60/minute",
     "file_delete": "30/minute",
+    "file_write": "30/minute",
     
     # Share operations - moderate limits
     "share_create": "10/minute",
@@ -89,6 +90,18 @@ RATE_LIMITS = {
     
     # VPN operations - moderate limits
     "vpn_operations": "10/minute",
+
+    # Backup operations - strict limits (resource intensive)
+    "backup_operations": "10/minute",
+
+    # Sync operations - moderate limits
+    "sync_operations": "30/minute",
+
+    # Chunked upload operations
+    "file_chunked": "20/minute",
+
+    # Benchmark operations - very strict (resource intensive)
+    "admin_benchmark": "3/minute",
 }
 
 

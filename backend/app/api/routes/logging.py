@@ -1,11 +1,10 @@
 """Logging API endpoints."""
-from __future__ import annotations
 
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_user, get_db
@@ -14,6 +13,7 @@ from app.schemas.user import UserPublic
 from app.schemas.audit_log import AuditLogResponse
 from app.services.audit_logger_db import get_audit_logger_db
 from app.services.disk_monitor import get_disk_io_history
+from app.core.rate_limiter import user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 
@@ -116,7 +116,10 @@ def _generate_mock_file_access_logs(days: int = 1, limit: int = 100) -> List[Dic
 
 
 @router.get("/disk-io")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_disk_io_logs(
+    request: Request,
+    response: Response,
     hours: int = Query(default=24, ge=1, le=168),  # 1 hour to 1 week
     current_user: UserPublic = Depends(get_current_user)
 ) -> Dict[str, Any]:
@@ -156,7 +159,10 @@ async def get_disk_io_logs(
 
 
 @router.get("/file-access")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_file_access_logs(
+    request: Request,
+    response: Response,
     limit: int = Query(default=100, ge=1, le=1000),
     days: int = Query(default=1, ge=1, le=30),
     action: Optional[str] = Query(default=None),
@@ -198,7 +204,10 @@ async def get_file_access_logs(
 
 
 @router.get("/stats")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_logging_stats(
+    request: Request,
+    response: Response,
     days: int = Query(default=7, ge=1, le=30),
     current_user: UserPublic = Depends(get_current_user),
     db: Session = Depends(get_db)
@@ -280,7 +289,10 @@ async def get_logging_stats(
 
 
 @router.get("/audit")
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_audit_logs(
+    request: Request,
+    response: Response,
     page: int = Query(default=1, ge=1),
     page_size: int = Query(default=50, ge=1, le=100),
     event_type: Optional[str] = Query(default=None),

@@ -1,9 +1,10 @@
 """Scheduler API routes."""
 from typing import Optional
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.rate_limiter import user_limiter, get_limit
 from app.core.database import get_db
 from app.schemas.user import UserPublic
 from app.schemas.scheduler import (
@@ -23,7 +24,9 @@ router = APIRouter()
 
 
 @router.get("/", response_model=SchedulerListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_schedulers(
+    request: Request, response: Response,
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -43,7 +46,9 @@ async def list_schedulers(
 
 
 @router.get("/{name}", response_model=SchedulerStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_scheduler(
+    request: Request, response: Response,
     name: str,
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
@@ -66,9 +71,11 @@ async def get_scheduler(
 
 
 @router.post("/{name}/run-now", response_model=RunNowResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def run_scheduler_now(
+    request: Request, response: Response,
     name: str,
-    request: RunNowRequest = RunNowRequest(),
+    body: RunNowRequest = RunNowRequest(),
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -80,7 +87,7 @@ async def run_scheduler_now(
     Use force=true to run even if the scheduler is already running.
     """
     service = get_scheduler_service(db)
-    result = await service.run_scheduler_now(name, current_user.id, request.force)
+    result = await service.run_scheduler_now(name, current_user.id, body.force)
 
     if not result.success and result.status == "error":
         raise HTTPException(
@@ -92,7 +99,9 @@ async def run_scheduler_now(
 
 
 @router.get("/{name}/history", response_model=SchedulerHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_scheduler_history(
+    request: Request, response: Response,
     name: str,
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
@@ -118,7 +127,9 @@ async def get_scheduler_history(
 
 
 @router.get("/history/all", response_model=SchedulerHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_all_scheduler_history(
+    request: Request, response: Response,
     page: int = Query(default=1, ge=1, description="Page number"),
     page_size: int = Query(default=20, ge=1, le=100, description="Items per page"),
     status_filter: Optional[str] = Query(
@@ -147,7 +158,9 @@ async def get_all_scheduler_history(
 
 
 @router.put("/{name}/config", status_code=status.HTTP_200_OK)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_scheduler_config(
+    request: Request, response: Response,
     name: str,
     config: SchedulerConfigUpdate,
     current_user: UserPublic = Depends(deps.get_current_admin),
@@ -178,9 +191,11 @@ async def update_scheduler_config(
 
 
 @router.post("/{name}/toggle", response_model=SchedulerToggleResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def toggle_scheduler(
+    request: Request, response: Response,
     name: str,
-    request: SchedulerToggleRequest,
+    body: SchedulerToggleRequest,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ):
@@ -191,4 +206,4 @@ async def toggle_scheduler(
     When enabled, it will be started with the configured interval.
     """
     service = get_scheduler_service(db)
-    return service.toggle_scheduler(name, request.enabled, current_user.id)
+    return service.toggle_scheduler(name, body.enabled, current_user.id)

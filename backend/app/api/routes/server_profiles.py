@@ -4,7 +4,7 @@ import datetime
 import logging
 from typing import List, Optional, cast
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 
 from app.api import deps
@@ -21,6 +21,7 @@ from app.schemas.server_profile import (
 )
 from app.services.ssh_service import SSHService
 from app.services.vpn_encryption import VPNEncryption
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
 
@@ -28,7 +29,10 @@ router = APIRouter(prefix="/server-profiles", tags=["server-profiles"])
 
 
 @router.get("/public", response_model=List[ServerProfileList])
+@limiter.limit(get_limit("admin_operations"))
 async def list_server_profiles_public(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
 ) -> List[ServerProfileList]:
     """
@@ -66,7 +70,10 @@ async def list_server_profiles_public(
 
 
 @router.post("", response_model=ServerProfileResponse, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("admin_operations"))
 async def create_server_profile(
+    request: Request,
+    response: Response,
     profile_data: ServerProfileCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -111,7 +118,10 @@ async def create_server_profile(
 
 
 @router.get("", response_model=List[ServerProfileList])
+@user_limiter.limit(get_limit("admin_operations"))
 async def list_server_profiles(
+    request: Request,
+    response: Response,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
 ) -> List[ServerProfileList]:
@@ -124,7 +134,10 @@ async def list_server_profiles(
 
 
 @router.get("/{profile_id}", response_model=ServerProfileResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_server_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -145,7 +158,10 @@ async def get_server_profile(
 
 
 @router.put("/{profile_id}", response_model=ServerProfileResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_server_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     profile_data: ServerProfileUpdate,
     db: Session = Depends(get_db),
@@ -198,7 +214,10 @@ async def update_server_profile(
 
 
 @router.delete("/{profile_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
 async def delete_server_profile(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -229,7 +248,10 @@ async def delete_server_profile(
 
 
 @router.post("/{profile_id}/check-connectivity", response_model=SSHConnectionTest)
+@user_limiter.limit(get_limit("admin_operations"))
 async def check_ssh_connection(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),
@@ -276,7 +298,10 @@ async def check_ssh_connection(
 
 
 @router.post("/{profile_id}/start", response_model=ServerStartResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_remote_server(
+    request: Request,
+    response: Response,
     profile_id: int,
     db: Session = Depends(get_db),
     current_user: User = Depends(deps.get_current_user),

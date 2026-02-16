@@ -1,10 +1,11 @@
 """Update service API endpoints."""
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status, Query
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query
 from sqlalchemy.orm import Session
 
 from app.api import deps
+from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.core.database import get_db
 from app.schemas.user import UserPublic
 from app.schemas.update import (
@@ -27,7 +28,10 @@ router = APIRouter(prefix="/updates", tags=["updates"])
 
 
 @router.get("/version", response_model=VersionInfo)
-async def get_public_version() -> VersionInfo:
+@limiter.limit(get_limit("admin_operations"))
+async def get_public_version(
+    request: Request, response: Response,
+) -> VersionInfo:
     """Get current version (public endpoint, no auth required).
 
     Returns the current installed version information including
@@ -38,7 +42,10 @@ async def get_public_version() -> VersionInfo:
 
 
 @router.get("/release-notes", response_model=ReleaseNotesResponse)
-async def get_release_notes() -> ReleaseNotesResponse:
+@limiter.limit(get_limit("admin_operations"))
+async def get_release_notes(
+    request: Request, response: Response,
+) -> ReleaseNotesResponse:
     """Get release notes for the current version (public endpoint, no auth required).
 
     Returns categorized changes between the previous and current version tag.
@@ -48,7 +55,9 @@ async def get_release_notes() -> ReleaseNotesResponse:
 
 
 @router.get("/check", response_model=UpdateCheckResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def check_for_updates(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> UpdateCheckResponse:
@@ -82,8 +91,10 @@ async def check_for_updates(
 
 
 @router.post("/start", response_model=UpdateStartResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def start_update(
-    request: Optional[UpdateStartRequest] = None,
+    request: Request, response: Response,
+    body: Optional[UpdateStartRequest] = None,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> UpdateStartResponse:
@@ -98,7 +109,7 @@ async def start_update(
     service = get_update_service(db)
     audit_logger = get_audit_logger_db()
 
-    req = request or UpdateStartRequest()
+    req = body or UpdateStartRequest()
 
     result = await service.start_update(
         user_id=current_user.id,
@@ -138,7 +149,9 @@ async def start_update(
 
 
 @router.get("/progress/{update_id}", response_model=UpdateProgressResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_update_progress(
+    request: Request, response: Response,
     update_id: int,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
@@ -164,7 +177,9 @@ async def get_update_progress(
 
 
 @router.get("/current", response_model=Optional[UpdateProgressResponse])
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_current_update(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> Optional[UpdateProgressResponse]:
@@ -200,8 +215,10 @@ async def get_current_update(
 
 
 @router.post("/rollback", response_model=RollbackResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def rollback_update(
-    request: Optional[RollbackRequest] = None,
+    request: Request, response: Response,
+    body: Optional[RollbackRequest] = None,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> RollbackResponse:
@@ -215,7 +232,7 @@ async def rollback_update(
     service = get_update_service(db)
     audit_logger = get_audit_logger_db()
 
-    req = request or RollbackRequest()
+    req = body or RollbackRequest()
 
     result = await service.rollback(req, current_user.id)
 
@@ -245,7 +262,9 @@ async def rollback_update(
 
 
 @router.get("/history", response_model=UpdateHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_update_history(
+    request: Request, response: Response,
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(20, ge=1, le=100, description="Items per page"),
     current_user: UserPublic = Depends(deps.get_current_admin),
@@ -262,7 +281,9 @@ async def get_update_history(
 
 
 @router.get("/config", response_model=UpdateConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def get_update_config(
+    request: Request, response: Response,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
 ) -> UpdateConfigResponse:
@@ -277,7 +298,9 @@ async def get_update_config(
 
 
 @router.put("/config", response_model=UpdateConfigResponse)
+@user_limiter.limit(get_limit("admin_operations"))
 async def update_config(
+    request: Request, response: Response,
     config: UpdateConfigUpdate,
     current_user: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db),
