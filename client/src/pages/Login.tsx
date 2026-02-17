@@ -5,7 +5,6 @@ import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
-import { Shield } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -203,7 +202,7 @@ export default function Login({ onLogin }: LoginProps) {
               </div>
             </div>
             <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">{t('title')}</h1>
-            <p className="mt-2 text-sm text-slate-100-tertiary">{t('subtitle')}</p>
+            <p className="mt-2 text-sm text-slate-100-tertiary">{twoFactorRequired ? t('twoFactor.subtitle') : t('subtitle')}</p>
 
             {/* Developer Build Badge */}
             <DeveloperBadge size="md" className="mt-3" />
@@ -228,17 +227,7 @@ export default function Login({ onLogin }: LoginProps) {
           {/* 2FA Verification Step */}
           {twoFactorRequired ? (
             <form onSubmit={handleVerify2FA} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
-              <div className="flex flex-col items-center gap-3 mb-2">
-                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/15 border border-sky-500/30">
-                  <Shield className="h-6 w-6 text-sky-400" />
-                </div>
-                <div className="text-center">
-                  <h2 className="text-lg font-semibold text-slate-100">{t('twoFactor.title')}</h2>
-                  <p className="text-sm text-slate-100-tertiary mt-1">{t('twoFactor.subtitle')}</p>
-                </div>
-              </div>
-
-              {error && (
+{error && (
                 <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
                   {error}
                 </div>
