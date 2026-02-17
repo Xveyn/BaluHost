@@ -293,7 +293,7 @@ export default function UpdatePage() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+        <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
       </div>
     );
   }
@@ -301,20 +301,20 @@ export default function UpdatePage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white flex items-center gap-3">
-            <Download className="h-7 w-7 text-sky-500" />
+          <h1 className="text-2xl sm:text-3xl font-bold text-white flex items-center gap-3">
+            <Download className="h-7 w-7 text-blue-500" />
             {t('title')}
           </h1>
-          <p className="text-slate-400 mt-1">
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             {t('description')}
           </p>
         </div>
         <button
           onClick={fetchCheck}
           disabled={checkLoading}
-          className="flex items-center gap-2 px-4 py-2 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded-lg transition-colors"
+          className="flex items-center gap-2 rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40 disabled:opacity-50"
         >
           <RefreshCw className={`h-4 w-4 ${checkLoading ? 'animate-spin' : ''}`} />
           {t('buttons.checkForUpdates')}
@@ -322,15 +322,15 @@ export default function UpdatePage() {
       </div>
 
       {/* Tabs */}
-      <div className="flex gap-1 p-1 bg-slate-800 rounded-lg w-fit">
+      <div className="flex gap-2 border-b border-slate-800 pb-3 overflow-x-auto scrollbar-none">
         {tabs.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-2 rounded-md transition-colors ${
+            className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
               activeTab === tab.id
-                ? 'bg-slate-700 text-white'
-                : 'text-slate-400 hover:text-white hover:bg-slate-700/50'
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
             }`}
           >
             {tab.icon}
@@ -388,13 +388,13 @@ export default function UpdatePage() {
             <div
               className={`bg-slate-800 rounded-lg p-5 border ${
                 checkResult?.update_available
-                  ? 'border-sky-500/50 bg-sky-500/5'
+                  ? 'border-blue-500/50 bg-blue-500/5'
                   : 'border-slate-700'
               }`}
             >
               <div className="flex items-center gap-2 mb-4">
                 {checkResult?.update_available ? (
-                  <Zap className="h-5 w-5 text-sky-400" />
+                  <Zap className="h-5 w-5 text-blue-400" />
                 ) : (
                   <CheckCircle className="h-5 w-5 text-emerald-400" />
                 )}
@@ -404,7 +404,7 @@ export default function UpdatePage() {
               </div>
               {checkResult?.update_available && checkResult.latest_version ? (
                 <div className="space-y-3">
-                  <div className="text-3xl font-bold text-sky-400">
+                  <div className="text-3xl font-bold text-blue-400">
                     v{checkResult.latest_version.version}
                   </div>
                   <div className="flex items-center gap-2 text-sm text-slate-400">
@@ -449,7 +449,7 @@ export default function UpdatePage() {
           {releaseNotes && releaseNotes.categories.length > 0 && (
             <div className="bg-slate-800 rounded-lg p-5 border border-slate-700">
               <div className="flex items-center gap-3 mb-1">
-                <FileText className="h-5 w-5 text-sky-400" />
+                <FileText className="h-5 w-5 text-blue-400" />
                 <h3 className="font-medium text-white">{t('releaseNotes.title')}</h3>
                 <span className="text-sm font-mono text-slate-400">v{releaseNotes.version}</span>
               </div>
@@ -486,7 +486,7 @@ export default function UpdatePage() {
               <h3 className="font-medium text-white mb-4">{t('changelog.title')}</h3>
               <div className="space-y-4">
                 {checkResult.changelog.map((entry, i) => (
-                  <div key={i} className="border-l-2 border-sky-500/50 pl-4">
+                  <div key={i} className="border-l-2 border-blue-500/50 pl-4">
                     <div className="flex items-center gap-2 mb-2">
                       <span className="font-medium text-white">v{entry.version}</span>
                       {entry.is_prerelease && (
@@ -527,7 +527,7 @@ export default function UpdatePage() {
                 <button
                   onClick={() => setShowUpdateConfirm(true)}
                   disabled={!checkResult.can_update || updateLoading || !!currentUpdate}
-                  className="flex items-center gap-2 px-6 py-3 bg-sky-600 hover:bg-sky-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-colors font-medium"
+                  className="flex items-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-all touch-manipulation active:scale-95 font-medium"
                 >
                   <Download className="h-5 w-5" />
                   {t('buttons.updateTo', { version: checkResult.latest_version?.version })}
@@ -538,7 +538,7 @@ export default function UpdatePage() {
                   <button
                     onClick={handleStartUpdate}
                     disabled={updateLoading}
-                    className="px-4 py-1.5 bg-sky-600 hover:bg-sky-700 text-white rounded text-sm"
+                    className="px-4 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
                   >
                     {updateLoading ? (
                       <Loader2 className="h-4 w-4 animate-spin" />
@@ -548,7 +548,7 @@ export default function UpdatePage() {
                   </button>
                   <button
                     onClick={() => setShowUpdateConfirm(false)}
-                    className="px-4 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm"
+                    className="px-4 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
                   >
                     {t('common:cancel')}
                   </button>
@@ -627,7 +627,7 @@ export default function UpdatePage() {
                               setRollbackTarget(entry.id);
                               setShowRollbackConfirm(true);
                             }}
-                            className="text-amber-400 hover:text-amber-300 text-sm"
+                            className="text-amber-400 hover:text-amber-300 text-sm transition-all touch-manipulation active:scale-95"
                           >
                             <RotateCcw className="h-4 w-4" />
                           </button>
@@ -650,14 +650,14 @@ export default function UpdatePage() {
                 <button
                   onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
                   disabled={historyPage === 1}
-                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm"
+                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
                 >
                   {t('buttons.previous')}
                 </button>
                 <button
                   onClick={() => setHistoryPage((p) => p + 1)}
                   disabled={historyPage >= Math.ceil(historyTotal / 10)}
-                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm"
+                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
                 >
                   {t('buttons.next')}
                 </button>
@@ -687,7 +687,7 @@ export default function UpdatePage() {
                 disabled={configLoading}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
@@ -752,7 +752,7 @@ export default function UpdatePage() {
                 disabled={configLoading}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
@@ -774,7 +774,7 @@ export default function UpdatePage() {
                 disabled={configLoading}
                 className="sr-only peer"
               />
-              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-sky-600"></div>
+              <div className="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
             </label>
           </div>
 
@@ -787,7 +787,7 @@ export default function UpdatePage() {
                   {t('version.lastChecked')} {new Date(config.last_check_at).toLocaleString()}
                 </span>
                 {config.last_available_version && (
-                  <span className="text-sky-400">
+                  <span className="text-blue-400">
                     (v{config.last_available_version} available)
                   </span>
                 )}
@@ -801,7 +801,7 @@ export default function UpdatePage() {
         <Suspense
           fallback={
             <div className="flex items-center justify-center h-64">
-              <Loader2 className="h-8 w-8 animate-spin text-sky-500" />
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500" />
             </div>
           }
         >
@@ -826,14 +826,14 @@ export default function UpdatePage() {
                   setShowRollbackConfirm(false);
                   setRollbackTarget(null);
                 }}
-                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg"
+                className="px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg transition-all touch-manipulation active:scale-95"
               >
                 {t('common:cancel')}
               </button>
               <button
                 onClick={() => handleRollback()}
                 disabled={rollbackLoading}
-                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg"
+                className="flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg transition-all touch-manipulation active:scale-95"
               >
                 {rollbackLoading ? (
                   <Loader2 className="h-4 w-4 animate-spin" />
