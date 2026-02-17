@@ -62,7 +62,8 @@
       "Bash(git rm:*)",
       "Bash(SKIP_APP_INIT=1 NAS_MODE=dev python:*)",
       "Bash(NAS_MODE=dev .venv/bin/python:*)",
-      "Bash(/home/sven/projects/BaluHost/backend/.venv/bin/python3:*)"
+      "Bash(/home/sven/projects/BaluHost/backend/.venv/bin/python3:*)",
+      "Bash(pip install:*)"
     ]
   },
   "enabledPlugins": {
