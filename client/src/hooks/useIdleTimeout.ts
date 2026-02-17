@@ -22,47 +22,54 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
   const [warningVisible, setWarningVisible] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState(WARNING_SEC);
 
+  // Stable refs to avoid re-creating callbacks when props change
+  const onLogoutRef = useRef(onLogout);
+  onLogoutRef.current = onLogout;
+
+  const enabledRef = useRef(enabled);
+  enabledRef.current = enabled;
+
   const idleTimer = useRef<ReturnType<typeof setTimeout>>();
   const countdownInterval = useRef<ReturnType<typeof setInterval>>();
-  const secondsRef = useRef(WARNING_SEC);
+  const warningActiveRef = useRef(false);
 
   const clearTimers = useCallback(() => {
-    if (idleTimer.current) clearTimeout(idleTimer.current);
-    if (countdownInterval.current) clearInterval(countdownInterval.current);
+    if (idleTimer.current) { clearTimeout(idleTimer.current); idleTimer.current = undefined; }
+    if (countdownInterval.current) { clearInterval(countdownInterval.current); countdownInterval.current = undefined; }
   }, []);
 
   const resetTimer = useCallback(() => {
     clearTimers();
+    warningActiveRef.current = false;
     setWarningVisible(false);
     setSecondsRemaining(WARNING_SEC);
-    secondsRef.current = WARNING_SEC;
 
-    if (!enabled) return;
+    if (!enabledRef.current) return;
 
     idleTimer.current = setTimeout(() => {
       // Show warning, start countdown
+      warningActiveRef.current = true;
       setWarningVisible(true);
-      secondsRef.current = WARNING_SEC;
-      setSecondsRemaining(WARNING_SEC);
+      let remaining = WARNING_SEC;
+      setSecondsRemaining(remaining);
 
       countdownInterval.current = setInterval(() => {
-        secondsRef.current -= 1;
-        setSecondsRemaining(secondsRef.current);
-        if (secondsRef.current <= 0) {
+        remaining -= 1;
+        setSecondsRemaining(remaining);
+        if (remaining <= 0) {
           clearTimers();
-          onLogout();
+          warningActiveRef.current = false;
+          onLogoutRef.current();
         }
       }, 1000);
     }, IDLE_MS);
-  }, [enabled, onLogout, clearTimers]);
+  }, [clearTimers]);
 
   // Activity handler — resets timer and pings other tabs
   const handleActivity = useCallback(() => {
-    // Only reset if warning is NOT showing (activity during warning is ignored;
-    // user must explicitly click "Stay logged in")
-    if (secondsRef.current < WARNING_SEC && secondsRef.current > 0) return;
+    // Ignore activity while warning is showing — user must click "Stay logged in"
+    if (warningActiveRef.current) return;
     resetTimer();
-    // Cross-tab sync: write timestamp so other tabs pick it up
     try {
       localStorage.setItem(STORAGE_KEY, Date.now().toString());
     } catch { /* quota errors are harmless */ }
@@ -72,6 +79,7 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
   useEffect(() => {
     if (!enabled) {
       clearTimers();
+      warningActiveRef.current = false;
       setWarningVisible(false);
       return;
     }
@@ -89,21 +97,21 @@ export function useIdleTimeout({ onLogout, enabled }: UseIdleTimeoutOptions): Us
         document.removeEventListener(event, handleActivity);
       }
     };
-  }, [enabled, handleActivity, resetTimer, clearTimers]);
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Cross-tab sync: listen for storage events from other tabs
   useEffect(() => {
     if (!enabled) return;
 
     const handleStorage = (e: StorageEvent) => {
-      if (e.key === STORAGE_KEY) {
+      if (e.key === STORAGE_KEY && !warningActiveRef.current) {
         resetTimer();
       }
     };
 
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
-  }, [enabled, resetTimer]);
+  }, [enabled]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return { warningVisible, secondsRemaining, resetTimer };
 }
