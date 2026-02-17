@@ -4,24 +4,31 @@ import useAdminDb from '../hooks/useAdminDb'
 import AdminDataTable from '../components/AdminDataTable'
 import ColumnFilterPanel from '../components/admin/ColumnFilterPanel'
 import TableSelector from '../components/admin/TableSelector'
+import TableSidebar from '../components/admin/TableSidebar'
+import RowDetailPanel from '../components/admin/RowDetailPanel'
+import DataTypeIndicator from '../components/admin/DataTypeIndicator'
 import { rowsToCsv } from '../lib/csv'
 import type { ColumnFilters, AdminTableSchemaField } from '../lib/api'
-import { Database, Table, Download, ChevronLeft, ChevronRight, RefreshCw, BarChart3, History, Wrench, Search, Filter, X, ChevronDown } from 'lucide-react'
+import { Database, Table, Download, ChevronLeft, ChevronRight, RefreshCw, BarChart3, History, Wrench, Search, Filter, X } from 'lucide-react'
+import { AdminBadge } from '../components/ui/AdminBadge'
 import DatabaseStatsCards from '../components/admin/DatabaseStatsCards'
 import MaintenanceTools from '../components/admin/MaintenanceTools'
 import StorageAnalysisChart from '../components/admin/StorageAnalysisChart'
 import MonitoringHistoryViewer from '../components/admin/MonitoringHistoryViewer'
 
-type TabType = 'tables' | 'stats' | 'storage' | 'history' | 'maintenance'
+type CategoryType = 'browse' | 'analytics'
+type AnalyticsTabType = 'stats' | 'storage' | 'history' | 'maintenance'
 
 export default function AdminDatabase() {
   const { t } = useTranslation('admin');
-  const [activeTab, setActiveTab] = useState<TabType>('tables')
+  const [activeCategory, setActiveCategory] = useState<CategoryType>('browse')
+  const [analyticsTab, setAnalyticsTab] = useState<AnalyticsTabType>('stats')
+
   const [tables, setTables] = useState<string[]>([])
   const [tableCategories, setTableCategories] = useState<Record<string, string[]>>({})
   const [selected, setSelected] = useState<string | null>(null)
   const [page, setPage] = useState<number>(1)
-  const [pageSize] = useState<number>(50)
+  const [pageSize, setPageSize] = useState<number>(25)
 
   // Sort state
   const [sortBy, setSortBy] = useState<string | null>(null)
@@ -36,13 +43,8 @@ export default function AdminDatabase() {
   const [debouncedSearch, setDebouncedSearch] = useState('')
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  const tabs = [
-    { id: 'tables' as TabType, label: t('database.tabs.tables'), icon: Table },
-    { id: 'stats' as TabType, label: t('database.tabs.stats'), icon: BarChart3 },
-    { id: 'storage' as TabType, label: t('database.tabs.storage'), icon: Database },
-    { id: 'history' as TabType, label: t('database.tabs.history'), icon: History },
-    { id: 'maintenance' as TabType, label: t('database.tabs.maintenance'), icon: Wrench },
-  ];
+  // Row detail
+  const [selectedRow, setSelectedRow] = useState<Record<string, any> | null>(null)
 
   const { fetchTables, fetchTableCategories, fetchSchema, fetchRows } = useAdminDb()
   const [schema, setSchema] = useState<any | null>(null)
@@ -52,10 +54,21 @@ export default function AdminDatabase() {
   const [total, setTotal] = useState<number | null>(null)
   const [loading, setLoading] = useState<boolean>(false)
   const [error, setError] = useState<string | null>(null)
-  const [showSchema, setShowSchema] = useState(false)
 
   const totalPages = total ? Math.ceil((total ?? 0) / pageSize) : null
   const activeFilterCount = Object.keys(filters).length
+
+  // Row range display
+  const rangeStart = total !== null && total > 0 ? (page - 1) * pageSize + 1 : 0
+  const rangeEnd = total !== null ? Math.min(page * pageSize, total) : 0
+
+  // Analytics sub-tabs
+  const analyticsTabs = [
+    { id: 'stats' as AnalyticsTabType, label: t('database.tabs.stats'), icon: BarChart3 },
+    { id: 'storage' as AnalyticsTabType, label: t('database.tabs.storage'), icon: Database },
+    { id: 'history' as AnalyticsTabType, label: t('database.tabs.history'), icon: History },
+    { id: 'maintenance' as AnalyticsTabType, label: t('database.tabs.maintenance'), icon: Wrench },
+  ];
 
   // Debounce global search
   useEffect(() => {
@@ -120,6 +133,7 @@ export default function AdminDatabase() {
     setGlobalSearch('')
     setDebouncedSearch('')
     setShowFilters(false)
+    setSelectedRow(null)
   }
 
   const handleSortChange = useCallback((column: string, order: 'asc' | 'desc') => {
@@ -131,6 +145,10 @@ export default function AdminDatabase() {
   const handleFiltersChange = useCallback((newFilters: ColumnFilters) => {
     setFilters(newFilters)
     setPage(1)
+  }, [])
+
+  const handleRowClick = useCallback((row: Record<string, any>) => {
+    setSelectedRow(prev => prev === row ? null : row)
   }, [])
 
   // Manual owner mapping loader
@@ -173,172 +191,189 @@ export default function AdminDatabase() {
     }
   }
 
-  // Render Tables Tab Content
-  const renderTablesContent = () => (
-    <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
+  const handleCsvExport = () => {
+    if (!selected || rows.length === 0) return
+    const cols = schema?.columns?.map((c: any) => c.name) ?? []
+    const csv = rowsToCsv(rows, cols)
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `${selected}.csv`
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
 
-      {/* Compact Toolbar */}
-      <div className="relative px-4 sm:px-5 py-3 border-b border-slate-700/50 bg-slate-800/30">
-        <div className="flex flex-wrap items-center gap-2 sm:gap-3">
-          {/* Table Selector Dropdown */}
-          <TableSelector
-            tables={tables}
-            categories={tableCategories}
-            selected={selected}
-            onSelect={handleTableSelect}
-          />
+  // Render Browse Content
+  const renderBrowseContent = () => (
+    <div className="flex gap-4 min-h-[500px]">
+      {/* Desktop Sidebar */}
+      <TableSidebar
+        tables={tables}
+        categories={tableCategories}
+        selected={selected}
+        onSelect={handleTableSelect}
+      />
 
-          {/* Global Search */}
-          {selected && (
-            <div className="relative flex-1 min-w-[160px] max-w-xs">
-              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
-              <input
-                type="text"
-                value={globalSearch}
-                onChange={(e) => setGlobalSearch(e.target.value)}
-                placeholder="Search columns..."
-                className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
+      {/* Main Panel */}
+      <div className="flex-1 min-w-0 card !p-0 overflow-hidden">
+        {/* Toolbar */}
+        <div className="px-4 sm:px-5 py-3 border-b border-slate-800/60">
+          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+            {/* Mobile-only table selector dropdown */}
+            <div className="lg:hidden">
+              <TableSelector
+                tables={tables}
+                categories={tableCategories}
+                selected={selected}
+                onSelect={handleTableSelect}
               />
-              {globalSearch && (
-                <button
-                  onClick={() => { setGlobalSearch(''); setDebouncedSearch('') }}
-                  className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
-                >
-                  <X className="w-3.5 h-3.5" />
-                </button>
-              )}
             </div>
-          )}
 
-          {/* Filter Toggle */}
-          {selected && schema?.columns?.length > 0 && (
-            <button
-              onClick={() => setShowFilters(!showFilters)}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
-                showFilters || activeFilterCount > 0
-                  ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
-                  : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-white'
-              }`}
-            >
-              <Filter className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Filters</span>
-              {activeFilterCount > 0 && (
-                <span className="bg-blue-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
-                  {activeFilterCount}
-                </span>
-              )}
-            </button>
-          )}
-
-          {/* Pagination */}
-          {selected && (
-            <div className="flex items-center gap-1">
-              <button
-                onClick={() => setPage(Math.max(1, page - 1))}
-                className={`p-1.5 rounded-md border transition-all duration-200 ${
-                  page <= 1
-                    ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
-                }`}
-                disabled={page <= 1}
-              >
-                <ChevronLeft className="w-4 h-4" />
-              </button>
-              <span className="text-xs text-slate-300 font-medium min-w-[60px] text-center tabular-nums">
-                {page}{totalPages ? ` / ${totalPages}` : ''}
-              </span>
-              <button
-                onClick={() => setPage(page + 1)}
-                className={`p-1.5 rounded-md border transition-all duration-200 ${
-                  totalPages !== null && page >= (totalPages ?? 1)
-                    ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
-                    : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
-                }`}
-                disabled={totalPages !== null && page >= (totalPages ?? 1)}
-              >
-                <ChevronRight className="w-4 h-4" />
-              </button>
-            </div>
-          )}
-
-          {/* Export Button */}
-          <button
-            disabled={!selected || rows.length === 0}
-            className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-              selected && rows.length
-                ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
-                : 'bg-slate-700/40 text-slate-500 cursor-not-allowed border border-slate-700/50'
-            }`}
-            onClick={() => {
-              if (!selected || rows.length === 0) return
-              const cols = schema?.columns?.map((c: any) => c.name) ?? []
-              const csv = rowsToCsv(rows, cols)
-              const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
-              const url = URL.createObjectURL(blob)
-              const a = document.createElement('a')
-              a.href = url
-              a.download = `${selected}.csv`
-              document.body.appendChild(a)
-              a.click()
-              a.remove()
-              URL.revokeObjectURL(url)
-            }}
-          >
-            <Download className="w-3.5 h-3.5" />
-            CSV
-          </button>
-
-          {/* Compact info */}
-          {selected && total !== null && (
-            <span className="text-[11px] text-slate-500 ml-auto hidden sm:inline tabular-nums">
-              {total.toLocaleString()} rows · {schema?.columns?.length ?? 0} columns
-            </span>
-          )}
-        </div>
-      </div>
-
-      {/* Card Body */}
-      <div className="relative">
-        {!selected && (
-          <div className="text-center py-16 px-4">
-            <Database className="w-12 h-12 text-slate-700 mx-auto mb-4" />
-            <p className="text-slate-400 text-sm font-medium">Select a table to view its data</p>
-            <p className="text-slate-500 text-xs mt-1">{tables.length} tables available</p>
-          </div>
-        )}
-
-        {selected && (
-          <>
-            {error && (
-              <div className="mx-4 sm:mx-5 mt-4 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
-                <p className="text-red-400 text-xs font-medium">{error}</p>
-              </div>
-            )}
-
-            {/* Column Filter Panel */}
-            {showFilters && schema?.columns && (
-              <div className="mx-4 sm:mx-5 mt-4">
-                <ColumnFilterPanel
-                  columns={schema.columns as AdminTableSchemaField[]}
-                  filters={filters}
-                  onFiltersChange={handleFiltersChange}
+            {/* Global Search */}
+            {selected && (
+              <div className="relative flex-1 min-w-[160px] max-w-xs">
+                <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
+                <input
+                  type="text"
+                  value={globalSearch}
+                  onChange={(e) => setGlobalSearch(e.target.value)}
+                  placeholder="Search columns..."
+                  className="w-full bg-slate-800/60 border border-slate-700/50 rounded-lg pl-8 pr-8 py-2 text-xs text-slate-200 placeholder-slate-500 focus:outline-none focus:border-blue-500/50 transition-colors"
                 />
+                {globalSearch && (
+                  <button
+                    onClick={() => { setGlobalSearch(''); setDebouncedSearch('') }}
+                    className="absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 hover:text-slate-300 transition-colors"
+                  >
+                    <X className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             )}
 
-            {/* Collapsible Schema Pills */}
-            {schema?.columns && (
-              <div className="mx-4 sm:mx-5 mt-4">
+            {/* Filter Toggle */}
+            {selected && schema?.columns?.length > 0 && (
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
+                  showFilters || activeFilterCount > 0
+                    ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
+                    : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                }`}
+              >
+                <Filter className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Filters</span>
+                {activeFilterCount > 0 && (
+                  <span className="bg-blue-500 text-white text-[10px] font-bold w-4 h-4 rounded-full flex items-center justify-center">
+                    {activeFilterCount}
+                  </span>
+                )}
+              </button>
+            )}
+
+            {/* Page Size Selector */}
+            {selected && (
+              <select
+                value={pageSize}
+                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500/50 transition-colors"
+              >
+                <option value={25}>25</option>
+                <option value={50}>50</option>
+                <option value={100}>100</option>
+              </select>
+            )}
+
+            {/* Pagination */}
+            {selected && (
+              <div className="flex items-center gap-1">
                 <button
-                  onClick={() => setShowSchema(!showSchema)}
-                  className="inline-flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-200 transition-colors"
+                  onClick={() => setPage(Math.max(1, page - 1))}
+                  className={`p-1.5 rounded-md border transition-all duration-200 ${
+                    page <= 1
+                      ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
+                      : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  disabled={page <= 1}
                 >
-                  <ChevronDown className={`w-3.5 h-3.5 transition-transform ${showSchema ? '' : '-rotate-90'}`} />
-                  Schema ({schema.columns.length} columns)
+                  <ChevronLeft className="w-4 h-4" />
                 </button>
-                {showSchema && (
-                  <div className="mt-2 flex flex-wrap gap-1.5">
+                <span className="text-xs text-slate-300 font-medium min-w-[60px] text-center tabular-nums">
+                  {page}{totalPages ? ` / ${totalPages}` : ''}
+                </span>
+                <button
+                  onClick={() => setPage(page + 1)}
+                  className={`p-1.5 rounded-md border transition-all duration-200 ${
+                    totalPages !== null && page >= (totalPages ?? 1)
+                      ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
+                      : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
+                  }`}
+                  disabled={totalPages !== null && page >= (totalPages ?? 1)}
+                >
+                  <ChevronRight className="w-4 h-4" />
+                </button>
+              </div>
+            )}
+
+            {/* Export Button */}
+            <button
+              disabled={!selected || rows.length === 0}
+              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
+                selected && rows.length
+                  ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
+                  : 'bg-slate-700/40 text-slate-500 cursor-not-allowed border border-slate-700/50'
+              }`}
+              onClick={handleCsvExport}
+            >
+              <Download className="w-3.5 h-3.5" />
+              CSV
+            </button>
+
+            {/* Row count info */}
+            {selected && total !== null && (
+              <span className="text-[11px] text-slate-500 ml-auto hidden sm:inline tabular-nums">
+                {rangeStart}–{rangeEnd} von {total.toLocaleString()} · {schema?.columns?.length ?? 0} columns
+              </span>
+            )}
+          </div>
+        </div>
+
+        {/* Card Body */}
+        <div className="flex flex-1 min-h-0">
+          <div className="flex-1 min-w-0">
+            {!selected && (
+              <div className="text-center py-16 px-4">
+                <Database className="w-12 h-12 text-slate-700 mx-auto mb-4" />
+                <p className="text-slate-400 text-sm font-medium">Select a table to view its data</p>
+                <p className="text-slate-500 text-xs mt-1">{tables.length} tables available</p>
+              </div>
+            )}
+
+            {selected && (
+              <>
+                {error && (
+                  <div className="mx-4 sm:mx-5 mt-4 bg-red-500/10 border border-red-500/30 rounded-lg px-4 py-3">
+                    <p className="text-red-400 text-xs font-medium">{error}</p>
+                  </div>
+                )}
+
+                {/* Column Filter Panel */}
+                {showFilters && schema?.columns && (
+                  <div className="mx-4 sm:mx-5 mt-4">
+                    <ColumnFilterPanel
+                      columns={schema.columns as AdminTableSchemaField[]}
+                      filters={filters}
+                      onFiltersChange={handleFiltersChange}
+                    />
+                  </div>
+                )}
+
+                {/* Schema Strip - always visible */}
+                {schema?.columns && (
+                  <div className="mx-4 sm:mx-5 mt-3 flex flex-wrap gap-1.5">
                     {(schema.columns as AdminTableSchemaField[]).map((col) => (
                       <span
                         key={col.name}
@@ -347,171 +382,195 @@ export default function AdminDatabase() {
                         }`}
                       >
                         <span className="text-slate-300">{col.name}</span>
-                        <span className="text-slate-500">:</span>
-                        <span className="text-slate-500 text-[10px] uppercase">{col.type}</span>
+                        <DataTypeIndicator type={col.type} />
                         {col.nullable && <span className="text-slate-600 text-[10px]">?</span>}
                       </span>
                     ))}
                   </div>
                 )}
-              </div>
-            )}
 
-            {/* Owner Mapping - compact */}
-            <details className="mx-4 sm:mx-5 mt-4 group">
-              <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5">
-                <ChevronDown className="w-3.5 h-3.5 -rotate-90 group-open:rotate-0 transition-transform" />
-                Owner Mapping
-                <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
-                  ownerLoadInfo.status === 'loaded' ? 'bg-emerald-500/20 text-emerald-400' :
-                  ownerLoadInfo.status === 'loading' ? 'bg-blue-500/20 text-blue-400' :
-                  ownerLoadInfo.status === 'failed' ? 'bg-red-500/20 text-red-400' :
-                  'bg-slate-700/50 text-slate-500'
-                }`}>
-                  {ownerLoadInfo.status}
-                </span>
-              </summary>
-              <div className="mt-2 pl-5 pb-2 space-y-2 text-xs">
-                {ownerLoadInfo.count !== undefined && (
-                  <p className="text-slate-500">{ownerLoadInfo.count} users loaded</p>
-                )}
-                {ownerLoadInfo.error && (
-                  <p className="text-red-400">Error: {ownerLoadInfo.error}</p>
-                )}
-                <button
-                  onClick={() => loadOwners()}
-                  className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:border-slate-600/50 transition-colors text-xs"
-                >
-                  <RefreshCw className={`w-3 h-3 ${ownerLoadInfo.status === 'loading' ? 'animate-spin' : ''}`} />
-                  Load Owner Names
-                </button>
-              </div>
-            </details>
+                {/* Owner Mapping - compact */}
+                <details className="mx-4 sm:mx-5 mt-3 group">
+                  <summary className="cursor-pointer text-xs text-slate-400 hover:text-slate-200 transition-colors flex items-center gap-1.5">
+                    <span className="text-[10px] transition-transform group-open:rotate-90">&#9654;</span>
+                    Owner Mapping
+                    <span className={`text-[10px] px-1.5 py-0.5 rounded font-medium ${
+                      ownerLoadInfo.status === 'loaded' ? 'bg-emerald-500/20 text-emerald-400' :
+                      ownerLoadInfo.status === 'loading' ? 'bg-blue-500/20 text-blue-400' :
+                      ownerLoadInfo.status === 'failed' ? 'bg-red-500/20 text-red-400' :
+                      'bg-slate-700/50 text-slate-500'
+                    }`}>
+                      {ownerLoadInfo.status}
+                    </span>
+                  </summary>
+                  <div className="mt-2 pl-5 pb-2 space-y-2 text-xs">
+                    {ownerLoadInfo.count !== undefined && (
+                      <p className="text-slate-500">{ownerLoadInfo.count} users loaded</p>
+                    )}
+                    {ownerLoadInfo.error && (
+                      <p className="text-red-400">Error: {ownerLoadInfo.error}</p>
+                    )}
+                    <button
+                      onClick={() => loadOwners()}
+                      className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-slate-800/60 border border-slate-700/50 text-slate-300 hover:text-white hover:border-slate-600/50 transition-colors text-xs"
+                    >
+                      <RefreshCw className={`w-3 h-3 ${ownerLoadInfo.status === 'loading' ? 'animate-spin' : ''}`} />
+                      Load Owner Names
+                    </button>
+                  </div>
+                </details>
 
-            {/* Data Table */}
-            <div className="mt-4">
-              {loading ? (
-                <div className="flex items-center justify-center py-16 gap-3">
-                  <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
-                  <span className="text-slate-400 text-sm">Loading rows...</span>
+                {/* Data Table */}
+                <div className="mt-3">
+                  {loading ? (
+                    <div className="flex items-center justify-center py-16 gap-3">
+                      <RefreshCw className="w-5 h-5 text-blue-400 animate-spin" />
+                      <span className="text-slate-400 text-sm">Loading rows...</span>
+                    </div>
+                  ) : (
+                    <AdminDataTable
+                      tableName={selected ?? undefined}
+                      columns={schema?.columns ?? []}
+                      rows={rows}
+                      ownerMap={ownerMap}
+                      page={page}
+                      pageSize={pageSize}
+                      total={total}
+                      onPageChange={(p) => setPage(p)}
+                      sortBy={sortBy}
+                      sortOrder={sortOrder}
+                      onSortChange={handleSortChange}
+                      onRowClick={handleRowClick}
+                    />
+                  )}
                 </div>
-              ) : (
-                <AdminDataTable
-                  tableName={selected ?? undefined}
-                  columns={schema?.columns ?? []}
-                  rows={rows}
-                  ownerMap={ownerMap}
-                  page={page}
-                  pageSize={pageSize}
-                  total={total}
-                  onPageChange={(p) => setPage(p)}
-                  sortBy={sortBy}
-                  sortOrder={sortOrder}
-                  onSortChange={handleSortChange}
-                />
-              )}
-            </div>
-          </>
-        )}
+              </>
+            )}
+          </div>
+
+          {/* Row Detail Panel (desktop) */}
+          {selectedRow && schema?.columns && (
+            <RowDetailPanel
+              row={selectedRow}
+              columns={schema.columns}
+              onClose={() => setSelectedRow(null)}
+              ownerMap={ownerMap}
+            />
+          )}
+        </div>
       </div>
     </div>
   )
 
-  // Render Stats Tab Content
-  const renderStatsContent = () => (
-    <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
-      <div className="relative">
-        <DatabaseStatsCards autoRefresh={true} refreshInterval={30000} />
-      </div>
-    </div>
-  )
-
-  // Render Storage Tab Content
-  const renderStorageContent = () => (
-    <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
-      <div className="relative">
-        <StorageAnalysisChart />
-      </div>
-    </div>
-  )
-
-  // Render History Tab Content
-  const renderHistoryContent = () => (
-    <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
-      <div className="relative">
-        <MonitoringHistoryViewer />
-      </div>
-    </div>
-  )
-
-  // Render Maintenance Tab Content
-  const renderMaintenanceContent = () => (
-    <div className="relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl sm:rounded-2xl overflow-hidden shadow-2xl p-4 sm:p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top_right,_var(--tw-gradient-stops))] from-blue-500/5 via-transparent to-transparent pointer-events-none" />
-      <div className="relative">
-        <MaintenanceTools />
-      </div>
-    </div>
-  )
-
-  // Render active tab content
-  const renderTabContent = () => {
-    switch (activeTab) {
-      case 'tables':
-        return renderTablesContent()
+  // Render Analytics Content
+  const renderAnalyticsContent = () => {
+    switch (analyticsTab) {
       case 'stats':
-        return renderStatsContent()
+        return (
+          <div className="card">
+            <DatabaseStatsCards autoRefresh={true} refreshInterval={30000} />
+          </div>
+        )
       case 'storage':
-        return renderStorageContent()
+        return (
+          <div className="card">
+            <StorageAnalysisChart />
+          </div>
+        )
       case 'history':
-        return renderHistoryContent()
+        return (
+          <div className="card">
+            <MonitoringHistoryViewer />
+          </div>
+        )
       case 'maintenance':
-        return renderMaintenanceContent()
+        return (
+          <div className="card">
+            <MaintenanceTools />
+          </div>
+        )
       default:
         return null
     }
   }
 
   return (
-    <div className="min-h-screen bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-slate-900 via-slate-900 to-black">
-      <div className="max-w-[1800px] mx-auto p-4 sm:p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-6 sm:mb-8">
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold bg-gradient-to-r from-white via-slate-200 to-slate-400 bg-clip-text text-transparent mb-2 sm:mb-3">
+    <div className="space-y-6 min-w-0">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
+        <div className="flex items-center gap-3">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">
             Database Management
           </h1>
-          <p className="text-slate-400 text-sm sm:text-lg">Control database access, view statistics, and manage maintenance</p>
+          <AdminBadge size="md" />
         </div>
+        <p className="text-xs sm:text-sm text-slate-400">
+          Control database access, view statistics, and manage maintenance
+        </p>
+      </div>
 
-        {/* Tab Navigation */}
-        <div className="mb-6 sm:mb-8">
-          <div className="flex flex-wrap gap-2 sm:gap-3 overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 pb-2 sm:pb-0">
-            {tabs.map((tab) => {
-              const Icon = tab.icon
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id)}
-                  className={`relative inline-flex items-center gap-2 px-4 sm:px-6 py-2.5 sm:py-3 rounded-xl text-sm font-semibold transition-all duration-300 touch-manipulation active:scale-95 whitespace-nowrap min-h-[44px] ${
-                    activeTab === tab.id
-                      ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
-                      : 'bg-slate-800/40 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50 hover:border-slate-600/50 hover:text-white'
-                  }`}
-                >
-                  <Icon className="w-4 h-4" />
-                  <span className="hidden sm:inline">{tab.label}</span>
-                </button>
-              )
-            })}
+      {/* Two-Level Navigation */}
+      <div className="space-y-3">
+        {/* Category Pills */}
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
+            <button
+              onClick={() => setActiveCategory('browse')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                activeCategory === 'browse'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+              }`}
+            >
+              <Table className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span>Browse</span>
+            </button>
+            <button
+              onClick={() => setActiveCategory('analytics')}
+              className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                activeCategory === 'analytics'
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+              }`}
+            >
+              <BarChart3 className="h-4 w-4 sm:h-5 sm:w-5" />
+              <span>Analytics</span>
+            </button>
           </div>
         </div>
 
-        {/* Tab Content */}
-        {renderTabContent()}
+        {/* Sub-Tabs (only for Analytics) */}
+        {activeCategory === 'analytics' && (
+          <div className="relative">
+            <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+              <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+                {analyticsTabs.map((tab) => {
+                  const Icon = tab.icon
+                  return (
+                    <button
+                      key={tab.id}
+                      onClick={() => setAnalyticsTab(tab.id)}
+                      className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                        analyticsTab === tab.id
+                          ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                          : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+                      }`}
+                    >
+                      <Icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                      <span>{tab.label}</span>
+                    </button>
+                  )
+                })}
+              </div>
+            </div>
+            {/* Fade-Gradient rechts — nur mobile */}
+            <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
+          </div>
+        )}
       </div>
+
+      {/* Content */}
+      {activeCategory === 'browse' ? renderBrowseContent() : renderAnalyticsContent()}
     </div>
   )
 }
