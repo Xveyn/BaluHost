@@ -13,6 +13,17 @@
     "submit": "Zugriff erhalten",
     "loading": "Autorisiere..."
   },
+  "twoFactor": {
+    "title": "Zwei-Faktor-Authentifizierung",
+    "subtitle": "Gib den 6-stelligen Code aus deiner Authenticator-App ein",
+    "codeLabel": "Verifizierungscode",
+    "codePlaceholder": "000000",
+    "verify": "Verifizieren",
+    "verifying": "Verifiziere...",
+    "useBackupCode": "Backup-Code verwenden",
+    "backToLogin": "Zurück zum Login",
+    "invalidCode": "Ungültiger Verifizierungscode"
+  },
   "defaultCredentials": "Standard-Anmeldedaten",
   "systemStatus": "System-Status",
   "optimal": "Optimal",

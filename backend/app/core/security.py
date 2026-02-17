@@ -136,6 +136,27 @@ def create_sse_token(user_id: int | str, upload_id: str, expires_seconds: int = 
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
+def create_2fa_pending_token(user_id: int | str, expires_seconds: int = 300) -> str:
+    """
+    Create a short-lived token indicating that password was verified but 2FA is pending.
+
+    Args:
+        user_id: The authenticated user's ID.
+        expires_seconds: Token lifetime in seconds (default 5 minutes).
+
+    Returns:
+        Encoded JWT token string.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "type": "2fa_pending",
+        "exp": now + timedelta(seconds=expires_seconds),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
 def decode_token(token: str, token_type: str = "access") -> dict:
     """
     Decode and verify a JWT token.

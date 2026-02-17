@@ -13,6 +13,17 @@
     "submit": "Access System",
     "loading": "Authorising..."
   },
+  "twoFactor": {
+    "title": "Two-Factor Authentication",
+    "subtitle": "Enter the 6-digit code from your authenticator app",
+    "codeLabel": "Verification Code",
+    "codePlaceholder": "000000",
+    "verify": "Verify",
+    "verifying": "Verifying...",
+    "useBackupCode": "Use a backup code",
+    "backToLogin": "Back to login",
+    "invalidCode": "Invalid verification code"
+  },
   "defaultCredentials": "Default credentials",
   "systemStatus": "System Status",
   "optimal": "Optimal",

@@ -90,3 +90,42 @@ class TokenResponse(BaseModel):
     access_token: str
     token_type: str = "bearer"
     user: UserPublic
+
+
+# --- 2FA Schemas ---
+
+class TwoFactorRequiredResponse(BaseModel):
+    requires_2fa: bool = True
+    pending_token: str
+    token_type: str = "2fa_pending"
+
+
+class TwoFactorVerifyRequest(BaseModel):
+    pending_token: str
+    code: str
+
+
+class TwoFactorSetupResponse(BaseModel):
+    qr_code: str
+    provisioning_uri: str
+    secret: str
+
+
+class TwoFactorVerifySetupRequest(BaseModel):
+    secret: str
+    code: str
+
+
+class TwoFactorDisableRequest(BaseModel):
+    password: str
+    code: str
+
+
+class TwoFactorBackupCodesResponse(BaseModel):
+    backup_codes: list[str]
+
+
+class TwoFactorStatusResponse(BaseModel):
+    enabled: bool
+    enabled_at: datetime | None = None
+    backup_codes_remaining: int = 0

@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional, List
 
-from sqlalchemy import String, DateTime, Integer
+from sqlalchemy import String, DateTime, Integer, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -11,9 +11,9 @@ from app.models.base import Base
 
 class User(Base):
     """User model for authentication and authorization."""
-    
+
     __tablename__ = "users"
-    
+
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     username: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
     hashed_password: Mapped[str] = mapped_column(String(255), nullable=False)
@@ -31,6 +31,14 @@ class User(Base):
         DateTime(timezone=True),
         onupdate=func.now(),
         nullable=True
+    )
+
+    # TOTP 2FA fields
+    totp_secret_encrypted: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    totp_enabled: Mapped[bool] = mapped_column(nullable=False, default=False, server_default="0")
+    totp_backup_codes_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    totp_enabled_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
     )
     
     # Relationships

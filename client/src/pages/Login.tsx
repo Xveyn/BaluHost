@@ -1,10 +1,11 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
 import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
+import { Shield } from 'lucide-react';
 
 interface LoginProps {
   onLogin: (user: User, token: string) => void;
@@ -20,6 +21,12 @@ export default function Login({ onLogin }: LoginProps) {
   const [localBackendAvailable, setLocalBackendAvailable] = useState(false);
   const [connectionMode, setConnectionMode] = useState<'checking' | 'local' | 'ipc' | 'fallback'>('checking');
   const [isDevMode, setIsDevMode] = useState(false);
+
+  // 2FA state
+  const [twoFactorRequired, setTwoFactorRequired] = useState(false);
+  const [pendingToken, setPendingToken] = useState('');
+  const [totpCode, setTotpCode] = useState('');
+  const totpInputRef = useRef<HTMLInputElement>(null);
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -40,6 +47,13 @@ export default function Login({ onLogin }: LoginProps) {
       .catch(() => setIsDevMode(false));
   }, []);
 
+  // Focus TOTP input when 2FA step is shown
+  useEffect(() => {
+    if (twoFactorRequired && totpInputRef.current) {
+      totpInputRef.current.focus();
+    }
+  }, [twoFactorRequired]);
+
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
     setError('');
@@ -51,7 +65,15 @@ export default function Login({ onLogin }: LoginProps) {
         try {
           console.log('[Login] Attempting login via local HTTP API...');
           const loginResult = await localApi.login(username, password);
-          
+
+          // Check if 2FA is required
+          if ((loginResult as any).requires_2fa) {
+            setPendingToken((loginResult as any).pending_token);
+            setTwoFactorRequired(true);
+            setLoading(false);
+            return;
+          }
+
           console.log('[Login] Local API login successful:', {
             username: loginResult.user.username,
             hasToken: !!loginResult.access_token
@@ -80,7 +102,7 @@ export default function Login({ onLogin }: LoginProps) {
       // Handle empty or non-JSON responses
       const contentType = response.headers.get('content-type');
       let data: any = {};
-      
+
       if (contentType && contentType.includes('application/json')) {
         try {
           data = await response.json();
@@ -98,6 +120,14 @@ export default function Login({ onLogin }: LoginProps) {
         throw new Error(data.detail || data.error || `Login failed (${response.status})`);
       }
 
+      // Check if 2FA is required
+      if (data.requires_2fa) {
+        setPendingToken(data.pending_token);
+        setTwoFactorRequired(true);
+        setLoading(false);
+        return;
+      }
+
       const token: string | undefined = data.access_token ?? data.token;
 
       if (!token) {
@@ -112,6 +142,48 @@ export default function Login({ onLogin }: LoginProps) {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleVerify2FA = async (e: FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setLoading(true);
+
+    try {
+      const response = await fetch('/api/auth/verify-2fa', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ pending_token: pendingToken, code: totpCode }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.detail || t('twoFactor.invalidCode'));
+      }
+
+      const token: string | undefined = data.access_token ?? data.token;
+      if (!token) {
+        throw new Error('Response did not include an access token');
+      }
+
+      // Store token
+      localStorage.setItem('token', token);
+      onLogin(data.user, token);
+    } catch (err: any) {
+      console.error('2FA verification error:', err);
+      setError(err.message || t('twoFactor.invalidCode'));
+      setTotpCode('');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleBackToLogin = () => {
+    setTwoFactorRequired(false);
+    setPendingToken('');
+    setTotpCode('');
+    setError('');
   };
 
   return (
@@ -132,10 +204,10 @@ export default function Login({ onLogin }: LoginProps) {
             </div>
             <h1 className="mt-5 sm:mt-6 text-2xl sm:text-3xl font-semibold tracking-wide text-slate-100">{t('title')}</h1>
             <p className="mt-2 text-sm text-slate-100-tertiary">{t('subtitle')}</p>
-            
+
             {/* Developer Build Badge */}
             <DeveloperBadge size="md" className="mt-3" />
-            
+
             {/* Connection mode indicator */}
             {connectionMode !== 'checking' && (
               <div className="mt-3 flex items-center gap-2 text-xs">
@@ -153,57 +225,121 @@ export default function Login({ onLogin }: LoginProps) {
             )}
           </div>
 
-          <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
-            {error && (
-              <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
-                {error}
+          {/* 2FA Verification Step */}
+          {twoFactorRequired ? (
+            <form onSubmit={handleVerify2FA} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
+              <div className="flex flex-col items-center gap-3 mb-2">
+                <div className="flex h-12 w-12 items-center justify-center rounded-full bg-sky-500/15 border border-sky-500/30">
+                  <Shield className="h-6 w-6 text-sky-400" />
+                </div>
+                <div className="text-center">
+                  <h2 className="text-lg font-semibold text-slate-100">{t('twoFactor.title')}</h2>
+                  <p className="text-sm text-slate-100-tertiary mt-1">{t('twoFactor.subtitle')}</p>
+                </div>
               </div>
-            )}
 
-            <div className="space-y-2">
-              <label htmlFor="username" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
-                {t('form.username')}
-              </label>
-              <input
-                type="text"
-                id="username"
-                className="input"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                placeholder="admin"
-                required
-              />
-            </div>
+              {error && (
+                <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
+                  {error}
+                </div>
+              )}
 
-            <div className="space-y-2">
-              <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
-                <label htmlFor="password">{t('form.password')}</label>
-                <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">{t('form.passwordHint')}</span>
+              <div className="space-y-2">
+                <label htmlFor="totp-code" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
+                  {t('twoFactor.codeLabel')}
+                </label>
+                <input
+                  ref={totpInputRef}
+                  type="text"
+                  id="totp-code"
+                  className="input text-center text-2xl tracking-[0.5em] font-mono"
+                  value={totpCode}
+                  onChange={(e) => {
+                    const val = e.target.value.replace(/\D/g, '').slice(0, 8);
+                    setTotpCode(val);
+                  }}
+                  placeholder={t('twoFactor.codePlaceholder')}
+                  autoComplete="one-time-code"
+                  inputMode="numeric"
+                  required
+                />
+                <p className="text-xs text-slate-100-tertiary text-center mt-1">
+                  {t('twoFactor.useBackupCode')}
+                </p>
               </div>
-              <input
-                type="password"
-                id="password"
-                className="input"
-                value={password}
-                onChange={(e) => setPassword(e.target.value)}
-                placeholder="••••••••"
-                required
-              />
-            </div>
 
-            <button
-              type="submit"
-              className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
-              disabled={loading}
-            >
-              {loading ? t('form.loading') : t('form.submit')}
-            </button>
-          </form>
+              <button
+                type="submit"
+                className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
+                disabled={loading || totpCode.length < 6}
+              >
+                {loading ? t('twoFactor.verifying') : t('twoFactor.verify')}
+              </button>
 
-          {isDevMode && (
-            <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
-              {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
-            </div>
+              <button
+                type="button"
+                onClick={handleBackToLogin}
+                className="w-full text-center text-sm text-slate-100-tertiary hover:text-slate-100-secondary transition-colors"
+              >
+                {t('twoFactor.backToLogin')}
+              </button>
+            </form>
+          ) : (
+            /* Regular Login Form */
+            <>
+              <form onSubmit={handleSubmit} className="mt-8 sm:mt-10 space-y-4 sm:space-y-5">
+                {error && (
+                  <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 px-3 sm:px-4 py-2.5 sm:py-3 text-sm text-rose-200">
+                    {error}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <label htmlFor="username" className="text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
+                    {t('form.username')}
+                  </label>
+                  <input
+                    type="text"
+                    id="username"
+                    className="input"
+                    value={username}
+                    onChange={(e) => setUsername(e.target.value)}
+                    placeholder="admin"
+                    required
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs font-medium uppercase tracking-[0.2em] text-slate-100-tertiary">
+                    <label htmlFor="password">{t('form.password')}</label>
+                    <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">{t('form.passwordHint')}</span>
+                  </div>
+                  <input
+                    type="password"
+                    id="password"
+                    className="input"
+                    value={password}
+                    onChange={(e) => setPassword(e.target.value)}
+                    placeholder="••••••••"
+                    required
+                  />
+                </div>
+
+                <button
+                  type="submit"
+                  className="btn btn-primary w-full mt-5 sm:mt-6 touch-manipulation active:scale-[0.98]"
+                  disabled={loading}
+                >
+                  {loading ? t('form.loading') : t('form.submit')}
+                </button>
+              </form>
+
+              {isDevMode && (
+                <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
+                  {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
+                </div>
+              )}
+            </>
           )}
 
           <div className="mt-4 sm:mt-6 text-center text-[10px] sm:text-[11px] uppercase tracking-[0.3em] sm:tracking-[0.35em] text-slate-100-tertiary">
