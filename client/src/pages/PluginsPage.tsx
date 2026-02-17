@@ -138,7 +138,7 @@ export default function PluginsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500" />
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500" />
       </div>
     );
   }
@@ -146,17 +146,17 @@ export default function PluginsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">{t('title')}</h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
+          <p className="text-xs sm:text-sm text-slate-400 mt-1">
             {t('description')}
           </p>
         </div>
         {activeTab === 'plugins' && (
           <button
             onClick={refreshPlugins}
-            className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 hover:border-sky-500/50 text-slate-300 hover:text-white transition"
+            className="rounded-lg px-3 sm:px-4 py-1.5 sm:py-2 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40"
           >
             {t('buttons.refresh')}
           </button>
@@ -164,15 +164,15 @@ export default function PluginsPage() {
       </div>
 
       {/* Tab Navigation */}
-      <div className="flex gap-2 border-b border-slate-800 -mb-px overflow-x-auto">
+      <div className="flex gap-2 border-b border-slate-800 pb-3 overflow-x-auto scrollbar-none">
         {TABS.map((tab) => (
           <button
             key={tab.id}
             onClick={() => setActiveTab(tab.id)}
-            className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors whitespace-nowrap ${
+            className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
               activeTab === tab.id
-                ? 'text-sky-400 border-sky-500'
-                : 'text-slate-400 border-transparent hover:text-slate-300'
+                ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
             }`}
           >
             <tab.icon className="w-4 h-4" />
@@ -219,7 +219,7 @@ export default function PluginsPage() {
                 onClick={() => loadPluginDetails(plugin.name)}
                 className={`rounded-xl border p-4 cursor-pointer transition-all ${
                   selectedPlugin?.name === plugin.name
-                    ? 'border-sky-500 bg-slate-900/80'
+                    ? 'border-blue-500 bg-slate-900/80'
                     : 'border-slate-800 bg-slate-900/50 hover:border-slate-700'
                 }`}
               >
@@ -263,10 +263,10 @@ export default function PluginsPage() {
                       handleTogglePlugin(plugin);
                     }}
                     disabled={actionLoading}
-                    className={`px-3 py-1.5 text-sm font-medium rounded-lg transition ${
+                    className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 ${
                       plugin.is_enabled
                         ? 'bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
-                        : 'bg-sky-500/20 text-sky-400 hover:bg-sky-500/30'
+                        : 'bg-blue-500/20 text-blue-400 hover:bg-blue-500/30'
                     } border border-slate-700`}
                   >
                     {plugin.is_enabled ? t('buttons.disable') : t('buttons.enable')}
@@ -320,7 +320,7 @@ export default function PluginsPage() {
                           href={selectedPlugin.homepage}
                           target="_blank"
                           rel="noopener noreferrer"
-                          className="text-sky-400 hover:underline flex items-center gap-1"
+                          className="text-blue-400 hover:underline flex items-center gap-1"
                         >
                           {t('details.link')} <ExternalLink className="h-3 w-3" />
                         </a>
@@ -386,7 +386,7 @@ export default function PluginsPage() {
                 <button
                   onClick={() => setShowPermissionModal(true)}
                   disabled={!selectedPlugin.is_enabled}
-                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
                 >
                   <Settings className="h-4 w-4" />
                   {t('buttons.configure')}
@@ -394,7 +394,7 @@ export default function PluginsPage() {
                 <button
                   onClick={() => handleUninstall(selectedPlugin.name)}
                   disabled={actionLoading || selectedPlugin.is_enabled}
-                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                  className="w-full px-4 py-2 text-sm font-medium rounded-lg border border-red-500/30 text-red-400 hover:bg-red-500/10 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 transition-all touch-manipulation active:scale-95"
                 >
                   <Trash2 className="h-4 w-4" />
                   {t('buttons.uninstall')}
@@ -451,7 +451,7 @@ export default function PluginsPage() {
                           setSelectedPermissions(selectedPermissions.filter((p) => p !== perm));
                         }
                       }}
-                      className="mt-1 rounded border-slate-600 text-sky-500 focus:ring-sky-500 focus:ring-offset-slate-900"
+                      className="mt-1 rounded border-slate-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900"
                     />
                     <div>
                       <div className={`text-sm font-medium ${permInfo?.dangerous ? 'text-amber-400' : 'text-white'}`}>
@@ -471,14 +471,14 @@ export default function PluginsPage() {
             <div className="flex gap-3">
               <button
                 onClick={() => setShowPermissionModal(false)}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600"
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-slate-600 transition-all touch-manipulation active:scale-95"
               >
                 {t('buttons.cancel')}
               </button>
               <button
                 onClick={handleEnableWithPermissions}
                 disabled={!selectedPlugin.required_permissions.every((p) => selectedPermissions.includes(p))}
-                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-sky-500 text-white hover:bg-sky-600 disabled:opacity-50 disabled:cursor-not-allowed"
+                className="flex-1 px-4 py-2 text-sm font-medium rounded-lg bg-blue-500 text-white hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all touch-manipulation active:scale-95"
               >
                 {t('buttons.enablePlugin')}
               </button>
