@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
-import i18n from '../i18n'
+import DataTypeIndicator from './admin/DataTypeIndicator'
+import { formatAdminValue } from '../lib/adminDbFormatters'
 
 interface Column {
   name: string
@@ -20,9 +21,10 @@ interface Props {
   sortBy?: string | null
   sortOrder?: 'asc' | 'desc' | null
   onSortChange?: (column: string, order: 'asc' | 'desc') => void
+  onRowClick?: (row: Record<string, any>) => void
 }
 
-export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOrder, onSortChange }: Props) {
+export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOrder, onSortChange, onRowClick }: Props) {
   const { t } = useTranslation('admin')
   const [isMobile, setIsMobile] = useState(false)
 
@@ -56,29 +58,7 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
     return 'min-w-[120px]'
   }
 
-  const formatValue = (name: string, raw: any) => {
-    if (raw === null || raw === undefined) return '-'
-    const n = name.toLowerCase()
-    // sizes / numbers
-    if (n.includes('size') || n.includes('bytes') || n === 'owner_id' || n.endsWith('_id')) {
-      if (typeof raw === 'number') return new Intl.NumberFormat(i18n.language).format(raw)
-      const num = Number(raw)
-      return Number.isFinite(num) ? new Intl.NumberFormat(i18n.language).format(num) : String(raw)
-    }
-
-    // booleans
-    if (n.startsWith('is_') || n === 'is_directory' || typeof raw === 'boolean') {
-      return raw ? t('common.true') : t('common.false')
-    }
-
-    // dates
-    if (n.includes('created') || n.includes('updated') || n.includes('date') || n.includes('at')) {
-      const d = new Date(raw)
-      if (!isNaN(d.getTime())) return d.toLocaleString()
-    }
-
-    return String(raw)
-  }
+  const formatValue = (name: string, raw: any) => formatAdminValue(name, raw, t)
 
   const cellAlignmentClass = (name: string) => {
     const n = name.toLowerCase()
@@ -143,7 +123,11 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
         {isMobile ? (
           <div className="space-y-3">
             {rows.map((r, idx) => (
-              <div key={idx} className="bg-slate-800/40 p-3 rounded border border-slate-800/60">
+              <div
+                key={idx}
+                className={`bg-slate-800/40 p-3 rounded border border-slate-800/60 ${onRowClick ? 'cursor-pointer hover:bg-slate-800/60 transition-colors' : ''}`}
+                onClick={() => onRowClick?.(r)}
+              >
                 <div className="grid grid-cols-2 gap-2 text-sm">
                   {visibleColumns.map((c) => {
                     const raw = r[c.name]
@@ -162,8 +146,8 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
         ) : (
           <div className="overflow-x-auto border border-slate-800/60 rounded min-w-0 px-4">
             <table className="w-full table-fixed min-w-0 divide-y divide-slate-800/60">
-              <thead>
-                <tr className="text-left text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500 bg-transparent">
+              <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-sm">
+                <tr className="text-left text-[10px] sm:text-xs uppercase tracking-[0.24em] text-slate-500">
                   {(() => {
                     const pcts = computeColumnPercents(visibleColumns)
                     return visibleColumns.map((c, i) => (
@@ -173,9 +157,10 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
                         style={{ width: `${pcts[i]}%` }}
                         onClick={() => handleHeaderClick(c.name)}
                       >
-                        <div className="flex items-center gap-1.5">
-                          <span>{c.name.toLowerCase().includes('owner') ? 'OWNER' : c.name}</span>
-                          {onSortChange && renderSortIcon(c.name)}
+                        <div className="flex items-center gap-1.5 overflow-hidden">
+                          <span className="truncate min-w-0">{c.name.toLowerCase().includes('owner') ? 'OWNER' : c.name}</span>
+                          {c.type && <DataTypeIndicator type={c.type} className="flex-shrink-0" />}
+                          {onSortChange && <span className="flex-shrink-0">{renderSortIcon(c.name)}</span>}
                         </div>
                       </th>
                     ))
@@ -184,7 +169,11 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
               </thead>
               <tbody className="divide-y divide-slate-800/60">
                 {rows.map((r, idx) => (
-                  <tr key={idx} className="group transition hover:bg-slate-900/65">
+                  <tr
+                    key={idx}
+                    className={`group transition hover:bg-slate-900/65 ${onRowClick ? 'cursor-pointer hover:bg-blue-500/5' : ''}`}
+                    onClick={() => onRowClick?.(r)}
+                  >
                     {visibleColumns.map((c) => {
                       const raw = r[c.name]
                       const wclass = columnMinWidthClass(c.name)
