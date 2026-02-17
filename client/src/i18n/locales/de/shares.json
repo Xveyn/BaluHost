@@ -57,7 +57,8 @@
     "sharedWith": "Geteilt mit",
     "permissions": "Berechtigungen",
     "owner": "Besitzer",
-    "shared": "Geteilt"
+    "shared": "Geteilt",
+    "from": "Von"
   },
   "status": {
     "active": "Aktiv",
