@@ -243,6 +243,39 @@ def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
                 logger.debug(f"Konnte Partition {partition.mountpoint} nicht lesen: {e}")
                 continue
         
+        # RAID-aware: Erstelle Mapping member_base_name -> (used, total, mountpoint, array_name)
+        raid_member_map: dict[str, tuple[int, int, str | None, str]] = {}
+        try:
+            from app.services import raid as raid_service
+            from app.services.hardware.raid import find_raid_mountpoint
+            raid_data = raid_service.get_status()
+            if raid_data and raid_data.arrays:
+                for array in raid_data.arrays:
+                    mountpoint = find_raid_mountpoint(array.name)
+                    if mountpoint:
+                        try:
+                            array_usage = psutil.disk_usage(mountpoint)
+                            # Map each member device base name to array usage
+                            for member_dev in array.devices:
+                                import re as _re
+                                base_name = _re.sub(r'\d+$', '', member_dev.name)
+                                raid_member_map[base_name] = (
+                                    array_usage.used,
+                                    array_usage.total,
+                                    mountpoint,
+                                    array.name,
+                                )
+                        except (PermissionError, OSError) as e:
+                            logger.debug("Could not get usage for RAID mountpoint %s: %s", mountpoint, e)
+                    else:
+                        # No mountpoint but still track membership
+                        for member_dev in array.devices:
+                            import re as _re
+                            base_name = _re.sub(r'\d+$', '', member_dev.name)
+                            raid_member_map[base_name] = (0, 0, None, array.name)
+        except Exception as e:
+            logger.debug("RAID enrichment failed (non-critical): %s", e)
+
         # Windows-spezifisch: Versuche Disk-Nummer zu Laufwerksbuchstaben-Mapping
         windows_disk_map: dict[str, str] = {}  # {"/dev/sda": "c", ...}
         if platform.system().lower() == 'windows' and partition_usage:
@@ -281,9 +314,23 @@ def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
         for device in devices:
             # Versuche verschiedene Matching-Strategien
             matched = False
-            
+            device_base = device.name.replace('/dev/', '').lower()
+
+            # 0. RAID-Member: Setze used_bytes aus Array-Usage
+            if device_base in raid_member_map:
+                used, total, mount, array_name = raid_member_map[device_base]
+                device.raid_member_of = array_name
+                if used > 0:
+                    device.used_bytes = used
+                    # Prozent relativ zur physischen Disk-Kapazität
+                    cap = device.capacity_bytes or 0
+                    device.used_percent = (used / cap * 100) if cap > 0 else 0
+                    device.mount_point = mount
+                    matched = True
+                    logger.debug("RAID matched %s -> %s: %d used", device.name, array_name, used)
+
             # 1. Windows: Nutze Disk-Mapping
-            if device.name in windows_disk_map:
+            if not matched and device.name in windows_disk_map:
                 drive_letter = windows_disk_map[device.name]
                 if drive_letter in partition_usage:
                     used, total, mount = partition_usage[drive_letter]
@@ -292,7 +339,7 @@ def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
                     device.mount_point = mount
                     matched = True
                     logger.debug(f"Matched {device.name} -> {drive_letter}: {used / (1024**3):.2f} GB used")
-            
+
             # 2. Linux: Direkte Device-Namen (/dev/sda -> sda)
             if not matched:
                 device_key = device.name.replace('/dev/', '').lower()
@@ -304,7 +351,7 @@ def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
                         matched = True
                         logger.debug(f"Matched {device.name} -> {partition_dev}: {used / (1024**3):.2f} GB used")
                         break
-            
+
             # 3. Fallback: Wenn keine Nutzungsdaten gefunden, lasse None
             if not matched:
                 logger.debug(f"No filesystem usage found for {device.name}")
@@ -627,6 +674,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=disk_used,
             used_percent=disk_used_percent,
             mount_point=None,
+            raid_member_of="md0",
             last_self_test=SmartSelfTest(
                 test_type="Short offline",
                 status="Completed without error",
@@ -682,6 +730,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=disk_used,
             used_percent=disk_used_percent,
             mount_point=None,
+            raid_member_of="md0",
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -733,6 +782,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_10gb * 0.45),  # 45% genutzt
             used_percent=45.0,
             mount_point=None,
+            raid_member_of="md1",
             last_self_test=SmartSelfTest(
                 test_type="Extended offline",
                 status="Completed without error",
@@ -788,6 +838,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_10gb * 0.45),  # 45% genutzt
             used_percent=45.0,
             mount_point=None,
+            raid_member_of="md1",
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -839,6 +890,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
             used_percent=28.0,
             mount_point=None,
+            raid_member_of="md2",
             attributes=[
                 SmartAttribute(
                     id=5,
@@ -888,6 +940,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
             used_percent=28.0,
             mount_point=None,
+            raid_member_of="md2",
             last_self_test=SmartSelfTest(
                 test_type="Short offline",
                 status="Completed: read failure",
@@ -943,6 +996,7 @@ def _mock_status() -> SmartStatusResponse:
             used_bytes=int(disk_capacity_20gb * 0.28),  # 28% genutzt
             used_percent=28.0,
             mount_point=None,
+            raid_member_of="md2",
             attributes=[
                 SmartAttribute(
                     id=5,

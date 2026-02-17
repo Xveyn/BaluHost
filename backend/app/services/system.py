@@ -324,7 +324,7 @@ def get_aggregated_storage_info() -> StorageInfo:
         # Hole SMART-Daten für alle Festplatten (auch im Dev-Mode)
         smart_data = smart_service.get_smart_status()
         logger.info(f"get_aggregated_storage_info: Found {len(smart_data.devices)} SMART devices")
-        
+
         # Hole RAID-Informationen
         try:
             raid_data = raid_service.get_status()
@@ -332,12 +332,12 @@ def get_aggregated_storage_info() -> StorageInfo:
         except Exception:
             has_raid = False
             raid_data = None
-        
+
         total_capacity = 0
         total_used = 0
         device_count = 0
         raid_effective = False
-        
+
         if has_raid and raid_data and raid_data.arrays:
             # RAID ist aktiv - verwende find_raid_mountpoint() für zuverlässige Erkennung
             from app.services.hardware.raid import find_raid_mountpoint
@@ -351,7 +351,17 @@ def get_aggregated_storage_info() -> StorageInfo:
                     total_used += usage.used
                     device_count += len(array.devices)
                 else:
-                    logger.warning("RAID %s not mounted, skipping from aggregated storage", array.name)
+                    # Fallback: Array-Größe aus RAID-Status nutzen
+                    total_capacity += array.size_bytes
+                    device_count += len(array.devices)
+                    # Used bytes vom ersten passenden SMART-Device holen
+                    member_base_names = {re.sub(r'\d+$', '', dev.name) for dev in array.devices}
+                    for smart_dev in smart_data.devices:
+                        dev_base = smart_dev.name.replace('/dev/', '').lower()
+                        if dev_base in member_base_names and smart_dev.used_bytes is not None:
+                            total_used += smart_dev.used_bytes
+                            break  # Bei RAID 1 nur einmal zählen
+                    logger.info("RAID %s not mounted, using size_bytes=%d as capacity", array.name, array.size_bytes)
         else:
             # Kein RAID - summiere alle einzelnen Festplatten
             logger.info(f"Aggregating {len(smart_data.devices)} devices without RAID")

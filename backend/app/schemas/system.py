@@ -145,6 +145,7 @@ class SmartDevice(BaseModel):
     used_bytes: int | None = None  # Genutzte Bytes auf dieser Festplatte
     used_percent: float | None = None  # Prozentsatz der Nutzung
     mount_point: str | None = None  # Mount-Punkt, falls gemountet
+    raid_member_of: str | None = None  # RAID-Array, z.B. "md0"
     last_self_test: SmartSelfTest | None = None
     attributes: list[SmartAttribute]
 

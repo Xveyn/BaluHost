@@ -27,6 +27,7 @@ export interface SmartDevice {
   used_bytes: number | null;
   used_percent: number | null;
   mount_point: string | null;
+  raid_member_of: string | null;
   last_self_test: SmartSelfTest | null;
   attributes: SmartAttribute[];
 }

@@ -536,15 +536,25 @@ export default function Dashboard({ user }: DashboardProps) {
                       let usedBytes = device.used_bytes ?? 0;
 
                       // Fallback: Wenn keine direkten Nutzungsdaten verfügbar sind,
-                      // berechne proportional basierend auf Gesamtspeicher
+                      // berechne basierend auf RAID-Membership oder proportional
                       if (usedBytes === 0 && storageStats.used > 0) {
-                        const totalHardwareCapacity = smartData.devices.reduce((sum, d) => sum + (d.capacity_bytes || 0), 0);
                         const deviceCapacity = device.capacity_bytes || 0;
 
-                        if (deviceCapacity > 0 && totalHardwareCapacity > 0) {
-                          const deviceShare = deviceCapacity / totalHardwareCapacity;
-                          usedBytes = Math.round(storageStats.used * deviceShare);
+                        if (device.raid_member_of && deviceCapacity > 0) {
+                          // RAID-Member: Jede Disk enthält alle Daten (RAID 1 = volle Spiegelung)
+                          usedBytes = storageStats.used;
                           usagePercent = (usedBytes / deviceCapacity) * 100;
+                        } else if (deviceCapacity > 0) {
+                          // Non-RAID: Proportionale Verteilung über non-RAID Devices
+                          const nonRaidCapacity = smartData.devices
+                            .filter(d => !d.raid_member_of)
+                            .reduce((sum, d) => sum + (d.capacity_bytes || 0), 0);
+
+                          if (nonRaidCapacity > 0) {
+                            const deviceShare = deviceCapacity / nonRaidCapacity;
+                            usedBytes = Math.round(storageStats.used * deviceShare);
+                            usagePercent = (usedBytes / deviceCapacity) * 100;
+                          }
                         }
                       }
 
