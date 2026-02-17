@@ -1,0 +1,1259 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>BaluHost Codebase Analysis Report</title>
+  <style>
+    :root {
+      --bg-primary: #0f172a;
+      --bg-secondary: #1e293b;
+      --bg-card: #1e293b;
+      --bg-card-hover: #334155;
+      --border: #334155;
+      --text-primary: #f1f5f9;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #38bdf8;
+      --accent-indigo: #818cf8;
+      --accent-violet: #a78bfa;
+      --accent-emerald: #34d399;
+      --accent-amber: #fbbf24;
+      --accent-rose: #fb7185;
+      --accent-cyan: #22d3ee;
+      --gradient-primary: linear-gradient(135deg, #38bdf8, #818cf8, #a78bfa);
+      --gradient-success: linear-gradient(135deg, #34d399, #22d3ee);
+      --gradient-warning: linear-gradient(135deg, #fbbf24, #fb923c);
+      --gradient-danger: linear-gradient(135deg, #fb7185, #f472b6);
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      line-height: 1.6;
+      min-height: 100vh;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+      padding: 2rem;
+    }
+
+    /* Header */
+    .header {
+      text-align: center;
+      padding: 3rem 0 2rem;
+      position: relative;
+    }
+
+    .header::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 50%;
+      transform: translateX(-50%);
+      width: 300px; height: 300px;
+      background: radial-gradient(circle, rgba(56,189,248,0.08) 0%, transparent 70%);
+      pointer-events: none;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      font-weight: 800;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      margin-bottom: 0.5rem;
+      letter-spacing: -0.03em;
+    }
+
+    .header .subtitle {
+      color: var(--text-secondary);
+      font-size: 1.1rem;
+    }
+
+    .header .meta {
+      display: flex;
+      justify-content: center;
+      gap: 2rem;
+      margin-top: 1.5rem;
+      flex-wrap: wrap;
+    }
+
+    .header .meta-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      color: var(--text-muted);
+      font-size: 0.875rem;
+    }
+
+    .meta-item .dot {
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      background: var(--accent-emerald);
+    }
+
+    /* Section */
+    .section {
+      margin-bottom: 3rem;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      gap: 0.75rem;
+      margin-bottom: 1.5rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .section-header h2 {
+      font-size: 1.5rem;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+    }
+
+    .section-header .badge {
+      font-size: 0.7rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      padding: 0.25rem 0.75rem;
+      border-radius: 9999px;
+      background: rgba(56,189,248,0.15);
+      color: var(--accent-blue);
+      border: 1px solid rgba(56,189,248,0.2);
+    }
+
+    /* Stat Cards */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+      margin-bottom: 2rem;
+    }
+
+    .stat-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+      transition: all 0.2s;
+      position: relative;
+      overflow: hidden;
+    }
+
+    .stat-card::before {
+      content: '';
+      position: absolute;
+      top: 0; left: 0; right: 0;
+      height: 3px;
+      background: var(--gradient-primary);
+      opacity: 0;
+      transition: opacity 0.2s;
+    }
+
+    .stat-card:hover::before { opacity: 1; }
+    .stat-card:hover { border-color: rgba(56,189,248,0.3); }
+
+    .stat-card .label {
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+      margin-bottom: 0.5rem;
+    }
+
+    .stat-card .value {
+      font-size: 2rem;
+      font-weight: 800;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1.2;
+    }
+
+    .stat-card .detail {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      margin-top: 0.25rem;
+    }
+
+    /* Score Cards */
+    .score-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+      gap: 1rem;
+    }
+
+    .score-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.25rem;
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      transition: all 0.2s;
+    }
+
+    .score-card:hover { border-color: rgba(56,189,248,0.3); }
+
+    .score-ring {
+      width: 56px; height: 56px;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.1rem;
+      font-weight: 800;
+      flex-shrink: 0;
+      position: relative;
+    }
+
+    .score-ring.excellent {
+      background: rgba(52,211,153,0.15);
+      color: var(--accent-emerald);
+      border: 2px solid rgba(52,211,153,0.4);
+    }
+
+    .score-ring.good {
+      background: rgba(56,189,248,0.15);
+      color: var(--accent-blue);
+      border: 2px solid rgba(56,189,248,0.4);
+    }
+
+    .score-ring.fair {
+      background: rgba(251,191,36,0.15);
+      color: var(--accent-amber);
+      border: 2px solid rgba(251,191,36,0.4);
+    }
+
+    .score-ring.poor {
+      background: rgba(251,113,133,0.15);
+      color: var(--accent-rose);
+      border: 2px solid rgba(251,113,133,0.4);
+    }
+
+    .score-card .info h3 {
+      font-size: 0.95rem;
+      font-weight: 600;
+      margin-bottom: 0.15rem;
+    }
+
+    .score-card .info p {
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
+    /* Tables */
+    .table-wrapper {
+      overflow-x: auto;
+      border-radius: 1rem;
+      border: 1px solid var(--border);
+      margin-bottom: 1.5rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 0.875rem;
+    }
+
+    thead th {
+      background: rgba(15,23,42,0.8);
+      padding: 0.875rem 1rem;
+      text-align: left;
+      font-weight: 600;
+      font-size: 0.75rem;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--border);
+      white-space: nowrap;
+    }
+
+    tbody td {
+      padding: 0.75rem 1rem;
+      border-bottom: 1px solid rgba(51,65,85,0.5);
+      color: var(--text-secondary);
+    }
+
+    tbody tr:last-child td { border-bottom: none; }
+    tbody tr:hover { background: rgba(56,189,248,0.03); }
+
+    td.file-path {
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      color: var(--accent-cyan);
+    }
+
+    td.loc {
+      font-weight: 700;
+      text-align: right;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    /* Bar Charts */
+    .bar-chart {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+      margin: 1.5rem 0;
+    }
+
+    .bar-item {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+    }
+
+    .bar-label {
+      width: 160px;
+      font-size: 0.8rem;
+      color: var(--text-secondary);
+      text-align: right;
+      flex-shrink: 0;
+    }
+
+    .bar-track {
+      flex: 1;
+      height: 28px;
+      background: rgba(30,41,59,0.8);
+      border-radius: 0.5rem;
+      overflow: hidden;
+      position: relative;
+    }
+
+    .bar-fill {
+      height: 100%;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      padding: 0 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      color: white;
+      white-space: nowrap;
+      transition: width 1s ease;
+    }
+
+    .bar-fill.blue { background: linear-gradient(90deg, #38bdf8, #818cf8); }
+    .bar-fill.emerald { background: linear-gradient(90deg, #34d399, #22d3ee); }
+    .bar-fill.violet { background: linear-gradient(90deg, #a78bfa, #c084fc); }
+    .bar-fill.amber { background: linear-gradient(90deg, #fbbf24, #fb923c); }
+    .bar-fill.rose { background: linear-gradient(90deg, #fb7185, #f472b6); }
+
+    /* Summary Box */
+    .summary-box {
+      background: linear-gradient(135deg, rgba(56,189,248,0.05) 0%, rgba(129,140,248,0.05) 50%, rgba(167,139,250,0.05) 100%);
+      border: 1px solid rgba(56,189,248,0.2);
+      border-radius: 1rem;
+      padding: 2rem;
+      margin: 2rem 0;
+    }
+
+    .summary-box h3 {
+      font-size: 1.2rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      background: var(--gradient-primary);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .summary-box p {
+      color: var(--text-secondary);
+      margin-bottom: 0.75rem;
+      line-height: 1.7;
+    }
+
+    /* Pro/Con Lists */
+    .pro-con-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+      margin: 1.5rem 0;
+    }
+
+    @media (max-width: 768px) {
+      .pro-con-grid { grid-template-columns: 1fr; }
+    }
+
+    .pro-list, .con-list {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+    }
+
+    .pro-list h3, .con-list h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .pro-list h3 { color: var(--accent-emerald); }
+    .con-list h3 { color: var(--accent-amber); }
+
+    .pro-list ul, .con-list ul {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 0.6rem;
+    }
+
+    .pro-list li, .con-list li {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      padding-left: 1.5rem;
+      position: relative;
+      line-height: 1.5;
+    }
+
+    .pro-list li::before {
+      content: '+';
+      position: absolute;
+      left: 0;
+      font-weight: 700;
+      color: var(--accent-emerald);
+    }
+
+    .con-list li::before {
+      content: '!';
+      position: absolute;
+      left: 0.15rem;
+      font-weight: 700;
+      color: var(--accent-amber);
+      font-size: 0.85rem;
+    }
+
+    /* Comparison */
+    .comparison {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1.5rem;
+    }
+
+    @media (max-width: 768px) {
+      .comparison { grid-template-columns: 1fr; }
+    }
+
+    .comparison-panel {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 1.5rem;
+    }
+
+    .comparison-panel h3 {
+      font-size: 1.05rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      padding-bottom: 0.75rem;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .detail-list {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .detail-item {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 0.4rem 0;
+    }
+
+    .detail-item .key {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    .detail-item .val {
+      font-size: 0.85rem;
+      font-weight: 600;
+      font-family: 'JetBrains Mono', monospace;
+      color: var(--text-primary);
+    }
+
+    /* Tags */
+    .tag {
+      display: inline-flex;
+      align-items: center;
+      padding: 0.2rem 0.6rem;
+      border-radius: 0.375rem;
+      font-size: 0.7rem;
+      font-weight: 600;
+      letter-spacing: 0.02em;
+    }
+
+    .tag-emerald { background: rgba(52,211,153,0.15); color: var(--accent-emerald); border: 1px solid rgba(52,211,153,0.3); }
+    .tag-blue { background: rgba(56,189,248,0.15); color: var(--accent-blue); border: 1px solid rgba(56,189,248,0.3); }
+    .tag-amber { background: rgba(251,191,36,0.15); color: var(--accent-amber); border: 1px solid rgba(251,191,36,0.3); }
+    .tag-violet { background: rgba(167,139,250,0.15); color: var(--accent-violet); border: 1px solid rgba(167,139,250,0.3); }
+    .tag-rose { background: rgba(251,113,133,0.15); color: var(--accent-rose); border: 1px solid rgba(251,113,133,0.3); }
+
+    /* Overall Grade */
+    .overall-grade {
+      text-align: center;
+      padding: 3rem 0;
+      position: relative;
+    }
+
+    .grade-circle {
+      width: 140px; height: 140px;
+      border-radius: 50%;
+      margin: 0 auto 1.5rem;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      background: linear-gradient(135deg, rgba(52,211,153,0.1) 0%, rgba(56,189,248,0.1) 100%);
+      border: 3px solid rgba(52,211,153,0.4);
+      box-shadow: 0 0 40px rgba(52,211,153,0.15);
+    }
+
+    .grade-circle .grade {
+      font-size: 3rem;
+      font-weight: 900;
+      background: var(--gradient-success);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+      line-height: 1;
+    }
+
+    .grade-circle .grade-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.15em;
+      color: var(--text-muted);
+      margin-top: 0.25rem;
+    }
+
+    .grade-text {
+      font-size: 1.1rem;
+      color: var(--text-secondary);
+      max-width: 600px;
+      margin: 0 auto;
+    }
+
+    /* Footer */
+    .footer {
+      text-align: center;
+      padding: 2rem 0;
+      border-top: 1px solid var(--border);
+      margin-top: 2rem;
+      color: var(--text-muted);
+      font-size: 0.8rem;
+    }
+
+    /* Donut Chart via CSS */
+    .donut-container {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 3rem;
+      margin: 2rem 0;
+      flex-wrap: wrap;
+    }
+
+    .donut {
+      position: relative;
+      width: 160px; height: 160px;
+    }
+
+    .donut-ring {
+      width: 100%; height: 100%;
+      border-radius: 50%;
+      position: relative;
+    }
+
+    .donut-center {
+      position: absolute;
+      top: 50%; left: 50%;
+      transform: translate(-50%, -50%);
+      text-align: center;
+    }
+
+    .donut-center .donut-value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: var(--text-primary);
+    }
+
+    .donut-center .donut-label {
+      font-size: 0.65rem;
+      text-transform: uppercase;
+      letter-spacing: 0.1em;
+      color: var(--text-muted);
+    }
+
+    .legend {
+      display: flex;
+      flex-direction: column;
+      gap: 0.75rem;
+    }
+
+    .legend-item {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+    }
+
+    .legend-dot {
+      width: 12px; height: 12px;
+      border-radius: 3px;
+      flex-shrink: 0;
+    }
+
+    /* Architecture Diagram */
+    .arch-box {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 1rem;
+      padding: 2rem;
+      margin: 1.5rem 0;
+      font-family: 'JetBrains Mono', 'Fira Code', monospace;
+      font-size: 0.8rem;
+      line-height: 1.8;
+      color: var(--text-secondary);
+      overflow-x: auto;
+      white-space: pre;
+    }
+
+    .arch-box .highlight { color: var(--accent-blue); font-weight: 600; }
+    .arch-box .dim { color: var(--text-muted); }
+    .arch-box .num { color: var(--accent-amber); }
+    .arch-box .accent { color: var(--accent-violet); }
+
+    /* Responsive */
+    @media (max-width: 640px) {
+      .container { padding: 1rem; }
+      .header h1 { font-size: 1.8rem; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .bar-label { width: 100px; font-size: 0.7rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+
+    <!-- Header -->
+    <div class="header">
+      <h1>BaluHost Codebase Report</h1>
+      <p class="subtitle">Umfassende Analyse von Code-Qualitat, Komplexitat und Wartbarkeit</p>
+      <div class="meta">
+        <div class="meta-item"><span class="dot"></span> Version 1.5.2-alpha</div>
+        <div class="meta-item"><span class="dot"></span> Analysiert am 17.02.2026</div>
+        <div class="meta-item"><span class="dot"></span> 192 Commits</div>
+        <div class="meta-item"><span class="dot"></span> Produktiv seit Jan 2026</div>
+      </div>
+    </div>
+
+    <!-- Overall Grade -->
+    <div class="overall-grade">
+      <div class="grade-circle">
+        <span class="grade">A</span>
+        <span class="grade-label">Gesamtnote</span>
+      </div>
+      <p class="grade-text">
+        BaluHost ist eine gut strukturierte, produktionsreife Full-Stack-Anwendung mit solider Architektur,
+        starker Typsicherheit und durchdachtem Security-Konzept. Die Codebase ist vergleichsweise gross
+        fur ein Einzelentwickler-Projekt.
+      </p>
+    </div>
+
+    <!-- Kennzahlen -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Kennzahlen im Uberblick</h2>
+        <span class="badge">Metrics</span>
+      </div>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <div class="label">Gesamte LOC</div>
+          <div class="value">129K</div>
+          <div class="detail">113.5K App + 15.7K Tests</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Quelldateien</div>
+          <div class="value">465</div>
+          <div class="detail">223 Python + 242 TS/TSX</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Testdateien</div>
+          <div class="value">88</div>
+          <div class="detail">72 Backend + 16 Frontend</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">API Endpoints</div>
+          <div class="value">330+</div>
+          <div class="detail">38 Route-Dateien</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">DB Migrationen</div>
+          <div class="value">49</div>
+          <div class="detail">Alembic Revisions</div>
+        </div>
+        <div class="stat-card">
+          <div class="label">Dependencies</div>
+          <div class="value">65</div>
+          <div class="detail">34 Backend + 31 Frontend</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grossenvergleich -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Grosseneinordnung</h2>
+        <span class="badge">Kontext</span>
+      </div>
+      <div class="summary-box">
+        <h3>Wie gross ist die Codebase wirklich?</h3>
+        <p>
+          Mit ~129.000 Zeilen Code ist BaluHost ein <strong>mittelgrosses bis grosses Projekt</strong>.
+          Zum Vergleich: Typische Open-Source-Projekte wie <em>Gitea</em> (Go-basierter Git-Server) haben ~200K LOC,
+          wahrend einfachere Self-Hosted-Tools wie <em>Filebrowser</em> bei ~30K LOC liegen.
+        </p>
+        <p>
+          Die Komplexitat entsteht durch die Breite der Features: BaluHost vereint Dateiverwaltung, RAID-Management,
+          VPN-Konfiguration, Power-Management, Fan-Steuerung, Monitoring, Backup, Sync, Plugin-System und
+          Mobile-App-Anbindung in einer einzigen Plattform -- ein Umfang, den man typischerweise bei Teams von 3-5 Entwicklern erwarten wurde.
+        </p>
+      </div>
+
+      <!-- LOC Breakdown Bar Chart -->
+      <h3 style="font-size: 1rem; margin-bottom: 1rem; color: var(--text-secondary);">Lines of Code nach Bereich</h3>
+      <div class="bar-chart">
+        <div class="bar-item">
+          <span class="bar-label">Backend App</span>
+          <div class="bar-track">
+            <div class="bar-fill blue" style="width: 47%;">60.482 LOC</div>
+          </div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Frontend</span>
+          <div class="bar-track">
+            <div class="bar-fill violet" style="width: 41%;">53.035 LOC</div>
+          </div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Backend Tests</span>
+          <div class="bar-track">
+            <div class="bar-fill emerald" style="width: 12%;">15.711 LOC</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Backend vs Frontend -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Backend vs. Frontend</h2>
+        <span class="badge">Struktur</span>
+      </div>
+      <div class="comparison">
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-blue);">&#9679;</span> Backend (Python / FastAPI)</h3>
+          <div class="detail-list">
+            <div class="detail-item"><span class="key">Dateien</span><span class="val">223</span></div>
+            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">60.482</span></div>
+            <div class="detail-item"><span class="key">Services</span><span class="val">88</span></div>
+            <div class="detail-item"><span class="key">Route-Dateien</span><span class="val">38</span></div>
+            <div class="detail-item"><span class="key">DB Models</span><span class="val">34</span></div>
+            <div class="detail-item"><span class="key">Pydantic Schemas</span><span class="val">33</span></div>
+            <div class="detail-item"><span class="key">Async Functions</span><span class="val">668</span></div>
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">72</span></div>
+            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">15.711</span></div>
+            <div class="detail-item"><span class="key">Dependencies</span><span class="val">34</span></div>
+          </div>
+        </div>
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-violet);">&#9679;</span> Frontend (React / TypeScript)</h3>
+          <div class="detail-list">
+            <div class="detail-item"><span class="key">Dateien</span><span class="val">242</span></div>
+            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">53.035</span></div>
+            <div class="detail-item"><span class="key">Pages</span><span class="val">28</span></div>
+            <div class="detail-item"><span class="key">Komponenten</span><span class="val">108</span></div>
+            <div class="detail-item"><span class="key">Custom Hooks</span><span class="val">20</span></div>
+            <div class="detail-item"><span class="key">API Module</span><span class="val">25</span></div>
+            <div class="detail-item"><span class="key">Type Definitionen</span><span class="val">851</span></div>
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">16</span></div>
+            <div class="detail-item"><span class="key">i18n Sprachen</span><span class="val">EN, DE</span></div>
+            <div class="detail-item"><span class="key">Dependencies</span><span class="val">11 + 20 dev</span></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Code Quality Scores -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Code-Qualitat Bewertung</h2>
+        <span class="badge">Quality</span>
+      </div>
+      <div class="score-grid">
+        <div class="score-card">
+          <div class="score-ring excellent">A+</div>
+          <div class="info">
+            <h3>Architektur</h3>
+            <p>Klare Trennung: Routes &rarr; Services &rarr; Models &rarr; Schemas. Plugin-System mit Events. Frontend mit Feature-basierten Komponenten.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring excellent">A+</div>
+          <div class="info">
+            <h3>Typsicherheit</h3>
+            <p>TypeScript strict mode, 851 Typ-Definitionen, 0 ts-ignore. Backend: 72.6% der Dateien mit Typing-Imports, Pydantic fur Validierung.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring excellent">A+</div>
+          <div class="info">
+            <h3>Security</h3>
+            <p>JWT + 2FA (TOTP), Rate Limiting, Audit Logging, Path Traversal Schutz, kein shell=True, CSP Headers, Input-Validierung.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring excellent">A+</div>
+          <div class="info">
+            <h3>Async/Concurrency</h3>
+            <p>668 async Functions, korrektes await-Pattern, async DB Sessions, WebSocket-Support, Background Jobs via Lifespan Events.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring good">A</div>
+          <div class="info">
+            <h3>Error Handling</h3>
+            <p>716+ Exception-Handler im Backend, 313 Catch-Blocks im Frontend. Konsistente Toast-Benachrichtigungen. Strukturierte Fehler via Pydantic.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring good">A</div>
+          <div class="info">
+            <h3>Dependencies</h3>
+            <p>Schlanke, gut gewahlte Abhangigkeiten. Klare Version-Pinning-Strategie. Keine veralteten oder bedenklichen Pakete.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring good">A</div>
+          <div class="info">
+            <h3>Konsistenz</h3>
+            <p>Einheitliche Patterns uber alle Module. Service-Layer-Pattern konsequent durchgezogen. API-Module folgen identischer Struktur.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring good">A-</div>
+          <div class="info">
+            <h3>Testing</h3>
+            <p>Solides Backend-Testing (72 Dateien, Security-fokussiert). Frontend-Tests eher basic (16 Dateien). E2E-Tests konfiguriert, aber minimal.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring fair">B+</div>
+          <div class="info">
+            <h3>Komponentengrosse</h3>
+            <p>19 Frontend-Dateien uber 500 LOC. FileManager.tsx mit 1.247 Zeilen konnte aufgeteilt werden. Backend: 19 Dateien uber 500 LOC.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring fair">B</div>
+          <div class="info">
+            <h3>Code Hygiene</h3>
+            <p>Nur 4 TODOs, 0 FIXME/HACK. Aber: 181 console.log im Frontend und 219 any-Typen (meist in Plugin SDK). Aufraumpotenzial vorhanden.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Grosste Dateien -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Grosste Dateien</h2>
+        <span class="badge">Hotspots</span>
+      </div>
+      <div class="comparison">
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-blue);">&#9679;</span> Backend Top 10</h3>
+          <div class="table-wrapper" style="border: none;">
+            <table>
+              <thead><tr><th>Datei</th><th style="text-align:right;">LOC</th></tr></thead>
+              <tbody>
+                <tr><td class="file-path">plugins/.../optical_drive/service.py</td><td class="loc">1.911</td></tr>
+                <tr><td class="file-path">services/power/manager.py</td><td class="loc">1.835</td></tr>
+                <tr><td class="file-path">services/hardware/raid.py</td><td class="loc">1.512</td></tr>
+                <tr><td class="file-path">services/update_service.py</td><td class="loc">1.504</td></tr>
+                <tr><td class="file-path">services/power/fan_control.py</td><td class="loc">1.101</td></tr>
+                <tr><td class="file-path">services/hardware/smart.py</td><td class="loc">1.062</td></tr>
+                <tr><td class="file-path">api/routes/vcl.py</td><td class="loc">1.037</td></tr>
+                <tr><td class="file-path">services/benchmark_service.py</td><td class="loc">982</td></tr>
+                <tr><td class="file-path">api/routes/files.py</td><td class="loc">947</td></tr>
+                <tr><td class="file-path">api/routes/system.py</td><td class="loc">823</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-violet);">&#9679;</span> Frontend Top 10</h3>
+          <div class="table-wrapper" style="border: none;">
+            <table>
+              <thead><tr><th>Datei</th><th style="text-align:right;">LOC</th></tr></thead>
+              <tbody>
+                <tr><td class="file-path">pages/FileManager.tsx</td><td class="loc">1.247</td></tr>
+                <tr><td class="file-path">pages/RaidManagement.tsx</td><td class="loc">1.113</td></tr>
+                <tr><td class="file-path">pages/DeviceManagement.tsx</td><td class="loc">978</td></tr>
+                <tr><td class="file-path">pages/UserManagement.tsx</td><td class="loc">915</td></tr>
+                <tr><td class="file-path">pages/SettingsPage.tsx</td><td class="loc">904</td></tr>
+                <tr><td class="file-path">pages/SharesPage.tsx</td><td class="loc">900</td></tr>
+                <tr><td class="file-path">pages/UpdatePage.tsx</td><td class="loc">851</td></tr>
+                <tr><td class="file-path">pages/Dashboard.tsx</td><td class="loc">756</td></tr>
+                <tr><td class="file-path">components/SyncSettings.tsx</td><td class="loc">743</td></tr>
+                <tr><td class="file-path">pages/PowerManagement.tsx</td><td class="loc">706</td></tr>
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Architektur-Diagramm -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Architektur-Uberblick</h2>
+        <span class="badge">Architecture</span>
+      </div>
+      <div class="arch-box"><span class="dim">  Client (React)</span>                          <span class="dim">Backend (FastAPI)</span>
+<span class="dim">  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>       <span class="dim">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+<span class="dim">  &#9474;</span> <span class="highlight">28 Pages</span>  <span class="dim">&#9474;</span> <span class="accent">25 API</span>  <span class="dim">&#9474;</span>  HTTP  <span class="dim">&#9474;</span> <span class="highlight">38 Routes</span>  <span class="dim">&#9474;</span> <span class="accent">88 Services</span> <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span>             <span class="dim">&#9474;</span> <span class="accent">Modules</span> <span class="dim">&#9474;</span> &#9472;&#9472;&#9472;&#9654; <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span> <span class="highlight">108 Comps</span> <span class="dim">&#9474;</span>         <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span> <span class="highlight">33 Schemas</span> <span class="dim">&#9474;</span>  <span class="accent">34 Models</span> <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span>             <span class="dim">&#9474;</span>         <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>      <span class="dim">&#9474;</span>      <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span>  <span class="highlight">20 Hooks</span> <span class="dim">&#9474;</span>  <span class="accent">5 Ctx</span>  <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span>  <span class="highlight">Middleware</span> <span class="dim">&#9474;</span>      <span class="dim">&#9660;</span>      <span class="dim">&#9474;</span>
+<span class="dim">  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>       <span class="dim">&#9474;</span>  <span class="highlight">Security</span>  <span class="dim">&#9474;</span> <span class="num">PostgreSQL</span> <span class="dim">&#9474;</span>
+                                        <span class="dim">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
+                                                    <span class="dim">&#9474;</span>
+                                        <span class="dim">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
+                                        <span class="dim">&#9474;</span>  <span class="num">Linux System Layer</span>             <span class="dim">&#9474;</span>
+                                        <span class="dim">&#9474;</span>  mdadm, smartctl, sysfs, hwmon   <span class="dim">&#9474;</span>
+                                        <span class="dim">&#9474;</span>  WireGuard, systemd, psutil      <span class="dim">&#9474;</span>
+                                        <span class="dim">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span></div>
+    </div>
+
+    <!-- Feature Coverage -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Feature-Umfang</h2>
+        <span class="badge">Scope</span>
+      </div>
+      <div class="bar-chart">
+        <div class="bar-item">
+          <span class="bar-label">File Management</span>
+          <div class="bar-track"><div class="bar-fill blue" style="width: 100%;">Upload, Shares, Permissions, Chunked Upload, Quotas</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">RAID & Storage</span>
+          <div class="bar-track"><div class="bar-fill violet" style="width: 95%;">mdadm RAID, SMART Health, SSD Cache, OS-Disk Schutz</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Monitoring</span>
+          <div class="bar-track"><div class="bar-fill emerald" style="width: 90%;">CPU, RAM, Network, Disk I/O, Prometheus Metrics</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Security</span>
+          <div class="bar-track"><div class="bar-fill blue" style="width: 95%;">JWT, 2FA TOTP, Rate Limiting, Audit Logs, CSP</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Power & Hardware</span>
+          <div class="bar-track"><div class="bar-fill amber" style="width: 85%;">CPU Freq Scaling, Fan PWM, Temperaturkurven, Energie</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Networking</span>
+          <div class="bar-track"><div class="bar-fill violet" style="width: 80%;">WireGuard VPN, mDNS Discovery, Remote Server SSH</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Backup & Sync</span>
+          <div class="bar-track"><div class="bar-fill emerald" style="width: 75%;">Backup/Restore, Desktop Sync, Cloud Import (rclone)</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Mobile & Devices</span>
+          <div class="bar-track"><div class="bar-fill blue" style="width: 70%;">QR Pairing, Push Notifications, Device Tracking</div></div>
+        </div>
+        <div class="bar-item">
+          <span class="bar-label">Admin Tools</span>
+          <div class="bar-track"><div class="bar-fill amber" style="width: 85%;">DB Inspector, Service Health, Scheduler, Benchmarks</div></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Wartbarkeit -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Wartbarkeit & Maintainability</h2>
+        <span class="badge">Maintenance</span>
+      </div>
+
+      <div class="pro-con-grid">
+        <div class="pro-list">
+          <h3><span>&#9650;</span> Starken</h3>
+          <ul>
+            <li>Klare Schichtenarchitektur: Routes, Services, Models und Schemas strikt getrennt</li>
+            <li>Konsistente Patterns -- einmal gelernt, uberall anwendbar</li>
+            <li>TypeScript strict mode mit 0 ts-ignore Direktiven</li>
+            <li>Minimale technische Schulden: nur 4 TODOs, 0 FIXME/HACK</li>
+            <li>Comprehensive Security-Enforcement-Rules dokumentiert</li>
+            <li>Dev-Mode mit Mock-Daten erlaubt risikofreies Entwickeln</li>
+            <li>Plugin-System fur erweiterbare Architektur</li>
+            <li>Gut gewahlte, schlanke Dependency-Liste ohne Bloat</li>
+            <li>49 Alembic-Migrationen zeigen saubere Schema-Evolution</li>
+            <li>i18n-Support (EN/DE) von Anfang an eingeplant</li>
+          </ul>
+        </div>
+        <div class="con-list">
+          <h3><span>&#9660;</span> Verbesserungspotenzial</h3>
+          <ul>
+            <li>19 Frontend-Dateien uber 500 LOC -- Aufteilen wurde Wartung erleichtern</li>
+            <li>181 console.log Statements im Frontend sollten entfernt werden</li>
+            <li>Frontend-Tests eher dunn (16 Dateien vs. 72 im Backend)</li>
+            <li>219 <code>any</code>-Typen im Frontend (meist Plugin SDK, aber aufraumenswert)</li>
+            <li>optical_drive Plugin mit 1.911 LOC in einer Datei -- sollte modularisiert werden</li>
+            <li>Bundle-Size 1.15 MB (331 KB gzipped) -- Recharts ist grosster Chunk</li>
+            <li>Kein E2E-Test-Coverage fur kritische User-Flows</li>
+            <li>AuthContext erstellt aber noch nicht vollstandig verdrahtet (Prop Drilling verbleibt)</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- Test Coverage -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Test-Abdeckung</h2>
+        <span class="badge">Testing</span>
+      </div>
+      <div class="comparison">
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-emerald);">&#9679;</span> Backend Tests (stark)</h3>
+          <div class="detail-list">
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">72</span></div>
+            <div class="detail-item"><span class="key">Test-Functions</span><span class="val">364+</span></div>
+            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">15.711</span></div>
+            <div class="detail-item"><span class="key">Test-zu-Code Ratio</span><span class="val">1 : 3.8</span></div>
+          </div>
+          <div style="margin-top: 1rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+              <span class="tag tag-emerald">Security</span>
+              <span class="tag tag-emerald">RAID</span>
+              <span class="tag tag-emerald">Auth / 2FA</span>
+              <span class="tag tag-emerald">Files</span>
+              <span class="tag tag-emerald">Audit Logging</span>
+              <span class="tag tag-blue">Power Mgmt</span>
+              <span class="tag tag-blue">Fan Control</span>
+              <span class="tag tag-blue">Integration</span>
+              <span class="tag tag-blue">Plugins</span>
+              <span class="tag tag-blue">Services</span>
+              <span class="tag tag-blue">DB Migration</span>
+              <span class="tag tag-blue">Monitoring</span>
+            </div>
+          </div>
+        </div>
+        <div class="comparison-panel">
+          <h3><span style="color: var(--accent-amber);">&#9679;</span> Frontend Tests (ausbaufahig)</h3>
+          <div class="detail-list">
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">16</span></div>
+            <div class="detail-item"><span class="key">Framework</span><span class="val">Vitest + RTL</span></div>
+            <div class="detail-item"><span class="key">E2E</span><span class="val">Playwright (konfiguriert)</span></div>
+            <div class="detail-item"><span class="key">Test-zu-Code Ratio</span><span class="val">~ 1 : 15</span></div>
+          </div>
+          <div style="margin-top: 1rem;">
+            <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
+              <span class="tag tag-emerald">Hooks</span>
+              <span class="tag tag-emerald">Formatters</span>
+              <span class="tag tag-emerald">AuthContext</span>
+              <span class="tag tag-blue">ErrorBoundary</span>
+              <span class="tag tag-blue">ConfirmDialog</span>
+              <span class="tag tag-amber">API Mocks</span>
+              <span class="tag tag-amber">E2E (minimal)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Security -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Security-Analyse</h2>
+        <span class="badge">Security</span>
+      </div>
+      <div class="summary-box">
+        <h3>Sicherheitskonzept</h3>
+        <p>
+          BaluHost implementiert ein umfassendes, mehrschichtiges Sicherheitskonzept, das uber dem Durchschnitt
+          vergleichbarer Self-Hosted-Projekte liegt. Die dokumentierten Security-Invarianten und der detaillierte
+          Review-Checklist zeigen ein bewusstes, systematisches Vorgehen.
+        </p>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Security-Feature</th><th>Status</th><th>Details</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>JWT Authentication</td><td><span class="tag tag-emerald">Implementiert</span></td><td>Access (15min TTL), Refresh (7 Tage), SSE (60s)</td></tr>
+            <tr><td>2FA (TOTP)</td><td><span class="tag tag-emerald">Implementiert</span></td><td>pyotp-basiert, QR-Code Enrollment</td></tr>
+            <tr><td>Rate Limiting</td><td><span class="tag tag-emerald">Implementiert</span></td><td>Pro Endpoint konfigurierbar via slowapi</td></tr>
+            <tr><td>Path Traversal Schutz</td><td><span class="tag tag-emerald">Implementiert</span></td><td>_jail_path() mit 8 Call Sites, PurePosixPath</td></tr>
+            <tr><td>Audit Logging</td><td><span class="tag tag-emerald">Implementiert</span></td><td>DB-basiert, Security-Events, Login-Tracking</td></tr>
+            <tr><td>SQL Injection Schutz</td><td><span class="tag tag-emerald">Implementiert</span></td><td>ORM-only, kein rohes SQL mit User-Input</td></tr>
+            <tr><td>Command Injection</td><td><span class="tag tag-emerald">Implementiert</span></td><td>0x shell=True in App-Code, Liste statt String</td></tr>
+            <tr><td>CSP Headers</td><td><span class="tag tag-emerald">Implementiert</span></td><td>X-Frame, HSTS, X-Content-Type-Options</td></tr>
+            <tr><td>Passwort-Policy</td><td><span class="tag tag-emerald">Implementiert</span></td><td>8-128 Chars, Gross/Klein/Zahl, Blacklist</td></tr>
+            <tr><td>Encryption at Rest</td><td><span class="tag tag-emerald">Implementiert</span></td><td>VPN/SSH Keys: Fernet (AES-128-CBC)</td></tr>
+            <tr><td>HTTPS</td><td><span class="tag tag-amber">Optional</span></td><td>WireGuard VPN verschlusselt bereits den Traffic</td></tr>
+            <tr><td>CSRF Protection</td><td><span class="tag tag-blue">Nicht notig</span></td><td>JWT Bearer Auth (keine Cookie-basierte Auth)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Tech Debt -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Technische Schulden</h2>
+        <span class="badge">Tech Debt</span>
+      </div>
+      <div class="table-wrapper">
+        <table>
+          <thead>
+            <tr><th>Bereich</th><th>Schwere</th><th>Beschreibung</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>change-password Endpoint</td>
+              <td><span class="tag tag-amber">Mittel</span></td>
+              <td>Akzeptiert raw dict statt Pydantic Model -- Passwort-Starke-Validierung wird umgangen</td>
+            </tr>
+            <tr>
+              <td>AuthContext Prop Drilling</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>Context erstellt aber nicht vollstandig in Komponentenbaum verdrahtet</td>
+            </tr>
+            <tr>
+              <td>Console.log Statements</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>181 Debug-Logs im Frontend-Produktionscode</td>
+            </tr>
+            <tr>
+              <td>CSP unsafe-inline</td>
+              <td><span class="tag tag-blue">Akzeptiert</span></td>
+              <td>Benotigt durch Vite Dev Server, konnte in Prod gestraift werden</td>
+            </tr>
+            <tr>
+              <td>Fan Silent Preset</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>Backend PWM 25 vs. Minimum 30 -- Frontend bereits gefixt, Backend-Fix ausstehend</td>
+            </tr>
+            <tr>
+              <td>SECURITY.md</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>Dokumentation veraltet, beschreibt bereits behobene Limitierungen</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Empfehlungen -->
+    <div class="section">
+      <div class="section-header">
+        <h2>Empfehlungen</h2>
+        <span class="badge">Next Steps</span>
+      </div>
+      <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
+        <div class="stat-card" style="border-left: 3px solid var(--accent-rose);">
+          <div class="label" style="color: var(--accent-rose);">Prioritat 1</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">change-password Endpoint fixen</div>
+          <div class="detail">Pydantic Schema statt raw dict verwenden, damit Passwort-Policy greift</div>
+        </div>
+        <div class="stat-card" style="border-left: 3px solid var(--accent-amber);">
+          <div class="label" style="color: var(--accent-amber);">Prioritat 2</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Frontend Tests ausbauen</div>
+          <div class="detail">E2E Tests fur Login, File Upload, RAID Wizard -- kritische User Flows absichern</div>
+        </div>
+        <div class="stat-card" style="border-left: 3px solid var(--accent-amber);">
+          <div class="label" style="color: var(--accent-amber);">Prioritat 2</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Grosse Komponenten aufteilen</div>
+          <div class="detail">FileManager.tsx (1.247 LOC), RaidManagement.tsx (1.113 LOC) in Sub-Komponenten splitten</div>
+        </div>
+        <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
+          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Console.log bereinigen</div>
+          <div class="detail">181 Debug-Statements entfernen oder hinter __DEV__ Guard setzen</div>
+        </div>
+        <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
+          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Bundle-Size optimieren</div>
+          <div class="detail">Recharts dynamisch importieren, Tree-Shaking fur lucide-react prufen</div>
+        </div>
+        <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
+          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">AuthContext verdrahten</div>
+          <div class="detail">Prop Drilling fur User/Auth durch Context ersetzen -- Code vereinfachen</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fazit -->
+    <div class="section">
+      <div class="summary-box" style="border-color: rgba(52,211,153,0.3); background: linear-gradient(135deg, rgba(52,211,153,0.05) 0%, rgba(56,189,248,0.05) 100%);">
+        <h3 style="background: var(--gradient-success); -webkit-background-clip: text; background-clip: text;">Fazit</h3>
+        <p>
+          <strong>BaluHost ist eine beeindruckend umfangreiche und qualitativ hochwertige Codebase</strong> -- insbesondere
+          fur ein Einzelentwickler-Projekt. Die ~129.000 Zeilen Code decken ein Feature-Set ab, das typischerweise
+          von kleinen Teams entwickelt wird.
+        </p>
+        <p>
+          Die Architektur ist durchdacht und konsistent, das Security-Konzept ist uber dem Branchendurchschnitt,
+          und die Code-Qualitat (TypeScript strict, minimale technische Schulden, gute Typisierung) spricht fur
+          ein diszipliniertes Entwicklungsvorgehen.
+        </p>
+        <p>
+          Die grossten Hebel fur zukunftige Verbesserungen liegen im Aufteilen der grosseren Komponenten,
+          dem Ausbau der Frontend-Tests und der Bereinigung von Debug-Code. Die bestehenden technischen
+          Schulden sind minimal und gut dokumentiert.
+        </p>
+        <p style="margin-bottom: 0;">
+          <strong>Gesamtbewertung: A</strong> -- Produktionsreife, gut wartbare Codebase mit klarer Architektur und starkem Security-Fokus.
+        </p>
+      </div>
+    </div>
+
+    <div class="footer">
+      BaluHost Codebase Analysis Report &middot; Generiert am 17. Februar 2026 &middot; v1.5.2-alpha &middot; 192 Commits
+    </div>
+
+  </div>
+</body>
+</html>
