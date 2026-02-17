@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useMemo } from 'react'
 import { useTranslation } from 'react-i18next'
 import {
   getCpuHistory,
@@ -13,64 +13,71 @@ import type {
   DiskIoHistoryResponse,
   TimeRange,
 } from '../../api/monitoring'
-import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils'
 import { formatNumber } from '../../lib/formatters'
-import { RefreshCw, Cpu, MemoryStick, Network, HardDrive, Clock } from 'lucide-react'
-import {
-  AreaChart,
-  Area,
-  XAxis,
-  YAxis,
-  CartesianGrid,
-  Tooltip,
-  ResponsiveContainer,
-  Legend,
-} from 'recharts'
+import { RefreshCw, Cpu, MemoryStick, Network, HardDrive, TrendingDown, TrendingUp, Activity } from 'lucide-react'
+import { MetricChart, TimeRangeSelector } from '../monitoring'
+import type { ChartDataPoint, MetricLine } from '../monitoring'
+import { StatCard } from '../ui/StatCard'
 
 type MetricType = 'cpu' | 'memory' | 'network' | 'disk_io'
 
-const METRIC_TABS: { id: MetricType; labelKey: string; icon: React.ElementType; color: string }[] = [
-  { id: 'cpu', labelKey: 'admin:monitoring.metrics.cpu', icon: Cpu, color: 'blue' },
-  { id: 'memory', labelKey: 'admin:monitoring.metrics.memory', icon: MemoryStick, color: 'emerald' },
-  { id: 'network', labelKey: 'admin:monitoring.metrics.network', icon: Network, color: 'purple' },
-  { id: 'disk_io', labelKey: 'admin:monitoring.metrics.diskIo', icon: HardDrive, color: 'amber' },
+const METRIC_TABS: { id: MetricType; labelKey: string; icon: React.ElementType; color: string; gradient: string }[] = [
+  { id: 'cpu', labelKey: 'admin:monitoring.metrics.cpu', icon: Cpu, color: 'blue', gradient: 'from-blue-500 to-blue-600' },
+  { id: 'memory', labelKey: 'admin:monitoring.metrics.memory', icon: MemoryStick, color: 'emerald', gradient: 'from-emerald-500 to-emerald-600' },
+  { id: 'network', labelKey: 'admin:monitoring.metrics.network', icon: Network, color: 'purple', gradient: 'from-purple-500 to-purple-600' },
+  { id: 'disk_io', labelKey: 'admin:monitoring.metrics.diskIo', icon: HardDrive, color: 'amber', gradient: 'from-amber-500 to-amber-600' },
 ]
 
-const TIME_RANGES: { value: TimeRange; labelKey: string }[] = [
-  { value: '10m', labelKey: 'admin:monitoring.timeRanges.10m' },
-  { value: '1h', labelKey: 'admin:monitoring.timeRanges.1h' },
-  { value: '24h', labelKey: 'admin:monitoring.timeRanges.24h' },
-  { value: '7d', labelKey: 'admin:monitoring.timeRanges.7d' },
-]
-
-// formatDate and formatDateFull replaced by shared formatTimeForRange()
-
-interface CustomTooltipProps {
-  active?: boolean
-  payload?: any[]
-  label?: string
+const CHART_CONFIG: Record<MetricType, { lines: MetricLine[]; yAxisLabel: string; yAxisDomain?: [number | 'auto', number | 'auto'] }> = {
+  cpu: {
+    lines: [{ dataKey: 'usage', name: 'CPU Usage', color: '#3b82f6' }],
+    yAxisLabel: '%',
+    yAxisDomain: [0, 100],
+  },
+  memory: {
+    lines: [{ dataKey: 'percent', name: 'Memory', color: '#10b981' }],
+    yAxisLabel: '%',
+    yAxisDomain: [0, 100],
+  },
+  network: {
+    lines: [
+      { dataKey: 'download', name: 'Download', color: '#8b5cf6' },
+      { dataKey: 'upload', name: 'Upload', color: '#06b6d4' },
+    ],
+    yAxisLabel: 'Mbps',
+  },
+  disk_io: {
+    lines: [
+      { dataKey: 'read', name: 'Read', color: '#f59e0b' },
+      { dataKey: 'write', name: 'Write', color: '#ef4444' },
+    ],
+    yAxisLabel: 'MB/s',
+  },
 }
 
-const CustomTooltip = ({ active, payload, label }: CustomTooltipProps) => {
-  if (active && payload && payload.length && label) {
-    const fullDate = parseUtcTimestamp(label).toLocaleString();
-    return (
-      <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 shadow-xl">
-        <p className="text-slate-400 text-xs mb-1">{fullDate}</p>
-        {payload.map((entry: any, index: number) => (
-          <p key={index} className="text-sm" style={{ color: entry.color }}>
-            {entry.name}: {typeof entry.value === 'number' ? formatNumber(entry.value, 2) : entry.value}
-            {entry.unit || ''}
-          </p>
-        ))}
-      </div>
-    )
+function computeStats(data: ChartDataPoint[], dataKeys: string[]): { min: number; max: number; avg: number } {
+  if (data.length === 0) return { min: 0, max: 0, avg: 0 }
+  let min = Infinity
+  let max = -Infinity
+  let sum = 0
+  let count = 0
+  for (const point of data) {
+    for (const key of dataKeys) {
+      const val = point[key]
+      if (typeof val === 'number' && !isNaN(val)) {
+        if (val < min) min = val
+        if (val > max) max = val
+        sum += val
+        count++
+      }
+    }
   }
-  return null
+  if (count === 0) return { min: 0, max: 0, avg: 0 }
+  return { min, max, avg: sum / count }
 }
 
 export default function MonitoringHistoryViewer() {
-  const { t, i18n } = useTranslation(['admin', 'common'])
+  const { t } = useTranslation(['admin', 'common'])
   const [activeMetric, setActiveMetric] = useState<MetricType>('cpu')
   const [timeRange, setTimeRange] = useState<TimeRange>('1h')
   const [loading, setLoading] = useState(true)
@@ -84,8 +91,8 @@ export default function MonitoringHistoryViewer() {
   const [networkData, setNetworkData] = useState<NetworkHistoryResponse | null>(null)
   const [diskIoData, setDiskIoData] = useState<DiskIoHistoryResponse | null>(null)
 
-  const tickFormatter = (dateStr: string) => formatTimeForRange(dateStr, timeRange, i18n.language)
-  const minTickGap = timeRange === '7d' ? 70 : 40
+  // Disk selector
+  const [selectedDisk, setSelectedDisk] = useState<string>('')
 
   const fetchData = useCallback(async () => {
     setLoading(true)
@@ -115,10 +122,15 @@ export default function MonitoringHistoryViewer() {
           break
         }
         case 'disk_io': {
-          const data = await getDiskIoHistory(timeRange, 'database', undefined, 2000)
+          const diskParam = selectedDisk || undefined
+          const data = await getDiskIoHistory(timeRange, 'database', diskParam, 2000)
           setDiskIoData(data)
           setSource(data.source)
           setSampleCount(data.sample_count)
+          // Set default disk if not selected
+          if (!selectedDisk && data.available_disks.length > 0) {
+            setSelectedDisk(data.available_disks[0])
+          }
           break
         }
       }
@@ -127,306 +139,53 @@ export default function MonitoringHistoryViewer() {
     } finally {
       setLoading(false)
     }
-  }, [activeMetric, timeRange])
+  }, [activeMetric, timeRange, selectedDisk])
 
   useEffect(() => {
     fetchData()
   }, [fetchData])
 
-  const renderCpuChart = () => {
-    if (!cpuData || cpuData.samples.length === 0) {
-      return (
-        <div className="h-[300px] flex items-center justify-center text-slate-400">
-          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.cpu') })}
-        </div>
-      )
-    }
-
-    const chartData = cpuData.samples.map(s => ({
-      timestamp: s.timestamp,
-      usage: s.usage_percent,
-      frequency: s.frequency_mhz ? s.frequency_mhz / 1000 : null,
-    }))
-
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={chartData}>
-          <defs>
-            <linearGradient id="cpuGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={tickFormatter}
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            interval="preserveStartEnd"
-            minTickGap={minTickGap}
-          />
-          <YAxis
-            domain={[0, 100]}
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            tickFormatter={(v) => `${v}%`}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Area
-            type="monotone"
-            dataKey="usage"
-            name={t('admin:monitoring.charts.cpuUsage')}
-            stroke="#3b82f6"
-            fill="url(#cpuGradient)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  const renderMemoryChart = () => {
-    if (!memoryData || memoryData.samples.length === 0) {
-      return (
-        <div className="h-[300px] flex items-center justify-center text-slate-400">
-          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.memory') })}
-        </div>
-      )
-    }
-
-    const chartData = memoryData.samples.map(s => ({
-      timestamp: s.timestamp,
-      usedGB: s.used_bytes / (1024 * 1024 * 1024),
-      percent: s.percent,
-    }))
-
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={chartData}>
-          <defs>
-            <linearGradient id="memoryGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={tickFormatter}
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            interval="preserveStartEnd"
-            minTickGap={minTickGap}
-          />
-          <YAxis
-            domain={[0, 100]}
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            tickFormatter={(v) => `${v}%`}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Area
-            type="monotone"
-            dataKey="percent"
-            name={t('admin:monitoring.charts.memoryUsage')}
-            stroke="#10b981"
-            fill="url(#memoryGradient)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  const renderNetworkChart = () => {
-    if (!networkData || networkData.samples.length === 0) {
-      return (
-        <div className="h-[300px] flex items-center justify-center text-slate-400">
-          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.network') })}
-        </div>
-      )
-    }
-
-    const chartData = networkData.samples.map(s => ({
-      timestamp: s.timestamp,
-      download: s.download_mbps,
-      upload: s.upload_mbps,
-    }))
-
-    return (
-      <ResponsiveContainer width="100%" height={300}>
-        <AreaChart data={chartData}>
-          <defs>
-            <linearGradient id="downloadGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
-            </linearGradient>
-            <linearGradient id="uploadGradient" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-              <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
-            </linearGradient>
-          </defs>
-          <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-          <XAxis
-            dataKey="timestamp"
-            tickFormatter={tickFormatter}
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            interval="preserveStartEnd"
-            minTickGap={minTickGap}
-          />
-          <YAxis
-            stroke="#64748b"
-            tick={{ fill: '#94a3b8', fontSize: 10 }}
-            tickFormatter={(v) => `${v} Mbps`}
-          />
-          <Tooltip content={<CustomTooltip />} />
-          <Legend />
-          <Area
-            type="monotone"
-            dataKey="download"
-            name={t('admin:monitoring.charts.download')}
-            stroke="#8b5cf6"
-            fill="url(#downloadGradient)"
-            strokeWidth={2}
-          />
-          <Area
-            type="monotone"
-            dataKey="upload"
-            name={t('admin:monitoring.charts.upload')}
-            stroke="#06b6d4"
-            fill="url(#uploadGradient)"
-            strokeWidth={2}
-          />
-        </AreaChart>
-      </ResponsiveContainer>
-    )
-  }
-
-  const renderDiskIoChart = () => {
-    if (!diskIoData || Object.keys(diskIoData.disks).length === 0) {
-      return (
-        <div className="h-[300px] flex items-center justify-center text-slate-400">
-          {t('admin:monitoring.noDataAvailable', { metric: t('admin:monitoring.metrics.diskIo') })}
-        </div>
-      )
-    }
-
-    // Aggregate all disks into a single chart (sum of read/write)
-    const diskNames = Object.keys(diskIoData.disks)
-    const firstDisk = diskNames[0]
-    const samples = diskIoData.disks[firstDisk] || []
-
-    if (samples.length === 0) {
-      return (
-        <div className="h-[300px] flex items-center justify-center text-slate-400">
-          {t('admin:monitoring.noSamplesAvailable', { metric: t('admin:monitoring.metrics.diskIo') })}
-        </div>
-      )
-    }
-
-    const chartData = samples.map(s => ({
-      timestamp: s.timestamp,
-      read: s.read_mbps,
-      write: s.write_mbps,
-    }))
-
-    return (
-      <div>
-        <p className="text-xs text-slate-400 mb-2">
-          {t('admin:monitoring.showingDisk', { disk: firstDisk, count: diskNames.length })}
-        </p>
-        <ResponsiveContainer width="100%" height={300}>
-          <AreaChart data={chartData}>
-            <defs>
-              <linearGradient id="readGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
-              </linearGradient>
-              <linearGradient id="writeGradient" x1="0" y1="0" x2="0" y2="1">
-                <stop offset="5%" stopColor="#ef4444" stopOpacity={0.3} />
-                <stop offset="95%" stopColor="#ef4444" stopOpacity={0} />
-              </linearGradient>
-            </defs>
-            <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis
-              dataKey="timestamp"
-              tickFormatter={tickFormatter}
-              stroke="#64748b"
-              tick={{ fill: '#94a3b8', fontSize: 10 }}
-              interval="preserveStartEnd"
-              minTickGap={minTickGap}
-            />
-            <YAxis
-              stroke="#64748b"
-              tick={{ fill: '#94a3b8', fontSize: 10 }}
-              tickFormatter={(v) => `${v} MB/s`}
-            />
-            <Tooltip content={<CustomTooltip />} />
-            <Legend />
-            <Area
-              type="monotone"
-              dataKey="read"
-              name={t('admin:monitoring.charts.read')}
-              stroke="#f59e0b"
-              fill="url(#readGradient)"
-              strokeWidth={2}
-            />
-            <Area
-              type="monotone"
-              dataKey="write"
-              name={t('admin:monitoring.charts.write')}
-              stroke="#ef4444"
-              fill="url(#writeGradient)"
-              strokeWidth={2}
-            />
-          </AreaChart>
-        </ResponsiveContainer>
-      </div>
-    )
-  }
-
-  const renderChart = () => {
-    if (loading) {
-      return (
-        <div className="h-[300px] flex flex-col items-center justify-center">
-          <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-          <p className="text-slate-400">{t('admin:monitoring.loadingHistory')}</p>
-        </div>
-      )
-    }
-
-    if (error) {
-      return (
-        <div className="h-[300px] flex flex-col items-center justify-center">
-          <p className="text-red-400 mb-4">{error}</p>
-          <button
-            onClick={fetchData}
-            className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors text-sm"
-          >
-            <RefreshCw className="w-4 h-4" />
-            Retry
-          </button>
-        </div>
-      )
-    }
-
+  // Chart data mapping
+  const chartData: ChartDataPoint[] = useMemo(() => {
     switch (activeMetric) {
       case 'cpu':
-        return renderCpuChart()
+        return (cpuData?.samples || []).map(s => ({
+          time: s.timestamp,
+          usage: s.usage_percent,
+        }))
       case 'memory':
-        return renderMemoryChart()
+        return (memoryData?.samples || []).map(s => ({
+          time: s.timestamp,
+          percent: s.percent,
+        }))
       case 'network':
-        return renderNetworkChart()
-      case 'disk_io':
-        return renderDiskIoChart()
+        return (networkData?.samples || []).map(s => ({
+          time: s.timestamp,
+          download: s.download_mbps,
+          upload: s.upload_mbps,
+        }))
+      case 'disk_io': {
+        const diskName = selectedDisk || Object.keys(diskIoData?.disks || {})[0] || ''
+        const samples = diskIoData?.disks[diskName] || []
+        return samples.map(s => ({
+          time: s.timestamp,
+          read: s.read_mbps,
+          write: s.write_mbps,
+        }))
+      }
       default:
-        return null
+        return []
     }
-  }
+  }, [activeMetric, cpuData, memoryData, networkData, diskIoData, selectedDisk])
+
+  const config = CHART_CONFIG[activeMetric]
+  const dataKeys = config.lines.map(l => l.dataKey)
+
+  // Min/Max/Avg stats
+  const stats = useMemo(() => computeStats(chartData, dataKeys), [chartData, dataKeys])
+
+  const activeTab = METRIC_TABS.find(t => t.id === activeMetric)!
+  const availableDisks = diskIoData?.available_disks || []
 
   return (
     <div className="space-y-6">
@@ -453,7 +212,7 @@ export default function MonitoringHistoryViewer() {
         </button>
       </div>
 
-      {/* Metric Type Tabs */}
+      {/* Metric Type Tabs — metric-colored */}
       <div className="flex flex-wrap gap-2">
         {METRIC_TABS.map((tab) => {
           const Icon = tab.icon
@@ -464,7 +223,7 @@ export default function MonitoringHistoryViewer() {
               onClick={() => setActiveMetric(tab.id)}
               className={`inline-flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold transition-all ${
                 isActive
-                  ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg shadow-blue-500/30'
+                  ? `bg-gradient-to-r ${tab.gradient} text-white shadow-lg shadow-${tab.color}-500/30`
                   : 'bg-slate-800/40 text-slate-300 border border-slate-700/50 hover:bg-slate-700/50 hover:text-white'
               }`}
             >
@@ -475,33 +234,76 @@ export default function MonitoringHistoryViewer() {
         })}
       </div>
 
-      {/* Time Range Selector */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 text-slate-400">
-          <Clock className="w-4 h-4" />
-          <span className="text-sm">{t('admin:monitoring.timeRange')}:</span>
-        </div>
-        <div className="flex gap-2">
-          {TIME_RANGES.map((range) => (
-            <button
-              key={range.value}
-              onClick={() => setTimeRange(range.value)}
-              className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-all ${
-                timeRange === range.value
-                  ? 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
-                  : 'bg-slate-800/40 text-slate-400 border border-slate-700/50 hover:bg-slate-700/50 hover:text-slate-300'
-              }`}
-            >
-              {t(range.labelKey)}
-            </button>
-          ))}
-        </div>
+      {/* Time Range Selector + Disk Selector */}
+      <div className="flex items-center gap-4 flex-wrap">
+        <TimeRangeSelector value={timeRange} onChange={setTimeRange} />
+
+        {activeMetric === 'disk_io' && availableDisks.length > 1 && (
+          <select
+            value={selectedDisk}
+            onChange={(e) => setSelectedDisk(e.target.value)}
+            className="rounded-lg px-3 py-1.5 text-sm bg-slate-800/60 text-slate-300 border border-slate-700/50 focus:border-amber-500/50 focus:outline-none"
+          >
+            {availableDisks.map((disk) => (
+              <option key={disk} value={disk}>{disk}</option>
+            ))}
+          </select>
+        )}
       </div>
 
       {/* Chart Container */}
-      <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
-        {renderChart()}
+      <div className="card !p-4">
+        {error ? (
+          <div className="h-[300px] flex flex-col items-center justify-center">
+            <p className="text-red-400 mb-4">{error}</p>
+            <button
+              onClick={fetchData}
+              className="inline-flex items-center gap-2 px-4 py-2 rounded-lg bg-red-500/20 text-red-300 hover:bg-red-500/30 transition-colors text-sm"
+            >
+              <RefreshCw className="w-4 h-4" />
+              Retry
+            </button>
+          </div>
+        ) : (
+          <MetricChart
+            data={chartData}
+            lines={config.lines}
+            yAxisLabel={config.yAxisLabel}
+            yAxisDomain={config.yAxisDomain}
+            height={300}
+            showArea
+            loading={loading}
+            timeRange={timeRange}
+          />
+        )}
       </div>
+
+      {/* Min/Max/Avg Summary Strip */}
+      {!loading && !error && chartData.length > 0 && (
+        <div className="grid grid-cols-3 gap-4">
+          <StatCard
+            label="Min"
+            value={formatNumber(stats.min, 1)}
+            unit={config.yAxisLabel}
+            color={activeTab.color}
+            icon={<TrendingDown className={`w-5 h-5 text-${activeTab.color}-400`} />}
+          />
+          <StatCard
+            label="Avg"
+            value={formatNumber(stats.avg, 1)}
+            unit={config.yAxisLabel}
+            color={activeTab.color}
+            icon={<Activity className={`w-5 h-5 text-${activeTab.color}-400`} />}
+          />
+          <StatCard
+            label="Max"
+            value={formatNumber(stats.max, 1)}
+            unit={config.yAxisLabel}
+            color={activeTab.color}
+            icon={<TrendingUp className={`w-5 h-5 text-${activeTab.color}-400`} />}
+          />
+        </div>
+      )}
 
       {/* Info Note */}
       <div className="bg-slate-800/30 border border-slate-700/40 rounded-lg px-4 py-3">

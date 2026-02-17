@@ -3,6 +3,8 @@ import { useTranslation } from 'react-i18next'
 import { getDatabaseHealth } from '../../lib/api'
 import type { DatabaseHealthResponse } from '../../lib/api'
 import { triggerCleanup } from '../../api/monitoring'
+import { useConfirmDialog } from '../../hooks/useConfirmDialog'
+import { ProgressBar } from '../ui/ProgressBar'
 import {
   CheckCircle,
   XCircle,
@@ -15,10 +17,71 @@ import {
   Shield
 } from 'lucide-react'
 
+const METRIC_COLORS: Record<string, { bg: string; text: string; border: string }> = {
+  cpu: { bg: 'from-blue-500/20 to-blue-600/10', text: 'text-blue-400', border: 'border-blue-500/30' },
+  memory: { bg: 'from-emerald-500/20 to-emerald-600/10', text: 'text-emerald-400', border: 'border-emerald-500/30' },
+  network: { bg: 'from-purple-500/20 to-purple-600/10', text: 'text-purple-400', border: 'border-purple-500/30' },
+  disk_io: { bg: 'from-amber-500/20 to-amber-600/10', text: 'text-amber-400', border: 'border-amber-500/30' },
+  process: { bg: 'from-rose-500/20 to-rose-600/10', text: 'text-rose-400', border: 'border-rose-500/30' },
+}
+
 interface CleanupResult {
   message: string
   deleted: Record<string, number>
   total: number
+}
+
+function StatusPill({ status, variant }: { status: string; variant: 'success' | 'error' | 'warning' | 'neutral' }) {
+  const classes = {
+    success: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30',
+    error: 'bg-red-500/10 text-red-400 border-red-500/30',
+    warning: 'bg-amber-500/10 text-amber-400 border-amber-500/30',
+    neutral: 'bg-slate-500/10 text-slate-400 border-slate-500/30',
+  }
+  return (
+    <span className={`rounded-full px-2.5 py-0.5 text-xs font-medium border ${classes[variant]}`}>
+      {status}
+    </span>
+  )
+}
+
+function MaintenanceSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-6 w-48 rounded bg-slate-800 animate-pulse" />
+          <div className="h-4 w-64 rounded bg-slate-800 animate-pulse mt-2" />
+        </div>
+        <div className="h-9 w-24 rounded-lg bg-slate-800 animate-pulse" />
+      </div>
+      {/* Health cards skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {Array.from({ length: 4 }).map((_, i) => (
+          <div key={i} className="card !p-4 animate-pulse">
+            <div className="flex items-center gap-3 mb-3">
+              <div className="w-10 h-10 rounded-lg bg-slate-800" />
+              <div>
+                <div className="h-3 w-20 rounded bg-slate-800 mb-2" />
+                <div className="h-4 w-16 rounded bg-slate-800" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Cleanup section skeleton */}
+      <div className="card animate-pulse">
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <div className="h-5 w-32 rounded bg-slate-800 mb-2" />
+            <div className="h-4 w-64 rounded bg-slate-800" />
+          </div>
+          <div className="h-10 w-32 rounded-xl bg-slate-800" />
+        </div>
+      </div>
+    </div>
+  )
 }
 
 export default function MaintenanceTools() {
@@ -30,7 +93,8 @@ export default function MaintenanceTools() {
   const [cleanupLoading, setCleanupLoading] = useState(false)
   const [cleanupResult, setCleanupResult] = useState<CleanupResult | null>(null)
   const [cleanupError, setCleanupError] = useState<string | null>(null)
-  const [showConfirm, setShowConfirm] = useState(false)
+
+  const { confirm, dialog } = useConfirmDialog()
 
   const fetchHealth = useCallback(async () => {
     try {
@@ -49,7 +113,17 @@ export default function MaintenanceTools() {
   }, [fetchHealth])
 
   const handleCleanup = async () => {
-    setShowConfirm(false)
+    const ok = await confirm(
+      t('admin:maintenance.cleanup.description'),
+      {
+        title: t('admin:maintenance.cleanup.title'),
+        variant: 'warning',
+        confirmLabel: t('admin:maintenance.cleanup.confirm'),
+        cancelLabel: t('common:cancel'),
+      }
+    )
+    if (!ok) return
+
     setCleanupLoading(true)
     setCleanupError(null)
     setCleanupResult(null)
@@ -77,16 +151,21 @@ export default function MaintenanceTools() {
   }
 
   if (healthLoading) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-        <p className="text-slate-400">{t('admin:maintenance.loading')}</p>
-      </div>
-    )
+    return <MaintenanceSkeleton />
   }
+
+  // Pool saturation calculation
+  const poolCheckedOut = health?.pool_checked_out ?? 0
+  const poolSize = health?.pool_size ?? 0
+  const poolPercent = poolSize > 0 ? (poolCheckedOut / poolSize) * 100 : 0
+  const poolVariant = poolPercent > 95 ? 'danger' as const
+    : poolPercent > 80 ? 'warning' as const
+    : 'default' as const
 
   return (
     <div className="space-y-6">
+      {dialog}
+
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
@@ -114,7 +193,7 @@ export default function MaintenanceTools() {
       {/* Health Status Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         {/* Connection Status */}
-        <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all duration-300">
+        <div className="card !p-4 hover:border-slate-600/50 transition-all duration-300">
           <div className="flex items-center gap-3 mb-3">
             <div className={`w-10 h-10 bg-gradient-to-br ${health?.is_healthy ? getStatusColor(true).bg : getStatusColor(false).bg} rounded-lg flex items-center justify-center`}>
               {health?.is_healthy ? (
@@ -125,15 +204,16 @@ export default function MaintenanceTools() {
             </div>
             <div>
               <p className="text-xs text-slate-400">{t('admin:maintenance.connection')}</p>
-              <p className={`text-sm font-semibold ${health?.is_healthy ? 'text-emerald-400' : 'text-red-400'}`}>
-                {health?.connection_status || t('common:unknown')}
-              </p>
+              <StatusPill
+                status={health?.connection_status || t('common:unknown')}
+                variant={health?.connection_status === 'connected' ? 'success' : 'error'}
+              />
             </div>
           </div>
         </div>
 
         {/* Database Type */}
-        <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all duration-300">
+        <div className="card !p-4 hover:border-slate-600/50 transition-all duration-300">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-lg flex items-center justify-center">
               <Database className="w-5 h-5 text-blue-400" />
@@ -149,21 +229,22 @@ export default function MaintenanceTools() {
 
         {/* Integrity Check (SQLite) or Pool Status (PostgreSQL) */}
         {health?.database_type === 'sqlite' ? (
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all duration-300">
+          <div className="card !p-4 hover:border-slate-600/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-3">
               <div className={`w-10 h-10 bg-gradient-to-br ${getIntegrityColor(health.integrity_check).bg} rounded-lg flex items-center justify-center`}>
                 <Shield className={`w-5 h-5 ${getIntegrityColor(health.integrity_check).text}`} />
               </div>
               <div>
                 <p className="text-xs text-slate-400">{t('admin:maintenance.integrityCheck')}</p>
-                <p className={`text-sm font-semibold ${getIntegrityColor(health.integrity_check).text}`}>
-                  {health.integrity_check || t('common:notAvailable')}
-                </p>
+                <StatusPill
+                  status={health.integrity_check || t('common:notAvailable')}
+                  variant={health.integrity_check === 'ok' ? 'success' : health.integrity_check ? 'warning' : 'neutral'}
+                />
               </div>
             </div>
           </div>
         ) : health?.database_type === 'postgresql' ? (
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all duration-300">
+          <div className="card !p-4 hover:border-slate-600/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-lg flex items-center justify-center">
                 <Server className="w-5 h-5 text-purple-400" />
@@ -177,7 +258,7 @@ export default function MaintenanceTools() {
             </div>
           </div>
         ) : (
-          <div className="group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 hover:border-slate-600/50 transition-all duration-300">
+          <div className="card !p-4 hover:border-slate-600/50 transition-all duration-300">
             <div className="flex items-center gap-3 mb-3">
               <div className="w-10 h-10 bg-gradient-to-br from-slate-500/20 to-slate-600/10 rounded-lg flex items-center justify-center">
                 <Activity className="w-5 h-5 text-slate-400" />
@@ -191,7 +272,7 @@ export default function MaintenanceTools() {
         )}
 
         {/* Health Summary */}
-        <div className={`group relative bg-gradient-to-br ${health?.is_healthy ? 'from-emerald-900/20' : 'from-red-900/20'} via-slate-800/30 to-slate-900/20 backdrop-blur-xl border ${health?.is_healthy ? 'border-emerald-500/30' : 'border-red-500/30'} rounded-xl p-4 transition-all duration-300`}>
+        <div className={`card !p-4 ${health?.is_healthy ? '!border-emerald-500/30' : '!border-red-500/30'} transition-all duration-300`}>
           <div className="flex items-center gap-3 mb-3">
             <div className={`w-10 h-10 bg-gradient-to-br ${health?.is_healthy ? getStatusColor(true).bg : getStatusColor(false).bg} rounded-lg flex items-center justify-center`}>
               {health?.is_healthy ? (
@@ -202,17 +283,18 @@ export default function MaintenanceTools() {
             </div>
             <div>
               <p className="text-xs text-slate-400">{t('admin:maintenance.overallHealth')}</p>
-              <p className={`text-sm font-semibold ${health?.is_healthy ? 'text-emerald-400' : 'text-red-400'}`}>
-                {health?.is_healthy ? t('admin:maintenance.healthy') : t('admin:maintenance.issuesDetected')}
-              </p>
+              <StatusPill
+                status={health?.is_healthy ? t('admin:maintenance.healthy') : t('admin:maintenance.issuesDetected')}
+                variant={health?.is_healthy ? 'success' : 'error'}
+              />
             </div>
           </div>
         </div>
       </div>
 
-      {/* PostgreSQL Pool Details */}
+      {/* PostgreSQL Pool Details with Saturation Bar */}
       {health?.database_type === 'postgresql' && health.pool_size !== undefined && (
-        <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
+        <div className="card !p-4">
           <h4 className="text-sm font-semibold text-white mb-3">{t('admin:maintenance.poolDetails.title')}</h4>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-4 text-sm">
             <div>
@@ -232,11 +314,20 @@ export default function MaintenanceTools() {
               <p className="text-amber-400 font-medium">{health.pool_overflow ?? t('common:notAvailable')}</p>
             </div>
           </div>
+          {poolSize > 0 && (
+            <div className="mt-3">
+              <div className="flex items-center justify-between mb-1">
+                <p className="text-xs text-slate-400">Pool Saturation</p>
+                <p className="text-xs text-slate-400">{poolCheckedOut} / {poolSize}</p>
+              </div>
+              <ProgressBar progress={poolPercent} variant={poolVariant} size="sm" />
+            </div>
+          )}
         </div>
       )}
 
       {/* Cleanup Section */}
-      <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 sm:p-6">
+      <div className="card">
         <div className="flex items-start justify-between gap-4 flex-wrap">
           <div>
             <h4 className="text-sm font-semibold text-white mb-1 flex items-center gap-2">
@@ -248,38 +339,18 @@ export default function MaintenanceTools() {
             </p>
           </div>
 
-          {!showConfirm ? (
-            <button
-              onClick={() => setShowConfirm(true)}
-              disabled={cleanupLoading}
-              className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-amber-300 border border-amber-500/30 hover:from-amber-500/30 hover:to-amber-600/20 transition-all text-sm font-medium"
-            >
+          <button
+            onClick={handleCleanup}
+            disabled={cleanupLoading}
+            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-amber-500/20 to-amber-600/10 text-amber-300 border border-amber-500/30 hover:from-amber-500/30 hover:to-amber-600/20 transition-all text-sm font-medium"
+          >
+            {cleanupLoading ? (
+              <RefreshCw className="w-4 h-4 animate-spin" />
+            ) : (
               <Trash2 className="w-4 h-4" />
-              {t('admin:maintenance.cleanup.runCleanup')}
-            </button>
-          ) : (
-            <div className="flex items-center gap-2">
-              <button
-                onClick={handleCleanup}
-                disabled={cleanupLoading}
-                className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-gradient-to-r from-red-500 to-red-600 text-white hover:from-red-600 hover:to-red-700 transition-all text-sm font-medium shadow-lg shadow-red-500/30"
-              >
-                {cleanupLoading ? (
-                  <RefreshCw className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Trash2 className="w-4 h-4" />
-                )}
-                {t('admin:maintenance.cleanup.confirm')}
-              </button>
-              <button
-                onClick={() => setShowConfirm(false)}
-                disabled={cleanupLoading}
-                className="px-4 py-2.5 rounded-xl bg-slate-700/40 text-slate-300 hover:bg-slate-700/60 transition-all text-sm font-medium border border-slate-600/50"
-              >
-                {t('common:cancel')}
-              </button>
-            </div>
-          )}
+            )}
+            {t('admin:maintenance.cleanup.runCleanup')}
+          </button>
         </div>
 
         {cleanupError && (
@@ -293,12 +364,15 @@ export default function MaintenanceTools() {
             <p className="text-emerald-400 text-sm font-medium mb-2">{cleanupResult.message}</p>
             {cleanupResult.total > 0 ? (
               <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-3 mt-3">
-                {Object.entries(cleanupResult.deleted).map(([metric, count]) => (
-                  <div key={metric} className="bg-slate-800/40 rounded-lg px-3 py-2">
-                    <p className="text-xs text-slate-400 capitalize">{metric.replace('_', ' ')}</p>
-                    <p className="text-sm font-semibold text-white">{count.toLocaleString()}</p>
-                  </div>
-                ))}
+                {Object.entries(cleanupResult.deleted).map(([metric, count]) => {
+                  const metricColor = METRIC_COLORS[metric] || METRIC_COLORS.cpu
+                  return (
+                    <div key={metric} className={`bg-gradient-to-br ${metricColor.bg} rounded-lg px-3 py-2 border ${metricColor.border}`}>
+                      <p className={`text-xs capitalize ${metricColor.text}`}>{metric.replace('_', ' ')}</p>
+                      <p className="text-sm font-semibold text-white">{count.toLocaleString()}</p>
+                    </div>
+                  )
+                })}
               </div>
             ) : (
               <p className="text-xs text-slate-400">{t('admin:maintenance.cleanup.noSamplesDeleted')}</p>

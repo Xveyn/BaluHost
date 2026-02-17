@@ -4,8 +4,10 @@ import { getDatabaseStats } from '../../api/monitoring'
 import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
 import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw } from 'lucide-react'
 import { formatBytes } from '../../lib/formatters'
+import { StatCard } from '../ui/StatCard'
+import { ProgressBar } from '../ui/ProgressBar'
 
-const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType; color: string }> = {
+export const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType; color: string }> = {
   cpu: { labelKey: 'admin:databaseStats.metrics.cpu', icon: Cpu, color: 'blue' },
   memory: { labelKey: 'admin:databaseStats.metrics.memory', icon: MemoryStick, color: 'emerald' },
   network: { labelKey: 'admin:databaseStats.metrics.network', icon: Network, color: 'purple' },
@@ -13,10 +15,18 @@ const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.ElementType;
   process: { labelKey: 'admin:databaseStats.metrics.process', icon: Activity, color: 'rose' },
 }
 
-function formatDate(dateStr?: string): string {
+interface MetricCardProps {
+  metricType: string
+  stats: MetricDatabaseStats
+  totalSize: number
+  t: (key: string, options?: Record<string, unknown>) => string
+  locale: string
+}
+
+function formatDate(dateStr: string | undefined, locale: string): string {
   if (!dateStr) return 'Never'
   const date = new Date(dateStr)
-  return date.toLocaleString('de-DE', {
+  return date.toLocaleString(locale, {
     day: '2-digit',
     month: '2-digit',
     year: 'numeric',
@@ -25,13 +35,7 @@ function formatDate(dateStr?: string): string {
   })
 }
 
-interface MetricCardProps {
-  metricType: string
-  stats: MetricDatabaseStats
-  t: (key: string, options?: Record<string, unknown>) => string
-}
-
-function MetricCard({ metricType, stats, t }: MetricCardProps) {
+function MetricCard({ metricType, stats, totalSize, t, locale }: MetricCardProps) {
   const config = METRIC_CONFIG[metricType] || { labelKey: metricType, icon: Database, color: 'slate' }
   const Icon = config.icon
   const colorClasses: Record<string, { border: string; bg: string; text: string; glow: string }> = {
@@ -43,12 +47,16 @@ function MetricCard({ metricType, stats, t }: MetricCardProps) {
     slate: { border: 'hover:border-slate-500/50', bg: 'from-slate-500/20 to-slate-600/10', text: 'text-slate-400', glow: 'hover:shadow-slate-500/10' },
   }
   const colors = colorClasses[config.color] || colorClasses.slate
+  const sizePercent = totalSize > 0 ? (stats.estimated_size_bytes / totalSize) * 100 : 0
+  const progressVariant = config.color === 'blue' ? 'default' as const
+    : config.color === 'emerald' ? 'success' as const
+    : config.color === 'amber' ? 'warning' as const
+    : config.color === 'rose' ? 'danger' as const
+    : 'default' as const
 
   return (
-    <div className={`group relative bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4 ${colors.border} transition-all duration-300 hover:shadow-2xl ${colors.glow} overflow-hidden`}>
-      <div className={`absolute inset-0 bg-gradient-to-br ${colors.bg.replace('from-', 'from-').replace('/20', '/5')} opacity-0 group-hover:opacity-100 transition-opacity duration-300`} />
-
-      <div className="relative">
+    <div className={`card !p-4 ${colors.border} transition-all duration-300 hover:shadow-2xl ${colors.glow}`}>
+      <div>
         {/* Header */}
         <div className="flex items-center justify-between mb-3">
           <div className="flex items-center gap-2">
@@ -71,17 +79,66 @@ function MetricCard({ metricType, stats, t }: MetricCardProps) {
           <div>
             <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.size')}</p>
             <p className="text-lg font-bold text-white">{formatBytes(stats.estimated_size_bytes)}</p>
+            <ProgressBar progress={sizePercent} variant={progressVariant} size="sm" className="mt-1" />
           </div>
           <div className="col-span-2">
             <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.lastCleanup')}</p>
-            <p className="text-sm text-slate-300">{formatDate(stats.last_cleanup)}</p>
+            <p className="text-sm text-slate-300">{formatDate(stats.last_cleanup, locale)}</p>
           </div>
-          {stats.total_cleaned > 0 && (
-            <div className="col-span-2">
-              <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.totalCleaned')}</p>
-              <p className="text-sm text-slate-300">{stats.total_cleaned.toLocaleString()}</p>
+          <div className="col-span-2">
+            <p className="text-xs text-slate-400 mb-1">{t('admin:databaseStats.fields.totalCleaned')}</p>
+            <p className="text-sm text-slate-300">{stats.total_cleaned.toLocaleString()}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  )
+}
+
+function StatsCardsSkeleton() {
+  return (
+    <div className="space-y-6">
+      {/* Header skeleton */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="h-6 w-48 rounded bg-slate-800 animate-pulse" />
+          <div className="h-4 w-32 rounded bg-slate-800 animate-pulse mt-2" />
+        </div>
+        <div className="h-9 w-24 rounded-lg bg-slate-800 animate-pulse" />
+      </div>
+      {/* Metric cards skeleton */}
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
+        {Array.from({ length: 5 }).map((_, i) => (
+          <div key={i} className="card !p-4 animate-pulse">
+            <div className="flex items-center gap-2 mb-3">
+              <div className="w-8 h-8 rounded-lg bg-slate-800" />
+              <div className="h-4 w-16 rounded bg-slate-800" />
             </div>
-          )}
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="h-3 w-12 rounded bg-slate-800 mb-1" />
+                <div className="h-6 w-16 rounded bg-slate-800" />
+              </div>
+              <div>
+                <div className="h-3 w-12 rounded bg-slate-800 mb-1" />
+                <div className="h-6 w-16 rounded bg-slate-800" />
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
+      {/* Summary skeleton */}
+      <div className="card !p-4 animate-pulse">
+        <div className="flex items-center justify-between flex-wrap gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-slate-800" />
+              <div>
+                <div className="h-3 w-20 rounded bg-slate-800 mb-2" />
+                <div className="h-6 w-16 rounded bg-slate-800" />
+              </div>
+            </div>
+          ))}
         </div>
       </div>
     </div>
@@ -94,7 +151,7 @@ interface DatabaseStatsCardsProps {
 }
 
 export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval = 30000 }: DatabaseStatsCardsProps) {
-  const { t } = useTranslation(['admin', 'common'])
+  const { t, i18n } = useTranslation(['admin', 'common'])
   const [stats, setStats] = useState<DatabaseStatsResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -123,12 +180,7 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
   }, [fetchStats, autoRefresh, refreshInterval])
 
   if (loading && !stats) {
-    return (
-      <div className="flex flex-col items-center justify-center py-12">
-        <RefreshCw className="w-8 h-8 text-blue-400 animate-spin mb-4" />
-        <p className="text-slate-400">{t('admin:databaseStats.loading')}</p>
-      </div>
-    )
+    return <StatsCardsSkeleton />
   }
 
   if (error && !stats) {
@@ -155,10 +207,15 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
       {/* Header with refresh info */}
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-lg font-semibold text-white">{t('admin:databaseStats.title')}</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="text-lg font-semibold text-white">{t('admin:databaseStats.title')}</h3>
+            {autoRefresh && (
+              <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" title="Auto-refresh active" />
+            )}
+          </div>
           {lastUpdate && (
             <p className="text-xs text-slate-400 mt-1">
-              {t('admin:databaseStats.lastUpdated', { time: lastUpdate.toLocaleTimeString('de-DE') })}
+              {t('admin:databaseStats.lastUpdated', { time: lastUpdate.toLocaleTimeString(i18n.language) })}
               {autoRefresh && ` ${t('admin:databaseStats.autoRefresh', { seconds: refreshInterval / 1000 })}`}
             </p>
           )}
@@ -173,44 +230,40 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
         </button>
       </div>
 
+      {/* Summary StatCards */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <StatCard
+          label={t('admin:databaseStats.summary.totalSamples')}
+          value={stats.total_samples.toLocaleString()}
+          color="blue"
+          icon={<Database className="w-5 h-5 text-blue-400" />}
+        />
+        <StatCard
+          label={t('admin:databaseStats.summary.totalSize')}
+          value={formatBytes(stats.total_size_bytes)}
+          color="emerald"
+          icon={<HardDrive className="w-5 h-5 text-emerald-400" />}
+        />
+        <StatCard
+          label={t('admin:databaseStats.summary.metricTypes')}
+          value={metricTypes.length}
+          color="purple"
+          icon={<Activity className="w-5 h-5 text-purple-400" />}
+        />
+      </div>
+
       {/* Metric Cards Grid */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
         {metricTypes.map((metricType) => (
-          <MetricCard key={metricType} metricType={metricType} stats={stats.metrics[metricType]} t={t} />
+          <MetricCard
+            key={metricType}
+            metricType={metricType}
+            stats={stats.metrics[metricType]}
+            totalSize={stats.total_size_bytes}
+            t={t}
+            locale={i18n.language}
+          />
         ))}
-      </div>
-
-      {/* Summary Card */}
-      <div className="bg-gradient-to-br from-slate-800/40 via-slate-800/30 to-slate-900/20 backdrop-blur-xl border border-slate-700/50 rounded-xl p-4">
-        <div className="flex items-center justify-between flex-wrap gap-4">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-blue-500/20 to-blue-600/10 rounded-xl flex items-center justify-center">
-              <Database className="w-5 h-5 text-blue-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.totalSamples')}</p>
-              <p className="text-xl font-bold text-white">{stats.total_samples.toLocaleString()}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 rounded-xl flex items-center justify-center">
-              <HardDrive className="w-5 h-5 text-emerald-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.totalSize')}</p>
-              <p className="text-xl font-bold text-white">{formatBytes(stats.total_size_bytes)}</p>
-            </div>
-          </div>
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 bg-gradient-to-br from-purple-500/20 to-purple-600/10 rounded-xl flex items-center justify-center">
-              <Activity className="w-5 h-5 text-purple-400" />
-            </div>
-            <div>
-              <p className="text-sm text-slate-400">{t('admin:databaseStats.summary.metricTypes')}</p>
-              <p className="text-xl font-bold text-white">{metricTypes.length}</p>
-            </div>
-          </div>
-        </div>
       </div>
     </div>
   )
