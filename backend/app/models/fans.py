@@ -10,6 +10,34 @@ from typing import Optional
 from app.models.base import Base
 
 
+class FanScheduleEntry(Base):
+    """Time-based fan schedule entry for scheduled mode."""
+    __tablename__ = "fan_schedule_entries"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    fan_id: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(100), nullable=False)
+    start_time: Mapped[str] = mapped_column(String(5), nullable=False)  # "HH:MM"
+    end_time: Mapped[str] = mapped_column(String(5), nullable=False)  # "HH:MM"
+    curve_json: Mapped[str] = mapped_column(Text, nullable=False)  # JSON array of {temp, pwm}
+    priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False
+    )
+
+    def __repr__(self) -> str:
+        return f"<FanScheduleEntry(fan_id='{self.fan_id}', name='{self.name}', {self.start_time}-{self.end_time})>"
+
+
 class FanConfig(Base):
     """Fan configuration storage."""
     __tablename__ = "fan_configs"

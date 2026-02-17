@@ -64,6 +64,8 @@ export default function FanCard({
         return 'border-purple-500/30 bg-purple-500/10 text-purple-300';
       case FanMode.EMERGENCY:
         return 'border-rose-500/30 bg-rose-500/10 text-rose-300';
+      case FanMode.SCHEDULED:
+        return 'border-amber-500/30 bg-amber-500/10 text-amber-300';
       default:
         return 'border-slate-500/30 bg-slate-500/10 text-slate-300';
     }
@@ -133,6 +135,24 @@ export default function FanCard({
             <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
           ) : (
             t('system:fanControl.card.auto')
+          )}
+        </button>
+        <button
+          onClick={(e) => {
+            e.stopPropagation();
+            onModeChange(fan.fan_id, FanMode.SCHEDULED);
+          }}
+          disabled={fan.mode === FanMode.SCHEDULED || isReadOnly || isLoading}
+          className={`flex-1 px-3 py-1 text-xs rounded-lg transition-colors ${
+            fan.mode === FanMode.SCHEDULED
+              ? 'bg-amber-500 text-white shadow-lg shadow-amber-500/30'
+              : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+          } disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          {isLoading && fan.mode !== FanMode.SCHEDULED ? (
+            <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-slate-300 border-t-transparent" />
+          ) : (
+            t('system:fanControl.card.scheduled')
           )}
         </button>
         <button

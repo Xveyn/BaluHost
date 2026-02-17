@@ -556,6 +556,7 @@
       "temperature": "Temperatur",
       "auto": "Auto",
       "manual": "Manuell",
+      "scheduled": "Zeitplan",
       "manualPwm": "Manuelles PWM"
     },
     "details": {
@@ -576,6 +577,48 @@
       "ascendingTemp": "Temperaturwerte müssen streng aufsteigend sein",
       "pwmRange": "PWM muss zwischen {{min}}% und {{max}}% liegen",
       "invalidCurve": "Ungültige Kurvenkonfiguration"
+    },
+    "schedule": {
+      "title": "Lüfter-Zeitplan",
+      "description": "Zeitbasierte Lüfterkurven — verschiedene Kühlprofile für verschiedene Tageszeiten",
+      "noEntries": "Noch keine Zeitplan-Einträge",
+      "noEntriesHint": "Erstellen Sie einen Zeitplan-Eintrag, um verschiedene Lüfterkurven zu verschiedenen Zeiten zu verwenden",
+      "addEntry": "Eintrag hinzufügen",
+      "editEntry": "Eintrag bearbeiten",
+      "deleteEntry": "Eintrag löschen",
+      "deleteConfirmTitle": "Zeitplan-Eintrag löschen?",
+      "deleteConfirmMessage": "Möchten Sie \"{{name}}\" wirklich löschen? Diese Aktion kann nicht rückgängig gemacht werden.",
+      "maxEntriesReached": "Maximal 8 Zeitplan-Einträge erreicht",
+      "timeline": "24h-Zeitachse",
+      "defaultCurve": "Standardkurve",
+      "active": "AKTIV",
+      "next": "NÄCHSTER",
+      "disabled": "Deaktiviert",
+      "overnight": "Über Nacht",
+      "name": "Name",
+      "namePlaceholder": "z.B. Nachtmodus",
+      "startTime": "Startzeit",
+      "endTime": "Endzeit",
+      "priority": "Priorität",
+      "priorityHint": "Niedrigere Zahl = höhere Priorität",
+      "curvePreset": "Kurven-Preset",
+      "customCurve": "Eigene Kurve",
+      "enabled": "Aktiviert",
+      "save": "Speichern",
+      "cancel": "Abbrechen",
+      "create": "Erstellen",
+      "update": "Aktualisieren",
+      "usingDefaultCurve": "Standardkurve aktiv (kein Zeitplan aktiv)",
+      "activeSchedule": "Aktiv: {{name}}",
+      "messages": {
+        "created": "Zeitplan-Eintrag \"{{name}}\" erstellt",
+        "updated": "Zeitplan-Eintrag aktualisiert",
+        "deleted": "Zeitplan-Eintrag gelöscht",
+        "createFailed": "Zeitplan-Eintrag konnte nicht erstellt werden",
+        "updateFailed": "Zeitplan-Eintrag konnte nicht aktualisiert werden",
+        "deleteFailed": "Zeitplan-Eintrag konnte nicht gelöscht werden",
+        "toggleFailed": "Zeitplan-Eintrag konnte nicht umgeschaltet werden"
+      }
     }
   },
   "servicesStatus": {

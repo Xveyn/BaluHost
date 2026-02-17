@@ -12,6 +12,7 @@ class FanMode(str, Enum):
     AUTO = "auto"
     MANUAL = "manual"
     EMERGENCY = "emergency"
+    SCHEDULED = "scheduled"
 
 
 class CurvePreset(str, Enum):
@@ -25,7 +26,7 @@ class CurvePreset(str, Enum):
 # Preset curve definitions
 CURVE_PRESETS: Dict[str, List[dict]] = {
     "silent": [
-        {"temp": 40, "pwm": 25},
+        {"temp": 40, "pwm": 30},
         {"temp": 55, "pwm": 35},
         {"temp": 70, "pwm": 55},
         {"temp": 80, "pwm": 75},
@@ -344,3 +345,120 @@ class UpdateFanConfigResponse(BaseModel):
     max_pwm_percent: int
     emergency_temp_celsius: float
     message: Optional[str] = None
+
+
+# --- Schedule Schemas ---
+
+class FanScheduleEntrySchema(BaseModel):
+    """Schema for a fan schedule entry."""
+    id: int
+    fan_id: str
+    name: str = Field(..., min_length=1, max_length=100)
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
+    curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
+    priority: int = Field(0, ge=0, le=100)
+    is_enabled: bool = True
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CreateFanScheduleEntryRequest(BaseModel):
+    """Request to create a new fan schedule entry."""
+    name: str = Field(..., min_length=1, max_length=100, description="Schedule entry label")
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
+    curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
+    priority: int = Field(0, ge=0, le=100, description="Lower number = higher priority")
+    is_enabled: bool = Field(True, description="Whether this entry is active")
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def validate_time_format(cls, v: str) -> str:
+        """Validate HH:MM format with valid hour/minute ranges."""
+        parts = v.split(':')
+        if len(parts) != 2:
+            raise ValueError("Time must be in HH:MM format")
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError("Invalid time value")
+        return v
+
+    @field_validator('curve_points')
+    @classmethod
+    def validate_curve_points(cls, points: List[FanCurvePoint]) -> List[FanCurvePoint]:
+        """Ensure curve points are sorted by temperature with unique temps."""
+        if len(points) < 2:
+            raise ValueError("Curve must have at least 2 points")
+        sorted_points = sorted(points, key=lambda p: p.temp)
+        temps = [p.temp for p in sorted_points]
+        if len(temps) != len(set(temps)):
+            raise ValueError("Curve points must have unique temperatures")
+        return sorted_points
+
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "name": "Night Mode",
+                "start_time": "22:00",
+                "end_time": "06:00",
+                "curve_points": [
+                    {"temp": 40, "pwm": 30},
+                    {"temp": 60, "pwm": 45},
+                    {"temp": 80, "pwm": 70},
+                    {"temp": 90, "pwm": 100}
+                ],
+                "priority": 0,
+                "is_enabled": True
+            }
+        }
+
+
+class UpdateFanScheduleEntryRequest(BaseModel):
+    """Request to update an existing fan schedule entry."""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    start_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    end_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
+    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
+    priority: Optional[int] = Field(None, ge=0, le=100)
+    is_enabled: Optional[bool] = None
+
+    @field_validator('start_time', 'end_time')
+    @classmethod
+    def validate_time_format(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        parts = v.split(':')
+        if len(parts) != 2:
+            raise ValueError("Time must be in HH:MM format")
+        hour, minute = int(parts[0]), int(parts[1])
+        if not (0 <= hour <= 23 and 0 <= minute <= 59):
+            raise ValueError("Invalid time value")
+        return v
+
+    @field_validator('curve_points')
+    @classmethod
+    def validate_curve_points(cls, points: Optional[List[FanCurvePoint]]) -> Optional[List[FanCurvePoint]]:
+        if points is None:
+            return points
+        if len(points) < 2:
+            raise ValueError("Curve must have at least 2 points")
+        sorted_points = sorted(points, key=lambda p: p.temp)
+        temps = [p.temp for p in sorted_points]
+        if len(temps) != len(set(temps)):
+            raise ValueError("Curve points must have unique temperatures")
+        return sorted_points
+
+
+class FanScheduleListResponse(BaseModel):
+    """Response for listing schedule entries."""
+    entries: List[FanScheduleEntrySchema]
+    fan_id: str
+    total_count: int
+
+
+class ActiveScheduleInfo(BaseModel):
+    """Information about the currently active schedule entry."""
+    active_entry: Optional[FanScheduleEntrySchema] = None
+    next_entry: Optional[FanScheduleEntrySchema] = None
+    is_using_default_curve: bool = True

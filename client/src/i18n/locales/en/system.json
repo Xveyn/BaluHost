@@ -556,6 +556,7 @@
       "temperature": "Temperature",
       "auto": "Auto",
       "manual": "Manual",
+      "scheduled": "Schedule",
       "manualPwm": "Manual PWM"
     },
     "details": {
@@ -576,6 +577,48 @@
       "ascendingTemp": "Temperature values must be strictly ascending",
       "pwmRange": "PWM must be between {{min}}% and {{max}}%",
       "invalidCurve": "Invalid curve configuration"
+    },
+    "schedule": {
+      "title": "Fan Schedule",
+      "description": "Time-based fan curves — different cooling profiles for different times of day",
+      "noEntries": "No schedule entries yet",
+      "noEntriesHint": "Add a schedule entry to use different fan curves at different times",
+      "addEntry": "Add Entry",
+      "editEntry": "Edit Entry",
+      "deleteEntry": "Delete Entry",
+      "deleteConfirmTitle": "Delete Schedule Entry?",
+      "deleteConfirmMessage": "Are you sure you want to delete \"{{name}}\"? This action cannot be undone.",
+      "maxEntriesReached": "Maximum of 8 schedule entries reached",
+      "timeline": "24h Timeline",
+      "defaultCurve": "Default Curve",
+      "active": "ACTIVE",
+      "next": "NEXT",
+      "disabled": "Disabled",
+      "overnight": "Overnight",
+      "name": "Name",
+      "namePlaceholder": "e.g. Night Mode",
+      "startTime": "Start Time",
+      "endTime": "End Time",
+      "priority": "Priority",
+      "priorityHint": "Lower number = higher priority",
+      "curvePreset": "Curve Preset",
+      "customCurve": "Custom Curve",
+      "enabled": "Enabled",
+      "save": "Save",
+      "cancel": "Cancel",
+      "create": "Create",
+      "update": "Update",
+      "usingDefaultCurve": "Using default curve (no active schedule)",
+      "activeSchedule": "Active: {{name}}",
+      "messages": {
+        "created": "Schedule entry \"{{name}}\" created",
+        "updated": "Schedule entry updated",
+        "deleted": "Schedule entry deleted",
+        "createFailed": "Failed to create schedule entry",
+        "updateFailed": "Failed to update schedule entry",
+        "deleteFailed": "Failed to delete schedule entry",
+        "toggleFailed": "Failed to toggle schedule entry"
+      }
     }
   },
   "servicesStatus": {

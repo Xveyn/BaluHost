@@ -31,7 +31,7 @@ from app.models.power import (
     PowerAutoScalingConfig,
     PowerDynamicModeConfig,
 )
-from app.models.fans import FanConfig, FanSample
+from app.models.fans import FanConfig, FanSample, FanScheduleEntry
 from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
@@ -101,6 +101,7 @@ __all__ = [
     "PowerDynamicModeConfig",
     "FanConfig",
     "FanSample",
+    "FanScheduleEntry",
     "SchedulerExecution",
     "SchedulerConfig",
     "SchedulerStatus",

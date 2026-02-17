@@ -7,7 +7,8 @@ import { apiClient } from '../lib/api';
 export const FanMode = {
   AUTO: 'auto',
   MANUAL: 'manual',
-  EMERGENCY: 'emergency'
+  EMERGENCY: 'emergency',
+  SCHEDULED: 'scheduled'
 } as const;
 export type FanMode = typeof FanMode[keyof typeof FanMode];
 
@@ -183,6 +184,50 @@ export interface UpdateFanConfigResponse {
   message?: string;
 }
 
+// Schedule types
+export interface FanScheduleEntry {
+  id: number;
+  fan_id: string;
+  name: string;
+  start_time: string; // "HH:MM"
+  end_time: string;   // "HH:MM"
+  curve_points: FanCurvePoint[];
+  priority: number;
+  is_enabled: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateFanScheduleEntryRequest {
+  name: string;
+  start_time: string;
+  end_time: string;
+  curve_points: FanCurvePoint[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface UpdateFanScheduleEntryRequest {
+  name?: string;
+  start_time?: string;
+  end_time?: string;
+  curve_points?: FanCurvePoint[];
+  priority?: number;
+  is_enabled?: boolean;
+}
+
+export interface FanScheduleListResponse {
+  entries: FanScheduleEntry[];
+  fan_id: string;
+  total_count: number;
+}
+
+export interface ActiveScheduleInfo {
+  active_entry: FanScheduleEntry | null;
+  next_entry: FanScheduleEntry | null;
+  is_using_default_curve: boolean;
+}
+
 // API Functions
 
 /**
@@ -302,5 +347,64 @@ export async function updateFanConfig(
 ): Promise<UpdateFanConfigResponse> {
   const request: UpdateFanConfigRequest = { fan_id: fanId, ...config };
   const response = await apiClient.patch<UpdateFanConfigResponse>('/api/fans/config', request);
+  return response.data;
+}
+
+// --- Schedule API Functions ---
+
+/**
+ * Get all schedule entries for a fan
+ */
+export async function getFanSchedule(fanId: string): Promise<FanScheduleListResponse> {
+  const response = await apiClient.get<FanScheduleListResponse>(`/api/fans/${encodeURIComponent(fanId)}/schedule`);
+  return response.data;
+}
+
+/**
+ * Create a new schedule entry for a fan
+ */
+export async function createFanScheduleEntry(
+  fanId: string,
+  entry: CreateFanScheduleEntryRequest
+): Promise<FanScheduleEntry> {
+  const response = await apiClient.post<FanScheduleEntry>(
+    `/api/fans/${encodeURIComponent(fanId)}/schedule`,
+    entry
+  );
+  return response.data;
+}
+
+/**
+ * Update an existing schedule entry
+ */
+export async function updateFanScheduleEntry(
+  fanId: string,
+  entryId: number,
+  update: UpdateFanScheduleEntryRequest
+): Promise<FanScheduleEntry> {
+  const response = await apiClient.put<FanScheduleEntry>(
+    `/api/fans/${encodeURIComponent(fanId)}/schedule/${entryId}`,
+    update
+  );
+  return response.data;
+}
+
+/**
+ * Delete a schedule entry
+ */
+export async function deleteFanScheduleEntry(
+  fanId: string,
+  entryId: number
+): Promise<void> {
+  await apiClient.delete(`/api/fans/${encodeURIComponent(fanId)}/schedule/${entryId}`);
+}
+
+/**
+ * Get the currently active schedule entry for a fan
+ */
+export async function getActiveFanSchedule(fanId: string): Promise<ActiveScheduleInfo> {
+  const response = await apiClient.get<ActiveScheduleInfo>(
+    `/api/fans/${encodeURIComponent(fanId)}/schedule/active`
+  );
   return response.data;
 }

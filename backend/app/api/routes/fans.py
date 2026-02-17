@@ -35,6 +35,11 @@ from app.schemas.fans import (
     UpdateFanConfigRequest,
     UpdateFanConfigResponse,
     FanCurvePoint,
+    FanScheduleEntrySchema,
+    CreateFanScheduleEntryRequest,
+    UpdateFanScheduleEntryRequest,
+    FanScheduleListResponse,
+    ActiveScheduleInfo,
 )
 from app.services.fan_control import get_fan_control_service, FanControlService
 
@@ -109,7 +114,7 @@ async def set_fan_mode(
     service: FanControlService = Depends(get_fan_service),
 ):
     """
-    Set fan operation mode (auto or manual).
+    Set fan operation mode (auto, manual, or scheduled).
 
     Requires admin role.
     """
@@ -458,3 +463,176 @@ async def update_fan_config(
     except Exception as e:
         logger.error(f"Failed to update fan config: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")
+
+
+# --- Schedule Endpoints ---
+
+
+def _entry_to_schema(entry) -> FanScheduleEntrySchema:
+    """Convert a FanScheduleEntry model to schema."""
+    import json
+    curve_points = json.loads(entry.curve_json) if entry.curve_json else []
+    return FanScheduleEntrySchema(
+        id=entry.id,
+        fan_id=entry.fan_id,
+        name=entry.name,
+        start_time=entry.start_time,
+        end_time=entry.end_time,
+        curve_points=[FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in curve_points],
+        priority=entry.priority,
+        is_enabled=entry.is_enabled,
+        created_at=entry.created_at,
+        updated_at=entry.updated_at,
+    )
+
+
+@router.get("/{fan_id}/schedule", response_model=FanScheduleListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_fan_schedule(
+    request: Request, response: Response,
+    fan_id: str,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Get all schedule entries for a fan.
+
+    Requires admin role.
+    """
+    try:
+        entries = await service.get_schedule_entries(fan_id)
+        return FanScheduleListResponse(
+            entries=[_entry_to_schema(e) for e in entries],
+            fan_id=fan_id,
+            total_count=len(entries),
+        )
+    except Exception as e:
+        logger.error(f"Failed to get fan schedule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get fan schedule: {str(e)}")
+
+
+@router.post("/{fan_id}/schedule", response_model=FanScheduleEntrySchema, status_code=201)
+@user_limiter.limit(get_limit("admin_operations"))
+async def create_fan_schedule_entry(
+    request: Request, response: Response,
+    fan_id: str,
+    body: CreateFanScheduleEntryRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Create a new schedule entry for a fan.
+
+    Max 8 entries per fan. Requires admin role.
+    """
+    try:
+        entry = await service.create_schedule_entry(
+            fan_id=fan_id,
+            name=body.name,
+            start_time=body.start_time,
+            end_time=body.end_time,
+            curve_points=body.curve_points,
+            priority=body.priority,
+            is_enabled=body.is_enabled,
+        )
+
+        if entry is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Maximum of 8 schedule entries per fan reached"
+            )
+
+        return _entry_to_schema(entry)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create schedule entry: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create schedule entry: {str(e)}")
+
+
+@router.put("/{fan_id}/schedule/{entry_id}", response_model=FanScheduleEntrySchema)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_fan_schedule_entry(
+    request: Request, response: Response,
+    fan_id: str,
+    entry_id: int,
+    body: UpdateFanScheduleEntryRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Update an existing schedule entry.
+
+    Requires admin role.
+    """
+    try:
+        kwargs = body.model_dump(exclude_none=True)
+        entry = await service.update_schedule_entry(fan_id, entry_id, **kwargs)
+
+        if entry is None:
+            raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
+
+        return _entry_to_schema(entry)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update schedule entry: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update schedule entry: {str(e)}")
+
+
+@router.delete("/{fan_id}/schedule/{entry_id}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_fan_schedule_entry(
+    request: Request, response: Response,
+    fan_id: str,
+    entry_id: int,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Delete a schedule entry.
+
+    Requires admin role.
+    """
+    try:
+        success = await service.delete_schedule_entry(fan_id, entry_id)
+
+        if not success:
+            raise HTTPException(status_code=404, detail=f"Schedule entry {entry_id} not found for fan {fan_id}")
+
+        return {"success": True, "message": f"Schedule entry {entry_id} deleted"}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete schedule entry: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete schedule entry: {str(e)}")
+
+
+@router.get("/{fan_id}/schedule/active", response_model=ActiveScheduleInfo)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_active_schedule(
+    request: Request, response: Response,
+    fan_id: str,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Get the currently active schedule entry for a fan.
+
+    Requires admin role.
+    """
+    try:
+        active_entry, next_entry = await service.get_active_schedule_entry(fan_id)
+
+        return ActiveScheduleInfo(
+            active_entry=_entry_to_schema(active_entry) if active_entry else None,
+            next_entry=_entry_to_schema(next_entry) if next_entry else None,
+            is_using_default_curve=active_entry is None,
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to get active schedule: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to get active schedule: {str(e)}")

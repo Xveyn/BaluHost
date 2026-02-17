@@ -12,7 +12,7 @@ import { LoadingOverlay } from '../components/ui/Spinner';
 import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
 import type { FanCurvePoint } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
-import { FanCard, FanDetails } from '../components/fan-control';
+import { FanCard, FanDetails, FanSchedulePanel } from '../components/fan-control';
 
 export default function FanControl() {
   const { t } = useTranslation(['system', 'common']);
@@ -219,6 +219,16 @@ export default function FanControl() {
           />
         ))}
       </div>
+
+      {/* Fan Schedule Panel (if fan is in scheduled mode) */}
+      {selectedFanData && selectedFanData.mode === FanMode.SCHEDULED && (
+        <div className="mt-6">
+          <FanSchedulePanel
+            fan={selectedFanData}
+            isReadOnly={isReadOnly}
+          />
+        </div>
+      )}
 
       {/* Fan Details (if fan selected) */}
       {selectedFanData && (
