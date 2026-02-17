@@ -89,6 +89,15 @@
     "viewSchedulers": "View Schedulers",
     "viewHealth": "View Health"
   },
+  "liveActivities": {
+    "title": "Live Activities",
+    "count_one": "{{count}} active",
+    "count_other": "{{count}} active",
+    "schedulerRunning": "{{name}} running",
+    "fanScheduled": "{{name}} until {{until}}",
+    "raidResync": "{{name}} {{action}} {{progress}}%",
+    "powerElevated": "Power: {{profile}} ({{source}})"
+  },
   "devices": {
     "title": "Connected Devices",
     "unableToLoad": "Unable to load",

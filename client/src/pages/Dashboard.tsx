@@ -6,6 +6,7 @@ import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
+import { useLiveActivities } from '../hooks/useLiveActivities';
 import PowerWidget from '../components/PowerWidget';
 import {
   ActivityFeed,
@@ -15,6 +16,7 @@ import {
   NetworkWidget,
   ConnectedDevicesWidget,
   AlertBanner,
+  LiveActivities,
   type Alert,
 } from '../components/dashboard';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
@@ -90,6 +92,7 @@ export default function Dashboard({ user }: DashboardProps) {
   // Hooks for alert generation
   const { allSchedulers } = useNextMaintenance({ enabled: isAdmin });
   const { services } = useServicesSummary({ enabled: isAdmin });
+  const { activities } = useLiveActivities({ raidData, schedulers: allSchedulers, isAdmin });
 
   useEffect(() => {
     const loadRaidData = async () => {
@@ -486,6 +489,9 @@ export default function Dashboard({ user }: DashboardProps) {
             {/* Plugins Panel (visible to all, clickable for admins) */}
             <PluginsPanel isAdmin={isAdmin} />
           </div>
+
+          {/* Live Activities - below panels */}
+          {activities.length > 0 && <LiveActivities activities={activities} />}
 
           <div className="grid grid-cols-1 gap-6">
             <div className="card border-slate-800/50 bg-slate-900/55">

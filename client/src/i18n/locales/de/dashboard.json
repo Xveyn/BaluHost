@@ -89,6 +89,15 @@
     "viewSchedulers": "Scheduler anzeigen",
     "viewHealth": "Status anzeigen"
   },
+  "liveActivities": {
+    "title": "Live-Aktivitäten",
+    "count_one": "{{count}} aktiv",
+    "count_other": "{{count}} aktiv",
+    "schedulerRunning": "{{name}} läuft",
+    "fanScheduled": "{{name}} bis {{until}}",
+    "raidResync": "{{name}} {{action}} {{progress}}%",
+    "powerElevated": "Leistung: {{profile}} ({{source}})"
+  },
   "devices": {
     "title": "Verbundene Geräte",
     "unableToLoad": "Laden fehlgeschlagen",

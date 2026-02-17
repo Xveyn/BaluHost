@@ -61,6 +61,14 @@ class FanCurvePoint(BaseModel):
         }
 
 
+class FanActiveSchedule(BaseModel):
+    """Active schedule entry info for a fan in SCHEDULED mode."""
+    id: int
+    name: str
+    start_time: str
+    end_time: str
+
+
 class FanInfo(BaseModel):
     """Information about a single fan."""
     fan_id: str = Field(..., description="Unique fan identifier (e.g., hwmon0_pwm1)")
@@ -76,6 +84,7 @@ class FanInfo(BaseModel):
     temp_sensor_id: Optional[str] = Field(None, description="Associated temperature sensor ID")
     curve_points: List[FanCurvePoint] = Field(default_factory=list)
     hysteresis_celsius: float = Field(3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
+    active_schedule: Optional[FanActiveSchedule] = None
 
     class Config:
         json_schema_extra = {

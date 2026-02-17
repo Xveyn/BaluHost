@@ -48,6 +48,13 @@ export const CURVE_PRESETS: Record<string, FanCurvePoint[]> = {
   ],
 };
 
+export interface FanActiveSchedule {
+  id: number;
+  name: string;
+  start_time: string; // "HH:MM"
+  end_time: string;   // "HH:MM"
+}
+
 export interface FanInfo {
   fan_id: string;
   name: string;
@@ -62,6 +69,7 @@ export interface FanInfo {
   temp_sensor_id: string | null;
   curve_points: FanCurvePoint[];
   hysteresis_celsius: number;
+  active_schedule?: FanActiveSchedule | null;
 }
 
 export interface FanStatusResponse {
