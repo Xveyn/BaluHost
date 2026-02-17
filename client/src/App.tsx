@@ -8,6 +8,8 @@ import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';
 import { UploadProvider } from './contexts/UploadContext';
 import { buildApiUrl } from './lib/api';
+import { useIdleTimeout } from './hooks/useIdleTimeout';
+import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
 import type { User } from './types/auth';
 import './App.css';
 
@@ -182,6 +184,11 @@ function App() {
     localStorage.removeItem('token');
   };
 
+  const { warningVisible, secondsRemaining, resetTimer } = useIdleTimeout({
+    onLogout: handleLogout,
+    enabled: user !== null,
+  });
+
   const LoadingScreen = () => {
     const [dots, setDots] = useState('');
     useEffect(() => {
@@ -261,6 +268,12 @@ function App() {
 
   return (
     <ErrorBoundary>
+    <IdleWarningDialog
+      open={warningVisible}
+      secondsRemaining={secondsRemaining}
+      onStayLoggedIn={resetTimer}
+      onLogoutNow={handleLogout}
+    />
     <VersionProvider>
     <PluginProvider>
     <Router>
