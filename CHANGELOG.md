@@ -7,6 +7,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.6.1] - 2026-02-18
+
+### 📚 Documentation Restructure & Code Quality Release
+
+This release focuses on improved documentation organization and significant client-side refactoring.
+
+### ✨ Added
+
+#### Documentation
+- **Structured documentation directory** with logical subdirectories:
+  - `docs/api/` - API documentation
+  - `docs/deployment/` - Deployment, SSL, reverse proxy, production guides
+  - `docs/features/` - Feature documentation
+  - `docs/getting-started/` - User guide and dev checklist
+  - `docs/monitoring/` - Monitoring and telemetry
+  - `docs/network/` - VPN, WebDAV, mDNS setup
+  - `docs/security/` - Security, audit logging, rate limiting
+  - `docs/storage/` - RAID and backup documentation
+- **Updated navigation** in docs/README.md with table-based quick links
+
+#### Features
+- **Time-based fan schedules** (scheduled mode) for fan control
+- **Collapsible LiveActivities section** on dashboard below panels
+
+### 🔧 Changed
+
+#### Client Refactoring
+- **Decomposed FileManager and RaidManagement** into smaller, focused components
+- **Consolidated API layer** from raw fetch calls to unified `apiClient`
+- **Added barrel exports** for all component directories
+- **Activated AuthContext** with proper error handling
+- **Stabilized idle-timeout hook** to prevent unnecessary re-renders
+
+#### UI Improvements
+- **SharesPage and modals** aligned with SystemMonitor design language
+- **PluginsPage** aligned with SystemMonitor design language
+- **UpdatePage** aligned with SystemMonitor design language
+- **Admin Database page** redesigned with sidebar and browse/analytics split
+- **Improved analytics tabs** with skeletons and shared UI components
+- **Simplified 2FA step** in login page
+
+### 🐛 Fixed
+
+- **RAID 1 disk capacity display** corrected on dashboard
+- **Auth idle-timeout** re-render issues resolved
+
+### 📊 Status
+
+- **Production Readiness**: ✅ Stable
+- **Version**: 1.6.1
+
+---
+
 ## [1.4.2] - 2026-01-29
 
 ### 🗓️ Unified Scheduler Dashboard

@@ -1051,6 +1051,6 @@ All errors follow this format:
 
 ---
 
-**Last Updated:** January 2026
-**API Version:** 1.4.2
+**Last Updated:** February 2026
+**API Version:** 1.6.1
 **Base Path:** `/api`

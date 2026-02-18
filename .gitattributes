@@ -1,0 +1,8 @@
+# Exclude from source archives (git archive / GitHub releases)
+baludesk/ export-ignore
+android-app/ export-ignore
+
+# Development files
+.github/ export-ignore
+.claude/ export-ignore
+*.log export-ignore
