@@ -1,4 +1,4 @@
-import { buildApiUrl } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 export interface RaidDevice {
   name: string;
@@ -77,64 +77,18 @@ export interface DeleteArrayPayload {
   force?: boolean;
 }
 
-const getToken = (): string => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('Keine aktive Sitzung – bitte erneut anmelden.');
-  }
-  return token;
-};
-
-const parseResponse = async <T>(response: Response): Promise<T> => {
-  const text = await response.text();
-  let payload: any = null;
-
-  if (text) {
-    try {
-      payload = JSON.parse(text);
-    } catch (error) {
-      payload = null;
-    }
-  }
-
-  if (!response.ok) {
-    const detail =
-      (payload && (payload.detail || payload.error || payload.message)) ||
-      `Request failed with status ${response.status}`;
-    throw new Error(typeof detail === 'string' ? detail : 'RAID request failed');
-  }
-
-  return payload as T;
-};
-
 export const getRaidStatus = async (): Promise<RaidStatusResponse> => {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/raid/status'), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return parseResponse<RaidStatusResponse>(response);
+  const { data } = await apiClient.get<RaidStatusResponse>('/api/system/raid/status');
+  return data;
 };
 
 const postRaidAction = async (endpoint: string, array: string, device?: string): Promise<RaidActionResponse> => {
-  const token = getToken();
   const payload: Record<string, string> = { array };
   if (device) {
     payload.device = device;
   }
-
-  const response = await fetch(buildApiUrl(endpoint), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(payload),
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>(endpoint, payload);
+  return data;
 };
 
 export const markDeviceFailed = async (array: string, device?: string): Promise<RaidActionResponse> => {
@@ -153,91 +107,35 @@ export const finalizeRaidRebuild = async (array: string): Promise<RaidActionResp
 };
 
 export const updateRaidOptions = async (payload: RaidOptionsPayload): Promise<RaidActionResponse> => {
-  const token = getToken();
-
-  const response = await fetch(buildApiUrl('/api/system/raid/options'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/options', payload);
+  return data;
 };
 
 export const getAvailableDisks = async (): Promise<AvailableDisksResponse> => {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/raid/available-disks'), {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-  });
-
-  return parseResponse<AvailableDisksResponse>(response);
+  const { data } = await apiClient.get<AvailableDisksResponse>('/api/system/raid/available-disks');
+  return data;
 };
 
 export const formatDisk = async (payload: FormatDiskPayload): Promise<RaidActionResponse> => {
-  const token = getToken();
-
-  const response = await fetch(buildApiUrl('/api/system/raid/format-disk'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/format-disk', payload);
+  return data;
 };
 
 export const createArray = async (payload: CreateArrayPayload): Promise<RaidActionResponse> => {
-  const token = getToken();
-
-  const response = await fetch(buildApiUrl('/api/system/raid/create-array'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/create-array', payload);
+  return data;
 };
 
 export const deleteArray = async (payload: DeleteArrayPayload): Promise<RaidActionResponse> => {
-  const token = getToken();
-
-  const response = await fetch(buildApiUrl('/api/system/raid/delete-array'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/delete-array', payload);
+  return data;
 };
 
 export const triggerRaidScrub = async (array?: string): Promise<RaidActionResponse> => {
-  const token = getToken();
   const body: Record<string, string | undefined> = {};
   if (array) body.array = array;
-
-  const response = await fetch(buildApiUrl('/api/system/raid/scrub'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(body),
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/scrub', body);
+  return data;
 };
 
 export interface ConfirmTokenResponse {
@@ -246,32 +144,13 @@ export interface ConfirmTokenResponse {
 }
 
 export const requestConfirmation = async (action: string, payload: object, ttl_seconds?: number): Promise<ConfirmTokenResponse> => {
-  const token = getToken();
-  const body: any = { action, payload };
+  const body: Record<string, unknown> = { action, payload };
   if (ttl_seconds) body.ttl_seconds = ttl_seconds;
-
-  const response = await fetch(buildApiUrl('/api/system/raid/confirm/request'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(body)
-  });
-
-  return parseResponse<ConfirmTokenResponse>(response);
+  const { data } = await apiClient.post<ConfirmTokenResponse>('/api/system/raid/confirm/request', body);
+  return data;
 };
 
 export const executeConfirmation = async (tokenStr: string): Promise<RaidActionResponse> => {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/raid/confirm/execute'), {
-    method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify({ token: tokenStr })
-  });
-
-  return parseResponse<RaidActionResponse>(response);
+  const { data } = await apiClient.post<RaidActionResponse>('/api/system/raid/confirm/execute', { token: tokenStr });
+  return data;
 };

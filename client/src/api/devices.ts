@@ -2,7 +2,7 @@
  * API client for unified device management (Mobile + Desktop)
  */
 
-import { buildApiUrl } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 export interface Device {
   id: string;
@@ -26,78 +26,31 @@ export interface Device {
  * Admins see all devices from all users.
  */
 export async function getAllDevices(): Promise<Device[]> {
-  const token = localStorage.getItem('token');
-
-  const response = await fetch(buildApiUrl('/api/devices/all'), {
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || `HTTP ${response.status}: Failed to load devices`);
-  }
-
-  return response.json();
+  const { data } = await apiClient.get<Device[]>('/api/devices/all');
+  return data;
 }
 
 /**
  * Update mobile device name
  */
 export async function updateMobileDeviceName(deviceId: string, name: string): Promise<void> {
-  const token = localStorage.getItem('token');
-
-  const response = await fetch(buildApiUrl(`/api/devices/mobile/${deviceId}/name?name=${encodeURIComponent(name)}`), {
-    method: 'PATCH',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
+  await apiClient.patch(`/api/devices/mobile/${deviceId}/name`, null, {
+    params: { name },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || `HTTP ${response.status}: Failed to update device name`);
-  }
 }
 
 /**
  * Update desktop device name
  */
 export async function updateDesktopDeviceName(deviceId: string, name: string): Promise<void> {
-  const token = localStorage.getItem('token');
-
-  const response = await fetch(buildApiUrl(`/api/devices/desktop/${deviceId}/name?name=${encodeURIComponent(name)}`), {
-    method: 'PATCH',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
+  await apiClient.patch(`/api/devices/desktop/${deviceId}/name`, null, {
+    params: { name },
   });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || `HTTP ${response.status}: Failed to update device name`);
-  }
 }
 
 /**
  * Delete mobile device
  */
 export async function deleteMobileDevice(deviceId: string): Promise<void> {
-  const token = localStorage.getItem('token');
-
-  const response = await fetch(buildApiUrl(`/api/mobile/devices/${deviceId}`), {
-    method: 'DELETE',
-    headers: {
-      'Authorization': `Bearer ${token}`
-    }
-  });
-
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-    throw new Error(errorData.detail || `HTTP ${response.status}: Failed to delete device`);
-  }
+  await apiClient.delete(`/api/mobile/devices/${deviceId}`);
 }

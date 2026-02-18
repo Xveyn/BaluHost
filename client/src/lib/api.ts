@@ -157,8 +157,6 @@ apiClient.interceptors.request.use((config) => {
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
-  // Debug: Log the final request URL
-  console.log('[API] Request:', config.method?.toUpperCase(), config.url, 'baseURL:', config.baseURL);
   return config;
 });
 

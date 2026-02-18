@@ -1,22 +1,4 @@
-import { buildApiUrl } from '../lib/api';
-
-const fetchWithAuth = async (url: string, options?: RequestInit): Promise<any> => {
-  const token = localStorage.getItem('token');
-  const response = await fetch(buildApiUrl(url), {
-    ...options,
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json',
-      ...options?.headers,
-    },
-  });
-
-  if (!response.ok) {
-    throw new Error(`HTTP error! status: ${response.status}`);
-  }
-
-  return response.json();
-};
+import { apiClient } from '../lib/api';
 
 export interface DiskIOSample {
   timestamp: number;
@@ -43,7 +25,7 @@ export interface FileAccessLog {
   details?: {
     size_bytes?: number;
     duration_ms?: number;
-    [key: string]: any;
+    [key: string]: unknown;
   };
   error?: string;
 }
@@ -81,7 +63,10 @@ export interface AuditLoggingStatus {
 
 export const loggingApi = {
   async getDiskIOLogs(hours: number = 24): Promise<DiskIOData> {
-    return fetchWithAuth(`/api/logging/disk-io?hours=${hours}`);
+    const { data } = await apiClient.get<DiskIOData>('/api/logging/disk-io', {
+      params: { hours },
+    });
+    return data;
   },
 
   async getFileAccessLogs(params?: {
@@ -90,27 +75,26 @@ export const loggingApi = {
     action?: string;
     user?: string;
   }): Promise<FileAccessLogsResponse> {
-    const queryParams = new URLSearchParams();
-    if (params?.limit) queryParams.append('limit', params.limit.toString());
-    if (params?.days) queryParams.append('days', params.days.toString());
-    if (params?.action) queryParams.append('action', params.action);
-    if (params?.user) queryParams.append('user', params.user);
-
-    return fetchWithAuth(`/api/logging/file-access?${queryParams.toString()}`);
+    const { data } = await apiClient.get<FileAccessLogsResponse>('/api/logging/file-access', {
+      params,
+    });
+    return data;
   },
 
   async getLoggingStats(days: number = 7): Promise<LoggingStats> {
-    return fetchWithAuth(`/api/logging/stats?days=${days}`);
+    const { data } = await apiClient.get<LoggingStats>('/api/logging/stats', {
+      params: { days },
+    });
+    return data;
   },
 
   async getAuditLoggingStatus(): Promise<AuditLoggingStatus> {
-    return fetchWithAuth('/api/system/audit-logging');
+    const { data } = await apiClient.get<AuditLoggingStatus>('/api/system/audit-logging');
+    return data;
   },
 
   async toggleAuditLogging(enabled: boolean): Promise<AuditLoggingStatus> {
-    return fetchWithAuth('/api/system/audit-logging', {
-      method: 'POST',
-      body: JSON.stringify({ enabled }),
-    });
+    const { data } = await apiClient.post<AuditLoggingStatus>('/api/system/audit-logging', { enabled });
+    return data;
   },
 };

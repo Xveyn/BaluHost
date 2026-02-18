@@ -1,4 +1,4 @@
-import { buildApiUrl } from '../lib/api';
+import { apiClient } from '../lib/api';
 
 export interface SmartAttribute {
   id: number;
@@ -37,30 +37,9 @@ export interface SmartStatusResponse {
   devices: SmartDevice[];
 }
 
-const getToken = (): string => {
-  const token = localStorage.getItem('token');
-  if (!token) {
-    throw new Error('Keine aktive Sitzung – bitte erneut anmelden.');
-  }
-  return token;
-};
-
 export async function fetchSmartStatus(): Promise<SmartStatusResponse> {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/smart/status'), {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'SMART-Status konnte nicht abgerufen werden');
-  }
-
-  return await response.json();
+  const { data } = await apiClient.get<SmartStatusResponse>('/api/system/smart/status');
+  return data;
 }
 
 export interface SmartModeResponse {
@@ -69,39 +48,13 @@ export interface SmartModeResponse {
 }
 
 export async function getSmartMode(): Promise<SmartModeResponse> {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/smart/mode'), {
-    method: 'GET',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'SMART-Modus konnte nicht abgerufen werden');
-  }
-
-  return await response.json();
+  const { data } = await apiClient.get<SmartModeResponse>('/api/system/smart/mode');
+  return data;
 }
 
 export async function toggleSmartMode(): Promise<SmartModeResponse> {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/smart/toggle-mode'), {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    }
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'SMART-Modus konnte nicht geändert werden');
-  }
-
-  return await response.json();
+  const { data } = await apiClient.post<SmartModeResponse>('/api/system/smart/toggle-mode');
+  return data;
 }
 
 export interface SmartTestPayload {
@@ -110,20 +63,6 @@ export interface SmartTestPayload {
 }
 
 export async function runSmartTest(payload: SmartTestPayload = {}): Promise<{ message: string }> {
-  const token = getToken();
-  const response = await fetch(buildApiUrl('/api/system/smart/test'), {
-    method: 'POST',
-    headers: {
-      'Authorization': `Bearer ${token}`,
-      'Content-Type': 'application/json'
-    },
-    body: JSON.stringify(payload)
-  });
-
-  if (!response.ok) {
-    const error = await response.text();
-    throw new Error(error || 'SMART-Test konnte nicht gestartet werden');
-  }
-
-  return await response.json();
+  const { data } = await apiClient.post<{ message: string }>('/api/system/smart/test', payload);
+  return data;
 }
