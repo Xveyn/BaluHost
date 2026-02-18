@@ -22,6 +22,12 @@ from app.schemas.files import (
     FilePermissions,
     FilePermissionsRequest,
     FileItem,
+    OwnershipTransferRequest,
+    OwnershipTransferResponse,
+    ConflictInfo,
+    EnforceResidencyRequest,
+    EnforceResidencyResponse,
+    ResidencyViolation,
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
@@ -184,6 +190,12 @@ async def set_permissions(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FilePermissions:
+    """
+    Set permission rules (shares) for a file.
+    
+    NOTE: owner_id in payload is ignored for backwards compatibility.
+    To change ownership, use POST /api/files/transfer-ownership instead.
+    """
     from app.services import file_metadata_db
     from app.models.file_share import FileShare
     # Nur Owner/Admin darf setzen
@@ -193,15 +205,19 @@ async def set_permissions(
         raise HTTPException(status_code=404, detail="File not found")
     from app.services.permissions import ensure_owner_or_privileged
     ensure_owner_or_privileged(user, str(metadata.owner_id))
-    # Owner setzen
-    file_metadata_db.set_owner_id(payload.path, payload.owner_id, db=db)
+    
+    # NOTE: owner_id changes are NOT applied here anymore.
+    # Use POST /api/files/transfer-ownership for ownership changes.
+    # This preserves the residency invariant (files must live in owner's directory).
+    current_owner_id = metadata.owner_id
+    
     # Bestehende Regeln löschen
     db.query(FileShare).filter(FileShare.file_id == metadata.id).delete()
     # Neue Regeln speichern
     for rule in payload.rules:
         share = FileShare(
             file_id=metadata.id,
-            owner_id=payload.owner_id,
+            owner_id=current_owner_id,  # Use actual owner, not payload.owner_id
             shared_with_user_id=rule.user_id,
             can_read=rule.can_view,
             can_write=rule.can_edit,
@@ -224,7 +240,7 @@ async def set_permissions(
     from app.schemas.files import FilePermissions, FilePermissionRule
     return FilePermissions(
         path=payload.path,
-        owner_id=payload.owner_id,
+        owner_id=current_owner_id,  # Return actual owner
         rules=[FilePermissionRule(**rule) for rule in rules]
     )
 
@@ -945,3 +961,123 @@ async def delete_path_param(
     emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
 
     return FileOperationResponse(message="Deleted")
+
+
+# ============================================================================
+# Ownership Transfer Endpoints
+# ============================================================================
+
+@router.post("/transfer-ownership")
+@user_limiter.limit(get_limit("file_delete"))  # Use stricter rate limit
+async def transfer_ownership(
+    request: Request,
+    response: Response,
+    payload: OwnershipTransferRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> OwnershipTransferResponse:
+    """
+    Transfer ownership of a file or directory to another user.
+    
+    Only the current owner or an admin can transfer ownership.
+    For files outside Shared/, this will physically move the file
+    to the new owner's directory to maintain the residency invariant.
+    
+    Conflict strategies:
+    - rename: Add (2), (3), etc. to avoid conflicts
+    - skip: Don't transfer if conflict exists
+    - overwrite: Replace existing file (dangerous)
+    """
+    from app.services.files.ownership import transfer_ownership as do_transfer, OwnershipTransferResult
+    from app.services.permissions import is_privileged
+    
+    # Validate and jail the path
+    payload.path = _jail_path(payload.path, user, db)
+    
+    # Perform the transfer
+    result: OwnershipTransferResult = do_transfer(
+        path=payload.path,
+        new_owner_id=payload.new_owner_id,
+        requesting_user_id=user.id,
+        requesting_user_is_admin=is_privileged(user),
+        db=db,
+        recursive=payload.recursive,
+        conflict_strategy=payload.conflict_strategy,
+    )
+    
+    if not result.success and result.error in ("NOT_FOUND", "DISK_NOT_FOUND"):
+        raise HTTPException(status_code=404, detail=result.message)
+    elif not result.success and result.error == "UNAUTHORIZED":
+        raise HTTPException(status_code=403, detail=result.message)
+    elif not result.success and result.error == "INVALID_TARGET_USER":
+        raise HTTPException(status_code=400, detail=result.message)
+    elif not result.success and result.error == "HOME_DIRECTORY":
+        raise HTTPException(status_code=400, detail=result.message)
+    
+    return OwnershipTransferResponse(
+        success=result.success,
+        message=result.message,
+        transferred_count=result.transferred_count,
+        skipped_count=result.skipped_count,
+        new_path=result.new_path,
+        conflicts=[
+            ConflictInfo(
+                original_path=c.original_path,
+                resolved_path=c.resolved_path,
+                action=c.action
+            )
+            for c in result.conflicts
+        ],
+        error=result.error,
+    )
+
+
+@router.post("/enforce-residency")
+@user_limiter.limit(get_limit("admin"))  # Admin-only rate limit
+async def enforce_residency_endpoint(
+    request: Request,
+    response: Response,
+    payload: EnforceResidencyRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> EnforceResidencyResponse:
+    """
+    Scan for and optionally fix residency violations (Admin only).
+    
+    A residency violation occurs when a file's owner doesn't match
+    the top-level directory containing it (except for Shared/).
+    
+    Set dry_run=True to only scan without fixing.
+    Set scope to a username to limit the scan to that user's files.
+    """
+    from app.services.files.ownership import enforce_residency, ResidencyEnforcementResult
+    
+    # Admin only
+    if not is_privileged(user):
+        raise HTTPException(
+            status_code=403,
+            detail="Only administrators can enforce residency"
+        )
+    
+    result: ResidencyEnforcementResult = enforce_residency(
+        db=db,
+        dry_run=payload.dry_run,
+        scope=payload.scope,
+        requesting_user_id=user.id,
+        conflict_strategy="rename",
+    )
+    
+    return EnforceResidencyResponse(
+        violations=[
+            ResidencyViolation(
+                path=v.path,
+                current_owner_id=v.current_owner_id,
+                current_owner_username=v.current_owner_username,
+                expected_directory=v.expected_directory,
+                actual_directory=v.actual_directory
+            )
+            for v in result.violations
+        ],
+        fixed_count=result.fixed_count,
+    )
+
