@@ -88,5 +88,25 @@
     "cancel": "Abbrechen",
     "existingSize": "Vorhanden: {{size}}",
     "existingModified": "Geändert: {{date}}"
+  },
+  "ownership": {
+    "title": "Eigentümer übertragen",
+    "newOwner": "Neuer Eigentümer",
+    "selectUser": "Nutzer auswählen...",
+    "recursive": "Alle Inhalte einschließen",
+    "conflictStrategy": "Bei Namenskonflikt",
+    "strategy": {
+      "rename": "Umbenennen",
+      "skip": "Überspringen",
+      "overwrite": "Überschreiben"
+    },
+    "overwriteWarning": "Achtung: Bestehende Dateien werden gelöscht!",
+    "transferInfo": "\"{{name}}\" wird an {{user}} übertragen.",
+    "recursiveInfo": "Alle enthaltenen Dateien und Ordner werden ebenfalls übertragen.",
+    "transfer": "Übertragen",
+    "transferError": "Übertragung fehlgeschlagen",
+    "transferSuccess": "Übertragung erfolgreich",
+    "transferSuccessMessage": "{{count}} Element(e) an {{user}} übertragen.",
+    "button": "Eigentümer übertragen"
   }
 }
