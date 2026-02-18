@@ -179,7 +179,7 @@ function AppRoutes() {
           element={
             user ? (
               <Layout>
-                <FileManager user={user!} />
+                <FileManager />
               </Layout>
             ) : (
               <Navigate to="/login" />
