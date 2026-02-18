@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import mimetypes
+import threading
+import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
@@ -11,6 +13,11 @@ from sqlalchemy.orm import Session
 from sqlalchemy import select, or_
 
 from app.core.config import settings
+
+# Cache for calculate_used_bytes() - avoids expensive filesystem scans on every request
+_used_bytes_cache: dict[str, tuple[int, float]] = {}  # {"value": (bytes, timestamp)}
+_used_bytes_cache_lock = threading.Lock()
+_USED_BYTES_CACHE_TTL = 30.0  # Cache for 30 seconds
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
 from app.services.files import metadata_db as file_metadata_db
@@ -185,7 +192,8 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
     return items
 
 
-def calculate_used_bytes() -> int:
+def _calculate_used_bytes_uncached() -> int:
+    """Internal: Actually scan the filesystem. Called by calculate_used_bytes()."""
     total = 0
     if not ROOT_DIR.exists():
         return total
@@ -201,6 +209,38 @@ def calculate_used_bytes() -> int:
         if entry.is_file():
             total += entry.stat().st_size
     return total
+
+
+def calculate_used_bytes() -> int:
+    """Calculate total used bytes in storage.
+    
+    Uses a 30-second TTL cache to avoid expensive filesystem scans on every request.
+    The Settings page and other UI elements call this frequently.
+    """
+    global _used_bytes_cache
+    
+    now = time.time()
+    
+    with _used_bytes_cache_lock:
+        if "value" in _used_bytes_cache:
+            cached_value, cached_time = _used_bytes_cache["value"]
+            if now - cached_time < _USED_BYTES_CACHE_TTL:
+                return cached_value
+    
+    # Cache miss or expired - do the expensive calculation
+    total = _calculate_used_bytes_uncached()
+    
+    with _used_bytes_cache_lock:
+        _used_bytes_cache["value"] = (total, now)
+    
+    return total
+
+
+def invalidate_used_bytes_cache() -> None:
+    """Invalidate the used_bytes cache. Call after file uploads/deletions."""
+    global _used_bytes_cache
+    with _used_bytes_cache_lock:
+        _used_bytes_cache.clear()
 
 
 def calculate_available_bytes() -> int | None:
@@ -435,6 +475,8 @@ async def save_uploads(
                 await progress_manager.fail_upload(upload_ids[idx], str(e))
             raise
 
+    # Invalidate storage quota cache after uploads
+    invalidate_used_bytes_cache()
     return saved_paths
 
 
@@ -475,6 +517,9 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
         success=True,
         db=db
     )
+    
+    # Invalidate storage quota cache after deletion
+    invalidate_used_bytes_cache()
 
 
 def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, db: Optional[Session] = None) -> Path:
