@@ -111,8 +111,8 @@ app/src/main/java/com/baluhost/android/
 ## Documentation
 
 - **Full Implementation Guide:** `/docs/ANDROID_APP_GUIDE.md`
-- **Backend API Reference:** `/docs/API_REFERENCE.md`
-- **Architecture Overview:** `/ARCHITECTURE.md`
+- **Backend API Reference:** `/docs/api/API_REFERENCE.md`
+- **Architecture Overview:** `/docs/ARCHITECTURE.md`
 
 ## Backend API
 

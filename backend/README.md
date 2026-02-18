@@ -3,20 +3,64 @@
 FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integration.
 
 ## Features
-- **JWT Authentication** - Sichere Token-basierte Auth
+
+### Core Features
+- **JWT Authentication** - Sichere Token-basierte Auth mit Refresh Tokens
+- **Two-Factor Authentication (TOTP)** - Optionale 2FA mit Authenticator Apps
 - **SQLite/PostgreSQL Database** - Persistente Datenspeicherung mit Alembic Migrations
 - **User Management** - CRUD Operations mit Rollen (Admin/User)
 - **File Metadata** - Database-backed Ownership & Permissions
 - **File Sharing** - Public Links mit Passwortschutz und Ablaufdatum
+- **Chunked Upload** - Große Dateien in Chunks hochladen mit Fortschrittsanzeige
+
+### Storage & Backup
 - **Backup & Restore** - Vollständige und inkrementelle Backups mit Verschlüsselung
+- **SSD Cache** - SSD-Cache-Layer für HDD-Arrays
+- **RAID Management** - Simulation im Dev-Mode, mdadm Production-Ready
+- **S.M.A.R.T. Monitoring** - Festplatten-Gesundheitsüberwachung
+- **Quota System** - Storage Limits & Monitoring pro Benutzer
+
+### Sync & Mobile
 - **Sync System** - Desktop Sync Client mit Konfliktauflösung
 - **Mobile Support** - Geräteregistrierung und Kamera-Backup
-- **System Monitoring** - CPU, RAM, Disk, Network via psutil
-- **RAID Management** - Simulation im Dev-Mode, Production-Ready
-- **Audit Logging** - Comprehensive Security & File Operation Logs
-- **Quota System** - Storage Limits & Monitoring
-- **Custom API Docs** - Styled Swagger UI matching frontend design
+- **WebDAV Server** - WebDAV-Zugriff für externe Clients
+- **Samba Integration** - Windows-Netzwerkfreigaben
+
+### Network & Access
+- **VPN Management** - WireGuard VPN-Konfiguration und Profile
 - **Network Discovery** - mDNS/Bonjour for automatic server discovery
+- **Remote Server Profiles** - Verwaltung mehrerer BaluHost-Server
+
+### Power & Hardware
+- **Power Management** - CPU-Governor-Steuerung und Energieprofile
+- **Fan Control** - Temperaturbasierte Lüftersteuerung
+- **Tapo Smart Plug Integration** - TP-Link Tapo Steckdosen für Power-Monitoring
+- **Energy Monitoring** - Stromverbrauchsüberwachung und Preiskonfiguration
+
+### System & Monitoring
+- **System Monitoring** - CPU, RAM, Disk, Network via psutil
+- **Telemetry Service** - Historische Metriken mit konfigurierbarem Intervall
+- **Audit Logging** - Comprehensive Security & File Operation Logs
+- **Disk I/O Monitor** - Festplatten-I/O-Überwachung
+
+### Automation & Plugins
+- **Scheduler System** - Geplante Tasks (Backups, Cleanup, etc.)
+- **Plugin System** - Erweiterbare Plugin-Architektur
+- **Update Service** - System-Update-Verwaltung
+
+### Cloud & Integration
+- **Cloud Import** - Import von Dropbox, Google Drive, OneDrive
+- **Email Notifications** - SMTP-basierte Benachrichtigungen
+- **Firebase Push** - Mobile Push-Benachrichtigungen
+- **WebSocket Events** - Echtzeit-Benachrichtigungen
+
+### Admin & DevOps
+- **Admin Database Tools** - Datenbank-Verwaltung und Health-Checks
+- **Rate Limiting** - Konfigurierbare API-Rate-Limits
+- **Service Status Management** - Überwachung aller Hintergrunddienste
+- **Custom API Docs** - Styled Swagger UI matching frontend design
+- **VCL (Virtual Command Line)** - Web-basierte Terminal-Emulation
+- **Benchmark Tools** - Storage-Performance-Tests
 - **Dev Mode** - Windows-kompatible Sandbox (2x5GB RAID1 = 5 GB effective)
 
 ## Quickstart
@@ -161,75 +205,128 @@ app/
       users.py           # User CRUD (Admin)
       files.py           # File Operations & Upload
       upload_progress.py # Upload Progress Tracking
+      chunked_upload.py  # Chunked Upload für große Dateien
       shares.py          # File Sharing
       backup.py          # Backup & Restore
       sync.py            # Sync System
       sync_advanced.py   # Advanced Sync Features
+      sync_compat.py     # Sync Compatibility Layer
       mobile.py          # Mobile Device Management
       system.py          # System Metrics, RAID, SMART
       logging.py         # Audit Logs API
+      vpn.py             # VPN Management
+      vpn_profiles.py    # VPN Profile Management
+      health.py          # Health Check Endpoints
+      admin_db.py        # Admin Database Tools
+      rate_limit_config.py # Rate Limiting Config
+      vcl.py             # Virtual Command Line
+      server_profiles.py # Remote Server Profiles
+      metrics.py         # Prometheus Metrics
+      tapo.py            # Tapo Smart Plug Control
+      energy.py          # Energy Monitoring
+      monitoring.py      # System Monitoring
+      power.py           # Power Management
+      power_presets.py   # Power Preset Profiles
+      fans.py            # Fan Control
+      service_status.py  # Service Status Management
+      schedulers.py      # Scheduled Tasks
+      plugins.py         # Plugin Management
+      benchmark.py       # Storage Benchmarks
+      notifications.py   # Notification System
+      updates.py         # System Updates
+      webdav.py          # WebDAV Server
+      samba.py           # Samba Integration
+      cloud.py           # Cloud Import
+      devices.py         # Device Management
     docs.py              # Custom Swagger UI Styling
     deps.py              # Dependencies (Auth, DB Session)
   core/
     config.py            # Settings & Logging Setup
     database.py          # SQLAlchemy Engine & Session
+    rate_limiter.py      # Rate Limiting Setup
   models/                # SQLAlchemy ORM Models
     base.py              # Base Model
     user.py              # User Model
     file_metadata.py     # FileMetadata Model
-    share.py             # Share Model
+    file_share.py        # FileShare Model
+    share_link.py        # ShareLink Model
     backup.py            # Backup Model
-    sync_folder.py       # SyncFolder Model
-    mobile_device.py     # MobileDevice Model
+    sync_state.py        # Sync State Model
+    sync_progress.py     # Sync Progress Model
+    device.py            # Device Model
+    mobile.py            # Mobile Device Model
+    audit_log.py         # Audit Log Model
+    vpn.py               # VPN Configuration Model
+    vpn_profile.py       # VPN Profile Model
+    power.py             # Power Settings Model
+    power_preset.py      # Power Preset Model
+    power_sample.py      # Power Sample Model
+    energy_price_config.py # Energy Price Config
+    fans.py              # Fan Configuration Model
+    ssd_cache.py         # SSD Cache Model
+    plugin.py            # Plugin Model
+    scheduler_state.py   # Scheduler State Model
+    scheduler_history.py # Scheduler History Model
+    notification.py      # Notification Model
+    update_history.py    # Update History Model
+    benchmark.py         # Benchmark Results Model
+    cloud.py             # Cloud Import Model
+    server_profile.py    # Server Profile Model
+    tapo_device.py       # Tapo Device Model
+    refresh_token.py     # Refresh Token Model
+    rate_limit_config.py # Rate Limit Config Model
+    vcl.py               # VCL Session Model
+    webdav_state.py      # WebDAV State Model
+    monitoring.py        # Monitoring Data Model
   services/              # Business Logic Layer
     auth.py              # JWT Token & Authentication
     users.py             # User CRUD Operations
-    files.py             # File Operations (Upload, Delete, etc.)
-    shares.py            # File Sharing Logic
-    backup.py            # Backup/Restore Operations
-    sync.py              # Sync Logic
-    sync_background.py   # Background Sync Scheduler
+    files/               # File Operations
+    audit/               # Audit Logging
+    backup/              # Backup/Restore Operations
+    sync/                # Sync Logic & Background Jobs
     mobile.py            # Mobile Device Management
     network_discovery.py # mDNS/Bonjour Service
-    file_metadata_db.py  # File Metadata DB Operations
     permissions.py       # Permission Checks
-    audit_logger.py      # Security & File Audit Logging
     system.py            # System Metrics (CPU, RAM, Disk)
     disk_monitor.py      # Disk I/O Monitoring
-    raid.py              # RAID Management
-    smart.py             # SMART Disk Health
-    
-  ## RAID settings (CI and production safety)
-
-  Two environment settings control RAID backend selection and safety:
-
-  - `RAID_FORCE_DEV_BACKEND`: when set to `1` forces the use of the development (simulated) RAID backend even on Linux. Useful for CI runners without `mdadm` or for safe unit tests.
-  - `RAID_ASSUME_CLEAN_BY_DEFAULT`: when set to `1`, `mdadm --create` will include `--assume-clean`. WARNING: this is dangerous in production and should remain `0` except in isolated test VMs.
-
-  For full details and self-hosted runner instructions, see: `docs/RAID_CI_AND_SETTINGS.md`.
-
-  Also consider adding `backend/.env.example` to your repo root; it contains recommended entries for these variables.
-    network_discovery.py # mDNS/Bonjour Service
-
-## API Endpoints
-
-### Core Endpoints
-- **Auth**: `/api/auth/login`, `/api/auth/logout`, `/api/auth/me`
-- **Files**: `/api/files/list`, `/api/files/upload`, `/api/files/download`, `/api/files/permissions`
-- **Shares**: `/api/shares` - File sharing with public links
-- **Backups**: `/api/backups` - Backup creation and restoration
-- **Sync**: `/api/sync/folders`, `/api/sync/conflicts` - Desktop sync
-- **Mobile**: `/api/mobile/devices`, `/api/mobile/camera/settings` - Mobile device management
-- **Users**: `/api/users` - User management (Admin only)
-- **System**: `/api/system/info`, `/api/system/raid/status`, `/api/system/smart/status`
-- **Logging**: `/api/logging/audit`, `/api/logging/disk-io`
-
-**Vollständige API-Referenz**: `http://localhost:3001/docs`
+    telemetry.py         # Telemetry Service
+    hardware/            # Hardware Services (RAID, SMART)
+    cloud/               # Cloud Import Services
+    vpn/                 # VPN Services
+    power/               # Power Management (wenn vorhanden)
+    notifications/       # Notification Services
+    versioning/          # File Versioning
+    email_service.py     # Email Notifications
+    totp_service.py      # 2FA/TOTP Service
+    token_service.py     # Token Management
+    websocket_manager.py # WebSocket Management
+    upload_progress.py   # Upload Progress Tracking
+    user_metadata_cache.py # User Metadata Cache
+    jobs.py              # Background Jobs
+    scheduler_service.py # Scheduler Service
+    scheduler_worker_service.py # Scheduler Worker
+    benchmark_service.py # Benchmark Service
+    samba_service.py     # Samba Integration
+    webdav_service.py    # WebDAV Service
+    update_service.py    # Update Service
+    service_status.py    # Service Status Management
+    rate_limit_config.py # Rate Limit Config Service
+    ssh_service.py       # SSH Service
+    monitoring/          # Monitoring Orchestrator
+  middleware/            # Custom Middleware
+    device_tracking.py   # Device Tracking
+    local_only.py        # Local Network Only
+    security_headers.py  # Security Headers
+    error_counter.py     # Error Counting
+  plugins/               # Plugin System
+    manager.py           # Plugin Manager
   schemas/               # Pydantic Models (Request/Response)
     auth.py              # Login, Register, Token
     user.py              # UserPublic, UserCreate, UserUpdate
     files.py             # FileItem, FileListResponse
     system.py            # SystemInfo, StorageInfo, RAIDStatus
+    ...                  # (weitere Schemas für alle Endpoints)
   main.py                # FastAPI Application
 
 alembic/                 # Database Migrations
@@ -238,8 +335,14 @@ alembic/                 # Database Migrations
 
 scripts/                 # Utility Scripts
   seed.py                # Database Seeding
-  reset_dev_storage.py   # Dev Storage Reset
-  dev_check.py           # Development Health Check
+  setup/                 # Setup Scripts
+  migration/             # Migration Scripts
+  benchmark/             # Benchmark Scripts
+  debug/                 # Debug Tools
+  fixes/                 # Fix Scripts
+  test/                  # Test Scripts
+  scheduler_worker.py    # Scheduler Worker Process
+  webdav_worker.py       # WebDAV Worker Process
 
 tests/                   # Test Suite
   conftest.py            # Test Fixtures & Configuration
@@ -283,7 +386,11 @@ CREATE TABLE file_metadata (
 ### Authentication
 - `POST /api/auth/login` - User Login
 - `POST /api/auth/register` - User Registration
+- `POST /api/auth/logout` - User Logout
+- `POST /api/auth/refresh` - Refresh Access Token
 - `GET /api/auth/me` - Get Current User
+- `POST /api/auth/2fa/setup` - Setup 2FA/TOTP
+- `POST /api/auth/2fa/verify` - Verify 2FA Code
 
 ### Users (Admin Only)
 - `GET /api/users/` - List all users
@@ -295,11 +402,38 @@ CREATE TABLE file_metadata (
 - `GET /api/files/list?path=` - List files/folders
 - `GET /api/files/download/{path}` - Download file
 - `POST /api/files/upload` - Upload file(s)
+- `POST /api/files/upload/chunk` - Chunked upload
 - `POST /api/files/folder` - Create folder
 - `DELETE /api/files/{path}` - Delete file/folder
 - `PUT /api/files/rename` - Rename file/folder
 - `PUT /api/files/move` - Move file/folder
 - `GET /api/files/storage/available` - Get storage quota
+- `GET /api/files/upload-progress/{id}` - Upload progress
+
+### Shares
+- `GET /api/shares/` - List shares
+- `POST /api/shares/` - Create share
+- `DELETE /api/shares/{id}` - Delete share
+- `GET /api/shares/public/{token}` - Access public share
+
+### Backups
+- `GET /api/backups/` - List backups
+- `POST /api/backups/` - Create backup
+- `POST /api/backups/{id}/restore` - Restore backup
+- `DELETE /api/backups/{id}` - Delete backup
+
+### Sync
+- `GET /api/sync/folders` - List sync folders
+- `POST /api/sync/folders` - Create sync folder
+- `GET /api/sync/conflicts` - List conflicts
+- `POST /api/sync/conflicts/{id}/resolve` - Resolve conflict
+- `POST /api/sync/delta` - Get delta changes
+
+### Mobile
+- `GET /api/mobile/devices` - List mobile devices
+- `POST /api/mobile/register` - Register device
+- `GET /api/mobile/camera/settings` - Camera backup settings
+- `POST /api/mobile/camera/upload` - Camera upload
 
 ### System
 - `GET /api/system/info` - System information
@@ -308,9 +442,97 @@ CREATE TABLE file_metadata (
 - `GET /api/system/smart` - SMART disk health
 - `GET /api/system/telemetry` - Historical metrics
 
+### Power Management
+- `GET /api/power/status` - Power status
+- `GET /api/power/presets` - Power presets
+- `POST /api/power/presets` - Create preset
+- `PUT /api/power/presets/{id}/apply` - Apply preset
+
+### Fan Control
+- `GET /api/fans/` - Fan status
+- `POST /api/fans/mode` - Set fan mode
+- `POST /api/fans/speed` - Set fan speed
+
+### Energy Monitoring
+- `GET /api/energy/` - Energy consumption data
+- `GET /api/energy/prices` - Energy price config
+
+### Tapo Smart Plugs
+- `GET /api/tapo/devices` - List Tapo devices
+- `POST /api/tapo/devices` - Add device
+- `GET /api/tapo/devices/{id}/status` - Device status
+
+### VPN
+- `GET /api/vpn/status` - VPN status
+- `GET /api/vpn/profiles` - VPN profiles
+- `POST /api/vpn/profiles` - Create profile
+- `DELETE /api/vpn/profiles/{id}` - Delete profile
+
+### Schedulers
+- `GET /api/schedulers/` - List scheduled tasks
+- `POST /api/schedulers/` - Create scheduled task
+- `PUT /api/schedulers/{id}` - Update task
+- `DELETE /api/schedulers/{id}` - Delete task
+
+### Plugins
+- `GET /api/plugins/` - List plugins
+- `POST /api/plugins/{name}/enable` - Enable plugin
+- `POST /api/plugins/{name}/disable` - Disable plugin
+
+### Cloud Import
+- `GET /api/cloud/providers` - Available providers
+- `POST /api/cloud/import` - Start import
+- `GET /api/cloud/import/{id}/status` - Import status
+
+### WebDAV
+- `GET /api/webdav/status` - WebDAV status
+- `POST /api/webdav/start` - Start WebDAV
+- `POST /api/webdav/stop` - Stop WebDAV
+
+### Samba
+- `GET /api/samba/shares` - Samba shares
+- `POST /api/samba/shares` - Create share
+- `DELETE /api/samba/shares/{name}` - Delete share
+
+### Monitoring
+- `GET /api/monitoring/status` - Monitoring status
+- `GET /api/metrics` - Prometheus metrics
+
+### Admin
+- `GET /api/admin/db/health` - Database health
+- `GET /api/admin/rate-limits` - Rate limit config
+- `POST /api/admin/rate-limits` - Update rate limits
+- `GET /api/admin/services` - Service status
+
+### Notifications
+- `GET /api/notifications/` - List notifications
+- `POST /api/notifications/settings` - Update settings
+
+### Updates
+- `GET /api/updates/check` - Check for updates
+- `POST /api/updates/install` - Install update
+
+### VCL (Version Control Light)
+- `POST /api/vcl/execute` - Execute command
+- `GET /api/vcl/history` - Command history
+
 ### Logging
 - `GET /api/logging/audit` - Audit logs
 - `GET /api/logging/disk-io` - Disk I/O history
+
+### Health
+- `GET /api/health` - Health check
+
+**Vollständige API-Referenz**: `http://localhost:3001/docs`
+
+## RAID Settings (CI and Production Safety)
+
+Two environment settings control RAID backend selection and safety:
+
+- `RAID_FORCE_DEV_BACKEND`: when set to `1` forces the use of the development (simulated) RAID backend even on Linux. Useful for CI runners without `mdadm` or for safe unit tests.
+- `RAID_ASSUME_CLEAN_BY_DEFAULT`: when set to `1`, `mdadm --create` will include `--assume-clean`. WARNING: this is dangerous in production and should remain `0` except in isolated test VMs.
+
+For full details and self-hosted runner instructions, see: `docs/RAID_CI_AND_SETTINGS.md`.
 
 ## Authentication
 
@@ -402,7 +624,7 @@ CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - **Deployment**: `docs/DEPLOYMENT.md`
 
 ## Nächste Schritte
-- SQLite/PostgreSQL anbinden und Mock-Daten ablösen
-- Persistente File-Metadaten und Quotas modellieren
-- Upload-Progress, Sharing und Websocket-Events ergänzen
-- Express-Backend mittelfristig ablösen und FastAPI auch produktiv einsetzen
+- Weitere Plugin-Integrationen entwickeln
+- Cluster-Support für Multi-Node-Setups
+- LDAP/Active Directory Integration
+- S3-kompatible API für externe Tools

@@ -129,9 +129,9 @@ BaluHost is a full-stack NAS management application built with modern web techno
 | **Monitoring** | ✅ Ready | Prometheus/Grafana integration |
 
 ### Documentation
-- 📈 [Production Readiness](PRODUCTION_READINESS.md) - Full status checklist
-- 📋 [Deployment Notes](PRODUCTION_DEPLOYMENT_NOTES.md) - Deployment details
-- 🚀 [Quick Start](PRODUCTION_QUICKSTART.md) - Getting started guide
+- 📈 [Production Readiness](docs/deployment/PRODUCTION_READINESS.md) - Full status checklist
+- 📋 [Deployment Notes](docs/deployment/PRODUCTION_DEPLOYMENT_NOTES.md) - Deployment details
+- 🚀 [Quick Start](docs/deployment/PRODUCTION_QUICKSTART.md) - Getting started guide
 
 ---
 
@@ -371,23 +371,23 @@ baluhost/
 
 ### Core Documentation
 - **[README.md](README.md)** - This file (project overview, quick start)
-- **[TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)** - Complete feature documentation
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System architecture and design decisions
+- **[TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)** - Complete feature documentation
+- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and design decisions
 - **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute (code style, workflow)
 - **[TODO.md](TODO.md)** - Roadmap and planned features
-- **[SECURITY.md](SECURITY.md)** - Security policy and best practices
+- **[SECURITY.md](docs/security/SECURITY.md)** - Security policy and best practices
 - **[LICENSE](LICENSE)** - MIT License
 
 ### User Documentation
-- **[User Guide](docs/USER_GUIDE.md)** - Complete user manual
-- **[API Reference](docs/API_REFERENCE.md)** - Full API documentation
+- **[User Guide](docs/getting-started/USER_GUIDE.md)** - Complete user manual
+- **[API Reference](docs/api/API_REFERENCE.md)** - Full API documentation
 
 ### Feature Documentation
-- [Audit Logging](docs/AUDIT_LOGGING.md) - Activity tracking system
-- [Disk I/O Monitor](docs/DISK_IO_MONITOR.md) - Real-time disk monitoring
-- [RAID Setup Wizard](docs/RAID_SETUP_WIZARD.md) - RAID configuration guide
-- [Network Drive Setup](docs/NETWORK_DRIVE_SETUP.md) - Mount as network drive
-- [Telemetry Configuration](docs/TELEMETRY_CONFIG_RECOMMENDATIONS.md) - Monitoring setup
+- [Audit Logging](docs/security/AUDIT_LOGGING.md) - Activity tracking system
+- [Disk I/O Monitor](docs/monitoring/DISK_IO_MONITOR.md) - Real-time disk monitoring
+- [RAID Setup Wizard](docs/storage/RAID_SETUP_WIZARD.md) - RAID configuration guide
+- [Network Drive Setup](docs/network/NETWORK_DRIVE_SETUP.md) - Mount as network drive
+- [Telemetry Configuration](docs/monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.md) - Monitoring setup
 
 ### Auto-Generated API Documentation
 
@@ -399,13 +399,17 @@ FastAPI provides interactive API documentation with custom BaluHost styling:
 
 ```
 docs/
-├── USER_GUIDE.md           # End-user documentation
-├── API_REFERENCE.md        # Complete API reference
-├── AUDIT_LOGGING.md        # Audit system docs
-├── DISK_IO_MONITOR.md      # Disk monitoring
-├── RAID_SETUP_WIZARD.md    # RAID configuration
-├── NETWORK_DRIVE_SETUP.md  # Network drive mounting
-└── TELEMETRY_CONFIG_RECOMMENDATIONS.md
+├── README.md               # Documentation overview
+├── ARCHITECTURE.md         # System architecture
+├── TECHNICAL_DOCUMENTATION.md
+├── api/                    # API documentation
+├── deployment/             # Deployment & ops
+├── features/               # Feature documentation
+├── getting-started/        # User guide & dev checklist
+├── monitoring/             # Monitoring & telemetry
+├── network/                # Network & VPN setup
+├── security/               # Security & audit
+└── storage/                # RAID & backup
 ```
 
 ## 🧪 Testing

@@ -1045,9 +1045,9 @@ All errors follow this format:
 ## 📚 Additional Resources
 
 - [Main Documentation](../README.md)
-- [User Guide](USER_GUIDE.md)
+- [User Guide](../getting-started/USER_GUIDE.md)
 - [Architecture Documentation](../ARCHITECTURE.md)
-- [Contributing Guidelines](../CONTRIBUTING.md)
+- [Contributing Guidelines](../../CONTRIBUTING.md)
 
 ---
 

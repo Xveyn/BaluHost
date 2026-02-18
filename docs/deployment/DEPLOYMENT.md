@@ -670,9 +670,9 @@ Before going live, verify:
 ## Support & Resources
 
 - **Documentation**: [TECHNICAL_DOCUMENTATION.md](../TECHNICAL_DOCUMENTATION.md)
-- **Production Readiness**: [PRODUCTION_READINESS.md](../PRODUCTION_READINESS.md)
-- **Monitoring Guide**: [MONITORING.md](./MONITORING.md)
-- **Security Policy**: [SECURITY.md](../SECURITY.md)
+- **Production Readiness**: [PRODUCTION_READINESS.md](./PRODUCTION_READINESS.md)
+- **Monitoring Guide**: [MONITORING.md](../monitoring/MONITORING.md)
+- **Security Policy**: [SECURITY.md](../security/SECURITY.md)
 - **GitHub Issues**: https://github.com/your-org/baluhost/issues
 
 ---

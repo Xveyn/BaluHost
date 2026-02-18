@@ -4,57 +4,75 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 
 ## Hauptdokumentation
 
-- **[TECHNICAL_DOCUMENTATION.md](../TECHNICAL_DOCUMENTATION.md)** - Vollständige technische Dokumentation aller Features
-- **[TODO.md](../TODO.md)** - Globale TODO-Liste mit Priorisierung
-- **[README.md](../README.md)** - Projekt-Übersicht und Setup-Anleitung
+- **[ARCHITECTURE.md](ARCHITECTURE.md)** - System-Architektur
+- **[TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md)** - Vollständige technische Dokumentation
+- **[../README.md](../README.md)** - Projekt-Übersicht und Setup-Anleitung
+- **[../TODO.md](../TODO.md)** - Globale TODO-Liste mit Priorisierung
 
-## Feature-Dokumentation
+---
 
-### Storage & RAID
-- **[RAID_SETUP_WIZARD.md](RAID_SETUP_WIZARD.md)** - RAID-Konfigurationsassistent
-- **[RAID_SCRUB.md](RAID_SCRUB.md)** - RAID-Scrubbing
-- **[RAID_CI_AND_SETTINGS.md](RAID_CI_AND_SETTINGS.md)** - RAID Testing/CI
-- **[STORAGE_MOUNTPOINTS.md](STORAGE_MOUNTPOINTS.md)** - Multi-Mountpoint Feature
-- **[BACKUP_RESTORE.md](BACKUP_RESTORE.md)** - Backup-System
+## 📁 Verzeichnisstruktur
 
-### Monitoring & Performance
-- **[DISK_IO_MONITOR.md](DISK_IO_MONITOR.md)** - Disk I/O Monitor
-- **[MONITORING.md](MONITORING.md)** - Monitoring-Setup (Prometheus/Grafana)
-- **[TELEMETRY_CONFIG_RECOMMENDATIONS.md](TELEMETRY_CONFIG_RECOMMENDATIONS.md)** - Telemetrie-Konfiguration
+### [getting-started/](getting-started/) - Einstieg
+- **[USER_GUIDE.md](getting-started/USER_GUIDE.md)** - Benutzerhandbuch
+- **[DEV_CHECKLIST.md](getting-started/DEV_CHECKLIST.md)** - Entwickler-Checkliste
 
-### Sicherheit & Logging
-- **[AUDIT_LOGGING.md](AUDIT_LOGGING.md)** - Audit-Logging-System
-- **[API_RATE_LIMITING.md](API_RATE_LIMITING.md)** - Rate Limiting
-- **[RATE_LIMITING_QUICKSTART.md](RATE_LIMITING_QUICKSTART.md)** - Rate Limit Quick-Reference
-- **[SSL_SETUP.md](SSL_SETUP.md)** - SSL/TLS-Konfiguration
+### [deployment/](deployment/) - Deployment & Betrieb
+- **[DEPLOYMENT.md](deployment/DEPLOYMENT.md)** - Deployment-Guide
+- **[PRODUCTION_QUICKSTART.md](deployment/PRODUCTION_QUICKSTART.md)** - Produktion Quick-Start
+- **[PRODUCTION_READINESS.md](deployment/PRODUCTION_READINESS.md)** - Produktionsreife-Checkliste
+- **[PRODUCTION_DEPLOYMENT_NOTES.md](deployment/PRODUCTION_DEPLOYMENT_NOTES.md)** - Deployment-Notizen
+- **[FRONTEND_DEPLOYMENT.md](deployment/FRONTEND_DEPLOYMENT.md)** - Frontend-Deployment
+- **[SSL_SETUP.md](deployment/SSL_SETUP.md)** - SSL/TLS-Konfiguration
+- **[REVERSE_PROXY_SETUP.md](deployment/REVERSE_PROXY_SETUP.md)** - Reverse-Proxy-Setup
 
-### Netzwerk & Zugriff
-- **[VPN_INTEGRATION.md](VPN_INTEGRATION.md)** - WireGuard VPN
-- **[WEBDAV_NETWORK_DRIVE.md](WEBDAV_NETWORK_DRIVE.md)** - WebDAV-Setup
-- **[NETWORK_DRIVE_SETUP.md](NETWORK_DRIVE_SETUP.md)** - Netzlaufwerk-Mounting
-- **[NETWORK_DRIVE_QUICKSTART.md](NETWORK_DRIVE_QUICKSTART.md)** - Netzlaufwerk Quick-Start
-- **[CLIENT_MDNS_SETUP.md](CLIENT_MDNS_SETUP.md)** - mDNS-Client-Konfiguration
+### [storage/](storage/) - Storage & RAID
+- **[RAID_SETUP_WIZARD.md](storage/RAID_SETUP_WIZARD.md)** - RAID-Konfigurationsassistent
+- **[RAID_SCRUB.md](storage/RAID_SCRUB.md)** - RAID-Scrubbing
+- **[RAID_CI_AND_SETTINGS.md](storage/RAID_CI_AND_SETTINGS.md)** - RAID Testing/CI
+- **[STORAGE_MOUNTPOINTS.md](storage/STORAGE_MOUNTPOINTS.md)** - Multi-Mountpoint Feature
+- **[BACKUP_RESTORE.md](storage/BACKUP_RESTORE.md)** - Backup-System
 
-### Benutzer & Sharing
-- **[USER_GUIDE.md](USER_GUIDE.md)** - Benutzerhandbuch
-- **[USER_MANAGEMENT_FEATURES.md](USER_MANAGEMENT_FEATURES.md)** - User-Management
-- **[SHARING_FEATURES_PHASE1.md](SHARING_FEATURES_PHASE1.md)** - File-Sharing
-- **[UPLOAD_PROGRESS.md](UPLOAD_PROGRESS.md)** - Upload-Progress (SSE)
+### [monitoring/](monitoring/) - Monitoring & Performance
+- **[MONITORING.md](monitoring/MONITORING.md)** - Monitoring-Setup (Prometheus/Grafana)
+- **[MONITORING_QUICKSTART.md](monitoring/MONITORING_QUICKSTART.md)** - Monitoring Quick-Start
+- **[DISK_IO_MONITOR.md](monitoring/DISK_IO_MONITOR.md)** - Disk I/O Monitor
+- **[TELEMETRY_CONFIG_RECOMMENDATIONS.md](monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.md)** - Telemetrie-Konfiguration
 
-### Deployment & Betrieb
-- **[DEPLOYMENT.md](DEPLOYMENT.md)** - Deployment-Guide
-- **[FRONTEND_DEPLOYMENT.md](FRONTEND_DEPLOYMENT.md)** - Frontend-Deployment-Checkliste
-- **[API_REFERENCE.md](API_REFERENCE.md)** - API-Referenz
-- **[DEV_CHECKLIST.md](DEV_CHECKLIST.md)** - Dev-Mode Checkliste
+### [security/](security/) - Sicherheit & Logging
+- **[SECURITY.md](security/SECURITY.md)** - Sicherheitsübersicht
+- **[AUDIT_LOGGING.md](security/AUDIT_LOGGING.md)** - Audit-Logging-System
+- **[API_RATE_LIMITING.md](security/API_RATE_LIMITING.md)** - Rate Limiting
+- **[RATE_LIMITING_QUICKSTART.md](security/RATE_LIMITING_QUICKSTART.md)** - Rate Limit Quick-Reference
+
+### [network/](network/) - Netzwerk & Zugriff
+- **[VPN_INTEGRATION.md](network/VPN_INTEGRATION.md)** - WireGuard VPN
+- **[WEBDAV_NETWORK_DRIVE.md](network/WEBDAV_NETWORK_DRIVE.md)** - WebDAV-Setup
+- **[NETWORK_DRIVE_SETUP.md](network/NETWORK_DRIVE_SETUP.md)** - Netzlaufwerk-Mounting
+- **[NETWORK_DRIVE_QUICKSTART.md](network/NETWORK_DRIVE_QUICKSTART.md)** - Netzlaufwerk Quick-Start
+- **[CLIENT_MDNS_SETUP.md](network/CLIENT_MDNS_SETUP.md)** - mDNS-Client-Konfiguration
+
+### [api/](api/) - API-Dokumentation
+- **[API_REFERENCE.md](api/API_REFERENCE.md)** - API-Referenz
+
+### [features/](features/) - Feature-Dokumentation
+- **[USER_MANAGEMENT_FEATURES.md](features/USER_MANAGEMENT_FEATURES.md)** - User-Management
+- **[SHARING_FEATURES_PHASE1.md](features/SHARING_FEATURES_PHASE1.md)** - File-Sharing
+- **[UPLOAD_PROGRESS.md](features/UPLOAD_PROGRESS.md)** - Upload-Progress (SSE)
+
+---
 
 ## Komponentendokumentation
 
-- `../backend/README.md` - Backend-Übersicht (FastAPI)
-- `../client/README.md` - Frontend-Übersicht (React)
+- **[../backend/README.md](../backend/README.md)** - Backend-Übersicht (FastAPI)
+- **[../client/README.md](../client/README.md)** - Frontend-Übersicht (React)
 
 ## Quick Links
 
-- [API-Endpunkte](../README.md#api-überblick-fastapi)
-- [Setup-Anleitung](../README.md#setup)
-- [Dev-Mode Konfiguration](DEV_CHECKLIST.md)
-- [Features-Übersicht](../TECHNICAL_DOCUMENTATION.md)
+| Thema | Link |
+|-------|------|
+| Projekt-Setup | [README.md](../README.md#setup) |
+| API-Endpunkte | [API_REFERENCE.md](api/API_REFERENCE.md) |
+| Dev-Mode | [DEV_CHECKLIST.md](getting-started/DEV_CHECKLIST.md) |
+| Produktion | [PRODUCTION_QUICKSTART.md](deployment/PRODUCTION_QUICKSTART.md) |
+| Features | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
