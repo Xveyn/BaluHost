@@ -771,10 +771,8 @@ export default function SettingsPage() {
               </form>
             </div>
 
-            {/* Two-Factor Authentication (admin only) */}
-            {profile.role === 'admin' && (
-              <TwoFactorCard />
-            )}
+            {/* Two-Factor Authentication */}
+            <TwoFactorCard />
 
             {/* Active Sessions */}
             <div className="card border-slate-800/60 bg-slate-900/55">

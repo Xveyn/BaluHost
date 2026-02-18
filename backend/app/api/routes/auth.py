@@ -161,10 +161,10 @@ async def verify_2fa(payload: TwoFactorVerifyRequest, request: Request, response
 async def setup_2fa(
     request: Request,
     response: Response,
-    current_user=Depends(deps.get_current_admin),
+    current_user=Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Generate TOTP secret and QR code for 2FA setup (admin only)."""
+    """Generate TOTP secret and QR code for 2FA setup."""
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
@@ -195,10 +195,10 @@ async def verify_setup_2fa(
     payload: TwoFactorVerifySetupRequest,
     request: Request,
     response: Response,
-    current_user=Depends(deps.get_current_admin),
+    current_user=Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Verify TOTP code to complete 2FA setup, returns backup codes (admin only)."""
+    """Verify TOTP code to complete 2FA setup, returns backup codes."""
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
@@ -232,10 +232,10 @@ async def disable_2fa(
     payload: TwoFactorDisableRequest,
     request: Request,
     response: Response,
-    current_user=Depends(deps.get_current_admin),
+    current_user=Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Disable 2FA (requires password + TOTP code, admin only)."""
+    """Disable 2FA (requires password + TOTP code)."""
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
@@ -317,10 +317,10 @@ async def get_2fa_status(
 async def regenerate_backup_codes(
     request: Request,
     response: Response,
-    current_user=Depends(deps.get_current_admin),
+    current_user=Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
-    """Regenerate backup codes (invalidates old ones, admin only)."""
+    """Regenerate backup codes (invalidates old ones)."""
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
