@@ -44,11 +44,11 @@ export default function AdminDatabase() {
   const searchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   // Row detail
-  const [selectedRow, setSelectedRow] = useState<Record<string, any> | null>(null)
+  const [selectedRow, setSelectedRow] = useState<Record<string, unknown> | null>(null)
 
   const { fetchTables, fetchTableCategories, fetchSchema, fetchRows } = useAdminDb()
-  const [schema, setSchema] = useState<any | null>(null)
-  const [rows, setRows] = useState<any[]>([])
+  const [schema, setSchema] = useState<{ columns?: AdminTableSchemaField[] } | null>(null)
+  const [rows, setRows] = useState<Record<string, unknown>[]>([])
   const [ownerMap, setOwnerMap] = useState<Record<string,string>>({})
   const [ownerLoadInfo, setOwnerLoadInfo] = useState<{status: 'idle'|'loading'|'loaded'|'failed', page_size?: number, count?: number, keys?: string[], error?: string}>({status: 'idle'})
   const [total, setTotal] = useState<number | null>(null)
@@ -90,8 +90,7 @@ export default function AdminDatabase() {
         setTables(t)
         setTableCategories(cat.categories || {})
       })
-      .catch((e) => {
-        console.error('Failed to load admin tables', e)
+      .catch(() => {
         if (mounted) setError('Failed to load tables')
       })
     return () => { mounted = false }
@@ -116,8 +115,7 @@ export default function AdminDatabase() {
         setRows(r.rows)
         setTotal(r.total ?? null)
       })
-      .catch((e) => {
-        console.error('Failed to load table data', e)
+      .catch(() => {
         if (mounted) setError('Fehler beim Laden der Tabellendaten')
       })
       .finally(() => { if (mounted) setLoading(false) })
@@ -147,7 +145,7 @@ export default function AdminDatabase() {
     setPage(1)
   }, [])
 
-  const handleRowClick = useCallback((row: Record<string, any>) => {
+  const handleRowClick = useCallback((row: Record<string, unknown>) => {
     setSelectedRow(prev => prev === row ? null : row)
   }, [])
 
@@ -176,8 +174,8 @@ export default function AdminDatabase() {
           setOwnerLoadInfo({ status: 'loaded', page_size: sz, count: (res.rows || []).length, keys: Object.keys(map).slice(0,20) })
           successful = true
           break
-        } catch (err: any) {
-          const status = err?.response?.status
+        } catch (err: unknown) {
+          const status = (err as { response?: { status?: number } })?.response?.status
           if (status && status !== 422) {
             setOwnerLoadInfo({ status: 'failed', error: `HTTP ${status}` })
             break
@@ -186,14 +184,14 @@ export default function AdminDatabase() {
         }
       }
       if (!successful) setOwnerLoadInfo({ status: 'failed', error: 'no successful response' })
-    } catch (e) {
+    } catch (e: unknown) {
       setOwnerLoadInfo({ status: 'failed', error: String(e) })
     }
   }
 
   const handleCsvExport = () => {
     if (!selected || rows.length === 0) return
-    const cols = schema?.columns?.map((c: any) => c.name) ?? []
+    const cols = schema?.columns?.map((c: AdminTableSchemaField) => c.name) ?? []
     const csv = rowsToCsv(rows, cols)
     const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' })
     const url = URL.createObjectURL(blob)
@@ -255,7 +253,7 @@ export default function AdminDatabase() {
             )}
 
             {/* Filter Toggle */}
-            {selected && schema?.columns?.length > 0 && (
+            {selected && (schema?.columns?.length ?? 0) > 0 && (
               <button
                 onClick={() => setShowFilters(!showFilters)}
                 className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${

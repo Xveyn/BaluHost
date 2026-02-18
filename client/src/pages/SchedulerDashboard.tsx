@@ -10,6 +10,7 @@ import { SchedulerTimeline } from '../components/scheduler/SchedulerTimeline';
 import type { SchedulerStatus, SchedulerConfigUpdate, SchedulerExecStatus } from '../api/schedulers';
 import { retryExecution } from '../api/schedulers';
 import { toast } from 'react-hot-toast';
+import { handleApiError } from '../lib/errorHandling';
 
 type TabId = 'overview' | 'timeline' | 'sync' | 'maintenance' | 'history';
 
@@ -84,8 +85,8 @@ export default function SchedulerDashboard() {
       } else {
         toast.error(result.message);
       }
-    } catch (err: any) {
-      toast.error(err.message || t('common:toast.runFailed'));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.runFailed'));
     }
   };
 
@@ -102,8 +103,8 @@ export default function SchedulerDashboard() {
       } else {
         toast.error(result.message);
       }
-    } catch (err: any) {
-      toast.error(err.message || t('common:toast.toggleFailed'));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.toggleFailed'));
     }
   };
 
@@ -115,8 +116,8 @@ export default function SchedulerDashboard() {
         return true;
       }
       return false;
-    } catch (err: any) {
-      toast.error(err.message || t('common:toast.configFailed'));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.configFailed'));
       return false;
     }
   };
@@ -130,8 +131,8 @@ export default function SchedulerDashboard() {
       } else {
         toast.error(result.message || t('common:toast.retryFailed'));
       }
-    } catch (err: any) {
-      toast.error(err.message || t('common:toast.retryFailed'));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.retryFailed'));
     }
   };
 

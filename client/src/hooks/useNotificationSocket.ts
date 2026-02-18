@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Notification } from '../api/notifications';
 import { getWebSocketUrl } from '../api/notifications';
+import { useAuth } from '../contexts/AuthContext';
 
 export interface NotificationSocketState {
   connected: boolean;
@@ -28,6 +29,8 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     reconnectDelay = 3000,
     maxReconnectAttempts = 5,
   } = options;
+
+  const { token } = useAuth();
 
   const [state, setState] = useState<NotificationSocketState>({
     connected: false,
@@ -59,11 +62,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     // Don't create duplicate connections
     if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      console.log('[NotificationSocket] Already connected, skipping');
       return;
     }
 
-    const token = localStorage.getItem('token');
     if (!token) {
       setState((prev) => ({
         ...prev,
@@ -75,11 +76,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
 
     try {
       const url = getWebSocketUrl();
-      console.log('[NotificationSocket] Connecting to:', url.replace(/token=.*/, 'token=***'));
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
-        console.log('[NotificationSocket] Connected');
         reconnectAttemptsRef.current = 0;
         setState((prev) => ({
           ...prev,
@@ -123,15 +122,14 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
               break;
 
             default:
-              console.log('[NotificationSocket] Unknown message type:', data.type);
+              break;
           }
-        } catch (error) {
-          console.error('[NotificationSocket] Failed to parse message:', error);
+        } catch {
+          // Ignore malformed messages
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[NotificationSocket] Error:', error);
+      ws.onerror = () => {
         setState((prev) => ({
           ...prev,
           error: 'WebSocket error',
@@ -139,8 +137,6 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
       };
 
       ws.onclose = (event) => {
-        console.log('[NotificationSocket] Disconnected:', event.code, event.reason);
-
         // Clear ping interval
         if (pingIntervalRef.current) {
           clearInterval(pingIntervalRef.current);
@@ -161,8 +157,6 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
             if (reconnectAttemptsRef.current < maxReconnectAttempts) {
               reconnectAttemptsRef.current++;
               const delay = reconnectDelay * reconnectAttemptsRef.current;
-              console.log(`[NotificationSocket] Reconnecting in ${delay}ms (attempt ${reconnectAttemptsRef.current})`);
-
               reconnectTimeoutRef.current = setTimeout(() => {
                 connect();
               }, delay);
@@ -177,8 +171,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
       };
 
       wsRef.current = ws;
-    } catch (error) {
-      console.error('[NotificationSocket] Connection failed:', error);
+    } catch {
       setState((prev) => ({
         ...prev,
         connected: false,

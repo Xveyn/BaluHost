@@ -27,7 +27,7 @@ export default function SharesPage() {
   const { t } = useTranslation(['shares', 'common']);
   const { confirm, dialog } = useConfirmDialog();
   // User list for modal
-  const [users, setUsers] = useState<any[]>([]);
+  const [users, setUsers] = useState<Array<{ id: number; username: string; role: string }>>([]);
   const [activeTab, setActiveTab] = useState<'links' | 'shares' | 'shared-with-me'>('links');
   const [shareLinks, setShareLinks] = useState<ShareLink[]>([]);
   const [fileShares, setFileShares] = useState<FileShare[]>([]);
@@ -82,8 +82,8 @@ export default function SharesPage() {
         const shared = await listFilesSharedWithMe();
         setSharedWithMe(shared);
       }
-    } catch (error) {
-      console.error('Failed to load shares:', error);
+    } catch {
+      // Load failure handled by empty state
     } finally {
       setLoading(false);
     }
@@ -96,8 +96,7 @@ export default function SharesPage() {
     try {
       await deleteShareLink(linkId);
       await loadData();
-    } catch (error) {
-      console.error('Failed to delete share link:', error);
+    } catch {
       toast.error(t('shares:toast.deleteFailed'));
     }
   };
@@ -109,8 +108,7 @@ export default function SharesPage() {
     try {
       await deleteFileShare(shareId);
       await loadData();
-    } catch (error) {
-      console.error('Failed to delete file share:', error);
+    } catch {
       toast.error(t('shares:toast.revokeFailed'));
     }
   };

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
 import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { useAuth } from '../contexts/AuthContext';
 
 interface UserInfo {
   id: string;
@@ -14,6 +15,7 @@ interface UserInfo {
 export default function MobileDevicesPage() {
   const { t } = useTranslation('common');
   const { confirm, dialog } = useConfirmDialog();
+  const { token } = useAuth();
   const [user, setUser] = useState<UserInfo | null>(null);
   const [devices, setDevices] = useState<MobileDevice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -28,14 +30,13 @@ export default function MobileDevicesPage() {
 
   useEffect(() => {
     // User-Info aus Token laden
-    const token = localStorage.getItem('token');
     if (token) {
       fetch(buildApiUrl('/api/auth/me'), {
         headers: { 'Authorization': `Bearer ${token}` }
       })
         .then(res => res.json())
         .then(data => setUser(data))
-        .catch(err => console.error('Failed to load user:', err));
+        .catch(() => {});
     }
 
     loadDevices();
@@ -51,12 +52,10 @@ export default function MobileDevicesPage() {
   const loadDevices = async () => {
     try {
       setLoading(true);
-      console.log('Loading devices...');
       const data = await getMobileDevices();
-      console.log('Loaded devices:', data);
       setDevices(data);
-    } catch (error) {
-      console.error('Failed to load devices:', error);
+    } catch {
+      // Silently fail - auto-refresh will retry
     } finally {
       setLoading(false);
     }
@@ -76,13 +75,12 @@ export default function MobileDevicesPage() {
       try {
         const stored = { ...token, device_name: deviceName.trim(), include_vpn: includeVpn };
         localStorage.setItem('lastMobileToken', JSON.stringify(stored));
-      } catch (e) {
-        console.warn('Failed to store lastMobileToken', e);
+      } catch {
+        // localStorage may be full or unavailable
       }
       setShowQrDialog(true);
-    } catch (error: any) {
-      console.error('Failed to generate token:', error);
-      const errorMsg = error?.response?.data?.detail || 'QR-Code konnte nicht generiert werden';
+    } catch (error: unknown) {
+      const errorMsg = error instanceof Error ? error.message : 'QR-Code konnte nicht generiert werden';
       alert(errorMsg);
     } finally {
       setGenerating(false);
@@ -94,19 +92,15 @@ export default function MobileDevicesPage() {
     if (!ok) return;
 
     try {
-      console.log('Deleting device:', deviceId);
-      
       // Delete device from backend
       await deleteMobileDevice(deviceId);
-      console.log('Device deleted successfully');
-      
+
       // Force complete refresh
       setDevices([]);
       setRefreshKey(prev => prev + 1);
       await loadDevices();
       
-    } catch (error) {
-      console.error('Failed to delete device:', error);
+    } catch {
       alert('Gerät konnte nicht gelöscht werden');
       await loadDevices();
     }
@@ -537,8 +531,8 @@ function NotificationStatus({ deviceId }: { deviceId: string }) {
         if (notifications.length > 0) {
           setLastNotification(notifications[0]);
         }
-      } catch (error) {
-        console.error('Failed to load notifications:', error);
+      } catch {
+        // Non-critical, silently fail
       } finally {
         setLoading(false);
       }

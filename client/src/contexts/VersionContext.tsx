@@ -34,7 +34,6 @@ export function VersionProvider({ children }: VersionProviderProps) {
           setError(null);
         }
       } catch (err) {
-        console.error('Failed to load version:', err);
         if (isMounted) {
           setError(err instanceof Error ? err.message : 'Failed to load version');
         }

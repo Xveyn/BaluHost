@@ -163,8 +163,8 @@ export default function DatabaseStatsCards({ autoRefresh = true, refreshInterval
       const data = await getDatabaseStats()
       setStats(data)
       setLastUpdate(new Date())
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load database stats')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load database stats')
     } finally {
       setLoading(false)
     }

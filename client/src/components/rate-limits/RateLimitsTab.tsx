@@ -10,6 +10,7 @@ import { useTranslation } from 'react-i18next';
 import { Zap, Settings, RefreshCw } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl, extractErrorMessage } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 
 // ==================== Types ====================
 
@@ -129,6 +130,7 @@ function RateLimitModal({ config, onClose, onSave, t }: RateLimitModalProps) {
 
 export default function RateLimitsTab() {
   const { t } = useTranslation(['system', 'common']);
+  const { token } = useAuth();
   const [rateLimitsList, setRateLimitsList] = useState<RateLimitConfig[]>([]);
   const [loading, setLoading] = useState(true);
   const [editingConfig, setEditingConfig] = useState<RateLimitConfig | null>(null);
@@ -138,7 +140,6 @@ export default function RateLimitsTab() {
   }, []);
 
   const loadRateLimits = async () => {
-    const token = localStorage.getItem('token');
     if (!token) {
       setLoading(false);
       return;
@@ -153,8 +154,8 @@ export default function RateLimitsTab() {
         const data = await response.json();
         setRateLimitsList(data.configs);
       }
-    } catch (error) {
-      console.error('Failed to load rate limits:', error);
+    } catch {
+      // Non-critical: rate limits list will remain empty
     } finally {
       setLoading(false);
     }
@@ -164,7 +165,6 @@ export default function RateLimitsTab() {
     endpointType: string,
     data: { limit_string: string; description: string; enabled: boolean }
   ) => {
-    const token = localStorage.getItem('token');
     if (!token) {
       toast.error(t('system:apiCenter.toasts.notAuthenticated'));
       return;
@@ -196,7 +196,6 @@ export default function RateLimitsTab() {
   const handleSeedDefaults = async () => {
     if (!confirm(t('system:apiCenter.rateLimits.seedConfirm'))) return;
 
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
@@ -217,7 +216,6 @@ export default function RateLimitsTab() {
   };
 
   const handleToggleEnabled = async (config: RateLimitConfig) => {
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {

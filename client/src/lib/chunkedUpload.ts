@@ -150,10 +150,10 @@ export class ChunkedUploader {
           // Let the controller be GC'd
           this._currentController = null;
           break;
-        } catch (e: any) {
+        } catch (e: unknown) {
           // If aborted, do not retry
-          if (e.name === 'AbortError' || this._aborted) throw e;
-          lastError = e;
+          if ((e instanceof Error && e.name === 'AbortError') || this._aborted) throw e;
+          lastError = e instanceof Error ? e : new Error('Chunk upload failed');
           // Wait before retry (exponential backoff)
           if (attempt < this.maxRetries - 1) {
             await new Promise(r => setTimeout(r, 1000 * (attempt + 1)));

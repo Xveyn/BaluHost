@@ -66,10 +66,7 @@ export default function FanCurveChart({
   useEffect(() => { maxPointsRef.current = maxPoints; }, [maxPoints]);
   useEffect(() => { onPointsChangeRef.current = onPointsChange; }, [onPointsChange]);
 
-  // Mount-time version log for production debugging
-  useEffect(() => {
-    console.log('[FanCurveChart] mounted v7');
-  }, []);
+  // (mount-time diagnostic removed)
 
   // Update local points when external points change (but not while dragging)
   useEffect(() => {
@@ -99,9 +96,6 @@ export default function FanCurveChart({
     isCurrentPoint: false,
   }));
 
-  // Render-time diagnostic: confirms React re-renders with updated data
-  console.log('[FanCurveChart] render', { numPoints: localPoints.length, chartDataLen: chartData.length });
-
   // Handle right-click to remove a point
   const handleRemovePoint = useCallback((index: number) => {
     if (!canEdit || localPoints.length <= minPoints) return;
@@ -116,7 +110,7 @@ export default function FanCurveChart({
   }, [canEdit, localPoints, minPoints, onPointsChange, sortedPoints]);
 
   // Stable render function for dot prop (useCallback keeps reference identity across renders)
-  const renderDot = useCallback((props: any) => {
+  const renderDot = useCallback((props: { cx?: number; cy?: number; payload?: ChartDataPoint; index?: number }) => {
     const { cx, cy, payload, index } = props;
 
     if (cx === undefined || cy === undefined) return null;
@@ -196,7 +190,7 @@ export default function FanCurveChart({
   }, [sortedPoints, localPoints, minPWM, maxPWM, emergencyTemp]);
 
   // Custom tooltip
-  const CustomTooltip = ({ active, payload }: any) => {
+  const CustomTooltip = ({ active, payload }: { active?: boolean; payload?: Array<{ payload: ChartDataPoint }> }) => {
     if (!active || !payload || payload.length === 0) return null;
 
     const data = payload[0].payload as ChartDataPoint;
@@ -253,7 +247,6 @@ export default function FanCurveChart({
       );
     }
 
-    console.warn('[FanCurveChart] getChartBounds: no chart elements found');
     return null;
   }, []);
 
@@ -320,7 +313,6 @@ export default function FanCurveChart({
     };
 
     const handleMouseUp = () => {
-      console.log('[FanCurveChart] drag end');
       wasDraggingRef.current = true; // Suppress the following onClick
       setDraggingIndex(null);
       onPointsChangeRef.current(localPointsRef.current);
@@ -351,7 +343,6 @@ export default function FanCurveChart({
     const values = pixelToValue(e.clientX, e.clientY);
     if (!values || !values.inBounds) return;
 
-    console.log('[FanCurveChart] click adding point', { temp: values.temp, pwm: values.pwm });
     const newPoint: FanCurvePoint = { temp: values.temp, pwm: values.pwm };
     const updatedPoints = [...localPoints, newPoint];
     setLocalPoints(updatedPoints);
@@ -416,7 +407,6 @@ export default function FanCurveChart({
         const values = pixelToValue(endTouch.clientX, endTouch.clientY);
         if (!values || !values.inBounds) return;
 
-        console.log('[FanCurveChart] tap adding point', { temp: values.temp, pwm: values.pwm });
         const newPoint: FanCurvePoint = { temp: values.temp, pwm: values.pwm };
         const updatedPoints = [...localPointsRef.current, newPoint];
         setLocalPoints(updatedPoints);
@@ -524,7 +514,7 @@ export default function FanCurveChart({
               data={currentPointData}
               dataKey="currentPwm"
               fill="#34d399"
-              shape={(props: any) => (
+              shape={(props: { cx?: number; cy?: number }) => (
                 <circle
                   cx={props.cx}
                   cy={props.cy}

@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { buildApiUrl } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
 import { getAllServices, type ServiceStatus, ServiceState } from '../api/service-status';
 import {
@@ -102,6 +103,7 @@ const getStateBadgeClass = (state: string) => {
 export default function AdminHealth() {
   const navigate = useNavigate();
   const { t } = useTranslation('admin');
+  const { token } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [services, setServices] = useState<ServiceStatus[]>([]);
   const [loading, setLoading] = useState(true);
@@ -112,15 +114,14 @@ export default function AdminHealth() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(buildApiUrl('/api/system/health'), {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });
       if (!res.ok) throw new Error(await res.text());
       const data = await res.json();
       setHealth(data);
-    } catch (err: any) {
-      setError(err?.message || t('health.loadError'));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('health.loadError'));
     } finally {
       setLoading(false);
     }
@@ -131,8 +132,8 @@ export default function AdminHealth() {
     try {
       const data = await getAllServices();
       setServices(data);
-    } catch (err: any) {
-      console.error('Failed to load services:', err);
+    } catch {
+      // Services load failure handled by empty state
     } finally {
       setServicesLoading(false);
     }

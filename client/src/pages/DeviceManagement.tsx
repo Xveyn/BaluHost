@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { handleApiError } from '../lib/errorHandling';
 import {
   Smartphone,
   Monitor,
@@ -70,9 +71,8 @@ export default function DeviceManagement() {
       setDevices(data);
     } catch (err) {
       const errorMsg = err instanceof Error ? err.message : t('common:toast.loadFailed');
-      console.error('Failed to load devices:', err);
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleApiError(err, t('common:toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -85,7 +85,6 @@ export default function DeviceManagement() {
       const data = await listSyncSchedules();
       setSchedules(data);
     } catch (err) {
-      console.error('Failed to load schedules:', err);
     } finally {
       setSchedulesLoading(false);
     }
@@ -103,10 +102,8 @@ export default function DeviceManagement() {
       setQrData(token);
       setShowQrDialog(true);
       toast.success(t('common:toast.qrGenerated'));
-    } catch (error: any) {
-      console.error('Failed to generate token:', error);
-      const errorMsg = error?.response?.data?.detail || 'Failed to generate QR code';
-      toast.error(errorMsg);
+    } catch (error: unknown) {
+      handleApiError(error, 'Failed to generate QR code');
     } finally {
       setGenerating(false);
     }
@@ -140,7 +137,6 @@ export default function DeviceManagement() {
       setDayOfMonth(null);
     } catch (err) {
       toast.error(t('common:toast.scheduleFailed'));
-      console.error(err);
     }
   };
 
@@ -151,7 +147,6 @@ export default function DeviceManagement() {
       loadSchedules();
     } catch (err) {
       toast.error(t('common:toast.disableFailed'));
-      console.error(err);
     }
   };
 
@@ -181,7 +176,6 @@ export default function DeviceManagement() {
       loadDevices();
     } catch (err) {
       toast.error(t('common:toast.updateFailed'));
-      console.error(err);
     }
   };
 
@@ -209,7 +203,6 @@ export default function DeviceManagement() {
       loadDevices();
     } catch (err) {
       toast.error(t('common:toast.deleteFailed'));
-      console.error(err);
     }
   };
 

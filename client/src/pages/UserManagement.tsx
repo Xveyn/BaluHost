@@ -2,6 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl, extractErrorMessage } from '../lib/api';
+import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
+import { useAuth } from '../contexts/AuthContext';
 import { 
   Search, 
   ArrowUpDown, 
@@ -43,6 +45,7 @@ interface UserFormData {
 
 export default function UserManagement() {
   const { t } = useTranslation(['admin', 'common']);
+  const { token } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [stats, setStats] = useState<UserStats>({ total: 0, active: 0, inactive: 0, admins: 0 });
   const [loading, setLoading] = useState(false);
@@ -80,7 +83,6 @@ export default function UserManagement() {
   const loadUsers = async () => {
     setLoading(true);
     setError(null);
-    const token = localStorage.getItem('token');
     
     if (!token) {
       const errorMsg = t('users.noToken');
@@ -127,17 +129,15 @@ export default function UserManagement() {
         });
       }
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to load users';
-      console.error('Failed to load users:', err);
+      const errorMsg = getApiErrorMessage(err, 'Failed to load users');
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleApiError(err, 'Failed to load users');
     } finally {
       setLoading(false);
     }
   };
 
   const handleCreateUser = async () => {
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     // Pflichtfelder validieren
@@ -152,7 +152,7 @@ export default function UserManagement() {
     }
 
     // Request-Body zusammenbauen
-    const payload: any = {
+    const payload: Record<string, unknown> = {
       username: formData.username,
       password: formData.password,
       role: formData.role || 'user'
@@ -185,17 +185,15 @@ export default function UserManagement() {
       loadUsers();
     } catch (err) {
       toast.error(t('users.messages.createFailed'));
-      console.error(err);
     }
   };
 
   const handleUpdateUser = async () => {
     if (!editingUser) return;
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
-      const updateData: any = {};
+      const updateData: Record<string, unknown> = {};
       if (formData.username !== editingUser.username) updateData.username = formData.username;
       if (formData.email !== (editingUser.email ?? '')) updateData.email = formData.email || null;
       if (formData.role !== editingUser.role) updateData.role = formData.role;
@@ -224,12 +222,10 @@ export default function UserManagement() {
       loadUsers();
     } catch (err) {
       toast.error(t('users.messages.updateFailed'));
-      console.error(err);
     }
   };
 
   const handleDeleteUser = async (userId: number) => {
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
@@ -250,13 +246,11 @@ export default function UserManagement() {
       loadUsers();
     } catch (err) {
       toast.error(t('users.messages.deleteFailed'));
-      console.error(err);
     }
   };
 
   const handleBulkDelete = async () => {
     if (selectedUsers.size === 0) return;
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
@@ -280,12 +274,10 @@ export default function UserManagement() {
       loadUsers();
     } catch (err) {
       toast.error(t('users.messages.bulkDeleteFailed'));
-      console.error(err);
     }
   };
 
   const handleToggleActive = async (userId: number) => {
-    const token = localStorage.getItem('token');
     if (!token) return;
 
     try {
@@ -305,7 +297,6 @@ export default function UserManagement() {
       loadUsers();
     } catch (err) {
       toast.error(t('users.messages.toggleFailed'));
-      console.error(err);
     }
   };
 

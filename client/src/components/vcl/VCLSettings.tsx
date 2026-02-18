@@ -54,8 +54,11 @@ export default function VCLSettings() {
       ]);
       setOverview(overviewData);
       setUsers(usersData?.users || []);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.errors.loadFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('vcl.errors.loadFailed'));
       // Set empty arrays on error
       setUsers([]);
       setOverview(null);
@@ -76,8 +79,11 @@ export default function VCLSettings() {
       );
       setTimeout(() => setSuccessMessage(null), 5000);
       if (!dryRun) loadData(); // Reload stats
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.errors.cleanupFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('vcl.errors.cleanupFailed'));
     } finally {
       setActionLoading(false);
     }
@@ -102,8 +108,11 @@ export default function VCLSettings() {
       setTimeout(() => setSuccessMessage(null), 3000);
       setEditingUser(null);
       loadData(); // Reload
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('vcl.errors.updateFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('vcl.errors.updateFailed'));
     } finally {
       setActionLoading(false);
     }

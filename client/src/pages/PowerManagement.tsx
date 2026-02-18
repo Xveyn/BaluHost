@@ -14,6 +14,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { AlertTriangle } from 'lucide-react';
+import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
 import { Spinner } from '../components/ui/Spinner';
 import { StatCard } from '../components/ui/StatCard';
 import { AdminBadge } from '../components/ui/AdminBadge';
@@ -104,9 +105,9 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
         toast.success(t('system:power.toasts.statusUpdated'));
       }
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.loadFailed');
+      const message = getApiErrorMessage(err, t('system:power.toasts.loadFailed'));
       setError(message);
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -127,8 +128,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       toast.success(result.message);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.presetActivateFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.presetActivateFailed'));
     } finally {
       setBusy(false);
     }
@@ -143,8 +143,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       toast.success(t('system:power.toasts.demandRemoved'));
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.demandRemoveFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.demandRemoveFailed'));
     } finally {
       setBusy(false);
     }
@@ -160,8 +159,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       setAutoScaling(newConfig);
       toast.success(newConfig.enabled ? t('system:power.toasts.autoScalingEnabled') : t('system:power.toasts.autoScalingDisabled'));
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.settingChangeFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.settingChangeFailed'));
     } finally {
       setBusy(false);
     }
@@ -203,8 +201,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       setEditAutoScaling(null);
       toast.success(t('system:power.autoScaling.thresholdsSaved'));
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.autoScaling.thresholdsSaveFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.autoScaling.thresholdsSaveFailed'));
     } finally {
       setBusy(false);
     }
@@ -221,8 +218,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       toast.success(result.message);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.backendSwitchFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.backendSwitchFailed'));
     } finally {
       setBusy(false);
     }
@@ -241,8 +237,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       setEditorPreset(null);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.saveFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.saveFailed'));
     } finally {
       setBusy(false);
     }
@@ -258,8 +253,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       setEditorPreset(null);
       await loadData();
     } catch (err) {
-      const message = err instanceof Error ? err.message : t('system:power.toasts.deleteFailed');
-      toast.error(message);
+      handleApiError(err, t('system:power.toasts.deleteFailed'));
     } finally {
       setBusy(false);
     }

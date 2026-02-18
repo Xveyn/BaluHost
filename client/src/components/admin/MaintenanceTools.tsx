@@ -101,8 +101,8 @@ export default function MaintenanceTools() {
       setHealthError(null)
       const data = await getDatabaseHealth()
       setHealth(data)
-    } catch (err: any) {
-      setHealthError(err?.message || 'Failed to load health status')
+    } catch (err: unknown) {
+      setHealthError(err instanceof Error ? err.message : 'Failed to load health status')
     } finally {
       setHealthLoading(false)
     }
@@ -131,8 +131,8 @@ export default function MaintenanceTools() {
     try {
       const result = await triggerCleanup()
       setCleanupResult(result)
-    } catch (err: any) {
-      setCleanupError(err?.message || 'Cleanup failed')
+    } catch (err: unknown) {
+      setCleanupError(err instanceof Error ? err.message : 'Cleanup failed')
     } finally {
       setCleanupLoading(false)
     }

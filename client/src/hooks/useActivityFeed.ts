@@ -147,9 +147,11 @@ export function useActivityFeed(options: UseActivityFeedOptions = {}): UseActivi
       const items = response.logs.map((log, idx) => transformLog(log, idx));
       setActivities(items);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load activity feed';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load activity feed'));
     }
   }, [limit, days]);
 

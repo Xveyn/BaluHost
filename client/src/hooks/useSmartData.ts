@@ -16,8 +16,8 @@ function getCachedData(): SmartStatusResponse | null {
         return JSON.parse(cached);
       }
     }
-  } catch (err) {
-    console.error('Failed to read cache:', err);
+  } catch {
+    // Ignore cache read failures
   }
   return null;
 }
@@ -26,8 +26,8 @@ function setCachedData(data: SmartStatusResponse): void {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(data));
     localStorage.setItem(CACHE_TIMESTAMP_KEY, Date.now().toString());
-  } catch (err) {
-    console.error('Failed to write cache:', err);
+  } catch {
+    // Ignore cache write failures
   }
 }
 

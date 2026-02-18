@@ -1,9 +1,11 @@
 import { useMemo, useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '../contexts/AuthContext';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
+import { getSystemMode } from '../api/system';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
@@ -36,12 +38,6 @@ interface StorageStats {
   percent: number;
 }
 
-interface DashboardProps {
-  user?: {
-    role: string;
-  };
-}
-
 const RAID_CACHE_KEY = 'raid_status_cache';
 const RAID_CACHE_DURATION = 120000; // 2 minutes
 
@@ -55,8 +51,8 @@ function getCachedRaid(): RaidStatusResponse | null {
         return data.raid;
       }
     }
-  } catch (err) {
-    console.error('Failed to read RAID cache:', err);
+  } catch {
+    // Ignore cache read errors
   }
   return null;
 }
@@ -67,15 +63,15 @@ function setCachedRaid(raid: RaidStatusResponse): void {
       raid,
       timestamp: Date.now()
     }));
-  } catch (err) {
-    console.error('Failed to write RAID cache:', err);
+  } catch {
+    // Ignore cache write errors
   }
 }
 
-export default function Dashboard({ user }: DashboardProps) {
+export default function Dashboard() {
   const navigate = useNavigate();
   const { t } = useTranslation('dashboard');
-  const isAdmin = user?.role === 'admin';
+  const { isAdmin } = useAuth();
   const { system: systemInfo, storage: storageInfo, loading, error, lastUpdated, history } = useSystemTelemetry();
 
   // Navigation handlers for dashboard panels
@@ -100,8 +96,8 @@ export default function Dashboard({ user }: DashboardProps) {
         const data = await getRaidStatus();
         setRaidData(data);
         setCachedRaid(data);
-      } catch (err) {
-        console.error('RAID-Daten konnten nicht geladen werden:', err);
+      } catch {
+        // RAID data load failed
       } finally {
         setRaidLoading(false);
       }
@@ -116,15 +112,14 @@ export default function Dashboard({ user }: DashboardProps) {
   useEffect(() => {
     const loadSmartMode = async () => {
       try {
-        const modeRes = await fetch('/api/system/mode');
-        const modeData = await modeRes.json();
+        const modeData = await getSystemMode();
         if (!modeData?.dev_mode) return;
 
         const { getSmartMode } = await import('../api/smart');
         const response = await getSmartMode();
         setSmartMode(response.mode);
-      } catch (err) {
-        console.debug('SMART mode toggle not available:', err);
+      } catch {
+        // SMART mode toggle not available
       }
     };
 
@@ -138,8 +133,8 @@ export default function Dashboard({ user }: DashboardProps) {
       const response = await toggleSmartMode();
       setSmartMode(response.mode);
       refetchSmartData();
-    } catch (err) {
-      console.error('Failed to toggle SMART mode:', err);
+    } catch {
+      // Failed to toggle SMART mode
     } finally {
       setSmartModeLoading(false);
     }

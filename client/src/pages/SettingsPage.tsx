@@ -51,8 +51,8 @@ function TwoFactorCard() {
     try {
       const data = await get2FAStatus();
       setStatus(data);
-    } catch (err) {
-      console.error('Failed to load 2FA status:', err);
+    } catch {
+      // Failed to load 2FA status
     } finally {
       setLoading(false);
     }
@@ -64,8 +64,11 @@ function TwoFactorCard() {
     try {
       const data = await setup2FA();
       setSetupData(data);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to start 2FA setup');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || 'Failed to start 2FA setup');
     } finally {
       setSaving(false);
     }
@@ -81,8 +84,11 @@ function TwoFactorCard() {
       setBackupCodes(result.backup_codes);
       setSetupData(null);
       setVerifyCode('');
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Invalid verification code');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || 'Invalid verification code');
     } finally {
       setSaving(false);
     }
@@ -110,8 +116,11 @@ function TwoFactorCard() {
       setDisablePassword('');
       setDisableCode('');
       loadStatus();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to disable 2FA');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || 'Failed to disable 2FA');
     } finally {
       setSaving(false);
     }
@@ -124,8 +133,11 @@ function TwoFactorCard() {
     try {
       const result = await regenerateBackupCodes();
       setBackupCodes(result.backup_codes);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to regenerate backup codes');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || 'Failed to regenerate backup codes');
     } finally {
       setSaving(false);
     }
@@ -425,24 +437,19 @@ export default function SettingsPage() {
 
   const loadProfile = async () => {
     try {
-      console.log('Settings - Calling API with baseURL:', apiClient.defaults.baseURL);
       const response = await apiClient.get('/api/auth/me');
-      console.log('Settings - Response data:', response.data);
-      
+
       // Backend returns user object directly, not wrapped in {user: ...}
       const userData = response.data;
-      console.log('Settings - User data:', userData);
-      
+
       if (!userData || !userData.username) {
-        console.error('Invalid user data:', userData);
         throw new Error('No valid user data received');
       }
-      
+
       setProfile(userData);
       setEmail(userData.email || '');
-      console.log('Settings - Profile set successfully');
-    } catch (error) {
-      console.error('Failed to load profile:', error);
+    } catch {
+      // Failed to load profile
     } finally {
       setLoading(false);
     }
@@ -452,8 +459,8 @@ export default function SettingsPage() {
     try {
       const response = await apiClient.get('/api/system/quota');
       setStorageQuota(response.data);
-    } catch (error) {
-      console.error('Failed to load storage quota:', error);
+    } catch {
+      // Failed to load storage quota
     }
   };
 
@@ -465,9 +472,11 @@ export default function SettingsPage() {
       await apiClient.patch(`/api/users/${profile?.id}`, { email });
       alert('Email updated successfully');
       await loadProfile();
-    } catch (error: any) {
-      console.error('Failed to update email:', error);
-      alert(error.response?.data?.detail || 'Failed to update email');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      alert(detail || 'Failed to update email');
     } finally {
       setSaving(false);
     }
@@ -498,9 +507,11 @@ export default function SettingsPage() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-    } catch (error: any) {
-      console.error('Failed to change password:', error);
-      alert(error.response?.data?.detail || 'Failed to change password');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      alert(detail || 'Failed to change password');
     } finally {
       setSaving(false);
     }
@@ -534,20 +545,18 @@ export default function SettingsPage() {
       setAvatarFile(null);
       setAvatarPreview(null);
       await loadProfile();
-    } catch (error: any) {
-      console.error('Failed to upload avatar:', error);
-      alert(error.response?.data?.detail || 'Failed to upload avatar');
+    } catch (err: unknown) {
+      const detail = err instanceof Object && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      alert(detail || 'Failed to upload avatar');
     } finally {
       setSaving(false);
     }
   };
 
-  const handleExportData = async () => {
-    try {
-      alert('Data export feature coming soon!');
-    } catch (error) {
-      console.error('Failed to export data:', error);
-    }
+  const handleExportData = () => {
+    alert('Data export feature coming soon!');
   };
 
   const formatDate = (dateString: string) => {
@@ -573,15 +582,15 @@ export default function SettingsPage() {
       {/* Tabs */}
       <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
         <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
-          {[
-            { id: 'profile', label: t('tabs.profile'), icon: User },
-            { id: 'security', label: t('tabs.security'), icon: Lock },
-            { id: 'storage', label: t('tabs.storage'), icon: HardDrive },
-            { id: 'language', label: t('tabs.language'), icon: Globe },
-          ].map(tab => (
+          {([
+            { id: 'profile' as const, label: t('tabs.profile'), icon: User },
+            { id: 'security' as const, label: t('tabs.security'), icon: Lock },
+            { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
+            { id: 'language' as const, label: t('tabs.language'), icon: Globe },
+          ]).map(tab => (
             <button
               key={tab.id}
-              onClick={() => setActiveTab(tab.id as any)}
+              onClick={() => setActiveTab(tab.id)}
               className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
                 activeTab === tab.id
                   ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'

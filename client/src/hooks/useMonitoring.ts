@@ -76,8 +76,8 @@ export function useCpuMonitoring(
       setHistory(historyData.samples);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch CPU data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch CPU data');
     } finally {
       setLoading(false);
     }
@@ -121,8 +121,8 @@ export function useMemoryMonitoring(
       setHistory(historyData.samples);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch memory data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch memory data');
     } finally {
       setLoading(false);
     }
@@ -166,8 +166,8 @@ export function useNetworkMonitoring(
       setHistory(historyData.samples);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch network data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch network data');
     } finally {
       setLoading(false);
     }
@@ -224,8 +224,8 @@ export function useDiskIoMonitoring(
       setAvailableDisks(historyData.available_disks);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch disk I/O data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch disk I/O data');
     } finally {
       setLoading(false);
     }
@@ -282,8 +282,8 @@ export function useProcessMonitoring(
       setCrashesDetected(historyData.crashes_detected);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      setError(err.message || 'Failed to fetch process data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch process data');
     } finally {
       setLoading(false);
     }

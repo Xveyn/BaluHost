@@ -31,15 +31,15 @@ export const ConnectedDevicesWidget: React.FC<ConnectedDevicesWidgetProps> = ({ 
       const response = await getAllDevices();
       setDevices(response);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Don't show error for 403 (user may not have permission)
-      if (err.message?.includes('403') || err.message?.includes('Forbidden')) {
+      const msg = err instanceof Error ? err.message : '';
+      if (msg.includes('403') || msg.includes('Forbidden')) {
         setDevices([]);
         setError(null);
         return;
       }
-      const message = err.message || 'Failed to load devices';
-      setError(message);
+      setError(msg || 'Failed to load devices');
     }
   }, []);
 

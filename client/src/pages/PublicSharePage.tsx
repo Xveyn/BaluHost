@@ -52,9 +52,8 @@ export default function PublicSharePage() {
         // No password required, access directly
         await handleAccess();
       }
-    } catch (err: any) {
-      console.error('Failed to load share info:', err);
-      setError(err.response?.data?.detail || t('errors.loadFailed'));
+    } catch (err: unknown) {
+      setError(t('errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -69,13 +68,8 @@ export default function PublicSharePage() {
       const data = await accessShareLink(token, { password: pwd || password });
       setAccessData(data);
       setPasswordRequired(false);
-    } catch (err: any) {
-      console.error('Failed to access share:', err);
-      if (err.response?.status === 403) {
-        setError(t('password.invalid'));
-      } else {
-        setError(err.response?.data?.detail || t('errors.accessFailed'));
-      }
+    } catch (err: unknown) {
+      setError(t('errors.accessFailed'));
     }
   };
 
@@ -108,9 +102,8 @@ export default function PublicSharePage() {
       link.click();
       link.remove();
       window.URL.revokeObjectURL(url);
-    } catch (err: any) {
-      console.error('Download failed:', err);
-      setError(err.response?.data?.detail || t('errors.downloadFailed'));
+    } catch (err: unknown) {
+      setError(t('errors.downloadFailed'));
     } finally {
       setDownloading(false);
     }

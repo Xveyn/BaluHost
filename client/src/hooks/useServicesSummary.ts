@@ -37,9 +37,11 @@ export function useServicesSummary(options: UseServicesSummaryOptions = {}): Use
       const response = await getDebugSnapshot();
       setServices(response.services);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load services';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load services'));
     }
   }, []);
 

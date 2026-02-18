@@ -72,8 +72,11 @@ export default function VersionsTab() {
       if (result.groups.length > 0) {
         setExpandedGroups(new Set([result.groups[0].version]));
       }
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, 'Failed to load commit history'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      toast.error(extractErrorMessage(detail, 'Failed to load commit history'));
     } finally {
       setLoading(false);
     }
@@ -108,8 +111,11 @@ export default function VersionsTab() {
     try {
       const diff = await getCommitDiff(hash);
       setDiffCache((prev) => ({ ...prev, [hash]: diff }));
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, 'Failed to load diff'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      toast.error(extractErrorMessage(detail, 'Failed to load diff'));
       setSelectedCommit(null);
     } finally {
       setDiffLoading(null);

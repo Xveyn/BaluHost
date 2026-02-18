@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Clock, Smartphone, HardDrive, Calendar, Settings, Trash2, CheckCircle, AlertTriangle, Edit2, X, Save } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { apiClient } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface SyncDevice {
   device_id: string;
@@ -52,6 +53,7 @@ const WEEKDAYS = [
 
 export default function SyncSettings() {
   const { t } = useTranslation('settings');
+  const { token } = useAuth();
   const [devices, setDevices] = useState<SyncDevice[]>([]);
   const [schedules, setSchedules] = useState<SyncSchedule[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>('');
@@ -98,7 +100,6 @@ export default function SyncSettings() {
   async function loadSyncData() {
     setLoading(true);
     try {
-      const token = localStorage.getItem('token');
 
       // Load schedules
       const schedulesRes = await fetch('/api/sync/schedule/list', {
@@ -124,21 +125,21 @@ export default function SyncSettings() {
         if (devRes.ok) {
           const devData = await devRes.json();
           const list = Array.isArray(devData) ? devData : (devData.devices || []);
-          mapped = list.map((d: any) => ({
-            device_id: d.device_id ?? d.id ?? d.name,
-            device_name: d.device_name ?? d.name ?? d.device_name,
-            status: d.status ?? 'unknown',
-            last_sync: d.last_sync ?? d.last_seen ?? null,
-            pending_changes: d.pending_changes ?? 0,
-            conflicts: d.conflicts ?? 0,
-            vpn_client_id: d.vpn_client_id ?? d.vpn?.id ?? null,
-            vpn_assigned_ip: d.vpn_assigned_ip ?? d.vpn?.assigned_ip ?? null,
-            vpn_last_handshake: d.vpn_last_handshake ?? d.vpn?.last_handshake ?? null,
-            vpn_active: d.vpn_active ?? d.vpn?.is_active ?? null,
+          mapped = list.map((d: Record<string, unknown>) => ({
+            device_id: (d.device_id ?? d.id ?? d.name) as string,
+            device_name: (d.device_name ?? d.name) as string,
+            status: (d.status as string) ?? 'unknown',
+            last_sync: (d.last_sync ?? d.last_seen ?? null) as string | null,
+            pending_changes: (d.pending_changes as number) ?? 0,
+            conflicts: (d.conflicts as number) ?? 0,
+            vpn_client_id: (d.vpn_client_id ?? (d.vpn as Record<string, unknown> | undefined)?.id ?? null) as number | null,
+            vpn_assigned_ip: (d.vpn_assigned_ip ?? (d.vpn as Record<string, unknown> | undefined)?.assigned_ip ?? null) as string | null,
+            vpn_last_handshake: (d.vpn_last_handshake ?? (d.vpn as Record<string, unknown> | undefined)?.last_handshake ?? null) as string | null,
+            vpn_active: (d.vpn_active ?? (d.vpn as Record<string, unknown> | undefined)?.is_active ?? null) as boolean | null,
           }));
         }
-      } catch (e) {
-        console.warn('Error fetching /api/sync/devices', e);
+      } catch {
+        // Non-critical: sync devices endpoint may not be available
       }
 
       // If no devices from sync API, try mobile devices endpoint
@@ -148,21 +149,21 @@ export default function SyncSettings() {
           if (mobRes.ok) {
             const mobData = await mobRes.json();
             const list = Array.isArray(mobData) ? mobData : (mobData.devices || mobData);
-            mapped = list.map((d: any) => ({
-              device_id: d.id ?? d.device_id ?? d.deviceId,
-              device_name: d.device_name ?? d.name ?? d.deviceName,
+            mapped = list.map((d: Record<string, unknown>) => ({
+              device_id: (d.id ?? d.device_id ?? d.deviceId) as string,
+              device_name: (d.device_name ?? d.name ?? d.deviceName) as string,
               status: (d.is_active === false) ? 'inactive' : 'active',
-              last_sync: d.last_sync ?? d.last_seen ?? null,
-              pending_changes: d.pending_uploads ?? d.pending_changes ?? 0,
+              last_sync: (d.last_sync ?? d.last_seen ?? null) as string | null,
+              pending_changes: (d.pending_uploads ?? d.pending_changes ?? 0) as number,
               conflicts: 0,
-              vpn_client_id: d.vpn_client_id ?? null,
-              vpn_assigned_ip: d.vpn_assigned_ip ?? null,
-              vpn_last_handshake: d.vpn_last_handshake ?? null,
-              vpn_active: d.vpn_active ?? null,
+              vpn_client_id: (d.vpn_client_id ?? null) as number | null,
+              vpn_assigned_ip: (d.vpn_assigned_ip ?? null) as string | null,
+              vpn_last_handshake: (d.vpn_last_handshake ?? null) as string | null,
+              vpn_active: (d.vpn_active ?? null) as boolean | null,
             }));
           }
-        } catch (e) {
-          console.warn('Error fetching /api/mobile/devices', e);
+        } catch {
+          // Non-critical: mobile devices endpoint may not be available
         }
       }
 
@@ -184,15 +185,15 @@ export default function SyncSettings() {
             if (fRes.ok) {
               const fData = await fRes.json();
               const list = Array.isArray(fData) ? fData : (fData.folders || fData);
-              foldersMap[dev.device_id] = list.map((f: any) => ({
-                id: f.id,
-                device_id: f.device_id,
-                local_path: f.local_path,
-                remote_path: f.remote_path,
-                sync_type: f.sync_type,
-                auto_sync: f.auto_sync,
-                last_sync: f.last_sync ?? null,
-                status: f.status ?? null,
+              foldersMap[dev.device_id] = list.map((f: Record<string, unknown>) => ({
+                id: f.id as string,
+                device_id: f.device_id as string,
+                local_path: f.local_path as string,
+                remote_path: f.remote_path as string,
+                sync_type: f.sync_type as string,
+                auto_sync: f.auto_sync as boolean,
+                last_sync: (f.last_sync ?? null) as string | null,
+                status: (f.status ?? null) as string | null,
               }));
             } else {
               foldersMap[dev.device_id] = [];
@@ -202,11 +203,11 @@ export default function SyncSettings() {
           }
         }));
         setDeviceFolders(foldersMap);
-      } catch (e) {
-        console.warn('Failed to load per-device folders', e);
+      } catch {
+        // Non-critical: per-device folders will remain empty
       }
 
-    } catch (err: any) {
+    } catch {
       setError('Failed to load sync settings');
     } finally {
       setLoading(false);
@@ -220,7 +221,7 @@ export default function SyncSettings() {
     }
 
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         device_id: selectedDevice,
         schedule_type: scheduleType,
         time_of_day: scheduleTime,
@@ -237,8 +238,11 @@ export default function SyncSettings() {
       await apiClient.post('/api/sync/schedule/create', payload);
       setSuccess(t('sync.scheduleCreated'));
       await loadSyncData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || t('sync.createScheduleFailed'));
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || t('sync.createScheduleFailed'));
     }
   }
 
@@ -247,7 +251,7 @@ export default function SyncSettings() {
       await apiClient.post(`/api/sync/schedule/${scheduleId}/disable`);
       setSuccess(t('sync.scheduleDisabled'));
       await loadSyncData();
-    } catch (err: any) {
+    } catch {
       setError(t('sync.disableScheduleFailed'));
     }
   }
@@ -257,7 +261,7 @@ export default function SyncSettings() {
 
     setIsSaving(true);
     try {
-      const payload: any = {
+      const payload: Record<string, unknown> = {
         schedule_type: editScheduleType,
         time_of_day: editScheduleTime,
       };
@@ -277,8 +281,11 @@ export default function SyncSettings() {
       setSuccess(t('sync.scheduleUpdated'));
       setEditingSchedule(null);
       await loadSyncData();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || err.message || t('sync.updateScheduleFailed'));
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || t('sync.updateScheduleFailed'));
     } finally {
       setIsSaving(false);
     }
@@ -299,7 +306,7 @@ export default function SyncSettings() {
         download_speed_limit: downloadLimit
       });
       setSuccess(t('sync.bandwidthSaved'));
-    } catch (err: any) {
+    } catch {
       setError(t('sync.saveLimitsFailed'));
     }
   }
@@ -310,8 +317,11 @@ export default function SyncSettings() {
       await apiClient.post(`/api/vpn/clients/${clientId}/revoke`);
       setSuccess(t('sync.vpnRevoked'));
       await loadSyncData();
-    } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || t('sync.revokeVpnFailed'));
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || t('sync.revokeVpnFailed'));
     }
   }
 

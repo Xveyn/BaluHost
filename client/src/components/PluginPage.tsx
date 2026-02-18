@@ -6,6 +6,7 @@
 import { useEffect, useState, Suspense, type ComponentType } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useParams, useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import { usePlugins } from '../contexts/PluginContext';
 import { loadPluginComponent, loadPluginStyles } from '../lib/pluginLoader';
 import { AlertTriangle, Plug } from 'lucide-react';
@@ -16,15 +17,13 @@ interface PluginUser {
   role: string;
 }
 
-interface PluginPageProps {
-  user: PluginUser;
-}
-
 interface PluginComponentProps {
   user: PluginUser;
 }
 
-export default function PluginPage({ user }: PluginPageProps) {
+export default function PluginPage() {
+  const { user } = useAuth();
+
   const { t } = useTranslation('plugins');
   const { pluginName } = useParams<{ pluginName: string }>();
   const navigate = useNavigate();
@@ -72,7 +71,6 @@ export default function PluginPage({ user }: PluginPageProps) {
           setLoading(false);
         }
       } catch (err) {
-        console.error('Failed to load plugin:', err);
         if (mounted) {
           setError(err instanceof Error ? err.message : 'Failed to load plugin');
           setLoading(false);
@@ -88,6 +86,8 @@ export default function PluginPage({ user }: PluginPageProps) {
       // unloadPluginStyles(pluginName);
     };
   }, [pluginName, pluginInfo]);
+
+  if (!user) return null;
 
   if (loading) {
     return (

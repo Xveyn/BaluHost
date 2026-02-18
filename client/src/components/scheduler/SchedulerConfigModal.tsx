@@ -99,8 +99,8 @@ export function SchedulerConfigModal({
       } else {
         setError(t('scheduler:configModal.saveFailed'));
       }
-    } catch (err: any) {
-      setError(err.message || t('scheduler:configModal.saveFailed'));
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('scheduler:configModal.saveFailed'));
     } finally {
       setIsSaving(false);
     }

@@ -2,6 +2,7 @@ import { createContext, useContext, useState, useRef, useCallback, lazy, Suspens
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl, checkFilesExist } from '../lib/api';
+import { useAuth } from './AuthContext';
 import { formatBytes } from '../lib/formatters';
 import { ChunkedUploader, CHUNKED_THRESHOLD } from '../lib/chunkedUpload';
 import type { ChunkedUploadProgress } from '../lib/chunkedUpload';
@@ -58,20 +59,25 @@ export function useUpload(): UploadContextValue {
 
 export function UploadProvider({ children }: { children: ReactNode }) {
   const { t } = useTranslation(['fileManager', 'shares']);
+  const { token } = useAuth();
   const [uploads, setUploads] = useState<Map<string, ChunkedUploadProgress>>(new Map());
   const activeUploadersRef = useRef<Map<string, ChunkedUploader>>(new Map());
   const completionCallbacksRef = useRef<Set<() => void>>(new Set());
   const [pendingUpload, setPendingUpload] = useState<PendingUploadState | null>(null);
 
   const getToken = (): string | null => {
-    const token = localStorage.getItem('token');
     if (!token) toast.error('Session expired. Please sign in again.');
     return token;
   };
 
-  const getErrorMessage = (error: any): string => {
+  const getErrorMessage = (error: unknown): string => {
     if (!error) return 'Unknown error';
-    return error.error ?? error.detail ?? 'Unknown error';
+    if (typeof error === 'object' && error !== null) {
+      const obj = error as Record<string, unknown>;
+      if (typeof obj.error === 'string') return obj.error;
+      if (typeof obj.detail === 'string') return obj.detail;
+    }
+    return 'Unknown error';
   };
 
   // Derived state — 'pending' and 'uploading' both count as "active"
@@ -249,9 +255,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
               toast.error(`${t('fileManager:messages.uploadError')}: ${errorMsg}`);
               break;
             }
-          } catch (err) {
+          } catch {
             batchFailed = true;
-            console.error('Batch upload failed:', err);
             toast.error(t('fileManager:messages.uploadError'));
             break;
           }
@@ -307,17 +312,18 @@ export function UploadProvider({ children }: { children: ReactNode }) {
 
           try {
             await uploader.upload();
-          } catch (err: any) {
-            if (err.name !== 'AbortError') {
-              console.error('Chunked upload failed:', err);
-              toast.error(`${t('fileManager:messages.uploadError')}: ${err.message || 'Unknown error'}`);
+          } catch (err: unknown) {
+            const isAbort = err instanceof Error && err.name === 'AbortError';
+            const msg = err instanceof Error ? err.message : 'Unknown error';
+            if (!isAbort) {
+              toast.error(`${t('fileManager:messages.uploadError')}: ${msg}`);
             }
             if (uploader.uploadId) {
               setUploads(prev => {
                 const next = new Map(prev);
                 const existing = next.get(uploader.uploadId!);
                 if (existing) {
-                  next.set(uploader.uploadId!, { ...existing, status: 'failed', error: err.message });
+                  next.set(uploader.uploadId!, { ...existing, status: 'failed', error: msg });
                 }
                 return next;
               });
@@ -360,9 +366,8 @@ export function UploadProvider({ children }: { children: ReactNode }) {
           });
           return;
         }
-      } catch (err) {
+      } catch {
         // If the check fails, proceed without duplicate detection
-        console.warn('Duplicate check failed, proceeding with upload:', err);
       }
 
       // No duplicates — proceed directly

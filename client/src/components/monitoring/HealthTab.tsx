@@ -13,6 +13,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { buildApiUrl } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import { formatBytes, formatUptime, formatNumber } from '../../lib/formatters';
 import {
   RefreshCw,
@@ -75,6 +76,7 @@ interface HealthData {
 
 export function HealthTab() {
   const { t } = useTranslation('admin');
+  const { token } = useAuth();
   const [health, setHealth] = useState<HealthData | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -83,7 +85,6 @@ export function HealthTab() {
     setLoading(true);
     setError(null);
     try {
-      const token = localStorage.getItem('token');
       const res = await fetch(buildApiUrl('/api/system/health'), {
         headers: token ? { Authorization: `Bearer ${token}` } : undefined,
       });

@@ -5,12 +5,10 @@ import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { useVersion } from '../contexts/VersionContext';
 import { DeveloperBadge } from '../components/ui/DeveloperBadge';
+import { useAuth } from '../contexts/AuthContext';
 
-interface LoginProps {
-  onLogin: (user: User, token: string) => void;
-}
-
-export default function Login({ onLogin }: LoginProps) {
+export default function Login() {
+  const { login } = useAuth();
   const { t } = useTranslation('login');
   const { version, loading: versionLoading } = useVersion();
   const [username, setUsername] = useState('');
@@ -33,7 +31,6 @@ export default function Login({ onLogin }: LoginProps) {
       const available = await localApi.isAvailable();
       setLocalBackendAvailable(available);
       setConnectionMode(available ? 'local' : 'ipc');
-      console.log('[Login] Local backend available:', available);
     };
     checkBackend();
   }, []);
@@ -62,34 +59,27 @@ export default function Login({ onLogin }: LoginProps) {
       // Strategy 1: Try local API if available
       if (localBackendAvailable) {
         try {
-          console.log('[Login] Attempting login via local HTTP API...');
           const loginResult = await localApi.login(username, password);
 
-          // Check if 2FA is required
-          if ((loginResult as any).requires_2fa) {
-            setPendingToken((loginResult as any).pending_token);
+          // Check if 2FA is required - login may return a different shape
+          const resultObj = loginResult as unknown as Record<string, unknown>;
+          if (resultObj.requires_2fa) {
+            setPendingToken(String(resultObj.pending_token ?? ''));
             setTwoFactorRequired(true);
             setLoading(false);
             return;
           }
 
-          console.log('[Login] Local API login successful:', {
-            username: loginResult.user.username,
-            hasToken: !!loginResult.access_token
-          });
-
           setConnectionMode('local');
-          onLogin(loginResult.user, loginResult.access_token);
+          login(loginResult.user, loginResult.access_token);
           return;
-        } catch (localErr: any) {
-          console.warn('[Login] Local API login failed, trying fallback:', localErr.message);
+        } catch (localErr: unknown) {
           setConnectionMode('fallback');
           // Continue to fallback strategy
         }
       }
 
       // Strategy 2: Fall back to regular fetch (via proxy or IPC)
-      console.log('[Login] Using fallback fetch method...');
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: {
@@ -100,44 +90,40 @@ export default function Login({ onLogin }: LoginProps) {
 
       // Handle empty or non-JSON responses
       const contentType = response.headers.get('content-type');
-      let data: any = {};
+      let data: Record<string, unknown> = {};
 
       if (contentType && contentType.includes('application/json')) {
         try {
           data = await response.json();
-        } catch (jsonError) {
-          console.error('Failed to parse JSON response:', jsonError);
+        } catch {
           throw new Error('Server returned invalid response');
         }
       } else {
-        const text = await response.text();
-        console.error('Non-JSON response:', text);
+        await response.text();
         throw new Error(`Server error: ${response.status}`);
       }
 
       if (!response.ok) {
-        throw new Error(data.detail || data.error || `Login failed (${response.status})`);
+        throw new Error(String(data.detail || data.error || `Login failed (${response.status})`));
       }
 
       // Check if 2FA is required
       if (data.requires_2fa) {
-        setPendingToken(data.pending_token);
+        setPendingToken(String(data.pending_token ?? ''));
         setTwoFactorRequired(true);
         setLoading(false);
         return;
       }
 
-      const token: string | undefined = data.access_token ?? data.token;
+      const token = data.access_token ?? data.token;
 
-      if (!token) {
+      if (typeof token !== 'string') {
         throw new Error('Login response did not include an access token');
       }
 
-      console.log('[Login] Fallback login successful');
-      onLogin(data.user, token);
-    } catch (err: any) {
-      console.error('Login error:', err);
-      setError(err.message || 'Login failed');
+      login(data.user as User, token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setLoading(false);
     }
@@ -168,10 +154,9 @@ export default function Login({ onLogin }: LoginProps) {
 
       // Store token
       localStorage.setItem('token', token);
-      onLogin(data.user, token);
-    } catch (err: any) {
-      console.error('2FA verification error:', err);
-      setError(err.message || t('twoFactor.invalidCode'));
+      login(data.user, token);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : t('twoFactor.invalidCode'));
       setTotpCode('');
     } finally {
       setLoading(false);

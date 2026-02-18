@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 import { apiSections, apiCategories, methodColors } from '../data/api-endpoints';
 import type { ApiEndpoint } from '../data/api-endpoints';
 
@@ -175,6 +176,7 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
 
 export default function ApiCenterPage() {
   const { t } = useTranslation(['system', 'common']);
+  const { token } = useAuth();
   const [user, setUser] = useState<User | null>(null);
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
@@ -202,7 +204,6 @@ export default function ApiCenterPage() {
   // Load current user
   useEffect(() => {
     const fetchUser = async () => {
-      const token = localStorage.getItem('token');
       if (!token) {
         setLoading(false);
         return;
@@ -216,8 +217,8 @@ export default function ApiCenterPage() {
           const data = await response.json();
           setUser(data.user || data);
         }
-      } catch (error) {
-        console.error('Failed to fetch user:', error);
+      } catch {
+        // User not authenticated
       }
     };
     fetchUser();
@@ -233,7 +234,6 @@ export default function ApiCenterPage() {
   }, [isAdmin]);
 
   const loadRateLimits = async () => {
-    const token = localStorage.getItem('token');
     if (!token) {
       setLoading(false);
       return;
@@ -252,8 +252,8 @@ export default function ApiCenterPage() {
         });
         setRateLimits(map);
       }
-    } catch (error) {
-      console.error('Failed to load rate limits:', error);
+    } catch {
+      // Rate limits not available
     } finally {
       setLoading(false);
     }

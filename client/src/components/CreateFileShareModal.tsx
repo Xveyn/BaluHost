@@ -58,8 +58,7 @@ const CreateFileShareModal = ({ fileId, users, onClose, onSuccess }: CreateFileS
         expires_at: formData.expires_at || null
       });
       onSuccess();
-    } catch (error: any) {
-      console.error('Failed to create file share:', error);
+    } catch (error: unknown) {
       toast.error(t('shares:toast.createShareFailed'));
     } finally {
       setLoading(false);

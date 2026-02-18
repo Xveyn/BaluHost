@@ -33,9 +33,11 @@ export default function ServicesStatusTab({ isAdmin = false }: ServicesStatusTab
       const data = await getDebugSnapshot();
       setSnapshot(data);
       setLastRefresh(new Date());
-    } catch (err: any) {
-      console.error('Failed to fetch service status:', err);
-      setError(err.response?.data?.detail || 'Failed to load service status');
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || 'Failed to load service status');
     } finally {
       setIsLoading(false);
     }

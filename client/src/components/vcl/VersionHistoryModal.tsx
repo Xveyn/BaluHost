@@ -50,7 +50,7 @@ export function VersionHistoryModal({
   const [actionLoading, setActionLoading] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
-  
+
   // Diff state
   const [selectedForDiff, setSelectedForDiff] = useState<number[]>([]);
   const [diffData, setDiffData] = useState<VersionDiffResponse | null>(null);
@@ -68,8 +68,11 @@ export function VersionHistoryModal({
       setError(null);
       const data = await getFileVersions(fileId);
       setVersions(data.versions);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.loadFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -85,8 +88,11 @@ export function VersionHistoryModal({
       setSuccessMessage(t('versionHistory.actions.restored', { number: versionNumber }));
       setTimeout(() => setSuccessMessage(null), 3000);
       onVersionRestored?.();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.restoreFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.restoreFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -102,8 +108,11 @@ export function VersionHistoryModal({
       setSuccessMessage(t('versionHistory.actions.deleted', { number: versionNumber }));
       setTimeout(() => setSuccessMessage(null), 3000);
       loadVersions(); // Reload list
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.deleteFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.deleteFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -115,8 +124,11 @@ export function VersionHistoryModal({
       setError(null);
       await toggleVersionPriority(versionId, !currentPriority);
       loadVersions(); // Reload to update UI
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.priorityFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.priorityFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -127,7 +139,7 @@ export function VersionHistoryModal({
       setActionLoading(versionId);
       setError(null);
       const blob = await downloadVersion(versionId);
-      
+
       // Create download link
       const url = window.URL.createObjectURL(blob);
       const a = document.createElement('a');
@@ -137,11 +149,14 @@ export function VersionHistoryModal({
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      
+
       setSuccessMessage(t('versionHistory.actions.downloadStarted'));
       setTimeout(() => setSuccessMessage(null), 2000);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.downloadFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.downloadFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -161,7 +176,7 @@ export function VersionHistoryModal({
 
   const handleCompareDiff = async () => {
     if (selectedForDiff.length !== 2) return;
-    
+
     try {
       setDiffLoading(true);
       setError(null);
@@ -170,8 +185,11 @@ export function VersionHistoryModal({
       const data = await getVersionDiff(id1, id2);
       setDiffData(data);
       setShowDiff(true);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('versionHistory.errors.diffFailed'));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || t('versionHistory.errors.diffFailed'));
     } finally {
       setDiffLoading(false);
     }
@@ -185,21 +203,21 @@ export function VersionHistoryModal({
 
   if (showDiff && diffData) {
     return (
-      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-4">
-        <div className="card w-full max-w-6xl max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
-          <div className="flex items-center justify-between mb-4">
+      <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+        <div className="card w-full max-w-6xl max-h-[90vh] border-slate-800/60 bg-slate-900/90 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)] flex flex-col">
+          <div className="flex items-center justify-between pb-4 border-b border-slate-800/60">
             <h3 className="text-xl font-semibold text-white">{t('versionHistory.diff.title', { fileName: diffData.file_name })}</h3>
             <button
               onClick={closeDiff}
-              className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
             >
-              {t('versionHistory.diff.close')}
+              <X className="w-5 h-5" />
             </button>
           </div>
-          
-          <div className="text-sm text-slate-400 mb-4 flex flex-wrap gap-2 sm:gap-4">
+
+          <div className="text-sm text-slate-400 mt-4 mb-4 flex flex-wrap gap-2 sm:gap-4">
             <span>{t('versionHistory.diff.old', { version: selectedForDiff[0], size: formatBytes(diffData.old_size) })}</span>
-            <span>→</span>
+            <span className="text-slate-600">→</span>
             <span>{t('versionHistory.diff.new', { version: selectedForDiff[1], size: formatBytes(diffData.new_size) })}</span>
           </div>
 
@@ -261,23 +279,23 @@ export function VersionHistoryModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-slate-900 rounded-xl shadow-2xl border border-slate-800 w-full max-w-[95vw] sm:max-w-4xl max-h-[85vh] flex flex-col">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-4">
+      <div className="card w-full max-w-[95vw] sm:max-w-4xl max-h-[85vh] flex flex-col border-slate-800/60 bg-slate-900/90 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)]">
         {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 p-4 sm:p-6 border-b border-slate-800">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-4 border-b border-slate-800/60">
           <div>
-            <h2 className="text-xl font-bold text-white flex items-center gap-2">
-              <Clock className="w-5 h-5 text-sky-400" />
+            <h2 className="text-lg sm:text-xl font-semibold text-white flex items-center gap-2">
+              <Clock className="w-5 h-5 text-blue-400" />
               {t('versionHistory.title')}
             </h2>
-            <p className="text-sm text-slate-400 mt-1">{fileName}</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-0.5">{fileName}</p>
           </div>
           <div className="flex items-center gap-2">
             {selectedForDiff.length === 2 && (
               <button
                 onClick={handleCompareDiff}
                 disabled={diffLoading}
-                className="rounded-lg border border-blue-700/70 bg-blue-900/50 px-4 py-2 text-sm font-medium text-blue-200 transition hover:border-blue-500 hover:bg-blue-900/70 disabled:opacity-50 flex items-center gap-2"
+                className="flex items-center gap-2 rounded-xl border border-blue-500/40 bg-blue-500/10 px-4 py-2 text-sm font-medium text-blue-200 transition hover:border-blue-500/60 hover:bg-blue-500/20 disabled:opacity-50"
               >
                 {diffLoading ? (
                   <>
@@ -291,32 +309,33 @@ export function VersionHistoryModal({
             )}
             <button
               onClick={onClose}
-              className="p-2 hover:bg-slate-800 rounded-lg transition-colors"
+              className="p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
             >
-              <X className="w-5 h-5 text-slate-400" />
+              <X className="w-5 h-5" />
             </button>
           </div>
         </div>
 
         {/* Messages */}
         {error && (
-          <div className="mx-6 mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-400">
+          <div className="mt-4 p-4 bg-red-500/10 border border-red-500/30 rounded-lg flex items-center gap-2 text-red-400">
             <AlertCircle className="w-5 h-5 flex-shrink-0" />
             <span className="text-sm">{error}</span>
           </div>
         )}
         {successMessage && (
-          <div className="mx-6 mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2 text-green-400">
+          <div className="mt-4 p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2 text-green-400">
             <Check className="w-5 h-5 flex-shrink-0" />
             <span className="text-sm">{successMessage}</span>
           </div>
         )}
 
         {/* Version List */}
-        <div className="flex-1 overflow-y-auto p-6 space-y-3">
+        <div className="flex-1 overflow-y-auto mt-4 space-y-3">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-sky-500"></div>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
+              <p className="text-sm text-slate-400">{t('versionHistory.loading')}</p>
             </div>
           ) : versions.length === 0 ? (
             <div className="text-center py-12 text-slate-400">
@@ -335,9 +354,9 @@ export function VersionHistoryModal({
               return (
                 <div
                   key={version.id}
-                  className={`p-4 rounded-lg border transition-all ${
+                  className={`p-4 rounded-xl border transition-all ${
                     isLatest
-                      ? 'bg-sky-500/10 border-sky-500/30'
+                      ? 'bg-blue-500/10 border-blue-500/30'
                       : 'bg-slate-800/40 border-slate-700/50 hover:border-slate-600'
                   }`}
                 >
@@ -348,7 +367,7 @@ export function VersionHistoryModal({
                         type="checkbox"
                         checked={selectedForDiff.includes(version.id)}
                         onChange={() => handleSelectForDiff(version.id)}
-                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-slate-900 cursor-pointer"
+                        className="w-4 h-4 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-blue-500 focus:ring-offset-0 cursor-pointer"
                         title={t('versionHistory.actions.selectForComparison')}
                       />
                     </div>
@@ -360,7 +379,7 @@ export function VersionHistoryModal({
                           {t('versionHistory.version', { number: version.version_number })}
                         </span>
                         {isLatest && (
-                          <span className="px-2 py-0.5 bg-sky-500/20 text-sky-400 text-xs font-medium rounded-full">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold border border-blue-500/40 bg-blue-500/15 text-blue-300">
                             {t('versionHistory.latest')}
                           </span>
                         )}
@@ -368,7 +387,7 @@ export function VersionHistoryModal({
                           <Star className="w-4 h-4 text-amber-400 fill-amber-400" />
                         )}
                         {version.was_cached && (
-                          <span className="px-2 py-0.5 bg-violet-500/20 text-violet-400 text-xs font-medium rounded-full">
+                          <span className="px-2.5 py-0.5 rounded-full text-xs font-semibold border border-violet-500/40 bg-violet-500/15 text-violet-300">
                             {t('versionHistory.cached')}
                           </span>
                         )}
@@ -416,10 +435,10 @@ export function VersionHistoryModal({
                       <button
                         onClick={() => handleTogglePriority(version.id, version.is_high_priority)}
                         disabled={isWorking}
-                        className={`p-2 rounded-lg transition-colors ${
+                        className={`p-2 rounded-lg border transition-colors ${
                           version.is_high_priority
-                            ? 'text-amber-400 hover:bg-amber-500/10'
-                            : 'text-slate-400 hover:bg-slate-700'
+                            ? 'border-amber-500/30 bg-amber-500/10 text-amber-400 hover:border-amber-500/50 hover:bg-amber-500/20'
+                            : 'border-transparent text-slate-400 hover:border-slate-700/50 hover:bg-slate-800/50'
                         } disabled:opacity-50`}
                         title={version.is_high_priority ? t('versionHistory.actions.removePriority') : t('versionHistory.actions.markPriority')}
                       >
@@ -433,7 +452,7 @@ export function VersionHistoryModal({
                       <button
                         onClick={() => handleDownload(version.id, version.version_number)}
                         disabled={isWorking}
-                        className="p-2 text-slate-400 hover:text-sky-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 rounded-lg border border-transparent text-slate-400 hover:border-sky-500/30 hover:bg-sky-500/10 hover:text-sky-200 transition-colors disabled:opacity-50"
                         title={t('versionHistory.actions.download')}
                       >
                         <Download className="w-4 h-4" />
@@ -442,7 +461,7 @@ export function VersionHistoryModal({
                       <button
                         onClick={() => handleRestore(version.id, version.version_number)}
                         disabled={isWorking || isLatest}
-                        className="p-2 text-slate-400 hover:text-green-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 rounded-lg border border-transparent text-slate-400 hover:border-green-500/30 hover:bg-green-500/10 hover:text-green-200 transition-colors disabled:opacity-50"
                         title={t('versionHistory.actions.restore')}
                       >
                         <RotateCcw className="w-4 h-4" />
@@ -451,7 +470,7 @@ export function VersionHistoryModal({
                       <button
                         onClick={() => handleDelete(version.id, version.version_number)}
                         disabled={isWorking || isLatest}
-                        className="p-2 text-slate-400 hover:text-red-400 hover:bg-slate-700 rounded-lg transition-colors disabled:opacity-50"
+                        className="p-2 rounded-lg border border-transparent text-slate-400 hover:border-rose-500/30 hover:bg-rose-500/10 hover:text-rose-200 transition-colors disabled:opacity-50"
                         title={t('versionHistory.actions.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
@@ -460,8 +479,8 @@ export function VersionHistoryModal({
                   </div>
 
                   {isWorking && (
-                    <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center gap-2 text-sky-400">
-                      <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-sky-500"></div>
+                    <div className="mt-3 pt-3 border-t border-slate-700/50 flex items-center gap-2 text-blue-400">
+                      <Loader2 className="h-4 w-4 animate-spin" />
                       <span className="text-sm">{t('versionHistory.processing')}</span>
                     </div>
                   )}
@@ -472,19 +491,17 @@ export function VersionHistoryModal({
         </div>
 
         {/* Footer */}
-        <div className="p-6 border-t border-slate-800 bg-slate-900/50">
-          <div className="flex items-center justify-between text-sm">
-            <div className="text-slate-400">
-              <Archive className="w-4 h-4 inline mr-1" />
-              {t('versionHistory.versionsTotal', { count: versions.length })}
-            </div>
-            <button
-              onClick={onClose}
-              className="px-4 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-lg transition-colors"
-            >
-              {t('common.close')}
-            </button>
+        <div className="flex items-center justify-between text-sm pt-5 mt-5 border-t border-slate-800/40">
+          <div className="text-slate-400 flex items-center gap-1.5">
+            <Archive className="w-4 h-4" />
+            {t('versionHistory.versionsTotal', { count: versions.length })}
           </div>
+          <button
+            onClick={onClose}
+            className="rounded-xl border border-slate-700/70 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white"
+          >
+            {t('common.close')}
+          </button>
         </div>
       </div>
     </div>

@@ -37,8 +37,7 @@ const TapoDeviceSettings: React.FC = () => {
     try {
       const data = await listTapoDevices();
       setDevices(data);
-    } catch (error: any) {
-      console.error('Failed to load devices:', error);
+    } catch {
       toast.error('Failed to load devices');
     } finally {
       setLoading(false);
@@ -76,9 +75,11 @@ const TapoDeviceSettings: React.FC = () => {
 
       // Reload devices
       loadDevices();
-    } catch (error: any) {
-      console.error('Failed to create device:', error);
-      toast.error(extractErrorMessage(error.response?.data?.detail, 'Failed to add device'));
+    } catch (error: unknown) {
+      const detail = error != null && typeof error === 'object' && 'response' in error
+        ? (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+        : undefined;
+      toast.error(extractErrorMessage(detail, 'Failed to add device'));
     }
   };
 
@@ -92,8 +93,7 @@ const TapoDeviceSettings: React.FC = () => {
       await deleteTapoDevice(deviceId);
       toast.success('Device deleted');
       loadDevices();
-    } catch (error: any) {
-      console.error('Failed to delete device:', error);
+    } catch {
       toast.error('Failed to delete device');
     }
   };

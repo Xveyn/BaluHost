@@ -35,7 +35,7 @@ const MONITORING_TABLES = ['cpu_samples', 'memory_samples', 'network_samples', '
 
 interface CustomTooltipProps {
   active?: boolean
-  payload?: any[]
+  payload?: Array<{ name: string; value: number; payload: { percent?: number; table_name?: string; row_count?: number; estimated_size_bytes?: number } }>
 }
 
 const CustomPieTooltip = ({ active, payload }: CustomTooltipProps) => {
@@ -58,8 +58,8 @@ const CustomBarTooltip = ({ active, payload }: CustomTooltipProps) => {
     return (
       <div className="bg-slate-800 border border-slate-600 rounded-lg px-3 py-2 shadow-xl">
         <p className="text-white text-sm font-medium">{data.table_name}</p>
-        <p className="text-slate-300 text-xs">Rows: {data.row_count.toLocaleString()}</p>
-        <p className="text-slate-300 text-xs">Size: {formatBytes(data.estimated_size_bytes)}</p>
+        <p className="text-slate-300 text-xs">Rows: {data.row_count?.toLocaleString() ?? '—'}</p>
+        <p className="text-slate-300 text-xs">Size: {formatBytes(data.estimated_size_bytes ?? 0)}</p>
       </div>
     )
   }
@@ -120,8 +120,8 @@ export default function StorageAnalysisChart() {
       setError(null)
       const data = await getDatabaseInfo()
       setInfo(data)
-    } catch (err: any) {
-      setError(err?.message || 'Failed to load storage info')
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load storage info')
     } finally {
       setLoading(false)
     }

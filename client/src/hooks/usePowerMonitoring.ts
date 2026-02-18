@@ -31,9 +31,8 @@ export function usePowerMonitoring(): UsePowerMonitoringReturn {
       setData(response);
       setError(null);
       setLastUpdated(new Date());
-    } catch (err: any) {
-      console.error('Failed to fetch power data:', err);
-      setError(err.message || 'Failed to fetch power data');
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to fetch power data');
     } finally {
       setLoading(false);
     }

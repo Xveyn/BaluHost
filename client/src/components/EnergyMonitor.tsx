@@ -62,7 +62,7 @@ const EnergyMonitor: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [costPerKwh, setCostPerKwh] = useState(0.40);
   const [timeWindow, setTimeWindow] = useState<TimeWindow>('10min');
-  const [chartData, setChartData] = useState<any[]>([]);
+  const [chartData, setChartData] = useState<Array<{ time: string; watts: number; fullTimestamp: string }>>([]);
 
   // Load devices
   useEffect(() => {
@@ -75,8 +75,7 @@ const EnergyMonitor: React.FC = () => {
         if (deviceList.length > 0 && !selectedDeviceId) {
           setSelectedDeviceId(deviceList[0].id);
         }
-      } catch (error: any) {
-        console.error('Failed to load devices:', error);
+      } catch {
         toast.error('Failed to load devices');
       } finally {
         setLoading(false);
@@ -104,8 +103,7 @@ const EnergyMonitor: React.FC = () => {
         ]);
 
         setCosts({ today: todayCost, week: weekCost, month: monthCost });
-      } catch (error: any) {
-        console.error('Failed to load dashboard:', error);
+      } catch {
         toast.error('Failed to load energy data');
       } finally {
         setLoading(false);
@@ -125,7 +123,7 @@ const EnergyMonitor: React.FC = () => {
 
     const loadChartData = async () => {
       try {
-        let data: any[] = [];
+        let data: Array<{ time: string; watts: number; fullTimestamp: string }> = [];
 
         const chartRange = windowToRange[timeWindow];
 
@@ -179,8 +177,8 @@ const EnergyMonitor: React.FC = () => {
         }
 
         setChartData(data);
-      } catch (error: any) {
-        console.error('Failed to load chart data:', error);
+      } catch {
+        // Non-critical: chart will show empty state
       }
     };
 

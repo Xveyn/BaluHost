@@ -7,7 +7,7 @@ import { useState, useMemo, useCallback, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
-import { extractErrorMessage } from '../lib/api';
+import { handleApiError } from '../lib/errorHandling';
 import { LoadingOverlay } from '../components/ui/Spinner';
 import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
 import type { FanCurvePoint } from '../api/fan-control';
@@ -43,9 +43,8 @@ export default function FanControl() {
       await setFanMode(fanId, mode);
       toast.success(t('system:fanControl.messages.modeChanged', { mode }));
       refetch();
-    } catch (error: any) {
-      const message = error.response?.data?.detail || error.message || t('system:fanControl.messages.modeChangeFailed');
-      toast.error(message);
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.messages.modeChangeFailed'));
     } finally {
       setOperationLoading(prev => ({ ...prev, [opKey]: false }));
     }
@@ -56,9 +55,8 @@ export default function FanControl() {
       await setFanPWM(fanId, pwm);
       toast.success(t('system:fanControl.messages.pwmSet', { pwm }));
       refetch();
-    } catch (error: any) {
-      const message = error.response?.data?.detail || error.message || t('system:fanControl.messages.pwmFailed');
-      toast.error(message);
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.messages.pwmFailed'));
     }
   }, [refetch, t]);
 
@@ -67,8 +65,8 @@ export default function FanControl() {
       await updateFanCurve(fanId, points);
       toast.success(t('system:fanControl.messages.curveUpdated'));
       refetch();
-    } catch (error: any) {
-      toast.error(extractErrorMessage(error.response?.data?.detail, t('system:fanControl.messages.curveFailed')));
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.messages.curveFailed'));
     }
   }, [refetch, t]);
 
@@ -81,8 +79,8 @@ export default function FanControl() {
       } else {
         toast.error(result.message || t('system:fanControl.messages.backendFailed'));
       }
-    } catch (error: any) {
-      toast.error(extractErrorMessage(error.response?.data?.detail, t('system:fanControl.messages.backendFailed')));
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.messages.backendFailed'));
     }
   }, [refetch, t]);
 

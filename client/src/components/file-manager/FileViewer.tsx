@@ -5,7 +5,9 @@
  */
 
 import { useState, useEffect } from 'react';
+import { X, Loader2, Music } from 'lucide-react';
 import { buildApiUrl } from '../../lib/api';
+import { useAuth } from '../../contexts/AuthContext';
 import {
   getFileExtension,
   isTextFile,
@@ -22,6 +24,7 @@ interface FileViewerProps {
 }
 
 export function FileViewer({ file, onClose }: FileViewerProps) {
+  const { token } = useAuth();
   const [content, setContent] = useState<string>('');
   const [blobUrl, setBlobUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
@@ -42,7 +45,6 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
   const loadFileContent = async () => {
     setLoading(true);
     setError('');
-    const token = localStorage.getItem('token');
     if (!token) {
       setError('Not authenticated');
       setLoading(false);
@@ -80,32 +82,32 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-lg p-2 sm:p-4">
-      <div className="card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] border-slate-800/60 bg-slate-900/90 flex flex-col">
-        <div className="flex items-start sm:items-center justify-between gap-3 mb-3 sm:mb-4">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/90 backdrop-blur-xl p-2 sm:p-4">
+      <div className="card w-full max-w-4xl max-h-[95vh] sm:max-h-[90vh] border-slate-800/60 bg-slate-900/90 backdrop-blur-2xl shadow-[0_20px_70px_rgba(0,0,0,0.5)] flex flex-col">
+        <div className="flex items-start sm:items-center justify-between gap-3 pb-4 border-b border-slate-800/60">
           <div className="min-w-0 flex-1">
             <h3 className="text-lg sm:text-xl font-semibold text-white truncate">{file.name}</h3>
-            <p className="text-xs sm:text-sm text-slate-400 mt-1 truncate">{file.path}</p>
+            <p className="text-xs sm:text-sm text-slate-400 mt-0.5 truncate">{file.path}</p>
           </div>
           <button
             onClick={onClose}
-            className="shrink-0 rounded-xl border border-slate-700/70 bg-slate-900/70 px-3 sm:px-4 py-2 text-sm font-medium text-slate-300 transition hover:border-slate-500 hover:text-white touch-manipulation active:scale-95"
+            className="shrink-0 p-1.5 text-slate-400 hover:text-white rounded-lg hover:bg-slate-800 transition-colors"
           >
-            <span className="hidden sm:inline">✕ Close</span>
-            <span className="sm:hidden">✕</span>
+            <X className="w-5 h-5" />
           </button>
         </div>
-        <div className="flex-1 overflow-auto">
+        <div className="flex-1 overflow-auto mt-4">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <p className="text-sm text-slate-500">Loading file...</p>
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="h-8 w-8 animate-spin text-blue-500 mb-4" />
+              <p className="text-sm text-slate-400">Loading file...</p>
             </div>
           ) : error ? (
             <div className="flex items-center justify-center py-12">
               <p className="text-sm text-rose-400">{error}</p>
             </div>
           ) : isImageFile(file.name) ? (
-            <div className="flex items-center justify-center p-4 bg-slate-950/50">
+            <div className="flex items-center justify-center p-4 bg-slate-950/50 rounded-lg">
               <img
                 src={blobUrl}
                 alt={file.name}
@@ -121,7 +123,7 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
             </div>
           ) : isAudioFile(file.name) ? (
             <div className="flex flex-col items-center justify-center p-8">
-              <div className="mb-4 text-6xl">🎵</div>
+              <Music className="h-16 w-16 text-slate-600 mb-4" />
               <audio controls className="w-full max-w-md">
                 <source src={blobUrl} type={`audio/${getFileExtension(file.name)}`} />
                 Your browser does not support the audio tag.

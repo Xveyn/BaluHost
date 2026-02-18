@@ -58,7 +58,7 @@ import {
   type UpdateChannel,
   type ReleaseNotesResponse,
 } from '../api/updates';
-import { extractErrorMessage } from '../lib/api';
+import { handleApiError } from '../lib/errorHandling';
 import UpdateProgress from '../components/updates/UpdateProgress';
 
 const VersionsTab = lazy(() => import('../components/updates/VersionsTab'));
@@ -133,8 +133,8 @@ export default function UpdatePage() {
     try {
       const result = await checkForUpdates();
       setCheckResult(result);
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.checkFailed')));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.checkFailed'));
     } finally {
       setCheckLoading(false);
     }
@@ -158,8 +158,8 @@ export default function UpdatePage() {
       const result = await getUpdateHistory({ page: historyPage, page_size: 10 });
       setHistory(result.updates);
       setHistoryTotal(result.total);
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.historyFailed')));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.historyFailed'));
     }
   }, [historyPage]);
 
@@ -168,9 +168,8 @@ export default function UpdatePage() {
     try {
       const result = await getReleaseNotes();
       setReleaseNotes(result);
-    } catch (err) {
+    } catch {
       // Non-critical, don't show error toast
-      console.warn('Failed to fetch release notes', err);
     }
   }, []);
 
@@ -179,8 +178,8 @@ export default function UpdatePage() {
     try {
       const result = await getUpdateConfig();
       setConfig(result);
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.configFailed')));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.configFailed'));
     }
   }, []);
 
@@ -217,9 +216,8 @@ export default function UpdatePage() {
             toast.success(t('common:toast.updateCompleted', { version: progress.to_version }));
           }
         }
-      } catch (err) {
+      } catch {
         // Update might have restarted the service
-        console.log('Update progress fetch failed, service may be restarting');
       }
     }, 2000);
 
@@ -239,12 +237,13 @@ export default function UpdatePage() {
       } else {
         toast.error(result.message);
       }
-    } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      if (typeof detail === 'object' && detail.blockers) {
-        toast.error(t('blockers.updateBlocked', { blockers: detail.blockers.join(', ') }));
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      if (typeof detail === 'object' && detail !== null && 'blockers' in detail) {
+        const blockers = (detail as { blockers: string[] }).blockers;
+        toast.error(t('blockers.updateBlocked', { blockers: blockers.join(', ') }));
       } else {
-        toast.error(detail || t('common:toast.updateFailed'));
+        handleApiError(err, t('common:toast.updateFailed'));
       }
     } finally {
       setUpdateLoading(false);
@@ -267,8 +266,8 @@ export default function UpdatePage() {
       } else {
         toast.error(result.message);
       }
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.rollbackFailed')));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.rollbackFailed'));
     } finally {
       setRollbackLoading(false);
       setRollbackTarget(null);
@@ -276,15 +275,15 @@ export default function UpdatePage() {
   };
 
   // Update config
-  const handleConfigChange = async (key: keyof UpdateConfig, value: any) => {
+  const handleConfigChange = async (key: keyof UpdateConfig, value: UpdateConfig[keyof UpdateConfig]) => {
     if (!config) return;
     setConfigLoading(true);
     try {
       const updated = await updateConfig({ [key]: value });
       setConfig(updated);
       toast.success(t('common:toast.settingsSaved'));
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('common:toast.settingsFailed')));
+    } catch (err: unknown) {
+      handleApiError(err, t('common:toast.settingsFailed'));
     } finally {
       setConfigLoading(false);
     }

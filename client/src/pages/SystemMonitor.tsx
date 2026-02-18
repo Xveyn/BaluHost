@@ -22,12 +22,7 @@ import { MemoryTab } from '../components/system-monitor/MemoryTab';
 import { NetworkTab } from '../components/system-monitor/NetworkTab';
 import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
-
-import type { User } from '../types/auth';
-
-interface SystemMonitorProps {
-  user: User;
-}
+import { useAuth } from '../contexts/AuthContext';
 
 type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services' | 'health' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
@@ -179,12 +174,11 @@ const VALID_TABS = new Set(CATEGORIES.flatMap((cat) => cat.tabs.map((tab) => tab
 const METRIC_TABS = new Set<TabType>(['cpu', 'memory', 'network', 'disk-io']);
 
 // Main Component
-export default function SystemMonitor({ user }: SystemMonitorProps) {
+export default function SystemMonitor() {
   const { t } = useTranslation(['system', 'common']);
+  const { user, isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
-
-  const isAdmin = user?.role === 'admin';
 
   // Get active tab from URL, default to 'cpu'
   const rawTab = searchParams.get('tab') || 'cpu';
@@ -294,7 +288,7 @@ export default function SystemMonitor({ user }: SystemMonitorProps) {
         {activeTab === 'services' && <ServicesStatusTab isAdmin={isAdmin} />}
         {activeTab === 'health' && <HealthTab />}
         {activeTab === 'logs' && <LogsTab />}
-        {activeTab === 'activity' && <ActivityTab user={user} />}
+        {activeTab === 'activity' && <ActivityTab user={user ?? undefined} />}
       </div>
     </div>
   );

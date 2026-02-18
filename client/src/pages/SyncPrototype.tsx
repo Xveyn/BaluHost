@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
+import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
 import {
   Smartphone,
   Monitor,
@@ -39,10 +40,9 @@ export default function SyncPrototype() {
       const data = await getAllDevices();
       setDevices(data);
     } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : t('common:toast.loadFailed');
-      console.error('Failed to load devices:', err);
+      const errorMsg = getApiErrorMessage(err, t('common:toast.loadFailed'));
       setError(errorMsg);
-      toast.error(errorMsg);
+      handleApiError(err, t('common:toast.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -74,7 +74,6 @@ export default function SyncPrototype() {
       loadDevices();
     } catch (err) {
       toast.error(t('common:toast.updateFailed'));
-      console.error(err);
     }
   };
 
@@ -102,7 +101,6 @@ export default function SyncPrototype() {
       loadDevices();
     } catch (err) {
       toast.error(t('common:toast.deleteFailed'));
-      console.error(err);
     }
   };
 

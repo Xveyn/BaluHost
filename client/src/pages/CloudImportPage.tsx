@@ -40,8 +40,8 @@ export default function CloudImportPage() {
       const [conns, jobList] = await Promise.all([getConnections(), getJobs()]);
       setConnections(conns);
       setJobs(jobList);
-    } catch (err) {
-      console.error('Failed to load cloud data:', err);
+    } catch {
+      // Load failure handled by empty state
     } finally {
       setLoading(false);
     }

@@ -36,8 +36,8 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
     try {
       const response = await apiClient.get('/files/list', { params: { path: '/' } });
       setFiles(response.data.files || []);
-    } catch (error) {
-      console.error('Failed to load files:', error);
+    } catch {
+      // Non-critical: file list will remain empty
     } finally {
       setLoadingFiles(false);
     }
@@ -54,8 +54,7 @@ export default function CreateShareLinkModal({ fileId, onClose, onSuccess }: Cre
         expires_at: formData.expires_at || null
       });
       onSuccess();
-    } catch (error: any) {
-      console.error('Failed to create share link:', error);
+    } catch (error: unknown) {
       toast.error(t('shares:toast.createLinkFailed'));
     } finally {
       setLoading(false);

@@ -94,13 +94,6 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
     const pCores = current.p_core_count;
     const eCores = current.e_core_count;
 
-    // Debug: Log thread_usages to console
-    if (current.thread_usages) {
-      console.log('[CPU Monitor] Thread usages received:', current.thread_usages.length, 'threads');
-    } else {
-      console.log('[CPU Monitor] No thread_usages data received from backend');
-    }
-
     // If we have P/E core info (Intel hybrid)
     if (pCores !== null && pCores !== undefined && eCores !== null && eCores !== undefined) {
       return {

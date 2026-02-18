@@ -36,14 +36,17 @@ export function usePluginsSummary(options: UsePluginsSummaryOptions = {}): UsePl
       const response = await listPlugins();
       setPlugins(response.plugins);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Don't show error if user is not admin (403)
-      if (err.response?.status === 403) {
+      const resp = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { status?: number; data?: { detail?: string } } }).response
+        : undefined;
+      if (resp?.status === 403) {
         setPlugins([]);
         setError(null);
         return;
       }
-      const message = err.response?.data?.detail || err.message || 'Failed to load plugins';
+      const message = resp?.data?.detail || (err instanceof Error ? err.message : 'Failed to load plugins');
       setError(message);
     }
   }, []);

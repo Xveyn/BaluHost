@@ -37,8 +37,11 @@ export default function VpnManagement() {
       // Load QR code data
       const qrResponse = await apiClient.get('/api/vpn/fritzbox/qr');
       setQrData(qrResponse.data.config_base64);
-    } catch (err: any) {
-      if (err.response?.status !== 404) {
+    } catch (err: unknown) {
+      const status = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { status?: number } }).response?.status
+        : undefined;
+      if (status !== 404) {
         setError(t('vpn.loadFailed'));
       }
     } finally {
@@ -78,8 +81,11 @@ export default function VpnManagement() {
 
       // Reload config
       await loadConfig();
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('vpn.uploadFailed'));
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || t('vpn.uploadFailed'));
     } finally {
       setUploading(false);
     }
@@ -93,8 +99,11 @@ export default function VpnManagement() {
       setSuccess(t('vpn.deleteSuccess'));
       setConfig(null);
       setQrData(null);
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('vpn.deleteFailed'));
+    } catch (err: unknown) {
+      const msg = err != null && typeof err === 'object' && 'response' in err
+        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+        : (err instanceof Error ? err.message : undefined);
+      setError(msg || t('vpn.deleteFailed'));
     }
   };
 

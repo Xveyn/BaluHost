@@ -46,9 +46,9 @@ export function LogsTab() {
 
       setFileAccessLogs(logsData);
       setAuditStatus(statusData);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load logging data');
-      console.error('Error loading logging data:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : 'Failed to load logging data';
+      setError(msg);
     } finally {
       setLoading(false);
     }
@@ -66,9 +66,9 @@ export function LogsTab() {
           ? t('logging.enabledSuccess')
           : t('logging.disabledSuccess')
       );
-    } catch (err: any) {
-      toast.error(err.message || t('logging.toggleError'));
-      console.error('Error toggling audit logging:', err);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('logging.toggleError');
+      toast.error(msg);
     } finally {
       setTogglingAudit(false);
     }

@@ -4,6 +4,7 @@ import { loggingApi } from '../api/logging';
 import type { AuditLoggingStatus, FileAccessLogsResponse } from '../api/logging';
 import { RefreshCw, FileText, CheckCircle, XCircle, Power } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { handleApiError } from '../lib/errorHandling';
 import { formatDateTime } from '../lib/dateUtils';
 import { formatBytes } from '../lib/formatters';
 
@@ -41,9 +42,8 @@ const Logging: React.FC = () => {
 
       setFileAccessLogs(logsData);
       setAuditStatus(statusData);
-    } catch (err: any) {
-      setError(err.message || 'Failed to load logging data');
-      console.error('Error loading logging data:', err);
+    } catch (err: unknown) {
+      setError(err instanceof Error ? err.message : 'Failed to load logging data');
     } finally {
       setLoading(false);
     }
@@ -61,9 +61,8 @@ const Logging: React.FC = () => {
           ? t('logging.enabledSuccess')
           : t('logging.disabledSuccess')
       );
-    } catch (err: any) {
-      toast.error(err.message || t('logging.toggleError'));
-      console.error('Error toggling audit logging:', err);
+    } catch (err: unknown) {
+      handleApiError(err, t('logging.toggleError'));
     } finally {
       setTogglingAudit(false);
     }

@@ -58,10 +58,13 @@ export function PowerTab() {
       const data = await getPowerHistory();
       setPowerData(data);
       setError(null);
-    } catch (err: any) {
+    } catch (err: unknown) {
       // Don't show error for no devices configured
-      if (err.response?.status !== 404) {
-        setError(err.message || 'Failed to load power data');
+      const isAxiosLike = err != null && typeof err === 'object' && 'response' in err;
+      const status = isAxiosLike ? (err as { response?: { status?: number } }).response?.status : undefined;
+      if (status !== 404) {
+        const msg = err instanceof Error ? err.message : 'Failed to load power data';
+        setError(msg);
       }
     } finally {
       setLoading(false);
@@ -75,8 +78,8 @@ export function PowerTab() {
         const config = await getEnergyPriceConfig();
         setPriceConfig(config);
         setPriceInput(config.cost_per_kwh.toString());
-      } catch (err) {
-        console.error('Failed to load price config:', err);
+      } catch {
+        // Non-critical: price config will remain null
       }
     };
     fetchPriceConfig();
@@ -98,8 +101,8 @@ export function PowerTab() {
       try {
         const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
         setCumulativeData(data);
-      } catch (err) {
-        console.error('Failed to load cumulative data:', err);
+      } catch {
+        // Non-critical: cumulative data will remain null
       } finally {
         setCumulativeLoading(false);
       }
@@ -134,8 +137,11 @@ export function PowerTab() {
         const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
         setCumulativeData(data);
       }
-    } catch (err: any) {
-      toast.error(extractErrorMessage(err.response?.data?.detail, t('monitor.power.saveError')));
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
+        : undefined;
+      toast.error(extractErrorMessage(detail, t('monitor.power.saveError')));
     } finally {
       setSavingPrice(false);
     }

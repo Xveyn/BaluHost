@@ -7,17 +7,13 @@ import { AdminBadge } from './ui/AdminBadge';
 import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
+import { useAuth } from '../contexts/AuthContext';
 import { Plug, CloudDownload } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { UploadProgressBar } from './UploadProgressBar';
 
 interface LayoutProps {
   children: ReactNode;
-  user: {
-    username: string;
-    role: string;
-  };
-  onLogout: () => void;
 }
 
 interface NavItem {
@@ -110,9 +106,10 @@ const navIcon = {
   )
 } as const;
 
-export default function Layout({ children, user, onLogout }: LayoutProps) {
+export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { t } = useTranslation('common');
+  const { user, logout, isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [shutdownPending, setShutdownPending] = useState(false);
   const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
@@ -257,7 +254,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
   // Add plugin navigation items
   const pluginItems = pluginNavItems
-    .filter((item) => !item.admin_only || user.role === 'admin')
+    .filter((item) => !item.admin_only || isAdmin)
     .map((item) => ({
       path: `/plugins/${item.path}`,
       label: item.label,
@@ -268,7 +265,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
   // Filter nav items based on user role
   const filteredNavItems = navItems
-    .filter(item => !item.adminOnly || user.role === 'admin');
+    .filter(item => !item.adminOnly || isAdmin);
 
   // Find where admin items start (for showing separator)
   const adminStartIndex = filteredNavItems.findIndex(item => item.adminOnly);
@@ -430,11 +427,11 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-xs text-slate-400">Logged in as</p>
-                  <p className="text-sm font-semibold text-slate-100">{user.username}</p>
-                  <p className="text-xs text-slate-100-tertiary">{user.role === 'admin' ? 'Administrator' : 'User'}</p>
+                  <p className="text-sm font-semibold text-slate-100">{user?.username}</p>
+                  <p className="text-xs text-slate-100-tertiary">{isAdmin ? 'Administrator' : 'User'}</p>
                 </div>
                 <div className="flex h-12 w-12 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-lg font-semibold text-sky-400">
-                  {user.username.charAt(0).toUpperCase()}
+                  {user?.username?.charAt(0).toUpperCase()}
                 </div>
               </div>
             </div>
@@ -479,9 +476,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
               {/* Desktop Header Left */}
               <div className="hidden lg:flex flex-col items-start">
-                <span className="text-sm font-medium text-slate-100">{user.username}</span>
+                <span className="text-sm font-medium text-slate-100">{user?.username}</span>
                 <span className="text-xs text-slate-100-tertiary">
-                  {user.role === 'admin' ? 'Administrator' : 'Standard Access'} - <span className="text-sky-400">Online</span>
+                  {isAdmin ? 'Administrator' : 'Standard Access'} - <span className="text-sky-400">Online</span>
                 </span>
               </div>
 
@@ -489,9 +486,9 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
               <div className="flex items-center gap-3">
                 <NotificationCenter />
                 <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
-                  {user.username.charAt(0).toUpperCase()}
+                  {user?.username?.charAt(0).toUpperCase()}
                 </div>
-                {user.role === 'admin' && (
+                {isAdmin && (
                   <button
                     onClick={async () => {
                       const ok = window.confirm('Server herunterfahren? Alle Dienste werden beendet. Fortfahren?');
@@ -501,22 +498,21 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
 
                       try {
                         const res = await localApi.shutdown();
-                        const eta = (res && (res as any).eta_seconds) || 1;
+                        const eta = (res && typeof res === 'object' && 'eta_seconds' in res ? (res as { eta_seconds: number }).eta_seconds : 1);
                         setShutdownMessage(`Shutdown geplant — beendet in ~${eta}s`);
 
                         // Wait for shutdown to complete, then logout
                         setTimeout(() => {
                           setShutdownPending(false);
-                          onLogout();
+                          logout();
                         }, (eta + 1) * 1000);
-                      } catch (err: any) {
-                        console.error('Shutdown API call error (may be expected):', err);
+                      } catch {
                         setShutdownMessage('Server wird heruntergefahren...');
 
                         // Still logout after a short delay
                         setTimeout(() => {
                           setShutdownPending(false);
-                          onLogout();
+                          logout();
                         }, 2000);
                       }
                     }}
@@ -531,7 +527,7 @@ export default function Layout({ children, user, onLogout }: LayoutProps) {
                   </button>
                 )}
                 <button
-                  onClick={onLogout}
+                  onClick={logout}
                   className="rounded-xl border border-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100 md:px-4"
                 >
                   <span className="hidden sm:inline">Logout</span>

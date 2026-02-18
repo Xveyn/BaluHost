@@ -119,9 +119,9 @@ export function ActivityTab({ user }: ActivityTabProps) {
       const response = await apiClient.get<AuditLogResponse>('/api/logging/audit', { params });
       setAuditLogs(response.data.logs || []);
       setTotalCount(response.data.total || response.data.logs?.length || 0);
-    } catch (err: any) {
-      console.error('Failed to load audit logs:', err);
-      setError(err.message || t('monitor.activity.loadError'));
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : t('monitor.activity.loadError');
+      setError(msg);
       toast.error(t('monitor.activity.loadError'));
     } finally {
       setLoading(false);

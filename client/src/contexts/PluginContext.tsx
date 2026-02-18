@@ -11,6 +11,7 @@ import {
   listPlugins,
   getUIManifest,
 } from '../api/plugins';
+import { useAuth } from './AuthContext';
 
 interface PluginContextType {
   plugins: PluginInfo[];
@@ -28,6 +29,7 @@ interface PluginProviderProps {
 }
 
 export function PluginProvider({ children }: PluginProviderProps) {
+  const { token } = useAuth();
   const [plugins, setPlugins] = useState<PluginInfo[]>([]);
   const [enabledPlugins, setEnabledPlugins] = useState<PluginUIInfo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -35,7 +37,6 @@ export function PluginProvider({ children }: PluginProviderProps) {
 
   const loadPlugins = useCallback(async () => {
     // Only load plugins if user is authenticated
-    const token = localStorage.getItem('token');
     if (!token) {
       setIsLoading(false);
       return;
@@ -54,7 +55,6 @@ export function PluginProvider({ children }: PluginProviderProps) {
       setPlugins(pluginList?.plugins ?? []);
       setEnabledPlugins(manifest?.plugins ?? []);
     } catch (err) {
-      console.error('Failed to load plugins:', err);
       setError(err instanceof Error ? err.message : 'Failed to load plugins');
       // Ensure arrays stay as arrays on error
       setPlugins([]);

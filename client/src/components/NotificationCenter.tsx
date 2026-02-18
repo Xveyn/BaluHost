@@ -62,8 +62,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       ]);
       setNotifications(notifResponse.notifications);
       setUnreadCount(countResponse.count);
-    } catch (error) {
-      console.error('Failed to fetch notifications:', error);
+    } catch {
+      // Non-critical: notifications will remain empty
     } finally {
       setLoading(false);
     }
@@ -100,8 +100,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
           prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
         );
         setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch (error) {
-        console.error('Failed to mark notification as read:', error);
+      } catch {
+        // Non-critical: UI state may be slightly out of sync
       }
     }
 
@@ -119,8 +119,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
       setUnreadCount(0);
       toast.success(t('markedAllRead'));
-    } catch (error) {
-      console.error('Failed to mark all as read:', error);
+    } catch {
       toast.error(t('markError'));
     }
   };
@@ -134,8 +133,8 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       if (!notification.is_read) {
         setUnreadCount((prev) => Math.max(0, prev - 1));
       }
-    } catch (error) {
-      console.error('Failed to dismiss notification:', error);
+    } catch {
+      // Non-critical: notification will remain in list
     }
   };
 

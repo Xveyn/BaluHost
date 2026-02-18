@@ -97,9 +97,11 @@ export function useBenchmarkDisks(): UseBenchmarkDisksReturn {
       const response = await getAvailableDisks();
       setDisks(response.disks);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load disks';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load disks'));
     } finally {
       setLoading(false);
     }
@@ -126,9 +128,11 @@ export function useBenchmarkProfiles(): UseBenchmarkProfilesReturn {
       const response = await getBenchmarkProfiles();
       setProfiles(response.profiles);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load profiles';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load profiles'));
     } finally {
       setLoading(false);
     }
@@ -157,9 +161,11 @@ export function useBenchmark(benchmarkId: number | null): UseBenchmarkReturn {
       const response = await getBenchmark(benchmarkId);
       setBenchmark(response);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load benchmark';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load benchmark'));
     } finally {
       setLoading(false);
     }
@@ -207,9 +213,11 @@ export function useBenchmarkProgress(
           intervalRef.current = null;
         }
       }
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load progress';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load progress'));
     }
   }, [benchmarkId, autoStopOnComplete]);
 
@@ -275,9 +283,11 @@ export function useBenchmarkHistory(
       setTotal(response.total);
       setTotalPages(response.total_pages);
       setError(null);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to load history';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to load history'));
     } finally {
       setLoading(false);
     }
@@ -314,9 +324,11 @@ export function useStartBenchmark(): UseStartBenchmarkReturn {
       const response = await startBenchmark(request);
       setBenchmark(response);
       return response;
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to start benchmark';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to start benchmark'));
       throw err;
     } finally {
       setLoading(false);
@@ -338,9 +350,11 @@ export function useCancelBenchmark(): UseCancelBenchmarkReturn {
       setLoading(true);
       setError(null);
       await cancelBenchmark(benchmarkId);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to cancel benchmark';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to cancel benchmark'));
       throw err;
     } finally {
       setLoading(false);
@@ -362,9 +376,11 @@ export function useMarkBenchmarkFailed(): UseMarkBenchmarkFailedReturn {
       setLoading(true);
       setError(null);
       await markBenchmarkFailed(benchmarkId);
-    } catch (err: any) {
-      const message = err.response?.data?.detail || err.message || 'Failed to mark benchmark as failed';
-      setError(message);
+    } catch (err: unknown) {
+      const detail = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
+        : undefined;
+      setError(detail || (err instanceof Error ? err.message : 'Failed to mark benchmark as failed'));
       throw err;
     } finally {
       setLoading(false);

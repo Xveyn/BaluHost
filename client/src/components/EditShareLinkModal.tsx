@@ -43,8 +43,7 @@ export default function EditShareLinkModal({ shareLink, onClose, onSuccess }: Ed
 
       await updateShareLink(shareLink.id, updateData);
       onSuccess();
-    } catch (error: any) {
-      console.error('Failed to update share link:', error);
+    } catch (error: unknown) {
       toast.error(t('shares:toast.updateFailed'));
     } finally {
       setLoading(false);

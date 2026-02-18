@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { buildApiUrl } from '../lib/api';
+import { useAuth } from '../contexts/AuthContext';
 
 interface CpuInfo {
   usage: number;
@@ -102,8 +103,8 @@ function getCachedTelemetry(): { system: SystemInfoResponse | null; storage: Sto
         return { system: data.system, storage: data.storage, history: data.history };
       }
     }
-  } catch (err) {
-    console.error('Failed to read telemetry cache:', err);
+  } catch {
+    // Ignore cache read failures
   }
   return null;
 }
@@ -116,12 +117,13 @@ function setCachedTelemetry(system: SystemInfoResponse, storage: StorageInfoResp
       history,
       timestamp: Date.now()
     }));
-  } catch (err) {
-    console.error('Failed to write telemetry cache:', err);
+  } catch {
+    // Ignore cache write failures
   }
 }
 
 export const useSystemTelemetry = (pollInterval = 5000): TelemetryState => {
+  const { token } = useAuth();
   const cachedData = getCachedTelemetry();
   const [system, setSystem] = useState<SystemInfoResponse | null>(cachedData?.system || null);
   const [storage, setStorage] = useState<StorageInfoResponse | null>(cachedData?.storage || null);
@@ -133,8 +135,6 @@ export const useSystemTelemetry = (pollInterval = 5000): TelemetryState => {
   const intervalRef = useRef<number | null>(null);
 
   useEffect(() => {
-    const token = localStorage.getItem('token');
-
     if (!token) {
       setError('Missing authentication token.');
       setLoading(false);

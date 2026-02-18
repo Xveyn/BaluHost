@@ -39,6 +39,11 @@ export interface ApiFileItem {
   type: 'file' | 'directory';
   modified_at?: string;
   mtime?: string;
+  ownerId?: number;
+  owner_id?: number;
+  ownerName?: string;
+  owner_name?: string;
+  file_id?: number;
 }
 
 export interface PermissionRule {

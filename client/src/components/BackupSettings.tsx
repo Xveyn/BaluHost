@@ -39,8 +39,11 @@ export default function BackupSettings() {
 			setBackups(response.backups);
 			const totalBytes = response.backups.reduce((acc, b) => acc + b.size_bytes, 0);
 			setTotalSize({ bytes: totalBytes, mb: totalBytes / 1024 / 1024 });
-		} catch (err: any) {
-			setError(err.response?.data?.detail || t('backup.loadFailed'));
+		} catch (err: unknown) {
+			const msg = err != null && typeof err === 'object' && 'response' in err
+				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+				: (err instanceof Error ? err.message : undefined);
+			setError(msg || t('backup.loadFailed'));
 			setBackups([]);
 		} finally {
 			setLoading(false);
@@ -63,8 +66,11 @@ export default function BackupSettings() {
 			// Clear API cache to force fresh backup list
 			apiCache.clear();
 			await loadBackups();
-		} catch (err: any) {
-			setError(err.response?.data?.detail || t('backup.createFailed'));
+		} catch (err: unknown) {
+			const msg = err != null && typeof err === 'object' && 'response' in err
+				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+				: (err instanceof Error ? err.message : undefined);
+			setError(msg || t('backup.createFailed'));
 		} finally {
 			setCreating(false);
 		}
@@ -82,8 +88,11 @@ export default function BackupSettings() {
 			await loadBackups();
 			setDeleteDialogOpen(false);
 			setBackupToDelete(null);
-		} catch (err: any) {
-			setError(err.response?.data?.detail || t('backup.deleteFailed'));
+		} catch (err: unknown) {
+			const msg = err != null && typeof err === 'object' && 'response' in err
+				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+				: (err instanceof Error ? err.message : undefined);
+			setError(msg || t('backup.deleteFailed'));
 		} finally {
 			setDeleting(false);
 		}
@@ -111,8 +120,11 @@ export default function BackupSettings() {
 					window.location.reload();
 				}
 			}, 2000);
-		} catch (err: any) {
-			setError(err.response?.data?.detail || t('backup.restoreFailed'));
+		} catch (err: unknown) {
+			const msg = err != null && typeof err === 'object' && 'response' in err
+				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
+				: (err instanceof Error ? err.message : undefined);
+			setError(msg || t('backup.restoreFailed'));
 		} finally {
 			setRestoring(false);
 		}
