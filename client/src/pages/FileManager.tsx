@@ -506,22 +506,6 @@ export default function FileManager() {
     const parts = currentPath.split('/').filter(Boolean);
     parts.pop();
     const parentPath = parts.join('/');
-
-    if (
-      currentPath &&
-      !currentPath.startsWith(user.username + '/') &&
-      currentPath !== user.username &&
-      !currentPath.startsWith('Shared/') &&
-      currentPath !== 'Shared' &&
-      currentPath !== 'Shared with me'
-    ) {
-      const topLevel = parts[0] || '';
-      if (!topLevel || (topLevel !== user.username && topLevel !== 'Shared' && topLevel !== 'Shared with me')) {
-        setCurrentPath('Shared with me');
-        return;
-      }
-    }
-
     setCurrentPath(parentPath);
   };
 
