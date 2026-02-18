@@ -17,6 +17,7 @@ import { formatBytes, formatNumber } from '../lib/formatters';
 import { FileViewer } from '../components/file-manager/FileViewer';
 import { StorageSelector } from '../components/file-manager/StorageSelector';
 import { PermissionEditor } from '../components/file-manager/PermissionEditor';
+import { OwnershipTransferModal } from '../components/file-manager/OwnershipTransferModal';
 import { FileListView } from '../components/file-manager/FileListView';
 import { NewFolderDialog } from '../components/file-manager/NewFolderDialog';
 import { DeleteDialog } from '../components/file-manager/DeleteDialog';
@@ -45,6 +46,10 @@ export default function FileManager() {
   const [showEditPermissionsModal, setShowEditPermissionsModal] = useState(false);
   const [fileToEditPermissions, setFileToEditPermissions] = useState<FileItem | null>(null);
   const [editRules, setEditRules] = useState<PermissionRule[]>([]);
+
+  // Ownership transfer modal state
+  const [showOwnershipModal, setShowOwnershipModal] = useState(false);
+  const [fileToTransfer, setFileToTransfer] = useState<FileItem | null>(null);
 
   function isCurrentUserOwnerOrAdmin(ownerId: number | undefined) {
     if (!user) return false;
@@ -555,6 +560,11 @@ export default function FileManager() {
     setShowVersionHistory(true);
   };
 
+  const handleTransferOwnershipClick = (file: FileItem) => {
+    setFileToTransfer(file);
+    setShowOwnershipModal(true);
+  };
+
   return (
     <div className="space-y-6 min-w-0">
       {/* Header */}
@@ -680,6 +690,7 @@ export default function FileManager() {
           onDelete={confirmDelete}
           onVersionHistory={handleVersionHistory}
           onEditPermissions={handleEditPermissionsClick}
+          onTransferOwnership={handleTransferOwnershipClick}
           onDragEnter={handleDrag}
           onDragLeave={handleDrag}
           onDragOver={handleDrag}
@@ -748,6 +759,29 @@ export default function FileManager() {
           onClose={() => {
             setShowEditPermissionsModal(false);
             setFileToEditPermissions(null);
+          }}
+        />
+      )}
+
+      {/* Ownership Transfer Modal */}
+      {showOwnershipModal && fileToTransfer && (
+        <OwnershipTransferModal
+          file={fileToTransfer}
+          allUsers={allUsers}
+          currentUserId={user?.id ?? 0}
+          onClose={() => {
+            setShowOwnershipModal(false);
+            setFileToTransfer(null);
+          }}
+          onSuccess={(response) => {
+            const targetUser = allUsers.find(u => Number(u.id) === Number(response.new_path?.split('/')[0] === fileToTransfer.name ? '' : response.new_path?.split('/')[0]));
+            toast.success(t('fileManager:ownership.transferSuccessMessage', {
+              count: response.transferred_count,
+              user: targetUser?.username ?? '?',
+            }));
+            setShowOwnershipModal(false);
+            setFileToTransfer(null);
+            loadFiles(currentPath, false);
           }}
         />
       )}

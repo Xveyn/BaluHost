@@ -9,6 +9,7 @@ import {
   FolderOpen,
   File as FileIcon,
   Users,
+  UserCheck,
 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatters';
 import type { FileItem } from './types';
@@ -27,6 +28,7 @@ export interface FileListViewProps {
   onDelete: (file: FileItem) => void;
   onVersionHistory: (file: FileItem) => void;
   onEditPermissions: (file: FileItem) => void;
+  onTransferOwnership: (file: FileItem) => void;
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -79,6 +81,7 @@ export function FileListView({
   onDelete,
   onVersionHistory,
   onEditPermissions,
+  onTransferOwnership,
   onDragEnter,
   onDragLeave,
   onDragOver,
@@ -218,6 +221,15 @@ export function FileListView({
                           <Settings2 className="w-4 h-4" />
                         </button>
                       )}
+                      {isCurrentUserOwnerOrAdmin(file.ownerId) && (
+                        <button
+                          onClick={() => onTransferOwnership(file)}
+                          className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 transition hover:border-amber-500/50 hover:bg-amber-500/20"
+                          title="Transfer Ownership"
+                        >
+                          <UserCheck className="w-4 h-4" />
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -328,6 +340,14 @@ export function FileListView({
                 >
                   <Trash2 className="w-3.5 h-3.5" />
                 </button>
+                {isCurrentUserOwnerOrAdmin(file.ownerId) && (
+                  <button
+                    onClick={() => onTransferOwnership(file)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-amber-500/30 bg-amber-500/10 px-3 py-2 text-xs font-medium text-amber-200 transition hover:border-amber-500/50 hover:bg-amber-500/20 touch-manipulation active:scale-95"
+                  >
+                    <UserCheck className="w-3.5 h-3.5" />
+                  </button>
+                )}
               </div>
             </div>
           ))
