@@ -47,6 +47,18 @@ from app.services.files.metadata_db import (
     ensure_metadata,
 )
 from app.services.files.shares import ShareService
+from app.services.files.ownership import (
+    transfer_ownership,
+    enforce_residency,
+    scan_residency_violations,
+    OwnershipError,
+    OwnershipTransferError,
+    ResidencyViolationError,
+    OwnershipTransferResult,
+    ResidencyEnforcementResult,
+    ConflictInfo,
+    ResidencyViolation,
+)
 
 __all__ = [
     # Operations
@@ -86,4 +98,15 @@ __all__ = [
     "ensure_metadata",
     # Shares
     "ShareService",
+    # Ownership
+    "transfer_ownership",
+    "enforce_residency",
+    "scan_residency_violations",
+    "OwnershipError",
+    "OwnershipTransferError",
+    "ResidencyViolationError",
+    "OwnershipTransferResult",
+    "ResidencyEnforcementResult",
+    "ConflictInfo",
+    "ResidencyViolation",
 ]
