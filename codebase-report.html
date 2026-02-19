@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>BaluHost Codebase Analysis Report</title>
+  <title>BaluHost Codebase Analysis Report v2</title>
   <style>
     :root {
       --bg-primary: #0f172a;
@@ -183,6 +183,33 @@
       font-size: 0.8rem;
       color: var(--text-secondary);
       margin-top: 0.25rem;
+    }
+
+    /* Delta Badge */
+    .delta {
+      display: inline-flex;
+      align-items: center;
+      font-size: 0.65rem;
+      font-weight: 600;
+      padding: 0.1rem 0.4rem;
+      border-radius: 0.25rem;
+      margin-left: 0.4rem;
+      vertical-align: middle;
+    }
+
+    .delta-up {
+      background: rgba(52,211,153,0.15);
+      color: var(--accent-emerald);
+    }
+
+    .delta-down {
+      background: rgba(56,189,248,0.15);
+      color: var(--accent-blue);
+    }
+
+    .delta-fixed {
+      background: rgba(52,211,153,0.2);
+      color: var(--accent-emerald);
     }
 
     /* Score Cards */
@@ -566,67 +593,6 @@
       font-size: 0.8rem;
     }
 
-    /* Donut Chart via CSS */
-    .donut-container {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 3rem;
-      margin: 2rem 0;
-      flex-wrap: wrap;
-    }
-
-    .donut {
-      position: relative;
-      width: 160px; height: 160px;
-    }
-
-    .donut-ring {
-      width: 100%; height: 100%;
-      border-radius: 50%;
-      position: relative;
-    }
-
-    .donut-center {
-      position: absolute;
-      top: 50%; left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-    }
-
-    .donut-center .donut-value {
-      font-size: 1.5rem;
-      font-weight: 800;
-      color: var(--text-primary);
-    }
-
-    .donut-center .donut-label {
-      font-size: 0.65rem;
-      text-transform: uppercase;
-      letter-spacing: 0.1em;
-      color: var(--text-muted);
-    }
-
-    .legend {
-      display: flex;
-      flex-direction: column;
-      gap: 0.75rem;
-    }
-
-    .legend-item {
-      display: flex;
-      align-items: center;
-      gap: 0.5rem;
-      font-size: 0.85rem;
-      color: var(--text-secondary);
-    }
-
-    .legend-dot {
-      width: 12px; height: 12px;
-      border-radius: 3px;
-      flex-shrink: 0;
-    }
-
     /* Architecture Diagram */
     .arch-box {
       background: var(--bg-card);
@@ -647,6 +613,62 @@
     .arch-box .num { color: var(--accent-amber); }
     .arch-box .accent { color: var(--accent-violet); }
 
+    /* Changes Since v1 */
+    .changelog-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+      gap: 1rem;
+      margin: 1.5rem 0;
+    }
+
+    .changelog-item {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 0.75rem;
+      padding: 1rem 1.25rem;
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+    }
+
+    .changelog-icon {
+      width: 32px; height: 32px;
+      border-radius: 0.5rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 0.9rem;
+      flex-shrink: 0;
+    }
+
+    .changelog-icon.green {
+      background: rgba(52,211,153,0.15);
+      color: var(--accent-emerald);
+    }
+
+    .changelog-icon.blue {
+      background: rgba(56,189,248,0.15);
+      color: var(--accent-blue);
+    }
+
+    .changelog-icon.violet {
+      background: rgba(167,139,250,0.15);
+      color: var(--accent-violet);
+    }
+
+    .changelog-item .cl-title {
+      font-size: 0.85rem;
+      font-weight: 600;
+      color: var(--text-primary);
+      margin-bottom: 0.15rem;
+    }
+
+    .changelog-item .cl-detail {
+      font-size: 0.75rem;
+      color: var(--text-secondary);
+      line-height: 1.4;
+    }
+
     /* Responsive */
     @media (max-width: 640px) {
       .container { padding: 1rem; }
@@ -662,11 +684,11 @@
     <!-- Header -->
     <div class="header">
       <h1>BaluHost Codebase Report</h1>
-      <p class="subtitle">Umfassende Analyse von Code-Qualitat, Komplexitat und Wartbarkeit</p>
+      <p class="subtitle">Umfassende Analyse von Code-Qualit&auml;t, Komplexit&auml;t und Wartbarkeit</p>
       <div class="meta">
-        <div class="meta-item"><span class="dot"></span> Version 1.5.2-alpha</div>
-        <div class="meta-item"><span class="dot"></span> Analysiert am 17.02.2026</div>
-        <div class="meta-item"><span class="dot"></span> 192 Commits</div>
+        <div class="meta-item"><span class="dot"></span> Version 1.7.0</div>
+        <div class="meta-item"><span class="dot"></span> Analysiert am 19.02.2026</div>
+        <div class="meta-item"><span class="dot"></span> 229 Commits</div>
         <div class="meta-item"><span class="dot"></span> Produktiv seit Jan 2026</div>
       </div>
     </div>
@@ -679,68 +701,134 @@
       </div>
       <p class="grade-text">
         BaluHost ist eine gut strukturierte, produktionsreife Full-Stack-Anwendung mit solider Architektur,
-        starker Typsicherheit und durchdachtem Security-Konzept. Die Codebase ist vergleichsweise gross
-        fur ein Einzelentwickler-Projekt.
+        starker Typsicherheit und durchdachtem Security-Konzept. Seit v1 wurde die Code-Hygiene signifikant
+        verbessert &mdash; insbesondere der Frontend-Cleanup (console.log: 181&rarr;5, any: 219&rarr;81).
       </p>
+    </div>
+
+    <!-- Changes Since v1 -->
+    <div class="section">
+      <div class="section-header">
+        <h2>&Auml;nderungen seit v1</h2>
+        <span class="badge">Changelog</span>
+      </div>
+      <div class="changelog-grid">
+        <div class="changelog-item">
+          <div class="changelog-icon green">&#10003;</div>
+          <div>
+            <div class="cl-title">console.log Cleanup</div>
+            <div class="cl-detail">181 &rarr; 5 Statements. Frontend-Debug-Code fast vollst&auml;ndig entfernt.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon green">&#10003;</div>
+          <div>
+            <div class="cl-title">any-Typen reduziert</div>
+            <div class="cl-detail">219 &rarr; 81 Vorkommen. TypeScript-Disziplin deutlich gesteigert.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon green">&#10003;</div>
+          <div>
+            <div class="cl-title">Test-Explosion</div>
+            <div class="cl-detail">Testfunktionen: 364 &rarr; 1.183. Dreifache Abdeckung im Backend.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon blue">&#9733;</div>
+          <div>
+            <div class="cl-title">Sleep Mode</div>
+            <div class="cl-detail">Neues Full-Stack-Feature: Config, Status, History, Auto-Wake Middleware.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon blue">&#9733;</div>
+          <div>
+            <div class="cl-title">Fan Schedule erweitert</div>
+            <div class="cl-detail">Fan Control: 1.101 &rarr; 1.341 LOC. Scheduled Mode mit Zeitfenstern.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon violet">&#8644;</div>
+          <div>
+            <div class="cl-title">Komponenten-Refactoring</div>
+            <div class="cl-detail">FileManager: 1.247 &rarr; 774 LOC. Neue Sub-Komponenten extrahiert.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon violet">&#8644;</div>
+          <div>
+            <div class="cl-title">+39 Komponenten</div>
+            <div class="cl-detail">108 &rarr; 147 React-Komponenten. Bessere Modularisierung.</div>
+          </div>
+        </div>
+        <div class="changelog-item">
+          <div class="changelog-icon blue">&#9733;</div>
+          <div>
+            <div class="cl-title">+37 Commits</div>
+            <div class="cl-detail">192 &rarr; 229 Commits. ~10K LOC Wachstum (129K &rarr; 139K).</div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- Kennzahlen -->
     <div class="section">
       <div class="section-header">
-        <h2>Kennzahlen im Uberblick</h2>
+        <h2>Kennzahlen im &Uuml;berblick</h2>
         <span class="badge">Metrics</span>
       </div>
       <div class="stats-grid">
         <div class="stat-card">
           <div class="label">Gesamte LOC</div>
-          <div class="value">129K</div>
-          <div class="detail">113.5K App + 15.7K Tests</div>
+          <div class="value">139K</div>
+          <div class="detail">120.1K App + 18.9K Tests <span class="delta delta-up">+10K</span></div>
         </div>
         <div class="stat-card">
           <div class="label">Quelldateien</div>
-          <div class="value">465</div>
-          <div class="detail">223 Python + 242 TS/TSX</div>
+          <div class="value">506</div>
+          <div class="detail">229 Python + 277 TS/TSX <span class="delta delta-up">+41</span></div>
         </div>
         <div class="stat-card">
-          <div class="label">Testdateien</div>
-          <div class="value">88</div>
-          <div class="detail">72 Backend + 16 Frontend</div>
+          <div class="label">Test-Functions</div>
+          <div class="value">1.183</div>
+          <div class="detail">81 Backend + 25 Frontend Testdateien <span class="delta delta-up">+819</span></div>
         </div>
         <div class="stat-card">
           <div class="label">API Endpoints</div>
-          <div class="value">330+</div>
-          <div class="detail">38 Route-Dateien</div>
+          <div class="value">346</div>
+          <div class="detail">39 Route-Dateien <span class="delta delta-up">+16</span></div>
         </div>
         <div class="stat-card">
           <div class="label">DB Migrationen</div>
-          <div class="value">49</div>
-          <div class="detail">Alembic Revisions</div>
+          <div class="value">52</div>
+          <div class="detail">Alembic Revisions <span class="delta delta-up">+3</span></div>
         </div>
         <div class="stat-card">
           <div class="label">Dependencies</div>
-          <div class="value">65</div>
-          <div class="detail">34 Backend + 31 Frontend</div>
+          <div class="value">67</div>
+          <div class="detail">34 Backend + 33 Frontend</div>
         </div>
       </div>
     </div>
 
-    <!-- Grossenvergleich -->
+    <!-- Gr&ouml;ssenvergleich -->
     <div class="section">
       <div class="section-header">
-        <h2>Grosseneinordnung</h2>
+        <h2>Gr&ouml;sseneinordnung</h2>
         <span class="badge">Kontext</span>
       </div>
       <div class="summary-box">
         <h3>Wie gross ist die Codebase wirklich?</h3>
         <p>
-          Mit ~129.000 Zeilen Code ist BaluHost ein <strong>mittelgrosses bis grosses Projekt</strong>.
+          Mit ~139.000 Zeilen Code ist BaluHost ein <strong>mittelgrosses bis grosses Projekt</strong>.
           Zum Vergleich: Typische Open-Source-Projekte wie <em>Gitea</em> (Go-basierter Git-Server) haben ~200K LOC,
-          wahrend einfachere Self-Hosted-Tools wie <em>Filebrowser</em> bei ~30K LOC liegen.
+          w&auml;hrend einfachere Self-Hosted-Tools wie <em>Filebrowser</em> bei ~30K LOC liegen.
         </p>
         <p>
-          Die Komplexitat entsteht durch die Breite der Features: BaluHost vereint Dateiverwaltung, RAID-Management,
-          VPN-Konfiguration, Power-Management, Fan-Steuerung, Monitoring, Backup, Sync, Plugin-System und
-          Mobile-App-Anbindung in einer einzigen Plattform -- ein Umfang, den man typischerweise bei Teams von 3-5 Entwicklern erwarten wurde.
+          Die Komplexit&auml;t entsteht durch die Breite der Features: BaluHost vereint Dateiverwaltung, RAID-Management,
+          VPN-Konfiguration, Power-Management, Fan-Steuerung, Sleep Mode, Monitoring, Backup, Sync, Plugin-System und
+          Mobile-App-Anbindung in einer einzigen Plattform &mdash; ein Umfang, den man typischerweise bei Teams von 3&ndash;5 Entwicklern erwarten w&uuml;rde.
         </p>
       </div>
 
@@ -750,19 +838,19 @@
         <div class="bar-item">
           <span class="bar-label">Backend App</span>
           <div class="bar-track">
-            <div class="bar-fill blue" style="width: 47%;">60.482 LOC</div>
+            <div class="bar-fill blue" style="width: 46%;">63.718 LOC</div>
           </div>
         </div>
         <div class="bar-item">
           <span class="bar-label">Frontend</span>
           <div class="bar-track">
-            <div class="bar-fill violet" style="width: 41%;">53.035 LOC</div>
+            <div class="bar-fill violet" style="width: 41%;">56.398 LOC</div>
           </div>
         </div>
         <div class="bar-item">
           <span class="bar-label">Backend Tests</span>
           <div class="bar-track">
-            <div class="bar-fill emerald" style="width: 12%;">15.711 LOC</div>
+            <div class="bar-fill emerald" style="width: 14%;">18.883 LOC</div>
           </div>
         </div>
       </div>
@@ -778,31 +866,31 @@
         <div class="comparison-panel">
           <h3><span style="color: var(--accent-blue);">&#9679;</span> Backend (Python / FastAPI)</h3>
           <div class="detail-list">
-            <div class="detail-item"><span class="key">Dateien</span><span class="val">223</span></div>
-            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">60.482</span></div>
-            <div class="detail-item"><span class="key">Services</span><span class="val">88</span></div>
-            <div class="detail-item"><span class="key">Route-Dateien</span><span class="val">38</span></div>
-            <div class="detail-item"><span class="key">DB Models</span><span class="val">34</span></div>
-            <div class="detail-item"><span class="key">Pydantic Schemas</span><span class="val">33</span></div>
-            <div class="detail-item"><span class="key">Async Functions</span><span class="val">668</span></div>
-            <div class="detail-item"><span class="key">Testdateien</span><span class="val">72</span></div>
-            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">15.711</span></div>
+            <div class="detail-item"><span class="key">Dateien</span><span class="val">229</span></div>
+            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">63.718</span></div>
+            <div class="detail-item"><span class="key">Services</span><span class="val">90</span></div>
+            <div class="detail-item"><span class="key">Route-Dateien</span><span class="val">39</span></div>
+            <div class="detail-item"><span class="key">DB Models</span><span class="val">35</span></div>
+            <div class="detail-item"><span class="key">Pydantic Schemas</span><span class="val">34</span></div>
+            <div class="detail-item"><span class="key">Async Functions</span><span class="val">729</span></div>
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">81</span></div>
+            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">18.883</span></div>
             <div class="detail-item"><span class="key">Dependencies</span><span class="val">34</span></div>
           </div>
         </div>
         <div class="comparison-panel">
           <h3><span style="color: var(--accent-violet);">&#9679;</span> Frontend (React / TypeScript)</h3>
           <div class="detail-list">
-            <div class="detail-item"><span class="key">Dateien</span><span class="val">242</span></div>
-            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">53.035</span></div>
-            <div class="detail-item"><span class="key">Pages</span><span class="val">28</span></div>
-            <div class="detail-item"><span class="key">Komponenten</span><span class="val">108</span></div>
-            <div class="detail-item"><span class="key">Custom Hooks</span><span class="val">20</span></div>
-            <div class="detail-item"><span class="key">API Module</span><span class="val">25</span></div>
-            <div class="detail-item"><span class="key">Type Definitionen</span><span class="val">851</span></div>
-            <div class="detail-item"><span class="key">Testdateien</span><span class="val">16</span></div>
+            <div class="detail-item"><span class="key">Dateien</span><span class="val">277</span></div>
+            <div class="detail-item"><span class="key">Lines of Code</span><span class="val">56.398</span></div>
+            <div class="detail-item"><span class="key">Pages</span><span class="val">29</span></div>
+            <div class="detail-item"><span class="key">Komponenten</span><span class="val">147</span></div>
+            <div class="detail-item"><span class="key">Custom Hooks</span><span class="val">21</span></div>
+            <div class="detail-item"><span class="key">API Module</span><span class="val">28</span></div>
+            <div class="detail-item"><span class="key">Type Exports</span><span class="val">434</span></div>
+            <div class="detail-item"><span class="key">React Contexts</span><span class="val">7</span></div>
             <div class="detail-item"><span class="key">i18n Sprachen</span><span class="val">EN, DE</span></div>
-            <div class="detail-item"><span class="key">Dependencies</span><span class="val">11 + 20 dev</span></div>
+            <div class="detail-item"><span class="key">Dependencies</span><span class="val">11 + 22 dev</span></div>
           </div>
         </div>
       </div>
@@ -811,7 +899,7 @@
     <!-- Code Quality Scores -->
     <div class="section">
       <div class="section-header">
-        <h2>Code-Qualitat Bewertung</h2>
+        <h2>Code-Qualit&auml;t Bewertung</h2>
         <span class="badge">Quality</span>
       </div>
       <div class="score-grid">
@@ -826,72 +914,72 @@
           <div class="score-ring excellent">A+</div>
           <div class="info">
             <h3>Typsicherheit</h3>
-            <p>TypeScript strict mode, 851 Typ-Definitionen, 0 ts-ignore. Backend: 72.6% der Dateien mit Typing-Imports, Pydantic fur Validierung.</p>
+            <p>TypeScript strict mode, 434 exportierte Type-Definitionen, 0 ts-ignore. Backend: 72% der Dateien mit Typing-Imports, Pydantic f&uuml;r Validierung.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring excellent">A+</div>
           <div class="info">
             <h3>Security</h3>
-            <p>JWT + 2FA (TOTP), Rate Limiting, Audit Logging, Path Traversal Schutz, kein shell=True, CSP Headers, Input-Validierung.</p>
+            <p>JWT + 2FA (TOTP), 24 Rate-Limited Endpoints, 109 Audit-Log Call Sites, Path Traversal Schutz, kein shell=True, CSP Headers.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring excellent">A+</div>
           <div class="info">
             <h3>Async/Concurrency</h3>
-            <p>668 async Functions, korrektes await-Pattern, async DB Sessions, WebSocket-Support, Background Jobs via Lifespan Events.</p>
+            <p>729 async Functions, korrektes await-Pattern, async DB Sessions, WebSocket-Support, Background Jobs via Lifespan Events.</p>
+          </div>
+        </div>
+        <div class="score-card">
+          <div class="score-ring excellent">A+</div>
+          <div class="info">
+            <h3>Testing <span class="delta delta-up">&uarr;</span></h3>
+            <p>1.183 Testfunktionen in 106 Dateien. Test-zu-Code Ratio 1:3.4. Dreifache Abdeckung seit v1. Security-fokussiert mit Integration Tests.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring good">A</div>
           <div class="info">
             <h3>Error Handling</h3>
-            <p>716+ Exception-Handler im Backend, 313 Catch-Blocks im Frontend. Konsistente Toast-Benachrichtigungen. Strukturierte Fehler via Pydantic.</p>
+            <p>728 Exception-Handler im Backend, 321 Catch-Blocks im Frontend. Konsistente Toast-Benachrichtigungen. Strukturierte Fehler via Pydantic.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring good">A</div>
           <div class="info">
             <h3>Dependencies</h3>
-            <p>Schlanke, gut gewahlte Abhangigkeiten. Klare Version-Pinning-Strategie. Keine veralteten oder bedenklichen Pakete.</p>
+            <p>Schlanke, gut gew&auml;hlte Abh&auml;ngigkeiten. Klare Version-Pinning-Strategie. Keine veralteten oder bedenklichen Pakete.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring good">A</div>
           <div class="info">
             <h3>Konsistenz</h3>
-            <p>Einheitliche Patterns uber alle Module. Service-Layer-Pattern konsequent durchgezogen. API-Module folgen identischer Struktur.</p>
+            <p>Einheitliche Patterns &uuml;ber alle Module. Service-Layer-Pattern konsequent durchgezogen. API-Module folgen identischer Struktur.</p>
           </div>
         </div>
         <div class="score-card">
-          <div class="score-ring good">A-</div>
+          <div class="score-ring good">A</div>
           <div class="info">
-            <h3>Testing</h3>
-            <p>Solides Backend-Testing (72 Dateien, Security-fokussiert). Frontend-Tests eher basic (16 Dateien). E2E-Tests konfiguriert, aber minimal.</p>
+            <h3>Code Hygiene <span class="delta delta-up">&uarr;</span></h3>
+            <p>Nur 5 TODOs, 0 FIXME/HACK. console.log: 181&rarr;5, any-Typen: 219&rarr;81. Massiver Cleanup seit v1.</p>
           </div>
         </div>
         <div class="score-card">
           <div class="score-ring fair">B+</div>
           <div class="info">
-            <h3>Komponentengrosse</h3>
-            <p>19 Frontend-Dateien uber 500 LOC. FileManager.tsx mit 1.247 Zeilen konnte aufgeteilt werden. Backend: 19 Dateien uber 500 LOC.</p>
-          </div>
-        </div>
-        <div class="score-card">
-          <div class="score-ring fair">B</div>
-          <div class="info">
-            <h3>Code Hygiene</h3>
-            <p>Nur 4 TODOs, 0 FIXME/HACK. Aber: 181 console.log im Frontend und 219 any-Typen (meist in Plugin SDK). Aufraumpotenzial vorhanden.</p>
+            <h3>Komponentengr&ouml;sse</h3>
+            <p>21 Frontend-Dateien &uuml;ber 500 LOC. Gr&ouml;sste: DeviceManagement.tsx (971). Backend: fan_control.py wuchs auf 1.341 LOC.</p>
           </div>
         </div>
       </div>
     </div>
 
-    <!-- Grosste Dateien -->
+    <!-- Gr&ouml;sste Dateien -->
     <div class="section">
       <div class="section-header">
-        <h2>Grosste Dateien</h2>
+        <h2>Gr&ouml;sste Dateien</h2>
         <span class="badge">Hotspots</span>
       </div>
       <div class="comparison">
@@ -905,12 +993,12 @@
                 <tr><td class="file-path">services/power/manager.py</td><td class="loc">1.835</td></tr>
                 <tr><td class="file-path">services/hardware/raid.py</td><td class="loc">1.512</td></tr>
                 <tr><td class="file-path">services/update_service.py</td><td class="loc">1.504</td></tr>
-                <tr><td class="file-path">services/power/fan_control.py</td><td class="loc">1.101</td></tr>
-                <tr><td class="file-path">services/hardware/smart.py</td><td class="loc">1.062</td></tr>
+                <tr><td class="file-path">services/power/fan_control.py</td><td class="loc">1.341</td></tr>
+                <tr><td class="file-path">services/hardware/smart.py</td><td class="loc">1.116</td></tr>
+                <tr><td class="file-path">services/power/sleep.py</td><td class="loc">1.112</td></tr>
+                <tr><td class="file-path">api/routes/files.py</td><td class="loc">1.083</td></tr>
                 <tr><td class="file-path">api/routes/vcl.py</td><td class="loc">1.037</td></tr>
                 <tr><td class="file-path">services/benchmark_service.py</td><td class="loc">982</td></tr>
-                <tr><td class="file-path">api/routes/files.py</td><td class="loc">947</td></tr>
-                <tr><td class="file-path">api/routes/system.py</td><td class="loc">823</td></tr>
               </tbody>
             </table>
           </div>
@@ -921,16 +1009,16 @@
             <table>
               <thead><tr><th>Datei</th><th style="text-align:right;">LOC</th></tr></thead>
               <tbody>
-                <tr><td class="file-path">pages/FileManager.tsx</td><td class="loc">1.247</td></tr>
-                <tr><td class="file-path">pages/RaidManagement.tsx</td><td class="loc">1.113</td></tr>
-                <tr><td class="file-path">pages/DeviceManagement.tsx</td><td class="loc">978</td></tr>
-                <tr><td class="file-path">pages/UserManagement.tsx</td><td class="loc">915</td></tr>
-                <tr><td class="file-path">pages/SettingsPage.tsx</td><td class="loc">904</td></tr>
-                <tr><td class="file-path">pages/SharesPage.tsx</td><td class="loc">900</td></tr>
-                <tr><td class="file-path">pages/UpdatePage.tsx</td><td class="loc">851</td></tr>
-                <tr><td class="file-path">pages/Dashboard.tsx</td><td class="loc">756</td></tr>
-                <tr><td class="file-path">components/SyncSettings.tsx</td><td class="loc">743</td></tr>
-                <tr><td class="file-path">pages/PowerManagement.tsx</td><td class="loc">706</td></tr>
+                <tr><td class="file-path">pages/DeviceManagement.tsx</td><td class="loc">971</td></tr>
+                <tr><td class="file-path">pages/SettingsPage.tsx</td><td class="loc">911</td></tr>
+                <tr><td class="file-path">pages/UserManagement.tsx</td><td class="loc">906</td></tr>
+                <tr><td class="file-path">pages/SharesPage.tsx</td><td class="loc">864</td></tr>
+                <tr><td class="file-path">pages/UpdatePage.tsx</td><td class="loc">850</td></tr>
+                <tr><td class="file-path">pages/FileManager.tsx</td><td class="loc">774</td></tr>
+                <tr><td class="file-path">pages/Dashboard.tsx</td><td class="loc">767</td></tr>
+                <tr><td class="file-path">components/SyncSettings.tsx</td><td class="loc">753</td></tr>
+                <tr><td class="file-path">pages/PowerManagement.tsx</td><td class="loc">700</td></tr>
+                <tr><td class="file-path">pages/MobileDevicesPage.tsx</td><td class="loc">578</td></tr>
               </tbody>
             </table>
           </div>
@@ -941,16 +1029,16 @@
     <!-- Architektur-Diagramm -->
     <div class="section">
       <div class="section-header">
-        <h2>Architektur-Uberblick</h2>
+        <h2>Architektur-&Uuml;berblick</h2>
         <span class="badge">Architecture</span>
       </div>
       <div class="arch-box"><span class="dim">  Client (React)</span>                          <span class="dim">Backend (FastAPI)</span>
 <span class="dim">  &#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>       <span class="dim">&#9484;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9488;</span>
-<span class="dim">  &#9474;</span> <span class="highlight">28 Pages</span>  <span class="dim">&#9474;</span> <span class="accent">25 API</span>  <span class="dim">&#9474;</span>  HTTP  <span class="dim">&#9474;</span> <span class="highlight">38 Routes</span>  <span class="dim">&#9474;</span> <span class="accent">88 Services</span> <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span> <span class="highlight">29 Pages</span>  <span class="dim">&#9474;</span> <span class="accent">28 API</span>  <span class="dim">&#9474;</span>  HTTP  <span class="dim">&#9474;</span> <span class="highlight">39 Routes</span>  <span class="dim">&#9474;</span> <span class="accent">90 Services</span> <span class="dim">&#9474;</span>
 <span class="dim">  &#9474;</span>             <span class="dim">&#9474;</span> <span class="accent">Modules</span> <span class="dim">&#9474;</span> &#9472;&#9472;&#9472;&#9654; <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>
-<span class="dim">  &#9474;</span> <span class="highlight">108 Comps</span> <span class="dim">&#9474;</span>         <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span> <span class="highlight">33 Schemas</span> <span class="dim">&#9474;</span>  <span class="accent">34 Models</span> <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span> <span class="highlight">147 Comps</span><span class="dim"> &#9474;</span>         <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span> <span class="highlight">34 Schemas</span> <span class="dim">&#9474;</span>  <span class="accent">35 Models</span> <span class="dim">&#9474;</span>
 <span class="dim">  &#9474;</span>             <span class="dim">&#9474;</span>         <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span>             <span class="dim">&#9474;</span>      <span class="dim">&#9474;</span>      <span class="dim">&#9474;</span>
-<span class="dim">  &#9474;</span>  <span class="highlight">20 Hooks</span> <span class="dim">&#9474;</span>  <span class="accent">5 Ctx</span>  <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span>  <span class="highlight">Middleware</span> <span class="dim">&#9474;</span>      <span class="dim">&#9660;</span>      <span class="dim">&#9474;</span>
+<span class="dim">  &#9474;</span>  <span class="highlight">21 Hooks</span> <span class="dim">&#9474;</span>  <span class="accent">7 Ctx</span>  <span class="dim">&#9474;</span>       <span class="dim">&#9474;</span>  <span class="highlight">Middleware</span> <span class="dim">&#9474;</span>      <span class="dim">&#9660;</span>      <span class="dim">&#9474;</span>
 <span class="dim">  &#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>       <span class="dim">&#9474;</span>  <span class="highlight">Security</span>  <span class="dim">&#9474;</span> <span class="num">PostgreSQL</span> <span class="dim">&#9474;</span>
                                         <span class="dim">&#9492;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9472;&#9496;</span>
                                                     <span class="dim">&#9474;</span>
@@ -973,7 +1061,7 @@
           <div class="bar-track"><div class="bar-fill blue" style="width: 100%;">Upload, Shares, Permissions, Chunked Upload, Quotas</div></div>
         </div>
         <div class="bar-item">
-          <span class="bar-label">RAID & Storage</span>
+          <span class="bar-label">RAID &amp; Storage</span>
           <div class="bar-track"><div class="bar-fill violet" style="width: 95%;">mdadm RAID, SMART Health, SSD Cache, OS-Disk Schutz</div></div>
         </div>
         <div class="bar-item">
@@ -985,19 +1073,19 @@
           <div class="bar-track"><div class="bar-fill blue" style="width: 95%;">JWT, 2FA TOTP, Rate Limiting, Audit Logs, CSP</div></div>
         </div>
         <div class="bar-item">
-          <span class="bar-label">Power & Hardware</span>
-          <div class="bar-track"><div class="bar-fill amber" style="width: 85%;">CPU Freq Scaling, Fan PWM, Temperaturkurven, Energie</div></div>
+          <span class="bar-label">Power &amp; Hardware</span>
+          <div class="bar-track"><div class="bar-fill amber" style="width: 90%;">CPU Freq, Fan PWM, Temperaturkurven, Energie, Sleep Mode</div></div>
         </div>
         <div class="bar-item">
           <span class="bar-label">Networking</span>
           <div class="bar-track"><div class="bar-fill violet" style="width: 80%;">WireGuard VPN, mDNS Discovery, Remote Server SSH</div></div>
         </div>
         <div class="bar-item">
-          <span class="bar-label">Backup & Sync</span>
+          <span class="bar-label">Backup &amp; Sync</span>
           <div class="bar-track"><div class="bar-fill emerald" style="width: 75%;">Backup/Restore, Desktop Sync, Cloud Import (rclone)</div></div>
         </div>
         <div class="bar-item">
-          <span class="bar-label">Mobile & Devices</span>
+          <span class="bar-label">Mobile &amp; Devices</span>
           <div class="bar-track"><div class="bar-fill blue" style="width: 70%;">QR Pairing, Push Notifications, Device Tracking</div></div>
         </div>
         <div class="bar-item">
@@ -1010,37 +1098,39 @@
     <!-- Wartbarkeit -->
     <div class="section">
       <div class="section-header">
-        <h2>Wartbarkeit & Maintainability</h2>
+        <h2>Wartbarkeit &amp; Maintainability</h2>
         <span class="badge">Maintenance</span>
       </div>
 
       <div class="pro-con-grid">
         <div class="pro-list">
-          <h3><span>&#9650;</span> Starken</h3>
+          <h3><span>&#9650;</span> St&auml;rken</h3>
           <ul>
             <li>Klare Schichtenarchitektur: Routes, Services, Models und Schemas strikt getrennt</li>
-            <li>Konsistente Patterns -- einmal gelernt, uberall anwendbar</li>
+            <li>Konsistente Patterns &mdash; einmal gelernt, &uuml;berall anwendbar</li>
             <li>TypeScript strict mode mit 0 ts-ignore Direktiven</li>
-            <li>Minimale technische Schulden: nur 4 TODOs, 0 FIXME/HACK</li>
+            <li>Minimale technische Schulden: nur 5 TODOs, 0 FIXME/HACK</li>
             <li>Comprehensive Security-Enforcement-Rules dokumentiert</li>
             <li>Dev-Mode mit Mock-Daten erlaubt risikofreies Entwickeln</li>
-            <li>Plugin-System fur erweiterbare Architektur</li>
-            <li>Gut gewahlte, schlanke Dependency-Liste ohne Bloat</li>
-            <li>49 Alembic-Migrationen zeigen saubere Schema-Evolution</li>
+            <li>Plugin-System f&uuml;r erweiterbare Architektur</li>
+            <li>Gut gew&auml;hlte, schlanke Dependency-Liste ohne Bloat</li>
+            <li>52 Alembic-Migrationen zeigen saubere Schema-Evolution</li>
             <li>i18n-Support (EN/DE) von Anfang an eingeplant</li>
+            <li>1.183 Testfunktionen &mdash; starke Regressions-Sicherheit</li>
+            <li>Frontend Cleanup: console.log 181&rarr;5, any 219&rarr;81</li>
           </ul>
         </div>
         <div class="con-list">
           <h3><span>&#9660;</span> Verbesserungspotenzial</h3>
           <ul>
-            <li>19 Frontend-Dateien uber 500 LOC -- Aufteilen wurde Wartung erleichtern</li>
-            <li>181 console.log Statements im Frontend sollten entfernt werden</li>
-            <li>Frontend-Tests eher dunn (16 Dateien vs. 72 im Backend)</li>
-            <li>219 <code>any</code>-Typen im Frontend (meist Plugin SDK, aber aufraumenswert)</li>
-            <li>optical_drive Plugin mit 1.911 LOC in einer Datei -- sollte modularisiert werden</li>
-            <li>Bundle-Size 1.15 MB (331 KB gzipped) -- Recharts ist grosster Chunk</li>
-            <li>Kein E2E-Test-Coverage fur kritische User-Flows</li>
-            <li>AuthContext erstellt aber noch nicht vollstandig verdrahtet (Prop Drilling verbleibt)</li>
+            <li>21 Frontend-Dateien &uuml;ber 500 LOC &mdash; Aufteilen w&uuml;rde Wartung erleichtern</li>
+            <li>Frontend-Tests verbessert (25 Dateien), aber E2E-Coverage noch d&uuml;nn</li>
+            <li>81 <code>any</code>-Typen im Frontend (reduziert von 219, aber weiter aufr&auml;umenswert)</li>
+            <li>optical_drive Plugin mit 1.911 LOC in einer Datei &mdash; sollte modularisiert werden</li>
+            <li>fan_control.py wuchs auf 1.341 LOC &mdash; Schedule-Logik extrahierbar</li>
+            <li>Bundle: Main Chunk 1,2 MB &mdash; Recharts gr&ouml;sster Contributor (321 KB)</li>
+            <li>change-password Endpoint akzeptiert noch raw dict statt Pydantic Schema</li>
+            <li>SECURITY.md dokumentiert veraltete Limitierungen &mdash; Rewrite ausstehend</li>
           </ul>
         </div>
       </div>
@@ -1056,10 +1146,10 @@
         <div class="comparison-panel">
           <h3><span style="color: var(--accent-emerald);">&#9679;</span> Backend Tests (stark)</h3>
           <div class="detail-list">
-            <div class="detail-item"><span class="key">Testdateien</span><span class="val">72</span></div>
-            <div class="detail-item"><span class="key">Test-Functions</span><span class="val">364+</span></div>
-            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">15.711</span></div>
-            <div class="detail-item"><span class="key">Test-zu-Code Ratio</span><span class="val">1 : 3.8</span></div>
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">81</span></div>
+            <div class="detail-item"><span class="key">Test-Functions</span><span class="val">1.183</span></div>
+            <div class="detail-item"><span class="key">Test-LOC</span><span class="val">18.883</span></div>
+            <div class="detail-item"><span class="key">Test-zu-Code Ratio</span><span class="val">1 : 3.4</span></div>
           </div>
           <div style="margin-top: 1rem;">
             <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
@@ -1068,6 +1158,7 @@
               <span class="tag tag-emerald">Auth / 2FA</span>
               <span class="tag tag-emerald">Files</span>
               <span class="tag tag-emerald">Audit Logging</span>
+              <span class="tag tag-emerald">Sleep Mode</span>
               <span class="tag tag-blue">Power Mgmt</span>
               <span class="tag tag-blue">Fan Control</span>
               <span class="tag tag-blue">Integration</span>
@@ -1079,12 +1170,12 @@
           </div>
         </div>
         <div class="comparison-panel">
-          <h3><span style="color: var(--accent-amber);">&#9679;</span> Frontend Tests (ausbaufahig)</h3>
+          <h3><span style="color: var(--accent-blue);">&#9679;</span> Frontend Tests (verbessert <span class="delta delta-up">&uarr;</span>)</h3>
           <div class="detail-list">
-            <div class="detail-item"><span class="key">Testdateien</span><span class="val">16</span></div>
+            <div class="detail-item"><span class="key">Testdateien</span><span class="val">25</span></div>
             <div class="detail-item"><span class="key">Framework</span><span class="val">Vitest + RTL</span></div>
             <div class="detail-item"><span class="key">E2E</span><span class="val">Playwright (konfiguriert)</span></div>
-            <div class="detail-item"><span class="key">Test-zu-Code Ratio</span><span class="val">~ 1 : 15</span></div>
+            <div class="detail-item"><span class="key">Verbesserung</span><span class="val">16 &rarr; 25 Dateien</span></div>
           </div>
           <div style="margin-top: 1rem;">
             <div style="display: flex; flex-wrap: wrap; gap: 0.4rem;">
@@ -1093,6 +1184,7 @@
               <span class="tag tag-emerald">AuthContext</span>
               <span class="tag tag-blue">ErrorBoundary</span>
               <span class="tag tag-blue">ConfirmDialog</span>
+              <span class="tag tag-blue">Components</span>
               <span class="tag tag-amber">API Mocks</span>
               <span class="tag tag-amber">E2E (minimal)</span>
             </div>
@@ -1110,8 +1202,9 @@
       <div class="summary-box">
         <h3>Sicherheitskonzept</h3>
         <p>
-          BaluHost implementiert ein umfassendes, mehrschichtiges Sicherheitskonzept, das uber dem Durchschnitt
-          vergleichbarer Self-Hosted-Projekte liegt. Die dokumentierten Security-Invarianten und der detaillierte
+          BaluHost implementiert ein umfassendes, mehrschichtiges Sicherheitskonzept, das &uuml;ber dem Durchschnitt
+          vergleichbarer Self-Hosted-Projekte liegt. 24 Endpoints sind Rate-Limited, 109 Audit-Log Call Sites
+          decken alle sicherheitsrelevanten Aktionen ab. Die dokumentierten Security-Invarianten und der detaillierte
           Review-Checklist zeigen ein bewusstes, systematisches Vorgehen.
         </p>
       </div>
@@ -1123,16 +1216,16 @@
           <tbody>
             <tr><td>JWT Authentication</td><td><span class="tag tag-emerald">Implementiert</span></td><td>Access (15min TTL), Refresh (7 Tage), SSE (60s)</td></tr>
             <tr><td>2FA (TOTP)</td><td><span class="tag tag-emerald">Implementiert</span></td><td>pyotp-basiert, QR-Code Enrollment</td></tr>
-            <tr><td>Rate Limiting</td><td><span class="tag tag-emerald">Implementiert</span></td><td>Pro Endpoint konfigurierbar via slowapi</td></tr>
+            <tr><td>Rate Limiting</td><td><span class="tag tag-emerald">Implementiert</span></td><td>24 Endpoints, konfigurierbar via slowapi</td></tr>
             <tr><td>Path Traversal Schutz</td><td><span class="tag tag-emerald">Implementiert</span></td><td>_jail_path() mit 8 Call Sites, PurePosixPath</td></tr>
-            <tr><td>Audit Logging</td><td><span class="tag tag-emerald">Implementiert</span></td><td>DB-basiert, Security-Events, Login-Tracking</td></tr>
+            <tr><td>Audit Logging</td><td><span class="tag tag-emerald">Implementiert</span></td><td>109 Call Sites, DB-basiert, Login-Tracking</td></tr>
             <tr><td>SQL Injection Schutz</td><td><span class="tag tag-emerald">Implementiert</span></td><td>ORM-only, kein rohes SQL mit User-Input</td></tr>
             <tr><td>Command Injection</td><td><span class="tag tag-emerald">Implementiert</span></td><td>0x shell=True in App-Code, Liste statt String</td></tr>
             <tr><td>CSP Headers</td><td><span class="tag tag-emerald">Implementiert</span></td><td>X-Frame, HSTS, X-Content-Type-Options</td></tr>
             <tr><td>Passwort-Policy</td><td><span class="tag tag-emerald">Implementiert</span></td><td>8-128 Chars, Gross/Klein/Zahl, Blacklist</td></tr>
             <tr><td>Encryption at Rest</td><td><span class="tag tag-emerald">Implementiert</span></td><td>VPN/SSH Keys: Fernet (AES-128-CBC)</td></tr>
-            <tr><td>HTTPS</td><td><span class="tag tag-amber">Optional</span></td><td>WireGuard VPN verschlusselt bereits den Traffic</td></tr>
-            <tr><td>CSRF Protection</td><td><span class="tag tag-blue">Nicht notig</span></td><td>JWT Bearer Auth (keine Cookie-basierte Auth)</td></tr>
+            <tr><td>HTTPS</td><td><span class="tag tag-amber">Optional</span></td><td>WireGuard VPN verschl&uuml;sselt bereits den Traffic</td></tr>
+            <tr><td>CSRF Protection</td><td><span class="tag tag-blue">Nicht n&ouml;tig</span></td><td>JWT Bearer Auth (keine Cookie-basierte Auth)</td></tr>
           </tbody>
         </table>
       </div>
@@ -1147,38 +1240,50 @@
       <div class="table-wrapper">
         <table>
           <thead>
-            <tr><th>Bereich</th><th>Schwere</th><th>Beschreibung</th></tr>
+            <tr><th>Bereich</th><th>Schwere</th><th>Beschreibung</th><th>Status</th></tr>
           </thead>
           <tbody>
             <tr>
               <td>change-password Endpoint</td>
               <td><span class="tag tag-amber">Mittel</span></td>
-              <td>Akzeptiert raw dict statt Pydantic Model -- Passwort-Starke-Validierung wird umgangen</td>
-            </tr>
-            <tr>
-              <td>AuthContext Prop Drilling</td>
-              <td><span class="tag tag-blue">Niedrig</span></td>
-              <td>Context erstellt aber nicht vollstandig in Komponentenbaum verdrahtet</td>
-            </tr>
-            <tr>
-              <td>Console.log Statements</td>
-              <td><span class="tag tag-blue">Niedrig</span></td>
-              <td>181 Debug-Logs im Frontend-Produktionscode</td>
-            </tr>
-            <tr>
-              <td>CSP unsafe-inline</td>
-              <td><span class="tag tag-blue">Akzeptiert</span></td>
-              <td>Benotigt durch Vite Dev Server, konnte in Prod gestraift werden</td>
-            </tr>
-            <tr>
-              <td>Fan Silent Preset</td>
-              <td><span class="tag tag-blue">Niedrig</span></td>
-              <td>Backend PWM 25 vs. Minimum 30 -- Frontend bereits gefixt, Backend-Fix ausstehend</td>
+              <td>Akzeptiert raw dict statt Pydantic Model &mdash; Passwort-St&auml;rke-Validierung wird umgangen</td>
+              <td><span class="tag tag-rose">Offen</span></td>
             </tr>
             <tr>
               <td>SECURITY.md</td>
               <td><span class="tag tag-blue">Niedrig</span></td>
               <td>Dokumentation veraltet, beschreibt bereits behobene Limitierungen</td>
+              <td><span class="tag tag-rose">Offen</span></td>
+            </tr>
+            <tr>
+              <td>CSP unsafe-inline</td>
+              <td><span class="tag tag-blue">Akzeptiert</span></td>
+              <td>Ben&ouml;tigt durch Vite Dev Server, k&ouml;nnte in Prod gestraift werden</td>
+              <td><span class="tag tag-amber">Akzeptiert</span></td>
+            </tr>
+            <tr>
+              <td>Console.log Statements</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>181 &rarr; 5 &mdash; fast vollst&auml;ndig bereinigt</td>
+              <td><span class="tag tag-emerald">~Behoben</span></td>
+            </tr>
+            <tr>
+              <td>any-Typen im Frontend</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>219 &rarr; 81 &mdash; deutlich reduziert, Restmenge v.a. in Plugin SDK</td>
+              <td><span class="tag tag-emerald">Verbessert</span></td>
+            </tr>
+            <tr>
+              <td>AuthContext Prop Drilling</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>7 Contexts vorhanden, AuthContext erstellt &mdash; Verdrahtung noch nicht komplett</td>
+              <td><span class="tag tag-amber">In Arbeit</span></td>
+            </tr>
+            <tr>
+              <td>Fan Silent Preset</td>
+              <td><span class="tag tag-blue">Niedrig</span></td>
+              <td>Backend PWM Minimum korrigiert: 25 &rarr; 30 in schemas/fans.py</td>
+              <td><span class="tag tag-emerald">Behoben</span></td>
             </tr>
           </tbody>
         </table>
@@ -1193,34 +1298,34 @@
       </div>
       <div class="stats-grid" style="grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));">
         <div class="stat-card" style="border-left: 3px solid var(--accent-rose);">
-          <div class="label" style="color: var(--accent-rose);">Prioritat 1</div>
+          <div class="label" style="color: var(--accent-rose);">Priorit&auml;t 1</div>
           <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">change-password Endpoint fixen</div>
           <div class="detail">Pydantic Schema statt raw dict verwenden, damit Passwort-Policy greift</div>
         </div>
         <div class="stat-card" style="border-left: 3px solid var(--accent-amber);">
-          <div class="label" style="color: var(--accent-amber);">Prioritat 2</div>
-          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Frontend Tests ausbauen</div>
-          <div class="detail">E2E Tests fur Login, File Upload, RAID Wizard -- kritische User Flows absichern</div>
+          <div class="label" style="color: var(--accent-amber);">Priorit&auml;t 2</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">E2E Tests ausbauen</div>
+          <div class="detail">Playwright-Tests f&uuml;r Login, File Upload, RAID Wizard &mdash; kritische User Flows absichern</div>
         </div>
         <div class="stat-card" style="border-left: 3px solid var(--accent-amber);">
-          <div class="label" style="color: var(--accent-amber);">Prioritat 2</div>
+          <div class="label" style="color: var(--accent-amber);">Priorit&auml;t 2</div>
           <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Grosse Komponenten aufteilen</div>
-          <div class="detail">FileManager.tsx (1.247 LOC), RaidManagement.tsx (1.113 LOC) in Sub-Komponenten splitten</div>
+          <div class="detail">DeviceManagement.tsx (971), SettingsPage.tsx (911), optical_drive (1.911) in Sub-Komponenten splitten</div>
         </div>
         <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
-          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
-          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Console.log bereinigen</div>
-          <div class="detail">181 Debug-Statements entfernen oder hinter __DEV__ Guard setzen</div>
+          <div class="label" style="color: var(--accent-blue);">Priorit&auml;t 3</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Restliche any-Typen bereinigen</div>
+          <div class="detail">81 verbleibende any-Typen pr&uuml;fen &mdash; v.a. Plugin SDK typisieren</div>
         </div>
         <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
-          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
+          <div class="label" style="color: var(--accent-blue);">Priorit&auml;t 3</div>
           <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">Bundle-Size optimieren</div>
-          <div class="detail">Recharts dynamisch importieren, Tree-Shaking fur lucide-react prufen</div>
+          <div class="detail">Recharts (321 KB Chunk) dynamisch importieren, Tree-Shaking f&uuml;r lucide-react pr&uuml;fen</div>
         </div>
         <div class="stat-card" style="border-left: 3px solid var(--accent-blue);">
-          <div class="label" style="color: var(--accent-blue);">Prioritat 3</div>
-          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">AuthContext verdrahten</div>
-          <div class="detail">Prop Drilling fur User/Auth durch Context ersetzen -- Code vereinfachen</div>
+          <div class="label" style="color: var(--accent-blue);">Priorit&auml;t 3</div>
+          <div style="font-weight: 600; margin-bottom: 0.3rem; font-size: 0.95rem;">SECURITY.md aktualisieren</div>
+          <div class="detail">Veraltete Limitierungen entfernen, aktuellen Stand dokumentieren</div>
         </div>
       </div>
     </div>
@@ -1230,28 +1335,30 @@
       <div class="summary-box" style="border-color: rgba(52,211,153,0.3); background: linear-gradient(135deg, rgba(52,211,153,0.05) 0%, rgba(56,189,248,0.05) 100%);">
         <h3 style="background: var(--gradient-success); -webkit-background-clip: text; background-clip: text;">Fazit</h3>
         <p>
-          <strong>BaluHost ist eine beeindruckend umfangreiche und qualitativ hochwertige Codebase</strong> -- insbesondere
-          fur ein Einzelentwickler-Projekt. Die ~129.000 Zeilen Code decken ein Feature-Set ab, das typischerweise
+          <strong>BaluHost ist eine beeindruckend umfangreiche und qualitativ hochwertige Codebase</strong> &mdash; insbesondere
+          f&uuml;r ein Einzelentwickler-Projekt. Die ~139.000 Zeilen Code decken ein Feature-Set ab, das typischerweise
           von kleinen Teams entwickelt wird.
         </p>
         <p>
-          Die Architektur ist durchdacht und konsistent, das Security-Konzept ist uber dem Branchendurchschnitt,
-          und die Code-Qualitat (TypeScript strict, minimale technische Schulden, gute Typisierung) spricht fur
-          ein diszipliniertes Entwicklungsvorgehen.
+          Seit dem letzten Report (v1, 17.02.2026) wurden signifikante Verbesserungen erzielt: Die Test-Abdeckung
+          hat sich verdreifacht (364&rarr;1.183 Testfunktionen), der Frontend-Code wurde massiv aufger&auml;umt
+          (console.log: 181&rarr;5, any: 219&rarr;81), und neue Features wie Sleep Mode und erweiterte Fan-Steuerung
+          sind hinzugekommen. Der FileManager wurde erfolgreich refactored (1.247&rarr;774 LOC).
         </p>
         <p>
-          Die grossten Hebel fur zukunftige Verbesserungen liegen im Aufteilen der grosseren Komponenten,
-          dem Ausbau der Frontend-Tests und der Bereinigung von Debug-Code. Die bestehenden technischen
-          Schulden sind minimal und gut dokumentiert.
+          Die Architektur ist durchdacht und konsistent, das Security-Konzept ist &uuml;ber dem Branchendurchschnitt,
+          und die Code-Qualit&auml;t (TypeScript strict, minimale technische Schulden, starke Typisierung) spricht f&uuml;r
+          ein diszipliniertes Entwicklungsvorgehen.
         </p>
         <p style="margin-bottom: 0;">
-          <strong>Gesamtbewertung: A</strong> -- Produktionsreife, gut wartbare Codebase mit klarer Architektur und starkem Security-Fokus.
+          <strong>Gesamtbewertung: A</strong> &mdash; Produktionsreife, gut wartbare Codebase mit klarer Architektur, starkem Security-Fokus
+          und messbaren Qualit&auml;tsverbesserungen seit v1.
         </p>
       </div>
     </div>
 
     <div class="footer">
-      BaluHost Codebase Analysis Report &middot; Generiert am 17. Februar 2026 &middot; v1.5.2-alpha &middot; 192 Commits
+      BaluHost Codebase Analysis Report v2 &middot; Generiert am 19. Februar 2026 &middot; v1.7.0 &middot; 229 Commits
     </div>
 
   </div>
