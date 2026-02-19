@@ -42,6 +42,7 @@ from app.services import disk_monitor, jobs, seed, telemetry
 from app.services import power_monitor
 from app.services import power_manager
 from app.services import fan_control
+from app.services.power import sleep as sleep_mode
 from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
 from app.services.firebase_service import FirebaseService
@@ -52,6 +53,7 @@ from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.error_counter import ErrorCounterMiddleware
+from app.middleware.sleep_auto_wake import SleepAutoWakeMiddleware
 from app.services.service_status import (
     set_server_start_time,
     register_service,
@@ -154,6 +156,16 @@ def _register_services() -> None:
         stop_fn=fan_control.stop_fan_control,
         start_fn=fan_control.start_fan_control,
         config_enabled_fn=lambda: settings.fan_control_enabled,
+    )
+
+    # Sleep Mode
+    register_service(
+        name="sleep_mode",
+        display_name="Sleep Mode",
+        get_status_fn=sleep_mode.get_service_status,
+        stop_fn=sleep_mode.stop_sleep_manager,
+        start_fn=sleep_mode.start_sleep_manager,
+        config_enabled_fn=lambda: settings.sleep_mode_enabled,
     )
 
     # Sync Scheduler (managed by scheduler_worker process)
@@ -340,6 +352,14 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         except Exception as e:
             logger.warning(f"Fan control could not start: {e}")
 
+    # Start sleep mode (if enabled)
+    if settings.sleep_mode_enabled:
+        try:
+            await sleep_mode.start_sleep_manager()
+            logger.info("Sleep mode service started")
+        except Exception as e:
+            logger.warning(f"Sleep mode service could not start: {e}")
+
     # NOTE: Sync/backup/RAID-scrub/SMART/notification schedulers are now
     # managed by the separate scheduler_worker process (scheduler_worker.py).
     # The web process no longer starts APScheduler instances for these jobs.
@@ -444,6 +464,12 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
                     logger.info("Fan control stopped")
                 except Exception:
                     logger.debug("Error stopping fan control")
+                # Stop sleep mode
+                try:
+                    await sleep_mode.stop_sleep_manager()
+                    logger.info("Sleep mode service stopped")
+                except Exception:
+                    logger.debug("Error stopping sleep mode service")
         except Exception:
             logger.debug("Error while stopping background services")
 
@@ -539,6 +565,9 @@ def create_app() -> FastAPI:
 
     # Add error counter middleware for admin metrics
     app.add_middleware(ErrorCounterMiddleware)
+
+    # Add sleep auto-wake middleware (counts requests + auto-wakes from soft sleep)
+    app.add_middleware(SleepAutoWakeMiddleware)
 
     # Add local-only enforcement middleware (Option B security)
     if settings.enforce_local_only:

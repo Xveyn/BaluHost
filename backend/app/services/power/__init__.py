@@ -55,6 +55,16 @@ from app.services.power.fan_control import (
     stop_fan_control,
     get_service_status as get_fan_service_status,
 )
+from app.services.power.sleep import (
+    SleepBackend,
+    DevSleepBackend,
+    LinuxSleepBackend,
+    SleepManagerService,
+    get_sleep_manager,
+    start_sleep_manager,
+    stop_sleep_manager,
+    get_service_status as get_sleep_service_status,
+)
 
 __all__ = [
     # Manager
@@ -98,4 +108,13 @@ __all__ = [
     "start_fan_control",
     "stop_fan_control",
     "get_fan_service_status",
+    # Sleep Mode
+    "SleepBackend",
+    "DevSleepBackend",
+    "LinuxSleepBackend",
+    "SleepManagerService",
+    "get_sleep_manager",
+    "start_sleep_manager",
+    "stop_sleep_manager",
+    "get_sleep_service_status",
 ]

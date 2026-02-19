@@ -121,6 +121,9 @@ class Settings(BaseSettings):
     ssd_cache_default_mode: str = "writethrough"  # Default cache mode (writethrough|writeback|writearound)
     ssd_cache_force_dev_backend: bool = False  # Force dev backend even on Linux
 
+    # Sleep mode configuration
+    sleep_mode_enabled: bool = True  # Enable/disable sleep mode service
+
     # Fan control configuration (PWM fan management)
     fan_control_enabled: bool = True  # Enable/disable fan control
     fan_force_dev_backend: bool = False  # Force dev backend even on Linux

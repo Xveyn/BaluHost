@@ -64,6 +64,7 @@ from app.models.update_history import (
 from app.models.energy_price_config import EnergyPriceConfig
 from app.models.ssd_cache import SsdCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
+from app.models.sleep import SleepConfig, SleepStateLog
 
 __all__ = [
     "Base",
@@ -128,4 +129,6 @@ __all__ = [
     "CloudOAuthConfig",
     "CloudConnection",
     "CloudImportJob",
+    "SleepConfig",
+    "SleepStateLog",
 ]
