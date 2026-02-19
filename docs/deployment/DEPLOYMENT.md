@@ -224,7 +224,7 @@ docker-compose logs -f
 curl http://localhost:8000/api/system/health
 
 # Expected response:
-# {"status":"healthy","version":"1.6.1","database":"connected"}
+# {"status":"healthy","version":"1.7.0","database":"connected"}
 
 # Check frontend
 curl http://localhost/
@@ -678,4 +678,4 @@ Before going live, verify:
 ---
 
 **Last Updated**: February 2026
-**Version**: 1.6.1
+**Version**: 1.7.0

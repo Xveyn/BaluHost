@@ -665,7 +665,7 @@ Priority: Get BaluHost deployable on any Linux server.
 ---
 
 **Last Updated**: February 18, 2026
-**Version**: BaluHost v1.6.1
+**Version**: BaluHost v1.7.0
 **Status**: ✅ **DEPLOYED IN PRODUCTION** (seit 25. Januar 2026)
 **Remaining**: Optional enhancements (SSL/HTTPS, PWA, i18n)
 

@@ -7,6 +7,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.7.0] - 2026-02-19
+
+### Sleep Mode, Ownership Transfer & 2FA for All Users
+
+Major feature release adding intelligent sleep management, file ownership transfer, and universal two-factor authentication.
+
+### Added
+
+- **Sleep Mode** — Full soft-sleep and true-suspend (S3) support
+  - Auto-idle detection with configurable CPU, disk I/O, and HTTP thresholds
+  - Scheduled sleep/wake windows with rtcwake integration
+  - Wake-on-LAN configuration per interface
+  - Disk spindown via hdparm for data disks during sleep
+  - Auto-escalation from soft sleep to true suspend
+  - Auto-wake middleware: incoming HTTP requests wake the system from soft sleep
+  - Service registration for admin dashboard monitoring
+  - Collapsible setup help for missing capabilities (hdparm, rtcwake, WoL, suspend)
+  - Sleep history table with state transitions
+- **File Ownership Transfer** — Transfer file/folder ownership between users
+  - Backend service with residency enforcement migration
+  - API endpoints with admin and owner authorization
+  - Frontend modal with user selector and residency panel
+- **2FA for all users** — Two-factor authentication no longer limited to admins
+- **E2E test suite** — Comprehensive Playwright end-to-end tests
+- **Performance**: `calculate_used_bytes()` cached with 30s TTL
+
+### Fixed
+
+- Frontend `goBack` navigation simplified to avoid edge cases
+
+### Changed
+
+- Repaired and expanded existing backend test suite
+
+### Status
+
+- **Production Readiness**: Stable
+- **Version**: 1.7.0
+
+---
+
 ## [1.6.1] - 2026-02-18
 
 ### 📚 Documentation Restructure & Code Quality Release

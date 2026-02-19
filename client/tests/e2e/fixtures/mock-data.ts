@@ -159,7 +159,7 @@ export const MOCK_SCHEDULERS = {
 // ── Version ────────────────────────────────────────────────────────
 
 export const MOCK_VERSION = {
-  version: '1.6.1',
+  version: '1.7.0',
   build_date: '2026-02-19',
   git_commit: 'abc1234',
 };

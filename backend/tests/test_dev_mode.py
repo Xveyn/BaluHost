@@ -11,12 +11,17 @@ os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
 
 from app.main import app  # noqa: E402 (import after env setup)
 from app.core.config import settings
-from scripts.reset_dev_storage import reset_dev_storage
+from scripts.debug.reset_dev_storage import reset_dev_storage
 
 
 @pytest.fixture(scope="function")
 def client(db_session) -> Generator[TestClient, None, None]:
     reset_dev_storage()
+
+    # Reset RAID backend state to avoid test pollution from module-level singleton
+    from app.services.hardware import raid as _raid_module
+    from app.services.hardware.raid import DevRaidBackend as _DevRaidBackend
+    _raid_module._backend = _DevRaidBackend()
 
     # Override DB dependency to use the test in-memory session
     from app.core.database import get_db
@@ -49,7 +54,7 @@ def client(db_session) -> Generator[TestClient, None, None]:
     reset_dev_storage()
 
 
-def _login(client: TestClient, username: str = "admin", password: str = "changeme") -> str:
+def _login(client: TestClient, username: str = "admin", password: str = "DevMode2024") -> str:
     response = client.post(
         f"{settings.api_prefix}/auth/login",
         json={"username": username, "password": password},

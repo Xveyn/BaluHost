@@ -14,7 +14,7 @@ from app.main import app  # noqa: E402
 from app.core.config import settings
 from app.schemas.user import UserCreate
 from app.services import users as user_service
-from scripts.reset_dev_storage import reset_dev_storage
+from scripts.debug.reset_dev_storage import reset_dev_storage
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import StaticPool

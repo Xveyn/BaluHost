@@ -9,7 +9,8 @@ from fastapi.testclient import TestClient
 os.environ.setdefault("NAS_MODE", "dev")
 
 from app.main import create_app
-from scripts.reset_dev_storage import reset_dev_storage
+from app.core.config import settings
+from scripts.debug.reset_dev_storage import reset_dev_storage
 
 
 @pytest.fixture(scope="function")
@@ -31,8 +32,8 @@ def client(db_session):
     # Ensure admin user exists in test DB
     from app.services import users as user_service
     from app.schemas.user import UserCreate
-    if not user_service.get_user_by_username("admin", db=db_session):
-        user_service.create_user(UserCreate(username="admin", email="admin@example.com", password="changeme", role="admin"), db=db_session)
+    if not user_service.get_user_by_username(settings.admin_username, db=db_session):
+        user_service.create_user(UserCreate(username=settings.admin_username, email=settings.admin_email, password=settings.admin_password, role=settings.admin_role), db=db_session)
 
     with TestClient(app) as test_client:
         yield test_client
@@ -47,7 +48,7 @@ def auth_headers(client):
     # Login as admin (created by ensure_admin_user during app startup)
     response = client.post(
         "/api/auth/login",
-        json={"username": "admin", "password": "changeme"}
+        json={"username": settings.admin_username, "password": settings.admin_password}
     )
     assert response.status_code == 200, f"Login failed: {response.text}"
     token = response.json()["access_token"]

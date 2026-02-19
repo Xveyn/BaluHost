@@ -10,7 +10,7 @@ export const featureSections: ApiSection[] = [
     title: 'Updates',
     icon: icon(Download),
     endpoints: [
-      { method: 'GET', path: '/api/updates/version', description: 'Get Current Version', requiresAuth: true, response: '{ "version": "1.6.1", "build_date": "2026-02-18" }' },
+      { method: 'GET', path: '/api/updates/version', description: 'Get Current Version', requiresAuth: true, response: '{ "version": "1.7.0", "build_date": "2026-02-18" }' },
       { method: 'GET', path: '/api/updates/release-notes', description: 'Get Release Notes', requiresAuth: true, response: '{ "notes": [...] }' },
       { method: 'GET', path: '/api/updates/check', description: 'Check for Updates', requiresAuth: true, response: '{ "available": true, "latest_version": "1.5.2", "changelog": "..." }' },
       {

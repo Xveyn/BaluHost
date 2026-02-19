@@ -28,7 +28,7 @@ Number   Major   Minor   RaidDevice State
         cmd_key = " ".join(command)
         if "mdadm --detail --scan" in cmd_key:
             return subprocess.CompletedProcess(command, 0, stdout="ARRAY /dev/md0\n", stderr="")
-        if "mdadm /dev/md0 --detail" in cmd_key:
+        if "mdadm --detail /dev/md0" in cmd_key:
             return subprocess.CompletedProcess(command, 0, stdout=detail_output, stderr="")
         raise RuntimeError(f"Unexpected command in test fake: {cmd_key}")
 
