@@ -7,7 +7,7 @@ test('schedulers: live backend run', async ({ browser, playwright }) => {
   const apiContext = await playwright.request.newContext({ baseURL: apiBase });
 
   const loginRes = await apiContext.post('/api/auth/login', {
-    data: { username: 'admin', password: 'changeme' },
+    data: { username: 'admin', password: 'DevMode2024' },
   });
   expect(loginRes.ok()).toBeTruthy();
   const loginJson = await loginRes.json();

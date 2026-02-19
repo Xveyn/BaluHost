@@ -1,112 +1,41 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from './fixtures/auth.fixture';
 
 // E2E: Mock backend API calls so tests run without a live backend
-test('schedulers: mock API + trigger SMART and RAID scrub', async ({ browser }) => {
-  const fakeToken = 'fake-token-for-e2e';
-
-  // Create browser context, inject token and mock API routes
-  const context = await browser.newContext({ ignoreHTTPSErrors: true });
-  await context.addInitScript((t) => {
-    // Set both localStorage token (legacy) and sessionStorage secure token used in web mode
-    try { window.localStorage.setItem('token', t); } catch (e) {}
-    try { window.sessionStorage.setItem('baludesk-api-token', t); } catch (e) {}
-    try { window.sessionStorage.setItem('baludesk-username', 'admin'); } catch (e) {}
-  }, fakeToken);
-
-  // Mock API responses for the page so we don't depend on backend
-  await context.route('**/api/system/smart/status', async (route) => {
+test('schedulers: mock API + trigger Run Now for SMART and RAID', async ({ authenticatedContext }) => {
+  // Mock run-now endpoints for each scheduler
+  await authenticatedContext.route('**/api/schedulers/smart_short/run-now', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ devices: [{ name: '/dev/sda', model: 'MockDisk', serial: 'MOCK123', state: 'OK', attributes: [], capacity_bytes: 50 * 1024 * 1024 * 1024, used_bytes: 0 }] }),
+      body: JSON.stringify({ success: true, message: 'SMART Short Test started successfully' }),
     });
   });
 
-  await context.route('**/api/system/raid/status', async (route) => {
+  await authenticatedContext.route('**/api/schedulers/raid_scrub/run-now', async (route) => {
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
-      body: JSON.stringify({ arrays: [{ name: 'md0', level: '1', status: 'optimal', devices: [{ name: '/dev/sda', state: 'active' }], size_bytes: 5 * 1024 * 1024 * 1024 }] }),
+      body: JSON.stringify({ success: true, message: 'RAID Scrub started successfully' }),
     });
   });
 
-  // Mock system info and storage endpoints used by Dashboard
-  await context.route('**/api/system/info', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ cpu: { usage: 5, cores: 4 }, memory: { total: 8 * 1024 ** 3, used: 3 * 1024 ** 3 }, uptime: 3600 }),
-    });
-  });
-
-  await context.route('**/api/system/storage/aggregated', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ used: 10 * 1024 * 1024 * 1024, total: 50 * 1024 * 1024 * 1024 }),
-    });
-  });
-
-  await context.route('**/api/system/telemetry/history', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ cpu: [], memory: [], network: [] }),
-    });
-  });
-
-  await context.route('**/api/system/smart/test', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ message: 'Simulated short SMART test started for /dev/sda' }),
-    });
-  });
-
-  await context.route('**/api/system/raid/scrub', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ message: 'RAID configuration updated (dev mode)' }),
-    });
-  });
-
-  await context.route('**/api/system/smart/mode', async (route) => {
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({ mode: 'active', message: 'SMART active' }),
-    });
-  });
-
-  const page = await context.newPage();
-  page.on('console', (m) => console.log('[PAGE CONSOLE]', m.text()));
-  page.on('pageerror', (err) => console.log('[PAGE ERROR]', err.message));
+  const page = await authenticatedContext.newPage();
   await page.goto('/schedulers');
-
-  // Wait for initial API calls and the schedulers route to settle
-  await page.waitForResponse((resp) => resp.url().includes('/api/system/raid/status'), { timeout: 10000 }).catch(() => {});
   await page.waitForLoadState('networkidle');
 
-  // Ensure buttons/text appear (loose match to avoid role/label issues)
-  await page.waitForSelector('text=SMART', { timeout: 15000 });
-  await page.waitForSelector('text=RAID', { timeout: 15000 });
+  // Verify scheduler cards are visible
+  await expect(page.locator('text=SMART Short Test').first()).toBeVisible({ timeout: 10000 });
+  await expect(page.locator('text=RAID Scrub').first()).toBeVisible();
 
-  const smartBtn = page.locator('button:has-text("SMART")').first();
-  const raidBtn = page.locator('button:has-text("RAID")').first();
+  // Find Run Now buttons (one per scheduler card)
+  const runNowButtons = page.locator('button:has-text("Run Now")');
+  await expect(runNowButtons.first()).toBeVisible();
 
-  // Run SMART short
-  await page.waitForSelector('button:has-text("SMART")', { timeout: 10000 });
-  await smartBtn.click();
-  await expect(page.locator('text=Simulated short SMART test started').first()).toBeVisible({ timeout: 10000 });
+  // Click the first Run Now (SMART Short Test)
+  await runNowButtons.nth(0).click();
+  await expect(page.locator('text=SMART Short Test started successfully').first()).toBeVisible({ timeout: 10000 });
 
-  // Trigger RAID scrub
-  await page.waitForSelector('button:has-text("RAID")', { timeout: 10000 });
-  await raidBtn.click();
-  await expect(page.locator('text=RAID configuration updated').first()).toBeVisible({ timeout: 10000 });
-
-  // Take final screenshot
-  await page.screenshot({ path: 'e2e-schedulers-result.png', fullPage: true });
-
-  await context.close();
+  // Click the second Run Now (RAID Scrub)
+  await runNowButtons.nth(1).click();
+  await expect(page.locator('text=RAID Scrub started successfully').first()).toBeVisible({ timeout: 10000 });
 });

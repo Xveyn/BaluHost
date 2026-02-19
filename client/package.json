@@ -9,7 +9,10 @@
     "build": "tsc -b && vite build",
     "build:prod": "vite build",
     "lint": "eslint .",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "test:e2e": "playwright test",
+    "test:e2e:headed": "playwright test --headed",
+    "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
     "axios": "^1.13.2",

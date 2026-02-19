@@ -10,6 +10,7 @@ export default defineConfig({
     viewport: { width: 1280, height: 800 },
     ignoreHTTPSErrors: true,
     actionTimeout: 10_000,
+    locale: 'en-US',
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
