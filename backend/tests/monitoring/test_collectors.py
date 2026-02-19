@@ -327,3 +327,160 @@ class TestCoreDetection:
 
         assert p_cores is None or isinstance(p_cores, int)
         assert e_cores is None or isinstance(e_cores, int)
+
+
+# ============================================================================
+# Retention Manager Tests
+# ============================================================================
+
+class TestRetentionManager:
+    """Tests for RetentionManager."""
+
+    def test_init(self):
+        """Test retention manager initialization."""
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        manager = RetentionManager()
+        assert manager._last_cleanup == {}
+
+    def test_get_config_creates_default(self, db_session):
+        """Test that get_config creates default config if missing."""
+        from app.services.monitoring.retention_manager import RetentionManager
+        from app.models.monitoring import MetricType
+
+        manager = RetentionManager()
+        config = manager.get_config(db_session, MetricType.CPU)
+
+        assert config is not None
+        assert config.metric_type == MetricType.CPU
+        assert config.retention_hours == 168  # 7 days
+        assert config.is_enabled is True
+
+    def test_set_retention(self, db_session):
+        """Test setting retention period."""
+        from app.services.monitoring.retention_manager import RetentionManager
+        from app.models.monitoring import MetricType
+
+        manager = RetentionManager()
+        config = manager.set_retention(db_session, MetricType.CPU, 48)
+
+        assert config.retention_hours == 48
+
+    def test_set_retention_too_low_rejected(self, db_session):
+        """Test that retention less than 1 hour is rejected."""
+        from app.services.monitoring.retention_manager import RetentionManager
+        from app.models.monitoring import MetricType
+
+        manager = RetentionManager()
+        with pytest.raises(ValueError, match="at least 1 hour"):
+            manager.set_retention(db_session, MetricType.CPU, 0)
+
+    def test_set_retention_too_high_rejected(self, db_session):
+        """Test that retention over 1 year is rejected."""
+        from app.services.monitoring.retention_manager import RetentionManager
+        from app.models.monitoring import MetricType
+
+        manager = RetentionManager()
+        with pytest.raises(ValueError, match="cannot exceed"):
+            manager.set_retention(db_session, MetricType.CPU, 9000)
+
+    def test_should_run_cleanup_initially_true(self):
+        """Test that cleanup should run when no previous cleanup exists."""
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        manager = RetentionManager()
+        assert manager.should_run_cleanup() is True
+
+    def test_get_database_stats(self, db_session):
+        """Test getting database stats for all metric types."""
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        manager = RetentionManager()
+        stats = manager.get_database_stats(db_session)
+
+        assert isinstance(stats, dict)
+        assert "cpu" in stats
+        assert "memory" in stats
+        assert "network" in stats
+
+    def test_estimate_database_size(self, db_session):
+        """Test estimating database size."""
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        manager = RetentionManager()
+        sizes = manager.estimate_database_size(db_session)
+
+        assert isinstance(sizes, dict)
+        assert "total" in sizes
+        assert sizes["total"] >= 0
+
+    def test_run_all_cleanup(self, db_session):
+        """Test running cleanup for all metric types."""
+        from app.services.monitoring.retention_manager import RetentionManager
+
+        manager = RetentionManager()
+        results = manager.run_all_cleanup(db_session)
+
+        assert isinstance(results, dict)
+        # All values should be non-negative integers
+        for count in results.values():
+            assert isinstance(count, int)
+            assert count >= 0
+
+
+class TestSampleToDbConversion:
+    """Test sample schema to DB model conversion for each collector."""
+
+    def test_cpu_sample_to_db_dict(self):
+        """Test CPU sample conversion to DB dict."""
+        collector = CpuMetricCollector()
+        sample = collector.collect_sample()
+        if sample:
+            db_dict = collector.sample_to_db_dict(sample)
+            assert "timestamp" in db_dict
+            assert "usage_percent" in db_dict
+
+    def test_memory_sample_to_db_dict(self):
+        """Test memory sample conversion to DB dict."""
+        collector = MemoryMetricCollector()
+        sample = collector.collect_sample()
+        if sample:
+            db_dict = collector.sample_to_db_dict(sample)
+            assert "timestamp" in db_dict
+            assert "used_bytes" in db_dict
+            assert "total_bytes" in db_dict
+
+    def test_network_sample_to_db_dict(self):
+        """Test network sample conversion to DB dict."""
+        collector = NetworkMetricCollector()
+        sample = collector.collect_sample()
+        if sample:
+            db_dict = collector.sample_to_db_dict(sample)
+            assert "timestamp" in db_dict
+
+    def test_disk_io_physical_disk_filter(self):
+        """Test that disk IO collector filters non-physical disks."""
+        collector = DiskIoMetricCollector()
+        assert collector._is_physical_disk("loop0") is False
+        assert collector._is_physical_disk("ram0") is False
+
+    def test_enable_disable_collector(self):
+        """Test collector enable/disable via _is_enabled flag."""
+        collector = CpuMetricCollector()
+
+        assert collector.is_enabled() is True
+        collector._is_enabled = False
+        assert collector.is_enabled() is False
+        collector._is_enabled = True
+        assert collector.is_enabled() is True
+
+    def test_clear_memory_buffer(self):
+        """Test that clear_memory_buffer empties the buffer."""
+        collector = CpuMetricCollector()
+        collector.process_sample()
+        collector.process_sample()
+
+        assert len(collector._memory_buffer) == 2
+
+        collector.clear_memory_buffer()
+        assert len(collector._memory_buffer) == 0

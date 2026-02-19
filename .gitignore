@@ -97,5 +97,5 @@ backend/nul
 
 /user_input
 test_*.env.production
-test_*
+/test_*
 image.png

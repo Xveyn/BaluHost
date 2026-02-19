@@ -1,4 +1,3 @@
-from datetime import timezone
 """
 Critical Security Vulnerability Tests
 
@@ -219,28 +218,10 @@ class TestCriticalVulnerability5:
 class TestCriticalVulnerability6:
     """Test: Refresh Tokens Cannot Be Revoked"""
 
+    @pytest.mark.skip(reason="Refresh token revocation not yet implemented. Need RefreshToken model, store_refresh_token(), revoke_refresh_token()")
     def test_refresh_token_revocation_supported(self, client: TestClient, db_session):
         """Verify refresh tokens can be revoked."""
-        # This test will FAIL until refresh token revocation is implemented
-
-        # 1. Register user and get refresh token
-        import secrets
-        username = f"test_{secrets.token_hex(4)}"
-        response = client.post("/api/auth/register", json={
-            "username": username,
-            "email": f"{username}@example.com",
-            "password": "SecurePass123!"
-        })
-
-        if response.status_code != 201:
-            pytest.skip("Registration failed, skipping revocation test")
-
-        # 2. Get refresh token (would need to be returned by mobile registration)
-        # For now, document the requirement
-        pytest.skip(
-            "Refresh token revocation not yet implemented. "
-            "Need to add: RefreshToken model, store_refresh_token(), revoke_refresh_token()"
-        )
+        pass
 
 
 class TestCriticalVulnerability7:
@@ -291,55 +272,6 @@ class TestCriticalVulnerability8:
             f"Found {print_count} print() statements in deps.py! "
             f"Replace with logger.debug/info/warning/error"
         )
-
-
-# Fixtures for tests
-@pytest.fixture
-def client():
-    """Create test client."""
-    from app.main import app
-    return TestClient(app)
-
-
-@pytest.fixture
-def db_session():
-    """Create database session for tests."""
-    from app.core.database import SessionLocal
-
-    db = SessionLocal()
-    try:
-        yield db
-    finally:
-        db.close()
-
-
-@pytest.fixture
-def auth_headers(client: TestClient):
-    """Get authentication headers for test user."""
-    import secrets
-
-    # Register a test user
-    username = f"test_{secrets.token_hex(4)}"
-    password = "SecurePass123!"
-
-    response = client.post("/api/auth/register", json={
-        "username": username,
-        "email": f"{username}@example.com",
-        "password": password
-    })
-
-    if response.status_code != 201:
-        # Try to login if user already exists
-        response = client.post("/api/auth/login", json={
-            "username": username,
-            "password": password
-        })
-
-    if response.status_code in [200, 201]:
-        token = response.json()["access_token"]
-        return {"Authorization": f"Bearer {token}"}
-
-    pytest.fail(f"Could not get auth token: {response.json()}")
 
 
 if __name__ == "__main__":

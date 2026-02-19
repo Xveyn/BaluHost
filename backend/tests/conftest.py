@@ -45,11 +45,11 @@ try:
         _orig_testclient_init(self, *args, **kwargs)
         try:
             self.headers.setdefault("X-Test-Client", str(uuid4()))
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     TestClient.__init__ = _init_with_test_header
-except Exception:
+except (AttributeError, TypeError):
     pass
 try:
     _orig_asyncclient_init = AsyncClient.__init__
@@ -58,11 +58,11 @@ try:
         _orig_asyncclient_init(self, *args, **kwargs)
         try:
             self.headers.setdefault("X-Test-Client", str(uuid4()))
-        except Exception:
+        except (AttributeError, TypeError):
             pass
 
     AsyncClient.__init__ = _async_init_with_test_header
-except Exception:
+except (AttributeError, TypeError):
     pass
 
 
@@ -79,13 +79,13 @@ def pytest_runtest_setup(item):
             os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = "1"
         else:
             os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = "0"
-    except Exception:
+    except (AttributeError, OSError):
         pass
 # Ensure a Fernet key is available for VPN/SSH encryption during tests
 try:
     from cryptography.fernet import Fernet
     os.environ.setdefault("VPN_ENCRYPTION_KEY", Fernet.generate_key().decode())
-except Exception:
+except ImportError:
     # If cryptography isn't available in the environment, set a placeholder
     # (most tests will not exercise encryption if placeholder fails later).
     os.environ.setdefault("VPN_ENCRYPTION_KEY", "")
@@ -212,16 +212,16 @@ def client(db_session: Session) -> Generator[TestClient, None, None]:
                 total=8 * 1024 ** 3,
                 percent=round((3 * 1024 ** 3) / (8 * 1024 ** 3) * 100, 2),
             )
-        except Exception:
+        except (ImportError, AttributeError):
             pass
-    except Exception:
+    except ImportError:
         pass
     # Debug: list users present in the test DB
     try:
         users = db_session.query(UserModel).all()
         print("[TEST-DEBUG] users in db:", [u.username for u in users])
-    except Exception:
-        pass
+    except Exception as e:
+        print(f"[TEST-DEBUG] could not list users: {e}")
 
     with TestClient(app) as test_client:
         # Assign a unique per-test header so rate limiting buckets are separated
@@ -304,7 +304,7 @@ def another_user(db_session: Session) -> User:
         UserCreate(
             username="anotheruser",
             email="another@example.com",
-            password="anotherpass123",
+            password="Anotherpass123",
             role="user"
         ),
         db=db_session
@@ -356,7 +356,7 @@ def vpn_client_factory(db_session: Session):
             )
             # resp.client_id maps to the created VPNClient.id
             return resp.client_id
-        except Exception:
+        except (ValueError, RuntimeError, ImportError):
             # Fallback: create a simple VPNClient row
             client = VPNClient(
                 user_id=int(user_id),
@@ -389,7 +389,7 @@ def user_headers(client: TestClient, regular_user: User) -> dict[str, str]:
 @pytest.fixture
 def another_user_headers(client: TestClient, another_user: User) -> dict[str, str]:
     """Get authentication headers for another user."""
-    return get_auth_headers(client, "anotheruser", "anotherpass123")
+    return get_auth_headers(client, "anotheruser", "Anotherpass123")
 
 
 # ============================================================================

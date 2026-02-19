@@ -11,13 +11,10 @@ Tests cover:
 
 import pytest
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
-from sqlalchemy import create_engine
-from sqlalchemy.orm import Session
 
-# SQLite test database
-TEST_DATABASE_URL = "sqlite:///:memory:"
-engine = create_engine(TEST_DATABASE_URL)
+from app.core.security import create_access_token, create_refresh_token, decode_token
+from app.core.config import settings
+import jwt as pyjwt
 
 
 class TestJWTRefreshTokens:
@@ -25,168 +22,111 @@ class TestJWTRefreshTokens:
 
     def test_refresh_token_generation(self):
         """Verify refresh tokens are generated alongside access tokens."""
-        # Given: Valid user credentials
-        from app.core.security import create_access_token, create_refresh_token
-        
         user_id = "test_user_123"
-        
-        # When: Creating tokens
+
         access_token = create_access_token({"sub": user_id})
-        refresh_token = create_refresh_token({"sub": user_id})
-        
-        # Then: Both tokens exist and are different
+        refresh_token, jti = create_refresh_token({"sub": user_id})
+
         assert access_token is not None
         assert refresh_token is not None
+        assert jti is not None
         assert access_token != refresh_token
 
     def test_refresh_token_contains_required_claims(self):
         """Verify refresh tokens contain required claims."""
-        from app.core.security import create_refresh_token
-        import jwt
-        from app.core.config import settings
-        
         user_id = "test_user_123"
-        
-        # When: Creating refresh token
-        token = create_refresh_token({"sub": user_id})
-        
-        # Then: Decode and verify claims
-        decoded = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
+
+        token, jti = create_refresh_token({"sub": user_id})
+
+        decoded = pyjwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         assert decoded["sub"] == user_id
-        assert "exp" in decoded  # Expiration timestamp
-        assert "iat" in decoded  # Issued at
-        assert "type" in decoded  # Token type claim
+        assert "exp" in decoded
+        assert "iat" in decoded
         assert decoded["type"] == "refresh"
+        assert decoded["jti"] == jti
 
     def test_access_token_shorter_expiry_than_refresh_token(self):
         """Verify refresh tokens have longer TTL than access tokens."""
-        from app.core.security import create_access_token, create_refresh_token
-        from app.core.config import settings
-        import jwt
-        
         user_id = "test_user_123"
-        
-        # When: Creating both token types
+
         access_token = create_access_token({"sub": user_id})
-        refresh_token = create_refresh_token({"sub": user_id})
-        
-        # Then: Decode and compare expiration times
-        access_decoded = jwt.decode(
-            access_token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-        refresh_decoded = jwt.decode(
-            refresh_token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-        
-        # Refresh token should expire AFTER access token
+        refresh_token, _jti = create_refresh_token({"sub": user_id})
+
+        access_decoded = pyjwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
+        refresh_decoded = pyjwt.decode(refresh_token, settings.SECRET_KEY, algorithms=["HS256"])
+
         assert refresh_decoded["exp"] > access_decoded["exp"]
 
     def test_refresh_token_can_be_used_to_get_new_access_token(self):
         """Verify refresh tokens can obtain new access tokens."""
-        from app.core.security import create_refresh_token, create_access_token
-        
         user_id = "test_user_123"
-        
-        # When: Creating initial refresh token
-        refresh_token = create_refresh_token({"sub": user_id})
-        
-        # Then: Can generate new access token from it
-        new_access_token = create_access_token({"sub": user_id})
+
+        refresh_token, _jti = create_refresh_token({"sub": user_id})
+
+        # Decode the refresh token to extract user_id, then create new access token
+        payload = decode_token(refresh_token, token_type="refresh")
+        new_access_token = create_access_token({"sub": payload["sub"]})
         assert new_access_token is not None
 
     def test_expired_refresh_token_rejected(self):
-        """Verify expired refresh tokens are rejected."""
-        from app.core.security import decode_token
-        from app.core.config import settings
-        import jwt
-        from datetime import datetime, timedelta
-        
-        user_id = "test_user_123"
-        
-        # When: Creating already-expired token
-        expired_token = jwt.encode(
+        """Verify expired refresh tokens are rejected by decode_token."""
+        expired_token = pyjwt.encode(
             {
-                "sub": user_id,
-                "exp": datetime.now(timezone.utc) - timedelta(hours=1),  # Expired
+                "sub": "test_user_123",
+                "exp": datetime.now(timezone.utc) - timedelta(hours=1),
                 "iat": datetime.now(timezone.utc),
-                "type": "refresh"
+                "type": "refresh",
+                "jti": "test-jti",
             },
             settings.SECRET_KEY,
-            algorithm="HS256"
+            algorithm="HS256",
         )
-        
-        # Then: Decoding raises error
-        with pytest.raises(jwt.ExpiredSignatureError):
-            jwt.decode(
-                expired_token,
-                settings.SECRET_KEY,
-                algorithms=["HS256"]
-            )
+
+        with pytest.raises(pyjwt.ExpiredSignatureError):
+            decode_token(expired_token, token_type="refresh")
 
     def test_invalid_refresh_token_signature_rejected(self):
-        """Verify tokens with invalid signatures are rejected."""
-        import jwt
-        
-        # When: Token signed with wrong key
-        wrong_key = "wrong_secret_key_12345"
-        valid_key = "valid_secret_key_12345"
-        
-        token = jwt.encode(
+        """Verify tokens with invalid signatures are rejected by decode_token."""
+        # Sign with a different key
+        token = pyjwt.encode(
             {
                 "sub": "user123",
                 "exp": datetime.now(timezone.utc) + timedelta(hours=1),
-                "type": "refresh"
+                "iat": datetime.now(timezone.utc),
+                "type": "refresh",
+                "jti": "test-jti",
             },
-            valid_key,
-            algorithm="HS256"
+            "completely-wrong-secret-key-that-differs",
+            algorithm="HS256",
         )
-        
-        # Then: Verification with wrong key fails
-        with pytest.raises(jwt.InvalidSignatureError):
-            jwt.decode(token, wrong_key, algorithms=["HS256"])
 
-    def test_refresh_token_rotation_on_use(self):
-        """Verify tokens are rotated (old RT invalidated) when used."""
-        # This test defines the requirement that:
-        # - Old refresh token becomes invalid after use
-        # - New refresh + access tokens are issued
-        # - Prevents replay attacks
-        
-        # Implementation will require RT storage in database
-        # Marking as requirement for Subtask 2.1 implementation
-        
-        assert True  # Placeholder - implementation in 2.1
+        with pytest.raises(pyjwt.InvalidSignatureError):
+            decode_token(token, token_type="refresh")
 
+    def test_refresh_token_rotation_generates_unique_jtis(self):
+        """Verify each refresh token gets a unique JTI for revocation support."""
+        user_id = "test_user_123"
+
+        _token1, jti1 = create_refresh_token({"sub": user_id})
+        _token2, jti2 = create_refresh_token({"sub": user_id})
+
+        assert jti1 != jti2, "Each refresh token must have a unique JTI"
+
+    @pytest.mark.skip(reason="Refresh token revocation store not implemented yet")
     def test_refresh_token_revocation(self):
         """Verify refresh tokens can be revoked (logout)."""
-        # This test defines the requirement that:
-        # - Users can explicitly revoke RT (logout)
-        # - Revoked RT cannot be reused
-        # - Session ends immediately
-        
-        # Implementation will require RT storage in database
-        # Marking as requirement for Subtask 2.1 implementation
-        
-        assert True  # Placeholder - implementation in 2.1
+        pass
 
-    def test_refresh_endpoint_requires_valid_refresh_token(self):
-        """Verify /auth/refresh endpoint validates refresh token."""
-        # This test defines the API requirement:
-        # POST /auth/refresh
-        # {refresh_token: "..."}
-        # Returns: {access_token: "...", refresh_token: "..."}
-        
-        # Implementation in Subtask 2.1
-        
-        assert True  # Placeholder
+    def test_refresh_endpoint_requires_valid_refresh_token(self, client):
+        """Verify /auth/refresh endpoint rejects invalid tokens."""
+        response = client.post(
+            "/api/auth/refresh",
+            json={"refresh_token": "not-a-valid-token"},
+        )
+        # Should reject with 401 or 422
+        assert response.status_code in (401, 422), (
+            f"Expected 401/422 for invalid refresh token, got {response.status_code}"
+        )
 
 
 class TestJWTSecurityMechanisms:
@@ -194,70 +134,49 @@ class TestJWTSecurityMechanisms:
 
     def test_token_type_claim_prevents_confusion(self):
         """Verify 'type' claim distinguishes access vs refresh tokens."""
-        from app.core.security import create_access_token, create_refresh_token
-        from app.core.config import settings
-        import jwt
-        
         user_id = "test_user_123"
-        
-        # When: Creating both token types
+
         access_token = create_access_token({"sub": user_id})
-        refresh_token = create_refresh_token({"sub": user_id})
-        
-        # Then: Type claims differ
-        access_decoded = jwt.decode(
-            access_token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-        refresh_decoded = jwt.decode(
-            refresh_token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-        
+        refresh_token, _jti = create_refresh_token({"sub": user_id})
+
+        access_decoded = pyjwt.decode(access_token, settings.SECRET_KEY, algorithms=["HS256"])
+        refresh_decoded = pyjwt.decode(refresh_token, settings.SECRET_KEY, algorithms=["HS256"])
+
         assert access_decoded.get("type") == "access"
         assert refresh_decoded.get("type") == "refresh"
 
+    def test_access_token_rejected_as_refresh(self):
+        """Verify using an access token where refresh is expected fails."""
+        access_token = create_access_token({"sub": "test_user"})
+
+        with pytest.raises(pyjwt.InvalidTokenError, match="Invalid token type"):
+            decode_token(access_token, token_type="refresh")
+
+    def test_refresh_token_rejected_as_access(self):
+        """Verify using a refresh token where access is expected fails."""
+        refresh_token, _jti = create_refresh_token({"sub": "test_user"})
+
+        with pytest.raises(pyjwt.InvalidTokenError, match="Invalid token type"):
+            decode_token(refresh_token, token_type="access")
+
     def test_token_claims_include_issuance_time(self):
         """Verify tokens include iat (issued at) for clock skew detection."""
-        from app.core.security import create_access_token
-        from app.core.config import settings
-        import jwt
-        
-        # When: Creating token
         token = create_access_token({"sub": "test_user"})
-        
-        # Then: Token has iat claim
-        decoded = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
+
+        decoded = pyjwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
         assert "iat" in decoded
         assert isinstance(decoded["iat"], int)
 
     def test_short_access_token_reduces_exposure_window(self):
         """Verify access tokens expire quickly (short TTL)."""
-        from app.core.security import create_access_token
-        from app.core.config import settings
-        import jwt
-        
-        # Default should be 15-30 minutes for access tokens
         token = create_access_token({"sub": "test_user"})
-        decoded = jwt.decode(
-            token,
-            settings.SECRET_KEY,
-            algorithms=["HS256"]
-        )
-        
-        # Calculate TTL
+        decoded = pyjwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+
         now = datetime.now(timezone.utc)
-        exp_time = datetime.utcfromtimestamp(decoded["exp"])
+        exp_time = datetime.fromtimestamp(decoded["exp"], tz=timezone.utc)
         ttl_minutes = (exp_time - now).total_seconds() / 60
-        
-        # Access token should expire within 15-60 minutes
-        assert 10 < ttl_minutes < 60, f"Access token TTL {ttl_minutes} not in expected range"
+
+        assert 10 < ttl_minutes < 60, f"Access token TTL {ttl_minutes:.1f}min not in expected 10-60min range"
 
 
 if __name__ == "__main__":

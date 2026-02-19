@@ -42,5 +42,5 @@ async def get_file_list(
 - **Integration tests**: Test API endpoints with test database
 - **Fixtures**: Use pytest fixtures for database, auth tokens
 - **Test database**: Separate SQLite database for tests
-- **Coverage**: 40+ test files, 364 test functions
+- **Coverage**: 68 test files, 1121 test functions
 - Run with: `python -m pytest -v`

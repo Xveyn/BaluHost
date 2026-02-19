@@ -8,6 +8,7 @@ Tests cover:
 """
 import json
 import pytest
+from pydantic import ValidationError
 from unittest.mock import patch, MagicMock
 from datetime import datetime
 
@@ -429,7 +430,7 @@ class TestFanScheduleSchemas:
     def test_invalid_time_rejected(self):
         """Invalid time format (25:00) is rejected."""
         from app.schemas.fans import CreateFanScheduleEntryRequest
-        with pytest.raises(Exception):  # Pydantic ValidationError
+        with pytest.raises(ValidationError):
             CreateFanScheduleEntryRequest(
                 name="Bad",
                 start_time="25:00",
@@ -443,7 +444,7 @@ class TestFanScheduleSchemas:
     def test_insufficient_curve_points_rejected(self):
         """Fewer than 2 curve points is rejected."""
         from app.schemas.fans import CreateFanScheduleEntryRequest
-        with pytest.raises(Exception):
+        with pytest.raises(ValidationError):
             CreateFanScheduleEntryRequest(
                 name="Bad",
                 start_time="08:00",

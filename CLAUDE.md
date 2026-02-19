@@ -27,7 +27,7 @@ backend/
 │   ├── models/            # SQLAlchemy ORM models
 │   └── core/config.py     # Configuration
 ├── baluhost_tui/          # Terminal UI application
-├── tests/                 # Pytest tests (40+ files, 364 test functions)
+├── tests/                 # Pytest tests (68 files, 1121 test functions)
 └── pyproject.toml         # Dependencies
 
 client/
