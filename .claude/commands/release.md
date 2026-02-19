@@ -84,4 +84,4 @@ git checkout development
 - Bei Fehlern: Abbrechen und Status anzeigen
 - Alle Befehle mit `--dry-run` simulieren wenn möglich
 - Bei Konflikten: Benutzer informieren und manuell lösen lassen
-- Excludierte Verzeichnisse in `.gitattributes` beachten (baludesk, android-app)
+- Excludierte Verzeichnisse in `.gitattributes` beachten

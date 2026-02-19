@@ -11,8 +11,8 @@ BaluHost is a full-stack NAS management platform with multiple components:
 - **Backend**: Python FastAPI (primary), located in `backend/`
 - **Frontend**: React + TypeScript + Vite (Web UI), located in `client/`
 - **TUI**: Terminal UI (Textual), located in `backend/baluhost_tui/`
-- **BaluDesk**: Desktop sync client (C++ backend + Electron frontend), located in `baludesk/`
-- **Mobile Apps**: Native Android (Kotlin), iOS implementation guide available
+- **BaluDesk**: Desktop sync client → [Xveyn/BaluDesk](https://github.com/Xveyn/BaluDesk)
+- **BaluApp**: Android app → [Xveyn/BaluApp](https://github.com/Xveyn/BaluApp)
 
 **Current Production Status**: ~99% production-ready, deployed in production (Jan 2026). PostgreSQL, security hardening, and deployment complete.
 

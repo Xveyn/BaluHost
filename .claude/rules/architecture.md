@@ -121,10 +121,8 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 
 ## Multi-Component Architecture
 
-### BaluDesk (Desktop Sync Client)
+### BaluDesk (Desktop Sync Client) — [Separate Repo](https://github.com/Xveyn/BaluDesk)
 - C++ backend with Electron frontend
-- Located in `baludesk/`
-- Uses vcpkg for C++ dependencies
 - Communicates with backend API for sync operations
 
 ### TUI (Terminal UI)
@@ -133,7 +131,7 @@ API documentation available at: `http://localhost:3001/docs` (Swagger UI with cu
 - Provides CLI access to backend features
 - Run with `baluhost-tui` command
 
-### Mobile Apps
-- **Android**: Full native app in `android-app/` (175+ Kotlin files)
-- Both use QR code pairing with VPN config embedded
+### BaluApp (Android) — [Separate Repo](https://github.com/Xveyn/BaluApp)
+- Native Kotlin app
+- QR code pairing with VPN config embedded
 - 30-day refresh tokens for mobile sessions

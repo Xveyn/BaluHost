@@ -55,10 +55,6 @@ baluhost.db
 *.db-wal
 *.db-shm
 
-# Build artifacts (do not commit)
-baludesk/backend/build/
-baludesk/backend/build/**
-
 # C++ build artifacts and temporary files
 *.exe
 *.pdb
@@ -69,9 +65,6 @@ baludesk/backend/build/**
 # Client test artifacts
 client/test-results/
 client/e2e-*.png
-
-# Temporary frontend files
-baludesk/frontend/tmp_asar_list.txt
 
 # Local postgres env with secrets
 .env.postgres
