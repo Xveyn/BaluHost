@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -20,8 +20,9 @@ import TapoDeviceSettings from '../components/TapoDeviceSettings';
 import { RateLimitsTab } from '../components/rate-limits';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
+import SleepMode from './SleepMode';
 
-type TabType = 'energy' | 'fan' | 'raid' | 'backup' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -45,6 +46,7 @@ const CATEGORIES: CategoryConfig[] = [
     tabs: [
       { id: 'energy', labelKey: 'systemControl.tabs.energy', icon: <Zap className="h-5 w-5" /> },
       { id: 'fan', labelKey: 'systemControl.tabs.fan', icon: <Fan className="h-5 w-5" /> },
+      { id: 'sleep', labelKey: 'systemControl.tabs.sleep', icon: <Moon className="h-5 w-5" /> },
     ],
   },
   {
@@ -175,6 +177,7 @@ export default function SystemControlPage() {
       <div className="min-w-0">
         {activeTab === 'energy' && <PowerManagement isAdmin={true} />}
         {activeTab === 'fan' && <FanControl />}
+        {activeTab === 'sleep' && <SleepMode />}
         {activeTab === 'raid' && <RaidManagement />}
         {activeTab === 'backup' && <BackupSettings />}
         {activeTab === 'vpn' && <VpnManagement />}

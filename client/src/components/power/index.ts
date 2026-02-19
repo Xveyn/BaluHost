@@ -6,3 +6,6 @@ export { PresetEditor } from './PresetEditor';
 export { PresetSelector } from './PresetSelector';
 export { PropertyBadge } from './PropertyBadge';
 export { ServiceIntensityList } from './ServiceIntensityList';
+export { SleepModePanel } from './SleepModePanel';
+export { SleepConfigPanel } from './SleepConfigPanel';
+export { SleepHistoryTable } from './SleepHistoryTable';

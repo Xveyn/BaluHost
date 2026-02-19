@@ -175,7 +175,8 @@
       "smart": "Smart Devices",
       "rateLimits": "Rate Limits",
       "webdav": "WebDAV",
-      "samba": "SMB/CIFS"
+      "samba": "SMB/CIFS",
+      "sleep": "Sleep"
     }
   },
   "devices": {
