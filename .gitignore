@@ -75,7 +75,6 @@ client/e2e-*.png
 .env.production
 
 # Codebase Analyzer
-tools
 tools/codebase-analyzer/node_modules/
 tools/codebase-analyzer/dist/
 tools/codebase-analyzer/.env

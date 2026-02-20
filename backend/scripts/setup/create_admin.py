@@ -1,5 +1,6 @@
 import sys
-sys.path.insert(0, 'backend')
+from pathlib import Path
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent.parent))
 
 from app.core.database import SessionLocal
 from app.services.users import get_user_by_username, create_user

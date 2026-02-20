@@ -141,7 +141,7 @@ def analyze_component(name: str, config: Dict, base_path: Path) -> Dict:
 
 def main():
     """Main execution function."""
-    base_path = Path(__file__).parent
+    base_path = Path(__file__).parent.parent
     
     print("🔍 BaluHost LOC Analysis")
     print("=" * 60)
