@@ -219,7 +219,7 @@ export default function AdminDatabase() {
       <div className="flex-1 min-w-0 card !p-0 overflow-hidden">
         {/* Toolbar */}
         <div className="px-4 sm:px-5 py-3 border-b border-slate-800/60">
-          <div className="flex flex-wrap items-center gap-2 sm:gap-3">
+          <div className="flex flex-col gap-2 sm:flex-row sm:flex-wrap sm:items-center sm:gap-3">
             {/* Mobile-only table selector dropdown */}
             <div className="lg:hidden">
               <TableSelector
@@ -232,7 +232,7 @@ export default function AdminDatabase() {
 
             {/* Global Search */}
             {selected && (
-              <div className="relative flex-1 min-w-[160px] max-w-xs">
+              <div className="relative w-full sm:flex-1 sm:min-w-[160px] sm:max-w-xs sm:w-auto">
                 <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 w-3.5 h-3.5 text-slate-500" />
                 <input
                   type="text"
@@ -256,7 +256,7 @@ export default function AdminDatabase() {
             {selected && (schema?.columns?.length ?? 0) > 0 && (
               <button
                 onClick={() => setShowFilters(!showFilters)}
-                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border ${
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 border touch-manipulation active:scale-95 ${
                   showFilters || activeFilterCount > 0
                     ? 'bg-blue-500/10 border-blue-500/40 text-blue-300'
                     : 'bg-slate-800/60 border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-white'
@@ -272,69 +272,77 @@ export default function AdminDatabase() {
               </button>
             )}
 
-            {/* Page Size Selector */}
-            {selected && (
-              <select
-                value={pageSize}
-                onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
-                className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500/50 transition-colors"
+            {/* Pagination + PageSize + Export wrapper */}
+            <div className="flex items-center gap-2 sm:gap-3 flex-wrap">
+              {/* Page Size Selector */}
+              {selected && (
+                <select
+                  value={pageSize}
+                  onChange={(e) => { setPageSize(Number(e.target.value)); setPage(1) }}
+                  className="bg-slate-800/60 border border-slate-700/50 rounded-lg px-2 py-2 text-xs text-slate-300 focus:outline-none focus:border-blue-500/50 transition-colors min-h-[36px] touch-manipulation"
+                >
+                  <option value={25}>25</option>
+                  <option value={50}>50</option>
+                  <option value={100}>100</option>
+                </select>
+              )}
+
+              {/* Pagination */}
+              {selected && (
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={() => setPage(Math.max(1, page - 1))}
+                    className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-md border transition-all duration-200 touch-manipulation active:scale-95 ${
+                      page <= 1
+                        ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
+                        : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
+                    }`}
+                    disabled={page <= 1}
+                  >
+                    <ChevronLeft className="w-4 h-4" />
+                  </button>
+                  <span className="text-xs text-slate-300 font-medium min-w-[60px] text-center tabular-nums">
+                    {page}{totalPages ? ` / ${totalPages}` : ''}
+                  </span>
+                  <button
+                    onClick={() => setPage(page + 1)}
+                    className={`p-2 min-h-[36px] min-w-[36px] flex items-center justify-center rounded-md border transition-all duration-200 touch-manipulation active:scale-95 ${
+                      totalPages !== null && page >= (totalPages ?? 1)
+                        ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
+                        : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
+                    }`}
+                    disabled={totalPages !== null && page >= (totalPages ?? 1)}
+                  >
+                    <ChevronRight className="w-4 h-4" />
+                  </button>
+                </div>
+              )}
+
+              {/* Export Button */}
+              <button
+                disabled={!selected || rows.length === 0}
+                className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 touch-manipulation active:scale-95 ${
+                  selected && rows.length
+                    ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
+                    : 'bg-slate-700/40 text-slate-500 cursor-not-allowed border border-slate-700/50'
+                }`}
+                onClick={handleCsvExport}
               >
-                <option value={25}>25</option>
-                <option value={50}>50</option>
-                <option value={100}>100</option>
-              </select>
-            )}
-
-            {/* Pagination */}
-            {selected && (
-              <div className="flex items-center gap-1">
-                <button
-                  onClick={() => setPage(Math.max(1, page - 1))}
-                  className={`p-1.5 rounded-md border transition-all duration-200 ${
-                    page <= 1
-                      ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
-                      : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
-                  }`}
-                  disabled={page <= 1}
-                >
-                  <ChevronLeft className="w-4 h-4" />
-                </button>
-                <span className="text-xs text-slate-300 font-medium min-w-[60px] text-center tabular-nums">
-                  {page}{totalPages ? ` / ${totalPages}` : ''}
-                </span>
-                <button
-                  onClick={() => setPage(page + 1)}
-                  className={`p-1.5 rounded-md border transition-all duration-200 ${
-                    totalPages !== null && page >= (totalPages ?? 1)
-                      ? 'border-slate-700/50 bg-slate-800/40 text-slate-500 cursor-not-allowed'
-                      : 'border-slate-600/50 bg-slate-700/40 text-slate-200 hover:bg-slate-700 hover:text-white'
-                  }`}
-                  disabled={totalPages !== null && page >= (totalPages ?? 1)}
-                >
-                  <ChevronRight className="w-4 h-4" />
-                </button>
-              </div>
-            )}
-
-            {/* Export Button */}
-            <button
-              disabled={!selected || rows.length === 0}
-              className={`inline-flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium transition-all duration-200 ${
-                selected && rows.length
-                  ? 'bg-blue-500/20 border border-blue-500/40 text-blue-300 hover:bg-blue-500/30'
-                  : 'bg-slate-700/40 text-slate-500 cursor-not-allowed border border-slate-700/50'
-              }`}
-              onClick={handleCsvExport}
-            >
-              <Download className="w-3.5 h-3.5" />
-              CSV
-            </button>
+                <Download className="w-3.5 h-3.5" />
+                CSV
+              </button>
+            </div>
 
             {/* Row count info */}
             {selected && total !== null && (
-              <span className="text-[11px] text-slate-500 ml-auto hidden sm:inline tabular-nums">
-                {rangeStart}–{rangeEnd} von {total.toLocaleString()} · {schema?.columns?.length ?? 0} columns
-              </span>
+              <>
+                <span className="text-[11px] text-slate-500 ml-auto hidden sm:inline tabular-nums">
+                  {rangeStart}–{rangeEnd} von {total.toLocaleString()} · {schema?.columns?.length ?? 0} columns
+                </span>
+                <span className="text-[11px] text-slate-500 sm:hidden tabular-nums">
+                  {rangeStart}–{rangeEnd} / {total.toLocaleString()}
+                </span>
+              </>
             )}
           </div>
         </div>

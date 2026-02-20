@@ -519,7 +519,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
           </div>
           {editingAutoScaling && editAutoScaling ? (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4">
                 <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
                   <label className="block text-[10px] sm:text-sm text-slate-400 mb-1">{t('system:power.autoScaling.surge')}</label>
                   <div className="flex items-center gap-1">
@@ -582,7 +582,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
             </>
           ) : (
             <>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 sm:gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-2 sm:gap-4">
                 <div className="rounded-lg border border-slate-700/50 bg-slate-800/30 p-2 sm:p-4">
                   <p className="text-[10px] sm:text-sm text-slate-400">{t('system:power.autoScaling.surge')}</p>
                   <p className="text-sm sm:text-xl font-semibold text-red-300">&gt;{autoScaling.cpu_surge_threshold}%</p>
@@ -633,7 +633,7 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
       {status?.is_using_linux_backend && status.permission_status && (
         <div className="card border-slate-700/50 p-4 sm:p-6">
           <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">{t('system:power.permissions.title')}</h2>
-          <div className="grid grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 sm:gap-4 lg:grid-cols-4">
             {/* Write Access Status */}
             <div className={`rounded-lg border p-2 sm:p-4 ${
               status.permission_status.has_write_access

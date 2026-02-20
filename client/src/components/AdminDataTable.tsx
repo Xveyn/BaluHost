@@ -1,4 +1,3 @@
-import { useEffect, useState } from 'react'
 import { useTranslation } from 'react-i18next'
 import { ArrowUp, ArrowDown, ArrowUpDown } from 'lucide-react'
 import DataTypeIndicator from './admin/DataTypeIndicator'
@@ -26,7 +25,6 @@ interface Props {
 
 export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOrder, onSortChange, onRowClick }: Props) {
   const { t } = useTranslation('admin')
-  const [isMobile, setIsMobile] = useState(false)
 
   // hide specific columns from display (e.g. parent_path, is_directory, mime_type)
   const visibleColumns = columns.filter((c) => {
@@ -34,13 +32,6 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
     // hide hashed_password column explicitly (sensitive)
     return !n.includes('parent_path') && !n.includes('is_directory') && !n.includes('mime') && !n.includes('hashed_password')
   })
-
-  useEffect(() => {
-    const check = () => setIsMobile(window.innerWidth < 900)
-    check()
-    window.addEventListener('resize', check)
-    return () => window.removeEventListener('resize', check)
-  }, [])
 
   // determine column behavior (wider path column, truncate others)
   const isPathColumn = (name: string) => name.toLowerCase().includes('path') || name.toLowerCase() === 'path'
@@ -120,30 +111,31 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
   return (
     <div>
       <div className="px-0 sm:px-2 py-4 sm:py-5">
-        {isMobile ? (
-          <div className="space-y-3">
-            {rows.map((r, idx) => (
-              <div
-                key={idx}
-                className={`bg-slate-800/40 p-3 rounded border border-slate-800/60 ${onRowClick ? 'cursor-pointer hover:bg-slate-800/60 transition-colors' : ''}`}
-                onClick={() => onRowClick?.(r)}
-              >
-                <div className="grid grid-cols-2 gap-2 text-sm">
-                  {visibleColumns.map((c) => {
-                    const raw = r[c.name]
-                    const text = raw === null || raw === undefined ? '-' : String(raw)
-                    return (
-                      <div key={c.name} className="py-1">
-                        <div className="text-xs text-slate-400 uppercase tracking-wide">{c.name}</div>
-                        <div className={`text-sm text-slate-100 ${isPathColumn(c.name) ? 'break-words' : 'truncate'}`}>{text}</div>
-                      </div>
-                    )
-                  })}
-                </div>
+        {/* Mobile card view */}
+        <div className="lg:hidden space-y-3">
+          {rows.map((r, idx) => (
+            <div
+              key={idx}
+              className={`bg-slate-800/40 p-3 rounded border border-slate-800/60 ${onRowClick ? 'cursor-pointer hover:bg-slate-800/60 transition-colors' : ''}`}
+              onClick={() => onRowClick?.(r)}
+            >
+              <div className="grid grid-cols-2 gap-2 text-sm">
+                {visibleColumns.map((c) => {
+                  const raw = r[c.name]
+                  const text = raw === null || raw === undefined ? '-' : String(raw)
+                  return (
+                    <div key={c.name} className="py-1">
+                      <div className="text-xs text-slate-400 uppercase tracking-wide">{c.name}</div>
+                      <div className={`text-sm text-slate-100 ${isPathColumn(c.name) ? 'break-words' : 'truncate'}`}>{text}</div>
+                    </div>
+                  )
+                })}
               </div>
-            ))}
-          </div>
-        ) : (
+            </div>
+          ))}
+        </div>
+        {/* Desktop table view */}
+        <div className="hidden lg:block">
           <div className="overflow-x-auto border border-slate-800/60 rounded min-w-0 px-4">
             <table className="w-full table-fixed min-w-0 divide-y divide-slate-800/60">
               <thead className="sticky top-0 z-10 bg-slate-900/95 backdrop-blur-sm">
@@ -218,7 +210,7 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
               </tbody>
             </table>
           </div>
-        )}
+        </div>
       </div>
     </div>
   )

@@ -581,29 +581,32 @@ export default function SettingsPage() {
       </div>
 
       {/* Tabs */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
-        <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
-          {([
-            { id: 'profile' as const, label: t('tabs.profile'), icon: User },
-            { id: 'security' as const, label: t('tabs.security'), icon: Lock },
-            { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
-            { id: 'language' as const, label: t('tabs.language'), icon: Globe },
-            ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
-          ]).map(tab => (
-            <button
-              key={tab.id}
-              onClick={() => setActiveTab(tab.id)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
-                activeTab === tab.id
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
-                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
-              }`}
-            >
-              <tab.icon className="w-4 h-4 sm:w-5 sm:h-5" />
-              <span>{tab.label}</span>
-            </button>
-          ))}
+      <div className="relative">
+        <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+          <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
+            {([
+              { id: 'profile' as const, label: t('tabs.profile'), icon: User },
+              { id: 'security' as const, label: t('tabs.security'), icon: Lock },
+              { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
+              { id: 'language' as const, label: t('tabs.language'), icon: Globe },
+              ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
+            ]).map(tab => (
+              <button
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id)}
+                className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                  activeTab === tab.id
+                    ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                    : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+                }`}
+              >
+                <tab.icon className="w-4 h-4 sm:w-5 sm:h-5" />
+                <span>{tab.label}</span>
+              </button>
+            ))}
+          </div>
         </div>
+        <div className="pointer-events-none absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-slate-950 to-transparent sm:hidden" />
       </div>
 
       <div className="w-full space-y-6">

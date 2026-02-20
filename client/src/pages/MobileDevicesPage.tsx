@@ -561,7 +561,7 @@ function NotificationStatus({ deviceId }: { deviceId: string }) {
 
   return (
     <div className="mt-3 pt-3 border-t border-slate-700/50">
-      <div className="flex items-center gap-2 text-xs text-slate-400">
+      <div className="flex flex-wrap items-center gap-2 text-xs text-slate-400">
         <Bell className={`w-3.5 h-3.5 ${
           lastNotification.success ? 'text-sky-400' : 'text-red-400'
         }`} />

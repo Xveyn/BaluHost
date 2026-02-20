@@ -411,7 +411,7 @@ export default function AdminHealth() {
                     {device.status}
                   </span>
                 </div>
-                <div className="mt-3 grid grid-cols-2 sm:grid-cols-4 gap-4 text-xs">
+                <div className="mt-3 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 text-xs">
                   <div>
                     <p className="text-slate-500">{t('health.deviceLabels.capacity')}</p>
                     <p className="text-slate-200">{formatBytes(device.capacity_bytes)}</p>

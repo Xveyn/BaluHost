@@ -79,7 +79,7 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
         className="flex items-center justify-between cursor-pointer touch-manipulation"
         onClick={() => setIsOpen(!isOpen)}
       >
-        <div className="flex items-center gap-2 sm:gap-3 flex-1 flex-wrap min-w-0">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:gap-3 flex-1 min-w-0">
           <span className={`px-2 sm:px-3 py-1 rounded-lg text-[10px] sm:text-xs font-bold border flex-shrink-0 ${methodColors[endpoint.method]}`}>
             {endpoint.method}
           </span>
@@ -161,7 +161,7 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
                   {copied ? <Check className="w-4 h-4 text-emerald-400" /> : <Copy className="w-4 h-4" />}
                 </button>
               </div>
-              <pre className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-2 sm:p-3 text-[10px] sm:text-xs overflow-x-auto">
+              <pre className="bg-slate-900/60 border border-slate-700/50 rounded-lg p-2 sm:p-3 text-[10px] sm:text-xs overflow-x-auto max-w-full">
                 <code className="text-slate-300">{endpoint.response}</code>
               </pre>
             </div>

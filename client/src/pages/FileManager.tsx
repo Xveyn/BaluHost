@@ -645,8 +645,8 @@ export default function FileManager() {
               >
                 &larr; Back
               </button>
-              <span className="text-slate-600 hidden sm:inline">/</span>
-              <span className="rounded-full border border-slate-800/70 bg-slate-900/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.25em] text-slate-200 truncate max-w-[150px] sm:max-w-none">
+              <span className="text-slate-600">/</span>
+              <span className="rounded-full border border-slate-800/70 bg-slate-900/80 px-2.5 sm:px-3 py-1.5 text-[10px] sm:text-xs uppercase tracking-[0.15em] sm:tracking-[0.25em] text-slate-200 truncate max-w-[200px] sm:max-w-none" title={currentPath || '/'}>
                 {currentPath || '/'}
               </span>
             </>
