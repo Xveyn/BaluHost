@@ -276,7 +276,7 @@ export default function Layout({ children }: LayoutProps) {
   const renderLink = (path: string) => location.pathname === path;
 
   return (
-    <div className="relative min-h-screen overflow-hidden text-slate-100">
+    <div className="relative min-h-screen overflow-x-hidden text-slate-100">
       <div className="relative z-10 flex min-h-screen">
         {/* Desktop Sidebar */}
         <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]">
@@ -351,7 +351,7 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Mobile Sidebar */}
-        <aside className={`fixed left-0 top-0 z-50 h-screen w-72 flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
+        <aside className={`fixed left-0 top-0 z-50 h-screen w-72 flex flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
         }`}>
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
@@ -438,7 +438,7 @@ export default function Layout({ children }: LayoutProps) {
           </div>
         </aside>
 
-        <div className="flex flex-1 flex-col lg:pl-72">
+        <div className="flex flex-1 flex-col lg:pl-72 overflow-x-hidden">
           {shutdownPending && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-4 rounded-2xl bg-slate-900/90 border border-slate-800 p-6">
@@ -541,7 +541,7 @@ export default function Layout({ children }: LayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto overflow-x-hidden px-4 py-6 sm:px-6 lg:px-10 mt-[72px] pb-[env(safe-area-inset-bottom)]">
+          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 mt-[72px] pb-[env(safe-area-inset-bottom)]">
             <div className={`${location.pathname === '/admin-db' ? 'w-full max-w-none mx-0' : 'mx-auto w-full max-w-7xl'} space-y-6 sm:space-y-8`}>
               {children}
             </div>
