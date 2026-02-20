@@ -6,6 +6,7 @@ from app.api.routes import (
     vcl, server_profiles, vpn_profiles, metrics, tapo, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, sleep,
+    api_keys,
 )
 
 api_router = APIRouter()
@@ -47,5 +48,6 @@ api_router.include_router(webdav.router, tags=["webdav"])
 api_router.include_router(samba.router, tags=["samba"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
 api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])
+api_router.include_router(api_keys.router, tags=["api-keys"])
 
 __all__ = ["api_router"]

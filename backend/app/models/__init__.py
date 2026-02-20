@@ -65,6 +65,7 @@ from app.models.energy_price_config import EnergyPriceConfig
 from app.models.ssd_cache import SsdCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.sleep import SleepConfig, SleepStateLog
+from app.models.api_key import ApiKey
 
 __all__ = [
     "Base",
@@ -131,4 +132,5 @@ __all__ = [
     "CloudImportJob",
     "SleepConfig",
     "SleepStateLog",
+    "ApiKey",
 ]

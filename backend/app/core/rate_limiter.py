@@ -106,6 +106,9 @@ RATE_LIMITS = {
     # 2FA operations - strict limits for brute-force protection
     "auth_2fa_verify": "5/minute",
     "auth_2fa_setup": "5/minute",
+
+    # API key management
+    "api_key_operations": "30/minute",
 }
 
 

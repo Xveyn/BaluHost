@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound } from 'lucide-react';
+import ApiKeysTab from '../components/settings/ApiKeysTab';
 import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
 import { formatBytes } from '../lib/formatters';
@@ -402,7 +403,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language' | 'api-keys'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -587,6 +588,7 @@ export default function SettingsPage() {
             { id: 'security' as const, label: t('tabs.security'), icon: Lock },
             { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
             { id: 'language' as const, label: t('tabs.language'), icon: Globe },
+            ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
           ]).map(tab => (
             <button
               key={tab.id}
@@ -833,6 +835,11 @@ export default function SettingsPage() {
         {/* Language Tab */}
         {activeTab === 'language' && (
           <LanguageSettings />
+        )}
+
+        {/* API Keys Tab (Admin only) */}
+        {activeTab === 'api-keys' && profile?.role === 'admin' && (
+          <ApiKeysTab />
         )}
 
         {/* Storage Tab */}

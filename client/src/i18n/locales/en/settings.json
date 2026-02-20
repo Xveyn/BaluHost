@@ -9,7 +9,8 @@
     "backup": "Backup",
     "vpn": "VPN",
     "vcl": "Version Control",
-    "language": "Language"
+    "language": "Language",
+    "apiKeys": "API Keys"
   },
   "profile": {
     "title": "Profile Information",
@@ -115,6 +116,36 @@
     "description": "Change the user interface language",
     "autoDetect": "Auto-detect",
     "current": "Current Language"
+  },
+  "apiKeys": {
+    "title": "API Keys",
+    "description": "Create API keys for programmatic access to the BaluHost API. Keys act as the selected user.",
+    "loading": "Loading API keys...",
+    "loadFailed": "Failed to load API keys",
+    "create": "Create Key",
+    "creating": "Creating...",
+    "createFailed": "Failed to create API key",
+    "nameLabel": "Name",
+    "namePlaceholder": "e.g. Backup Script, CI/CD Pipeline",
+    "targetUser": "Target User",
+    "expiration": "Expiration",
+    "keyCreated": "API Key Created",
+    "keyLabel": "Your API Key",
+    "keyRevealWarning": "Copy this key now. It will not be shown again.",
+    "copy": "Copy",
+    "done": "Done",
+    "revoke": "Revoke",
+    "revokeConfirm": "Revoke API key",
+    "revokeFailed": "Failed to revoke API key",
+    "noKeys": "No API keys created yet",
+    "uses": "uses",
+    "expiresAt": "Expires",
+    "cancel": "Cancel",
+    "status": {
+      "active": "Active",
+      "revoked": "Revoked",
+      "expired": "Expired"
+    }
   },
   "sync": {
     "title": "Sync Settings",

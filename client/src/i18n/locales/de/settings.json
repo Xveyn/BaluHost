@@ -9,7 +9,8 @@
     "backup": "Backup",
     "vpn": "VPN",
     "vcl": "Versionskontrolle",
-    "language": "Sprache"
+    "language": "Sprache",
+    "apiKeys": "API-Schlüssel"
   },
   "profile": {
     "title": "Profilinformationen",
@@ -115,6 +116,36 @@
     "description": "Die Sprache der Benutzeroberfläche ändern",
     "autoDetect": "Automatisch erkennen",
     "current": "Aktuelle Sprache"
+  },
+  "apiKeys": {
+    "title": "API-Schlüssel",
+    "description": "API-Schlüssel für programmatischen Zugriff auf die BaluHost-API erstellen. Schlüssel agieren als der ausgewählte Benutzer.",
+    "loading": "Lade API-Schlüssel...",
+    "loadFailed": "Fehler beim Laden der API-Schlüssel",
+    "create": "Schlüssel erstellen",
+    "creating": "Wird erstellt...",
+    "createFailed": "Fehler beim Erstellen des API-Schlüssels",
+    "nameLabel": "Name",
+    "namePlaceholder": "z.B. Backup-Skript, CI/CD-Pipeline",
+    "targetUser": "Ziel-Benutzer",
+    "expiration": "Ablauf",
+    "keyCreated": "API-Schlüssel erstellt",
+    "keyLabel": "Dein API-Schlüssel",
+    "keyRevealWarning": "Kopiere diesen Schlüssel jetzt. Er wird nicht erneut angezeigt.",
+    "copy": "Kopieren",
+    "done": "Fertig",
+    "revoke": "Widerrufen",
+    "revokeConfirm": "API-Schlüssel widerrufen",
+    "revokeFailed": "Fehler beim Widerrufen des API-Schlüssels",
+    "noKeys": "Noch keine API-Schlüssel erstellt",
+    "uses": "Verwendungen",
+    "expiresAt": "Läuft ab",
+    "cancel": "Abbrechen",
+    "status": {
+      "active": "Aktiv",
+      "revoked": "Widerrufen",
+      "expired": "Abgelaufen"
+    }
   },
   "sync": {
     "title": "Sync-Einstellungen",
