@@ -109,6 +109,12 @@ RATE_LIMITS = {
 
     # API key management
     "api_key_operations": "30/minute",
+
+    # Desktop pairing (Device Code Flow)
+    "desktop_pairing_request": "3/minute",
+    "desktop_pairing_poll": "12/minute",
+    "desktop_pairing_verify": "10/minute",
+    "desktop_pairing_approve": "5/minute",
 }
 
 
