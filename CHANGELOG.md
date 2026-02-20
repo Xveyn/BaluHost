@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.0] - 2026-02-20
+
+### API Keys, Mobile UX & CI Improvements
+
+Feature release adding API key management for programmatic access and comprehensive mobile responsiveness fixes.
+
+### Added
+
+- **API Key Management** — Generate and manage API keys for programmatic access
+  - Create, revoke, and list API keys from Settings page
+  - Scoped permissions and expiration support
+  - Admin-only feature in Settings tab
+
+### Fixed
+
+- **Mobile sidebar scrolling** — Admin users can now scroll all 14 nav items on small screens
+- **Mobile responsiveness** — Improved layouts across multiple pages:
+  - AdminDataTable: CSS breakpoints replace JS-based mobile detection
+  - AdminDatabase: Stacked toolbar layout with proper touch targets
+  - AdminHealth: Disk info grid adapts to screen size
+  - ApiCenterPage: Endpoint headers stack on mobile
+  - FileManager: Path breadcrumb always visible with tooltip
+  - MobileDevicesPage: Notification status wraps properly
+  - PowerManagement: Grid breakpoints adjusted for small screens
+  - SettingsPage: Tab bar with scroll fade indicator
+
+### Changed
+
+- **CI**: Automatic GitHub Release creation on tag push
+
+---
+
 ## [1.7.0] - 2026-02-19
 
 ### Sleep Mode, Ownership Transfer & 2FA for All Users
