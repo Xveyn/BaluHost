@@ -66,15 +66,9 @@ git push origin vX.X.X
 
 **FRAGE DEN BENUTZER:** Änderungen und Tag pushen?
 
-### 9. GitHub Release erstellen
-Erstelle ein GitHub Release mit:
-- Titel: "vX.X.X - <Feature-Beschreibung>"
-- Release Notes aus CHANGELOG
-- Als "Latest" Release markieren (kein Pre-Release)
+> **Hinweis:** Nach dem Push des Tags erstellt der GitHub Actions Workflow `.github/workflows/create-release.yml` automatisch ein GitHub Release mit den Release Notes aus dem CHANGELOG.
 
-**FRAGE DEN BENUTZER:** GitHub Release mit diesen Notes erstellen? Zeige die Notes.
-
-### 10. Zurück zu development
+### 9. Zurück zu development
 ```bash
 git checkout development
 ```
