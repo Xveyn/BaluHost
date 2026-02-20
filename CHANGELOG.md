@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.2] - 2026-02-20
+
+### Desktop Pairing (Device Code Flow)
+
+Adds 6-digit code-based pairing for BaluDesk desktop clients.
+
+### Added
+
+- **Desktop Pairing Backend** — DB model, service, API routes (`/api/desktop-pairing/*`), rate limits, and Alembic migration for code-based desktop client authentication
+- **Desktop Pairing Dialog** — Frontend component with 6-digit code input, device confirmation/deny flow, and auto-open via `?pair=1` URL parameter
+- **i18n** — Pairing translations for EN and DE
+
+### Fixed
+
+- **Pairing Dialog integration** — Moved button and dialog from unused `SyncPrototype.tsx` to `DeviceManagement.tsx` where `/devices` route actually renders
+
+### Changed
+
+- **Root directory cleanup** — Deleted obsolete scripts, moved utilities to `tools/`
+
+---
+
 ## [1.8.1] - 2026-02-20
 
 ### Test & CI Fixes
