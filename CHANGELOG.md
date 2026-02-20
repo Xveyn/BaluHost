@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.8.1] - 2026-02-20
+
+### Test & CI Fixes
+
+Patch release with test infrastructure fixes and CI pipeline simplification.
+
+### Fixed
+
+- **Raid API tests** — Mock `apiClient` (axios) instead of `globalThis.fetch`, fixing `AxiosError: Network Error`
+- **ErrorBoundary test** — Correct `ThrowingComponent` return type to `never`
+- **Test setup** — Use `globalThis.ResizeObserver` instead of deprecated `global`
+- **Test TypeScript config** — Add dedicated `tsconfig.test.json` for test files
+
+### Changed
+
+- **Playwright CI** — Mocked E2E tests no longer require backend; Playwright `webServer` config handles dev server automatically
+- **Playwright CI** — Bump Node.js from 18 to 20 to fix Vite `crypto.hash` error
+- **Live E2E CI** — Moved secret check earlier, removed redundant frontend server, simplified service wait logic
+
+---
+
 ## [1.8.0] - 2026-02-20
 
 ### API Keys, Mobile UX & CI Improvements
