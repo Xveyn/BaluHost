@@ -1,5 +1,6 @@
 """API routes for unified device management (Mobile + Desktop/Sync devices)."""
 
+from datetime import datetime
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -138,7 +139,10 @@ async def get_all_devices(
             })
 
     # Sort by created_at descending (newest first)
-    devices.sort(key=lambda x: x["created_at"], reverse=True)
+    devices.sort(
+        key=lambda x: x["created_at"].replace(tzinfo=None) if x["created_at"] else datetime.min,
+        reverse=True
+    )
 
     return devices
 
