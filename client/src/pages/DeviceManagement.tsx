@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { handleApiError } from '../lib/errorHandling';
 import {
@@ -15,15 +16,18 @@ import {
   Clock,
   Plus,
   RefreshCw,
+  Link2,
 } from 'lucide-react';
 import { getAllDevices, updateMobileDeviceName, updateDesktopDeviceName, deleteMobileDevice, type Device } from '../api/devices';
 import { createSyncSchedule, listSyncSchedules, disableSyncSchedule, type SyncSchedule, type CreateScheduleRequest } from '../api/sync-schedules';
 import { generateMobileToken, type MobileRegistrationToken } from '../lib/api';
+import DesktopPairingDialog from '../components/DesktopPairingDialog';
 
 type Tab = 'devices' | 'register' | 'schedules';
 
 export default function DeviceManagement() {
   const { t } = useTranslation(['devices', 'common']);
+  const [searchParams, setSearchParams] = useSearchParams();
   const [activeTab, setActiveTab] = useState<Tab>('devices');
 
   // Devices
@@ -57,9 +61,17 @@ export default function DeviceManagement() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deviceToDelete, setDeviceToDelete] = useState<Device | null>(null);
 
+  // Desktop Pairing Dialog
+  const [showPairingDialog, setShowPairingDialog] = useState(false);
+
   useEffect(() => {
     loadDevices();
     loadSchedules();
+    // Auto-open pairing dialog if ?pair=1 is in URL
+    if (searchParams.get('pair') === '1') {
+      setShowPairingDialog(true);
+      setSearchParams({}, { replace: true });
+    }
   }, []);
 
   const loadDevices = async () => {
@@ -485,6 +497,13 @@ export default function DeviceManagement() {
                       {t('sections.baluDeskClients', { count: desktopDevices.length })}
                     </h2>
                   </div>
+                  <button
+                    onClick={() => setShowPairingDialog(true)}
+                    className="flex items-center gap-2 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-3 py-2 text-sm font-medium text-emerald-200 transition hover:border-emerald-500/50 hover:bg-emerald-500/20 touch-manipulation active:scale-95"
+                  >
+                    <Link2 className="h-4 w-4" />
+                    <span>{t('pairing.pairButton')}</span>
+                  </button>
                 </div>
 
                 {desktopDevices.length === 0 ? (
@@ -870,6 +889,13 @@ export default function DeviceManagement() {
           </div>
         </div>
       )}
+
+      {/* Desktop Pairing Dialog */}
+      <DesktopPairingDialog
+        open={showPairingDialog}
+        onClose={() => setShowPairingDialog(false)}
+        onPaired={loadDevices}
+      />
 
       {/* Edit Device Name Modal */}
       {showEditModal && editingDevice && (
