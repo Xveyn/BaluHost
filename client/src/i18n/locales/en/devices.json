@@ -131,6 +131,28 @@
     "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",
     "deviceNameEmpty": "Device name cannot be empty"
   },
+  "pairing": {
+    "title": "Pair Desktop Client",
+    "enterCode": "Enter the 6-digit code shown in BaluDesk to pair this device.",
+    "codePlaceholder": "000000",
+    "verify": "Verify",
+    "verifying": "Verifying...",
+    "deviceInfo": "A desktop client wants to connect to your account:",
+    "approve": "Approve",
+    "approving": "Approving...",
+    "deny": "Deny",
+    "denied": "Pairing request denied",
+    "expiresIn": "Expires in",
+    "successTitle": "Device Paired!",
+    "successMessage": "'{{name}}' has been approved and will connect shortly.",
+    "errorInvalid": "Invalid code. Please check the code and try again.",
+    "errorExpired": "This code has expired. Please request a new one in BaluDesk.",
+    "errorTooMany": "Too many failed attempts. Please request a new code.",
+    "errorGeneric": "An error occurred. Please try again.",
+    "tryAgain": "Try Again",
+    "close": "Close",
+    "pairButton": "Pair Desktop"
+  },
   "loading": "Loading devices...",
   "error": "Error"
 }

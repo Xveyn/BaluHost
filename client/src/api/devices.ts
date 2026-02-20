@@ -54,3 +54,50 @@ export async function updateDesktopDeviceName(deviceId: string, name: string): P
 export async function deleteMobileDevice(deviceId: string): Promise<void> {
   await apiClient.delete(`/api/mobile/devices/${deviceId}`);
 }
+
+// ---------------------------------------------------------------------------
+// Desktop Pairing (Device Code Flow)
+// ---------------------------------------------------------------------------
+
+export interface DesktopPairingApprovalInfo {
+  device_name: string;
+  device_id: string;
+  platform: string;
+  created_at: string;
+  expires_at: string;
+}
+
+/**
+ * Verify a 6-digit desktop pairing code and return device info.
+ */
+export async function verifyDesktopPairingCode(
+  userCode: string,
+): Promise<DesktopPairingApprovalInfo> {
+  const { data } = await apiClient.post<DesktopPairingApprovalInfo>(
+    '/api/desktop-pairing/verify',
+    { user_code: userCode },
+  );
+  return data;
+}
+
+/**
+ * Approve a desktop pairing request.
+ */
+export async function approveDesktopPairingCode(
+  userCode: string,
+): Promise<void> {
+  await apiClient.post('/api/desktop-pairing/approve', {
+    user_code: userCode,
+  });
+}
+
+/**
+ * Deny a desktop pairing request.
+ */
+export async function denyDesktopPairingCode(
+  userCode: string,
+): Promise<void> {
+  await apiClient.post('/api/desktop-pairing/deny', {
+    user_code: userCode,
+  });
+}

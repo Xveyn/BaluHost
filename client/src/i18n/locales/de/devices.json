@@ -131,6 +131,28 @@
     "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",
     "deviceNameEmpty": "Gerätename darf nicht leer sein"
   },
+  "pairing": {
+    "title": "Desktop koppeln",
+    "enterCode": "Geben Sie den 6-stelligen Code ein, der in BaluDesk angezeigt wird.",
+    "codePlaceholder": "000000",
+    "verify": "Verifizieren",
+    "verifying": "Wird verifiziert...",
+    "deviceInfo": "Ein Desktop-Client möchte sich mit Ihrem Konto verbinden:",
+    "approve": "Genehmigen",
+    "approving": "Wird genehmigt...",
+    "deny": "Ablehnen",
+    "denied": "Kopplungsanfrage abgelehnt",
+    "expiresIn": "Läuft ab in",
+    "successTitle": "Gerät gekoppelt!",
+    "successMessage": "'{{name}}' wurde genehmigt und wird sich in Kürze verbinden.",
+    "errorInvalid": "Ungültiger Code. Bitte überprüfen Sie den Code und versuchen Sie es erneut.",
+    "errorExpired": "Dieser Code ist abgelaufen. Bitte fordern Sie einen neuen in BaluDesk an.",
+    "errorTooMany": "Zu viele Fehlversuche. Bitte fordern Sie einen neuen Code an.",
+    "errorGeneric": "Ein Fehler ist aufgetreten. Bitte versuchen Sie es erneut.",
+    "tryAgain": "Erneut versuchen",
+    "close": "Schließen",
+    "pairButton": "Desktop koppeln"
+  },
   "loading": "Geräte werden geladen...",
   "error": "Fehler"
 }
