@@ -3,7 +3,7 @@ import { render, screen } from '@testing-library/react';
 import { ErrorBoundary } from '../../components/ErrorBoundary';
 
 // Component that throws an error on render
-function ThrowingComponent({ error }: { error: Error }) {
+function ThrowingComponent({ error }: { error: Error }): never {
   throw error;
 }
 
