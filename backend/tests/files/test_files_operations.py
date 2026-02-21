@@ -203,13 +203,15 @@ class TestCalculateBytes:
         assert used == 150
 
     def test_calculate_available_bytes_no_quota(self, storage_root, monkeypatch):
-        """Test available bytes when no quota is set."""
+        """Test available bytes when no quota — returns real disk free space."""
         from app.core.config import settings
         monkeypatch.setattr(settings, "nas_quota_bytes", None)
 
         available = file_ops.calculate_available_bytes()
 
-        assert available is None
+        # Without quota, returns actual disk free space (always > 0 on a running system)
+        assert isinstance(available, int)
+        assert available > 0
 
     def test_calculate_available_bytes_with_quota(self, storage_root, monkeypatch):
         """Test available bytes with quota."""

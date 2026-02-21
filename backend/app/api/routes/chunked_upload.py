@@ -119,14 +119,13 @@ async def chunked_init(
             detail="Invalid filename",
         )
 
-    # Quota pre-check
-    if settings.nas_quota_bytes is not None:
-        available = calculate_available_bytes()
-        if available is not None and payload.total_size > available:
-            raise HTTPException(
-                status.HTTP_507_INSUFFICIENT_STORAGE,
-                detail=f"Not enough space. Need {payload.total_size} bytes, available {available}.",
-            )
+    # Space pre-check (quota-based in dev, real disk space in prod)
+    available = calculate_available_bytes()
+    if payload.total_size > available:
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail=f"Not enough space. Need {payload.total_size} bytes, available {available}.",
+        )
 
     mgr = get_chunked_upload_manager()
     session = await mgr.create_session(
@@ -218,19 +217,18 @@ async def chunked_complete(
 
     file_size = temp_path.stat().st_size
 
-    # Final quota check (another upload could have consumed space in between)
-    if settings.nas_quota_bytes is not None:
-        used = calculate_used_bytes()
-        existing_size = destination.stat().st_size if destination.exists() else 0
-        if used - existing_size + file_size > settings.nas_quota_bytes:
-            # Cleanup temp
-            temp_path.unlink(missing_ok=True)
-            progress_mgr = get_upload_progress_manager()
-            await progress_mgr.fail_upload(upload_id, "Quota exceeded")
-            raise HTTPException(
-                status.HTTP_507_INSUFFICIENT_STORAGE,
-                detail="Quota exceeded",
-            )
+    # Final space check (another upload could have consumed space in between)
+    available = calculate_available_bytes()
+    existing_size = destination.stat().st_size if destination.exists() else 0
+    needed = file_size - existing_size  # net new bytes (replacing existing file needs less)
+    if needed > 0 and needed > available:
+        temp_path.unlink(missing_ok=True)
+        progress_mgr = get_upload_progress_manager()
+        await progress_mgr.fail_upload(upload_id, "Not enough space")
+        raise HTTPException(
+            status.HTTP_507_INSUFFICIENT_STORAGE,
+            detail=f"Not enough space. Need {needed} bytes, available {available}.",
+        )
 
     import shutil
     import hashlib

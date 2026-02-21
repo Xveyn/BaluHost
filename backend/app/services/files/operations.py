@@ -243,13 +243,24 @@ def invalidate_used_bytes_cache() -> None:
         _used_bytes_cache.clear()
 
 
-def calculate_available_bytes() -> int | None:
-    """Calculate remaining storage capacity. Returns None if no quota is set."""
+def calculate_available_bytes() -> int:
+    """Calculate remaining storage capacity.
+
+    When a quota is configured (dev mode), returns ``quota - used``.
+    When no quota is set (production), returns actual free disk space
+    via ``shutil.disk_usage()`` on the storage root.
+    """
     quota = settings.nas_quota_bytes
-    if quota is None:
-        return None
-    used = calculate_used_bytes()
-    return max(0, quota - used)
+    if quota is not None:
+        used = calculate_used_bytes()
+        return max(0, quota - used)
+    # No quota — check real disk space on the storage path
+    import shutil
+    try:
+        usage = shutil.disk_usage(ROOT_DIR)
+        return usage.free
+    except OSError:
+        return 0
 
 
 async def save_uploads(
@@ -335,13 +346,15 @@ async def save_uploads(
         can_stream.append(seekable)
         total_upload_size += sz
 
-    if quota is not None and total_upload_size > 0 and used_bytes + total_upload_size > quota:
+    # Check available space (quota-based in dev, real disk space in prod)
+    available = calculate_available_bytes()
+    if total_upload_size > 0 and total_upload_size > available:
         if upload_ids:
             for upload_id in upload_ids:
                 await progress_manager.fail_upload(upload_id, "Quota exceeded")
         raise QuotaExceededError(
-            f"Quota exceeded: attempting to store {used_bytes + total_upload_size} bytes "
-            f"with a limit of {quota} bytes. Available: {quota - used_bytes} bytes"
+            f"Not enough space: need {total_upload_size} bytes, "
+            f"available {available} bytes"
         )
 
     STREAM_CHUNK = 8 * 1024 * 1024  # 8 MB read/write buffer
@@ -383,15 +396,26 @@ async def save_uploads(
                 written = len(data)
                 await upload.close()
 
-            # Post-write quota check for uploads where size was unknown
-            if not can_stream[idx] and quota is not None and used_bytes + written > quota:
-                destination.unlink(missing_ok=True)
-                if upload_ids and idx < len(upload_ids):
-                    await progress_manager.fail_upload(upload_ids[idx], "Quota exceeded")
-                raise QuotaExceededError(
-                    f"Quota exceeded: attempting to store {used_bytes + written} bytes "
-                    f"with a limit of {quota} bytes. Available: {quota - used_bytes} bytes"
-                )
+            # Post-write check for uploads where size was unknown beforehand
+            if not can_stream[idx]:
+                exceeded = False
+                if quota is not None:
+                    # Quota mode: use local running total (cache may be stale)
+                    exceeded = used_bytes + written > quota
+                else:
+                    # No quota: check real disk free space
+                    import shutil
+                    try:
+                        exceeded = shutil.disk_usage(ROOT_DIR).free <= 0
+                    except OSError:
+                        pass
+                if exceeded:
+                    destination.unlink(missing_ok=True)
+                    if upload_ids and idx < len(upload_ids):
+                        await progress_manager.fail_upload(upload_ids[idx], "Not enough space")
+                    raise QuotaExceededError(
+                        f"Not enough space after writing {written} bytes"
+                    )
 
             # Update progress after writing each file
             if upload_ids and idx < len(upload_ids):

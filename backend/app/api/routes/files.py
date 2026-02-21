@@ -319,7 +319,7 @@ async def get_mountpoints(
         # Dev storage mountpoint
         used_bytes = file_service.calculate_used_bytes()
         quota_bytes = settings.nas_quota_bytes or 0
-        available_bytes = file_service.calculate_available_bytes() or 0
+        available_bytes = file_service.calculate_available_bytes()
         
         mountpoints.append(StorageMountpoint(
             id="dev-storage",
