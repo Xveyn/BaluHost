@@ -290,25 +290,48 @@ async def get_sync_state(
 
     Provides a list of files with paths and SHA256 hashes for client sync.
     """
+    import asyncio
     files = db.query(FileMetadata).filter(FileMetadata.owner_id == current_user.id).all()
-    result_files = []
     from pathlib import Path
     from app.core.config import settings
 
     storage_root = Path(settings.nas_storage_path)
-    for fm in files:
-        # Skip directories for file-hash calculations
+
+    # Build file list — use stored checksum when available, otherwise compute in thread.
+    files_needing_hash: list[tuple[int, Path]] = []
+    result_files: list[dict] = []
+    for idx, fm in enumerate(files):
         if fm.is_directory:
             continue
         display_path = fm.path if fm.path.startswith("/") else f"/{fm.path}"
         abs_path = storage_root / fm.path.lstrip("/")
-        sha = sync_service.calculate_file_hash(abs_path) if abs_path.exists() else ""
+
+        # Prefer stored checksum from DB (set during upload) to avoid disk I/O
+        if fm.checksum:
+            sha = fm.checksum
+        else:
+            sha = ""
+            if abs_path.exists():
+                files_needing_hash.append((len(result_files), abs_path))
+
         result_files.append({
             "path": display_path,
             "size": fm.size_bytes,
             "sha256": sha,
             "modified_at": fm.updated_at.isoformat() if fm.updated_at else None,
         })
+
+    # Compute missing hashes in a worker thread to avoid blocking the event loop
+    if files_needing_hash:
+        def _compute_hashes() -> list[tuple[int, str]]:
+            results = []
+            for result_idx, path in files_needing_hash:
+                results.append((result_idx, sync_service.calculate_file_hash(path)))
+            return results
+
+        hashes = await asyncio.to_thread(_compute_hashes)
+        for result_idx, sha in hashes:
+            result_files[result_idx]["sha256"] = sha
 
     return {"files": result_files}
 

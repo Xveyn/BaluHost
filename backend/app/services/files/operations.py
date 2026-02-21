@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+import logging
 import mimetypes
 import threading
 import time
@@ -263,6 +265,56 @@ def calculate_available_bytes() -> int:
         return 0
 
 
+async def calculate_used_bytes_async() -> int:
+    """Async wrapper for calculate_used_bytes() — runs in a thread to avoid blocking the event loop."""
+    return await asyncio.to_thread(calculate_used_bytes)
+
+
+async def calculate_available_bytes_async() -> int:
+    """Async wrapper for calculate_available_bytes() — runs in a thread to avoid blocking the event loop."""
+    return await asyncio.to_thread(calculate_available_bytes)
+
+
+def _schedule_vcl_version(
+    destination: Path,
+    file_meta_id: int,
+    owner_id: int,
+    checksum: str,
+    is_update: bool,
+) -> None:
+    """Schedule VCL version creation in a background task."""
+
+    async def _create() -> None:
+        from app.core.database import SessionLocal
+        from app.models.file_metadata import FileMetadata
+        from app.services.versioning.vcl import VCLService
+
+        db = SessionLocal()
+        try:
+            file_meta = db.get(FileMetadata, file_meta_id)
+            if not file_meta:
+                return
+            content = await asyncio.to_thread(destination.read_bytes)
+            vcl_service = VCLService(db)
+            vcl_service.create_version(
+                file=file_meta,
+                content=content,
+                user_id=owner_id,
+                checksum=checksum,
+                change_type="update" if is_update else "create",
+            )
+            db.commit()
+        except Exception as e:
+            db.rollback()
+            logging.getLogger(__name__).warning(
+                "Background VCL version creation failed: %s", e
+            )
+        finally:
+            db.close()
+
+    asyncio.create_task(_create())
+
+
 async def save_uploads(
     relative_path: str,
     uploads: list[UploadFile],
@@ -378,23 +430,46 @@ async def save_uploads(
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
 
+            import hashlib
+
             if can_stream[idx]:
                 # Stream file to disk — only one STREAM_CHUNK in memory at a time.
+                # Read chunks from the upload, then write + hash in a thread.
                 written = 0
-                with open(destination, 'wb') as f:
-                    while True:
-                        chunk = await upload.read(STREAM_CHUNK)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-                        written += len(chunk)
+                hasher = hashlib.sha256()
+
+                # Read all chunks from the async upload into memory first,
+                # then write + hash in a single thread call.
+                chunks: list[bytes] = []
+                while True:
+                    chunk = await upload.read(STREAM_CHUNK)
+                    if not chunk:
+                        break
+                    chunks.append(chunk)
                 await upload.close()
+
+                def _write_and_hash_stream() -> int:
+                    total = 0
+                    with open(destination, 'wb') as f:
+                        for c in chunks:
+                            f.write(c)
+                            hasher.update(c)
+                            total += len(c)
+                    return total
+
+                written = await asyncio.to_thread(_write_and_hash_stream)
+                file_checksum = hasher.hexdigest()
             else:
                 # Fallback: read entire content at once (small files or test mocks).
                 data = await upload.read()
-                destination.write_bytes(data)
-                written = len(data)
                 await upload.close()
+
+                def _write_and_hash_small() -> str:
+                    destination.write_bytes(data)
+                    return hashlib.sha256(data).hexdigest()
+
+                file_checksum = await asyncio.to_thread(_write_and_hash_small)
+                written = len(data)
 
             # Post-write check for uploads where size was unknown beforehand
             if not can_stream[idx]:
@@ -424,17 +499,6 @@ async def save_uploads(
             used_bytes = used_bytes - existing_size + written
             relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
             saved_paths.append(relative_destination)
-
-            # Compute SHA-256 checksum
-            import hashlib
-            sha256 = hashlib.sha256()
-            with open(destination, 'rb') as f:
-                while True:
-                    hash_chunk = f.read(8 * 1024 * 1024)
-                    if not hash_chunk:
-                        break
-                    sha256.update(hash_chunk)
-            file_checksum = sha256.hexdigest()
 
             # Create or update file metadata in database
             existing_meta = file_metadata_db.get_metadata(relative_destination, db=db)
@@ -466,28 +530,26 @@ async def save_uploads(
                 db=db
             )
 
-            # VCL: Create version from file on disk (avoids loading full file into RAM)
+            # VCL: Check if a version is needed (fast DB queries), then
+            # schedule the heavy create_version() work in a background task
+            # so it doesn't block the HTTP response.
             try:
                 from app.services.versioning.vcl import VCLService
-                vcl_service = VCLService(db)
                 file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
                 if file_meta:
-                    checksum = VCLService.calculate_checksum_from_file(destination)
-                    should_create, _reason = vcl_service.should_create_version(file_meta, checksum, int(owner_id))
+                    should_create, _reason = VCLService(db).should_create_version(
+                        file_meta, file_checksum, int(owner_id)
+                    )
                     if should_create:
-                        change_type = "update" if existing_meta else "create"
-                        content = destination.read_bytes()
-                        vcl_service.create_version(
-                            file=file_meta,
-                            content=content,
-                            user_id=int(owner_id),
-                            checksum=checksum,
-                            change_type=change_type,
+                        _schedule_vcl_version(
+                            destination=destination,
+                            file_meta_id=file_meta.id,
+                            owner_id=int(owner_id),
+                            checksum=file_checksum,
+                            is_update=bool(existing_meta),
                         )
-                        db.commit()
             except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning(f"VCL version creation failed: {e}")
+                logging.getLogger(__name__).warning("VCL check failed: %s", e)
 
             # Mark upload as completed
             if upload_ids and idx < len(upload_ids):

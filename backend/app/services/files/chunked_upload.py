@@ -6,6 +6,7 @@ and finalises uploads by moving temp files to the target location.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import shutil
 import uuid
@@ -41,6 +42,7 @@ class ChunkedUploadSession:
     user_id: int = 0
     username: str = ""
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    _hasher: hashlib._Hash = field(default_factory=hashlib.sha256, repr=False)
 
 
 class ChunkedUploadManager:
@@ -50,11 +52,21 @@ class ChunkedUploadManager:
     """
 
     DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MB
+    MAX_CONCURRENT_WRITES_PER_USER = 3
 
     def __init__(self) -> None:
         self._sessions: Dict[str, ChunkedUploadSession] = {}
         self._lock = asyncio.Lock()
         self._cleanup_task: Optional[asyncio.Task] = None
+        self._user_semaphores: Dict[int, asyncio.Semaphore] = {}
+
+    def _get_user_semaphore(self, user_id: int) -> asyncio.Semaphore:
+        """Return (or create) the per-user write semaphore."""
+        sem = self._user_semaphores.get(user_id)
+        if sem is None:
+            sem = asyncio.Semaphore(self.MAX_CONCURRENT_WRITES_PER_USER)
+            self._user_semaphores[user_id] = sem
+        return sem
 
     # ------------------------------------------------------------------
     # Session lifecycle
@@ -120,10 +132,14 @@ class ChunkedUploadManager:
                     f"Expected chunk {session.next_chunk_index}, got {chunk_index}"
                 )
 
-        # Write outside the lock — IO can be slow.
-        # Using sync write is fine: disk IO is fast, the bottleneck is network.
-        with open(session.temp_file_path, "ab") as f:
-            f.write(data)
+        # Write + hash outside the lock in a thread — avoids blocking the event loop.
+        def _write_and_hash() -> None:
+            with open(session.temp_file_path, "ab") as f:
+                f.write(data)
+            session._hasher.update(data)
+
+        async with self._get_user_semaphore(session.user_id):
+            await asyncio.to_thread(_write_and_hash)
 
         async with self._lock:
             session.received_bytes += len(data)
@@ -155,11 +171,24 @@ class ChunkedUploadManager:
                     f"Expected chunk {session.next_chunk_index}, got {chunk_index}"
                 )
 
-        chunk_bytes = 0
-        with open(session.temp_file_path, "ab") as f:
-            async for part in stream:
-                f.write(part)
-                chunk_bytes += len(part)
+        # Collect stream fragments, then write + hash in a worker thread
+        # so synchronous disk I/O doesn't block the event loop.
+        # Memory overhead = 1 chunk (same as before — network already buffered it).
+        parts: list[bytes] = []
+        async for part in stream:
+            parts.append(part)
+
+        def _write_and_hash() -> int:
+            written = 0
+            with open(session.temp_file_path, "ab") as f:
+                for p in parts:
+                    f.write(p)
+                    session._hasher.update(p)
+                    written += len(p)
+            return written
+
+        async with self._get_user_semaphore(session.user_id):
+            chunk_bytes = await asyncio.to_thread(_write_and_hash)
 
         async with self._lock:
             session.received_bytes += chunk_bytes
@@ -167,8 +196,8 @@ class ChunkedUploadManager:
 
         return session.received_bytes
 
-    async def complete_session(self, upload_id: str) -> Path:
-        """Finalise the upload: return the temp file path.
+    async def complete_session(self, upload_id: str) -> tuple[Path, str]:
+        """Finalise the upload: return the temp file path and SHA-256 hex digest.
 
         The caller (route layer) is responsible for moving the file to its
         final destination, creating metadata, and audit logging.
@@ -182,11 +211,13 @@ class ChunkedUploadManager:
         if not session.temp_file_path.exists():
             raise FileNotFoundError(f"Temp file missing for session {upload_id}")
 
+        sha256_hex = session._hasher.hexdigest()
+
         logger.info(
             "Chunked upload completed: id=%s file=%s bytes=%d",
             upload_id, session.filename, session.received_bytes,
         )
-        return session.temp_file_path
+        return session.temp_file_path, sha256_hex
 
     async def abort_session(self, upload_id: str) -> None:
         """Abort an upload and clean up the temp file."""

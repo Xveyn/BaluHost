@@ -12,7 +12,9 @@ Protocol
 4. ``DELETE /{id}``       — abort and clean up
 """
 
+import asyncio
 import logging
+import shutil
 from pathlib import PurePosixPath
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
@@ -29,7 +31,9 @@ from app.services.files.operations import (
     FileAccessError,
     QuotaExceededError,
     _resolve_path,
+    _schedule_vcl_version,
     calculate_available_bytes,
+    calculate_available_bytes_async,
     calculate_used_bytes,
     get_owner,
     is_in_shared_dir,
@@ -120,7 +124,7 @@ async def chunked_init(
         )
 
     # Space pre-check (quota-based in dev, real disk space in prod)
-    available = calculate_available_bytes()
+    available = await calculate_available_bytes_async()
     if payload.total_size > available:
         raise HTTPException(
             status.HTTP_507_INSUFFICIENT_STORAGE,
@@ -205,7 +209,7 @@ async def chunked_complete(
         raise HTTPException(status.HTTP_403_FORBIDDEN, detail="Not your upload session")
 
     try:
-        temp_path = await mgr.complete_session(upload_id)
+        temp_path, file_checksum = await mgr.complete_session(upload_id)
     except (ValueError, FileNotFoundError) as exc:
         raise HTTPException(status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
@@ -215,11 +219,11 @@ async def chunked_complete(
     destination = target_dir / session.filename
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    file_size = temp_path.stat().st_size
+    file_size = await asyncio.to_thread(lambda: temp_path.stat().st_size)
 
     # Final space check (another upload could have consumed space in between)
-    available = calculate_available_bytes()
-    existing_size = destination.stat().st_size if destination.exists() else 0
+    available = await calculate_available_bytes_async()
+    existing_size = await asyncio.to_thread(lambda: destination.stat().st_size if destination.exists() else 0)
     needed = file_size - existing_size  # net new bytes (replacing existing file needs less)
     if needed > 0 and needed > available:
         temp_path.unlink(missing_ok=True)
@@ -230,21 +234,9 @@ async def chunked_complete(
             detail=f"Not enough space. Need {needed} bytes, available {available}.",
         )
 
-    import shutil
-    import hashlib
-    shutil.move(str(temp_path), str(destination))
+    await asyncio.to_thread(shutil.move, str(temp_path), str(destination))
 
     relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
-
-    # --- Compute SHA-256 checksum ---
-    sha256 = hashlib.sha256()
-    with open(destination, 'rb') as f:
-        while True:
-            chunk = f.read(8 * 1024 * 1024)
-            if not chunk:
-                break
-            sha256.update(chunk)
-    file_checksum = sha256.hexdigest()
 
     # --- Metadata & audit ---
     from app.services.files import metadata_db as file_metadata_db
@@ -276,30 +268,27 @@ async def chunked_complete(
         db=db,
     )
 
-    # VCL: create version from file on disk.
-    # Skip VCL for large files (>100 MB) to avoid reading the entire file into RAM.
+    # VCL: Check if a version is needed (fast), then schedule heavy work
+    # in a background task. Skip for large files (>100 MB).
     VCL_SIZE_LIMIT = 100 * 1024 * 1024  # 100 MB
     if file_size <= VCL_SIZE_LIMIT:
         try:
             from app.services.versioning.vcl import VCLService
-            vcl_service = VCLService(db)
             file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
             if file_meta:
-                checksum = VCLService.calculate_checksum_from_file(destination)
-                should_create, _reason = vcl_service.should_create_version(file_meta, checksum, int(owner_id))
+                should_create, _reason = VCLService(db).should_create_version(
+                    file_meta, file_checksum, int(owner_id)
+                )
                 if should_create:
-                    content = destination.read_bytes()
-                    change_type = "update" if existing_meta else "create"
-                    vcl_service.create_version(
-                        file=file_meta,
-                        content=content,
-                        user_id=int(owner_id),
-                        checksum=checksum,
-                        change_type=change_type,
+                    _schedule_vcl_version(
+                        destination=destination,
+                        file_meta_id=file_meta.id,
+                        owner_id=int(owner_id),
+                        checksum=file_checksum,
+                        is_update=bool(existing_meta),
                     )
-                    db.commit()
         except Exception as e:
-            logger.warning("VCL version creation failed for chunked upload: %s", e)
+            logger.warning("VCL check failed for chunked upload: %s", e)
     else:
         logger.info("Skipping VCL for large file (%d bytes > %d limit)", file_size, VCL_SIZE_LIMIT)
 
