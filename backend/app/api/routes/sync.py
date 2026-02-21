@@ -2,6 +2,8 @@
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
+from sqlalchemy import select, update
+from sqlalchemy.sql import func
 import logging
 
 from app import api
@@ -11,7 +13,9 @@ from app.models.user import User
 from app.models.sync_state import SyncFileVersion
 from app.models.mobile import MobileRegistrationToken
 from app.models.file_metadata import FileMetadata
+from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.services.file_sync import FileSyncService
+from app.services.permissions import is_privileged
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
     RegisterDeviceRequest,
@@ -20,8 +24,13 @@ from app.schemas.sync import (
     SyncStatusResponse,
     ResolveConflictRequest,
     ResolveConflictResponse,
-    FileHistoryResponse
+    FileHistoryResponse,
+    ReportSyncFoldersRequest,
+    ReportSyncFoldersResponse,
+    SyncedFoldersResponse,
+    SyncedFolderInfo,
 )
+from app.schemas.user import UserPublic
 
 Logger = logging.getLogger(__name__)
 
@@ -302,3 +311,119 @@ async def get_sync_state(
         })
 
     return {"files": result_files}
+
+
+@router.post("/report-folders", response_model=ReportSyncFoldersResponse)
+@user_limiter.limit(get_limit("sync_operations"))
+async def report_sync_folders(
+    request: Request,
+    response: Response,
+    payload: ReportSyncFoldersRequest,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(deps.get_db),
+):
+    """BaluDesk client reports its currently active sync folders.
+
+    Upsert logic:
+    - For each reported folder: INSERT or UPDATE (device_id + remote_path as key)
+    - All NOT-reported folders of this device are marked is_active=False
+    """
+    now = func.now()
+    reported_paths: set[str] = set()
+    accepted = 0
+
+    for folder in payload.folders:
+        reported_paths.add(folder.remote_path)
+
+        existing = db.query(DesktopSyncFolder).filter(
+            DesktopSyncFolder.device_id == payload.device_id,
+            DesktopSyncFolder.remote_path == folder.remote_path,
+        ).first()
+
+        if existing:
+            existing.device_name = payload.device_name
+            existing.platform = payload.platform
+            existing.sync_direction = folder.sync_direction
+            existing.is_active = True
+            existing.last_reported_at = now
+            existing.user_id = current_user.id
+        else:
+            db.add(DesktopSyncFolder(
+                user_id=current_user.id,
+                device_id=payload.device_id,
+                device_name=payload.device_name,
+                platform=payload.platform,
+                remote_path=folder.remote_path,
+                sync_direction=folder.sync_direction,
+                is_active=True,
+                last_reported_at=now,
+            ))
+        accepted += 1
+
+    # Deactivate folders no longer reported by this device
+    deactivate_query = db.query(DesktopSyncFolder).filter(
+        DesktopSyncFolder.device_id == payload.device_id,
+        DesktopSyncFolder.user_id == current_user.id,
+        DesktopSyncFolder.is_active.is_(True),
+    )
+    if reported_paths:
+        deactivate_query = deactivate_query.filter(
+            DesktopSyncFolder.remote_path.notin_(reported_paths),
+        )
+    deactivated = 0
+    for row in deactivate_query.all():
+        row.is_active = False
+        deactivated += 1
+
+    db.commit()
+
+    return ReportSyncFoldersResponse(accepted=accepted, deactivated=deactivated)
+
+
+@router.get("/synced-folders", response_model=SyncedFoldersResponse)
+@user_limiter.limit(get_limit("sync_operations"))
+async def get_synced_folders(
+    request: Request,
+    response: Response,
+    active_only: bool = True,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(deps.get_db),
+):
+    """List all synced folders.
+
+    Normal users see only their own folders.
+    Admins see all folders (with username).
+    """
+    query = db.query(DesktopSyncFolder)
+
+    if active_only:
+        query = query.filter(DesktopSyncFolder.is_active.is_(True))
+
+    if not is_privileged(current_user):
+        query = query.filter(DesktopSyncFolder.user_id == current_user.id)
+
+    folders = query.all()
+
+    # Resolve usernames for admins
+    user_names: dict[int, str] = {}
+    if is_privileged(current_user):
+        user_ids = {f.user_id for f in folders}
+        if user_ids:
+            users = db.query(User).filter(User.id.in_(user_ids)).all()
+            user_names = {u.id: u.username for u in users}
+
+    return SyncedFoldersResponse(
+        folders=[
+            SyncedFolderInfo(
+                remote_path=f.remote_path,
+                device_id=f.device_id,
+                device_name=f.device_name,
+                platform=f.platform,
+                sync_direction=f.sync_direction,
+                is_active=f.is_active,
+                last_reported_at=f.last_reported_at.isoformat(),
+                username=user_names.get(f.user_id) if is_privileged(current_user) else None,
+            )
+            for f in folders
+        ]
+    )

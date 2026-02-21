@@ -38,7 +38,59 @@ from app.services.shares import ShareService
 from app.models.file_metadata import FileMetadata
 from app.plugins.emit import emit_hook
 
+from app.models.desktop_sync_folder import DesktopSyncFolder
+from app.schemas.sync import SyncDeviceInfo
+
 SHARED_DIR_NAME = "Shared"
+
+
+def _enrich_with_sync_info(
+    entries: list[FileItem],
+    user_id: int,
+    is_admin: bool,
+    db: Session,
+) -> list[FileItem]:
+    """Enrich directory entries with sync info from DesktopSyncFolder.
+
+    For each directory in the list, check if it is actively synced by any
+    BaluDesk client and attach the sync device info.
+    """
+    directories = [f for f in entries if f.type == "directory"]
+    if not directories:
+        return entries
+
+    query = db.query(DesktopSyncFolder).filter(
+        DesktopSyncFolder.is_active.is_(True),
+    )
+    if not is_admin:
+        query = query.filter(DesktopSyncFolder.user_id == user_id)
+
+    sync_folders = query.all()
+    if not sync_folders:
+        return entries
+
+    # Build index: normalized remote_path -> list[SyncDeviceInfo]
+    sync_map: dict[str, list[SyncDeviceInfo]] = {}
+    for sf in sync_folders:
+        normalized = sf.remote_path.rstrip("/")
+        if normalized not in sync_map:
+            sync_map[normalized] = []
+        sync_map[normalized].append(SyncDeviceInfo(
+            device_name=sf.device_name,
+            platform=sf.platform,
+            sync_direction=sf.sync_direction,
+            last_reported_at=sf.last_reported_at.isoformat(),
+        ))
+
+    # Enrich entries
+    for f in entries:
+        if f.type != "directory":
+            continue
+        folder_path = f.path.rstrip("/")
+        if folder_path in sync_map:
+            f.sync_info = sync_map[folder_path]
+
+    return entries
 
 
 def _jail_path(path: str, user: UserPublic, db: Session | None = None) -> str:
@@ -466,6 +518,7 @@ async def list_files(
                 file_id=None,
             ))
 
+        entries = _enrich_with_sync_info(entries, user.id, False, db)
         return FileListResponse(files=entries)
 
     # ── "Shared with me" virtual listing ──
@@ -506,6 +559,7 @@ async def list_files(
                 file_id=file_meta.id,
             ))
 
+        entries = _enrich_with_sync_info(entries, user.id, False, db)
         return FileListResponse(files=entries)
 
     # ── Admin or non-root path: normal behavior ──
@@ -525,6 +579,7 @@ async def list_files(
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
 
+    entries = _enrich_with_sync_info(entries, user.id, is_privileged(user), db)
     return FileListResponse(files=entries)
 
 

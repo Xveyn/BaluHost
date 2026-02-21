@@ -21,6 +21,8 @@ from typing import Literal
 
 from pydantic import BaseModel
 
+from app.schemas.sync import SyncDeviceInfo
+
 
 class FileItem(BaseModel):
     name: str
@@ -31,6 +33,7 @@ class FileItem(BaseModel):
     owner_id: str | None = None
     mime_type: str | None = None
     file_id: int | None = None
+    sync_info: list[SyncDeviceInfo] | None = None
 
 
 class FileListResponse(BaseModel):

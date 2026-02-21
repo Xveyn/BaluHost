@@ -189,3 +189,52 @@ class SelectiveSyncResponse(BaseModel):
     """Selective sync configuration."""
     device_id: str
     sync_paths: list[str]
+
+
+# ============================================================================
+# DESKTOP SYNC FOLDER TRACKING
+# ============================================================================
+
+class SyncFolderReport(BaseModel):
+    """Single folder report from BaluDesk client."""
+    remote_path: str = Field(..., description="Remote path on BaluHost being synced")
+    sync_direction: str = Field("bidirectional", description="bidirectional, push, or pull")
+
+
+class ReportSyncFoldersRequest(BaseModel):
+    """BaluDesk reports its active sync folders."""
+    device_id: str = Field(..., description="Unique device identifier")
+    device_name: str = Field(..., description="Human-readable device name")
+    platform: str = Field(..., description="windows, mac, or linux")
+    folders: list[SyncFolderReport] = Field(..., description="Currently active sync folders")
+
+
+class ReportSyncFoldersResponse(BaseModel):
+    """Response after processing sync folder report."""
+    accepted: int = Field(..., description="Number of folders accepted")
+    deactivated: int = Field(..., description="Number of previously active folders now deactivated")
+
+
+class SyncDeviceInfo(BaseModel):
+    """Info about a device syncing a specific folder."""
+    device_name: str
+    platform: str
+    sync_direction: str
+    last_reported_at: str
+
+
+class SyncedFolderInfo(BaseModel):
+    """Full info about a synced folder."""
+    remote_path: str
+    device_id: str
+    device_name: str
+    platform: str
+    sync_direction: str
+    is_active: bool
+    last_reported_at: str
+    username: str | None = None
+
+
+class SyncedFoldersResponse(BaseModel):
+    """List of synced folders."""
+    folders: list[SyncedFolderInfo]

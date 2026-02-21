@@ -67,6 +67,7 @@ from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
+from app.models.desktop_sync_folder import DesktopSyncFolder
 
 __all__ = [
     "Base",
@@ -135,4 +136,5 @@ __all__ = [
     "SleepStateLog",
     "ApiKey",
     "DesktopPairingCode",
+    "DesktopSyncFolder",
 ]
