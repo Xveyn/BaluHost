@@ -91,3 +91,4 @@ backend/nul
 test_*.env.production
 /test_*
 image.png
+tools/
