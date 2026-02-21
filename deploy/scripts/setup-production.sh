@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: Use deploy/install/install.sh instead.
+# This script is replaced by modules 02-system-packages, 06-postgresql, and 07-env-generate.
+echo "WARNING: This script is deprecated. Use deploy/install/install.sh instead." >&2
 set -e  # Exit on error
 
 echo "================================================"

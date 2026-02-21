@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: Use deploy/install/install.sh --module 11-nginx instead.
+# This script installs a hardcoded config. The new installer uses templates.
+echo "WARNING: This script is deprecated. Use deploy/install/install.sh instead." >&2
 set -e
 
 echo "Installing Nginx configuration for BaluHost..."

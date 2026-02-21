@@ -14,9 +14,9 @@ http://<your-server-ip>
 ```
 
 **Admin Login:**
-- Username: `admin`
-- Password: `SecureAdmin2026!P3lPPhaBmqA`
-- ⚠️ **CHANGE PASSWORD IMMEDIATELY** after first login (Settings → Change Password)
+- Username: (configured during installation)
+- Password: (configured during installation)
+- Change password immediately after first login (Settings → Change Password)
 
 **API Documentation:**
 ```

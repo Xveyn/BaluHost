@@ -1,4 +1,7 @@
 #!/bin/bash
+# DEPRECATED: Use deploy/install/install.sh --module 10-systemd-services instead.
+# This script is missing scheduler and webdav service templates.
+echo "WARNING: This script is deprecated. Use deploy/install/install.sh instead." >&2
 set -e
 
 echo "Installing BaluHost systemd services..."
