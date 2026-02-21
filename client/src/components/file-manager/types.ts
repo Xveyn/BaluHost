@@ -21,6 +21,13 @@ export interface StorageMountpoint {
   is_default: boolean;
 }
 
+export interface SyncDeviceInfo {
+  deviceName: string;
+  platform: 'windows' | 'mac' | 'linux';
+  syncDirection: 'bidirectional' | 'push' | 'pull';
+  lastReportedAt: string;
+}
+
 export interface FileItem {
   name: string;
   path: string;
@@ -30,6 +37,7 @@ export interface FileItem {
   ownerId?: number;
   ownerName?: string;
   file_id?: number;
+  syncInfo?: SyncDeviceInfo[];
 }
 
 export interface ApiFileItem {
@@ -44,6 +52,12 @@ export interface ApiFileItem {
   ownerName?: string;
   owner_name?: string;
   file_id?: number;
+  sync_info?: Array<{
+    device_name: string;
+    platform: string;
+    sync_direction: string;
+    last_reported_at: string;
+  }>;
 }
 
 export interface PermissionRule {

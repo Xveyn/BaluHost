@@ -10,6 +10,7 @@ import {
   File as FileIcon,
   Users,
   UserCheck,
+  Monitor,
 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatters';
 import type { FileItem } from './types';
@@ -149,6 +150,19 @@ export function FileListView({
                             {versionCounts[file.file_id]}
                           </span>
                         )}
+                        {file.syncInfo && file.syncInfo.length > 0 && (
+                          <span
+                            className="shrink-0 inline-flex items-center gap-1 rounded-full bg-teal-500/20 border border-teal-500/30 px-2 py-0.5 text-[10px] font-semibold text-teal-200"
+                            title={file.syncInfo.map(s =>
+                              `${s.deviceName} (${s.platform}, ${s.syncDirection})`
+                            ).join('\n')}
+                          >
+                            <Monitor className="h-3 w-3" />
+                            {file.syncInfo.length === 1
+                              ? file.syncInfo[0].deviceName
+                              : `${file.syncInfo.length} devices`}
+                          </span>
+                        )}
                       </div>
                     </div>
                   </td>
@@ -264,6 +278,19 @@ export function FileListView({
                       <span className="shrink-0 inline-flex items-center gap-1 rounded-full bg-sky-500/20 border border-sky-500/30 px-2 py-0.5 text-[10px] font-semibold text-sky-200">
                         <Clock className="h-2.5 w-2.5" />
                         {versionCounts[file.file_id]}
+                      </span>
+                    )}
+                    {file.syncInfo && file.syncInfo.length > 0 && (
+                      <span
+                        className="shrink-0 inline-flex items-center gap-1 rounded-full bg-teal-500/20 border border-teal-500/30 px-2 py-0.5 text-[10px] font-semibold text-teal-200"
+                        title={file.syncInfo.map(s =>
+                          `${s.deviceName} (${s.platform}, ${s.syncDirection})`
+                        ).join('\n')}
+                      >
+                        <Monitor className="h-2.5 w-2.5" />
+                        {file.syncInfo.length === 1
+                          ? file.syncInfo[0].deviceName
+                          : `${file.syncInfo.length} devices`}
                       </span>
                     )}
                   </div>

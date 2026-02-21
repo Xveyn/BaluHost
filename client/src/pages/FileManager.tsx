@@ -294,6 +294,12 @@ export default function FileManager() {
           ownerId: file.ownerId ?? file.owner_id,
           ownerName: file.ownerName ?? file.owner_name,
           file_id: file.file_id,
+          syncInfo: file.sync_info?.map(si => ({
+            deviceName: si.device_name,
+            platform: si.platform as 'windows' | 'mac' | 'linux',
+            syncDirection: si.sync_direction as 'bidirectional' | 'push' | 'pull',
+            lastReportedAt: si.last_reported_at,
+          })),
         }));
         setFiles(mappedFiles);
 
