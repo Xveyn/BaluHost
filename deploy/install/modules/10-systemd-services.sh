@@ -42,6 +42,31 @@ for service in "${SERVICES[@]}"; do
     log_info "Created $OUTPUT"
 done
 
+# --- Install update sudoers rule ---
+log_step "Update Sudoers"
+
+SUDOERS_TEMPLATE="$TEMPLATE_DIR/baluhost-update-sudoers"
+SUDOERS_OUTPUT="/etc/sudoers.d/baluhost-update"
+
+if [[ -f "$SUDOERS_TEMPLATE" ]]; then
+    process_template "$SUDOERS_TEMPLATE" "$SUDOERS_OUTPUT" \
+        "BALUHOST_USER=$BALUHOST_USER" \
+        "INSTALL_DIR=$INSTALL_DIR"
+    chmod 440 "$SUDOERS_OUTPUT"
+    log_info "Installed sudoers rule: $SUDOERS_OUTPUT"
+
+    # Validate sudoers syntax
+    if visudo -cf "$SUDOERS_OUTPUT" &>/dev/null; then
+        log_info "Sudoers syntax OK."
+    else
+        log_error "Sudoers syntax check failed! Removing $SUDOERS_OUTPUT"
+        rm -f "$SUDOERS_OUTPUT"
+        exit 1
+    fi
+else
+    log_warn "Update sudoers template not found: $SUDOERS_TEMPLATE (skipping)"
+fi
+
 # --- Reload systemd ---
 log_step "Reloading Systemd"
 

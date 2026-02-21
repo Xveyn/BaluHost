@@ -61,7 +61,7 @@ from app.services.service_status import (
 )
 from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
 from app.plugins.manager import PluginManager
-from app.services.update_service import register_update_service
+from app.services.update_service import register_update_service, finalize_pending_updates
 
 logger = logging.getLogger(__name__)
 
@@ -402,6 +402,18 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     # Register update service
     register_update_service()
+
+    # Finalize any updates that were in progress when the backend last stopped
+    # (e.g. after the detached update script restarted us)
+    if not settings.is_dev_mode:
+        try:
+            from app.core.database import SessionLocal
+            with SessionLocal() as update_db:
+                finalized = finalize_pending_updates(update_db)
+                if finalized:
+                    logger.info("Finalized %d pending update(s) from previous run", finalized)
+        except Exception as e:
+            logger.warning(f"Failed to finalize pending updates: {e}")
 
     # Set DB engine for pool monitoring
     from app.core.database import engine

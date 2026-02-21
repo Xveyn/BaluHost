@@ -8,6 +8,7 @@ Provides self-update functionality with:
 - Dev/Prod backend abstraction
 """
 import asyncio
+import json
 import logging
 import os
 import re
@@ -154,12 +155,7 @@ class UpdateBackend(ABC):
 
     @abstractmethod
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:
-        """
-        Check if updates are available.
-
-        Returns:
-            Tuple of (update_available, latest_version, changelog)
-        """
+        """Check if updates are available."""
         pass
 
     @abstractmethod
@@ -174,20 +170,37 @@ class UpdateBackend(ABC):
         """Apply updates (git checkout/pull). Returns (success, error_message)."""
         pass
 
-    @abstractmethod
     async def install_dependencies(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        """Install Python/Node dependencies. Returns (success, error_message)."""
-        pass
+        """Install Python/Node dependencies. Returns (success, error_message).
 
-    @abstractmethod
+        Only used by DevUpdateBackend (in-process simulation).
+        ProdUpdateBackend delegates to shell modules.
+        """
+        return True, None
+
     async def run_migrations(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        """Run database migrations. Returns (success, error_message)."""
-        pass
+        """Run database migrations. Returns (success, error_message).
 
-    @abstractmethod
+        Only used by DevUpdateBackend (in-process simulation).
+        ProdUpdateBackend delegates to shell modules.
+        """
+        return True, None
+
     async def restart_services(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        """Restart the backend service. Returns (success, error_message)."""
-        pass
+        """Restart services. Returns (success, error_message).
+
+        Only used by DevUpdateBackend (in-process simulation).
+        ProdUpdateBackend delegates to shell modules.
+        """
+        return True, None
+
+    async def health_check(self) -> tuple[bool, list[str]]:
+        """Check if services are healthy. Returns (healthy, issues).
+
+        Only used by DevUpdateBackend.
+        ProdUpdateBackend uses shell module 12 for health checks.
+        """
+        return True, []
 
     @abstractmethod
     async def rollback(self, commit: str) -> tuple[bool, Optional[str]]:
@@ -197,11 +210,6 @@ class UpdateBackend(ABC):
     @abstractmethod
     async def get_release_notes(self) -> ReleaseNotesResponse:
         """Get release notes for the current version (commits since previous tag)."""
-        pass
-
-    @abstractmethod
-    async def health_check(self) -> tuple[bool, list[str]]:
-        """Check if services are healthy. Returns (healthy, issues)."""
         pass
 
     @abstractmethod
@@ -677,113 +685,6 @@ class ProdUpdateBackend(UpdateBackend):
 
         return True, None
 
-    async def install_dependencies(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        errors = []
-
-        # Install Python dependencies
-        if callback:
-            callback(10, "Installing Python dependencies...")
-
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "pip", "install", "-e", ".[dev]"],
-                cwd=self.backend_path,
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if result.returncode != 0:
-                errors.append(f"pip install failed: {result.stderr}")
-        except Exception as e:
-            errors.append(f"pip install error: {e}")
-
-        # Install Node dependencies and build frontend
-        if callback:
-            callback(40, "Installing Node dependencies...")
-
-        try:
-            result = subprocess.run(
-                ["npm", "install"],
-                cwd=self.client_path,
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if result.returncode != 0:
-                errors.append(f"npm install failed: {result.stderr}")
-        except Exception as e:
-            errors.append(f"npm install error: {e}")
-
-        if callback:
-            callback(70, "Building frontend...")
-
-        try:
-            result = subprocess.run(
-                ["npm", "run", "build"],
-                cwd=self.client_path,
-                capture_output=True,
-                text=True,
-                timeout=600,
-            )
-            if result.returncode != 0:
-                errors.append(f"npm build failed: {result.stderr}")
-        except Exception as e:
-            errors.append(f"npm build error: {e}")
-
-        if callback:
-            callback(100, "Dependencies installed" if not errors else "Some errors occurred")
-
-        return len(errors) == 0, "; ".join(errors) if errors else None
-
-    async def run_migrations(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        if callback:
-            callback(20, "Running database migrations...")
-
-        try:
-            result = subprocess.run(
-                [sys.executable, "-m", "alembic", "upgrade", "head"],
-                cwd=self.backend_path,
-                capture_output=True,
-                text=True,
-                timeout=120,
-            )
-
-            if callback:
-                callback(100, "Migrations complete" if result.returncode == 0 else "Migration failed")
-
-            if result.returncode != 0:
-                return False, f"Migration failed: {result.stderr}"
-
-            return True, None
-        except Exception as e:
-            if callback:
-                callback(100, f"Migration error: {e}")
-            return False, str(e)
-
-    async def restart_services(self, callback: Optional[ProgressCallback] = None) -> tuple[bool, Optional[str]]:
-        if callback:
-            callback(20, "Restarting baluhost-backend service...")
-
-        try:
-            result = subprocess.run(
-                ["sudo", "systemctl", "restart", "baluhost-backend"],
-                capture_output=True,
-                text=True,
-                timeout=60,
-            )
-
-            if callback:
-                callback(100, "Service restarted" if result.returncode == 0 else "Restart failed")
-
-            if result.returncode != 0:
-                return False, f"Service restart failed: {result.stderr}"
-
-            return True, None
-        except Exception as e:
-            if callback:
-                callback(100, f"Restart error: {e}")
-            return False, str(e)
-
     async def rollback(self, commit: str) -> tuple[bool, Optional[str]]:
         """Rollback to a specific commit."""
         logger.info(f"Rolling back to {commit}")
@@ -792,30 +693,81 @@ class ProdUpdateBackend(UpdateBackend):
         if not success:
             return False, f"Rollback failed: {err}"
 
-        # Re-run migrations (downgrade if needed)
-        success, err = await self.run_migrations()
-        if not success:
-            logger.warning(f"Migration after rollback had issues: {err}")
-
         return True, None
 
-    async def health_check(self) -> tuple[bool, list[str]]:
-        """Check service health via API."""
-        issues = []
+    # --- Update Script Launch (replaces in-process install/migrate/restart) ---
+
+    _STATUS_DIR = Path("/var/lib/baluhost/update-status")
+
+    def launch_update_script(
+        self,
+        update_id: int,
+        from_commit: str,
+        to_commit: str,
+        from_version: str,
+        to_version: str,
+    ) -> tuple[bool, Optional[str]]:
+        """Launch the detached update runner as a transient systemd unit.
+
+        The script runs as root via systemd-run and survives backend restarts.
+        It writes progress to /var/lib/baluhost/update-status/<update_id>.json.
+        """
+        script_path = self.repo_path / "deploy" / "update" / "run-update.sh"
+        if not script_path.exists():
+            return False, f"Update script not found: {script_path}"
+
+        # Reset any previous failed unit with the same name
+        subprocess.run(
+            ["sudo", "systemctl", "reset-failed", "baluhost-update.service"],
+            capture_output=True, text=True, timeout=10,
+        )
 
         try:
-            import httpx
-            async with httpx.AsyncClient() as client:
-                response = await client.get(
-                    "http://localhost:3001/api/health",
-                    timeout=10,
-                )
-                if response.status_code != 200:
-                    issues.append(f"Health endpoint returned {response.status_code}")
-        except Exception as e:
-            issues.append(f"Health check failed: {e}")
+            result = subprocess.run(
+                [
+                    "sudo", "systemd-run",
+                    "--unit=baluhost-update",
+                    "--remain-after-exit",
+                    str(script_path),
+                    "--update-id", str(update_id),
+                    "--from-commit", from_commit,
+                    "--to-commit", to_commit,
+                    "--from-version", from_version,
+                    "--to-version", to_version,
+                ],
+                capture_output=True,
+                text=True,
+                timeout=30,
+            )
 
-        return len(issues) == 0, issues
+            if result.returncode != 0:
+                return False, f"Failed to launch update: {result.stderr}"
+
+            logger.info(
+                f"Update script launched as baluhost-update.service "
+                f"(update_id={update_id})"
+            )
+            return True, None
+
+        except subprocess.TimeoutExpired:
+            return False, "Timed out launching update script"
+        except Exception as e:
+            return False, str(e)
+
+    def read_update_status(self, update_id: int) -> Optional[dict]:
+        """Read the JSON status file written by the update runner script.
+
+        Returns the parsed dict or None if the file doesn't exist yet.
+        """
+        status_file = self._STATUS_DIR / f"{update_id}.json"
+        try:
+            if not status_file.exists():
+                return None
+            text = status_file.read_text(encoding="utf-8")
+            return json.loads(text)
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning(f"Failed to read update status file {status_file}: {e}")
+            return None
 
     # --- Commit History ---
 
@@ -1114,9 +1066,8 @@ class UpdateService:
     async def _check_blockers(self) -> list[str]:
         """Check for conditions that block updates."""
         blockers = []
-        config = self.get_config()
 
-        # Check for running update
+        # Check for running update in DB
         running = (
             self.db.query(UpdateHistory)
             .filter(UpdateHistory.status.in_([
@@ -1130,11 +1081,17 @@ class UpdateService:
         if running:
             blockers.append(f"Update already in progress (ID: {running.id})")
 
-        # Check service health if required (skip in dev mode - always healthy)
-        if config.require_healthy_services and not settings.is_dev_mode:
-            healthy, issues = await self.backend.health_check()
-            if not healthy:
-                blockers.extend([f"Service unhealthy: {issue}" for issue in issues])
+        # In prod, also check if the systemd-run unit is still active
+        if isinstance(self.backend, ProdUpdateBackend) and not running:
+            try:
+                result = subprocess.run(
+                    ["sudo", "systemctl", "is-active", "baluhost-update.service"],
+                    capture_output=True, text=True, timeout=5,
+                )
+                if result.stdout.strip() == "active":
+                    blockers.append("Update script is still running (baluhost-update.service)")
+            except Exception:
+                pass
 
         return blockers
 
@@ -1190,8 +1147,29 @@ class UpdateService:
 
         self._current_update = update
 
-        # Start update in background
-        asyncio.create_task(self._run_update(update.id, skip_backup))
+        # Production: launch detached shell script via systemd-run
+        # Dev mode: run in-process simulation via asyncio task
+        if isinstance(self.backend, ProdUpdateBackend):
+            update.status = UpdateStatus.DOWNLOADING.value
+            update.set_progress(5, "Launching update runner...")
+            self.db.commit()
+
+            success, error = self.backend.launch_update_script(
+                update_id=update.id,
+                from_commit=current.commit,
+                to_commit=target.commit,
+                from_version=current.version,
+                to_version=target.version,
+            )
+            if not success:
+                update.fail(f"Failed to launch update: {error}")
+                self.db.commit()
+                return UpdateStartResponse(
+                    success=False,
+                    message=f"Failed to launch update: {error}",
+                )
+        else:
+            asyncio.create_task(self._run_dev_update(update.id, skip_backup))
 
         return UpdateStartResponse(
             success=True,
@@ -1199,9 +1177,12 @@ class UpdateService:
             message=f"Update to {target.version} started",
         )
 
-    async def _run_update(self, update_id: int, skip_backup: bool) -> None:
-        """Run the actual update process."""
-        # Get fresh session for async context
+    async def _run_dev_update(self, update_id: int, skip_backup: bool) -> None:
+        """Run the update process in-process (dev mode only).
+
+        In production, the detached run-update.sh script handles everything.
+        This method simulates the update for development/testing.
+        """
         db = SessionLocal()
         try:
             update = db.query(UpdateHistory).filter(UpdateHistory.id == update_id).first()
@@ -1229,7 +1210,7 @@ class UpdateService:
                         backup_data = BackupCreate(
                             backup_type="full",
                             includes_database=True,
-                            includes_files=False,  # Just DB for speed
+                            includes_files=False,
                             includes_config=True,
                         )
                         backup = backup_service.create_backup(
@@ -1284,15 +1265,15 @@ class UpdateService:
                 if not success:
                     raise Exception(f"Migration failed: {error}")
 
-                # Step 6: Health check before restart
+                # Step 6: Health check
                 update.status = UpdateStatus.HEALTH_CHECK.value
-                progress(80, "Pre-restart health check...")
+                progress(80, "Health check...")
 
                 healthy, issues = await self.backend.health_check()
                 if not healthy and config and config.require_healthy_services:
                     raise Exception(f"Health check failed: {', '.join(issues)}")
 
-                # Step 7: Restart
+                # Step 7: Restart (simulated in dev)
                 update.status = UpdateStatus.RESTARTING.value
                 progress(85, "Restarting services...")
 
@@ -1304,11 +1285,7 @@ class UpdateService:
 
                 # Step 8: Final health check
                 progress(95, "Post-restart health check...")
-                await asyncio.sleep(5)  # Give service time to start
-
-                healthy, issues = await self.backend.health_check()
-                if not healthy:
-                    logger.warning(f"Post-restart health issues: {issues}")
+                await asyncio.sleep(2)
 
                 # Complete
                 update.complete()
@@ -1321,7 +1298,6 @@ class UpdateService:
                 update.rollback_commit = update.from_commit
                 db.commit()
 
-                # Attempt automatic rollback
                 if update.from_commit:
                     try:
                         await self.backend.rollback(update.from_commit)
@@ -1335,21 +1311,47 @@ class UpdateService:
             self._current_update = None
 
     def get_update_progress(self, update_id: int) -> Optional[UpdateProgressResponse]:
-        """Get progress of an update."""
+        """Get progress of an update.
+
+        For production updates running via the shell script, reads live
+        progress from the status JSON file. The DB record is the fallback
+        and is authoritative once the update is finalized.
+        """
         update = self.db.query(UpdateHistory).filter(UpdateHistory.id == update_id).first()
         if not update:
             return None
 
+        # For running prod updates, prefer the live status file
+        status = update.status
+        progress = update.progress_percent
+        step = update.current_step
+        error = update.error_message
+
+        if isinstance(self.backend, ProdUpdateBackend) and status in (
+            UpdateStatus.PENDING.value,
+            UpdateStatus.DOWNLOADING.value,
+            UpdateStatus.INSTALLING.value,
+            UpdateStatus.MIGRATING.value,
+            UpdateStatus.RESTARTING.value,
+            UpdateStatus.HEALTH_CHECK.value,
+        ):
+            file_status = self.backend.read_update_status(update_id)
+            if file_status:
+                status = file_status.get("status", status)
+                progress = file_status.get("progress_percent", progress)
+                step = file_status.get("current_step", step)
+                error = file_status.get("error_message", error)
+
         return UpdateProgressResponse(
             update_id=update.id,
-            status=update.status,
-            progress_percent=update.progress_percent,
-            current_step=update.current_step,
+            status=status,
+            progress_percent=progress,
+            current_step=step,
             started_at=update.started_at,
             from_version=update.from_version,
             to_version=update.to_version,
-            error_message=update.error_message,
-            can_rollback=update.from_commit is not None and update.status in [
+            error_message=error,
+            can_rollback=update.from_commit is not None and status in [
                 UpdateStatus.FAILED.value,
                 UpdateStatus.COMPLETED.value,
             ],
@@ -1456,6 +1458,115 @@ class UpdateService:
             page=page,
             page_size=page_size,
         )
+
+
+def finalize_pending_updates(db: Session) -> int:
+    """Finalize updates that were in progress when the backend restarted.
+
+    Called during app startup. Reads the status JSON file written by the
+    detached update runner script and syncs the final result back to the DB.
+
+    Returns the number of updates finalized.
+    """
+    status_dir = ProdUpdateBackend._STATUS_DIR
+    finalized = 0
+
+    # Find updates that are still in a running state
+    running_statuses = [
+        UpdateStatus.PENDING.value,
+        UpdateStatus.DOWNLOADING.value,
+        UpdateStatus.INSTALLING.value,
+        UpdateStatus.MIGRATING.value,
+        UpdateStatus.RESTARTING.value,
+        UpdateStatus.HEALTH_CHECK.value,
+        UpdateStatus.BACKING_UP.value,
+    ]
+
+    stale_updates = (
+        db.query(UpdateHistory)
+        .filter(UpdateHistory.status.in_(running_statuses))
+        .all()
+    )
+
+    for update in stale_updates:
+        status_file = status_dir / f"{update.id}.json"
+
+        if not status_file.exists():
+            # No status file — the script never ran or was killed before writing
+            logger.warning(
+                f"Update {update.id} was in '{update.status}' but no status file found. "
+                f"Marking as failed."
+            )
+            update.fail("Update interrupted: no status file found after restart")
+            finalized += 1
+            continue
+
+        try:
+            data = json.loads(status_file.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            logger.error(f"Failed to read status file for update {update.id}: {e}")
+            update.fail(f"Update status file unreadable: {e}")
+            finalized += 1
+            continue
+
+        file_status = data.get("status", "")
+        error_msg = data.get("error_message")
+        rollback_commit = data.get("rollback_commit")
+        completed_at_str = data.get("completed_at")
+
+        if file_status == "completed":
+            update.status = UpdateStatus.COMPLETED.value
+            update.progress_percent = 100
+            update.current_step = "Update completed successfully"
+            if completed_at_str:
+                try:
+                    update.completed_at = datetime.fromisoformat(completed_at_str)
+                except ValueError:
+                    update.completed_at = datetime.now(timezone.utc)
+            else:
+                update.completed_at = datetime.now(timezone.utc)
+            if update.started_at and update.completed_at:
+                delta = update.completed_at - update.started_at
+                update.duration_seconds = int(delta.total_seconds())
+            logger.info(f"Update {update.id} finalized as completed")
+            finalized += 1
+
+        elif file_status == "failed":
+            update.status = UpdateStatus.FAILED.value
+            update.error_message = error_msg or "Update failed (see status file)"
+            update.current_step = f"Failed: {(error_msg or 'unknown')[:100]}"
+            if rollback_commit:
+                update.rollback_commit = rollback_commit
+            if completed_at_str:
+                try:
+                    update.completed_at = datetime.fromisoformat(completed_at_str)
+                except ValueError:
+                    update.completed_at = datetime.now(timezone.utc)
+            else:
+                update.completed_at = datetime.now(timezone.utc)
+            if update.started_at and update.completed_at:
+                delta = update.completed_at - update.started_at
+                update.duration_seconds = int(delta.total_seconds())
+            logger.info(f"Update {update.id} finalized as failed: {error_msg}")
+            finalized += 1
+
+        else:
+            # Still running (e.g. installing/restarting) — the script may
+            # still be active. Update progress from file but don't finalize.
+            progress = data.get("progress_percent", update.progress_percent)
+            step = data.get("current_step", update.current_step)
+            update.set_progress(progress, step)
+            update.status = file_status or update.status
+            logger.info(
+                f"Update {update.id} still in progress (status={file_status}, "
+                f"progress={progress}%)"
+            )
+
+    if finalized:
+        db.commit()
+        logger.info(f"Finalized {finalized} pending update(s) from status files")
+
+    return finalized
 
 
 def get_update_service(db: Session) -> UpdateService:

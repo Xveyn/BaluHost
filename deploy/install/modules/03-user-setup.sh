@@ -46,6 +46,7 @@ DIRECTORIES=(
     "$INSTALL_DIR"
     "$FRONTEND_STATIC_DIR"
     "/etc/baluhost"
+    "/var/lib/baluhost/update-status"
 )
 
 for dir in "${DIRECTORIES[@]}"; do
@@ -69,6 +70,10 @@ log_info "Set ownership of $FRONTEND_STATIC_DIR to $BALUHOST_USER:$BALUHOST_GROU
 chown root:"$BALUHOST_GROUP" /etc/baluhost
 chmod 750 /etc/baluhost
 log_info "Set ownership of /etc/baluhost to root:$BALUHOST_GROUP (mode 750)"
+
+chown root:"$BALUHOST_GROUP" /var/lib/baluhost/update-status
+chmod 770 /var/lib/baluhost/update-status
+log_info "Set ownership of /var/lib/baluhost/update-status to root:$BALUHOST_GROUP (mode 770)"
 
 # --- Summary ---
 log_step "User & Directory Summary"

@@ -1,0 +1,12 @@
+# BaluHost Update - sudoers rules
+# Allows the baluhost service user to launch the update runner as a transient
+# systemd unit via systemd-run, and to run the update script directly.
+# Installed by module 10 (systemd-services).
+
+# Allow launching the update runner as a detached systemd unit
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemd-run --unit=baluhost-update --remain-after-exit @@INSTALL_DIR@@/deploy/update/run-update.sh *
+
+# Allow checking status of the transient update unit
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl is-active baluhost-update.service
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl show baluhost-update.service *
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl reset-failed baluhost-update.service
