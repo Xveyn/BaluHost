@@ -44,6 +44,8 @@ from app.schemas.update import (
     CommitHistoryResponse,
     DiffFile,
     CommitDiffResponse,
+    ReleaseInfo,
+    ReleaseListResponse,
 )
 from app.services.service_status import register_service
 
@@ -220,6 +222,11 @@ class UpdateBackend(ABC):
     @abstractmethod
     async def get_commit_diff(self, commit_hash: str) -> CommitDiffResponse:
         """Get diff details for a specific commit."""
+        pass
+
+    @abstractmethod
+    async def get_all_releases(self) -> ReleaseListResponse:
+        """Get list of all releases (git tags)."""
         pass
 
 
@@ -435,6 +442,22 @@ class DevUpdateBackend(UpdateBackend):
             ],
             diff="diff --git a/client/src/pages/Dashboard.tsx b/client/src/pages/Dashboard.tsx\n--- a/client/src/pages/Dashboard.tsx\n+++ b/client/src/pages/Dashboard.tsx\n@@ -1,5 +1,10 @@\n import React from 'react';\n+import { CpuChart } from '../components/CpuChart';\n \n export default function Dashboard() {\n-  return <div>Dashboard</div>;\n+  return (\n+    <div>\n+      <CpuChart />\n+    </div>\n+  );\n }\n",
         )
+
+    async def get_all_releases(self) -> ReleaseListResponse:
+        """Return mock releases for dev mode."""
+        releases = [
+            ReleaseInfo(tag="v1.9.0", version="1.9.0", date="2026-02-22T12:00:00Z", is_prerelease=False, commit_short="abc1234"),
+            ReleaseInfo(tag="v1.8.2", version="1.8.2", date="2026-02-20T10:30:00Z", is_prerelease=False, commit_short="def5678"),
+            ReleaseInfo(tag="v1.8.1", version="1.8.1", date="2026-02-20T09:00:00Z", is_prerelease=False, commit_short="ghi9012"),
+            ReleaseInfo(tag="v1.8.0", version="1.8.0", date="2026-02-19T14:00:00Z", is_prerelease=False, commit_short="jkl3456"),
+            ReleaseInfo(tag="v1.8.0-beta", version="1.8.0-beta", date="2026-02-18T16:00:00Z", is_prerelease=True, commit_short="mno7890"),
+            ReleaseInfo(tag="v1.7.0", version="1.7.0", date="2026-02-15T11:00:00Z", is_prerelease=False, commit_short="pqr1234"),
+            ReleaseInfo(tag="v1.6.0", version="1.6.0", date="2026-02-10T09:00:00Z", is_prerelease=False, commit_short="stu5678"),
+            ReleaseInfo(tag="v1.5.0-alpha", version="1.5.0-alpha", date="2026-02-05T14:00:00Z", is_prerelease=True, commit_short="vwx9012"),
+            ReleaseInfo(tag="v1.5.0", version="1.5.0", date="2026-02-01T10:00:00Z", is_prerelease=False, commit_short="yza3456"),
+            ReleaseInfo(tag="v1.0.0-alpha", version="1.0.0-alpha", date="2026-01-15T08:00:00Z", is_prerelease=True, commit_short="bcd7890"),
+        ]
+        return ReleaseListResponse(releases=releases, total=len(releases))
 
 
 class ProdUpdateBackend(UpdateBackend):
@@ -946,6 +969,39 @@ class ProdUpdateBackend(UpdateBackend):
             files=files,
             diff=diff_text,
         )
+
+    async def get_all_releases(self) -> ReleaseListResponse:
+        """Get list of all releases from git tags."""
+        # Get all tags sorted by semver (newest first)
+        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
+        if not success or not tags_output.strip():
+            return ReleaseListResponse(releases=[], total=0)
+
+        tags = [t.strip() for t in tags_output.strip().split("\n") if t.strip()]
+
+        releases: list[ReleaseInfo] = []
+        for tag in tags:
+            # Get commit for this tag
+            ok, commit, _ = self._run_git("rev-parse", "--short=7", tag)
+            commit_short = commit if ok else "unknown"
+
+            # Get tag date
+            ok, date_str, _ = self._run_git("log", "-1", "--format=%aI", tag)
+            tag_date = date_str if ok and date_str else None
+
+            # Parse version to check for prerelease
+            version = tag.lstrip("v")
+            is_prerelease = bool(parse_version(tag)[3])  # tuple[3] is prerelease suffix
+
+            releases.append(ReleaseInfo(
+                tag=tag,
+                version=version,
+                date=tag_date,
+                is_prerelease=is_prerelease,
+                commit_short=commit_short,
+            ))
+
+        return ReleaseListResponse(releases=releases, total=len(releases))
 
 
 # Global singleton for the update service

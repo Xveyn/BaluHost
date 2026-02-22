@@ -367,3 +367,23 @@ class CommitDiffResponse(BaseModel):
     stats: str = Field(default="", description="Diff stat summary")
     files: list[DiffFile] = Field(default_factory=list, description="Changed files")
     diff: str = Field(default="", description="Raw unified diff (truncated to 500KB)")
+
+
+# --- Release List Schemas ---
+
+
+class ReleaseInfo(BaseModel):
+    """Information about a single release (git tag)."""
+
+    tag: str = Field(description="Git tag (e.g., 'v1.9.0')")
+    version: str = Field(description="Version string without 'v' prefix")
+    date: Optional[str] = Field(default=None, description="Release date (ISO 8601)")
+    is_prerelease: bool = Field(default=False, description="True if alpha/beta/rc/etc.")
+    commit_short: str = Field(description="Short commit hash (7 chars)")
+
+
+class ReleaseListResponse(BaseModel):
+    """List of all releases."""
+
+    releases: list[ReleaseInfo] = Field(default_factory=list, description="All releases (newest first)")
+    total: int = Field(description="Total number of releases")

@@ -201,6 +201,20 @@ export interface CommitDiffResponse {
   diff: string;
 }
 
+// Release list types
+export interface ReleaseInfo {
+  tag: string;
+  version: string;
+  date: string | null;
+  is_prerelease: boolean;
+  commit_short: string;
+}
+
+export interface ReleaseListResponse {
+  releases: ReleaseInfo[];
+  total: number;
+}
+
 // API Functions
 
 /**
@@ -303,6 +317,14 @@ export async function getCommitHistory(): Promise<CommitHistoryResponse> {
  */
 export async function getCommitDiff(commitHash: string): Promise<CommitDiffResponse> {
   const response = await apiClient.get<CommitDiffResponse>(`/api/updates/commits/${commitHash}/diff`);
+  return response.data;
+}
+
+/**
+ * Get list of all releases (git tags)
+ */
+export async function getAllReleases(): Promise<ReleaseListResponse> {
+  const response = await apiClient.get<ReleaseListResponse>('/api/updates/releases');
   return response.data;
 }
 

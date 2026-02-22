@@ -23,6 +23,7 @@ from app.schemas.update import (
     ReleaseNotesResponse,
     CommitHistoryResponse,
     CommitDiffResponse,
+    ReleaseListResponse,
 )
 from app.services.update_service import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
@@ -372,3 +373,17 @@ async def get_commit_diff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.get("/releases", response_model=ReleaseListResponse)
+@limiter.limit(get_limit("admin_operations"))
+async def get_all_releases(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+) -> ReleaseListResponse:
+    """Get list of all releases (git tags).
+
+    Returns all releases and prereleases sorted by version (newest first).
+    """
+    backend = get_update_backend()
+    return await backend.get_all_releases()

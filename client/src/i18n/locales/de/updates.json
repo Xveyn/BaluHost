@@ -49,6 +49,13 @@
     "actions": "Aktionen",
     "page": "Seite {{current}} von {{total}}"
   },
+  "releases": {
+    "title": "Alle Releases",
+    "description": "Vollständige Liste aller veröffentlichten Versionen",
+    "stable": "Stabil",
+    "prerelease": "Vorabversion",
+    "noReleases": "Keine Releases gefunden"
+  },
   "status": {
     "pending": "Ausstehend",
     "downloading": "Wird heruntergeladen",

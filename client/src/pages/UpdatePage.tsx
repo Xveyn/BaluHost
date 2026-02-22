@@ -36,6 +36,7 @@ import {
   Paintbrush,
   CircleDot,
   FileText,
+  Tag,
 } from 'lucide-react';
 import {
   checkForUpdates,
@@ -47,6 +48,7 @@ import {
   getUpdateConfig,
   updateConfig,
   getReleaseNotes,
+  getAllReleases,
   getStatusInfo,
   formatDuration,
   isUpdateInProgress,
@@ -57,6 +59,7 @@ import {
   type UpdateConfig,
   type UpdateChannel,
   type ReleaseNotesResponse,
+  type ReleaseInfo,
 } from '../api/updates';
 import { handleApiError } from '../lib/errorHandling';
 import UpdateProgress from '../components/updates/UpdateProgress';
@@ -121,6 +124,8 @@ export default function UpdatePage() {
   const [historyPage, setHistoryPage] = useState(1);
   const [config, setConfig] = useState<UpdateConfig | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesResponse | null>(null);
+  const [releases, setReleases] = useState<ReleaseInfo[]>([]);
+  const [releasesLoading, setReleasesLoading] = useState(false);
 
   // Confirmation states
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
@@ -183,6 +188,19 @@ export default function UpdatePage() {
     }
   }, []);
 
+  // Fetch releases
+  const fetchReleases = useCallback(async () => {
+    setReleasesLoading(true);
+    try {
+      const result = await getAllReleases();
+      setReleases(result.releases);
+    } catch {
+      // Non-critical, don't show error toast
+    } finally {
+      setReleasesLoading(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     const loadAll = async () => {
@@ -197,6 +215,7 @@ export default function UpdatePage() {
   useEffect(() => {
     if (activeTab === 'history') {
       fetchHistory();
+      fetchReleases();
     }
   }, [activeTab, fetchHistory]);
 
@@ -559,6 +578,7 @@ export default function UpdatePage() {
       )}
 
       {activeTab === 'history' && (
+        <>
         <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
           <table className="w-full">
             <thead>
@@ -664,6 +684,57 @@ export default function UpdatePage() {
             </div>
           )}
         </div>
+
+        {/* All Releases Section */}
+        <div className="mt-6 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/80">
+            <h3 className="font-medium text-white flex items-center gap-2">
+              <Tag className="h-4 w-4 text-slate-400" />
+              {t('releases.title')}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">{t('releases.description')}</p>
+          </div>
+          {releasesLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            </div>
+          ) : releases.length === 0 ? (
+            <div className="px-4 py-8 text-center text-slate-400">
+              {t('releases.noReleases')}
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-700/50">
+              {releases.map((release) => (
+                <div
+                  key={release.tag}
+                  className="px-4 py-3 flex items-center justify-between hover:bg-slate-700/30 transition-colors"
+                >
+                  <div className="flex items-center gap-3">
+                    <span className="font-mono text-white">{release.tag}</span>
+                    <span className="font-mono text-xs text-slate-500">{release.commit_short}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {release.date && (
+                      <span className="text-sm text-slate-400">
+                        {new Date(release.date).toLocaleDateString()}
+                      </span>
+                    )}
+                    <span
+                      className={`inline-flex items-center px-2 py-0.5 rounded text-xs font-medium ${
+                        release.is_prerelease
+                          ? 'bg-amber-500/20 text-amber-400'
+                          : 'bg-emerald-500/20 text-emerald-400'
+                      }`}
+                    >
+                      {release.is_prerelease ? t('releases.prerelease') : t('releases.stable')}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        </>
       )}
 
       {activeTab === 'settings' && config && (
