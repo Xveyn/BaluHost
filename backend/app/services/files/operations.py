@@ -498,34 +498,42 @@ async def save_uploads(
             relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
             saved_paths.append(relative_destination)
 
-            # Create or update file metadata in database
-            existing_meta = file_metadata_db.get_metadata(relative_destination, db=db)
+            # Create or update file metadata in database.
+            # Run in thread pool with db=None so each call creates its own
+            # session — avoids blocking the event loop with synchronous
+            # db.commit() during bulk uploads.
+            existing_meta = await asyncio.to_thread(
+                file_metadata_db.get_metadata, relative_destination, db=None
+            )
             if existing_meta:
-                file_metadata_db.update_metadata(
+                await asyncio.to_thread(
+                    file_metadata_db.update_metadata,
                     relative_destination,
                     size_bytes=written,
                     checksum=file_checksum,
-                    db=db
+                    db=None,
                 )
             else:
-                file_metadata_db.create_metadata(
+                await asyncio.to_thread(
+                    file_metadata_db.create_metadata,
                     relative_path=relative_destination,
                     name=destination.name,
                     owner_id=int(owner_id),
                     size_bytes=written,
                     is_directory=False,
                     checksum=file_checksum,
-                    db=db
+                    db=None,
                 )
 
-            # Log file upload
-            audit.log_file_access(
+            # Log file upload (also in thread pool to avoid blocking)
+            await asyncio.to_thread(
+                audit.log_file_access,
                 user=user.username,
                 action="upload",
                 file_path=relative_destination,
                 size_bytes=written,
                 success=True,
-                db=db
+                db=None,
             )
 
             # VCL: Check if a version is needed (fast DB queries), then
@@ -533,11 +541,17 @@ async def save_uploads(
             # so it doesn't block the HTTP response.
             try:
                 from app.services.versioning.vcl import VCLService
-                file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
+                from app.core.database import SessionLocal as _VCLSessionLocal
+                file_meta = existing_meta or await asyncio.to_thread(
+                    file_metadata_db.get_metadata, relative_destination, db=None
+                )
                 if file_meta:
-                    should_create, _reason = VCLService(db).should_create_version(
-                        file_meta, file_checksum, int(owner_id)
-                    )
+                    def _vcl_check():
+                        with _VCLSessionLocal() as vcl_db:
+                            return VCLService(vcl_db).should_create_version(
+                                file_meta, file_checksum, int(owner_id)
+                            )
+                    should_create, _reason = await asyncio.to_thread(_vcl_check)
                     if should_create:
                         _schedule_vcl_version(
                             destination=destination,

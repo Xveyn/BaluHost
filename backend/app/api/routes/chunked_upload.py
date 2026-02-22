@@ -245,27 +245,36 @@ async def chunked_complete(
     audit = get_audit_logger_db()
     owner_id = user.id
 
-    existing_meta = file_metadata_db.get_metadata(relative_destination, db=db)
+    # Run metadata & audit in thread pool with db=None (own session)
+    # to avoid blocking the event loop with synchronous db.commit().
+    existing_meta = await asyncio.to_thread(
+        file_metadata_db.get_metadata, relative_destination, db=None
+    )
     if existing_meta:
-        file_metadata_db.update_metadata(relative_destination, size_bytes=file_size, checksum=file_checksum, db=db)
+        await asyncio.to_thread(
+            file_metadata_db.update_metadata,
+            relative_destination, size_bytes=file_size, checksum=file_checksum, db=None,
+        )
     else:
-        file_metadata_db.create_metadata(
+        await asyncio.to_thread(
+            file_metadata_db.create_metadata,
             relative_path=relative_destination,
             name=destination.name,
             owner_id=int(owner_id),
             size_bytes=file_size,
             is_directory=False,
             checksum=file_checksum,
-            db=db,
+            db=None,
         )
 
-    audit.log_file_access(
+    await asyncio.to_thread(
+        audit.log_file_access,
         user=user.username,
         action="upload",
         file_path=relative_destination,
         size_bytes=file_size,
         success=True,
-        db=db,
+        db=None,
     )
 
     # VCL: Check if a version is needed (fast), then schedule heavy work
@@ -274,11 +283,17 @@ async def chunked_complete(
     if file_size <= VCL_SIZE_LIMIT:
         try:
             from app.services.versioning.vcl import VCLService
-            file_meta = existing_meta or file_metadata_db.get_metadata(relative_destination, db=db)
+            file_meta = existing_meta or await asyncio.to_thread(
+                file_metadata_db.get_metadata, relative_destination, db=None,
+            )
             if file_meta:
-                should_create, _reason = VCLService(db).should_create_version(
-                    file_meta, file_checksum, int(owner_id)
-                )
+                from app.core.database import SessionLocal as _VCLSessionLocal
+                def _vcl_check():
+                    with _VCLSessionLocal() as vcl_db:
+                        return VCLService(vcl_db).should_create_version(
+                            file_meta, file_checksum, int(owner_id)
+                        )
+                should_create, _reason = await asyncio.to_thread(_vcl_check)
                 if should_create:
                     _schedule_vcl_version(
                         destination=destination,

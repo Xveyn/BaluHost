@@ -52,7 +52,7 @@ class ChunkedUploadManager:
     """
 
     DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MB
-    MAX_CONCURRENT_WRITES_PER_USER = 3
+    MAX_CONCURRENT_WRITES_PER_USER = 6
 
     def __init__(self) -> None:
         self._sessions: Dict[str, ChunkedUploadSession] = {}
