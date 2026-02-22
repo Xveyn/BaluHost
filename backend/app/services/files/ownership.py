@@ -23,7 +23,6 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.file_metadata import FileMetadata
 from app.models.file_share import FileShare
-from app.models.share_link import ShareLink
 from app.models.user import User
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.files import metadata_db as file_metadata_db
@@ -219,7 +218,7 @@ def transfer_ownership(
     - Physical move (unless in Shared/)
     - Metadata updates
     - Child cascade for directories
-    - Share/ShareLink updates
+    - Share updates
     - Audit logging
     
     Args:
@@ -455,21 +454,13 @@ def _cascade_shares_on_transfer(
     db: Session
 ) -> None:
     """
-    Update shares and share links when ownership changes.
-    
-    - FileShares where owner_id == old_owner_id -> update to new_owner_id
-    - ShareLinks where owner_id == old_owner_id -> update to new_owner_id
+    Update shares when ownership changes.
+
+    FileShares where owner_id == old_owner_id -> update to new_owner_id
     """
-    # Update FileShares
     db.query(FileShare).filter(
         FileShare.file_id == file_id,
         FileShare.owner_id == old_owner_id
-    ).update({"owner_id": new_owner_id}, synchronize_session=False)
-    
-    # Update ShareLinks
-    db.query(ShareLink).filter(
-        ShareLink.file_id == file_id,
-        ShareLink.owner_id == old_owner_id
     ).update({"owner_id": new_owner_id}, synchronize_session=False)
 
 

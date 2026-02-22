@@ -12,7 +12,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
-from app.models import Base, User, FileMetadata, AuditLog, ShareLink, FileShare
+from app.models import Base, User, FileMetadata, AuditLog, FileShare
 from app.models import Backup, VPNConfig, VPNClient, MobileDevice, RateLimitConfig
 import shutil
 from datetime import datetime
@@ -97,7 +97,6 @@ def main():
         'expiration_notifications',
         'mobile_registration_tokens',
         'file_metadata',
-        'share_links',
         'file_shares',
         'audit_logs',
         'backups',

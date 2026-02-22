@@ -2,8 +2,6 @@
 Tests for share API routes (api/routes/shares.py).
 
 Covers:
-- Share link CRUD endpoints
-- Public share link access
 - File share (user-to-user) endpoints
 - Authentication and authorization checks
 - Statistics endpoint
@@ -34,127 +32,6 @@ def owned_file(db_session, regular_user) -> FileMetadata:
     db_session.commit()
     db_session.refresh(meta)
     return meta
-
-
-# ============================================================================
-# Share Link Endpoints
-# ============================================================================
-
-class TestShareLinkRoutes:
-    """Test share link CRUD API endpoints."""
-
-    def test_create_share_link(self, client, auth_headers, owned_file):
-        response = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        assert response.status_code == 201
-        data = response.json()
-        assert "token" in data
-        assert data["file_id"] == owned_file.id
-
-    def test_create_share_link_unauthenticated(self, client, owned_file):
-        response = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-        )
-        assert response.status_code == 401
-
-    def test_list_share_links(self, client, auth_headers, owned_file):
-        # Create a share link first
-        client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-
-        response = client.get("/api/shares/links", headers=auth_headers)
-        assert response.status_code == 200
-        data = response.json()
-        assert isinstance(data, list)
-        assert len(data) >= 1
-
-    def test_get_share_link(self, client, auth_headers, owned_file):
-        create_resp = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        link_id = create_resp.json()["id"]
-
-        response = client.get(f"/api/shares/links/{link_id}", headers=auth_headers)
-        assert response.status_code == 200
-        assert response.json()["id"] == link_id
-
-    def test_get_share_link_not_found(self, client, auth_headers):
-        response = client.get("/api/shares/links/999999", headers=auth_headers)
-        assert response.status_code == 404
-
-    def test_update_share_link(self, client, auth_headers, owned_file):
-        create_resp = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        link_id = create_resp.json()["id"]
-
-        response = client.patch(
-            f"/api/shares/links/{link_id}",
-            json={"description": "Updated", "max_downloads": 5},
-            headers=auth_headers,
-        )
-        assert response.status_code == 200
-        assert response.json()["description"] == "Updated"
-
-    def test_delete_share_link(self, client, auth_headers, owned_file):
-        create_resp = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        link_id = create_resp.json()["id"]
-
-        response = client.delete(f"/api/shares/links/{link_id}", headers=auth_headers)
-        assert response.status_code in (200, 204)
-
-        # Verify it's gone
-        get_resp = client.get(f"/api/shares/links/{link_id}", headers=auth_headers)
-        assert get_resp.status_code == 404
-
-
-class TestPublicShareAccess:
-    """Test public share link access endpoints."""
-
-    def test_get_share_link_info(self, client, auth_headers, owned_file):
-        create_resp = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        token = create_resp.json()["token"]
-
-        # Public endpoint — no auth needed
-        response = client.get(f"/api/shares/public/{token}/info")
-        assert response.status_code == 200
-
-    def test_get_share_link_info_not_found(self, client):
-        response = client.get("/api/shares/public/nonexistent-token/info")
-        assert response.status_code == 404
-
-    def test_access_share_link_no_password(self, client, auth_headers, owned_file):
-        create_resp = client.post(
-            "/api/shares/links",
-            json={"file_id": owned_file.id},
-            headers=auth_headers,
-        )
-        token = create_resp.json()["token"]
-
-        response = client.post(
-            f"/api/shares/public/{token}/access",
-            json={},
-        )
-        assert response.status_code == 200
 
 
 # ============================================================================
@@ -262,8 +139,9 @@ class TestShareStatistics:
         response = client.get("/api/shares/statistics", headers=auth_headers)
         assert response.status_code == 200
         data = response.json()
-        assert "total_share_links" in data
         assert "total_file_shares" in data
+        assert "active_file_shares" in data
+        assert "files_shared_with_me" in data
 
     def test_get_statistics_unauthenticated(self, client):
         response = client.get("/api/shares/statistics")

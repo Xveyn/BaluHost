@@ -34,7 +34,6 @@ from app.services import files as file_service
 from app.services.files.operations import is_path_shared_with_user, SHARED_WITH_ME_DIR
 from app.services.permissions import PermissionDeniedError, is_privileged
 from app.services.audit_logger_db import get_audit_logger_db
-from app.services.shares import ShareService
 from app.models.file_metadata import FileMetadata
 from app.plugins.emit import emit_hook
 
@@ -623,80 +622,37 @@ async def download_file_by_id(
     file_id: int,
     request: Request,
     response: Response,
-    x_share_token: Optional[str] = Header(None),
-    x_share_password: Optional[str] = Header(None),
-    user: Optional[UserPublic] = Depends(deps.get_current_user_optional),
+    user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileResponse:
-    """
-    Download a file by ID. Supports both authenticated and public share link access.
-    """
+    """Download a file by ID (authenticated access only)."""
     audit_logger = get_audit_logger_db()
-    
+
     # Get file metadata
     file_metadata = db.get(FileMetadata, file_id)
     if not file_metadata:
         raise HTTPException(status_code=404, detail="File not found")
-    
-    # Check if accessing via share link
-    if x_share_token:
-        # Public share link access
-        share_link = ShareService.get_share_link_by_token(db, x_share_token)
-        
-        if not share_link:
-            raise HTTPException(status_code=404, detail="Share link not found")
-        
-        if not share_link.is_accessible():
-            raise HTTPException(status_code=410, detail="Share link has expired or reached download limit")
-        
-        if share_link.file_id != file_id:
-            raise HTTPException(status_code=403, detail="Share link does not match file")
-        
-        # Verify password if required
-        if not ShareService.verify_share_link_password(share_link, x_share_password):
-            raise HTTPException(status_code=403, detail="Invalid password")
-        
-        if not share_link.allow_download:
-            raise HTTPException(status_code=403, detail="Download not allowed for this share")
-        
-        # Increment download count
-        ShareService.increment_download_count(db, share_link)
-        
-        # Log public share download (use owner's ID for tracking)
-        audit_logger.log_file_action(
-            action="file_download_via_share",
-            user_id=share_link.owner_id,
-            username=f"shared_link:{x_share_token[:8]}",
-            file_path=file_metadata.path,
-            success=True,
-            ip_address=request.client.host if request.client else None,
+
+    try:
+        file_service.ensure_can_view(file_metadata.path, user, db=db)
+    except PermissionDeniedError as exc:
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="download_file",
+            resource=file_metadata.path,
+            required_permission="read",
             db=db
         )
-    else:
-        # Authenticated user access
-        if not user:
-            raise HTTPException(status_code=401, detail="Authentication required")
-        
-        try:
-            file_service.ensure_can_view(file_metadata.path, user, db=db)
-        except PermissionDeniedError as exc:
-            audit_logger.log_authorization_failure(
-                user=user.username,
-                action="download_file",
-                resource=file_metadata.path,
-                required_permission="read",
-                db=db
-            )
-            raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-        except file_service.FileAccessError as exc:
-            raise HTTPException(status_code=403, detail=str(exc)) from exc
-    
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
     # Get absolute file path
     file_path = file_service.get_absolute_path(file_metadata.path)
-    
+
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found on disk")
-    
+
     return FileResponse(path=file_path, filename=file_metadata.name)
 
 

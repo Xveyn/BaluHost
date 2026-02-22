@@ -16,7 +16,7 @@ REDACT_PATTERN = re.compile(r"password|secret|token|private_key|api_key", re.IGN
 # Categorised table whitelist – flat _WHITELIST is derived automatically.
 _TABLE_CATEGORIES: Dict[str, List[str]] = {
     "Core": ["users", "file_metadata", "audit_logs", "backups"],
-    "Sharing": ["share_links", "file_shares"],
+    "Sharing": ["file_shares"],
     "Auth": ["refresh_tokens"],
     "Mobile": [
         "mobile_devices", "mobile_registration_tokens", "camera_backups",

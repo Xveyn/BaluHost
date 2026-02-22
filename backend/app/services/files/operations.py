@@ -175,11 +175,18 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         
         # Get file_id from metadata if exists
         file_id = None
-        if db and entry.is_file():
+        if db:
             from app.services import file_metadata_db
-            metadata = file_metadata_db.get_metadata(relative_entry, db=db)
-            if metadata:
-                file_id = metadata.id
+            if entry.is_file():
+                metadata = file_metadata_db.get_metadata(relative_entry, db=db)
+                if metadata:
+                    file_id = metadata.id
+            elif entry.is_dir():
+                metadata = file_metadata_db.ensure_metadata(
+                    relative_entry, requesting_user_id=user.id, db=db
+                )
+                if metadata:
+                    file_id = metadata.id
         
         item = FileItem(
             name=entry.name,

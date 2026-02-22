@@ -11,7 +11,6 @@ from sqlalchemy.orm import Session
 
 from app.models.file_metadata import FileMetadata
 from app.models.file_share import FileShare
-from app.models.share_link import ShareLink
 from app.models.user import User
 from app.services.files import ownership
 from app.services.files import metadata_db as file_metadata_db

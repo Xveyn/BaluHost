@@ -82,9 +82,6 @@ RATE_LIMITS = {
     # System monitoring - generous limits
     "system_monitor": "120/minute",
     
-    # Public share access - generous but controlled
-    "public_share": "100/minute",
-    
     # Mobile device registration - strict limits
     "mobile_register": "3/minute",
     
@@ -176,7 +173,6 @@ def get_limit(endpoint_type: str) -> str:
             "auth_register",
             "mobile_register",
             "share_create",
-            "public_share",
         }
         if endpoint_type in strict_for_tests:
             # Use configured strict value for these endpoints

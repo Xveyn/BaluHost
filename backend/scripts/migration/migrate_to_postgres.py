@@ -20,7 +20,7 @@ from sqlalchemy import create_engine, inspect, text
 from sqlalchemy.orm import sessionmaker
 
 # Import all models to ensure they're registered
-from app.models import Base, User, FileMetadata, AuditLog, ShareLink, FileShare
+from app.models import Base, User, FileMetadata, AuditLog, FileShare
 from app.models import Backup, VPNConfig, VPNClient, MobileDevice, RateLimitConfig
 
 logging.basicConfig(

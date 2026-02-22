@@ -89,7 +89,6 @@ def main():
         'expiration_notifications',
         'mobile_registration_tokens',
         'file_metadata',
-        'share_links',
         'file_shares',
         'audit_logs',
         'backups',
