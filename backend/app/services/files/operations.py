@@ -23,6 +23,7 @@ _USED_BYTES_CACHE_TTL = 30.0  # Cache for 30 seconds
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
 from app.services.files import metadata_db as file_metadata_db
+from app.services.files.folder_size import get_folder_size, invalidate_folder_sizes_for_path
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.permissions import PermissionDeniedError, can_view, ensure_owner_or_privileged
 
@@ -181,7 +182,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         item = FileItem(
             name=entry.name,
             path=relative_entry,
-            size=stats.st_size,
+            size=get_folder_size(entry) if entry.is_dir() else stats.st_size,
             type="directory" if entry.is_dir() else "file",
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
@@ -560,6 +561,7 @@ async def save_uploads(
 
     # Invalidate storage quota cache after uploads
     invalidate_used_bytes_cache()
+    invalidate_folder_sizes_for_path(_resolve_path(relative_path), ROOT_DIR)
     return saved_paths
 
 
@@ -603,6 +605,7 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
     
     # Invalidate storage quota cache after deletion
     invalidate_used_bytes_cache()
+    invalidate_folder_sizes_for_path(_resolve_path(relative_path), ROOT_DIR)
 
 
 def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, db: Optional[Session] = None) -> Path:
@@ -664,8 +667,9 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
     target_relative = (PurePosixPath(source_relative).parent / new_name).as_posix()
     target = _resolve_path(target_relative)
 
+    is_dir = source.is_dir()
     source.rename(target)
-    
+
     # Update metadata in database
     file_metadata_db.rename_metadata(
         old_path=source_relative,
@@ -673,7 +677,12 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
         new_name=new_name,
         db=db
     )
-    
+
+    # Invalidate folder size cache for renamed directories
+    if is_dir:
+        invalidate_folder_sizes_for_path(source, ROOT_DIR)
+        invalidate_folder_sizes_for_path(target, ROOT_DIR)
+
     return target
 
 
@@ -708,8 +717,9 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
 
     final_relative = _relative_posix(final_target)
     final_target_resolved = _resolve_path(final_relative)
+    source_parent = source.parent
     source.rename(final_target_resolved)
-    
+
     # Update metadata in database
     file_metadata_db.rename_metadata(
         old_path=source_relative,
@@ -717,7 +727,11 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
         new_name=final_target.name,
         db=db
     )
-    
+
+    # Invalidate folder size cache for source parent and destination
+    invalidate_folder_sizes_for_path(source_parent, ROOT_DIR)
+    invalidate_folder_sizes_for_path(final_target_resolved.parent, ROOT_DIR)
+
     # Log move operation
     audit.log_file_access(
         user=user.username if user else "system",
@@ -727,5 +741,5 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
         success=True,
         db=db
     )
-    
+
     return final_target_resolved

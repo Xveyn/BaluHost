@@ -170,7 +170,7 @@ export function FileListView({
                     {file.type}
                   </td>
                   <td className="px-4 sm:px-6 py-4 text-sm text-slate-400">
-                    {file.type === 'file' ? formatBytes(file.size) : '\u2014'}
+                    {file.type === 'file' || file.size > 0 ? formatBytes(file.size) : '\u2014'}
                   </td>
                   <td className="px-4 sm:px-6 py-4 text-sm text-slate-500">
                     {new Date(file.modifiedAt).toLocaleString()}
@@ -296,7 +296,7 @@ export function FileListView({
                   </div>
                   <div className="flex items-center gap-2 mt-1 text-xs text-slate-500">
                     <span className="uppercase tracking-wider">{file.type}</span>
-                    {file.type === 'file' && (
+                    {(file.type === 'file' || file.size > 0) && (
                       <>
                         <span>&middot;</span>
                         <span>{formatBytes(file.size)}</span>

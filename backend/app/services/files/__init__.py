@@ -8,6 +8,11 @@ Provides file management with:
 - File sharing (public links, user shares)
 """
 
+from app.services.files.folder_size import (
+    get_folder_size,
+    invalidate_folder_sizes_for_path,
+    invalidate_all_folder_sizes,
+)
 from app.services.files.operations import (
     FileAccessError,
     QuotaExceededError,
@@ -61,6 +66,10 @@ from app.services.files.ownership import (
 )
 
 __all__ = [
+    # Folder size
+    "get_folder_size",
+    "invalidate_folder_sizes_for_path",
+    "invalidate_all_folder_sizes",
     # Operations
     "FileAccessError",
     "QuotaExceededError",
