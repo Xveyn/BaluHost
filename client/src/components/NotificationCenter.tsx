@@ -2,24 +2,19 @@
  * Notification Center Component
  *
  * Displays a bell icon with unread count badge and a dropdown showing recent notifications.
+ * Consumes NotificationContext (WS + state live above route level).
  */
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import { Bell, CheckCheck, X, Settings, ChevronRight } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
-  getNotifications,
-  getUnreadCount,
-  markAsRead,
-  markAllAsRead,
-  dismissNotification,
   getTypeStyle,
   getCategoryIcon,
   getCategoryName,
-  type Notification,
 } from '../api/notifications';
-import { useNotificationSocket } from '../hooks/useNotificationSocket';
+import { useNotifications } from '../contexts/NotificationContext';
 
 interface NotificationCenterProps {
   className?: string;
@@ -29,50 +24,17 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
   const { t } = useTranslation('notifications');
   const navigate = useNavigate();
   const [isOpen, setIsOpen] = useState(false);
-  const [notifications, setNotifications] = useState<Notification[]>([]);
-  const [unreadCount, setUnreadCount] = useState(0);
-  const [loading, setLoading] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
 
-  // WebSocket connection for real-time updates
-  const { isConnected } = useNotificationSocket({
-    enabled: true,
-    onNotification: (notification) => {
-      // Add new notification to the list
-      setNotifications((prev) => [notification, ...prev.slice(0, 49)]);
-      // Show toast for critical/warning notifications
-      if (notification.notification_type === 'critical') {
-        toast.error(notification.title, { duration: 5000 });
-      } else if (notification.notification_type === 'warning') {
-        toast(notification.title, { icon: '⚠️', duration: 4000 });
-      }
-    },
-    onUnreadCountChange: (count) => {
-      setUnreadCount(count);
-    },
-  });
-
-  // Fetch initial data
-  const fetchNotifications = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [notifResponse, countResponse] = await Promise.all([
-        getNotifications({ page_size: 20 }),
-        getUnreadCount(),
-      ]);
-      setNotifications(notifResponse.notifications);
-      setUnreadCount(countResponse.count);
-    } catch {
-      // Non-critical: notifications will remain empty
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  // Fetch on mount
-  useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+  const {
+    notifications,
+    unreadCount,
+    loading,
+    isConnected,
+    markAsRead,
+    markAllAsRead,
+    dismiss,
+  } = useNotifications();
 
   // Close dropdown when clicking outside
   useEffect(() => {
@@ -91,21 +53,10 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
   }, [isOpen]);
 
   // Handle notification click
-  const handleNotificationClick = async (notification: Notification) => {
-    // Mark as read
+  const handleNotificationClick = async (notification: { id: number; is_read: boolean; action_url: string | null }) => {
     if (!notification.is_read) {
-      try {
-        await markAsRead(notification.id);
-        setNotifications((prev) =>
-          prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n))
-        );
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      } catch {
-        // Non-critical: UI state may be slightly out of sync
-      }
+      await markAsRead(notification.id);
     }
-
-    // Navigate if action URL exists
     if (notification.action_url) {
       setIsOpen(false);
       navigate(notification.action_url);
@@ -116,8 +67,6 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
   const handleMarkAllAsRead = async () => {
     try {
       await markAllAsRead();
-      setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
-      setUnreadCount(0);
       toast.success(t('markedAllRead'));
     } catch {
       toast.error(t('markError'));
@@ -125,16 +74,12 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
   };
 
   // Handle dismiss
-  const handleDismiss = async (e: React.MouseEvent, notification: Notification) => {
+  const handleDismiss = async (e: React.MouseEvent, notification: { id: number }) => {
     e.stopPropagation();
     try {
-      await dismissNotification(notification.id);
-      setNotifications((prev) => prev.filter((n) => n.id !== notification.id));
-      if (!notification.is_read) {
-        setUnreadCount((prev) => Math.max(0, prev - 1));
-      }
+      await dismiss(notification.id);
     } catch {
-      // Non-critical: notification will remain in list
+      // Non-critical
     }
   };
 

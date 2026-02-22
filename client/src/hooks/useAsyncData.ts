@@ -36,6 +36,7 @@ export function useAsyncData<T>(
 
   const load = useCallback(async () => {
     try {
+      setLoading(true);
       setError(null);
       const result = await fetcherRef.current();
       setData(result);

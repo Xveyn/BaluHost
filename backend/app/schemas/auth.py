@@ -15,7 +15,6 @@ class RegisterRequest(BaseModel):
     username: str
     email: EmailStr
     password: str
-    role: str | None = "user"  # Default role for new registrations
 
     @field_validator("password")
     @classmethod

@@ -68,6 +68,7 @@ from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
 from app.models.desktop_sync_folder import DesktopSyncFolder
+from app.models.service_heartbeat import ServiceHeartbeat
 
 __all__ = [
     "Base",
@@ -137,4 +138,5 @@ __all__ = [
     "ApiKey",
     "DesktopPairingCode",
     "DesktopSyncFolder",
+    "ServiceHeartbeat",
 ]

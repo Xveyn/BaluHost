@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
 import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
@@ -63,7 +64,7 @@ export default function MobileDevicesPage() {
 
   const handleGenerateToken = async () => {
     if (!deviceName.trim()) {
-      alert('Bitte Gerätenamen eingeben');
+      toast.error(t('mobile.enterDeviceName', 'Bitte Gerätenamen eingeben'));
       return;
     }
 
@@ -81,7 +82,7 @@ export default function MobileDevicesPage() {
       setShowQrDialog(true);
     } catch (error: unknown) {
       const errorMsg = error instanceof Error ? error.message : 'QR-Code konnte nicht generiert werden';
-      alert(errorMsg);
+      toast.error(errorMsg);
     } finally {
       setGenerating(false);
     }
@@ -101,7 +102,7 @@ export default function MobileDevicesPage() {
       await loadDevices();
       
     } catch {
-      alert('Gerät konnte nicht gelöscht werden');
+      toast.error(t('mobile.deleteFailed', 'Gerät konnte nicht gelöscht werden'));
       await loadDevices();
     }
   };

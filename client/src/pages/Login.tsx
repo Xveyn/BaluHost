@@ -152,9 +152,8 @@ export default function Login() {
         throw new Error('Response did not include an access token');
       }
 
-      // Store token
-      localStorage.setItem('token', token);
-      login(data.user, token);
+      // login() already persists the token to localStorage
+      login(data.user as User, token);
     } catch (err: unknown) {
       setError(err instanceof Error ? err.message : t('twoFactor.invalidCode'));
       setTotpCode('');

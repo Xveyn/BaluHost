@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
 import os
 from contextlib import asynccontextmanager
+from datetime import datetime, timezone
 from typing import Any
 from pathlib import Path
 
@@ -59,6 +62,7 @@ from app.services.service_status import (
     set_server_start_time,
     register_service,
     get_service_status_collector,
+    _service_registry,
 )
 from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
 from app.plugins.manager import PluginManager
@@ -104,16 +108,11 @@ def _try_become_primary() -> bool:
     global _primary_lock_fd
     lock_path = Path("/tmp/baluhost-primary.lock")
 
-    # Remove stale lock file from previous runs so we get a fresh inode.
-    # If an old worker process still holds flock on the old inode, the new
-    # open() creates a new inode and the new flock only races with current workers.
+    # Do NOT unlink before open — that creates a race where two workers
+    # each unlink+create different inodes and both acquire the lock.
+    # Stale lock cleanup is handled by ExecStartPre / start_prod.py.
     try:
-        lock_path.unlink(missing_ok=True)
-    except OSError:
-        pass
-
-    try:
-        fd = open(lock_path, "w")
+        fd = open(lock_path, "a")
     except OSError as exc:
         logger.error("Cannot open primary lock file %s: %s", lock_path, exc)
         return False
@@ -124,6 +123,8 @@ def _try_become_primary() -> bool:
         fd.close()
         return False
 
+    fd.seek(0)
+    fd.truncate()
     fd.write(str(os.getpid()))
     fd.flush()
     _primary_lock_fd = fd  # keep fd open — lock released on process exit
@@ -164,6 +165,83 @@ def _get_worker_scheduler_status(scheduler_name: str) -> dict:
         return {"is_running": False}
     finally:
         db.close()
+
+
+# ---------------------------------------------------------------------------
+# Service heartbeat: primary → DB, secondary reads from DB
+# ---------------------------------------------------------------------------
+# Services that only run on the primary worker.  On secondary workers their
+# status function is replaced by a DB reader so the dashboard always shows
+# the correct state regardless of which worker handles the request.
+PRIMARY_ONLY_SERVICES = [
+    "telemetry_monitor",
+    "disk_io_monitor",
+    "power_monitor",
+    "monitoring_orchestrator",
+    "power_manager",
+    "fan_control",
+    "sleep_mode",
+    "network_discovery",
+]
+
+
+async def _do_heartbeat_write() -> None:
+    """Write current service states to the service_heartbeats table once."""
+    from app.models.service_heartbeat import ServiceHeartbeat
+    from app.core.database import SessionLocal
+
+    db = SessionLocal()
+    try:
+        for name, registry in _service_registry.items():
+            try:
+                status = registry["get_status"]()
+            except Exception:
+                status = {"is_running": False}
+            db.merge(ServiceHeartbeat(
+                name=name,
+                is_running=status.get("is_running", False),
+                details_json=json.dumps(status, default=str),
+                updated_at=datetime.now(timezone.utc),
+            ))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
+async def _write_service_heartbeats() -> None:
+    """Periodically write service states to DB for secondary workers (primary only)."""
+    # Write initial heartbeat immediately so secondary workers
+    # have data from the very first request (instead of waiting 15s).
+    await _do_heartbeat_write()
+
+    while True:
+        await asyncio.sleep(15)
+        await _do_heartbeat_write()
+
+
+def _make_db_status_reader(service_name: str):
+    """Return a status function that reads from the service_heartbeats table."""
+    def read_status():
+        from app.models.service_heartbeat import ServiceHeartbeat
+        from app.core.database import SessionLocal
+
+        db = SessionLocal()
+        try:
+            hb = db.query(ServiceHeartbeat).filter_by(name=service_name).first()
+            if hb and hb.updated_at:
+                age = (datetime.now(timezone.utc) - hb.updated_at).total_seconds()
+                if age < 45:  # heartbeat writes every 15s, allow some slack
+                    if hb.details_json:
+                        return json.loads(hb.details_json)
+                    return {"is_running": hb.is_running}
+            return {"is_running": False}
+        except Exception:
+            return {"is_running": False}
+        finally:
+            db.close()
+    return read_status
 
 
 def _register_services() -> None:
@@ -348,6 +426,14 @@ def _register_services() -> None:
         get_status_fn=_get_scheduler_worker_status,
     )
 
+    # On secondary workers: replace in-process status functions for
+    # primary-only services with DB readers so the dashboard shows
+    # consistent data regardless of which worker handles the request.
+    if not IS_PRIMARY_WORKER:
+        for svc_name in PRIMARY_ONLY_SERVICES:
+            if svc_name in _service_registry:
+                _service_registry[svc_name]["get_status"] = _make_db_status_reader(svc_name)
+
 
 @asynccontextmanager
 async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
@@ -477,6 +563,11 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     # Register all services with the service status collector
     _register_services()
+
+    # Start heartbeat writer on primary worker so secondary workers can
+    # read accurate service status from the database.
+    if IS_PRIMARY_WORKER:
+        asyncio.create_task(_write_service_heartbeats())
 
     # Register update service
     register_update_service()

@@ -19,6 +19,7 @@ from app.core.config import settings
 # Cache for calculate_used_bytes() - avoids expensive filesystem scans on every request
 _used_bytes_cache: dict[str, tuple[int, float]] = {}  # {"value": (bytes, timestamp)}
 _used_bytes_cache_lock = threading.Lock()
+_used_bytes_inflight: threading.Event | None = None  # stampede protection
 _USED_BYTES_CACHE_TTL = 30.0  # Cache for 30 seconds
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
@@ -33,7 +34,7 @@ ROOT_DIR.mkdir(parents=True, exist_ok=True)
 SHARED_DIR_NAME = "Shared"
 SHARED_WITH_ME_DIR = "Shared with me"
 SYSTEM_DIR_NAME = ".system"
-SYSTEM_DIRS = {".system", "lost+found"}
+SYSTEM_DIRS = {".system", "lost+found", ".tmp"}
 SYSTEM_DIR_PREFIXES = (".Trash-",)
 
 
@@ -216,27 +217,46 @@ def _calculate_used_bytes_uncached() -> int:
 
 def calculate_used_bytes() -> int:
     """Calculate total used bytes in storage.
-    
+
     Uses a 30-second TTL cache to avoid expensive filesystem scans on every request.
-    The Settings page and other UI elements call this frequently.
+    Includes stampede protection: if a scan is already in-flight, concurrent callers
+    wait for it instead of launching their own.
     """
-    global _used_bytes_cache
-    
+    global _used_bytes_cache, _used_bytes_inflight
+
     now = time.time()
-    
+    event = None
+
     with _used_bytes_cache_lock:
         if "value" in _used_bytes_cache:
             cached_value, cached_time = _used_bytes_cache["value"]
             if now - cached_time < _USED_BYTES_CACHE_TTL:
                 return cached_value
-    
-    # Cache miss or expired - do the expensive calculation
-    total = _calculate_used_bytes_uncached()
-    
+        # Check if another thread is already scanning
+        if _used_bytes_inflight is not None:
+            event = _used_bytes_inflight
+
+    # Another thread is scanning — wait for it then return cached value
+    if event is not None:
+        event.wait(timeout=60.0)
+        with _used_bytes_cache_lock:
+            if "value" in _used_bytes_cache:
+                return _used_bytes_cache["value"][0]
+
+    # We'll do the scan — set inflight flag
+    done_event = threading.Event()
     with _used_bytes_cache_lock:
-        _used_bytes_cache["value"] = (total, now)
-    
-    return total
+        _used_bytes_inflight = done_event
+
+    try:
+        total = _calculate_used_bytes_uncached()
+        with _used_bytes_cache_lock:
+            _used_bytes_cache["value"] = (total, time.time())
+        return total
+    finally:
+        with _used_bytes_cache_lock:
+            _used_bytes_inflight = None
+        done_event.set()
 
 
 def invalidate_used_bytes_cache() -> None:
@@ -427,7 +447,7 @@ async def save_uploads(
             filename = override_filename or upload.filename or "upload.bin"
             destination = target / filename
 
-        destination.parent.mkdir(parents=True, exist_ok=True)
+        await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
 
@@ -445,7 +465,7 @@ async def save_uploads(
                     f.write(data)
                     hasher.update(data)
 
-                f = open(destination, 'wb')
+                f = await asyncio.to_thread(open, destination, 'wb')
                 try:
                     while True:
                         chunk = await upload.read(STREAM_CHUNK)
@@ -580,9 +600,14 @@ async def save_uploads(
 
 
 def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional[Session] = None) -> None:
-    """Delete a file or directory and its metadata."""
+    """Delete a file or directory and its metadata.
+
+    For directories the deletion is recursive. If a child deletion fails
+    the error propagates immediately so the caller sees a clear failure
+    rather than a silently half-deleted tree.
+    """
     audit = get_audit_logger_db()
-    
+
     target = _resolve_path(relative_path)
     if not target.exists():
         return
@@ -596,17 +621,20 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
         target_relative = _relative_posix(target)
         if user:
             ensure_owner_or_privileged(user, get_owner(target_relative, db=db))
-        for child in target.iterdir():
+        # Collect children first, then delete bottom-up so partial
+        # failures don't leave orphaned metadata.
+        children = list(target.iterdir())
+        for child in children:
             delete_path(_relative_posix(child), user=user, db=db)
         target.rmdir()
     else:
         if user:
             ensure_owner_or_privileged(user, get_owner(_relative_posix(target), db=db))
         target.unlink()
-    
+
     # Delete metadata from database
     file_metadata_db.delete_metadata(relative_path, db=db)
-    
+
     # Log deletion
     audit.log_file_access(
         user=user.username if user else "system",
@@ -616,7 +644,7 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
         success=True,
         db=db
     )
-    
+
     # Invalidate storage quota cache after deletion
     invalidate_used_bytes_cache()
     invalidate_folder_sizes_for_path(_resolve_path(relative_path), ROOT_DIR)

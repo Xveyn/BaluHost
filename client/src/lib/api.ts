@@ -160,6 +160,23 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
+/** Dispatch auth:expired event — AuthContext listens and logs out */
+export function fireAuthExpired(): void {
+  localStorage.removeItem('token');
+  window.dispatchEvent(new CustomEvent('auth:expired'));
+}
+
+// Handle 401 responses — signal auth expiration
+apiClient.interceptors.response.use(
+  (response) => response,
+  (error) => {
+    if (error.response?.status === 401) {
+      fireAuthExpired();
+    }
+    return Promise.reject(error);
+  }
+);
+
 // --- Admin DB API (read-only, admin-only) ---
 export interface AdminTableSchemaField {
   name: string;

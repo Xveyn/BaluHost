@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
 import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 import { apiClient } from '../lib/api';
@@ -103,7 +104,7 @@ function TwoFactorCard() {
   const handleCopyBackupCodes = () => {
     if (backupCodes) {
       navigator.clipboard.writeText(backupCodes.join('\n'));
-      alert(t('security.backupCodesCopied'));
+      toast.success(t('security.backupCodesCopied'));
     }
   };
 
@@ -471,13 +472,13 @@ export default function SettingsPage() {
     
     try {
       await apiClient.patch(`/api/users/${profile?.id}`, { email });
-      alert('Email updated successfully');
+      toast.success('Email updated successfully');
       await loadProfile();
     } catch (err: unknown) {
       const detail = err instanceof Object && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
         : undefined;
-      alert(detail || 'Failed to update email');
+      toast.error(detail || 'Failed to update email');
     } finally {
       setSaving(false);
     }
@@ -487,12 +488,12 @@ export default function SettingsPage() {
     e.preventDefault();
     
     if (newPassword !== confirmPassword) {
-      alert('New passwords do not match');
+      toast.error('New passwords do not match');
       return;
     }
-    
+
     if (newPassword.length < 6) {
-      alert('Password must be at least 6 characters');
+      toast.error('Password must be at least 6 characters');
       return;
     }
     
@@ -504,7 +505,7 @@ export default function SettingsPage() {
         new_password: newPassword
       });
       
-      alert('Password changed successfully');
+      toast.success('Password changed successfully');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -512,7 +513,7 @@ export default function SettingsPage() {
       const detail = err instanceof Object && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
         : undefined;
-      alert(detail || 'Failed to change password');
+      toast.error(detail || 'Failed to change password');
     } finally {
       setSaving(false);
     }
@@ -542,7 +543,7 @@ export default function SettingsPage() {
         headers: { 'Content-Type': 'multipart/form-data' }
       });
       
-      alert('Avatar updated successfully');
+      toast.success('Avatar updated successfully');
       setAvatarFile(null);
       setAvatarPreview(null);
       await loadProfile();
@@ -550,14 +551,14 @@ export default function SettingsPage() {
       const detail = err instanceof Object && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
         : undefined;
-      alert(detail || 'Failed to upload avatar');
+      toast.error(detail || 'Failed to upload avatar');
     } finally {
       setSaving(false);
     }
   };
 
   const handleExportData = () => {
-    alert('Data export feature coming soon!');
+    toast('Data export feature coming soon!');
   };
 
   const formatDate = (dateString: string) => {

@@ -306,8 +306,9 @@ export default function FileManager() {
         const cacheKey = `files_cache_${fullPath}`;
         sessionStorage.setItem(cacheKey, JSON.stringify({ files: mappedFiles, timestamp: Date.now() }));
       }
-    } catch {
-      // ignore
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'Failed to load files';
+      toast.error(msg);
     } finally {
       setLoading(false);
     }

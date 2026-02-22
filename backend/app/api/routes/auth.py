@@ -359,12 +359,13 @@ async def register(payload: RegisterRequest, request: Request, response: Respons
         )
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="User already exists")
 
-    # Convert RegisterRequest to UserCreate
+    # Convert RegisterRequest to UserCreate — role is always "user";
+    # admin accounts can only be created via /api/users/ (admin-only).
     user_create = UserCreate(
         username=payload.username,
         email=payload.email,
         password=payload.password,
-        role=payload.role or "user"
+        role="user",
     )
     user_record = user_service.create_user(user_create, db=db)
 

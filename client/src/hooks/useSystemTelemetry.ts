@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { buildApiUrl } from '../lib/api';
+import { buildApiUrl, fireAuthExpired } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 
 interface CpuInfo {
@@ -164,6 +164,12 @@ export const useSystemTelemetry = (pollInterval = 5000): TelemetryState => {
           })
         ]);
 
+        // Check for auth expiration on raw fetch responses
+        if (infoRes.status === 401 || storageRes.status === 401 || historyRes.status === 401) {
+          fireAuthExpired();
+          return;
+        }
+
         if (!infoRes.ok) {
           throw new Error('Failed to fetch system info');
         }
@@ -222,7 +228,7 @@ export const useSystemTelemetry = (pollInterval = 5000): TelemetryState => {
         window.clearInterval(intervalRef.current);
       }
     };
-  }, [pollInterval]);
+  }, [pollInterval, token]);
 
   const normalisedStorage = useMemo<NormalisedStorageInfo | null>(() => {
     if (!storage) {

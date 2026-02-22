@@ -4,7 +4,7 @@
  * Supports images, video, audio, PDF, and plain-text files.
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { X, Loader2, Music } from 'lucide-react';
 import { buildApiUrl } from '../../lib/api';
 import { useAuth } from '../../contexts/AuthContext';
@@ -29,14 +29,15 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
   const [blobUrl, setBlobUrl] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string>('');
+  const blobUrlRef = useRef<string>('');
 
   useEffect(() => {
     loadFileContent();
 
-    // Cleanup blob URL when component unmounts
     return () => {
-      if (blobUrl) {
-        URL.revokeObjectURL(blobUrl);
+      if (blobUrlRef.current) {
+        URL.revokeObjectURL(blobUrlRef.current);
+        blobUrlRef.current = '';
       }
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -63,7 +64,12 @@ export function FileViewer({ file, onClose }: FileViewerProps) {
 
         // For images, videos, audio, PDFs - create blob URL
         if (isImageFile(file.name) || isVideoFile(file.name) || isAudioFile(file.name) || isPdfFile(file.name)) {
+          // Revoke previous blob URL before creating a new one
+          if (blobUrlRef.current) {
+            URL.revokeObjectURL(blobUrlRef.current);
+          }
           const url = URL.createObjectURL(blob);
+          blobUrlRef.current = url;
           setBlobUrl(url);
         } else {
           // For text files - convert to text

@@ -225,12 +225,11 @@ export function getCategoryName(category: NotificationCategory): string {
 }
 
 /**
- * Get WebSocket URL for notifications
+ * Get WebSocket URL for notifications.
+ * Token is passed as parameter (single source of truth from AuthContext).
  */
-export function getWebSocketUrl(): string {
-  const token = localStorage.getItem('token');
-  const isDevelopment = import.meta.env.DEV;
+export function getWebSocketUrl(token: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = isDevelopment ? '127.0.0.1:3001' : window.location.host;
+  const host = import.meta.env.DEV ? '127.0.0.1:3001' : window.location.host;
   return `${protocol}//${host}/api/notifications/ws?token=${token}`;
 }

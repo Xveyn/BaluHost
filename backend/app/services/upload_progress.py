@@ -46,9 +46,9 @@ class UploadProgressManager:
         self._lock = asyncio.Lock()
         self._cleanup_tasks: set[asyncio.Task] = set()
 
-    def create_upload_session(self, filename: str, total_bytes: int) -> str:
+    def create_upload_session(self, filename: str, total_bytes: int, upload_id: str | None = None) -> str:
         """Create a new upload session and return upload_id."""
-        upload_id = str(uuid.uuid4())
+        upload_id = upload_id or str(uuid.uuid4())
         progress = UploadProgress(
             upload_id=upload_id,
             filename=filename,

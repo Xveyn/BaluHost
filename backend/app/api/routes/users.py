@@ -28,12 +28,12 @@ async def list_users(
     is_active: bool | None = Query(None, description="Filter by active status"),
     sort_by: str = Query("created_at", description="Sort by field"),
     sort_order: str = Query("desc", description="Sort order (asc/desc)"),
-    _: UserPublic = Depends(deps.get_current_user),
+    _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> UsersResponse:
     # Build query
     query = db.query(User)
-    
+
     # Apply filters
     if search:
         query = query.filter(
@@ -42,14 +42,17 @@ async def list_users(
                 User.email.ilike(f"%{search}%")
             )
         )
-    
+
     if role:
         query = query.filter(User.role == role)
-    
+
     if is_active is not None:
         query = query.filter(User.is_active == is_active)
-    
-    # Apply sorting
+
+    # Apply sorting — whitelist prevents access to sensitive attributes
+    _SORTABLE_FIELDS = {"username", "created_at", "email", "role", "is_active"}
+    if sort_by not in _SORTABLE_FIELDS:
+        sort_by = "created_at"
     sort_column = getattr(User, sort_by, User.created_at)
     if sort_order == "desc":
         query = query.order_by(sort_column.desc())

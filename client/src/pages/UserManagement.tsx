@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { buildApiUrl, extractErrorMessage } from '../lib/api';
@@ -53,20 +53,28 @@ export default function UserManagement() {
   
   // Filter & Search
   const [searchTerm, setSearchTerm] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState<string>('');
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sortBy, setSortBy] = useState('created_at');
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  
+  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+
+  // Debounce search input (300ms)
+  useEffect(() => {
+    debounceRef.current = setTimeout(() => setDebouncedSearch(searchTerm), 300);
+    return () => clearTimeout(debounceRef.current);
+  }, [searchTerm]);
+
   // Selection & Bulk Actions
   const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
-  
+
   // Modal States
   const [showUserModal, setShowUserModal] = useState(false);
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [userToDelete, setUserToDelete] = useState<number | null>(null);
-  
+
   // Form Data
   const [formData, setFormData] = useState<UserFormData>({
     username: '',
@@ -78,7 +86,7 @@ export default function UserManagement() {
 
   useEffect(() => {
     loadUsers();
-  }, [searchTerm, roleFilter, statusFilter, sortBy, sortOrder]);
+  }, [debouncedSearch, roleFilter, statusFilter, sortBy, sortOrder]);
 
   const loadUsers = async () => {
     setLoading(true);
@@ -94,7 +102,7 @@ export default function UserManagement() {
 
     try {
       const params = new URLSearchParams();
-      if (searchTerm) params.append('search', searchTerm);
+      if (debouncedSearch) params.append('search', debouncedSearch);
       if (roleFilter) params.append('role', roleFilter);
       if (statusFilter) params.append('is_active', statusFilter);
       params.append('sort_by', sortBy);

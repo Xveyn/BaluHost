@@ -55,11 +55,9 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
             "payment=()"
         )
         
-        # HTTPS enforcement in production
-        if not settings.debug:
-            # Strict-Transport-Security
-            # Forces HTTPS for 1 year (31536000 seconds)
-            # includeSubDomains applies policy to all subdomains
+        # HSTS — only send when the request actually arrived over HTTPS.
+        # Sending HSTS over plain HTTP locks browsers out for max-age.
+        if request.url.scheme == "https" or request.headers.get("x-forwarded-proto") == "https":
             response.headers["Strict-Transport-Security"] = (
                 "max-age=31536000; includeSubDomains; preload"
             )

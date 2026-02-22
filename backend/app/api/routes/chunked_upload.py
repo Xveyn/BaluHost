@@ -145,6 +145,7 @@ async def chunked_init(
     progress_mgr.create_upload_session(
         filename=safe_filename,
         total_bytes=payload.total_size,
+        upload_id=session.upload_id,
     )
 
     return ChunkedInitResponse(

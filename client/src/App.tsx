@@ -7,6 +7,7 @@ import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
 import { VersionProvider } from './contexts/VersionContext';
 import { UploadProvider } from './contexts/UploadContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { buildApiUrl } from './lib/api';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
@@ -154,6 +155,7 @@ function AppRoutes() {
     <PluginProvider>
     <Router>
       <UploadProvider>
+      <NotificationProvider>
       <Suspense fallback={<LoadingFallback />}>
       <Routes>
         <Route
@@ -429,6 +431,7 @@ function AppRoutes() {
         />
       </Routes>
       </Suspense>
+      </NotificationProvider>
       </UploadProvider>
     </Router>
     </PluginProvider>

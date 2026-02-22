@@ -44,38 +44,37 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pingIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Use refs for callbacks to avoid reconnection on every render
+  // Refs for current values — keeps connect/disconnect stable (deps=[])
+  const tokenRef = useRef(token);
+  const enabledRef = useRef(enabled);
+  const reconnectDelayRef = useRef(reconnectDelay);
+  const maxReconnectAttemptsRef = useRef(maxReconnectAttempts);
   const onNotificationRef = useRef(onNotification);
   const onUnreadCountChangeRef = useRef(onUnreadCountChange);
 
-  // Update refs when callbacks change
-  useEffect(() => {
-    onNotificationRef.current = onNotification;
-  }, [onNotification]);
-
-  useEffect(() => {
-    onUnreadCountChangeRef.current = onUnreadCountChange;
-  }, [onUnreadCountChange]);
+  // Sync refs on every render
+  useEffect(() => { tokenRef.current = token; }, [token]);
+  useEffect(() => { enabledRef.current = enabled; }, [enabled]);
+  useEffect(() => { reconnectDelayRef.current = reconnectDelay; }, [reconnectDelay]);
+  useEffect(() => { maxReconnectAttemptsRef.current = maxReconnectAttempts; }, [maxReconnectAttempts]);
+  useEffect(() => { onNotificationRef.current = onNotification; }, [onNotification]);
+  useEffect(() => { onUnreadCountChangeRef.current = onUnreadCountChange; }, [onUnreadCountChange]);
 
   const connect = useCallback(() => {
-    if (!enabled) return;
+    if (!enabledRef.current || !tokenRef.current) return;
 
-    // Don't create duplicate connections
-    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
-      return;
-    }
-
-    if (!token) {
-      setState((prev) => ({
-        ...prev,
-        connected: false,
-        error: 'No authentication token',
-      }));
+    // CONNECTING + OPEN + CLOSING guard — prevent duplicate WebSockets
+    if (
+      wsRef.current &&
+      (wsRef.current.readyState === WebSocket.OPEN ||
+        wsRef.current.readyState === WebSocket.CONNECTING ||
+        wsRef.current.readyState === WebSocket.CLOSING)
+    ) {
       return;
     }
 
     try {
-      const url = getWebSocketUrl();
+      const url = getWebSocketUrl(tokenRef.current);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
@@ -99,7 +98,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
           const data = JSON.parse(event.data);
 
           switch (data.type) {
-            case 'notification':
+            case 'notification': {
               const notification = data.payload as Notification;
               setState((prev) => ({
                 ...prev,
@@ -107,8 +106,9 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
               }));
               onNotificationRef.current?.(notification);
               break;
+            }
 
-            case 'unread_count':
+            case 'unread_count': {
               const count = data.payload.count as number;
               setState((prev) => ({
                 ...prev,
@@ -116,6 +116,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
               }));
               onUnreadCountChangeRef.current?.(count);
               break;
+            }
 
             case 'pong':
               // Heartbeat response, ignore
@@ -153,10 +154,10 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
           wsRef.current = null;
 
           // Attempt reconnection if not intentionally closed
-          if (event.code !== 1000 && enabled) {
-            if (reconnectAttemptsRef.current < maxReconnectAttempts) {
+          if (event.code !== 1000 && enabledRef.current) {
+            if (reconnectAttemptsRef.current < maxReconnectAttemptsRef.current) {
               reconnectAttemptsRef.current++;
-              const delay = reconnectDelay * reconnectAttemptsRef.current;
+              const delay = reconnectDelayRef.current * reconnectAttemptsRef.current;
               reconnectTimeoutRef.current = setTimeout(() => {
                 connect();
               }, delay);
@@ -178,7 +179,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
         error: 'Connection failed',
       }));
     }
-  }, [enabled, reconnectDelay, maxReconnectAttempts]);
+  }, []); // Stable identity — reads everything from refs
 
   const disconnect = useCallback(() => {
     if (reconnectTimeoutRef.current) {
@@ -200,7 +201,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
       ...prev,
       connected: false,
     }));
-  }, []);
+  }, []); // Stable identity
 
   const markRead = useCallback((notificationId: number) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
@@ -213,35 +214,26 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     }
   }, []);
 
-  // Connect on mount, disconnect on unmount
-  // Note: connect/disconnect are stable now (don't depend on callbacks)
+  // 1) Mount: connect if ready. Unmount: disconnect.
   useEffect(() => {
-    if (enabled) {
+    if (enabledRef.current && tokenRef.current) {
       connect();
     }
-
-    return () => {
-      disconnect();
-    };
+    return () => { disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [enabled]);
+  }, []); // Runs ONCE on mount, cleanup on unmount
 
-  // Reconnect when token changes
+  // 2) Token became available after mount (e.g. slow AuthContext init)
+  //    OR token removed (logout) → disconnect only.
+  //    NO cleanup function → effect re-runs can't trigger disconnect.
   useEffect(() => {
-    const handleStorageChange = (event: StorageEvent) => {
-      if (event.key === 'token') {
-        disconnect();
-        if (event.newValue) {
-          connect();
-        }
-      }
-    };
-
-    window.addEventListener('storage', handleStorageChange);
-    return () => {
-      window.removeEventListener('storage', handleStorageChange);
-    };
-  }, [connect, disconnect]);
+    if (token && enabled) {
+      connect(); // no-op if already OPEN/CONNECTING
+    } else if (!token) {
+      disconnect();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [token]);
 
   return {
     ...state,
