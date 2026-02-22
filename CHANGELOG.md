@@ -7,6 +7,55 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.9.0] - 2026-02-22
+
+### Multi-Worker Production Support & Security Hardening
+
+Major release adding robust multi-worker support, security fixes, and frontend architecture improvements.
+
+### Added
+
+- **Primary worker guard** — File-lock-based primary election for multi-Uvicorn-worker deployments; background services only run on the primary worker
+- **Service heartbeat system** — Primary worker writes service status to DB every 15s; secondary workers read from DB for accurate dashboard data
+- **DB fallback for Network & Power widgets** — Secondary workers fall back to database when in-memory buffers are empty (fixes intermittent "Offline" on dashboard)
+- **Folder sizes in file manager** — Display cumulative folder sizes in the file listing
+- **Desktop sync folder tracking** — Track and display sync badges on synced folders
+- **Modular installation system** — Script-based installer with security fixes
+- **Detached update runner** — Updates run via `systemd-run` to survive service restarts
+- **NotificationContext** — WebSocket connection lives above route level, survives navigation
+- **Global 401 interceptor** — Axios + raw fetch handlers trigger centralized auth expiration
+
+### Fixed
+
+- **Privilege escalation via /register** — Hardcode `role="user"` in registration; remove `role` field from `RegisterRequest` schema
+- **User list access control** — Restrict `GET /api/users/` to admin-only (was any authenticated user)
+- **Sort field enumeration** — Whitelist sortable fields in user list endpoint
+- **HSTS over HTTP** — Only send `Strict-Transport-Security` header when request arrived over HTTPS
+- **Primary lock race condition** — Open lock file in append mode without unlinking (prevents dual-lock on separate inodes)
+- **Stale lock file** — Clean up via `ExecStartPre` / `start_prod.py` instead of in-process unlink
+- **Blob URL memory leak** — FileViewer uses ref for proper cleanup on unmount
+- **useAsyncData loading state** — Set `loading=true` on reload
+- **Mixed timezone datetimes** — Handle tz-aware/naive datetime comparison in device sorting
+- **Real disk space checks** — Use actual disk space in production instead of quota-only
+
+### Changed
+
+- **Streaming uploads** — Write chunks directly to disk (non-blocking I/O via `asyncio.to_thread`)
+- **Upload rate limits** — Increased to 50,000/min (effectively unlimited)
+- **Non-blocking upload metadata** — Nginx upload tuning for large files
+- **Stampede protection** — `calculate_used_bytes()` prevents concurrent filesystem scans
+- **Search debounce** — 300ms debounce on UserManagement search input
+- **AuthContext** — AbortController for `/me` fetch, cleanup on unmount
+- **useNotificationSocket** — Stabilized with refs, token from AuthContext (not localStorage)
+- **alert() → toast** — Replaced browser alerts with `react-hot-toast` in Settings, MobileDevices pages
+
+### Removed
+
+- **useMemoizedApi hook** — Deleted unused hook
+- **RegisterRequest.role field** — Removed to prevent client-side role assignment
+
+---
+
 ## [1.8.2] - 2026-02-20
 
 ### Desktop Pairing (Device Code Flow)
