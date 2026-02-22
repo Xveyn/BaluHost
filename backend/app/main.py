@@ -66,11 +66,71 @@ from app.services.update_service import register_update_service, finalize_pendin
 
 logger = logging.getLogger(__name__)
 
-# PRIMARY_WORKER guard: hardware-controlling tasks (fan, power, telemetry, mDNS, disk I/O)
-# must only run in one process to avoid conflicts. When running with >1 Uvicorn worker,
-# set BALUHOST_PRIMARY_WORKER=0 on secondary workers so they act as pure API handlers.
-# Default is "1" (primary), which is correct for the current single-worker deployment.
-IS_PRIMARY_WORKER = os.environ.get("BALUHOST_PRIMARY_WORKER", "1") == "1"
+# ---------------------------------------------------------------------------
+# PRIMARY_WORKER guard
+# ---------------------------------------------------------------------------
+# Hardware-controlling tasks (fan, power, telemetry, mDNS, disk I/O) must
+# only run in one process to avoid conflicts.
+#
+# Detection strategy (in order):
+# 1. If BALUHOST_PRIMARY_WORKER is explicitly set to "0", this worker is
+#    secondary (env-var override, useful for manual control).
+# 2. Otherwise, attempt to acquire an exclusive file lock on
+#    /tmp/baluhost-primary.lock.  The first worker to succeed becomes
+#    primary; the OS releases the lock automatically if the process dies,
+#    so another worker can take over.
+# 3. On Windows / dev-mode, the flock path is skipped and every process
+#    defaults to primary (single-worker is the norm there).
+# ---------------------------------------------------------------------------
+_primary_lock_fd = None  # kept open to hold the lock for the process lifetime
+
+
+def _try_become_primary() -> bool:
+    """Try to acquire the primary-worker file lock (non-blocking).
+
+    Returns True if this process is now the primary worker.
+    """
+    # Explicit opt-out via env var
+    env_val = os.environ.get("BALUHOST_PRIMARY_WORKER")
+    if env_val == "0":
+        return False
+
+    # On non-Linux (Windows dev-mode), skip file locking
+    try:
+        import fcntl
+    except ImportError:
+        return True
+
+    global _primary_lock_fd
+    lock_path = Path("/tmp/baluhost-primary.lock")
+
+    # Remove stale lock file from previous runs so we get a fresh inode.
+    # If an old worker process still holds flock on the old inode, the new
+    # open() creates a new inode and the new flock only races with current workers.
+    try:
+        lock_path.unlink(missing_ok=True)
+    except OSError:
+        pass
+
+    try:
+        fd = open(lock_path, "w")
+    except OSError as exc:
+        logger.error("Cannot open primary lock file %s: %s", lock_path, exc)
+        return False
+
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except (IOError, OSError):
+        fd.close()
+        return False
+
+    fd.write(str(os.getpid()))
+    fd.flush()
+    _primary_lock_fd = fd  # keep fd open — lock released on process exit
+    return True
+
+
+IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 
 # Network discovery service instance
 _discovery_service = None
@@ -337,9 +397,13 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     await jobs.start_health_monitor()
 
+    # Acquire primary-worker lock *after* fork (lifespan runs per-worker).
+    global IS_PRIMARY_WORKER
+    IS_PRIMARY_WORKER = _try_become_primary()
+    logger.info("Primary worker: %s (PID %d)", IS_PRIMARY_WORKER, os.getpid())
+
     # Hardware-controlling background tasks only run on the primary worker.
-    # Secondary workers (BALUHOST_PRIMARY_WORKER=0) skip these to avoid
-    # duplicate hardware writes and inconsistent in-memory state.
+    # Secondary workers skip these to avoid duplicate hardware writes.
     if IS_PRIMARY_WORKER:
         await telemetry.start_telemetry_monitor()
         await power_monitor.start_power_monitor(get_db)

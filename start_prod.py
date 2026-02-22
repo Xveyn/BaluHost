@@ -82,11 +82,11 @@ ProcessInfo = Tuple[str, subprocess.Popen]
 PROD_CONFIG = {
     "backend_port": 8000,
     "backend_host": "127.0.0.1",  # Bind to localhost, nginx handles external
-    # Workers: 1 is sufficient for home NAS (1-5 users). Upload throughput is
-    # disk-I/O-limited, not CPU-limited. For higher concurrency, set to 2 and
-    # use BALUHOST_PRIMARY_WORKER=0 on the secondary worker so hardware services
-    # (fan control, power management, telemetry, mDNS) only run once.
-    "workers": 1,
+    # 2 workers: primary detection via file lock (/tmp/baluhost-primary.lock).
+    # Hardware services (fan control, power management, telemetry, mDNS) only
+    # run on the primary worker. The second worker handles API requests during
+    # concurrent uploads.
+    "workers": 2,
     "frontend_port": 5173,  # Only used if running frontend in dev mode
 }
 
@@ -318,11 +318,18 @@ def main() -> int:
     kill_patterns = [
         "uvicorn.*app.main:app",
         "gunicorn.*app.main:app",
+        "from multiprocessing",      # spawned worker processes
         "node.*vite",
         "npm run dev",
         "npm run preview",
     ]
     kill_existing_processes(kill_patterns, grace_seconds=3)
+
+    # Clean up stale lock file
+    lock_file = Path("/tmp/baluhost-primary.lock")
+    if lock_file.exists():
+        lock_file.unlink()
+        print("[cleanup] Removed stale primary worker lock file")
 
     try:
         # Set production environment
