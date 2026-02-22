@@ -48,6 +48,7 @@ log_info "npm dependencies installed."
 log_step "Building Production Bundle"
 
 log_info "Running npm run build..."
+export VITE_BUILD_TYPE=release
 npm run build 2>&1 | tail -10
 log_info "Frontend build completed."
 

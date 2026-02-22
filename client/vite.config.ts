@@ -27,11 +27,14 @@ const gitBranch = getGitBranch();
 const gitCommit = getGitCommit();
 const isDevelopmentBranch = gitBranch === 'development' || gitBranch === 'develop';
 
+// Allow installer to override build type via env var (VITE_BUILD_TYPE=release)
+const buildType = process.env.VITE_BUILD_TYPE || (isDevelopmentBranch ? 'dev' : 'release');
+
 // https://vite.dev/config/
 export default defineConfig({
   plugins: [react()],
   define: {
-    '__BUILD_TYPE__': JSON.stringify(isDevelopmentBranch ? 'dev' : 'release'),
+    '__BUILD_TYPE__': JSON.stringify(buildType),
     '__GIT_BRANCH__': JSON.stringify(gitBranch),
     '__GIT_COMMIT__': JSON.stringify(gitCommit),
   },
