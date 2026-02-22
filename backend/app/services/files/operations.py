@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import mimetypes
+import os
 import threading
 import time
 from datetime import datetime, timezone
@@ -197,22 +198,34 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
 
 
 def _calculate_used_bytes_uncached() -> int:
-    """Internal: Actually scan the filesystem. Called by calculate_used_bytes()."""
-    total = 0
+    """Internal: Actually scan the filesystem. Called by calculate_used_bytes().
+
+    Uses recursive os.scandir() for efficiency — DirEntry.stat() reuses
+    cached inode data from the directory listing (no extra syscall), and
+    system directories are skipped at the root level without descending.
+    """
     if not ROOT_DIR.exists():
+        return 0
+
+    def _walk(path: str, skip_system: bool) -> int:
+        total = 0
+        try:
+            with os.scandir(path) as it:
+                for entry in it:
+                    try:
+                        if entry.is_dir(follow_symlinks=False):
+                            if skip_system and is_system_directory(entry.name):
+                                continue
+                            total += _walk(entry.path, skip_system=False)
+                        elif entry.is_file(follow_symlinks=False):
+                            total += entry.stat(follow_symlinks=False).st_size
+                    except (PermissionError, OSError):
+                        continue
+        except (PermissionError, OSError):
+            pass
         return total
 
-    excluded_dirs: set[Path] = set()
-    for child in ROOT_DIR.iterdir():
-        if child.is_dir() and is_system_directory(child.name):
-            excluded_dirs.add(child)
-
-    for entry in ROOT_DIR.rglob("*"):
-        if any(entry == d or d in entry.parents for d in excluded_dirs):
-            continue
-        if entry.is_file():
-            total += entry.stat().st_size
-    return total
+    return _walk(str(ROOT_DIR), skip_system=True)
 
 
 def calculate_used_bytes() -> int:

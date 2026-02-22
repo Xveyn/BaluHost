@@ -38,6 +38,8 @@ def storage_root(tmp_path, monkeypatch):
     storage = tmp_path / "storage"
     storage.mkdir()
     monkeypatch.setattr(file_ops, "ROOT_DIR", storage)
+    # Clear used-bytes cache so each test gets a fresh filesystem scan
+    file_ops._used_bytes_cache.clear()
     return storage
 
 

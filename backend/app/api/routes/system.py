@@ -59,7 +59,7 @@ async def get_system_mode(request: Request, response: Response) -> dict[str, boo
 
 @router.get("/info", response_model=SystemInfo)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_system_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
+def get_system_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SystemInfo:
     return system_service.get_system_info()
 
 
@@ -82,13 +82,13 @@ def get_system_info_local(request: Request, response: Response) -> SystemInfo:
 
 @router.get("/storage", response_model=StorageInfo)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
+def get_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
     return system_service.get_storage_info()
 
 
 @router.get("/storage/aggregated", response_model=StorageInfo)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_aggregated_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
+def get_aggregated_storage_info(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageInfo:
     """Gibt aggregierte Speicherinformationen über alle Festplatten zurück.
     
     Berücksichtigt SMART-Daten aller Festplatten und RAID-Arrays.
@@ -99,7 +99,7 @@ async def get_aggregated_storage_info(request: Request, response: Response, _: U
 
 @router.get("/quota", response_model=QuotaStatus)
 @user_limiter.limit(get_limit("system_monitor"))
-async def get_quota(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> QuotaStatus:
+def get_quota(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> QuotaStatus:
     return system_service.get_quota_status()
 
 

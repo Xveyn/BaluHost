@@ -19,8 +19,9 @@ interface UserProfile {
 
 interface StorageQuota {
   used_bytes: number;
-  quota_bytes: number | null;
-  percentage: number;
+  limit_bytes: number | null;
+  available_bytes: number | null;
+  percent_used: number | null;
 }
 
 
@@ -862,36 +863,43 @@ export default function SettingsPage() {
                       <span className="text-slate-100-secondary">{t('storage.used')}</span>
                       <span className="font-semibold">
                         {formatBytes(storageQuota.used_bytes)}
-                        {storageQuota.quota_bytes && ` / ${formatBytes(storageQuota.quota_bytes)}`}
+                        {storageQuota.limit_bytes && ` / ${formatBytes(storageQuota.limit_bytes)}`}
                       </span>
                     </div>
-                    {storageQuota.quota_bytes && (
+                    {storageQuota.limit_bytes && storageQuota.percent_used != null && (
                       <div className="w-full h-4 rounded-full overflow-hidden bg-slate-950-tertiary">
                         <div
                           className="h-full rounded-full transition-all"
                           style={{
-                            width: `${Math.min(storageQuota.percentage, 100)}%`,
-                            backgroundColor: storageQuota.percentage > 90 ? 'var(--error)' :
-                                           storageQuota.percentage > 75 ? 'var(--warning)' :
+                            width: `${Math.min(storageQuota.percent_used, 100)}%`,
+                            backgroundColor: storageQuota.percent_used > 90 ? 'var(--error)' :
+                                           storageQuota.percent_used > 75 ? 'var(--warning)' :
                                            'var(--success)'
                           }}
                         />
                       </div>
                     )}
                   </div>
-                  {storageQuota.quota_bytes && (
+                  {storageQuota.limit_bytes && (
                     <p className="text-sm text-slate-100-tertiary">
-                      {formatBytes(storageQuota.quota_bytes - storageQuota.used_bytes)} {t('storage.remaining')}
+                      {formatBytes(storageQuota.available_bytes ?? 0)} {t('storage.remaining')}
                     </p>
                   )}
-                  {!storageQuota.quota_bytes && (
+                  {!storageQuota.limit_bytes && (
                     <p className="text-sm text-slate-100-tertiary">
                       {t('storage.noLimit')}
                     </p>
                   )}
                 </>
               ) : (
-                <p className="text-slate-100-secondary">{t('storage.loading')}</p>
+                <div className="space-y-3 animate-pulse">
+                  <div className="flex justify-between">
+                    <div className="h-4 w-20 rounded bg-slate-700/50" />
+                    <div className="h-4 w-32 rounded bg-slate-700/50" />
+                  </div>
+                  <div className="w-full h-4 rounded-full bg-slate-700/50" />
+                  <div className="h-3 w-28 rounded bg-slate-700/50" />
+                </div>
               )}
             </div>
 
