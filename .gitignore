@@ -39,6 +39,9 @@ Thumbs.db
 .idea/
 *.code-workspace
 
+# Claude Code local settings (user-specific permissions)
+.claude/settings.local.json
+
 # Testing
 coverage/
 htmlcov/
