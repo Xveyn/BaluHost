@@ -63,7 +63,7 @@ RATE_LIMITS = {
     "auth_refresh": "10/minute",  # ✅ Security Fix #5
     
     # File operations - moderate limits
-    "file_upload": "120/minute",
+    "file_upload": "50000/minute",
     "file_download": "100/minute",
     "file_list": "60/minute",
     "file_delete": "30/minute",
@@ -98,7 +98,7 @@ RATE_LIMITS = {
     "sync_operations": "30/minute",
 
     # Chunked upload operations
-    "file_chunked": "120/minute",
+    "file_chunked": "50000/minute",
 
     # Benchmark operations - very strict (resource intensive)
     "admin_benchmark": "3/minute",
