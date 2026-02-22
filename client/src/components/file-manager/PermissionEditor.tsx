@@ -8,7 +8,7 @@ import type { FileItem, PermissionRule } from './types';
 interface PermissionEditorProps {
   file: FileItem;
   rules: PermissionRule[];
-  allUsers: Array<{ id: string; username: string }>;
+  allUsers: Array<{ id: number; username: string }>;
   onRulesChange: (rules: PermissionRule[]) => void;
   onSave: () => void;
   onClose: () => void;
@@ -44,7 +44,7 @@ export function PermissionEditor({ rules, allUsers, onRulesChange, onSave, onClo
               >
                 <option value="">Nutzer wählen...</option>
                 {allUsers.map(u => (
-                  <option key={u.id} value={u.id}>{u.username}</option>
+                  <option key={u.id} value={String(u.id)}>{u.username}</option>
                 ))}
               </select>
               <div className="flex flex-wrap items-center gap-3 sm:gap-4">

@@ -2,47 +2,7 @@
  * API client for file sharing functionality
  */
 
-import { apiClient, memoizedApiRequest } from '../lib/api';
-
-export interface ShareLink {
-  id: number;
-  token: string;
-  file_id: number;
-  owner_id: number;
-  has_password: boolean;
-  allow_download: boolean;
-  allow_preview: boolean;
-  max_downloads: number | null;
-  download_count: number;
-  expires_at: string | null;
-  description: string | null;
-  created_at: string;
-  last_accessed_at: string | null;
-  is_expired: boolean;
-  is_accessible: boolean;
-  file_name: string | null;
-  file_path: string | null;
-  file_size: number | null;
-}
-
-export interface CreateShareLinkRequest {
-  file_id: number;
-  password?: string;
-  allow_download?: boolean;
-  allow_preview?: boolean;
-  max_downloads?: number | null;
-  expires_at?: string | null;
-  description?: string;
-}
-
-export interface UpdateShareLinkRequest {
-  password?: string;
-  allow_download?: boolean;
-  allow_preview?: boolean;
-  max_downloads?: number | null;
-  expires_at?: string | null;
-  description?: string;
-}
+import { apiClient, apiCache, memoizedApiRequest } from '../lib/api';
 
 export interface FileShare {
   id: number;
@@ -63,6 +23,7 @@ export interface FileShare {
   file_name: string | null;
   file_path: string | null;
   file_size: number | null;
+  is_directory: boolean;
 }
 
 export interface CreateFileShareRequest {
@@ -102,111 +63,35 @@ export interface SharedWithMe {
 }
 
 export interface ShareStatistics {
-  total_share_links: number;
-  active_share_links: number;
-  expired_share_links: number;
-  total_downloads: number;
   total_file_shares: number;
   active_file_shares: number;
   files_shared_with_me: number;
 }
 
-export interface ShareLinkInfo {
-  has_password: boolean;
-  is_accessible: boolean;
-  is_expired: boolean;
-  file_name: string | null;
-  file_size: number | null;
-  is_directory: boolean;
-  description: string | null;
-  expires_at: string | null;
-  allow_preview: boolean;
-}
-
-export interface ShareLinkAccessRequest {
-  password?: string;
-}
-
-export interface ShareLinkAccessResponse {
-  file_id: number;
-  file_name: string | null;
-  file_path: string | null;
-  file_size: number | null;
-  is_directory: boolean;
-  allow_download: boolean;
-  allow_preview: boolean;
-  description: string | null;
-}
-
-// ===========================
-// Share Links API
-// ===========================
-
-export const createShareLink = async (data: CreateShareLinkRequest): Promise<ShareLink> => {
-  const response = await apiClient.post('/shares/links', data);
-  return response.data;
-};
-
-export const listShareLinks = async (includeExpired = false): Promise<ShareLink[]> => {
-  // Memoized: Share-Links werden für 60s gecached
-  return memoizedApiRequest<ShareLink[]>('/shares/links', { include_expired: includeExpired });
-};
-
-export const getShareLink = async (linkId: number): Promise<ShareLink> => {
-  const response = await apiClient.get(`/shares/links/${linkId}`);
-  return response.data;
-};
-
-export const updateShareLink = async (
-  linkId: number,
-  data: UpdateShareLinkRequest
-): Promise<ShareLink> => {
-  const response = await apiClient.patch(`/shares/links/${linkId}`, data);
-  return response.data;
-};
-
-export const deleteShareLink = async (linkId: number): Promise<void> => {
-  await apiClient.delete(`/shares/links/${linkId}`);
-};
-
-// ===========================
-// Public Share Link Access
-// ===========================
-
-export const getShareLinkInfo = async (token: string): Promise<ShareLinkInfo> => {
-  const response = await apiClient.get(`/shares/public/${token}/info`);
-  return response.data;
-};
-
-export const accessShareLink = async (
-  token: string,
-  data: ShareLinkAccessRequest
-): Promise<ShareLinkAccessResponse> => {
-  const response = await apiClient.post(`/shares/public/${token}/access`, data);
-  return response.data;
-};
-
 // ===========================
 // File Shares API
 // ===========================
 
+const SHARES_CACHE_KEY = '/api/shares/user-shares' + JSON.stringify({});
+
 export const createFileShare = async (data: CreateFileShareRequest): Promise<FileShare> => {
-  const response = await apiClient.post('/shares/user-shares', data);
+  const response = await apiClient.post('/api/shares/user-shares', data);
+  apiCache.delete(SHARES_CACHE_KEY);
   return response.data;
 };
 
 export const listFileShares = async (): Promise<FileShare[]> => {
   // Memoized: FileShares werden für 60s gecached
-  return memoizedApiRequest<FileShare[]>('/shares/user-shares');
+  return memoizedApiRequest<FileShare[]>('/api/shares/user-shares');
 };
 
 export const listFileSharesForFile = async (fileId: number): Promise<FileShare[]> => {
-  const response = await apiClient.get(`/shares/user-shares/file/${fileId}`);
+  const response = await apiClient.get(`/api/shares/user-shares/file/${fileId}`);
   return response.data;
 };
 
 export const listFilesSharedWithMe = async (): Promise<SharedWithMe[]> => {
-  const response = await apiClient.get('/shares/shared-with-me');
+  const response = await apiClient.get('/api/shares/shared-with-me');
   return response.data;
 };
 
@@ -214,15 +99,17 @@ export const updateFileShare = async (
   shareId: number,
   data: UpdateFileShareRequest
 ): Promise<FileShare> => {
-  const response = await apiClient.patch(`/shares/user-shares/${shareId}`, data);
+  const response = await apiClient.patch(`/api/shares/user-shares/${shareId}`, data);
+  apiCache.delete(SHARES_CACHE_KEY);
   return response.data;
 };
 
 export const deleteFileShare = async (shareId: number): Promise<void> => {
-  await apiClient.delete(`/shares/user-shares/${shareId}`);
+  await apiClient.delete(`/api/shares/user-shares/${shareId}`);
+  apiCache.delete(SHARES_CACHE_KEY);
 };
 
 export const getShareStatistics = async (): Promise<ShareStatistics> => {
-  const response = await apiClient.get('/shares/statistics');
+  const response = await apiClient.get('/api/shares/statistics');
   return response.data;
 };

@@ -11,6 +11,7 @@ import {
   Users,
   UserCheck,
   Monitor,
+  Share2,
 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatters';
 import type { FileItem } from './types';
@@ -28,6 +29,7 @@ export interface FileListViewProps {
   onRename: (file: FileItem) => void;
   onDelete: (file: FileItem) => void;
   onVersionHistory: (file: FileItem) => void;
+  onShare: (file: FileItem) => void;
   onEditPermissions: (file: FileItem) => void;
   onTransferOwnership: (file: FileItem) => void;
   onDragEnter: (e: React.DragEvent) => void;
@@ -81,6 +83,7 @@ export function FileListView({
   onRename,
   onDelete,
   onVersionHistory,
+  onShare,
   onEditPermissions,
   onTransferOwnership,
   onDragEnter,
@@ -196,21 +199,30 @@ export function FileListView({
                           >
                             <Download className="w-4 h-4" />
                           </button>
-                          {file.file_id && (
-                            <button
-                              onClick={() => onVersionHistory(file)}
-                              className="p-2 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-200 transition hover:border-violet-500/50 hover:bg-violet-500/20 relative"
-                              title="Versions"
-                            >
-                              <Clock className="w-4 h-4" />
-                              {versionCounts[file.file_id] > 0 && (
-                                <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-violet-500/30 px-1 text-[9px] font-bold text-violet-200">
-                                  {versionCounts[file.file_id]}
-                                </span>
-                              )}
-                            </button>
-                          )}
                         </>
+                      )}
+                      {file.file_id && isCurrentUserOwnerOrAdmin(file.ownerId) && (
+                        <button
+                          onClick={() => onShare(file)}
+                          className="p-2 rounded-lg border border-teal-500/30 bg-teal-500/10 text-teal-200 transition hover:border-teal-500/50 hover:bg-teal-500/20"
+                          title="Share"
+                        >
+                          <Share2 className="w-4 h-4" />
+                        </button>
+                      )}
+                      {file.type === 'file' && file.file_id && (
+                        <button
+                          onClick={() => onVersionHistory(file)}
+                          className="p-2 rounded-lg border border-violet-500/30 bg-violet-500/10 text-violet-200 transition hover:border-violet-500/50 hover:bg-violet-500/20 relative"
+                          title="Versions"
+                        >
+                          <Clock className="w-4 h-4" />
+                          {versionCounts[file.file_id] > 0 && (
+                            <span className="absolute -top-1 -right-1 flex h-4 min-w-[16px] items-center justify-center rounded-full bg-violet-500/30 px-1 text-[9px] font-bold text-violet-200">
+                              {versionCounts[file.file_id]}
+                            </span>
+                          )}
+                        </button>
                       )}
                       <button
                         onClick={() => onRename(file)}
@@ -339,6 +351,15 @@ export function FileListView({
                       Download
                     </button>
                   </>
+                )}
+                {file.file_id && isCurrentUserOwnerOrAdmin(file.ownerId) && (
+                  <button
+                    onClick={() => onShare(file)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-teal-500/30 bg-teal-500/10 px-3 py-2 text-xs font-medium text-teal-200 transition hover:border-teal-500/50 hover:bg-teal-500/20 touch-manipulation active:scale-95"
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    Share
+                  </button>
                 )}
                 {file.type === 'file' && file.file_id && (
                   <button

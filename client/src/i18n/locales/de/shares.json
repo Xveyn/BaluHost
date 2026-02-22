@@ -1,25 +1,20 @@
 {
   "title": "Dateifreigaben",
-  "description": "Öffentliche Links und Benutzerfreigaben verwalten",
+  "description": "Dateifreigaben zwischen Benutzern verwalten",
   "tabs": {
-    "publicLinks": "Öffentliche Links",
-    "links": "Links",
-    "userShares": "Benutzerfreigaben",
+    "userShares": "Meine Freigaben",
     "shares": "Freigaben",
     "sharedWithMe": "Mit mir geteilt",
     "received": "Empfangen"
   },
   "stats": {
-    "activeLinks": "Aktive Links",
-    "downloads": "Downloads",
-    "allTime": "insgesamt",
-    "userShares": "Benutzerfreigaben",
+    "userShares": "Meine Freigaben",
     "sharedWithMe": "Mit mir geteilt",
     "filesAccessible": "Dateien zugänglich",
     "ofTotal": "von {{total}} gesamt"
   },
   "search": {
-    "placeholder": "Nach Dateiname suchen...",
+    "placeholder": "Nach Name suchen...",
     "filters": "Filter",
     "status": "Status",
     "all": "Alle",
@@ -27,14 +22,8 @@
     "expired": "Abgelaufen"
   },
   "buttons": {
-    "createLink": "Link erstellen",
-    "create": "Erstellen",
     "shareWithUser": "Mit Benutzer teilen",
     "share": "Teilen",
-    "createFirstLink": "Ersten Link erstellen",
-    "copyLink": "Link kopieren",
-    "copied": "Kopiert!",
-    "qrCode": "QR-Code",
     "edit": "Bearbeiten",
     "delete": "Löschen",
     "revoke": "Widerrufen",
@@ -44,13 +33,11 @@
     "creating": "Erstellen...",
     "sharing": "Teilen...",
     "close": "Schließen",
-    "changePassword": "Passwort ändern",
     "up": "Nach oben"
   },
   "table": {
-    "file": "Datei",
+    "file": "Name",
     "status": "Status",
-    "downloads": "Downloads",
     "expires": "Läuft ab",
     "created": "Erstellt",
     "actions": "Aktionen",
@@ -63,9 +50,6 @@
   "status": {
     "active": "Aktiv",
     "expired": "Abgelaufen",
-    "limited": "Eingeschränkt",
-    "protected": "Geschützt",
-    "passwordProtected": "Passwortgeschützt",
     "done": "Fertig",
     "failed": "Fehlgeschlagen",
     "uploading": "Wird hochgeladen...",
@@ -81,39 +65,28 @@
     "canDelete": "Löschen erlaubt",
     "canShare": "Weiterteilen erlaubt",
     "canReadDesc": "anzeigen und herunterladen",
-    "canWriteDesc": "Datei bearbeiten",
-    "canShareDesc": "mit anderen teilen",
-    "allowDownload": "Download erlauben",
-    "allowPreview": "Vorschau erlauben",
-    "allowDownloads": "Downloads erlauben",
-    "allowPreviews": "Vorschau erlauben"
+    "canWriteDesc": "Inhalte bearbeiten",
+    "canShareDesc": "mit anderen teilen"
   },
   "empty": {
-    "noLinks": "Noch keine Links erstellt",
-    "noLinksDesc": "Erstellen Sie Ihren ersten öffentlichen Link",
-    "noMatchingLinks": "Keine passenden Links gefunden",
     "noShares": "Noch keine Freigaben",
+    "noSharesDesc": "Teilen Sie Dateien und Ordner mit anderen Benutzern",
     "noMatchingShares": "Keine passenden Freigaben gefunden",
-    "noFilesShared": "Keine Dateien mit Ihnen geteilt",
+    "noFilesShared": "Nichts mit Ihnen geteilt",
+    "noFilesSharedDesc": "Andere Benutzer können Dateien und Ordner mit Ihnen teilen",
     "noMatchingFilesShared": "Keine passenden geteilten Dateien gefunden",
     "tryAdjusting": "Versuchen Sie, Ihre Suche oder Filter anzupassen"
   },
   "loading": "Freigaben werden geladen...",
   "loadingFiles": "Dateien werden geladen...",
   "confirm": {
-    "deleteLink": "Sind Sie sicher, dass Sie diesen Link löschen möchten?",
     "revokeShare": "Sind Sie sicher, dass Sie diese Freigabe widerrufen möchten?"
   },
   "toast": {
-    "deleteFailed": "Löschen des Links fehlgeschlagen",
     "revokeFailed": "Widerrufen der Freigabe fehlgeschlagen",
-    "updateFailed": "Aktualisieren des Links fehlgeschlagen",
-    "createLinkFailed": "Erstellen des Links fehlgeschlagen",
     "createShareFailed": "Erstellen der Freigabe fehlgeschlagen"
   },
   "modal": {
-    "editShareLink": "Link bearbeiten",
-    "createShareLink": "Link erstellen",
     "shareWithUser": "Mit Benutzer teilen",
     "editFileShare": "Freigabe bearbeiten"
   },
@@ -121,26 +94,16 @@
     "file": "Datei",
     "selectFile": "Datei auswählen...",
     "selectFileToShare": "Datei zum Teilen auswählen",
+    "selectItemToShare": "Datei oder Ordner zum Teilen auswählen",
     "selectFileRequired": "Bitte wählen Sie eine Datei zum Teilen aus.",
+    "selectItemRequired": "Bitte wählen Sie eine Datei oder einen Ordner zum Teilen aus.",
+    "selectFolder": "Ordner auswählen",
+    "selected": "Ausgewählt",
+    "folder": "Ordner",
     "selectUser": "Benutzer auswählen...",
-    "password": "Passwort",
-    "passwordProtection": "Passwortschutz",
-    "passwordProtectionOptional": "Passwortschutz (optional)",
-    "passwordPlaceholder": "Leer lassen für kein Passwort",
-    "passwordRemoveHint": "Leer lassen um Passwortschutz zu entfernen",
-    "currentlyProtected": "Derzeit passwortgeschützt",
-    "maxDownloads": "Max. Downloads",
-    "maxDownloadsOptional": "Maximale Downloads (optional)",
-    "maxDownloadsHint": "leer lassen für unbegrenzt",
-    "currentDownloads": "Aktuelle Downloads: {{count}}",
-    "unlimited": "Unbegrenzt",
     "expirationDate": "Ablaufdatum",
     "expirationDateOptional": "Ablaufdatum (optional)",
     "expirationHint": "leer lassen für kein Ablaufdatum",
-    "description": "Beschreibung",
-    "descriptionOptional": "Beschreibung (optional)",
-    "descriptionPlaceholder": "Beschreibung hinzufügen...",
-    "descriptionPlaceholderLink": "Beschreibung für diesen Link hinzufügen",
     "sharedWith": "Geteilt mit"
   },
   "upload": {

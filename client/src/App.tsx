@@ -38,7 +38,6 @@ const SchedulerDashboard = lazyWithRetry(() => import('./pages/SchedulerDashboar
 const ApiCenterPage = lazyWithRetry(() => import('./pages/ApiCenterPage'));
 const SharesPage = lazyWithRetry(() => import('./pages/SharesPage'));
 const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'));
-const PublicSharePage = lazyWithRetry(() => import('./pages/PublicSharePage'));
 const AdminDatabase = lazyWithRetry(() => import('./pages/AdminDatabase'));
 const DevicesPage = lazyWithRetry(() => import('./pages/DevicesPage'));
 const SystemControlPage = lazyWithRetry(() => import('./pages/SystemControlPage'));
@@ -376,10 +375,6 @@ function AppRoutes() {
               <Navigate to="/login" />
             )
           }
-        />
-        <Route
-          path="/share/:token"
-          element={<PublicSharePage />}
         />
         <Route
           path="/plugins"

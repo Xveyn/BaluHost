@@ -23,6 +23,7 @@ import { NewFolderDialog } from '../components/file-manager/NewFolderDialog';
 import { DeleteDialog } from '../components/file-manager/DeleteDialog';
 import { RenameDialog } from '../components/file-manager/RenameDialog';
 import { useUpload } from '../contexts/UploadContext';
+import CreateFileShareModal from '../components/CreateFileShareModal';
 import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
 
 export default function FileManager() {
@@ -30,13 +31,13 @@ export default function FileManager() {
   const { t } = useTranslation(['fileManager', 'common']);
 
   // User list
-  const [allUsers, setAllUsers] = useState<Array<{ id: string; username: string }>>([]);
+  const [allUsers, setAllUsers] = useState<Array<{ id: number; username: string }>>([]);
 
   useEffect(() => {
     getUsers()
       .then(data => {
         if (data && Array.isArray(data.users)) {
-          setAllUsers(data.users.map((u) => ({ id: String(u.id), username: u.username })));
+          setAllUsers(data.users.map((u) => ({ id: u.id, username: u.username })));
         }
       })
       .catch(() => {});
@@ -50,6 +51,9 @@ export default function FileManager() {
   // Ownership transfer modal state
   const [showOwnershipModal, setShowOwnershipModal] = useState(false);
   const [fileToTransfer, setFileToTransfer] = useState<FileItem | null>(null);
+
+  // Share modal state
+  const [sharingFile, setSharingFile] = useState<FileItem | null>(null);
 
   function isCurrentUserOwnerOrAdmin(ownerId: number | undefined) {
     if (!user) return false;
@@ -556,6 +560,10 @@ export default function FileManager() {
     setShowOwnershipModal(true);
   };
 
+  const handleShareFile = (file: FileItem) => {
+    setSharingFile(file);
+  };
+
   return (
     <div className="space-y-6 min-w-0">
       {/* Header */}
@@ -680,6 +688,7 @@ export default function FileManager() {
           onRename={startRename}
           onDelete={confirmDelete}
           onVersionHistory={handleVersionHistory}
+          onShare={handleShareFile}
           onEditPermissions={handleEditPermissionsClick}
           onTransferOwnership={handleTransferOwnershipClick}
           onDragEnter={handleDrag}
@@ -773,6 +782,19 @@ export default function FileManager() {
             setShowOwnershipModal(false);
             setFileToTransfer(null);
             loadFiles(currentPath, false);
+          }}
+        />
+      )}
+
+      {/* Share File Modal */}
+      {sharingFile && sharingFile.file_id && (
+        <CreateFileShareModal
+          fileId={sharingFile.file_id}
+          users={allUsers}
+          onClose={() => setSharingFile(null)}
+          onSuccess={() => {
+            setSharingFile(null);
+            toast.success('File shared successfully');
           }}
         />
       )}

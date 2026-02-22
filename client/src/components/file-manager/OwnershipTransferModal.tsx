@@ -10,7 +10,7 @@ import type { FileItem } from './types';
 
 interface OwnershipTransferModalProps {
   file: FileItem;
-  allUsers: Array<{ id: string; username: string }>;
+  allUsers: Array<{ id: number; username: string }>;
   currentUserId: number;
   onClose: () => void;
   onSuccess: (response: OwnershipTransferResponse) => void;
@@ -34,7 +34,7 @@ export function OwnershipTransferModal({
 
   // Filter out current owner from user list
   const availableUsers = allUsers.filter(
-    u => Number(u.id) !== (file.ownerId ?? currentUserId)
+    u => u.id !== (file.ownerId ?? currentUserId)
   );
 
   const handleTransfer = async () => {
@@ -75,7 +75,7 @@ export function OwnershipTransferModal({
     }
   };
 
-  const selectedUser = availableUsers.find(u => u.id === selectedUserId);
+  const selectedUser = availableUsers.find(u => String(u.id) === selectedUserId);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 backdrop-blur-xl p-4">
@@ -119,7 +119,7 @@ export function OwnershipTransferModal({
             >
               <option value="">{t('fileManager:ownership.selectUser')}</option>
               {availableUsers.map(u => (
-                <option key={u.id} value={u.id}>
+                <option key={u.id} value={String(u.id)}>
                   {u.username}
                 </option>
               ))}

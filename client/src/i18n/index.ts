@@ -31,8 +31,6 @@ import updatesDe from './locales/de/updates.json';
 import updatesEn from './locales/en/updates.json';
 import remoteServersDe from './locales/de/remoteServers.json';
 import remoteServersEn from './locales/en/remoteServers.json';
-import publicShareDe from './locales/de/publicShare.json';
-import publicShareEn from './locales/en/publicShare.json';
 import apiDocsDe from './locales/de/apiDocs.json';
 import apiDocsEn from './locales/en/apiDocs.json';
 
@@ -52,7 +50,6 @@ const resources = {
     notifications: notificationsDe,
     updates: updatesDe,
     remoteServers: remoteServersDe,
-    publicShare: publicShareDe,
     apiDocs: apiDocsDe,
   },
   en: {
@@ -70,7 +67,6 @@ const resources = {
     notifications: notificationsEn,
     updates: updatesEn,
     remoteServers: remoteServersEn,
-    publicShare: publicShareEn,
     apiDocs: apiDocsEn,
   },
 };
@@ -82,7 +78,7 @@ i18n
     resources,
     fallbackLng: 'de',
     defaultNS: 'common',
-    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'publicShare', 'apiDocs'],
+    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs'],
     
     detection: {
       // Order of language detection methods
