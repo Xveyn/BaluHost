@@ -434,30 +434,27 @@ async def save_uploads(
 
             if can_stream[idx]:
                 # Stream file to disk — only one STREAM_CHUNK in memory at a time.
-                # Read chunks from the upload, then write + hash in a thread.
+                # Read a chunk from the network, write+hash it in a thread,
+                # then read the next chunk. This keeps RAM usage constant
+                # regardless of file size (~8 MB max vs. entire file buffered).
                 written = 0
                 hasher = hashlib.sha256()
 
-                # Read all chunks from the async upload into memory first,
-                # then write + hash in a single thread call.
-                chunks: list[bytes] = []
-                while True:
-                    chunk = await upload.read(STREAM_CHUNK)
-                    if not chunk:
-                        break
-                    chunks.append(chunk)
+                def _write_and_hash_chunk(f, data: bytes) -> None:
+                    f.write(data)
+                    hasher.update(data)
+
+                f = open(destination, 'wb')
+                try:
+                    while True:
+                        chunk = await upload.read(STREAM_CHUNK)
+                        if not chunk:
+                            break
+                        await asyncio.to_thread(_write_and_hash_chunk, f, chunk)
+                        written += len(chunk)
+                finally:
+                    await asyncio.to_thread(f.close)
                 await upload.close()
-
-                def _write_and_hash_stream() -> int:
-                    total = 0
-                    with open(destination, 'wb') as f:
-                        for c in chunks:
-                            f.write(c)
-                            hasher.update(c)
-                            total += len(c)
-                    return total
-
-                written = await asyncio.to_thread(_write_and_hash_stream)
                 file_checksum = hasher.hexdigest()
             else:
                 # Fallback: read entire content at once (small files or test mocks).
