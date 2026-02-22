@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from contextlib import asynccontextmanager
 from typing import Any
 from pathlib import Path
@@ -64,6 +65,12 @@ from app.plugins.manager import PluginManager
 from app.services.update_service import register_update_service, finalize_pending_updates
 
 logger = logging.getLogger(__name__)
+
+# PRIMARY_WORKER guard: hardware-controlling tasks (fan, power, telemetry, mDNS, disk I/O)
+# must only run in one process to avoid conflicts. When running with >1 Uvicorn worker,
+# set BALUHOST_PRIMARY_WORKER=0 on secondary workers so they act as pure API handlers.
+# Default is "1" (primary), which is correct for the current single-worker deployment.
+IS_PRIMARY_WORKER = os.environ.get("BALUHOST_PRIMARY_WORKER", "1") == "1"
 
 # Network discovery service instance
 _discovery_service = None
@@ -329,53 +336,60 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     logger.info("User home directories ensured")
 
     await jobs.start_health_monitor()
-    await telemetry.start_telemetry_monitor()
-    await power_monitor.start_power_monitor(get_db)
-    disk_monitor.start_monitoring()
-    await start_monitoring(get_db)
-    logger.info("System monitoring started")
 
-    # Start CPU power management (if enabled)
-    if settings.power_management_enabled:
-        try:
-            await power_manager.start_power_manager()
-            await power_manager.check_and_notify_permissions()
-            logger.info("CPU power management started")
-        except Exception as e:
-            logger.warning(f"CPU power management could not start: {e}")
+    # Hardware-controlling background tasks only run on the primary worker.
+    # Secondary workers (BALUHOST_PRIMARY_WORKER=0) skip these to avoid
+    # duplicate hardware writes and inconsistent in-memory state.
+    if IS_PRIMARY_WORKER:
+        await telemetry.start_telemetry_monitor()
+        await power_monitor.start_power_monitor(get_db)
+        disk_monitor.start_monitoring()
+        await start_monitoring(get_db)
+        logger.info("System monitoring started (primary worker)")
 
-    # Start fan control (if enabled)
-    if settings.fan_control_enabled:
-        try:
-            await fan_control.start_fan_control()
-            logger.info("Fan control started")
-        except Exception as e:
-            logger.warning(f"Fan control could not start: {e}")
+        # Start CPU power management (if enabled)
+        if settings.power_management_enabled:
+            try:
+                await power_manager.start_power_manager()
+                await power_manager.check_and_notify_permissions()
+                logger.info("CPU power management started")
+            except Exception as e:
+                logger.warning(f"CPU power management could not start: {e}")
 
-    # Start sleep mode (if enabled)
-    if settings.sleep_mode_enabled:
+        # Start fan control (if enabled)
+        if settings.fan_control_enabled:
+            try:
+                await fan_control.start_fan_control()
+                logger.info("Fan control started")
+            except Exception as e:
+                logger.warning(f"Fan control could not start: {e}")
+
+        # Start sleep mode (if enabled)
+        if settings.sleep_mode_enabled:
+            try:
+                await sleep_mode.start_sleep_manager()
+                logger.info("Sleep mode service started")
+            except Exception as e:
+                logger.warning(f"Sleep mode service could not start: {e}")
+
+        # Start network discovery (mDNS/Bonjour)
         try:
-            await sleep_mode.start_sleep_manager()
-            logger.info("Sleep mode service started")
+            port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
+            _discovery_service = NetworkDiscoveryService(
+                port=port,
+                webdav_port=settings.webdav_port,
+                hostname=settings.mdns_hostname,
+                webdav_ssl_enabled=settings.webdav_ssl_enabled,
+            )
+            _discovery_service.start()
         except Exception as e:
-            logger.warning(f"Sleep mode service could not start: {e}")
+            logger.warning(f"Network discovery could not start: {e}")
+    else:
+        logger.info("Secondary worker — skipping hardware services")
 
     # NOTE: Sync/backup/RAID-scrub/SMART/notification schedulers are now
     # managed by the separate scheduler_worker process (scheduler_worker.py).
     # The web process no longer starts APScheduler instances for these jobs.
-
-    # Start network discovery (mDNS/Bonjour)
-    try:
-        port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
-        _discovery_service = NetworkDiscoveryService(
-            port=port,
-            webdav_port=settings.webdav_port,
-            hostname=settings.mdns_hostname,
-            webdav_ssl_enabled=settings.webdav_ssl_enabled,
-        )
-        _discovery_service.start()
-    except Exception as e:
-        logger.warning(f"Network discovery could not start: {e}")
     
     # Initialize Firebase (optional, warnings if not configured)
     FirebaseService.initialize()
@@ -459,29 +473,30 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         try:
             if not skip_init:
                 await jobs.stop_health_monitor()
-                await telemetry.stop_telemetry_monitor()
-                await power_monitor.stop_power_monitor()
-                disk_monitor.stop_monitoring()
-                await stop_monitoring()
-                logger.info("System monitoring stopped")
-                # Stop CPU power management
-                try:
-                    await power_manager.stop_power_manager()
-                    logger.info("CPU power management stopped")
-                except Exception:
-                    logger.debug("Error stopping CPU power management")
-                # Stop fan control
-                try:
-                    await fan_control.stop_fan_control()
-                    logger.info("Fan control stopped")
-                except Exception:
-                    logger.debug("Error stopping fan control")
-                # Stop sleep mode
-                try:
-                    await sleep_mode.stop_sleep_manager()
-                    logger.info("Sleep mode service stopped")
-                except Exception:
-                    logger.debug("Error stopping sleep mode service")
+                if IS_PRIMARY_WORKER:
+                    await telemetry.stop_telemetry_monitor()
+                    await power_monitor.stop_power_monitor()
+                    disk_monitor.stop_monitoring()
+                    await stop_monitoring()
+                    logger.info("System monitoring stopped")
+                    # Stop CPU power management
+                    try:
+                        await power_manager.stop_power_manager()
+                        logger.info("CPU power management stopped")
+                    except Exception:
+                        logger.debug("Error stopping CPU power management")
+                    # Stop fan control
+                    try:
+                        await fan_control.stop_fan_control()
+                        logger.info("Fan control stopped")
+                    except Exception:
+                        logger.debug("Error stopping fan control")
+                    # Stop sleep mode
+                    try:
+                        await sleep_mode.stop_sleep_manager()
+                        logger.info("Sleep mode service stopped")
+                    except Exception:
+                        logger.debug("Error stopping sleep mode service")
         except Exception:
             logger.debug("Error while stopping background services")
 

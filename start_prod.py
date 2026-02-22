@@ -82,8 +82,10 @@ ProcessInfo = Tuple[str, subprocess.Popen]
 PROD_CONFIG = {
     "backend_port": 8000,
     "backend_host": "127.0.0.1",  # Bind to localhost, nginx handles external
-    # Workers: Use 1 for hardware control (PowerManager, FanControl need singleton)
-    # Multiple workers would start duplicate hardware controllers
+    # Workers: 1 is sufficient for home NAS (1-5 users). Upload throughput is
+    # disk-I/O-limited, not CPU-limited. For higher concurrency, set to 2 and
+    # use BALUHOST_PRIMARY_WORKER=0 on the secondary worker so hardware services
+    # (fan control, power management, telemetry, mDNS) only run once.
     "workers": 1,
     "frontend_port": 5173,  # Only used if running frontend in dev mode
 }
