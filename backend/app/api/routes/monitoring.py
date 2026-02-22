@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db, get_current_admin
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
-from app.models.monitoring import MetricType
+from app.models.monitoring import MetricType, NetworkSample
 from app.schemas.monitoring import (
     DataSource,
     TimeRangeEnum,
@@ -185,10 +185,17 @@ async def get_network_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Get current network metrics."""
     orchestrator = get_monitoring_orchestrator()
     sample = orchestrator.get_network_current()
+
+    if sample is None:
+        # Secondary worker has no in-memory data — fall back to DB
+        db_record = db.query(NetworkSample).order_by(NetworkSample.timestamp.desc()).first()
+        if db_record:
+            sample = orchestrator.network_collector.db_to_sample(db_record)
 
     if sample is None:
         raise HTTPException(status_code=503, detail="No network data available yet")

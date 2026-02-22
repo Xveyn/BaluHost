@@ -19,6 +19,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.tapo_device import TapoDevice
+from app.models.power_sample import PowerSample as PowerSampleModel
 from app.schemas.tapo import (
     PowerSample,
     PowerHistory,
@@ -461,6 +462,27 @@ def get_power_history(db: Session) -> PowerMonitoringResponse:
         for device in devices:
             # Get samples for this device
             samples = _device_histories.get(device.id, [])
+
+            if not samples:
+                # Secondary worker — read latest samples from DB
+                db_records = (
+                    db.query(PowerSampleModel)
+                    .filter(PowerSampleModel.device_id == device.id)
+                    .order_by(PowerSampleModel.timestamp.desc())
+                    .limit(120)
+                    .all()
+                )
+                if db_records:
+                    samples = [
+                        PowerSample(
+                            timestamp=r.timestamp,
+                            watts=r.watts,
+                            voltage=r.voltage,
+                            current=r.current,
+                            energy_today=r.energy_today,
+                        )
+                        for r in reversed(db_records)
+                    ]
 
             # Calculate current power (latest sample)
             latest_sample = samples[-1] if samples else None
