@@ -40,7 +40,12 @@ export function useFanControl(options: UseFanControlOptions = {}): UseFanControl
       // discard the result to prevent overwriting user edits
       if (isAutoRefresh && pauseRefreshRef.current) return;
 
-      setStatus(statusData);
+      // Don't flash "no fans" on a transient empty response when we had fans before
+      if (isAutoRefresh && statusData.backend_available && statusData.fans.length === 0) {
+        setStatus(prev => prev && prev.fans.length > 0 ? prev : statusData);
+      } else {
+        setStatus(statusData);
+      }
       setPermissionStatus(permData);
       setError(null);
     } catch (err: unknown) {

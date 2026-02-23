@@ -250,8 +250,7 @@ class LinuxFanControlBackend(FanControlBackend):
         return True
 
     async def get_fans(self) -> List[FanData]:
-        """Get hardware fans from hwmon."""
-        await self._scan_pwm_fans()
+        """Get hardware fans from hwmon (uses cache from startup scan)."""
 
         fans = []
         for fan_id, fan_info in self._fan_cache.items():
@@ -334,11 +333,19 @@ class LinuxFanControlBackend(FanControlBackend):
         return None
 
     async def _scan_pwm_fans(self) -> Dict[str, Dict]:
-        """Scan hwmon for PWM fans."""
-        self._fan_cache.clear()
+        """Scan hwmon for PWM fans.
+
+        Builds a new dict from sysfs. Only replaces the cache if the scan
+        found at least one fan (or the cache was empty), preventing
+        transient sysfs I/O failures from clearing known fans.
+        """
+        new_cache: Dict[str, Dict] = {}
 
         if not self._hwmon_base.exists():
-            return {}
+            if not self._fan_cache:
+                return {}
+            logger.debug("hwmon base missing but cache exists, keeping cached fans")
+            return self._fan_cache
 
         for hwmon_dir in self._hwmon_base.iterdir():
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
@@ -380,7 +387,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     temp_path = temp_file
                     break  # Use first temperature sensor
 
-                self._fan_cache[fan_id] = {
+                new_cache[fan_id] = {
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
                     "pwm_path": pwm_file,
                     "pwm_enable_path": pwm_enable_path if pwm_enable_path.exists() else None,
@@ -389,7 +396,14 @@ class LinuxFanControlBackend(FanControlBackend):
                     "temp_sensor_id": temp_sensor_id,
                 }
 
-        logger.info(f"Scanned hwmon: found {len(self._fan_cache)} PWM fan(s)")
+        if new_cache or not self._fan_cache:
+            self._fan_cache = new_cache
+            logger.info(f"Scanned hwmon: found {len(self._fan_cache)} PWM fan(s)")
+        else:
+            logger.warning(
+                f"hwmon scan found 0 fans but cache has {len(self._fan_cache)}, keeping cached fans"
+            )
+
         return self._fan_cache
 
     async def _read_hwmon_file(self, path: Path) -> Optional[int]:
@@ -908,6 +922,24 @@ class FanControlService:
                             }
 
                     fan_data_list.append(fan_entry)
+                else:
+                    # No DB config yet (first discovery or hwmon index changed)
+                    # Include with defaults so the fan isn't silently dropped
+                    fan_data_list.append({
+                        "fan_id": fan.fan_id,
+                        "name": fan.name,
+                        "rpm": fan.rpm,
+                        "pwm_percent": fan.pwm_percent,
+                        "temperature_celsius": fan.temperature_celsius,
+                        "mode": FanMode.MANUAL.value,
+                        "is_active": True,
+                        "min_pwm_percent": 0,
+                        "max_pwm_percent": 100,
+                        "emergency_temp_celsius": 85.0,
+                        "temp_sensor_id": fan.temp_sensor_id,
+                        "curve_points": [],
+                        "hysteresis_celsius": 3.0,
+                    })
 
         # Determine permission status
         permission_status = "ok"
