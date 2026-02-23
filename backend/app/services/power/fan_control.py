@@ -247,7 +247,42 @@ class LinuxFanControlBackend(FanControlBackend):
             return False
 
         logger.info(f"Found {len(fans)} PWM fan(s) in hwmon")
+        await self._check_write_permission()
         return True
+
+    async def _check_write_permission(self) -> None:
+        """Proactively test write permission on first PWM file."""
+        if not self._fan_cache:
+            return
+
+        first_fan = next(iter(self._fan_cache.values()))
+        pwm_path = first_fan["pwm_path"]
+
+        # Fast check: direct write permission
+        if os.access(pwm_path, os.W_OK):
+            self._has_write_permission = True
+            logger.info("Fan control: direct write permission available")
+            return
+
+        # Fallback: test sudo tee (read current value, write it back unchanged)
+        current = await self._read_hwmon_file(pwm_path)
+        if current is not None:
+            try:
+                import subprocess
+                result = subprocess.run(
+                    ["sudo", "-n", "tee", str(pwm_path)],
+                    input=str(current).encode(),
+                    capture_output=True,
+                    timeout=5,
+                )
+                if result.returncode == 0:
+                    self._has_write_permission = True
+                    logger.info("Fan control: write permission available via sudo tee")
+                    return
+            except Exception:
+                pass
+
+        logger.info("Fan control: no write permission (readonly mode)")
 
     async def get_fans(self) -> List[FanData]:
         """Get hardware fans from hwmon (uses cache from startup scan)."""
@@ -440,6 +475,7 @@ class LinuxFanControlBackend(FanControlBackend):
                     timeout=5
                 )
                 if result.returncode == 0:
+                    self._has_write_permission = True
                     logger.debug(f"Wrote to {path} via sudo tee")
                     return True
                 else:
