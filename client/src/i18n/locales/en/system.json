@@ -620,6 +620,39 @@
         "deleteFailed": "Failed to delete schedule entry",
         "toggleFailed": "Failed to toggle schedule entry"
       }
+    },
+    "profiles": {
+      "title": "Curve Profiles",
+      "description": "Named, reusable fan curves. Apply to fans or reference from schedule entries.",
+      "systemProfiles": "System Profiles",
+      "customProfiles": "Custom Profiles",
+      "newProfile": "New Profile",
+      "editProfile": "Edit Profile",
+      "editCurve": "Edit Curve",
+      "apply": "Apply to Fan",
+      "more": "More",
+      "name": "Name",
+      "namePlaceholder": "e.g. Low Noise",
+      "description_field": "Description",
+      "descriptionPlaceholder": "Optional description",
+      "curvePoints": "Curve Points",
+      "create": "Create",
+      "update": "Update",
+      "noProfiles": "No profiles yet",
+      "noFanSelected": "No fan selected",
+      "saveCurrentCurve": "Save Current as Profile",
+      "deleteConfirmTitle": "Delete Profile?",
+      "deleteConfirmMessage": "Delete profile \"{{name}}\"? Schedule entries using it will fall back to inline curves.",
+      "messages": {
+        "created": "Profile \"{{name}}\" created",
+        "updated": "Profile updated",
+        "deleted": "Profile deleted",
+        "applied": "Applied \"{{name}}\" to fan",
+        "createFailed": "Failed to create profile",
+        "updateFailed": "Failed to update profile",
+        "deleteFailed": "Failed to delete profile",
+        "applyFailed": "Failed to apply profile"
+      }
     }
   },
   "servicesStatus": {

@@ -1,8 +1,8 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info } from 'lucide-react';
+import { TrendingUp, Table, LineChart as LineChartIcon, Zap, Volume2, Gauge, Info, ChevronDown } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
-import type { FanInfo, FanCurvePoint } from '../../api/fan-control';
+import type { FanInfo, FanCurvePoint, FanCurveProfile } from '../../api/fan-control';
 import { CURVE_PRESETS, updateFanConfig } from '../../api/fan-control';
 import FanCurveChart from './FanCurveChart';
 
@@ -12,9 +12,11 @@ interface FanDetailsProps {
   isReadOnly: boolean;
   onEditingChange?: (isEditing: boolean) => void;
   onConfigUpdate?: () => void;
+  profiles?: FanCurveProfile[];
+  onApplyProfile?: (profile: FanCurveProfile) => void;
 }
 
-export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate }: FanDetailsProps) {
+export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingChange, onConfigUpdate, profiles, onApplyProfile }: FanDetailsProps) {
   const { t } = useTranslation(['system', 'common']);
   const [curvePoints, setCurvePoints] = useState<FanCurvePoint[]>(fan.curve_points);
   const [viewMode, setViewMode] = useState<'chart' | 'table'>('chart');
@@ -123,6 +125,8 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
     setCurvePoints(updated);
   };
 
+  const [showMoreProfiles, setShowMoreProfiles] = useState(false);
+
   const handleApplyPreset = (preset: keyof typeof CURVE_PRESETS) => {
     const presetPoints = CURVE_PRESETS[preset];
     if (presetPoints) {
@@ -131,6 +135,20 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
       toast.success(t('system:fanControl.curve.presetApplied', { preset }));
     }
   };
+
+  const handleApplyProfileCurve = (profile: FanCurveProfile) => {
+    if (onApplyProfile) {
+      onApplyProfile(profile);
+    } else {
+      userEditedRef.current = true;
+      setCurvePoints([...profile.curve_points]);
+      toast.success(t('system:fanControl.curve.presetApplied', { preset: profile.name }));
+    }
+    setShowMoreProfiles(false);
+  };
+
+  const systemProfiles = profiles?.filter(p => p.is_system) ?? [];
+  const userProfiles = profiles?.filter(p => !p.is_system) ?? [];
 
   // Wrapper for FanCurveChart's onPointsChange — marks as user-edited
   const handleChartPointsChange = useCallback((points: FanCurvePoint[]) => {
@@ -168,33 +186,80 @@ export default function FanDetails({ fan, onCurveUpdate, isReadOnly, onEditingCh
           {fan.name} - {t('system:fanControl.curve.title')}
         </h2>
 
-        {/* Preset Buttons */}
+        {/* Preset / Profile Buttons */}
         {!isReadOnly && (
-          <div className="flex gap-2">
-            <button
-              onClick={() => handleApplyPreset('silent')}
-              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title={t('system:fanControl.presets.silentDesc')}
-            >
-              <Volume2 className="w-4 h-4" />
-              {t('system:fanControl.presets.silent')}
-            </button>
-            <button
-              onClick={() => handleApplyPreset('balanced')}
-              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title={t('system:fanControl.presets.balancedDesc')}
-            >
-              <Gauge className="w-4 h-4" />
-              {t('system:fanControl.presets.balanced')}
-            </button>
-            <button
-              onClick={() => handleApplyPreset('performance')}
-              className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
-              title={t('system:fanControl.presets.performanceDesc')}
-            >
-              <Zap className="w-4 h-4" />
-              {t('system:fanControl.presets.performance')}
-            </button>
+          <div className="flex gap-2 flex-wrap items-center">
+            {/* System profiles (or fallback to hardcoded presets) */}
+            {systemProfiles.length > 0 ? (
+              systemProfiles.map(p => {
+                const icons: Record<string, typeof Volume2> = { silent: Volume2, balanced: Gauge, performance: Zap };
+                const Icon = icons[p.name] ?? Gauge;
+                return (
+                  <button
+                    key={p.id}
+                    onClick={() => handleApplyProfileCurve(p)}
+                    className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+                    title={p.description ?? ''}
+                  >
+                    <Icon className="w-4 h-4" />
+                    {p.name.charAt(0).toUpperCase() + p.name.slice(1)}
+                  </button>
+                );
+              })
+            ) : (
+              <>
+                <button
+                  onClick={() => handleApplyPreset('silent')}
+                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+                  title={t('system:fanControl.presets.silentDesc')}
+                >
+                  <Volume2 className="w-4 h-4" />
+                  {t('system:fanControl.presets.silent')}
+                </button>
+                <button
+                  onClick={() => handleApplyPreset('balanced')}
+                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+                  title={t('system:fanControl.presets.balancedDesc')}
+                >
+                  <Gauge className="w-4 h-4" />
+                  {t('system:fanControl.presets.balanced')}
+                </button>
+                <button
+                  onClick={() => handleApplyPreset('performance')}
+                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+                  title={t('system:fanControl.presets.performanceDesc')}
+                >
+                  <Zap className="w-4 h-4" />
+                  {t('system:fanControl.presets.performance')}
+                </button>
+              </>
+            )}
+
+            {/* User profiles dropdown */}
+            {userProfiles.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => setShowMoreProfiles(!showMoreProfiles)}
+                  className="px-3 py-1.5 bg-slate-700 text-slate-300 rounded-lg hover:bg-slate-600 text-sm flex items-center gap-1.5 transition-colors"
+                >
+                  {t('system:fanControl.profiles.more')}
+                  <ChevronDown className={`w-3 h-3 transition-transform ${showMoreProfiles ? 'rotate-180' : ''}`} />
+                </button>
+                {showMoreProfiles && (
+                  <div className="absolute right-0 top-full mt-1 z-10 bg-slate-800 border border-slate-700 rounded-lg shadow-xl py-1 min-w-[160px]">
+                    {userProfiles.map(p => (
+                      <button
+                        key={p.id}
+                        onClick={() => handleApplyProfileCurve(p)}
+                        className="w-full text-left px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 transition-colors"
+                      >
+                        {p.name}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
           </div>
         )}
       </div>

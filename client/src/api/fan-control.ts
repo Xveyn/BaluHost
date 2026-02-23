@@ -192,6 +192,34 @@ export interface UpdateFanConfigResponse {
   message?: string;
 }
 
+// Profile types
+export interface FanCurveProfile {
+  id: number;
+  name: string;
+  description?: string | null;
+  curve_points: FanCurvePoint[];
+  is_system: boolean;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface CreateFanCurveProfileRequest {
+  name: string;
+  description?: string;
+  curve_points: FanCurvePoint[];
+}
+
+export interface UpdateFanCurveProfileRequest {
+  name?: string;
+  description?: string;
+  curve_points?: FanCurvePoint[];
+}
+
+export interface FanCurveProfileListResponse {
+  profiles: FanCurveProfile[];
+  total_count: number;
+}
+
 // Schedule types
 export interface FanScheduleEntry {
   id: number;
@@ -199,9 +227,11 @@ export interface FanScheduleEntry {
   name: string;
   start_time: string; // "HH:MM"
   end_time: string;   // "HH:MM"
-  curve_points: FanCurvePoint[];
+  curve_points?: FanCurvePoint[] | null;
   priority: number;
   is_enabled: boolean;
+  profile_id?: number | null;
+  profile_name?: string | null;
   created_at?: string;
   updated_at?: string;
 }
@@ -210,7 +240,8 @@ export interface CreateFanScheduleEntryRequest {
   name: string;
   start_time: string;
   end_time: string;
-  curve_points: FanCurvePoint[];
+  curve_points?: FanCurvePoint[];
+  profile_id?: number;
   priority?: number;
   is_enabled?: boolean;
 }
@@ -220,6 +251,7 @@ export interface UpdateFanScheduleEntryRequest {
   start_time?: string;
   end_time?: string;
   curve_points?: FanCurvePoint[];
+  profile_id?: number | null;
   priority?: number;
   is_enabled?: boolean;
 }
@@ -413,6 +445,50 @@ export async function deleteFanScheduleEntry(
 export async function getActiveFanSchedule(fanId: string): Promise<ActiveScheduleInfo> {
   const response = await apiClient.get<ActiveScheduleInfo>(
     `/api/fans/${encodeURIComponent(fanId)}/schedule/active`
+  );
+  return response.data;
+}
+
+// --- Profile API Functions ---
+
+/**
+ * List all fan curve profiles
+ */
+export async function listProfiles(): Promise<FanCurveProfileListResponse> {
+  const response = await apiClient.get<FanCurveProfileListResponse>('/api/fans/profiles');
+  return response.data;
+}
+
+/**
+ * Create a new fan curve profile
+ */
+export async function createProfile(data: CreateFanCurveProfileRequest): Promise<FanCurveProfile> {
+  const response = await apiClient.post<FanCurveProfile>('/api/fans/profiles', data);
+  return response.data;
+}
+
+/**
+ * Update a fan curve profile
+ */
+export async function updateProfile(profileId: number, data: UpdateFanCurveProfileRequest): Promise<FanCurveProfile> {
+  const response = await apiClient.put<FanCurveProfile>(`/api/fans/profiles/${profileId}`, data);
+  return response.data;
+}
+
+/**
+ * Delete a fan curve profile
+ */
+export async function deleteProfile(profileId: number): Promise<void> {
+  await apiClient.delete(`/api/fans/profiles/${profileId}`);
+}
+
+/**
+ * Apply a profile to a fan
+ */
+export async function applyProfileToFan(profileId: number, fanId: string): Promise<ApplyPresetResponse> {
+  const response = await apiClient.post<ApplyPresetResponse>(
+    `/api/fans/profiles/${profileId}/apply`,
+    { fan_id: fanId }
   );
   return response.data;
 }

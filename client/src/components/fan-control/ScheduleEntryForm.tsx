@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
-import type { FanScheduleEntry, FanCurvePoint, CreateFanScheduleEntryRequest, UpdateFanScheduleEntryRequest } from '../../api/fan-control';
+import type { FanScheduleEntry, FanCurvePoint, FanCurveProfile, CreateFanScheduleEntryRequest, UpdateFanScheduleEntryRequest } from '../../api/fan-control';
 import { CURVE_PRESETS } from '../../api/fan-control';
 
 interface ScheduleEntryFormProps {
@@ -9,22 +9,29 @@ interface ScheduleEntryFormProps {
   onSubmit: (data: CreateFanScheduleEntryRequest | UpdateFanScheduleEntryRequest) => Promise<void>;
   onCancel: () => void;
   isSubmitting: boolean;
+  profiles?: FanCurveProfile[];
 }
 
-type PresetKey = 'silent' | 'balanced' | 'performance' | 'custom';
+type CurveSource = 'custom' | number; // number = profile_id
 
-function detectPreset(points: FanCurvePoint[]): PresetKey {
-  for (const [name, presetPoints] of Object.entries(CURVE_PRESETS)) {
-    if (points.length === presetPoints.length &&
-      points.every((p, i) => p.temp === presetPoints[i].temp && p.pwm === presetPoints[i].pwm)
-    ) {
-      return name as PresetKey;
+function detectCurveSource(entry: FanScheduleEntry | undefined, profiles: FanCurveProfile[]): CurveSource {
+  if (!entry) return profiles.find(p => p.name === 'silent')?.id ?? 'custom';
+  if (entry.profile_id != null) return entry.profile_id;
+  // Try to match inline curve against known profiles
+  if (entry.curve_points) {
+    for (const profile of profiles) {
+      if (
+        entry.curve_points.length === profile.curve_points.length &&
+        entry.curve_points.every((p, i) => p.temp === profile.curve_points[i].temp && p.pwm === profile.curve_points[i].pwm)
+      ) {
+        return profile.id;
+      }
     }
   }
   return 'custom';
 }
 
-export default function ScheduleEntryForm({ entry, onSubmit, onCancel, isSubmitting }: ScheduleEntryFormProps) {
+export default function ScheduleEntryForm({ entry, onSubmit, onCancel, isSubmitting, profiles = [] }: ScheduleEntryFormProps) {
   const { t } = useTranslation(['system', 'common']);
   const isEditing = !!entry;
 
@@ -33,32 +40,39 @@ export default function ScheduleEntryForm({ entry, onSubmit, onCancel, isSubmitt
   const [endTime, setEndTime] = useState(entry?.end_time ?? '06:00');
   const [priority, setPriority] = useState(entry?.priority ?? 0);
   const [isEnabled, setIsEnabled] = useState(entry?.is_enabled ?? true);
-  const [selectedPreset, setSelectedPreset] = useState<PresetKey>(
-    entry ? detectPreset(entry.curve_points) : 'silent'
+  const [curveSource, setCurveSource] = useState<CurveSource>(
+    detectCurveSource(entry, profiles)
   );
   const [curvePoints, setCurvePoints] = useState<FanCurvePoint[]>(
     entry?.curve_points ?? CURVE_PRESETS.silent
   );
 
-  // Sync curve when preset changes
+  // Sync curve when source changes to a profile
   useEffect(() => {
-    if (selectedPreset !== 'custom' && CURVE_PRESETS[selectedPreset]) {
-      setCurvePoints([...CURVE_PRESETS[selectedPreset]]);
+    if (curveSource !== 'custom') {
+      const profile = profiles.find(p => p.id === curveSource);
+      if (profile) {
+        setCurvePoints([...profile.curve_points]);
+      }
     }
-  }, [selectedPreset]);
+  }, [curveSource, profiles]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
+
+    const isProfileBased = curveSource !== 'custom';
 
     if (isEditing) {
       const update: UpdateFanScheduleEntryRequest = {
         name: name.trim(),
         start_time: startTime,
         end_time: endTime,
-        curve_points: curvePoints,
         priority,
         is_enabled: isEnabled,
+        ...(isProfileBased
+          ? { profile_id: curveSource as number }
+          : { curve_points: curvePoints, profile_id: null }),
       };
       await onSubmit(update);
     } else {
@@ -66,9 +80,11 @@ export default function ScheduleEntryForm({ entry, onSubmit, onCancel, isSubmitt
         name: name.trim(),
         start_time: startTime,
         end_time: endTime,
-        curve_points: curvePoints,
         priority,
         is_enabled: isEnabled,
+        ...(isProfileBased
+          ? { profile_id: curveSource as number }
+          : { curve_points: curvePoints }),
       };
       await onSubmit(create);
     }
@@ -143,34 +159,77 @@ export default function ScheduleEntryForm({ entry, onSubmit, onCancel, isSubmitt
           </p>
         )}
 
-        {/* Curve Preset Selector */}
+        {/* Curve Source Selector */}
         <div>
           <label className="block text-xs text-slate-400 mb-1">
             {t('system:fanControl.schedule.curvePreset')}
           </label>
           <div className="flex gap-2 flex-wrap">
-            {(['silent', 'balanced', 'performance', 'custom'] as PresetKey[]).map((preset) => (
-              <button
-                key={preset}
-                type="button"
-                onClick={() => setSelectedPreset(preset)}
-                className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
-                  selectedPreset === preset
-                    ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
-                    : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
-                }`}
-              >
-                {preset === 'custom'
-                  ? t('system:fanControl.schedule.customCurve')
-                  : t(`system:fanControl.presets.${preset}`)
-                }
-              </button>
-            ))}
+            {profiles.length > 0 ? (
+              <>
+                {profiles.map(profile => (
+                  <button
+                    key={profile.id}
+                    type="button"
+                    onClick={() => setCurveSource(profile.id)}
+                    className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                      curveSource === profile.id
+                        ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
+                        : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                    }`}
+                  >
+                    {profile.name.charAt(0).toUpperCase() + profile.name.slice(1)}
+                    {profile.is_system && (
+                      <span className="ml-1 text-[10px] opacity-60">S</span>
+                    )}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurveSource('custom')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    curveSource === 'custom'
+                      ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {t('system:fanControl.schedule.customCurve')}
+                </button>
+              </>
+            ) : (
+              /* Fallback to hardcoded presets if no profiles loaded */
+              <>
+                {(['silent', 'balanced', 'performance'] as const).map((preset) => (
+                  <button
+                    key={preset}
+                    type="button"
+                    onClick={() => {
+                      setCurveSource('custom');
+                      setCurvePoints([...CURVE_PRESETS[preset]]);
+                    }}
+                    className="px-3 py-1.5 rounded-lg text-xs font-medium transition-colors bg-slate-700 text-slate-300 hover:bg-slate-600"
+                  >
+                    {t(`system:fanControl.presets.${preset}`)}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurveSource('custom')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-medium transition-colors ${
+                    curveSource === 'custom'
+                      ? 'bg-sky-500 text-white shadow-lg shadow-sky-500/30'
+                      : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
+                  }`}
+                >
+                  {t('system:fanControl.schedule.customCurve')}
+                </button>
+              </>
+            )}
           </div>
         </div>
 
         {/* Custom Curve Editor (simplified table) */}
-        {selectedPreset === 'custom' && (
+        {curveSource === 'custom' && (
           <div className="overflow-x-auto">
             <table className="w-full text-sm border border-slate-700 rounded">
               <thead className="bg-slate-900">

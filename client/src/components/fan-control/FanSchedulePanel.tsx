@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Clock, Plus, Pencil, Trash2, Power, PowerOff } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
-import type { FanScheduleEntry, FanInfo, CreateFanScheduleEntryRequest, UpdateFanScheduleEntryRequest } from '../../api/fan-control';
+import type { FanScheduleEntry, FanInfo, FanCurveProfile, CreateFanScheduleEntryRequest, UpdateFanScheduleEntryRequest } from '../../api/fan-control';
 import {
   getFanSchedule,
   createFanScheduleEntry,
@@ -17,9 +17,10 @@ import ScheduleEntryForm from './ScheduleEntryForm';
 interface FanSchedulePanelProps {
   fan: FanInfo;
   isReadOnly: boolean;
+  profiles?: FanCurveProfile[];
 }
 
-export default function FanSchedulePanel({ fan, isReadOnly }: FanSchedulePanelProps) {
+export default function FanSchedulePanel({ fan, isReadOnly, profiles }: FanSchedulePanelProps) {
   const { t } = useTranslation(['system', 'common']);
   const { confirm, dialog } = useConfirmDialog();
 
@@ -194,6 +195,7 @@ export default function FanSchedulePanel({ fan, isReadOnly }: FanSchedulePanelPr
             onSubmit={editingEntry ? handleUpdate : handleCreate}
             onCancel={handleCancelForm}
             isSubmitting={submitting}
+            profiles={profiles}
           />
         </div>
       )}
@@ -246,7 +248,15 @@ export default function FanSchedulePanel({ fan, isReadOnly }: FanSchedulePanelPr
                       )}
                     </td>
                     <td className="px-4 py-2 text-sm text-slate-300">
-                      {entry.curve_points.length} pts
+                      {entry.profile_name ? (
+                        <span className="inline-flex items-center gap-1">
+                          <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-sky-500/20 text-sky-300 border border-sky-500/30">
+                            {entry.profile_name}
+                          </span>
+                        </span>
+                      ) : (
+                        <span>Custom ({entry.curve_points?.length ?? 0} pts)</span>
+                      )}
                     </td>
                     <td className="px-4 py-2 text-center text-sm text-slate-300">
                       {entry.priority}

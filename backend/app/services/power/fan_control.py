@@ -19,7 +19,7 @@ from sqlalchemy import select, desc
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings
-from app.models.fans import FanConfig, FanSample, FanScheduleEntry
+from app.models.fans import FanConfig, FanSample, FanScheduleEntry, FanCurveProfile
 from app.schemas.fans import FanMode, FanCurvePoint
 
 logger = logging.getLogger(__name__)
@@ -884,6 +884,16 @@ class FanControlService:
             start = self._parse_time_to_minutes(entry.start_time)
             end = self._parse_time_to_minutes(entry.end_time)
             if self._time_in_window(current_minutes, start, end):
+                # If entry references a profile, use the profile's curve
+                if entry.profile_id is not None:
+                    profile = db.execute(
+                        select(FanCurveProfile).where(FanCurveProfile.id == entry.profile_id)
+                    ).scalar_one_or_none()
+                    if profile:
+                        curve = json.loads(profile.curve_json) if profile.curve_json else []
+                        if len(curve) >= 2:
+                            return curve, entry
+                # Fallback to entry's inline curve
                 curve = json.loads(entry.curve_json) if entry.curve_json else []
                 if len(curve) >= 2:
                     return curve, entry
@@ -1123,6 +1133,8 @@ class FanControlService:
         """
         Apply a preset curve to a fan.
 
+        Looks up system profiles from DB first, falls back to CURVE_PRESETS dict.
+
         Args:
             fan_id: Fan identifier
             preset_name: Preset name (silent, balanced, performance)
@@ -1130,14 +1142,26 @@ class FanControlService:
         Returns:
             (success, curve_points)
         """
-        from app.schemas.fans import CURVE_PRESETS
+        # Try DB system profile first
+        curve_points: Optional[List[FanCurvePoint]] = None
+        with self.db_session_factory() as db:
+            profile = db.execute(
+                select(FanCurveProfile)
+                .where(FanCurveProfile.name == preset_name)
+                .where(FanCurveProfile.is_system == True)
+            ).scalar_one_or_none()
+            if profile:
+                points = json.loads(profile.curve_json)
+                curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in points]
 
-        if preset_name not in CURVE_PRESETS:
-            logger.warning(f"Unknown preset: {preset_name}")
-            return False, []
-
-        preset_points = CURVE_PRESETS[preset_name]
-        curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in preset_points]
+        # Fallback to hardcoded presets
+        if curve_points is None:
+            from app.schemas.fans import CURVE_PRESETS
+            if preset_name not in CURVE_PRESETS:
+                logger.warning(f"Unknown preset: {preset_name}")
+                return False, []
+            preset_points = CURVE_PRESETS[preset_name]
+            curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in preset_points]
 
         success = await self.update_fan_curve(fan_id, curve_points)
         if success:
@@ -1163,7 +1187,9 @@ class FanControlService:
 
     async def create_schedule_entry(
         self, fan_id: str, name: str, start_time: str, end_time: str,
-        curve_points: List[FanCurvePoint], priority: int = 0, is_enabled: bool = True
+        curve_points: Optional[List[FanCurvePoint]] = None,
+        priority: int = 0, is_enabled: bool = True,
+        profile_id: Optional[int] = None,
     ) -> Optional[FanScheduleEntry]:
         """
         Create a new schedule entry for a fan.
@@ -1183,7 +1209,10 @@ class FanControlService:
             if count >= 8:
                 return None
 
-            curve_json = json.dumps([p.model_dump() for p in curve_points])
+            curve_json = None
+            if curve_points:
+                curve_json = json.dumps([p.model_dump() for p in curve_points])
+
             entry = FanScheduleEntry(
                 fan_id=fan_id,
                 name=name,
@@ -1192,6 +1221,7 @@ class FanControlService:
                 curve_json=curve_json,
                 priority=priority,
                 is_enabled=is_enabled,
+                profile_id=profile_id,
             )
             db.add(entry)
             db.commit()
@@ -1223,6 +1253,14 @@ class FanControlService:
                 entry.end_time = kwargs['end_time']
             if 'curve_points' in kwargs and kwargs['curve_points'] is not None:
                 entry.curve_json = json.dumps([p.model_dump() for p in kwargs['curve_points']])
+                entry.profile_id = None  # Clear profile when setting inline curve
+            if 'profile_id' in kwargs:
+                pid = kwargs['profile_id']
+                if pid is not None:
+                    entry.profile_id = pid
+                    entry.curve_json = None  # Clear inline curve when setting profile
+                else:
+                    entry.profile_id = None
             if 'priority' in kwargs and kwargs['priority'] is not None:
                 entry.priority = kwargs['priority']
             if 'is_enabled' in kwargs and kwargs['is_enabled'] is not None:
@@ -1301,6 +1339,171 @@ class FanControlService:
                 db.expunge(next_entry)
 
             return active_entry, next_entry
+
+    # --- Profile CRUD Methods ---
+
+    async def list_profiles(self) -> List[FanCurveProfile]:
+        """Get all fan curve profiles."""
+        with self.db_session_factory() as db:
+            profiles = db.execute(
+                select(FanCurveProfile).order_by(
+                    FanCurveProfile.is_system.desc(),
+                    FanCurveProfile.name.asc(),
+                )
+            ).scalars().all()
+            for p in profiles:
+                db.expunge(p)
+            return list(profiles)
+
+    async def get_profile(self, profile_id: int) -> Optional[FanCurveProfile]:
+        """Get a single profile by ID."""
+        with self.db_session_factory() as db:
+            profile = db.execute(
+                select(FanCurveProfile).where(FanCurveProfile.id == profile_id)
+            ).scalar_one_or_none()
+            if profile:
+                db.expunge(profile)
+            return profile
+
+    async def create_profile(
+        self, name: str, curve_points: List[FanCurvePoint], description: Optional[str] = None
+    ) -> Optional[FanCurveProfile]:
+        """
+        Create a new user curve profile.
+
+        Returns None if max user profiles (20) reached or name already exists.
+        """
+        with self.db_session_factory() as db:
+            # Check max user profiles
+            user_count = db.execute(
+                select(func.count()).select_from(
+                    select(FanCurveProfile)
+                    .where(FanCurveProfile.is_system == False)
+                    .subquery()
+                )
+            ).scalar() or 0
+            if user_count >= 20:
+                return None
+
+            # Check name uniqueness
+            existing = db.execute(
+                select(FanCurveProfile).where(FanCurveProfile.name == name)
+            ).scalar_one_or_none()
+            if existing:
+                return None
+
+            curve_json = json.dumps([p.model_dump() for p in curve_points])
+            profile = FanCurveProfile(
+                name=name,
+                description=description,
+                curve_json=curve_json,
+                is_system=False,
+            )
+            db.add(profile)
+            db.commit()
+            db.refresh(profile)
+            db.expunge(profile)
+
+            logger.info(f"Created curve profile '{name}'")
+            return profile
+
+    async def update_profile(
+        self, profile_id: int, **kwargs
+    ) -> Optional[FanCurveProfile]:
+        """
+        Update a curve profile.
+
+        Rejects name/is_system changes on system profiles.
+        Returns None if profile not found.
+        """
+        with self.db_session_factory() as db:
+            profile = db.execute(
+                select(FanCurveProfile).where(FanCurveProfile.id == profile_id)
+            ).scalar_one_or_none()
+
+            if not profile:
+                return None
+
+            if profile.is_system:
+                # System profiles: only allow curve_points and description updates
+                kwargs.pop('name', None)
+
+            if 'name' in kwargs and kwargs['name'] is not None:
+                # Check uniqueness
+                existing = db.execute(
+                    select(FanCurveProfile)
+                    .where(FanCurveProfile.name == kwargs['name'])
+                    .where(FanCurveProfile.id != profile_id)
+                ).scalar_one_or_none()
+                if existing:
+                    return None
+                profile.name = kwargs['name']
+
+            if 'description' in kwargs:
+                profile.description = kwargs['description']
+
+            if 'curve_points' in kwargs and kwargs['curve_points'] is not None:
+                profile.curve_json = json.dumps([p.model_dump() for p in kwargs['curve_points']])
+
+            db.commit()
+            db.refresh(profile)
+            db.expunge(profile)
+
+            logger.info(f"Updated curve profile {profile_id}")
+            return profile
+
+    async def delete_profile(self, profile_id: int) -> bool:
+        """
+        Delete a curve profile.
+
+        Rejects deletion of system profiles. FK SET NULL handles schedule entries.
+        """
+        with self.db_session_factory() as db:
+            profile = db.execute(
+                select(FanCurveProfile).where(FanCurveProfile.id == profile_id)
+            ).scalar_one_or_none()
+
+            if not profile:
+                return False
+
+            if profile.is_system:
+                return False
+
+            db.delete(profile)
+            db.commit()
+
+            logger.info(f"Deleted curve profile '{profile.name}' (id={profile_id})")
+            return True
+
+    async def apply_profile_to_fan(
+        self, fan_id: str, profile_id: int
+    ) -> Tuple[bool, List[FanCurvePoint]]:
+        """
+        Apply a profile's curve to a fan's FanConfig.
+
+        Copies the profile's curve points to the fan's curve_json.
+
+        Args:
+            fan_id: Fan identifier
+            profile_id: Profile ID
+
+        Returns:
+            (success, curve_points)
+        """
+        profile = await self.get_profile(profile_id)
+        if not profile:
+            return False, []
+
+        points = json.loads(profile.curve_json)
+        curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in points]
+
+        success = await self.update_fan_curve(fan_id, curve_points)
+        if success:
+            if fan_id in self._hysteresis_state:
+                del self._hysteresis_state[fan_id]
+            logger.info(f"Applied profile '{profile.name}' to {fan_id}")
+
+        return success, curve_points
 
     async def update_fan_config(
         self,

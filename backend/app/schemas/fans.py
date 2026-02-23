@@ -2,7 +2,7 @@
 Fan control schemas for request/response validation.
 """
 from typing import List, Optional, Dict
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from enum import Enum
 from datetime import datetime
 
@@ -365,9 +365,11 @@ class FanScheduleEntrySchema(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
     end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
-    curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
+    curve_points: Optional[List[FanCurvePoint]] = Field(None)
     priority: int = Field(0, ge=0, le=100)
     is_enabled: bool = True
+    profile_id: Optional[int] = None
+    profile_name: Optional[str] = None
     created_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
 
@@ -377,9 +379,19 @@ class CreateFanScheduleEntryRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Schedule entry label")
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
     end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
-    curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
+    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
+    profile_id: Optional[int] = Field(None, description="Reference to a saved curve profile")
     priority: int = Field(0, ge=0, le=100, description="Lower number = higher priority")
     is_enabled: bool = Field(True, description="Whether this entry is active")
+
+    @model_validator(mode='after')
+    def validate_curve_source(self) -> 'CreateFanScheduleEntryRequest':
+        """Exactly one of profile_id or curve_points must be provided."""
+        has_profile = self.profile_id is not None
+        has_curve = self.curve_points is not None and len(self.curve_points) > 0
+        if has_profile == has_curve:
+            raise ValueError("Provide exactly one of profile_id or curve_points")
+        return self
 
     @field_validator('start_time', 'end_time')
     @classmethod
@@ -395,8 +407,10 @@ class CreateFanScheduleEntryRequest(BaseModel):
 
     @field_validator('curve_points')
     @classmethod
-    def validate_curve_points(cls, points: List[FanCurvePoint]) -> List[FanCurvePoint]:
+    def validate_curve_points(cls, points: Optional[List[FanCurvePoint]]) -> Optional[List[FanCurvePoint]]:
         """Ensure curve points are sorted by temperature with unique temps."""
+        if points is None:
+            return points
         if len(points) < 2:
             raise ValueError("Curve must have at least 2 points")
         sorted_points = sorted(points, key=lambda p: p.temp)
@@ -429,6 +443,7 @@ class UpdateFanScheduleEntryRequest(BaseModel):
     start_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
     end_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
     curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
+    profile_id: Optional[int] = Field(None, description="Reference to a saved curve profile")
     priority: Optional[int] = Field(None, ge=0, le=100)
     is_enabled: Optional[bool] = None
 
@@ -471,3 +486,84 @@ class ActiveScheduleInfo(BaseModel):
     active_entry: Optional[FanScheduleEntrySchema] = None
     next_entry: Optional[FanScheduleEntrySchema] = None
     is_using_default_curve: bool = True
+
+
+# --- Fan Curve Profile Schemas ---
+
+SYSTEM_PROFILE_NAMES = {"silent", "balanced", "performance"}
+
+
+class FanCurveProfileSchema(BaseModel):
+    """Response schema for a fan curve profile."""
+    id: int
+    name: str
+    description: Optional[str] = None
+    curve_points: List[FanCurvePoint]
+    is_system: bool
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None
+
+
+class CreateFanCurveProfileRequest(BaseModel):
+    """Request to create a new fan curve profile."""
+    name: str = Field(..., min_length=1, max_length=100, description="Profile name")
+    description: Optional[str] = Field(None, max_length=255)
+    curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: str) -> str:
+        if v.strip().lower() in SYSTEM_PROFILE_NAMES:
+            raise ValueError(f"Name '{v}' is reserved for system profiles")
+        return v.strip()
+
+    @field_validator('curve_points')
+    @classmethod
+    def validate_curve_points(cls, points: List[FanCurvePoint]) -> List[FanCurvePoint]:
+        if len(points) < 2:
+            raise ValueError("Curve must have at least 2 points")
+        sorted_points = sorted(points, key=lambda p: p.temp)
+        temps = [p.temp for p in sorted_points]
+        if len(temps) != len(set(temps)):
+            raise ValueError("Curve points must have unique temperatures")
+        return sorted_points
+
+
+class UpdateFanCurveProfileRequest(BaseModel):
+    """Request to update a fan curve profile."""
+    name: Optional[str] = Field(None, min_length=1, max_length=100)
+    description: Optional[str] = Field(None, max_length=255)
+    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
+
+    @field_validator('name')
+    @classmethod
+    def validate_name(cls, v: Optional[str]) -> Optional[str]:
+        if v is None:
+            return v
+        if v.strip().lower() in SYSTEM_PROFILE_NAMES:
+            raise ValueError(f"Name '{v}' is reserved for system profiles")
+        return v.strip()
+
+    @field_validator('curve_points')
+    @classmethod
+    def validate_curve_points(cls, points: Optional[List[FanCurvePoint]]) -> Optional[List[FanCurvePoint]]:
+        if points is None:
+            return points
+        if len(points) < 2:
+            raise ValueError("Curve must have at least 2 points")
+        sorted_points = sorted(points, key=lambda p: p.temp)
+        temps = [p.temp for p in sorted_points]
+        if len(temps) != len(set(temps)):
+            raise ValueError("Curve points must have unique temperatures")
+        return sorted_points
+
+
+class FanCurveProfileListResponse(BaseModel):
+    """Response for listing curve profiles."""
+    profiles: List[FanCurveProfileSchema]
+    total_count: int
+
+
+class ApplyProfileRequest(BaseModel):
+    """Request to apply a profile to a fan."""
+    fan_id: str = Field(..., description="Fan identifier")

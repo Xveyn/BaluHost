@@ -40,6 +40,11 @@ from app.schemas.fans import (
     UpdateFanScheduleEntryRequest,
     FanScheduleListResponse,
     ActiveScheduleInfo,
+    FanCurveProfileSchema,
+    CreateFanCurveProfileRequest,
+    UpdateFanCurveProfileRequest,
+    FanCurveProfileListResponse,
+    ApplyProfileRequest,
 )
 from app.services.fan_control import get_fan_control_service, FanControlService
 
@@ -465,22 +470,210 @@ async def update_fan_config(
         raise HTTPException(status_code=500, detail=f"Failed to update config: {str(e)}")
 
 
+# --- Profile Endpoints ---
+
+
+@router.get("/profiles", response_model=FanCurveProfileListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_profiles(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    List all fan curve profiles.
+
+    Requires admin role.
+    """
+    try:
+        import json as _json
+        profiles = await service.list_profiles()
+        items = []
+        for p in profiles:
+            curve_data = _json.loads(p.curve_json) if p.curve_json else []
+            items.append(FanCurveProfileSchema(
+                id=p.id,
+                name=p.name,
+                description=p.description,
+                curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+                is_system=p.is_system,
+                created_at=p.created_at,
+                updated_at=p.updated_at,
+            ))
+        return FanCurveProfileListResponse(profiles=items, total_count=len(items))
+    except Exception as e:
+        logger.error(f"Failed to list profiles: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list profiles: {str(e)}")
+
+
+@router.post("/profiles", response_model=FanCurveProfileSchema, status_code=201)
+@user_limiter.limit(get_limit("admin_operations"))
+async def create_profile(
+    request: Request, response: Response,
+    body: CreateFanCurveProfileRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Create a new fan curve profile.
+
+    Max 20 user profiles. Requires admin role.
+    """
+    try:
+        import json as _json
+        profile = await service.create_profile(
+            name=body.name,
+            curve_points=body.curve_points,
+            description=body.description,
+        )
+        if profile is None:
+            raise HTTPException(
+                status_code=422,
+                detail="Maximum of 20 user profiles reached or name already exists"
+            )
+        curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
+        return FanCurveProfileSchema(
+            id=profile.id,
+            name=profile.name,
+            description=profile.description,
+            curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+            is_system=profile.is_system,
+            created_at=profile.created_at,
+            updated_at=profile.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to create profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to create profile: {str(e)}")
+
+
+@router.put("/profiles/{profile_id}", response_model=FanCurveProfileSchema)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_profile(
+    request: Request, response: Response,
+    profile_id: int,
+    body: UpdateFanCurveProfileRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Update a fan curve profile.
+
+    System profiles allow only curve_points and description changes.
+    Requires admin role.
+    """
+    try:
+        import json as _json
+        kwargs = body.model_dump(exclude_none=True)
+        profile = await service.update_profile(profile_id, **kwargs)
+        if profile is None:
+            raise HTTPException(status_code=404, detail=f"Profile {profile_id} not found or name conflict")
+        curve_data = _json.loads(profile.curve_json) if profile.curve_json else []
+        return FanCurveProfileSchema(
+            id=profile.id,
+            name=profile.name,
+            description=profile.description,
+            curve_points=[FanCurvePoint(temp=pt["temp"], pwm=pt["pwm"]) for pt in curve_data],
+            is_system=profile.is_system,
+            created_at=profile.created_at,
+            updated_at=profile.updated_at,
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to update profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to update profile: {str(e)}")
+
+
+@router.delete("/profiles/{profile_id}")
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_profile(
+    request: Request, response: Response,
+    profile_id: int,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Delete a fan curve profile.
+
+    Cannot delete system profiles. Requires admin role.
+    """
+    try:
+        success = await service.delete_profile(profile_id)
+        if not success:
+            raise HTTPException(
+                status_code=400,
+                detail="Profile not found or is a system profile"
+            )
+        return {"success": True, "message": f"Profile {profile_id} deleted"}
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to delete profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to delete profile: {str(e)}")
+
+
+@router.post("/profiles/{profile_id}/apply", response_model=ApplyPresetResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def apply_profile_to_fan(
+    request: Request, response: Response,
+    profile_id: int,
+    body: ApplyProfileRequest,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    Apply a profile's curve to a fan.
+
+    Copies the profile's curve to the fan's active configuration.
+    Requires admin role.
+    """
+    try:
+        success, curve_points = await service.apply_profile_to_fan(body.fan_id, profile_id)
+        if not success:
+            raise HTTPException(status_code=404, detail="Profile or fan not found")
+        return ApplyPresetResponse(
+            success=True,
+            fan_id=body.fan_id,
+            preset=f"profile:{profile_id}",
+            curve_points=curve_points,
+            message="Profile applied",
+        )
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Failed to apply profile: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to apply profile: {str(e)}")
+
+
 # --- Schedule Endpoints ---
 
 
 def _entry_to_schema(entry) -> FanScheduleEntrySchema:
     """Convert a FanScheduleEntry model to schema."""
     import json
-    curve_points = json.loads(entry.curve_json) if entry.curve_json else []
+    curve_points = None
+    if entry.curve_json:
+        raw = json.loads(entry.curve_json)
+        curve_points = [FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in raw]
+
+    # Resolve profile name via the eager-loaded relationship
+    profile_name = None
+    if entry.profile_id is not None and hasattr(entry, 'profile') and entry.profile:
+        profile_name = entry.profile.name
+
     return FanScheduleEntrySchema(
         id=entry.id,
         fan_id=entry.fan_id,
         name=entry.name,
         start_time=entry.start_time,
         end_time=entry.end_time,
-        curve_points=[FanCurvePoint(temp=p["temp"], pwm=p["pwm"]) for p in curve_points],
+        curve_points=curve_points,
         priority=entry.priority,
         is_enabled=entry.is_enabled,
+        profile_id=entry.profile_id,
+        profile_name=profile_name,
         created_at=entry.created_at,
         updated_at=entry.updated_at,
     )
@@ -534,6 +727,7 @@ async def create_fan_schedule_entry(
             curve_points=body.curve_points,
             priority=body.priority,
             is_enabled=body.is_enabled,
+            profile_id=body.profile_id,
         )
 
         if entry is None:

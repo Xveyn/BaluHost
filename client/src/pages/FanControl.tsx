@@ -9,10 +9,10 @@ import { Fan, Settings, AlertTriangle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { handleApiError } from '../lib/errorHandling';
 import { LoadingOverlay } from '../components/ui/Spinner';
-import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode } from '../api/fan-control';
-import type { FanCurvePoint } from '../api/fan-control';
+import { setFanMode, setFanPWM, updateFanCurve, switchBackend, FanMode, listProfiles, applyProfileToFan } from '../api/fan-control';
+import type { FanCurvePoint, FanCurveProfile } from '../api/fan-control';
 import { useFanControl } from '../hooks/useFanControl';
-import { FanCard, FanDetails, FanSchedulePanel } from '../components/fan-control';
+import { FanCard, FanDetails, FanSchedulePanel, ProfileManager } from '../components/fan-control';
 
 export default function FanControl() {
   const { t } = useTranslation(['system', 'common']);
@@ -22,6 +22,20 @@ export default function FanControl() {
   });
   const [selectedFan, setSelectedFan] = useState<string | null>(null);
   const [operationLoading, setOperationLoading] = useState<Record<string, boolean>>({});
+  const [profiles, setProfiles] = useState<FanCurveProfile[]>([]);
+
+  const fetchProfiles = useCallback(async () => {
+    try {
+      const res = await listProfiles();
+      setProfiles(res.profiles);
+    } catch {
+      // Profiles are optional — fail silently
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchProfiles();
+  }, [fetchProfiles]);
 
   // IMPORTANT: All hooks must be called before any conditional returns
   // Memoize selected fan data
@@ -69,6 +83,17 @@ export default function FanControl() {
       handleApiError(error, t('system:fanControl.messages.curveFailed'));
     }
   }, [refetch, t]);
+
+  const handleApplyProfile = useCallback(async (profile: FanCurveProfile) => {
+    if (!selectedFan) return;
+    try {
+      await applyProfileToFan(profile.id, selectedFan);
+      toast.success(t('system:fanControl.profiles.messages.applied', { name: profile.name }));
+      refetch();
+    } catch (error: unknown) {
+      handleApiError(error, t('system:fanControl.profiles.messages.applyFailed'));
+    }
+  }, [selectedFan, refetch, t]);
 
   const handleBackendSwitch = useCallback(async (useLinux: boolean) => {
     try {
@@ -218,12 +243,26 @@ export default function FanControl() {
         ))}
       </div>
 
+      {/* Profile Manager */}
+      {selectedFanData && !isReadOnly && (
+        <div className="mt-6">
+          <ProfileManager
+            profiles={profiles}
+            selectedFanId={selectedFan}
+            selectedFanCurve={selectedFanData.curve_points}
+            onProfilesChanged={fetchProfiles}
+            onProfileApplied={refetch}
+          />
+        </div>
+      )}
+
       {/* Fan Schedule Panel (if fan is in scheduled mode) */}
       {selectedFanData && selectedFanData.mode === FanMode.SCHEDULED && (
         <div className="mt-6">
           <FanSchedulePanel
             fan={selectedFanData}
             isReadOnly={isReadOnly}
+            profiles={profiles}
           />
         </div>
       )}
@@ -237,6 +276,8 @@ export default function FanControl() {
             isReadOnly={isReadOnly}
             onEditingChange={setIsEditingCurve}
             onConfigUpdate={refetch}
+            profiles={profiles}
+            onApplyProfile={handleApplyProfile}
           />
         </div>
       )}

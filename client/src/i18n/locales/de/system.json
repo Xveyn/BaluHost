@@ -620,6 +620,39 @@
         "deleteFailed": "Zeitplan-Eintrag konnte nicht gelöscht werden",
         "toggleFailed": "Zeitplan-Eintrag konnte nicht umgeschaltet werden"
       }
+    },
+    "profiles": {
+      "title": "Kurvenprofile",
+      "description": "Benannte, wiederverwendbare Lüfterkurven. Auf Lüfter anwenden oder in Zeitplänen referenzieren.",
+      "systemProfiles": "Systemprofile",
+      "customProfiles": "Benutzerdefinierte Profile",
+      "newProfile": "Neues Profil",
+      "editProfile": "Profil bearbeiten",
+      "editCurve": "Kurve bearbeiten",
+      "apply": "Auf Lüfter anwenden",
+      "more": "Mehr",
+      "name": "Name",
+      "namePlaceholder": "z.B. Leise",
+      "description_field": "Beschreibung",
+      "descriptionPlaceholder": "Optionale Beschreibung",
+      "curvePoints": "Kurvenpunkte",
+      "create": "Erstellen",
+      "update": "Aktualisieren",
+      "noProfiles": "Noch keine Profile",
+      "noFanSelected": "Kein Lüfter ausgewählt",
+      "saveCurrentCurve": "Aktuelle Kurve als Profil speichern",
+      "deleteConfirmTitle": "Profil löschen?",
+      "deleteConfirmMessage": "Profil \"{{name}}\" löschen? Zeitplan-Einträge, die es verwenden, fallen auf Inline-Kurven zurück.",
+      "messages": {
+        "created": "Profil \"{{name}}\" erstellt",
+        "updated": "Profil aktualisiert",
+        "deleted": "Profil gelöscht",
+        "applied": "\"{{name}}\" auf Lüfter angewendet",
+        "createFailed": "Profil konnte nicht erstellt werden",
+        "updateFailed": "Profil konnte nicht aktualisiert werden",
+        "deleteFailed": "Profil konnte nicht gelöscht werden",
+        "applyFailed": "Profil konnte nicht angewendet werden"
+      }
     }
   },
   "servicesStatus": {
