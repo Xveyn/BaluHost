@@ -5,6 +5,7 @@ import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, Shi
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
+import ByteUnitSettings from '../components/ByteUnitSettings';
 import { formatBytes } from '../lib/formatters';
 import { get2FAStatus, setup2FA, verifySetup2FA, disable2FA, regenerateBackupCodes, type TwoFactorStatus, type TwoFactorSetupData } from '../api/two-factor';
 
@@ -839,7 +840,10 @@ export default function SettingsPage() {
 
         {/* Language Tab */}
         {activeTab === 'language' && (
-          <LanguageSettings />
+          <>
+            <LanguageSettings />
+            <ByteUnitSettings />
+          </>
         )}
 
         {/* API Keys Tab (Admin only) */}

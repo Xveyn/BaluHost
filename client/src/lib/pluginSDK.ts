@@ -24,7 +24,7 @@ import React, {
 import * as LucideIcons from 'lucide-react';
 import toast from 'react-hot-toast';
 import { apiClient } from './api';
-import { formatNumber } from './formatters';
+import { formatBytes as _formatBytes } from './formatters';
 
 // Import UI components
 import {
@@ -46,14 +46,10 @@ import {
   TabPanel,
 } from '../components/ui';
 
-// Utility functions
+// Utility functions — wrapper keeps null/undefined signature for plugin compat
 function formatBytes(bytes: number | null | undefined): string {
   if (!bytes || bytes === 0) return '0 B';
-  const k = 1024;
-  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  const value = bytes / Math.pow(k, i);
-  return `${value >= 100 ? Math.round(value) : formatNumber(value, value < 10 ? 2 : 1)} ${sizes[i]}`;
+  return _formatBytes(bytes);
 }
 
 function formatDate(date: string | Date, options?: Intl.DateTimeFormatOptions): string {

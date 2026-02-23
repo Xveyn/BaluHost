@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useCallback } from 'react';
 import { loggingApi, type FileAccessLog } from '../api/logging';
-import { formatNumber } from '../lib/formatters';
+import { formatBytes } from '../lib/formatters';
 
 export interface ActivityItem {
   id: string;
@@ -119,8 +119,7 @@ export function transformLog(log: FileAccessLog, index: number): ActivityItem {
     detail = `${log.user} • ${detail}`;
   }
   if (log.details?.size_bytes) {
-    const sizeKb = formatNumber(log.details.size_bytes / 1024, 1);
-    detail += ` (${sizeKb} KB)`;
+    detail += ` (${formatBytes(log.details.size_bytes)})`;
   }
 
   return {

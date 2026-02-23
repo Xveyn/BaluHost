@@ -6,6 +6,7 @@ import {
   transformLog,
 } from '../../hooks/useActivityFeed';
 import type { FileAccessLog } from '../../api/logging';
+import { setByteUnitMode } from '../../lib/byteUnits';
 
 describe('getActionIcon', () => {
   it('maps upload to "upload"', () => {
@@ -162,7 +163,7 @@ describe('transformLog', () => {
     expect(item.success).toBe(true);
     expect(item.detail).toContain('admin');
     expect(item.detail).toContain('report.pdf');
-    expect(item.detail).toContain('KB');
+    expect(item.detail).toContain('KiB');
     expect(item.ago).toBe('5 minutes ago');
   });
 

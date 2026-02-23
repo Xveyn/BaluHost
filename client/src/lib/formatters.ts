@@ -6,6 +6,7 @@
  */
 
 import i18n from '../i18n';
+import { getByteUnitMode, getUnitConfig } from './byteUnits';
 
 /** Locale-aware number formatting (de: "1,5" / en: "1.5"). */
 export function formatNumber(value: number, decimals: number, locale?: string): string {
@@ -23,13 +24,12 @@ export function formatNumber(value: number, decimals: number, locale?: string): 
  */
 export const formatBytes = (bytes: number): string => {
   if (!bytes || !Number.isFinite(bytes) || bytes <= 0) return '0 B';
-  const k = 1024;
-  const units = ['B', 'KB', 'MB', 'GB', 'TB', 'PB'];
+  const { divisor, units } = getUnitConfig(getByteUnitMode());
   const exponent = Math.min(
-    Math.floor(Math.log(bytes) / Math.log(k)),
+    Math.floor(Math.log(bytes) / Math.log(divisor)),
     units.length - 1,
   );
-  const size = bytes / k ** exponent;
+  const size = bytes / divisor ** exponent;
   return `${size >= 100 ? Math.round(size) : formatNumber(size, size < 10 ? 2 : 1)} ${units[exponent]}`;
 };
 

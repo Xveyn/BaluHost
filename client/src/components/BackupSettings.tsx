@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 	import { listBackups, createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
 	import type { Backup, BackupListResponse, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
 import { apiCache } from '../lib/api';
-import { formatNumber } from '../lib/formatters';
+import { formatBytes } from '../lib/formatters';
 
 export default function BackupSettings() {
 	const { t } = useTranslation('settings');
@@ -14,7 +14,7 @@ export default function BackupSettings() {
 	const [includesConfig, setIncludesConfig] = useState(false);
 	const [backupPath, setBackupPath] = useState('');
 	const [backups, setBackups] = useState<Backup[]>([]);
-	const [totalSize, setTotalSize] = useState({ bytes: 0, mb: 0 });
+	const [totalSizeBytes, setTotalSizeBytes] = useState(0);
 	const [loading, setLoading] = useState(true);
 	const [creating, setCreating] = useState(false);
 	const [error, setError] = useState<string | null>(null);
@@ -38,7 +38,7 @@ export default function BackupSettings() {
 			const response: BackupListResponse = await listBackups();
 			setBackups(response.backups);
 			const totalBytes = response.backups.reduce((acc, b) => acc + b.size_bytes, 0);
-			setTotalSize({ bytes: totalBytes, mb: totalBytes / 1024 / 1024 });
+			setTotalSizeBytes(totalBytes);
 		} catch (err: unknown) {
 			const msg = err != null && typeof err === 'object' && 'response' in err
 				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
@@ -207,7 +207,7 @@ export default function BackupSettings() {
 									<div className="flex items-center gap-2">
 										<HardDrive className="w-4 h-4 text-slate-400" />
 										<span className="text-slate-400">{t('backup.totalSize')}:</span>
-										<span className="font-medium text-slate-200">{formatNumber(totalSize.mb, 2)} MB</span>
+										<span className="font-medium text-slate-200">{formatBytes(totalSizeBytes)}</span>
 									</div>
 									<div className="flex items-center gap-2">
 										<Database className="w-4 h-4 text-slate-400" />
@@ -286,7 +286,7 @@ export default function BackupSettings() {
 										<td className="px-6 py-4 whitespace-nowrap">
 											<span className="px-2 py-1 text-xs font-medium rounded-full bg-sky-500/10 text-sky-400 border border-sky-500/20">{backup.backup_type}</span>
 										</td>
-										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{formatNumber(backup.size_mb, 2)} MB</td>
+										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-300">{formatBytes(backup.size_bytes)}</td>
 										<td className="px-6 py-4 whitespace-nowrap text-sm text-slate-400">{formatDate(backup.created_at)}</td>
 										<td className="px-6 py-4">
 											<div className="flex items-center gap-2 text-xs">
@@ -334,7 +334,7 @@ export default function BackupSettings() {
 									<p className="text-xs text-red-400 mt-1">{backup.error_message}</p>
 								)}
 								<div className="mt-2 flex items-center justify-between text-xs text-slate-400">
-									<span>{formatNumber(backup.size_mb, 2)} MB</span>
+									<span>{formatBytes(backup.size_bytes)}</span>
 									<span>{formatDate(backup.created_at)}</span>
 								</div>
 								<div className="mt-2 flex items-center justify-between">

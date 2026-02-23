@@ -653,7 +653,7 @@ export default function Dashboard() {
                         <div className="flex items-center justify-between">
                           <div>
                             <p className="text-sm font-medium text-slate-100">{array.name}</p>
-                            <p className="text-xs text-slate-500">RAID {array.level} • {formatNumber(array.size_bytes / (1024 ** 3), 1)} GB</p>
+                            <p className="text-xs text-slate-500">RAID {array.level} • {formatBytes(array.size_bytes)}</p>
                           </div>
                           <span className={`rounded-full border px-2 py-0.5 text-xs ${
                             array.status === 'clean' || array.status === 'optimal'

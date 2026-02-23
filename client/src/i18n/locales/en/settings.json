@@ -117,6 +117,12 @@
     "autoDetect": "Auto-detect",
     "current": "Current Language"
   },
+  "byteUnits": {
+    "title": "Byte Unit Display",
+    "description": "Choose how file sizes are displayed.",
+    "binary": "Binary (KiB / MiB / GiB)",
+    "decimal": "Decimal (KB / MB / GB)"
+  },
   "apiKeys": {
     "title": "API Keys",
     "description": "Create API keys for programmatic access to the BaluHost API. Keys act as the selected user.",

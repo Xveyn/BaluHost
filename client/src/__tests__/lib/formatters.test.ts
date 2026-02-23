@@ -1,7 +1,12 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
 import { formatBytes, formatUptime, formatPercentage, formatNumber } from '../../lib/formatters';
+import { setByteUnitMode } from '../../lib/byteUnits';
 
-describe('formatBytes', () => {
+beforeEach(() => {
+  setByteUnitMode('binary');
+});
+
+describe('formatBytes (binary mode — default)', () => {
   it('returns "0 B" for zero', () => {
     expect(formatBytes(0)).toBe('0 B');
   });
@@ -14,33 +19,58 @@ describe('formatBytes', () => {
     expect(formatBytes(-100)).toBe('0 B');
   });
 
-  it('formats bytes below 1 KB', () => {
+  it('formats bytes below 1 KiB', () => {
     expect(formatBytes(512)).toBe('512 B');
   });
 
-  it('formats exactly 1 KB', () => {
-    expect(formatBytes(1024)).toBe('1,00 KB');
+  it('formats exactly 1 KiB', () => {
+    expect(formatBytes(1024)).toBe('1,00 KiB');
   });
 
-  it('formats 1.5 GB', () => {
-    expect(formatBytes(1.5 * 1024 ** 3)).toBe('1,50 GB');
+  it('formats 1.5 GiB', () => {
+    expect(formatBytes(1.5 * 1024 ** 3)).toBe('1,50 GiB');
   });
 
-  it('formats 1 TB', () => {
-    expect(formatBytes(1024 ** 4)).toBe('1,00 TB');
+  it('formats 1 TiB', () => {
+    expect(formatBytes(1024 ** 4)).toBe('1,00 TiB');
   });
 
-  it('formats 1 PB', () => {
-    expect(formatBytes(1024 ** 5)).toBe('1,00 PB');
+  it('formats 1 PiB', () => {
+    expect(formatBytes(1024 ** 5)).toBe('1,00 PiB');
   });
 
   it('rounds large values within a unit (>=100)', () => {
-    // 500 GB = no decimal
-    expect(formatBytes(500 * 1024 ** 3)).toBe('500 GB');
+    expect(formatBytes(500 * 1024 ** 3)).toBe('500 GiB');
   });
 
   it('uses 1 decimal for values >= 10', () => {
-    expect(formatBytes(15 * 1024 ** 2)).toBe('15,0 MB');
+    expect(formatBytes(15 * 1024 ** 2)).toBe('15,0 MiB');
+  });
+});
+
+describe('formatBytes (decimal mode)', () => {
+  beforeEach(() => {
+    setByteUnitMode('decimal');
+  });
+
+  it('returns "0 B" for zero', () => {
+    expect(formatBytes(0)).toBe('0 B');
+  });
+
+  it('formats exactly 1 KB (1000 bytes)', () => {
+    expect(formatBytes(1000)).toBe('1,00 KB');
+  });
+
+  it('formats 1.5 GB', () => {
+    expect(formatBytes(1.5 * 1000 ** 3)).toBe('1,50 GB');
+  });
+
+  it('formats 1 TB', () => {
+    expect(formatBytes(1000 ** 4)).toBe('1,00 TB');
+  });
+
+  it('rounds large values within a unit (>=100)', () => {
+    expect(formatBytes(500 * 1000 ** 3)).toBe('500 GB');
   });
 });
 
