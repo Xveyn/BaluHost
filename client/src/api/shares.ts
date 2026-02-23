@@ -69,6 +69,20 @@ export interface ShareStatistics {
 }
 
 // ===========================
+// Users for sharing (available to all authenticated users)
+// ===========================
+
+export interface ShareableUser {
+  id: number;
+  username: string;
+}
+
+export const getShareableUsers = async (): Promise<ShareableUser[]> => {
+  const response = await apiClient.get('/api/shares/users');
+  return response.data;
+};
+
+// ===========================
 // File Shares API
 // ===========================
 

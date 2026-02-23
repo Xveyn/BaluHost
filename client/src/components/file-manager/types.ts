@@ -38,6 +38,9 @@ export interface FileItem {
   ownerName?: string;
   file_id?: number;
   syncInfo?: SyncDeviceInfo[];
+  canRead?: boolean;
+  canWrite?: boolean;
+  canDelete?: boolean;
 }
 
 export interface ApiFileItem {
@@ -58,6 +61,9 @@ export interface ApiFileItem {
     sync_direction: string;
     last_reported_at: string;
   }>;
+  can_read?: boolean;
+  can_write?: boolean;
+  can_delete?: boolean;
 }
 
 export interface PermissionRule {

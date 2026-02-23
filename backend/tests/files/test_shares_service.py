@@ -119,7 +119,7 @@ class TestFileShareCRUD:
             file_id=file_for_sharing.id,
             shared_with_user_id=regular_user.id,
         )
-        with pytest.raises(PermissionError, match="don't own"):
+        with pytest.raises(PermissionError, match="don't have permission"):
             ShareService.create_file_share(db_session, _to_user_public(another_user), data)
 
     def test_create_file_share_target_user_not_found(self, db_session, regular_user, file_for_sharing):

@@ -25,14 +25,23 @@ class ShareService:
     @staticmethod
     def create_file_share(db: Session, current_user: UserPublic, data: FileShareCreate) -> FileShare:
         """Share a file with another user."""
-        # Verify file exists and user owns it (or is privileged)
+        # Verify file exists and user owns it (or is privileged, or has can_share)
         file_metadata = db.get(FileMetadata, data.file_id)
         if not file_metadata:
             raise ValueError("File not found")
         try:
             ensure_owner_or_privileged(current_user, str(file_metadata.owner_id))
         except PermissionDeniedError:
-            raise PermissionError("You don't own this file")
+            # Not the owner and not privileged — check if user has can_share permission
+            existing_share = db.execute(
+                select(FileShare).where(
+                    FileShare.file_id == data.file_id,
+                    FileShare.shared_with_user_id == current_user.id,
+                    FileShare.can_share == True,
+                )
+            ).scalar_one_or_none()
+            if not existing_share or existing_share.is_expired():
+                raise PermissionError("You don't have permission to share this file")
 
         # Verify target user exists
         target_user = db.get(User, data.shared_with_user_id)
@@ -94,9 +103,14 @@ class ShareService:
 
     @staticmethod
     def get_files_shared_with_user(db: Session, user_id: int) -> List[FileShare]:
-        """Get all files shared with a user."""
+        """Get all active (non-expired) files shared with a user."""
+        now = datetime.now(timezone.utc)
         stmt = select(FileShare).where(
-            FileShare.shared_with_user_id == user_id
+            FileShare.shared_with_user_id == user_id,
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now
+            )
         )
         return list(db.execute(stmt).scalars().all())
 
@@ -148,20 +162,17 @@ class ShareService:
         user_id: int,
         file_id: int
     ) -> Optional[FileShare]:
-        """Check if a user has access to a file via sharing."""
+        """Check if a user has access to a file via sharing (read-only check)."""
+        now = datetime.now(timezone.utc)
         stmt = select(FileShare).where(
             FileShare.file_id == file_id,
-            FileShare.shared_with_user_id == user_id
+            FileShare.shared_with_user_id == user_id,
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now
+            )
         )
-        share = db.execute(stmt).scalar_one_or_none()
-
-        if share and share.is_accessible():
-            # Update last access time
-            share.last_accessed_at = datetime.now(timezone.utc)
-            db.commit()
-            return share
-
-        return None
+        return db.execute(stmt).scalar_one_or_none()
 
     @staticmethod
     def get_share_statistics(db: Session, user_id: int) -> ShareStatistics:

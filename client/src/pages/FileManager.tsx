@@ -304,6 +304,9 @@ export default function FileManager() {
             syncDirection: si.sync_direction as 'bidirectional' | 'push' | 'pull',
             lastReportedAt: si.last_reported_at,
           })),
+          canRead: file.can_read ?? undefined,
+          canWrite: file.can_write ?? undefined,
+          canDelete: file.can_delete ?? undefined,
         }));
         setFiles(mappedFiles);
 

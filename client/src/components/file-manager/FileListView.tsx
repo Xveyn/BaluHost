@@ -70,6 +70,19 @@ function renderFileIcon(file: FileItem, size: 'sm' | 'md' = 'sm') {
   );
 }
 
+/**
+ * Check if the current user can perform an action on a file.
+ * Returns true if user is owner/admin, or if the share permission is explicitly granted.
+ * When permission is undefined (own files, admin), defaults to owner/admin check.
+ */
+function canPerformAction(
+  isOwnerOrAdmin: boolean,
+  sharePermission: boolean | undefined,
+): boolean {
+  if (isOwnerOrAdmin) return true;
+  return sharePermission === true;
+}
+
 export function FileListView({
   files,
   versionCounts,
@@ -224,20 +237,24 @@ export function FileListView({
                           )}
                         </button>
                       )}
-                      <button
-                        onClick={() => onRename(file)}
-                        className="p-2 rounded-lg border border-slate-700/50 bg-slate-800/50 text-slate-300 transition hover:border-slate-600 hover:text-white"
-                        title="Rename"
-                      >
-                        <Pencil className="w-4 h-4" />
-                      </button>
-                      <button
-                        onClick={() => onDelete(file)}
-                        className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                        title="Delete"
-                      >
-                        <Trash2 className="w-4 h-4" />
-                      </button>
+                      {canPerformAction(isCurrentUserOwnerOrAdmin(file.ownerId), file.canWrite) && (
+                        <button
+                          onClick={() => onRename(file)}
+                          className="p-2 rounded-lg border border-slate-700/50 bg-slate-800/50 text-slate-300 transition hover:border-slate-600 hover:text-white"
+                          title="Rename"
+                        >
+                          <Pencil className="w-4 h-4" />
+                        </button>
+                      )}
+                      {canPerformAction(isCurrentUserOwnerOrAdmin(file.ownerId), file.canDelete) && (
+                        <button
+                          onClick={() => onDelete(file)}
+                          className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                          title="Delete"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </button>
+                      )}
                       {isCurrentUserOwnerOrAdmin(file.ownerId) && (
                         <button
                           onClick={() => onEditPermissions(file)}
@@ -375,19 +392,23 @@ export function FileListView({
                     )}
                   </button>
                 )}
-                <button
-                  onClick={() => onRename(file)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white touch-manipulation active:scale-95"
-                >
-                  <Pencil className="w-3.5 h-3.5" />
-                  Rename
-                </button>
-                <button
-                  onClick={() => onDelete(file)}
-                  className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
-                >
-                  <Trash2 className="w-3.5 h-3.5" />
-                </button>
+                {canPerformAction(isCurrentUserOwnerOrAdmin(file.ownerId), file.canWrite) && (
+                  <button
+                    onClick={() => onRename(file)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-xs font-medium text-slate-300 transition hover:border-slate-600 hover:text-white touch-manipulation active:scale-95"
+                  >
+                    <Pencil className="w-3.5 h-3.5" />
+                    Rename
+                  </button>
+                )}
+                {canPerformAction(isCurrentUserOwnerOrAdmin(file.ownerId), file.canDelete) && (
+                  <button
+                    onClick={() => onDelete(file)}
+                    className="flex-1 flex items-center justify-center gap-1.5 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-2 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                  </button>
+                )}
                 {isCurrentUserOwnerOrAdmin(file.ownerId) && (
                   <button
                     onClick={() => onTransferOwnership(file)}

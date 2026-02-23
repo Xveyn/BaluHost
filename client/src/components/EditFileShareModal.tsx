@@ -28,7 +28,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
     try {
       await updateFileShare(fileShare.id, {
         ...formData,
-        expires_at: formData.expires_at ? `${formData.expires_at}T23:59:59` : null
+        expires_at: formData.expires_at ? `${formData.expires_at}T23:59:59Z` : null
       });
       onSuccess();
     } catch (error: unknown) {

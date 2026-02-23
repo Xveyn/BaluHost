@@ -5,12 +5,12 @@ import {
   listFileShares,
   listFilesSharedWithMe,
   getShareStatistics,
+  getShareableUsers,
   deleteFileShare,
   type FileShare,
   type SharedWithMe,
   type ShareStatistics
 } from '../api/shares';
-import { getUsers } from '../api/users';
 import { Users, Share2, Trash2, Edit, Search, Filter, Calendar, Loader2, Folder, File as FileIcon } from 'lucide-react';
 import { formatBytes } from '../lib/formatters';
 import { StatCard } from '../components/ui/StatCard';
@@ -45,12 +45,8 @@ export default function SharesPage() {
 
   const fetchUsers = async () => {
     try {
-      const data = await getUsers();
-      if (Array.isArray(data.users)) {
-        setUsers(data.users.map(u => ({ id: u.id, username: u.username, role: u.role })));
-      } else {
-        setUsers([]);
-      }
+      const data = await getShareableUsers();
+      setUsers(Array.isArray(data) ? data.map(u => ({ id: u.id, username: u.username, role: '' })) : []);
     } catch {
       setUsers([]);
     }
@@ -280,6 +276,7 @@ export default function SharesPage() {
                           <thead className="bg-slate-800/30 border-b border-slate-700/50">
                             <tr>
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.owner')}</th>
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.sharedWith')}</th>
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.permissions')}</th>
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
@@ -302,6 +299,7 @@ export default function SharesPage() {
                                     </div>
                                   </div>
                                 </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-300 font-medium">{share.owner_username}</td>
                                 <td className="px-4 sm:px-6 py-3 sm:py-4 text-slate-300 font-medium">{share.shared_with_username}</td>
                                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                                   <div className="flex space-x-1">
@@ -382,6 +380,11 @@ export default function SharesPage() {
                                   <Trash2 className="w-4 h-4" />
                                 </button>
                               </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-2">
+                              <Users className="h-3 w-3 text-slate-400" />
+                              <span className="text-sm text-slate-300">{t('table.owner')}: {share.owner_username}</span>
                             </div>
 
                             <div className="flex items-center gap-2 mb-2">
