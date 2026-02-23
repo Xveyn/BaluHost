@@ -23,6 +23,7 @@ import {
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
 import { formatBytes } from '../../lib/formatters';
+import { ByteSizeInput } from '../ui/ByteSizeInput';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import MigrationPanel from './MigrationPanel';
 import { getRaidStatus } from '../../api/raid';
@@ -467,14 +468,11 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
 
               {/* Max Size */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Max Size (bytes)</label>
-                <input
-                  type="number"
+                <ByteSizeInput
+                  label="Max Size"
                   value={configForm.max_size_bytes ?? 0}
-                  onChange={(e) => handleConfigChange('max_size_bytes', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
+                  onChange={(bytes) => handleConfigChange('max_size_bytes', bytes)}
                 />
-                <p className="text-xs text-slate-500 mt-1">{formatBytes(configForm.max_size_bytes ?? 0)}</p>
               </div>
 
               {/* Eviction Policy */}
@@ -493,38 +491,29 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
 
               {/* Min File Size */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Min File Size</label>
-                <input
-                  type="number"
+                <ByteSizeInput
+                  label="Min File Size"
                   value={configForm.min_file_size_bytes ?? 0}
-                  onChange={(e) => handleConfigChange('min_file_size_bytes', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
+                  onChange={(bytes) => handleConfigChange('min_file_size_bytes', bytes)}
                 />
-                <p className="text-xs text-slate-500 mt-1">{formatBytes(configForm.min_file_size_bytes ?? 0)}</p>
               </div>
 
               {/* Max File Size */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Max File Size</label>
-                <input
-                  type="number"
+                <ByteSizeInput
+                  label="Max File Size"
                   value={configForm.max_file_size_bytes ?? 0}
-                  onChange={(e) => handleConfigChange('max_file_size_bytes', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
+                  onChange={(bytes) => handleConfigChange('max_file_size_bytes', bytes)}
                 />
-                <p className="text-xs text-slate-500 mt-1">{formatBytes(configForm.max_file_size_bytes ?? 0)}</p>
               </div>
 
               {/* Sequential Cutoff */}
               <div>
-                <label className="block text-sm text-slate-400 mb-1">Sequential Cutoff</label>
-                <input
-                  type="number"
+                <ByteSizeInput
+                  label="Sequential Cutoff"
                   value={configForm.sequential_cutoff_bytes ?? 0}
-                  onChange={(e) => handleConfigChange('sequential_cutoff_bytes', parseInt(e.target.value) || 0)}
-                  className="w-full px-3 py-1.5 bg-slate-800 border border-slate-700 rounded-lg text-white text-sm"
+                  onChange={(bytes) => handleConfigChange('sequential_cutoff_bytes', bytes)}
                 />
-                <p className="text-xs text-slate-500 mt-1">{formatBytes(configForm.sequential_cutoff_bytes ?? 0)}</p>
               </div>
             </div>
 

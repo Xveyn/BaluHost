@@ -34,5 +34,8 @@ export type { TabsProps, TabPanelProps, Tab } from './Tabs';
 export { ConfirmDialog } from './ConfirmDialog';
 export type { ConfirmDialogProps } from './ConfirmDialog';
 
+export { ByteSizeInput } from './ByteSizeInput';
+export type { ByteSizeInputProps } from './ByteSizeInput';
+
 // Re-export AdminBadge for backwards compatibility
 export { AdminBadge } from './AdminBadge';

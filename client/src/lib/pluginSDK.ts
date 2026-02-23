@@ -44,6 +44,7 @@ import {
   EmptyState,
   Tabs,
   TabPanel,
+  ByteSizeInput,
 } from '../components/ui';
 
 // Utility functions — wrapper keeps null/undefined signature for plugin compat
@@ -148,6 +149,7 @@ export interface BaluHostSDK {
     EmptyState: typeof EmptyState;
     Tabs: typeof Tabs;
     TabPanel: typeof TabPanel;
+    ByteSizeInput: typeof ByteSizeInput;
   };
   icons: typeof LucideIcons;
   toast: typeof pluginToast;
@@ -209,6 +211,7 @@ export function initPluginSDK(): void {
       EmptyState,
       Tabs,
       TabPanel,
+      ByteSizeInput,
     },
 
     // Lucide React Icons (all of them)

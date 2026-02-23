@@ -27,6 +27,7 @@ import {
   formatBytes,
 } from '../../api/vcl';
 import { formatNumber } from '../../lib/formatters';
+import { ByteSizeInput } from '../ui/ByteSizeInput';
 import type { AdminVCLOverview, UserVCLStats, VCLSettingsUpdate, VCLStorageInfo } from '../../types/vcl';
 
 export default function VCLSettings() {
@@ -427,17 +428,10 @@ export default function VCLSettings() {
                 <label className="block text-sm font-medium text-slate-300 mb-2">
                   {t('vcl.editModal.maxSizeLabel')}
                 </label>
-                <input
-                  type="number"
+                <ByteSizeInput
                   value={editForm.max_size_bytes || 0}
-                  onChange={(e) =>
-                    setEditForm({ ...editForm, max_size_bytes: parseInt(e.target.value) || 0 })
-                  }
-                  className="w-full px-4 py-2 bg-slate-800 border border-slate-700 rounded-lg text-white"
+                  onChange={(bytes) => setEditForm({ ...editForm, max_size_bytes: bytes })}
                 />
-                <p className="text-xs text-slate-500 mt-1">
-                  {formatBytes(editForm.max_size_bytes || 0)}
-                </p>
               </div>
               <div>
                 <label className="flex items-center gap-2 cursor-pointer">
