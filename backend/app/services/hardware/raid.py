@@ -98,8 +98,8 @@ class _RaidState:
                 size_bytes=size_bytes,
                 status="optimal",
                 devices=[
-                    RaidDevice(name="sda1", state="active"),
-                    RaidDevice(name="sdb1", state="active"),
+                    RaidDevice(name="sda1", state="active", disk_type="hdd"),
+                    RaidDevice(name="sdb1", state="active", disk_type="hdd"),
                 ],
                 resync_progress=None,
                 bitmap="internal",
@@ -338,16 +338,6 @@ class DevRaidBackend:
         self._state.ensure_default()
         arrays = list(self._state.arrays.values())
 
-        # Enrich arrays with SSD cache status
-        try:
-            from app.services.hardware.ssd_cache import get_cache_status
-            for arr in arrays:
-                cache = get_cache_status(arr.name)
-                if cache:
-                    arr.cache = cache
-        except Exception:
-            pass
-
         return RaidStatusResponse(
             arrays=arrays,
             speed_limits=RaidSpeedLimits(
@@ -419,17 +409,10 @@ class DevRaidBackend:
         # Dynamische Disks haben kein is_os_disk/is_ssd Feld (4-Tupel)
         all_mock_disks = base_mock_disks + [(d[0], d[1], d[2], d[3], False, False) for d in self._mock_disks]
 
-        # Get SSD cache device names for is_cache_device flag
-        try:
-            from app.services.hardware.ssd_cache import get_cache_devices
-            cache_device_names = get_cache_devices()
-        except Exception:
-            cache_device_names = set()
-
         for disk_name, partition_name, model, size_gb, is_os, is_ssd in all_mock_disks:
             in_raid = partition_name in used_devices
             raid_suffix = " (in RAID)" if in_raid else ""
-            is_cache = partition_name in cache_device_names or disk_name in cache_device_names
+            is_cache = disk_name == "nvme1n1"
 
             disks.append(
                 AvailableDisk(
@@ -473,6 +456,22 @@ class DevRaidBackend:
         return RaidActionResponse(
             message=f"Mock disk /dev/{disk_name} ({size_gb}GB) successfully added"
         )
+
+    def _get_dev_disk_type(self, partition_name: str) -> str:
+        """Derive disk type from mock disk data for a partition name (e.g. sda1 -> hdd)."""
+        # Strip partition number to get parent disk name
+        parent = re.sub(r"p?\d+$", "", partition_name)
+        base_mock_disks = [
+            ("nvme0n1", True), ("sda", False), ("sdb", False),
+            ("sdc", False), ("sdd", False), ("sde", False),
+            ("sdf", False), ("sdg", False), ("nvme1n1", True),
+        ]
+        for disk_name, is_ssd in base_mock_disks:
+            if parent == disk_name:
+                if "nvme" in disk_name:
+                    return "nvme"
+                return "ssd" if is_ssd else "hdd"
+        return "hdd"
 
     def format_disk(self, payload: FormatDiskRequest) -> RaidActionResponse:
         """Simulate disk formatting in dev mode."""
@@ -558,9 +557,9 @@ class DevRaidBackend:
             array_size = min_disk_size
         
         # Erstelle neues Array
-        devices = [RaidDevice(name=dev, state="active") for dev in payload.devices]
+        devices = [RaidDevice(name=dev, state="active", disk_type=self._get_dev_disk_type(dev)) for dev in payload.devices]
         if payload.spare_devices:
-            devices.extend([RaidDevice(name=dev, state="spare") for dev in payload.spare_devices])
+            devices.extend([RaidDevice(name=dev, state="spare", disk_type=self._get_dev_disk_type(dev)) for dev in payload.spare_devices])
         
         self._state.arrays[payload.name] = RaidArray(
             name=payload.name,
@@ -611,20 +610,12 @@ class MdadmRaidBackend:
                 speed_limits=self._read_speed_limits(),
             )
 
+        disk_type_map = self._get_disk_type_map()
+
         arrays: List[RaidArray] = []
         for name in sorted(array_names):
             info = mdstat_info.get(name)
-            arrays.append(self._build_array(name, info))
-
-        # Enrich arrays with SSD cache status
-        try:
-            from app.services.hardware.ssd_cache import get_cache_status as _get_cache
-            for arr in arrays:
-                cache = _get_cache(arr.name)
-                if cache:
-                    arr.cache = cache
-        except Exception:
-            pass
+            arrays.append(self._build_array(name, info, disk_type_map))
 
         speed_limits = self._read_speed_limits()
 
@@ -723,7 +714,8 @@ class MdadmRaidBackend:
 
         return RaidActionResponse(message="; ".join(actions))
 
-    def _build_array(self, name: str, info: Optional[MdstatInfo]) -> RaidArray:
+    def _build_array(self, name: str, info: Optional[MdstatInfo],
+                      disk_type_map: Optional[Dict[str, str]] = None) -> RaidArray:
         detail = self._run(["mdadm", "--detail", f"/dev/{name}"]).stdout
 
         level = _extract_detail_value(detail, "Raid Level") or "unknown"
@@ -735,6 +727,13 @@ class MdadmRaidBackend:
         sync_action = self._read_sync_action(name)
         status = _derive_array_status(state_line, resync_progress, devices, sync_action)
         bitmap_info = _extract_detail_value(detail, "Bitmap")
+
+        # Enrich devices with disk type from lsblk data
+        if disk_type_map:
+            for dev in devices:
+                # Strip partition number to get parent disk (e.g. sda1 -> sda)
+                parent = re.sub(r"p?\d+$", "", dev.name)
+                dev.disk_type = disk_type_map.get(parent, "hdd")
 
         return RaidArray(
             name=name,
@@ -844,6 +843,29 @@ class MdadmRaidBackend:
             devices.append(RaidDevice(name=Path(device_path).name, state=_map_device_state(state_text)))
 
         return devices
+
+    def _get_disk_type_map(self) -> Dict[str, str]:
+        """Build a map of disk name -> type ("hdd", "ssd", "nvme") using lsblk."""
+        if not getattr(self, "_lsblk_available", False):
+            return {}
+        try:
+            result = self._run(["lsblk", "-J", "-o", "NAME,ROTA,TYPE"], timeout=10)
+            data = json.loads(result.stdout)
+            mapping: Dict[str, str] = {}
+            for dev in data.get("blockdevices", []):
+                if dev.get("type") != "disk":
+                    continue
+                name = dev.get("name", "")
+                if "nvme" in name:
+                    mapping[name] = "nvme"
+                elif dev.get("rota") is not None and str(dev["rota"]) == "0":
+                    mapping[name] = "ssd"
+                else:
+                    mapping[name] = "hdd"
+            return mapping
+        except Exception:
+            logger.debug("Failed to build disk type map")
+            return {}
 
     def _read_mdstat(self) -> Dict[str, MdstatInfo]:
         if not self._MDSTAT_PATH.exists():
@@ -987,12 +1009,7 @@ class MdadmRaidBackend:
             for device in array.devices:
                 raid_devices.add(device.name)
 
-        # Get SSD cache device names
-        try:
-            from app.services.hardware.ssd_cache import get_cache_devices
-            cache_device_names = get_cache_devices()
-        except Exception:
-            cache_device_names = set()
+        cache_device_names: set[str] = set()
 
         # Parse lsblk output
         for device in data.get("blockdevices", []):
@@ -1008,7 +1025,13 @@ class MdadmRaidBackend:
             # Check for partitions
             if "children" in device:
                 is_partitioned = True
-                partitions = [child.get("name", "") for child in device["children"]]
+                for child in device["children"]:
+                    partitions.append(child.get("name", ""))
+                    # Detect SSD cache mount
+                    mp = child.get("mountpoint") or ""
+                    if mp.startswith("/mnt/cache-vcl"):
+                        cache_device_names.add(name)
+                        cache_device_names.add(child.get("name", ""))
 
             # Check if any partition is in RAID
             in_raid = any(part in raid_devices for part in partitions) or name in raid_devices

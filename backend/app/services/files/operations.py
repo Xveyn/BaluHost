@@ -29,6 +29,23 @@ from app.services.files.folder_size import get_folder_size, invalidate_folder_si
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.permissions import PermissionDeniedError, can_view, ensure_owner_or_privileged
 
+logger = logging.getLogger(__name__)
+
+
+def _invalidate_ssd_cache(source_path: str, db: Optional[Session] = None) -> None:
+    """Invalidate SSD cache entry for a file path across all arrays. Never raises."""
+    if not db:
+        return
+    try:
+        from app.services.cache.ssd_file_cache import SSDFileCacheService
+        configs = SSDFileCacheService.get_all_configs(db)
+        for cfg in configs:
+            if cfg.is_enabled:
+                svc = SSDFileCacheService(db, str(cfg.array_name))
+                svc.invalidate_entry(source_path)
+    except Exception:
+        logger.debug("SSD cache invalidation failed for %s", source_path, exc_info=True)
+
 ROOT_DIR = Path(settings.nas_storage_path).expanduser().resolve()
 ROOT_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -90,6 +107,47 @@ def is_path_shared_with_user(db: Session, relative_path: str, user_id: int) -> b
         .limit(1)
     )
     return db.execute(stmt).first() is not None
+
+
+def get_share_permissions(db: Session, relative_path: str, user_id: int):
+    """Return the FileShare object granting access to *relative_path* for *user_id*.
+
+    Checks the path itself and all ancestor directories, returning the first
+    matching active (non-expired) share, or ``None`` if no share exists.
+    """
+    if db is None:
+        return None
+
+    from app.models.file_share import FileShare
+    from app.models.file_metadata import FileMetadata
+    from datetime import datetime, timezone
+
+    now = datetime.now(timezone.utc)
+
+    candidates: list[str] = []
+    parts = PurePosixPath(relative_path).parts
+    for i in range(len(parts), 0, -1):
+        candidates.append(str(PurePosixPath(*parts[:i])))
+
+    if not candidates:
+        return None
+
+    stmt = (
+        select(FileShare)
+        .join(FileMetadata, FileShare.file_id == FileMetadata.id)
+        .where(
+            FileShare.shared_with_user_id == user_id,
+            FileShare.owner_id != user_id,
+            FileShare.can_read.is_(True),
+            FileMetadata.path.in_(candidates),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+        .limit(1)
+    )
+    return db.execute(stmt).scalars().first()
 
 
 class FileAccessError(Exception):
@@ -198,6 +256,13 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             mime_type=mime_type,
             file_id=file_id,
         )
+        # Attach share permissions for non-owner shared files
+        if user and db and entry_owner and not can_view(user, entry_owner) and not is_in_shared_dir(relative_entry):
+            share = get_share_permissions(db, relative_entry, user.id)
+            if share:
+                item.can_read = share.can_read
+                item.can_write = share.can_write
+                item.can_delete = share.can_delete
         items.append(item)
 
     items.sort(key=lambda item: (item.type != "directory", item.name.lower()))
@@ -603,6 +668,10 @@ async def save_uploads(
             except Exception as e:
                 logging.getLogger(__name__).warning("VCL check failed: %s", e)
 
+            # Invalidate SSD cache for overwritten files
+            if existing_meta:
+                _invalidate_ssd_cache(relative_destination, db=db)
+
             # Mark upload as completed
             if upload_ids and idx < len(upload_ids):
                 await progress_manager.complete_upload(upload_ids[idx])
@@ -640,7 +709,15 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
     if is_directory:
         target_relative = _relative_posix(target)
         if user:
-            ensure_owner_or_privileged(user, get_owner(target_relative, db=db))
+            try:
+                ensure_owner_or_privileged(user, get_owner(target_relative, db=db))
+            except PermissionDeniedError:
+                if db:
+                    share = get_share_permissions(db, target_relative, user.id)
+                    if not (share and share.can_delete):
+                        raise
+                else:
+                    raise
         # Collect children first, then delete bottom-up so partial
         # failures don't leave orphaned metadata.
         children = list(target.iterdir())
@@ -648,12 +725,25 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
             delete_path(_relative_posix(child), user=user, db=db)
         target.rmdir()
     else:
+        file_relative = _relative_posix(target)
         if user:
-            ensure_owner_or_privileged(user, get_owner(_relative_posix(target), db=db))
+            try:
+                ensure_owner_or_privileged(user, get_owner(file_relative, db=db))
+            except PermissionDeniedError:
+                if db:
+                    share = get_share_permissions(db, file_relative, user.id)
+                    if not (share and share.can_delete):
+                        raise
+                else:
+                    raise
         target.unlink()
 
     # Delete metadata from database
     file_metadata_db.delete_metadata(relative_path, db=db)
+
+    # Invalidate SSD cache
+    if not is_directory:
+        _invalidate_ssd_cache(relative_path, db=db)
 
     # Log deletion
     audit.log_file_access(
@@ -724,7 +814,15 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
     source_relative = _relative_posix(source)
 
     if user:
-        ensure_owner_or_privileged(user, get_owner(source_relative, db=db))
+        try:
+            ensure_owner_or_privileged(user, get_owner(source_relative, db=db))
+        except PermissionDeniedError:
+            if db:
+                share = get_share_permissions(db, source_relative, user.id)
+                if not (share and share.can_write):
+                    raise
+            else:
+                raise
 
     target_relative = (PurePosixPath(source_relative).parent / new_name).as_posix()
     target = _resolve_path(target_relative)
@@ -739,6 +837,10 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
         new_name=new_name,
         db=db
     )
+
+    # Invalidate SSD cache for renamed files
+    if not is_dir:
+        _invalidate_ssd_cache(source_relative, db=db)
 
     # Invalidate folder size cache for renamed directories
     if is_dir:
@@ -760,7 +862,15 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
     source_relative = _relative_posix(source)
 
     if user:
-        ensure_owner_or_privileged(user, get_owner(source_relative, db=db))
+        try:
+            ensure_owner_or_privileged(user, get_owner(source_relative, db=db))
+        except PermissionDeniedError:
+            if db:
+                share = get_share_permissions(db, source_relative, user.id)
+                if not (share and share.can_write):
+                    raise
+            else:
+                raise
 
     destination = _resolve_path(target_path)
     if destination.is_dir():
@@ -780,6 +890,7 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
     final_relative = _relative_posix(final_target)
     final_target_resolved = _resolve_path(final_relative)
     source_parent = source.parent
+    is_file = source.is_file()
     source.rename(final_target_resolved)
 
     # Update metadata in database
@@ -789,6 +900,10 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
         new_name=final_target.name,
         db=db
     )
+
+    # Invalidate SSD cache for moved files
+    if is_file:
+        _invalidate_ssd_cache(source_relative, db=db)
 
     # Invalidate folder size cache for source parent and destination
     invalidate_folder_sizes_for_path(source_parent, ROOT_DIR)

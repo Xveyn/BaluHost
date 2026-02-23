@@ -176,7 +176,8 @@
       "rateLimits": "Rate Limits",
       "webdav": "WebDAV",
       "samba": "SMB/CIFS",
-      "sleep": "Schlafmodus"
+      "sleep": "Schlafmodus",
+      "ssdCache": "SSD Cache"
     }
   },
   "devices": {
@@ -220,5 +221,58 @@
     "retryFailed": "Erneuter Versuch fehlgeschlagen",
     "revokeFailed": "Widerrufen fehlgeschlagen"
   },
-  "adminOnly": "Nur für Admins"
+  "adminOnly": "Nur für Admins",
+  "ssdCache": {
+    "migration": {
+      "title": "Datenmigration",
+      "cacheTab": "Datei-Cache",
+      "vclMigration": "VCL-Blob-Migration",
+      "vclInfo": "VCL Speicher-Info",
+      "sourcePath": "Quellpfad (HDD)",
+      "destPath": "Zielpfad (SSD)",
+      "storagePath": "Speicherpfad",
+      "blobCount": "Blob-Anzahl",
+      "totalSize": "Komprimierte Größe",
+      "diskFree": "Verfügbarer Speicher",
+      "dryRun": "Testlauf",
+      "dryRunHint": "Simulation ohne Dateien zu kopieren",
+      "dryRunLabel": "TESTLAUF — keine Dateien werden verändert",
+      "dryRunStarted": "Testlauf gestartet",
+      "startMigration": "Migration starten",
+      "migrationStarted": "Migration gestartet",
+      "startFailed": "Migration konnte nicht gestartet werden",
+      "verify": "Verifizieren",
+      "verifyStarted": "Verifizierung gestartet",
+      "verifyFailed": "Verifizierung konnte nicht gestartet werden",
+      "verifyRequiresMigration": "Zuerst eine Migration durchführen",
+      "cleanup": "Aufräumen",
+      "cleanupStarted": "Aufräumen gestartet",
+      "cleanupFailed": "Aufräumen konnte nicht gestartet werden",
+      "cleanupRequiresVerify": "Zuerst Verifizierung durchführen",
+      "confirmCleanup": "Dies löscht die Quell-VCL-Blobs unwiderruflich. Stelle sicher, dass die Verifizierung erfolgreich war.",
+      "vclStorageHint": "Nach der Migration VCL_STORAGE_PATH in .env.production auf den neuen SSD-Pfad setzen und Backend neu starten.",
+      "activeJob": "Aktiver Job",
+      "cancel": "Abbrechen",
+      "cancelled": "Job abgebrochen",
+      "cancelFailed": "Job konnte nicht abgebrochen werden",
+      "files": "Dateien",
+      "processed": "Verarbeitet",
+      "skipped": "Übersprungen",
+      "failed": "Fehlgeschlagen",
+      "currentFile": "Aktuell",
+      "jobHistory": "Job-Verlauf",
+      "noJobs": "Noch keine Migrations-Jobs",
+      "type": "Typ",
+      "statusLabel": "Status",
+      "duration": "Dauer",
+      "date": "Datum",
+      "browse": "Durchsuchen",
+      "selectSource": "Quellverzeichnis auswählen",
+      "selectDest": "Zielverzeichnis auswählen",
+      "selectDir": "Auswählen",
+      "selected": "Ausgewählt",
+      "mountpoint": "Mount",
+      "noSubdirs": "Keine Unterverzeichnisse"
+    }
+  }
 }

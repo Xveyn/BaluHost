@@ -204,6 +204,7 @@
     "tableHeaders": {
       "device": "Device",
       "status": "Status",
+      "type": "Type",
       "actions": "Actions",
       "name": "Name",
       "size": "Size",

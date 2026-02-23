@@ -4,8 +4,6 @@ import re
 
 from pydantic import BaseModel, field_validator
 
-from app.schemas.ssd_cache import CacheStatus
-
 
 class CPUStats(BaseModel):
     usage: float
@@ -165,6 +163,7 @@ class QuotaStatus(BaseModel):
 class RaidDevice(BaseModel):
     name: str
     state: str
+    disk_type: str = "hdd"  # "hdd", "ssd", "nvme"
 
 
 class RaidArray(BaseModel):
@@ -176,7 +175,6 @@ class RaidArray(BaseModel):
     resync_progress: float | None = None
     bitmap: str | None = None
     sync_action: str | None = None
-    cache: CacheStatus | None = None
 
 
 class RaidSpeedLimits(BaseModel):

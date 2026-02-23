@@ -1,12 +1,13 @@
 import type { FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { AvailableDisk, RaidArray, RaidDevice, RaidSpeedLimits } from '../../api/raid';
+import type { RaidArray, RaidDevice, RaidSpeedLimits } from '../../api/raid';
 import { formatBytes, formatNumber } from '../../lib/formatters';
-import SsdCachePanel from '../SsdCachePanel';
-import { Zap } from 'lucide-react';
+import RaidCacheStatus from './RaidCacheStatus';
 import {
   getStatusStyle,
   getDeviceStyle,
+  getTypeStyle,
+  getTypeLabel,
   upcase,
   canSimulateFailure,
   canStartRebuild,
@@ -17,7 +18,6 @@ export interface RaidArrayCardProps {
   array: RaidArray;
   busy: boolean;
   speedLimits: RaidSpeedLimits | null;
-  availableDisks: AvailableDisk[];
   onSimulateFailure: (array: RaidArray, device?: RaidDevice) => Promise<void>;
   onStartRebuild: (array: RaidArray, device: RaidDevice) => Promise<void>;
   onFinalize: (array: RaidArray) => Promise<void>;
@@ -28,15 +28,13 @@ export interface RaidArrayCardProps {
   onAddSpare: (event: FormEvent<HTMLFormElement>, array: RaidArray) => Promise<void>;
   onUpdateSpeed: (event: FormEvent<HTMLFormElement>, array: RaidArray) => Promise<void>;
   onDeleteArray: (arrayName: string) => Promise<void>;
-  onSetupCache: (arrayName: string) => void;
-  onRefresh: () => Promise<void>;
+  onNavigateToCache: (arrayName: string) => void;
 }
 
 export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
   array,
   busy,
   speedLimits,
-  availableDisks,
   onSimulateFailure,
   onStartRebuild,
   onFinalize,
@@ -47,8 +45,7 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
   onAddSpare,
   onUpdateSpeed,
   onDeleteArray,
-  onSetupCache,
-  onRefresh,
+  onNavigateToCache,
 }) => {
   const { t } = useTranslation(['system', 'common']);
   const lowerStatus = array.status.toLowerCase();
@@ -185,6 +182,7 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
               <tr className="text-left text-xs uppercase tracking-[0.24em] text-slate-500">
                 <th className="px-5 py-3">{t('system:raid.tableHeaders.device')}</th>
                 <th className="px-5 py-3">{t('system:raid.tableHeaders.status')}</th>
+                <th className="px-5 py-3">{t('system:raid.tableHeaders.type', 'Type')}</th>
                 <th className="px-5 py-3">{t('system:raid.tableHeaders.actions')}</th>
               </tr>
             </thead>
@@ -202,6 +200,11 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
                     <td className="px-5 py-4">
                       <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getDeviceStyle(lowerState)}`}>
                         {upcase(lowerState)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-4">
+                      <span className={`rounded-full border px-3 py-1 text-xs font-medium ${getTypeStyle(device.disk_type ?? 'hdd')}`}>
+                        {getTypeLabel(device.disk_type ?? 'hdd')}
                       </span>
                     </td>
                     <td className="px-5 py-4 text-sm">
@@ -257,6 +260,7 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
                   </tr>
                 );
               })}
+              <RaidCacheStatus arrayName={array.name} busy={busy} onNavigateToCache={onNavigateToCache} />
             </tbody>
           </table>
         </div>
@@ -272,9 +276,14 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
               <div key={`${array.name}-${device.name}-mobile`} className="rounded-xl border border-slate-800/60 bg-slate-900/60 p-3">
                 <div className="flex items-center justify-between">
                   <span className="text-sm font-medium text-slate-200">/dev/{device.name}</span>
-                  <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getDeviceStyle(lowerState)}`}>
-                    {upcase(lowerState)}
-                  </span>
+                  <div className="flex items-center gap-1.5">
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getDeviceStyle(lowerState)}`}>
+                      {upcase(lowerState)}
+                    </span>
+                    <span className={`rounded-full border px-2 py-0.5 text-[10px] font-medium ${getTypeStyle(device.disk_type ?? 'hdd')}`}>
+                      {getTypeLabel(device.disk_type ?? 'hdd')}
+                    </span>
+                  </div>
                 </div>
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   <button
@@ -327,36 +336,9 @@ export const RaidArrayCard: React.FC<RaidArrayCardProps> = ({
               </div>
             );
           })}
+          <RaidCacheStatus arrayName={array.name} busy={busy} onNavigateToCache={onNavigateToCache} />
         </div>
       </div>
-
-      {/* SSD Cache Panel */}
-      {array.cache ? (
-        <SsdCachePanel
-          cache={array.cache}
-          onRefresh={onRefresh}
-        />
-      ) : (
-        <div className="border-t border-slate-800/60 px-4 sm:px-6 py-3 sm:py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2 text-xs text-slate-500">
-              <Zap className="h-3.5 w-3.5" />
-              <span>{t('system:raid.cache.noCache')}</span>
-            </div>
-            <button
-              onClick={() => onSetupCache(array.name)}
-              disabled={busy || availableDisks.filter(d => d.is_ssd && !d.is_os_disk && !d.in_raid && !d.is_cache_device).length === 0}
-              className={`rounded-lg border px-3 py-1.5 text-xs transition touch-manipulation active:scale-95 ${
-                busy || availableDisks.filter(d => d.is_ssd && !d.is_os_disk && !d.in_raid && !d.is_cache_device).length === 0
-                  ? 'cursor-not-allowed border-slate-800 bg-slate-900/60 text-slate-500'
-                  : 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200 hover:border-cyan-500/50'
-              }`}
-            >
-              {t('system:raid.cache.actions.setup')}
-            </button>
-          </div>
-        </div>
-      )}
 
       <div className="border-t border-slate-800/60 px-4 sm:px-6 py-4 sm:py-5">
         <div className="grid gap-3 sm:gap-5 md:grid-cols-2">

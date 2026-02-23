@@ -31,16 +31,50 @@ from app.schemas.files import (
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
-from app.services.files.operations import is_path_shared_with_user, SHARED_WITH_ME_DIR
+from app.services.files.operations import is_path_shared_with_user, get_share_permissions, SHARED_WITH_ME_DIR
 from app.services.permissions import PermissionDeniedError, is_privileged
 from app.services.audit_logger_db import get_audit_logger_db
 from app.models.file_metadata import FileMetadata
 from app.plugins.emit import emit_hook
 
 from app.models.desktop_sync_folder import DesktopSyncFolder
+from app.services.cache.ssd_file_cache import SSDFileCacheService
 from app.schemas.sync import SyncDeviceInfo
 
 SHARED_DIR_NAME = "Shared"
+
+import logging as _logging
+_cache_logger = _logging.getLogger(__name__)
+
+
+def _schedule_cache_file(
+    db: Session,
+    resource_path: str,
+    file_path: "Path",
+    file_id: Optional[int] = None,
+) -> None:
+    """Schedule background caching of a file to SSD."""
+    import asyncio
+    from pathlib import Path as _Path
+
+    async def _do_cache() -> None:
+        from app.core.database import SessionLocal
+        _db = SessionLocal()
+        try:
+            svc = SSDFileCacheService(_db)
+            svc.cache_file(resource_path, _Path(str(file_path)), file_id=file_id)
+            _db.commit()
+        except Exception:
+            _cache_logger.debug("Background cache failed for %s", resource_path, exc_info=True)
+            _db.rollback()
+        finally:
+            _db.close()
+
+    try:
+        loop = asyncio.get_running_loop()
+        loop.create_task(_do_cache())
+    except RuntimeError:
+        pass
 
 
 def _enrich_with_sync_info(
@@ -556,6 +590,9 @@ async def list_files(
                 owner_id=str(share.owner_id),
                 mime_type=file_meta.mime_type,
                 file_id=file_meta.id,
+                can_read=share.can_read,
+                can_write=share.can_write,
+                can_delete=share.can_delete,
             ))
 
         entries = _enrich_with_sync_info(entries, user.id, False, db)
@@ -613,6 +650,22 @@ async def download_file(
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
+    # Try SSD cache for faster reads
+    try:
+        cache_svc = SSDFileCacheService(db)
+        if cache_svc.is_cache_enabled():
+            source_mtime = file_path.stat().st_mtime
+            cached = cache_svc.get_cached_path(resource_path, source_mtime)
+            if cached and cached.exists():
+                db.commit()
+                return FileResponse(path=cached, filename=file_path.name)
+            # Schedule background caching for eligible files
+            if file_path.stat().st_size >= 1024 * 1024:  # min 1MB
+                _schedule_cache_file(db, resource_path, file_path)
+            db.commit()
+    except Exception:
+        pass  # Cache failures never block delivery
+
     return FileResponse(path=file_path, filename=file_path.name)
 
 
@@ -652,6 +705,21 @@ async def download_file_by_id(
 
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found on disk")
+
+    # Try SSD cache for faster reads
+    try:
+        cache_svc = SSDFileCacheService(db)
+        if cache_svc.is_cache_enabled():
+            source_mtime = file_path.stat().st_mtime
+            cached = cache_svc.get_cached_path(file_metadata.path, source_mtime)
+            if cached and cached.exists():
+                db.commit()
+                return FileResponse(path=cached, filename=file_metadata.name)
+            if file_path.stat().st_size >= 1024 * 1024:
+                _schedule_cache_file(db, file_metadata.path, file_path, file_id=file_metadata.id)
+            db.commit()
+    except Exception:
+        pass
 
     return FileResponse(path=file_path, filename=file_metadata.name)
 

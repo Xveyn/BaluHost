@@ -21,8 +21,9 @@ import { RateLimitsTab } from '../components/rate-limits';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
 import SleepMode from './SleepMode';
+import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -56,6 +57,7 @@ const CATEGORIES: CategoryConfig[] = [
     tabs: [
       { id: 'raid', labelKey: 'systemControl.tabs.raid', icon: <HardDrive className="h-5 w-5" /> },
       { id: 'backup', labelKey: 'systemControl.tabs.backup', icon: <Archive className="h-5 w-5" /> },
+      { id: 'ssdcache', labelKey: 'systemControl.tabs.ssdCache', icon: <Zap className="h-5 w-5" /> },
     ],
   },
   {
@@ -180,6 +182,7 @@ export default function SystemControlPage() {
         {activeTab === 'sleep' && <SleepMode />}
         {activeTab === 'raid' && <RaidManagement />}
         {activeTab === 'backup' && <BackupSettings />}
+        {activeTab === 'ssdcache' && <SsdFileCacheTab />}
         {activeTab === 'vpn' && <VpnManagement />}
         {activeTab === 'services' && <ServicesTab isAdmin={true} />}
         {activeTab === 'vcl' && <VCLSettings />}

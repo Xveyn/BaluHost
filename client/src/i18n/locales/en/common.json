@@ -176,7 +176,8 @@
       "rateLimits": "Rate Limits",
       "webdav": "WebDAV",
       "samba": "SMB/CIFS",
-      "sleep": "Sleep"
+      "sleep": "Sleep",
+      "ssdCache": "SSD Cache"
     }
   },
   "devices": {
@@ -220,5 +221,58 @@
     "retryFailed": "Retry failed",
     "revokeFailed": "Failed to revoke"
   },
-  "adminOnly": "Admin only"
+  "adminOnly": "Admin only",
+  "ssdCache": {
+    "migration": {
+      "title": "Data Migration",
+      "cacheTab": "File Cache",
+      "vclMigration": "VCL Blob Migration",
+      "vclInfo": "VCL Storage Info",
+      "sourcePath": "Source Path (HDD)",
+      "destPath": "Destination Path (SSD)",
+      "storagePath": "Storage Path",
+      "blobCount": "Blob Count",
+      "totalSize": "Compressed Size",
+      "diskFree": "Disk Available",
+      "dryRun": "Dry Run",
+      "dryRunHint": "Simulate without copying files",
+      "dryRunLabel": "DRY RUN — no files are being modified",
+      "dryRunStarted": "Dry-run started",
+      "startMigration": "Start Migration",
+      "migrationStarted": "Migration started",
+      "startFailed": "Failed to start migration",
+      "verify": "Verify",
+      "verifyStarted": "Verification started",
+      "verifyFailed": "Failed to start verification",
+      "verifyRequiresMigration": "Complete a migration first",
+      "cleanup": "Cleanup",
+      "cleanupStarted": "Cleanup started",
+      "cleanupFailed": "Failed to start cleanup",
+      "cleanupRequiresVerify": "Complete verification first",
+      "confirmCleanup": "This will permanently delete the source VCL blobs. Make sure verification passed before proceeding.",
+      "vclStorageHint": "After migration, update VCL_STORAGE_PATH in .env.production to point to the new SSD path and restart the backend.",
+      "activeJob": "Active Job",
+      "cancel": "Cancel",
+      "cancelled": "Job cancelled",
+      "cancelFailed": "Failed to cancel job",
+      "files": "files",
+      "processed": "Processed",
+      "skipped": "Skipped",
+      "failed": "Failed",
+      "currentFile": "Current",
+      "jobHistory": "Job History",
+      "noJobs": "No migration jobs yet",
+      "type": "Type",
+      "statusLabel": "Status",
+      "duration": "Duration",
+      "date": "Date",
+      "browse": "Browse",
+      "selectSource": "Select Source Directory",
+      "selectDest": "Select Destination Directory",
+      "selectDir": "Select",
+      "selected": "Selected",
+      "mountpoint": "mount",
+      "noSubdirs": "No subdirectories"
+    }
+  }
 }

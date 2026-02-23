@@ -1,6 +1,7 @@
 import { type FormEvent, useEffect, useMemo, useState } from 'react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { useNavigate } from 'react-router-dom';
 import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
 import {
   deleteArray,
@@ -21,7 +22,6 @@ import {
 import { getSystemInfo } from '../api/system';
 import RaidSetupWizard from '../components/RaidSetupWizard';
 import MockDiskWizard from '../components/MockDiskWizard';
-import CacheSetupWizard from '../components/CacheSetupWizard';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { RaidArrayCard, DiskTable, FormatDiskDialog } from '../components/raid';
 
@@ -29,6 +29,7 @@ const REFRESH_INTERVAL_MS = 8000;
 
 export default function RaidManagement() {
   const { t } = useTranslation(['system', 'common']);
+  const navigate = useNavigate();
   const { confirm, dialog } = useConfirmDialog();
   const [arrays, setArrays] = useState<RaidArray[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
@@ -44,7 +45,6 @@ export default function RaidManagement() {
   const [showMockDiskWizard, setShowMockDiskWizard] = useState<boolean>(false);
   const [selectedDisk, setSelectedDisk] = useState<AvailableDisk | null>(null);
   const [isDevMode, setIsDevMode] = useState<boolean>(false);
-  const [cacheWizardArray, setCacheWizardArray] = useState<string | null>(null);
 
   const loadStatus = async (notifySuccess = false) => {
     try {
@@ -280,6 +280,10 @@ export default function RaidManagement() {
     }
   };
 
+  const handleNavigateToCache = (_arrayName: string) => {
+    navigate('/admin/system-control?tab=ssdcache');
+  };
+
   const handleDeleteArray = async (arrayName: string) => {
     const ok = await confirm(t('system:raid.messages.deleteConfirm', { name: arrayName }), { title: t('system:raid.deleteArray'), variant: 'danger', confirmLabel: t('system:raid.deleteArray') });
     if (!ok) return;
@@ -295,11 +299,6 @@ export default function RaidManagement() {
     } finally {
       setBusy(false);
     }
-  };
-
-  const handleRefresh = async () => {
-    await loadStatus();
-    await loadAvailableDisks();
   };
 
   return (
@@ -369,7 +368,6 @@ export default function RaidManagement() {
               array={array}
               busy={busy}
               speedLimits={speedLimits}
-              availableDisks={availableDisks}
               onSimulateFailure={handleSimulateFailure}
               onStartRebuild={handleStartRebuild}
               onFinalize={handleFinalize}
@@ -380,8 +378,7 @@ export default function RaidManagement() {
               onAddSpare={handleAddSpare}
               onUpdateSpeed={handleUpdateSpeed}
               onDeleteArray={handleDeleteArray}
-              onSetupCache={(arrayName) => setCacheWizardArray(arrayName)}
-              onRefresh={handleRefresh}
+              onNavigateToCache={handleNavigateToCache}
             />
           ))}
         </div>
@@ -420,19 +417,6 @@ export default function RaidManagement() {
         <RaidSetupWizard
           availableDisks={availableDisks}
           onClose={() => setShowCreateArrayDialog(false)}
-          onSuccess={async () => {
-            await loadStatus();
-            await loadAvailableDisks();
-          }}
-        />
-      )}
-
-      {/* Cache Setup Wizard */}
-      {cacheWizardArray && (
-        <CacheSetupWizard
-          arrayName={cacheWizardArray}
-          availableDisks={availableDisks}
-          onClose={() => setCacheWizardArray(null)}
           onSuccess={async () => {
             await loadStatus();
             await loadAvailableDisks();

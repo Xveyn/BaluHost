@@ -35,3 +35,22 @@ export const canSimulateFailure = (device: RaidDevice): boolean =>
 
 export const shouldShowFinalize = (array: RaidArray): boolean =>
   ['rebuilding', 'degraded'].includes(array.status.toLowerCase());
+
+export const typeStyles: Record<string, string> = {
+  hdd: 'border-slate-600/50 bg-slate-800/60 text-slate-300',
+  ssd: 'border-cyan-500/30 bg-cyan-500/10 text-cyan-200',
+  nvme: 'border-violet-500/30 bg-violet-500/10 text-violet-200',
+  cache: 'border-teal-500/30 bg-teal-500/10 text-teal-200',
+};
+
+export const getTypeStyle = (type: string): string =>
+  typeStyles[type] ?? typeStyles.hdd;
+
+export const getTypeLabel = (type: string): string => {
+  switch (type) {
+    case 'nvme': return 'NVMe';
+    case 'ssd': return 'SSD';
+    case 'cache': return 'Cache';
+    default: return 'HDD';
+  }
+};

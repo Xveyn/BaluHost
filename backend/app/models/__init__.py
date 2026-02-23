@@ -61,13 +61,13 @@ from app.models.update_history import (
     UpdateChannel,
 )
 from app.models.energy_price_config import EnergyPriceConfig
-from app.models.ssd_cache import SsdCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
 from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.models.service_heartbeat import ServiceHeartbeat
+from app.models.migration_job import MigrationJob
 
 __all__ = [
     "Base",
@@ -137,4 +137,5 @@ __all__ = [
     "DesktopPairingCode",
     "DesktopSyncFolder",
     "ServiceHeartbeat",
+    "MigrationJob",
 ]

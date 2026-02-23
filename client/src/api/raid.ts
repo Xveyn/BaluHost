@@ -3,6 +3,7 @@ import { apiClient } from '../lib/api';
 export interface RaidDevice {
   name: string;
   state: string;
+  disk_type?: string;  // "hdd" | "ssd" | "nvme"
 }
 
 export interface RaidArray {
@@ -14,7 +15,6 @@ export interface RaidArray {
   resync_progress?: number | null;
   bitmap?: string | null;
   sync_action?: string | null;
-  cache?: import('./ssd-cache').CacheStatus | null;
 }
 
 export interface RaidStatusResponse {
