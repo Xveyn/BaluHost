@@ -41,7 +41,8 @@ export function useFanControl(options: UseFanControlOptions = {}): UseFanControl
       if (isAutoRefresh && pauseRefreshRef.current) return;
 
       // Don't flash "no fans" on a transient empty response when we had fans before
-      if (isAutoRefresh && statusData.backend_available && statusData.fans.length === 0) {
+      // (covers both hwmon scan failures and secondary workers without backend)
+      if (isAutoRefresh && statusData.fans.length === 0) {
         setStatus(prev => prev && prev.fans.length > 0 ? prev : statusData);
       } else {
         setStatus(statusData);

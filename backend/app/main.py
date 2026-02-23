@@ -536,6 +536,13 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             logger.warning(f"Network discovery could not start: {e}")
     else:
         logger.info("Secondary worker — skipping hardware services")
+        # Initialize fan control read-only (backend + configs, no monitoring loop)
+        if settings.fan_control_enabled:
+            try:
+                await fan_control.start_fan_control(monitoring=False)
+                logger.info("Fan control initialized (read-only, secondary worker)")
+            except Exception as e:
+                logger.warning("Fan control init failed on secondary worker: %s", e)
 
     # NOTE: Sync/backup/RAID-scrub/SMART/notification schedulers are now
     # managed by the separate scheduler_worker process (scheduler_worker.py).

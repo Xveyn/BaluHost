@@ -537,8 +537,13 @@ class FanControlService:
                 cls._instance = cls(config, db_session_factory)
             return cls._instance
 
-    async def start(self):
-        """Start fan control service."""
+    async def start(self, monitoring: bool = True):
+        """Start fan control service.
+
+        Args:
+            monitoring: If True, start the monitoring loop (primary worker).
+                        If False, only initialize backend + configs (secondary workers).
+        """
         if not self.config.fan_control_enabled:
             logger.info("Fan control disabled in config")
             return
@@ -553,10 +558,11 @@ class FanControlService:
         # Load fan configs from database
         await self._load_fan_configs()
 
-        # Start monitoring loop
-        self._is_running = True
-        self._monitoring_task = asyncio.create_task(self._monitoring_loop())
-        logger.info("Fan control service started")
+        if monitoring:
+            # Start monitoring loop (primary worker only)
+            self._is_running = True
+            self._monitoring_task = asyncio.create_task(self._monitoring_loop())
+        logger.info("Fan control service started (monitoring=%s)", monitoring)
 
     async def stop(self):
         """Stop fan control service."""
@@ -1373,10 +1379,15 @@ def get_fan_control_service() -> FanControlService:
     return _fan_control_service
 
 
-async def start_fan_control() -> None:
-    """Start the fan control service."""
+async def start_fan_control(monitoring: bool = True) -> None:
+    """Start the fan control service.
+
+    Args:
+        monitoring: If True, start the monitoring loop (primary worker).
+                    If False, only initialize backend + configs (secondary workers).
+    """
     service = get_fan_control_service()
-    await service.start()
+    await service.start(monitoring=monitoring)
 
 
 async def stop_fan_control() -> None:
