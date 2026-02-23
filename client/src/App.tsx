@@ -43,6 +43,7 @@ const DevicesPage = lazyWithRetry(() => import('./pages/DevicesPage'));
 const SystemControlPage = lazyWithRetry(() => import('./pages/SystemControlPage'));
 const PluginsPage = lazyWithRetry(() => import('./pages/PluginsPage'));
 const NotificationPreferencesPage = lazyWithRetry(() => import('./pages/NotificationPreferencesPage'));
+const NotificationsArchivePage = lazyWithRetry(() => import('./pages/NotificationsArchivePage'));
 const UpdatePage = lazyWithRetry(() => import('./pages/UpdatePage'));
 const CloudImportPage = lazyWithRetry(() => import('./pages/CloudImportPage'));
 
@@ -322,6 +323,18 @@ function AppRoutes() {
         />
         <Route
           path="/notifications"
+          element={
+            user ? (
+              <Layout>
+                <NotificationsArchivePage />
+              </Layout>
+            ) : (
+              <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/notifications/settings"
           element={
             user ? (
               <Layout>

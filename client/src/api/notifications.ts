@@ -21,6 +21,7 @@ export interface Notification {
   priority: number;
   metadata: Record<string, any> | null;
   time_ago: string | null;
+  snoozed_until: string | null;
 }
 
 export interface NotificationListResponse {
@@ -81,6 +82,9 @@ export async function getNotifications(
     unread_only?: boolean;
     include_dismissed?: boolean;
     category?: NotificationCategory;
+    notification_type?: NotificationType;
+    created_after?: string;
+    created_before?: string;
     page?: number;
     page_size?: number;
   } = {}
@@ -90,6 +94,9 @@ export async function getNotifications(
       unread_only: options.unread_only ?? false,
       include_dismissed: options.include_dismissed ?? false,
       category: options.category,
+      notification_type: options.notification_type,
+      created_after: options.created_after,
+      created_before: options.created_before,
       page: options.page ?? 1,
       page_size: options.page_size ?? 50,
     },
@@ -222,6 +229,38 @@ export function getCategoryName(category: NotificationCategory): string {
     vpn: 'VPN',
   };
   return names[category] || category;
+}
+
+/**
+ * Snooze a notification for a given number of hours
+ */
+export async function snoozeNotification(
+  notificationId: number,
+  durationHours: number
+): Promise<Notification> {
+  const response = await apiClient.post<Notification>(
+    `/api/notifications/${notificationId}/snooze`,
+    null,
+    { params: { duration_hours: durationHours } }
+  );
+  return response.data;
+}
+
+/**
+ * Get action label for a notification based on its category
+ */
+export function getActionLabel(category: NotificationCategory): string {
+  const labels: Record<NotificationCategory, string> = {
+    raid: 'RAID anzeigen',
+    smart: 'Disk Health',
+    backup: 'Backups anzeigen',
+    scheduler: 'Scheduler anzeigen',
+    system: 'System anzeigen',
+    security: 'Logs anzeigen',
+    sync: 'Sync anzeigen',
+    vpn: 'VPN anzeigen',
+  };
+  return labels[category] || 'Anzeigen';
 }
 
 /**
