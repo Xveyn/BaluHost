@@ -25,7 +25,7 @@ _FAST_START_SAMPLES = 3  # Anzahl schneller Initial-Samples
 _FAST_START_INTERVAL = 0.5  # Abstand zwischen Fast-Start Samples
 _MAX_SAMPLES = int(getattr(settings, "telemetry_history_size", 60))
 
-_SERVER_START_TIME: Optional[float] = None
+_SERVER_START_TIME: float = time.time()
 _SAMPLE_COUNT: int = 0
 _ERROR_COUNT: int = 0
 _LAST_ERROR: Optional[str] = None
@@ -168,12 +168,10 @@ async def _monitor_loop(interval_seconds: float) -> None:
 
 
 async def start_telemetry_monitor(interval_seconds: float | None = None) -> None:
-    global _monitor_task, _SERVER_START_TIME
+    global _monitor_task
 
     if _monitor_task is not None and not _monitor_task.done():
         return
-
-    _SERVER_START_TIME = time.time()
     effective_interval = interval_seconds or _SAMPLE_INTERVAL_SECONDS
     # Fast-Start Burst Sampling für schnellere UI-Füllung
     for _ in range(_FAST_START_SAMPLES):
@@ -230,16 +228,7 @@ def get_latest_memory_sample() -> Optional[MemoryTelemetrySample]:
 
 
 def get_server_uptime() -> float:
-    """Returns server uptime in seconds since telemetry monitor started."""
-    if _SERVER_START_TIME is None:
-        # In dev/test mode, provide a deterministic mock uptime to support tests
-        try:
-            from app.core.config import settings
-            if getattr(settings, 'is_dev_mode', False):
-                return 4 * 3600.0
-        except Exception:
-            pass
-        return 0.0
+    """Returns server uptime in seconds since module was imported."""
     return time.time() - _SERVER_START_TIME
 
 
@@ -254,11 +243,8 @@ def get_status() -> dict:
 
     is_running = _monitor_task is not None and not _monitor_task.done()
 
-    started_at = None
-    uptime_seconds = None
-    if _SERVER_START_TIME is not None:
-        started_at = datetime.utcfromtimestamp(_SERVER_START_TIME)
-        uptime_seconds = time.time() - _SERVER_START_TIME
+    started_at = datetime.utcfromtimestamp(_SERVER_START_TIME)
+    uptime_seconds = time.time() - _SERVER_START_TIME
 
     last_error_at = None
     if _LAST_ERROR_TIME is not None:
