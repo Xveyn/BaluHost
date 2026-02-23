@@ -17,6 +17,7 @@ import type {
   CleanupRequest,
   CleanupResponse,
   VersionDiffResponse,
+  VCLStorageInfo,
 } from '../types/vcl';
 
 // ========== User Endpoints ==========
@@ -156,6 +157,14 @@ export const updateUserSettingsAdmin = async (
 };
 
 /**
+ * Get VCL storage info (Admin only)
+ */
+export const getStorageInfo = async (): Promise<VCLStorageInfo> => {
+  const response = await apiClient.get('/api/vcl/admin/storage-info');
+  return response.data;
+};
+
+/**
  * Trigger manual cleanup (Admin only)
  */
 export const triggerCleanup = async (
@@ -214,6 +223,7 @@ export const vclApi = {
   getAdminOverview,
   getAdminUsers,
   getAdminStats,
+  getStorageInfo,
   updateUserSettingsAdmin,
   triggerCleanup,
   formatBytes,

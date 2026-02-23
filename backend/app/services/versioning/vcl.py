@@ -25,7 +25,11 @@ class VCLService:
     
     def __init__(self, db: Session):
         self.db = db
-        self.storage_base = Path(settings.nas_storage_path) / ".system" / "versions"
+        vcl_base = settings.vcl_storage_path.strip()
+        if vcl_base:
+            self.storage_base = Path(vcl_base)
+        else:
+            self.storage_base = Path(settings.nas_storage_path) / ".system" / "versions"
         self.blobs_path = self.storage_base / "blobs"
         self._ensure_storage_dirs()
     

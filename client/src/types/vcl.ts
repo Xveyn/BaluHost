@@ -159,6 +159,18 @@ export interface DiffLine {
   type: 'added' | 'removed' | 'unchanged' | 'modified';
 }
 
+// ========== Storage Info ==========
+
+export interface VCLStorageInfo {
+  storage_path: string;
+  is_custom_path: boolean;
+  blob_count: number;
+  total_compressed_bytes: number;
+  disk_total_bytes: number;
+  disk_available_bytes: number;
+  disk_used_percent: number;
+}
+
 export interface VersionDiffResponse {
   version_id_old: number;
   version_id_new: number;

@@ -82,6 +82,9 @@ class Settings(BaseSettings):
     nas_temp_path: str = "./tmp"
     nas_quota_bytes: int | None = 5 * 1024 * 1024 * 1024
     nas_backup_path: str = "./backups"
+
+    # VCL storage path (empty = use nas_storage_path/.system/versions)
+    vcl_storage_path: str = ""
     nas_backup_retention_days: int = 30
     nas_backup_max_count: int = 10
 

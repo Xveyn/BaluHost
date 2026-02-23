@@ -342,4 +342,17 @@ class UserQuotaInfo(BaseModel):
     total_versions: int
 
 
+# ========== VCL Storage Info ==========
+
+class VCLStorageInfo(BaseModel):
+    """VCL storage location and usage info (admin)."""
+    storage_path: str
+    is_custom_path: bool
+    blob_count: int
+    total_compressed_bytes: int
+    disk_total_bytes: int
+    disk_available_bytes: int
+    disk_used_percent: float
+
+
 # ========== Admin Schemas (moved from old duplicate) ==========

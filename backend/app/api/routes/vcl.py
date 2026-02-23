@@ -22,12 +22,13 @@ from app.schemas.vcl import (
     AdminStatsResponse,
     CleanupRequest,
     CleanupResponse,
+    VCLStorageInfo,
 )
 from app.schemas.vcl_diff import VersionDiffResponse, DiffLine
 from app.services.vcl import VCLService
 from app.services.vcl_priority import VCLPriorityMode
 from app.services.audit_logger_db import get_audit_logger_db
-from app.models.vcl import VCLSettings, VCLStats, FileVersion
+from app.models.vcl import VCLSettings, VCLStats, FileVersion, VersionBlob
 from app.models.user import User
 from app.models.file_metadata import FileMetadata
 
@@ -193,7 +194,7 @@ async def restore_file_version(
             
             # Read and decompress content
             blob_storage_path: str = str(blob.storage_path)  # type: ignore
-            blob_path = Path(settings.nas_storage_path) / blob_storage_path
+            blob_path = Path(blob_storage_path)
             if not blob_path.exists():
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -594,10 +595,10 @@ async def update_vcl_settings(
     # Log settings change
     audit_logger = get_audit_logger_db()
     audit_logger.log_system_event(
-        event_type="vcl_settings_update",
-        description=f"User {user.username} updated VCL settings",
-        metadata=settings_update.model_dump(),
-        db=db
+        action="vcl_settings_update",
+        user=user.username,
+        details=settings_update.model_dump(),
+        db=db,
     )
     
     # Cast Columns for response
@@ -620,6 +621,57 @@ async def update_vcl_settings(
 # ============================================================================
 # ADMIN ENDPOINTS
 # ============================================================================
+
+@router.get("/admin/storage-info", response_model=VCLStorageInfo)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_vcl_storage_info(
+    request: Request,
+    response: Response,
+    admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> VCLStorageInfo:
+    """
+    Get VCL storage location and disk usage info (Admin only).
+
+    Returns:
+        Storage path, blob count, disk usage
+    """
+    import shutil
+    from pathlib import Path
+    from app.core.config import settings
+
+    vcl_base = settings.vcl_storage_path.strip()
+    is_custom = bool(vcl_base)
+    if vcl_base:
+        storage_path = Path(vcl_base)
+    else:
+        storage_path = Path(settings.nas_storage_path) / ".system" / "versions"
+
+    # Count blobs and total compressed size from DB
+    blob_count: int = db.query(func.count(VersionBlob.id)).scalar() or 0
+    total_compressed: int = db.query(func.sum(VersionBlob.compressed_size)).scalar() or 0
+
+    # Disk usage for the storage path
+    try:
+        disk_usage = shutil.disk_usage(str(storage_path))
+        disk_total = disk_usage.total
+        disk_available = disk_usage.free
+        disk_used_percent = ((disk_usage.total - disk_usage.free) / disk_usage.total * 100) if disk_usage.total > 0 else 0.0
+    except OSError:
+        disk_total = 0
+        disk_available = 0
+        disk_used_percent = 0.0
+
+    return VCLStorageInfo(
+        storage_path=str(storage_path),
+        is_custom_path=is_custom,
+        blob_count=blob_count,
+        total_compressed_bytes=total_compressed,
+        disk_total_bytes=disk_total,
+        disk_available_bytes=disk_available,
+        disk_used_percent=round(disk_used_percent, 1),
+    )
+
 
 @router.get("/admin/overview", response_model=AdminVCLOverview)
 @user_limiter.limit(get_limit("admin_operations"))

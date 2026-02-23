@@ -16,19 +16,22 @@ import {
   Star,
   Clock,
   Database,
+  FolderOpen,
 } from 'lucide-react';
 import {
   getAdminOverview,
   getAdminUsers,
+  getStorageInfo,
   updateUserSettingsAdmin,
   triggerCleanup,
   formatBytes,
 } from '../../api/vcl';
 import { formatNumber } from '../../lib/formatters';
-import type { AdminVCLOverview, UserVCLStats, VCLSettingsUpdate } from '../../types/vcl';
+import type { AdminVCLOverview, UserVCLStats, VCLSettingsUpdate, VCLStorageInfo } from '../../types/vcl';
 
 export default function VCLSettings() {
   const [overview, setOverview] = useState<AdminVCLOverview | null>(null);
+  const [storageInfo, setStorageInfo] = useState<VCLStorageInfo | null>(null);
   const [users, setUsers] = useState<UserVCLStats[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionLoading, setActionLoading] = useState(false);
@@ -48,12 +51,14 @@ export default function VCLSettings() {
     try {
       setLoading(true);
       setError(null);
-      const [overviewData, usersData] = await Promise.all([
+      const [overviewData, usersData, storageData] = await Promise.all([
         getAdminOverview(),
         getAdminUsers(100, 0),
+        getStorageInfo().catch(() => null),
       ]);
       setOverview(overviewData);
       setUsers(usersData?.users || []);
+      setStorageInfo(storageData);
     } catch (err: unknown) {
       const detail = err != null && typeof err === 'object' && 'response' in err
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
@@ -147,6 +152,54 @@ export default function VCLSettings() {
         <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg flex items-center gap-2 text-green-400">
           <Check className="w-5 h-5 flex-shrink-0" />
           <span className="text-sm">{successMessage}</span>
+        </div>
+      )}
+
+      {/* VCL Storage Info */}
+      {storageInfo && (
+        <div className="card border-slate-800/60 bg-slate-900/55">
+          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
+            <FolderOpen className="w-5 h-5 text-sky-400" />
+            {t('vcl.storageInfo.title', 'Storage Location')}
+          </h3>
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+            <div>
+              <p className="text-slate-400">{t('vcl.storageInfo.path', 'Storage Path')}</p>
+              <p className="text-white font-semibold mt-1 truncate" title={storageInfo.storage_path}>
+                {storageInfo.storage_path}
+              </p>
+              {storageInfo.is_custom_path && (
+                <span className="mt-1 inline-block px-2 py-0.5 rounded-full text-[10px] font-medium bg-violet-500/20 text-violet-300">
+                  Custom Path
+                </span>
+              )}
+            </div>
+            <div>
+              <p className="text-slate-400">{t('vcl.storageInfo.blobCount', 'Blob Count')}</p>
+              <p className="text-white font-semibold mt-1">{storageInfo.blob_count.toLocaleString()}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">{t('vcl.storageInfo.compressedSize', 'Compressed Size')}</p>
+              <p className="text-white font-semibold mt-1">{formatBytes(storageInfo.total_compressed_bytes)}</p>
+            </div>
+            <div>
+              <p className="text-slate-400">{t('vcl.storageInfo.diskUsage', 'Disk Usage')}</p>
+              <p className="text-white font-semibold mt-1">
+                {formatNumber(storageInfo.disk_used_percent, 1)}%
+              </p>
+              <div className="h-1.5 w-full mt-1.5 overflow-hidden rounded-full bg-slate-800 max-w-[120px]">
+                <div
+                  className={`h-full rounded-full transition-all ${
+                    storageInfo.disk_used_percent >= 90 ? 'bg-red-500' : storageInfo.disk_used_percent >= 70 ? 'bg-amber-500' : 'bg-sky-500'
+                  }`}
+                  style={{ width: `${Math.min(storageInfo.disk_used_percent, 100)}%` }}
+                />
+              </div>
+              <p className="text-xs text-slate-500 mt-1">
+                {formatBytes(storageInfo.disk_available_bytes)} {t('vcl.storageInfo.free', 'free')} / {formatBytes(storageInfo.disk_total_bytes)}
+              </p>
+            </div>
+          </div>
         </div>
       )}
 
