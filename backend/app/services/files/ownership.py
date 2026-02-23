@@ -4,7 +4,7 @@ File Ownership Transfer & User-Directory Residency Enforcement Service.
 This service handles:
 - Transferring file/folder ownership between users
 - Physical movement of files to maintain user-directory residency invariant
-- Cascading updates to child entries, shares, and share links
+- Cascading updates to child entries, shares, share links, and VCL versions
 - Residency enforcement scanning and fixing
 """
 from __future__ import annotations
@@ -219,6 +219,7 @@ def transfer_ownership(
     - Metadata updates
     - Child cascade for directories
     - Share updates
+    - VCL version ownership & quota transfer
     - Audit logging
     
     Args:
@@ -396,11 +397,17 @@ def transfer_ownership(
         
         # 8. CASCADE SHARES
         _cascade_shares_on_transfer(metadata.id, old_owner_id, new_owner_id, db)
-        
-        # 9. COMMIT
+
+        # 9. CASCADE VCL VERSIONS & QUOTA
+        vcl_file_ids = [metadata.id]
+        if metadata.is_directory and recursive:
+            vcl_file_ids.extend(child.id for child in children)
+        _cascade_vcl_on_transfer(vcl_file_ids, old_owner_id, new_owner_id, db)
+
+        # 10. COMMIT
         db.commit()
-        
-        # 10. AUDIT LOG
+
+        # 11. AUDIT LOG
         audit.log_event(
             event_type="FILE_MODIFY",
             user=str(requesting_user_id),
@@ -462,6 +469,77 @@ def _cascade_shares_on_transfer(
         FileShare.file_id == file_id,
         FileShare.owner_id == old_owner_id
     ).update({"owner_id": new_owner_id}, synchronize_session=False)
+
+
+def _cascade_vcl_on_transfer(
+    file_ids: list[int],
+    old_owner_id: int,
+    new_owner_id: int,
+    db: Session
+) -> None:
+    """
+    Update VCL (Version Control Light) data when ownership changes.
+
+    - Updates pending VCL cache entries (prevents race condition on flush)
+    - Updates FileVersion.user_id for all versions of transferred files
+    - Rebalances VCL storage quota between old and new owner
+
+    Args:
+        file_ids: IDs of all FileMetadata entries being transferred
+        old_owner_id: Previous owner's user ID
+        new_owner_id: New owner's user ID
+        db: Database session
+    """
+    from sqlalchemy import func, update as sql_update
+    from app.models.vcl import FileVersion, VCLSettings
+    from app.services.versioning.cache import VCLCache
+
+    if not file_ids:
+        return
+
+    # 1. Update pending VCL cache entries before DB changes
+    for file_id in file_ids:
+        pending = VCLCache.get_pending_for_file(file_id)
+        if pending and pending.user_id == old_owner_id:
+            pending.user_id = new_owner_id
+
+    # 2. Calculate quota delta (stored versions charged to old owner)
+    quota_delta = db.query(
+        func.coalesce(func.sum(FileVersion.compressed_size), 0)
+    ).filter(
+        FileVersion.file_id.in_(file_ids),
+        FileVersion.user_id == old_owner_id,
+        FileVersion.storage_type == 'stored'
+    ).scalar() or 0
+
+    # 3. Update FileVersion.user_id for all versions of transferred files
+    db.query(FileVersion).filter(
+        FileVersion.file_id.in_(file_ids)
+    ).update({"user_id": new_owner_id}, synchronize_session=False)
+
+    # 4. Rebalance quota if there are stored bytes to transfer
+    if quota_delta > 0:
+        old_settings = db.query(VCLSettings).filter(
+            VCLSettings.user_id == old_owner_id
+        ).first()
+        if old_settings:
+            new_usage = max(0, int(old_settings.current_usage_bytes) - quota_delta)
+            db.execute(
+                sql_update(VCLSettings).
+                where(VCLSettings.user_id == old_owner_id).
+                values(current_usage_bytes=new_usage)
+            )
+
+        new_settings = db.query(VCLSettings).filter(
+            VCLSettings.user_id == new_owner_id
+        ).first()
+        if new_settings:
+            new_usage = int(new_settings.current_usage_bytes) + quota_delta
+            db.execute(
+                sql_update(VCLSettings).
+                where(VCLSettings.user_id == new_owner_id).
+                values(current_usage_bytes=new_usage)
+            )
 
 
 def _delete_path_and_metadata(relative_path: str, db: Session) -> None:
