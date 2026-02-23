@@ -1280,7 +1280,13 @@ def simulate_failure(payload: RaidSimulationRequest) -> RaidActionResponse:
         resp = dev.degrade(payload)
         resp.message = "[DRY-RUN] " + resp.message
         return resp
-    return _backend.degrade(payload)
+    resp = _backend.degrade(payload)
+    try:
+        from app.services.notifications.events import emit_raid_degraded_sync
+        emit_raid_degraded_sync(payload.array, details="Manuell ausgelöst (simulate_failure)")
+    except Exception as exc:
+        logger.debug("Failed to emit RAID degraded notification: %s", exc)
+    return resp
 
 
 def simulate_rebuild(payload: RaidSimulationRequest) -> RaidActionResponse:
@@ -1300,7 +1306,13 @@ def finalize_rebuild(payload: RaidSimulationRequest) -> RaidActionResponse:
         resp = dev.finalize(payload)
         resp.message = "[DRY-RUN] " + resp.message
         return resp
-    return _backend.finalize(payload)
+    resp = _backend.finalize(payload)
+    try:
+        from app.services.notifications.events import emit_raid_rebuilt_sync
+        emit_raid_rebuilt_sync(payload.array)
+    except Exception as exc:
+        logger.debug("Failed to emit RAID rebuilt notification: %s", exc)
+    return resp
 
 
 def configure_array(payload: RaidOptionsRequest) -> RaidActionResponse:
@@ -1432,6 +1444,11 @@ def _perform_scrub_job() -> None:
             success=True,
             result={"message": result.message if result else "Scrub completed"}
         )
+        try:
+            from app.services.notifications.events import emit_raid_scrub_complete_sync
+            emit_raid_scrub_complete_sync("all", details=result.message if result else "")
+        except Exception:
+            pass
     except Exception as exc:  # pragma: no cover - runtime safety
         logger.exception("RAID scrub job failed: %s", exc)
         complete_scheduler_execution(execution_id, success=False, error=str(exc))

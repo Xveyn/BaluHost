@@ -252,6 +252,14 @@ class BackupService:
                 details={"size_bytes": backup.size_bytes, "backup_type": backup.backup_type},
                 db=self.db
             )
+            # Emit notification for successful backup
+            try:
+                from app.services.notifications.events import emit_backup_completed_sync
+                size_mb = f"{backup.size_bytes / (1024*1024):.1f} MB" if backup.size_bytes else "unbekannt"
+                emit_backup_completed_sync(backup.backup_type, size_mb)
+            except Exception:
+                pass
+
             # Cleanup old backups
             self._cleanup_old_backups()
             return BackupInDB.model_validate(backup)
@@ -273,6 +281,12 @@ class BackupService:
                 details={"traceback": tb},
                 db=self.db
             )
+            # Emit notification for failed backup
+            try:
+                from app.services.notifications.events import emit_backup_failed_sync
+                emit_backup_failed_sync(backup_data.backup_type, str(e))
+            except Exception:
+                pass
             raise
     
 

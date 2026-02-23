@@ -629,6 +629,25 @@ class FanControlService:
                             # Clear hysteresis state on emergency
                             if fan.fan_id in self._hysteresis_state:
                                 del self._hysteresis_state[fan.fan_id]
+                            # Emit critical temperature notification
+                            try:
+                                from app.services.notifications.events import emit_temperature_critical_sync
+                                emit_temperature_critical_sync(
+                                    config.temp_sensor_id or fan.fan_id,
+                                    temperature,
+                                )
+                            except Exception:
+                                pass
+                        elif temperature >= config.emergency_temp_celsius - 10:
+                            # Warning threshold: 10 degrees below emergency
+                            try:
+                                from app.services.notifications.events import emit_temperature_high_sync
+                                emit_temperature_high_sync(
+                                    config.temp_sensor_id or fan.fan_id,
+                                    temperature,
+                                )
+                            except Exception:
+                                pass
                         else:
                             # Resolve curve: scheduled mode uses time-based curve, auto uses default
                             if FanMode(config.mode) == FanMode.SCHEDULED:

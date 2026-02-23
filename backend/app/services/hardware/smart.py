@@ -1040,6 +1040,46 @@ def _mock_status() -> SmartStatusResponse:
     return SmartStatusResponse(checked_at=now, devices=devices)
 
 
+def _check_smart_for_notifications(status: SmartStatusResponse) -> None:
+    """Check SMART status for issues and emit notifications."""
+    try:
+        from app.services.notifications.events import (
+            emit_smart_failure_sync,
+            emit_smart_warning_sync,
+        )
+
+        for device in status.devices:
+            if device.status == "FAILED":
+                emit_smart_failure_sync(device.name, details=f"Status: FAILED, Modell: {device.model}")
+                continue
+
+            # Check for failing attributes
+            for attr in device.attributes:
+                if getattr(attr, "when_failed", None) == "FAILING_NOW":
+                    emit_smart_warning_sync(
+                        device.name,
+                        details=f"Attribut '{attr.name}' ist im FAILING-Zustand",
+                    )
+                    break  # One warning per device is enough
+
+            # Check for reallocated sectors
+            for attr in device.attributes:
+                if attr.name and "reallocated" in attr.name.lower() and attr.raw_value:
+                    try:
+                        count = int(str(attr.raw_value).split()[0])
+                        if count > 0:
+                            emit_smart_warning_sync(
+                                device.name,
+                                details=f"{count} reallocated Sektoren erkannt",
+                            )
+                    except (ValueError, IndexError):
+                        pass
+                    break
+
+    except Exception as exc:
+        logger.debug("Failed to check SMART notifications: %s", exc)
+
+
 def get_smart_status() -> SmartStatusResponse:
     """Return SMART diagnostics information.
 
@@ -1049,7 +1089,7 @@ def get_smart_status() -> SmartStatusResponse:
     cached = get_cached_smart_status()
     if cached:
         return cached
-    
+
     # Dev-Mode: Respektiere Toggle
     if settings.is_dev_mode:
         if _DEV_USE_MOCK_DATA:
@@ -1067,19 +1107,21 @@ def get_smart_status() -> SmartStatusResponse:
                     _set_smart_cache(mock)
                     return mock
                 _set_smart_cache(data)
+                _check_smart_for_notifications(data)
                 return data
             except Exception as e:
                 logger.warning("Failed to read real SMART data in dev-mode: %s", e)
                 mock = _mock_status()
                 _set_smart_cache(mock)
                 return mock
-    
+
     # Production: Versuche echte Daten, Fallback zu Mock
     try:
         data = _read_real_smart_data()
         if not data.devices:
             raise SmartUnavailableError("No devices")
         _set_smart_cache(data)
+        _check_smart_for_notifications(data)
         return data
     except SmartUnavailableError as e:
         logger.warning("SMART fallback to mock: %s", e)

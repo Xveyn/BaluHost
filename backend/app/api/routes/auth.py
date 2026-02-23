@@ -20,7 +20,14 @@ from app.models.user import User as UserModel
 from app.services.audit_logger_db import get_audit_logger_db
 from app.plugins.emit import emit_hook
 
+import time as _time
+
 router = APIRouter()
+
+# Brute-force detection: IP -> list of failure timestamps
+_failed_login_attempts: dict[str, list[float]] = {}
+_BRUTE_FORCE_WINDOW = 300  # 5 minutes
+_BRUTE_FORCE_THRESHOLD = 5  # failures before alert
 
 
 @router.post("/login")
@@ -41,6 +48,25 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
             error_message="Invalid credentials",
             db=db
         )
+        # Emit notification for failed login + brute force detection
+        try:
+            from app.services.notifications.events import emit_login_failed_sync, emit_brute_force_detected_sync
+            emit_login_failed_sync(payload.username, ip_address or "unknown")
+
+            # Track failed attempts per IP for brute-force detection
+            if ip_address:
+                now = _time.monotonic()
+                attempts = _failed_login_attempts.setdefault(ip_address, [])
+                attempts.append(now)
+                # Prune old entries outside the window
+                _failed_login_attempts[ip_address] = [
+                    t for t in attempts if now - t < _BRUTE_FORCE_WINDOW
+                ]
+                if len(_failed_login_attempts[ip_address]) >= _BRUTE_FORCE_THRESHOLD:
+                    emit_brute_force_detected_sync(ip_address)
+                    _failed_login_attempts[ip_address] = []  # Reset after alert
+        except Exception:
+            pass
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Check if 2FA is enabled

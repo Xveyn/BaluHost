@@ -266,6 +266,13 @@ class SchedulerWorker:
         except Exception as e:
             logger.exception("Scheduler job failed: %s", name)
 
+            # Emit notification for scheduler failure
+            try:
+                from app.services.notifications.events import emit_scheduler_failed_sync
+                emit_scheduler_failed_sync(name, str(e))
+            except Exception:
+                pass
+
             db = SessionLocal()
             try:
                 execution = db.query(SchedulerExecution).get(execution_id)
