@@ -231,13 +231,16 @@ export function useDiskIoMonitoring(
     }
   }, [historyDuration, source, diskName]);
 
+  // Use shorter poll interval while waiting for first disk data
+  const effectiveInterval = availableDisks.length === 0 && !error ? 1000 : pollInterval;
+
   useEffect(() => {
     if (!enabled) return;
 
     fetchData();
-    const interval = setInterval(fetchData, pollInterval);
+    const interval = setInterval(fetchData, effectiveInterval);
     return () => clearInterval(interval);
-  }, [fetchData, pollInterval, enabled]);
+  }, [fetchData, effectiveInterval, enabled]);
 
   return { disks, history, availableDisks, loading, error, refetch: fetchData, lastUpdated };
 }

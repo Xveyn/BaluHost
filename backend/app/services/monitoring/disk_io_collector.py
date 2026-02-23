@@ -70,6 +70,12 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
                 logger.debug("Disk I/O counters not available")
                 return samples
 
+            if self._previous_counters is None:
+                # First sample — register detected disks for immediate listing
+                for disk_name in current_counters:
+                    if self._is_physical_disk(disk_name) and disk_name not in self._disk_buffers:
+                        self._disk_buffers[disk_name] = []
+
             if self._previous_counters is not None:
                 time_delta = timestamp_seconds - self._previous_counters["timestamp"]
 
