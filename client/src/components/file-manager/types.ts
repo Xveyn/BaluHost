@@ -8,6 +8,13 @@ export interface StorageInfo {
   availableBytes: number;
 }
 
+export interface StorageBreakdown {
+  cache_bytes: number;
+  cache_enabled: boolean;
+  vcl_bytes: number;
+  user_files_bytes: number;
+}
+
 export interface StorageMountpoint {
   id: string;
   name: string;
@@ -19,6 +26,7 @@ export interface StorageMountpoint {
   raid_level?: string;
   status: string;
   is_default: boolean;
+  breakdown?: StorageBreakdown | null;
 }
 
 export interface SyncDeviceInfo {

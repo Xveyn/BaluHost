@@ -4,6 +4,14 @@ from typing import List, Optional
 from pydantic import BaseModel
 
 
+class StorageBreakdown(BaseModel):
+    """Breakdown of storage usage by category (cache, VCL, user files)."""
+    cache_bytes: int = 0
+    cache_enabled: bool = False
+    vcl_bytes: int = 0
+    user_files_bytes: int = 0  # used_bytes - cache - vcl (clamped >= 0)
+
+
 class StorageMountpoint(BaseModel):
     """Represents a mounted storage location (RAID array, disk, etc.)."""
     id: str  # e.g., "md0", "sda", "dev-storage"
@@ -16,6 +24,7 @@ class StorageMountpoint(BaseModel):
     raid_level: Optional[str] = None  # e.g., "raid1", "raid5"
     status: str  # "optimal", "degraded", "rebuilding", "n/a"
     is_default: bool = False  # Whether this is the default storage location
+    breakdown: Optional[StorageBreakdown] = None
 
 
 class MountpointsResponse(BaseModel):

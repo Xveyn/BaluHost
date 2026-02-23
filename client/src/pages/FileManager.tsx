@@ -582,6 +582,17 @@ export default function FileManager() {
               <span className="ml-2 text-sky-400">({formatBytes(storageInfo.availableBytes)} available)</span>
             </p>
           )}
+          {selectedMountpoint?.breakdown && (
+            <p className="mt-0.5 text-[11px] text-slate-500">
+              <span className="text-slate-400">Files: {formatBytes(selectedMountpoint.breakdown.user_files_bytes)}</span>
+              {selectedMountpoint.breakdown.cache_bytes > 0 && (
+                <span className="ml-2 text-amber-400/80">Cache: {formatBytes(selectedMountpoint.breakdown.cache_bytes)}</span>
+              )}
+              {selectedMountpoint.breakdown.vcl_bytes > 0 && (
+                <span className="ml-2 text-violet-400/80">VCL: {formatBytes(selectedMountpoint.breakdown.vcl_bytes)}</span>
+              )}
+            </p>
+          )}
           {vclQuota && (
             <div className="mt-1">
               <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border ${

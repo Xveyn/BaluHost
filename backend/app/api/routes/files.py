@@ -341,6 +341,7 @@ async def get_mountpoints(
     """Get list of available storage mountpoints (RAID arrays, disks, etc.)."""
     from app.schemas.storage import MountpointsResponse, StorageMountpoint
     from app.services import raid as raid_service
+    from app.services.storage_breakdown import compute_storage_breakdown
     from app.core.config import settings
     
     raid_status = raid_service.get_status()
@@ -353,7 +354,11 @@ async def get_mountpoints(
         used_bytes = file_service.calculate_used_bytes()
         quota_bytes = settings.nas_quota_bytes or 0
         available_bytes = file_service.calculate_available_bytes()
-        
+
+        from pathlib import Path as _Path
+        dev_mp_path = str(_Path(settings.nas_storage_path).resolve())
+        breakdown = compute_storage_breakdown(dev_mp_path, used_bytes, db)
+
         mountpoints.append(StorageMountpoint(
             id="dev-storage",
             name="Dev Storage",
@@ -363,7 +368,8 @@ async def get_mountpoints(
             used_bytes=used_bytes,
             available_bytes=available_bytes,
             status="optimal",
-            is_default=True
+            is_default=True,
+            breakdown=breakdown,
         ))
         
         # Add mock RAID arrays
@@ -423,6 +429,9 @@ async def get_mountpoints(
                 if a.status == "rebuilding" and worst_status != "degraded":
                     worst_status = "rebuilding"
 
+            breakdown = compute_storage_breakdown(
+                raid_mountpoint or str(ROOT_DIR), used_bytes, db,
+            )
             mountpoints.append(StorageMountpoint(
                 id=primary.name,
                 name=f"{primary.level.upper()} Storage - {primary.name}",
@@ -434,6 +443,7 @@ async def get_mountpoints(
                 raid_level=primary.level,
                 status=worst_status,
                 is_default=True,
+                breakdown=breakdown,
             ))
         else:
             # No RAID: use shutil.disk_usage on ROOT_DIR
@@ -447,6 +457,7 @@ async def get_mountpoints(
                 used_bytes = 0
                 available_bytes = 0
 
+            breakdown = compute_storage_breakdown(str(ROOT_DIR), used_bytes, db)
             mountpoints.append(StorageMountpoint(
                 id="storage",
                 name="Storage",
@@ -458,6 +469,7 @@ async def get_mountpoints(
                 raid_level=None,
                 status="optimal",
                 is_default=True,
+                breakdown=breakdown,
             ))
     
     default_id = next((m.id for m in mountpoints if m.is_default), mountpoints[0].id if mountpoints else "dev-storage")
