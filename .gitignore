@@ -95,3 +95,4 @@ test_*.env.production
 /test_*
 image.png
 tools/
+/backend/env.production
