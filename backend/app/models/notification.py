@@ -64,6 +64,9 @@ class Notification(Base):
     is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     extra_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
+    snoozed_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None
+    )
 
     # Relationship
     user: Mapped[Optional["User"]] = relationship("User", back_populates="notifications")
@@ -86,6 +89,7 @@ class Notification(Base):
             "is_dismissed": self.is_dismissed,
             "priority": self.priority,
             "metadata": self.extra_data,
+            "snoozed_until": self.snoozed_until.isoformat() if self.snoozed_until else None,
         }
 
 

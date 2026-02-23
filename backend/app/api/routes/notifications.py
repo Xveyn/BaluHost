@@ -1,5 +1,5 @@
 """Notification API endpoints."""
-from datetime import time
+from datetime import time, datetime
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status, Query, WebSocket, WebSocketDisconnect
@@ -33,6 +33,9 @@ async def get_notifications(
     unread_only: bool = Query(False, description="Only return unread notifications"),
     include_dismissed: bool = Query(False, description="Include dismissed notifications"),
     category: Optional[NotificationCategoryEnum] = Query(None, description="Filter by category"),
+    notification_type: Optional[str] = Query(None, description="Filter by type (info, warning, critical)"),
+    created_after: Optional[datetime] = Query(None, description="Only return notifications after this time"),
+    created_before: Optional[datetime] = Query(None, description="Only return notifications before this time"),
     page: int = Query(1, ge=1, description="Page number"),
     page_size: int = Query(50, ge=1, le=100, description="Items per page"),
     current_user: UserPublic = Depends(deps.get_current_user),
@@ -51,6 +54,9 @@ async def get_notifications(
         unread_only=unread_only,
         include_dismissed=include_dismissed,
         category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
         limit=page_size,
         offset=offset,
     )
@@ -64,6 +70,9 @@ async def get_notifications(
         unread_only=unread_only,
         include_dismissed=include_dismissed,
         category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
         limit=10000,
         offset=0,
     )
@@ -162,6 +171,32 @@ async def dismiss_notification(
     """
     service = get_notification_service()
     notification = service.dismiss(db, notification_id, current_user.id)
+
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return NotificationResponse.from_db(notification)
+
+
+@router.post("/{notification_id}/snooze", response_model=NotificationResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def snooze_notification(
+    request: Request, response: Response,
+    notification_id: int,
+    duration_hours: int = Query(..., ge=1, le=168, description="Hours to snooze (1-168)"),
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationResponse:
+    """Snooze a notification for a given number of hours.
+
+    The notification will be hidden from unread counts and default lists
+    until the snooze period expires.
+    """
+    service = get_notification_service()
+    notification = service.snooze(db, notification_id, current_user.id, duration_hours)
 
     if not notification:
         raise HTTPException(

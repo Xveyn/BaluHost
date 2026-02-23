@@ -61,6 +61,10 @@ class NotificationResponse(NotificationBase):
     user_id: Optional[int] = None
     is_read: bool = False
     is_dismissed: bool = False
+    snoozed_until: Optional[datetime] = Field(
+        default=None,
+        description="Snooze expiry time (null if not snoozed)"
+    )
 
     # Computed field for time ago display
     time_ago: Optional[str] = Field(
@@ -97,8 +101,9 @@ class NotificationResponse(NotificationBase):
             is_read=notification.is_read,
             is_dismissed=notification.is_dismissed,
             priority=notification.priority,
-            metadata=notification.metadata,
+            metadata=notification.extra_data,
             time_ago=time_ago,
+            snoozed_until=getattr(notification, "snoozed_until", None),
         )
 
 

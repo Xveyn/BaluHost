@@ -119,8 +119,8 @@ class NotificationService:
         # Get user preferences
         prefs = self.get_user_preferences(db, notification.user_id)
 
-        # Check quiet hours
-        if prefs and self._is_quiet_hours(prefs):
+        # Check quiet hours (critical notifications with priority >= 3 bypass)
+        if prefs and self._is_quiet_hours(prefs) and notification.priority < 3:
             logger.debug(f"Notification {notification.id} suppressed during quiet hours")
             # Still store, but don't dispatch actively
             return
@@ -300,6 +300,9 @@ class NotificationService:
         unread_only: bool = False,
         include_dismissed: bool = False,
         category: Optional[str] = None,
+        notification_type: Optional[str] = None,
+        created_after: Optional[datetime] = None,
+        created_before: Optional[datetime] = None,
         limit: int = 50,
         offset: int = 0,
     ) -> list[Notification]:
@@ -311,6 +314,9 @@ class NotificationService:
             unread_only: Only return unread notifications
             include_dismissed: Include dismissed notifications
             category: Filter by category
+            notification_type: Filter by type (info, warning, critical)
+            created_after: Only return notifications created after this time
+            created_before: Only return notifications created before this time
             limit: Maximum number of results
             offset: Number of results to skip
 
@@ -318,6 +324,16 @@ class NotificationService:
             List of Notification objects
         """
         query = db.query(Notification).filter(Notification.user_id == user_id)
+
+        # Exclude snoozed notifications from default queries
+        if hasattr(Notification, "snoozed_until"):
+            from sqlalchemy import or_
+            query = query.filter(
+                or_(
+                    Notification.snoozed_until.is_(None),
+                    Notification.snoozed_until <= datetime.now(timezone.utc),
+                )
+            )
 
         if unread_only:
             query = query.filter(Notification.is_read == False)
@@ -327,6 +343,15 @@ class NotificationService:
 
         if category:
             query = query.filter(Notification.category == category)
+
+        if notification_type:
+            query = query.filter(Notification.notification_type == notification_type)
+
+        if created_after:
+            query = query.filter(Notification.created_at >= created_after)
+
+        if created_before:
+            query = query.filter(Notification.created_at <= created_before)
 
         query = query.order_by(desc(Notification.created_at))
         query = query.offset(offset).limit(limit)
@@ -354,6 +379,16 @@ class NotificationService:
             Notification.is_read == False,
             Notification.is_dismissed == False,
         )
+
+        # Exclude snoozed notifications
+        if hasattr(Notification, "snoozed_until"):
+            from sqlalchemy import or_
+            query = query.filter(
+                or_(
+                    Notification.snoozed_until.is_(None),
+                    Notification.snoozed_until <= datetime.now(timezone.utc),
+                )
+            )
 
         if category:
             query = query.filter(Notification.category == category)
@@ -446,6 +481,39 @@ class NotificationService:
             db.commit()
             db.refresh(notification)
             logger.debug(f"Dismissed notification {notification_id}")
+
+        return notification
+
+    def snooze(
+        self,
+        db: Session,
+        notification_id: int,
+        user_id: int,
+        duration_hours: int,
+    ) -> Optional[Notification]:
+        """Snooze a notification for a given duration.
+
+        Args:
+            db: Database session
+            notification_id: Notification ID
+            user_id: User ID (for ownership check)
+            duration_hours: Number of hours to snooze
+
+        Returns:
+            Updated Notification or None if not found
+        """
+        from datetime import timedelta
+
+        notification = db.query(Notification).filter(
+            Notification.id == notification_id,
+            Notification.user_id == user_id,
+        ).first()
+
+        if notification and hasattr(notification, "snoozed_until"):
+            notification.snoozed_until = datetime.now(timezone.utc) + timedelta(hours=duration_hours)
+            db.commit()
+            db.refresh(notification)
+            logger.debug(f"Snoozed notification {notification_id} for {duration_hours}h")
 
         return notification
 

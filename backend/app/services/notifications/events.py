@@ -5,11 +5,52 @@ events that trigger notifications.
 """
 
 import logging
+import time as _time
 from typing import Optional, Any, Callable, Awaitable
 from dataclasses import dataclass
 from enum import Enum
 
 logger = logging.getLogger(__name__)
+
+# Cooldown cache: maps "event_type:entity_id" -> last_emit_timestamp
+_cooldown_cache: dict[str, float] = {}
+
+# Cooldown durations in seconds per event type
+_COOLDOWN_SECONDS: dict[str, int] = {
+    "raid.degraded": 3600,       # 1h
+    "raid.failed": 3600,         # 1h
+    "smart.warning": 86400,      # 24h
+    "smart.failure": 86400,      # 24h
+    "smart.reallocated": 86400,  # 24h
+    "system.disk_space_low": 3600,      # 1h
+    "system.disk_space_critical": 3600, # 1h
+    "system.temperature_high": 1800,    # 30min
+    "system.temperature_critical": 1800, # 30min
+}
+
+
+def _check_cooldown(event_type: str, entity_id: str = "") -> bool:
+    """Check if an event is still in cooldown.
+
+    Returns True if the event should be suppressed (still cooling down).
+    """
+    cooldown = _COOLDOWN_SECONDS.get(event_type)
+    if cooldown is None:
+        return False  # No cooldown configured, always emit
+
+    key = f"{event_type}:{entity_id}"
+    last_emit = _cooldown_cache.get(key)
+    if last_emit is None:
+        return False  # Never emitted before
+
+    return (_time.monotonic() - last_emit) < cooldown
+
+
+def _set_cooldown(event_type: str, entity_id: str = "") -> None:
+    """Record that an event was emitted (for cooldown tracking)."""
+    if event_type in _COOLDOWN_SECONDS:
+        key = f"{event_type}:{entity_id}"
+        _cooldown_cache[key] = _time.monotonic()
 
 
 class EventType(str, Enum):
@@ -387,6 +428,84 @@ class EventEmitter:
                 except Exception as e:
                     logger.error(f"Event handler error for {event_type}: {e}")
 
+    def emit_sync(
+        self,
+        event_type: str,
+        user_id: Optional[int] = None,
+        cooldown_entity: str = "",
+        **kwargs: Any,
+    ) -> None:
+        """Synchronous event emit - creates notification directly via DB.
+
+        For use in synchronous services (RAID, SMART, Backup, etc.)
+        that cannot easily await async code.
+
+        Args:
+            event_type: Type of event
+            user_id: Target user ID (None for admins/system)
+            cooldown_entity: Entity identifier for cooldown (e.g. 'md0', 'sda')
+            **kwargs: Event-specific data for template substitution
+        """
+        # Check cooldown
+        if _check_cooldown(event_type, cooldown_entity):
+            logger.debug(f"Event {event_type}:{cooldown_entity} suppressed by cooldown")
+            return
+
+        logger.info(f"Event emitted (sync): {event_type}, user_id={user_id}, data={kwargs}")
+
+        config = EVENT_CONFIGS.get(event_type)
+        if not config:
+            logger.warning(f"Unknown event type: {event_type}")
+            return
+
+        try:
+            title = config.title_template.format(**kwargs)
+            message = config.message_template.format(**kwargs)
+        except KeyError as e:
+            logger.error(f"Missing event data for {event_type}: {e}")
+            title = config.title_template
+            message = config.message_template
+
+        if self._db_session_factory:
+            db = self._db_session_factory()
+            try:
+                from app.models.notification import Notification
+
+                notification = Notification(
+                    user_id=user_id,
+                    category=config.category,
+                    notification_type=config.notification_type,
+                    title=title,
+                    message=message,
+                    action_url=config.action_url,
+                    extra_data={"event_type": event_type, **kwargs},
+                    priority=config.priority,
+                )
+                db.add(notification)
+                db.commit()
+                _set_cooldown(event_type, cooldown_entity)
+                logger.info(f"Created notification (sync): id={notification.id}, type={event_type}")
+            except Exception as e:
+                db.rollback()
+                logger.error(f"Failed to create notification for {event_type}: {e}")
+            finally:
+                db.close()
+
+    def emit_for_admins_sync(
+        self,
+        event_type: str,
+        cooldown_entity: str = "",
+        **kwargs: Any,
+    ) -> None:
+        """Synchronous emit for admin-targeted notifications.
+
+        Args:
+            event_type: Type of event
+            cooldown_entity: Entity identifier for cooldown
+            **kwargs: Event-specific data
+        """
+        self.emit_sync(event_type, user_id=None, cooldown_entity=cooldown_entity, **kwargs)
+
     async def emit_for_admins(
         self,
         event_type: str,
@@ -523,4 +642,197 @@ async def emit_temperature_high(component: str, temperature: float) -> None:
         EventType.TEMPERATURE_HIGH,
         component=component,
         temperature=temperature,
+    )
+
+
+async def emit_temperature_critical(component: str, temperature: float) -> None:
+    """Emit temperature critical event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.TEMPERATURE_CRITICAL,
+        component=component,
+        temperature=temperature,
+    )
+
+
+async def emit_raid_failed(array_name: str, details: str = "") -> None:
+    """Emit RAID failed event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.RAID_FAILED,
+        array_name=array_name,
+        details=details,
+    )
+
+
+async def emit_raid_rebuilt(array_name: str) -> None:
+    """Emit RAID rebuilt event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.RAID_REBUILT,
+        array_name=array_name,
+    )
+
+
+async def emit_raid_scrub_complete(array_name: str, details: str = "") -> None:
+    """Emit RAID scrub complete event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.RAID_SCRUB_COMPLETE,
+        array_name=array_name,
+        details=details,
+    )
+
+
+async def emit_disk_space_critical(percent: int, free_space: str) -> None:
+    """Emit disk space critical event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.DISK_SPACE_CRITICAL,
+        percent=percent,
+        free_space=free_space,
+    )
+
+
+async def emit_login_failed(username: str, ip_address: str) -> None:
+    """Emit login failed event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.LOGIN_FAILED,
+        username=username,
+        ip_address=ip_address,
+    )
+
+
+async def emit_brute_force_detected(ip_address: str) -> None:
+    """Emit brute force detected event."""
+    await get_event_emitter().emit_for_admins(
+        EventType.BRUTE_FORCE_DETECTED,
+        ip_address=ip_address,
+    )
+
+
+# Synchronous convenience functions for use in sync services
+def emit_raid_degraded_sync(array_name: str, details: str = "") -> None:
+    """Emit RAID degraded event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_DEGRADED,
+        cooldown_entity=array_name,
+        array_name=array_name,
+        details=details,
+    )
+
+
+def emit_raid_failed_sync(array_name: str, details: str = "") -> None:
+    """Emit RAID failed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_FAILED,
+        cooldown_entity=array_name,
+        array_name=array_name,
+        details=details,
+    )
+
+
+def emit_raid_rebuilt_sync(array_name: str) -> None:
+    """Emit RAID rebuilt event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_REBUILT,
+        array_name=array_name,
+    )
+
+
+def emit_raid_scrub_complete_sync(array_name: str, details: str = "") -> None:
+    """Emit RAID scrub complete event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_SCRUB_COMPLETE,
+        array_name=array_name,
+        details=details,
+    )
+
+
+def emit_smart_warning_sync(disk_name: str, details: str = "") -> None:
+    """Emit SMART warning event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SMART_WARNING,
+        cooldown_entity=disk_name,
+        disk_name=disk_name,
+        details=details,
+    )
+
+
+def emit_smart_failure_sync(disk_name: str, details: str = "") -> None:
+    """Emit SMART failure event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SMART_FAILURE,
+        cooldown_entity=disk_name,
+        disk_name=disk_name,
+        details=details,
+    )
+
+
+def emit_backup_completed_sync(backup_type: str, size: str) -> None:
+    """Emit backup completed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.BACKUP_COMPLETED,
+        backup_type=backup_type,
+        size=size,
+    )
+
+
+def emit_backup_failed_sync(backup_type: str, error: str) -> None:
+    """Emit backup failed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.BACKUP_FAILED,
+        backup_type=backup_type,
+        error=error,
+    )
+
+
+def emit_scheduler_failed_sync(scheduler_name: str, error: str) -> None:
+    """Emit scheduler failed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SCHEDULER_FAILED,
+        scheduler_name=scheduler_name,
+        error=error,
+    )
+
+
+def emit_disk_space_low_sync(percent: int, free_space: str) -> None:
+    """Emit disk space low event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.DISK_SPACE_LOW,
+        cooldown_entity="storage",
+        percent=percent,
+        free_space=free_space,
+    )
+
+
+def emit_temperature_high_sync(component: str, temperature: float) -> None:
+    """Emit temperature high event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.TEMPERATURE_HIGH,
+        cooldown_entity=component,
+        component=component,
+        temperature=temperature,
+    )
+
+
+def emit_temperature_critical_sync(component: str, temperature: float) -> None:
+    """Emit temperature critical event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.TEMPERATURE_CRITICAL,
+        cooldown_entity=component,
+        component=component,
+        temperature=temperature,
+    )
+
+
+def emit_login_failed_sync(username: str, ip_address: str) -> None:
+    """Emit login failed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.LOGIN_FAILED,
+        username=username,
+        ip_address=ip_address,
+    )
+
+
+def emit_brute_force_detected_sync(ip_address: str) -> None:
+    """Emit brute force detected event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.BRUTE_FORCE_DETECTED,
+        ip_address=ip_address,
     )
