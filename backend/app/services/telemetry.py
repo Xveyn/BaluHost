@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import random
 import time
 from threading import Lock
@@ -25,7 +26,26 @@ _FAST_START_SAMPLES = 3  # Anzahl schneller Initial-Samples
 _FAST_START_INTERVAL = 0.5  # Abstand zwischen Fast-Start Samples
 _MAX_SAMPLES = int(getattr(settings, "telemetry_history_size", 60))
 
-_SERVER_START_TIME: float = time.time()
+def _get_shared_start_time() -> float:
+    """Get the start time of the Uvicorn master process.
+
+    In a multi-worker deployment each worker is a child of the master process.
+    Using the parent's creation time ensures all workers report the same uptime.
+    Falls back to the current process start time for single-process dev mode.
+    """
+    try:
+        parent = psutil.Process(os.getpid()).parent()
+        if parent is not None:
+            parent_name = parent.name().lower()
+            # Only use parent time when running under a process manager
+            if any(kw in parent_name for kw in ("uvicorn", "gunicorn", "python")):
+                return parent.create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    return psutil.Process(os.getpid()).create_time()
+
+
+_SERVER_START_TIME: float = _get_shared_start_time()
 _SAMPLE_COUNT: int = 0
 _ERROR_COUNT: int = 0
 _LAST_ERROR: Optional[str] = None

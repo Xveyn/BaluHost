@@ -51,8 +51,11 @@ class TestServerUptime:
         set_server_start_time()
         uptime = get_server_uptime()
 
-        # Should be very small (just started)
-        assert 0 <= uptime < 1.0
+        # In multi-worker mode, start time is derived from the parent process
+        # creation time (shared across workers).  In tests this is the pytest
+        # process, so the uptime may already be several seconds.  We just
+        # verify it returns a non-negative, reasonable value.
+        assert 0 <= uptime < 120.0
 
     def test_get_server_uptime_increases(self):
         """Test that uptime increases over time."""

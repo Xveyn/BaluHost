@@ -1,8 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from sqlalchemy.orm import Session
 import threading
 import os
 import logging
 import signal
+from datetime import datetime, timedelta
 
 from app.api import deps
 from app.core.rate_limiter import limiter, user_limiter, get_limit
@@ -106,14 +108,91 @@ async def get_process_list(
     return system_service.get_process_list(limit=limit)
 
 
+def _telemetry_history_from_db(db: Session) -> TelemetryHistoryResponse:
+    """Build a TelemetryHistoryResponse from the monitoring DB tables.
+
+    Used as fallback on secondary workers whose in-memory telemetry buffer is
+    empty.  Converts the newer monitoring schema samples into the legacy
+    telemetry format consumed by the Dashboard.
+    """
+    from app.models.monitoring import CpuSample, MemorySample, NetworkSample
+    from app.schemas.system import CpuTelemetrySample, MemoryTelemetrySample, NetworkTelemetrySample
+    import time
+
+    cutoff = datetime.utcnow() - timedelta(minutes=3)
+
+    cpu_rows = (
+        db.query(CpuSample)
+        .filter(CpuSample.timestamp >= cutoff)
+        .order_by(CpuSample.timestamp.asc())
+        .limit(60)
+        .all()
+    )
+    mem_rows = (
+        db.query(MemorySample)
+        .filter(MemorySample.timestamp >= cutoff)
+        .order_by(MemorySample.timestamp.asc())
+        .limit(60)
+        .all()
+    )
+    net_rows = (
+        db.query(NetworkSample)
+        .filter(NetworkSample.timestamp >= cutoff)
+        .order_by(NetworkSample.timestamp.asc())
+        .limit(60)
+        .all()
+    )
+
+    cpu_samples = [
+        CpuTelemetrySample(
+            timestamp=int(r.timestamp.timestamp() * 1000) if isinstance(r.timestamp, datetime) else int(time.time() * 1000),
+            usage=round(r.usage_percent, 2),
+            frequency_mhz=r.frequency_mhz,
+            temperature_celsius=r.temperature_celsius,
+        )
+        for r in cpu_rows
+    ]
+    memory_samples = [
+        MemoryTelemetrySample(
+            timestamp=int(r.timestamp.timestamp() * 1000) if isinstance(r.timestamp, datetime) else int(time.time() * 1000),
+            used=r.used_bytes,
+            total=r.total_bytes,
+            percent=round(r.percent, 2),
+        )
+        for r in mem_rows
+    ]
+    network_samples = [
+        NetworkTelemetrySample(
+            timestamp=int(r.timestamp.timestamp() * 1000) if isinstance(r.timestamp, datetime) else int(time.time() * 1000),
+            downloadMbps=round(r.download_mbps, 2),
+            uploadMbps=round(r.upload_mbps, 2),
+        )
+        for r in net_rows
+    ]
+
+    return TelemetryHistoryResponse(
+        cpu=cpu_samples,
+        memory=memory_samples,
+        network=network_samples,
+    )
+
+
 @router.get("/telemetry/history", response_model=TelemetryHistoryResponse)
 @user_limiter.limit(get_limit("system_monitor"))
 async def get_telemetry_history(
     request: Request,
     response: Response,
     _: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(deps.get_db),
 ) -> TelemetryHistoryResponse:
-    return telemetry_service.get_history()
+    history = telemetry_service.get_history()
+
+    # On secondary workers the in-memory buffer is empty.  Fall back to the
+    # monitoring DB tables so the dashboard still shows recent data.
+    if not history.cpu and not history.memory and not history.network:
+        history = _telemetry_history_from_db(db)
+
+    return history
 
 
 @router.post("/shutdown")

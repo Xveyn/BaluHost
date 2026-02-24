@@ -108,6 +108,11 @@ async def get_cpu_history(
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
         samples = orchestrator.cpu_collector.get_history_memory(limit)
         source_str = "memory"
+        # Fallback to DB when memory buffer is empty (e.g. secondary worker)
+        if not samples:
+            start = datetime.utcnow() - duration
+            samples = orchestrator.cpu_collector.get_history_db(db, start=start, limit=limit)
+            source_str = "database (fallback)"
     else:
         start = datetime.utcnow() - duration
         samples = orchestrator.cpu_collector.get_history_db(db, start=start, limit=limit)
@@ -175,6 +180,11 @@ async def get_memory_history(
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
         samples = orchestrator.memory_collector.get_history_memory(limit)
         source_str = "memory"
+        # Fallback to DB when memory buffer is empty (e.g. secondary worker)
+        if not samples:
+            start = datetime.utcnow() - duration
+            samples = orchestrator.memory_collector.get_history_db(db, start=start, limit=limit)
+            source_str = "database (fallback)"
     else:
         start = datetime.utcnow() - duration
         samples = orchestrator.memory_collector.get_history_db(db, start=start, limit=limit)
@@ -243,6 +253,11 @@ async def get_network_history(
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
         samples = orchestrator.network_collector.get_history_memory(limit)
         source_str = "memory"
+        # Fallback to DB when memory buffer is empty (e.g. secondary worker)
+        if not samples:
+            start = datetime.utcnow() - duration
+            samples = orchestrator.network_collector.get_history_db(db, start=start, limit=limit)
+            source_str = "database (fallback)"
     else:
         start = datetime.utcnow() - duration
         samples = orchestrator.network_collector.get_history_db(db, start=start, limit=limit)
@@ -297,6 +312,19 @@ async def get_disk_io_history(
         else:
             disks = orchestrator.disk_io_collector.get_all_disk_histories()
         source_str = "memory"
+        # Fallback to DB when memory buffer is empty (e.g. secondary worker)
+        if not any(disks.values()):
+            start = datetime.utcnow() - duration
+            samples = orchestrator.disk_io_collector.get_history_db(db, start=start, limit=limit)
+            if samples:
+                disks = {}
+                for sample in samples:
+                    if disk_name and sample.disk_name != disk_name:
+                        continue
+                    if sample.disk_name not in disks:
+                        disks[sample.disk_name] = []
+                    disks[sample.disk_name].append(sample)
+                source_str = "database (fallback)"
     else:
         # Get from database
         start = datetime.utcnow() - duration
@@ -367,6 +395,17 @@ async def get_processes_history(
         else:
             processes = orchestrator.process_tracker.get_all_histories()
         source_str = "memory"
+        # Fallback to DB when memory buffer is empty (e.g. secondary worker)
+        if not any(processes.values()):
+            start = datetime.utcnow() - duration
+            samples = orchestrator.process_tracker.get_history_db(db, process_name=process_name, start=start)
+            if samples:
+                processes = {}
+                for sample in samples:
+                    if sample.process_name not in processes:
+                        processes[sample.process_name] = []
+                    processes[sample.process_name].append(sample)
+                source_str = "database (fallback)"
     else:
         # Get from database
         start = datetime.utcnow() - duration

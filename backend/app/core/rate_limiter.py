@@ -15,7 +15,16 @@ logger = logging.getLogger(__name__)
 _rate_limits_cache: Optional[dict[str, str]] = None
 _cache_initialized = False
 
-# Initialize rate limiter with identification function
+# Initialize rate limiter with identification function.
+#
+# NOTE: Multi-worker deployment uses in-memory storage (no shared state between
+# workers).  This is acceptable because:
+# 1. Nginx ip_hash ensures a client always hits the same worker, so per-client
+#    rate-limit counters are accurate.
+# 2. Nginx itself enforces rate-limits for auth endpoints (auth_limit zone,
+#    5r/m) as the primary brute-force defense.
+# 3. Counters reset on service restart — acceptable for a single-instance NAS.
+#
 # In test or dev mode we relax/disable strict limits to avoid flakiness in automated tests.
 try:
     from app.core.config import settings

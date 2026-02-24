@@ -82,11 +82,11 @@ ProcessInfo = Tuple[str, subprocess.Popen]
 PROD_CONFIG = {
     "backend_port": 8000,
     "backend_host": "127.0.0.1",  # Bind to localhost, nginx handles external
-    # 2 workers: primary detection via file lock (/tmp/baluhost-primary.lock).
+    # 4 workers: primary detection via file lock (/tmp/baluhost-primary.lock).
     # Hardware services (fan control, power management, telemetry, mDNS) only
-    # run on the primary worker. The second worker handles API requests during
-    # concurrent uploads.
-    "workers": 2,
+    # run on the primary worker. Secondary workers handle API requests.
+    # Nginx ip_hash ensures per-client sticky sessions.
+    "workers": 4,
     "frontend_port": 5173,  # Only used if running frontend in dev mode
 }
 

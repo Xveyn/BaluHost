@@ -13,13 +13,14 @@ WorkingDirectory=/home/sven/projects/BaluHost/backend
 EnvironmentFile=/home/sven/projects/BaluHost/.env.production
 
 # Virtual environment activation and uvicorn start
-# 2 workers: primary detection via file lock (/tmp/baluhost-primary.lock).
+# 4 workers: primary detection via file lock (/tmp/baluhost-primary.lock).
 # Hardware services (fan, power, telemetry) run only on the primary worker.
+# Nginx ip_hash ensures per-client sticky sessions across workers.
 ExecStartPre=/usr/bin/rm -f /tmp/baluhost-primary.lock
 ExecStart=/home/sven/projects/BaluHost/backend/.venv/bin/uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --workers 2 \
+    --workers 4 \
     --log-level info \
     --no-access-log
 

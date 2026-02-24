@@ -39,10 +39,32 @@ logger = logging.getLogger(__name__)
 _SERVER_START_TIME: Optional[float] = None
 
 
+def _get_shared_start_time() -> float:
+    """Get the start time of the Uvicorn master process.
+
+    In a multi-worker deployment each worker is a child of the master process.
+    Using the parent's creation time ensures all workers report the same uptime.
+    Falls back to the current process start time for single-process dev mode.
+    """
+    try:
+        parent = psutil.Process(os.getpid()).parent()
+        if parent is not None:
+            parent_name = parent.name().lower()
+            if any(kw in parent_name for kw in ("uvicorn", "gunicorn", "python")):
+                return parent.create_time()
+    except (psutil.NoSuchProcess, psutil.AccessDenied):
+        pass
+    return psutil.Process(os.getpid()).create_time()
+
+
 def set_server_start_time() -> None:
-    """Set the server start time. Call this during app startup."""
+    """Set the server start time. Call this during app startup.
+
+    Uses the parent (master) process creation time so that all workers in a
+    multi-worker deployment report the same uptime.
+    """
     global _SERVER_START_TIME
-    _SERVER_START_TIME = time.time()
+    _SERVER_START_TIME = _get_shared_start_time()
 
 
 def get_server_uptime() -> float:
