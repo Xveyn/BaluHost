@@ -38,7 +38,7 @@ const TapoDeviceSettings: React.FC = () => {
       const data = await listTapoDevices();
       setDevices(data);
     } catch {
-      toast.error('Failed to load devices');
+      toast.error(t('tapo.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -54,13 +54,13 @@ const TapoDeviceSettings: React.FC = () => {
 
     // Validation
     if (!formData.name || !formData.ip_address || !formData.email || !formData.password) {
-      toast.error('Please fill in all required fields');
+      toast.error(t('tapo.validationError'));
       return;
     }
 
     try {
       await createTapoDevice(formData);
-      toast.success('Device added successfully');
+      toast.success(t('tapo.addSuccess'));
 
       // Reset form
       setFormData({
@@ -79,22 +79,22 @@ const TapoDeviceSettings: React.FC = () => {
       const detail = error != null && typeof error === 'object' && 'response' in error
         ? (error as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
         : undefined;
-      toast.error(extractErrorMessage(detail, 'Failed to add device'));
+      toast.error(extractErrorMessage(detail, t('tapo.addFailed')));
     }
   };
 
   // Handle delete
   const handleDelete = async (deviceId: number, deviceName: string) => {
-    if (!confirm(`Are you sure you want to delete "${deviceName}"?`)) {
+    if (!confirm(t('tapo.deleteConfirm', { name: deviceName }))) {
       return;
     }
 
     try {
       await deleteTapoDevice(deviceId);
-      toast.success('Device deleted');
+      toast.success(t('tapo.deleteSuccess'));
       loadDevices();
     } catch {
-      toast.error('Failed to delete device');
+      toast.error(t('tapo.deleteFailed'));
     }
   };
 
@@ -306,7 +306,7 @@ const TapoDeviceSettings: React.FC = () => {
                   <button
                     onClick={() => handleDelete(device.id, device.name)}
                     className="btn-secondary p-2 hover:bg-red-500/10 hover:text-red-500 transition-colors"
-                    title="Delete device"
+                    title={t('tapo.deleteDevice')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
