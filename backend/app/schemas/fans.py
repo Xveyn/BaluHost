@@ -335,12 +335,14 @@ class UpdateFanConfigRequest(BaseModel):
     min_pwm_percent: Optional[int] = Field(None, ge=0, le=100, description="Minimum PWM percentage")
     max_pwm_percent: Optional[int] = Field(None, ge=0, le=100, description="Maximum PWM percentage")
     emergency_temp_celsius: Optional[float] = Field(None, ge=0, le=150, description="Emergency temperature threshold")
+    temp_sensor_id: Optional[str] = Field(None, description="Temperature sensor ID to use for this fan")
 
     class Config:
         json_schema_extra = {
             "example": {
                 "fan_id": "hwmon0_pwm1",
-                "hysteresis_celsius": 5.0
+                "hysteresis_celsius": 5.0,
+                "temp_sensor_id": "hwmon2_temp1"
             }
         }
 
@@ -353,7 +355,23 @@ class UpdateFanConfigResponse(BaseModel):
     min_pwm_percent: int
     max_pwm_percent: int
     emergency_temp_celsius: float
+    temp_sensor_id: Optional[str] = None
     message: Optional[str] = None
+
+
+class TempSensorInfo(BaseModel):
+    """Information about a temperature sensor."""
+    sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon2_temp1)")
+    device_name: str = Field(..., description="Hardware device name (e.g., k10temp)")
+    label: Optional[str] = Field(None, description="Sensor label (e.g., Tctl)")
+    is_cpu_sensor: bool = Field(..., description="Whether this is a CPU temperature sensor")
+    current_temp: Optional[float] = Field(None, description="Current temperature in Celsius")
+
+
+class TempSensorListResponse(BaseModel):
+    """Response for listing available temperature sensors."""
+    sensors: List[TempSensorInfo]
+    total_count: int
 
 
 # --- Schedule Schemas ---

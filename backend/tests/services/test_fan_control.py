@@ -16,6 +16,8 @@ from app.services.power.fan_control import (
     DevFanControlBackend,
     FanData,
     FanControlService,
+    LinuxFanControlBackend,
+    TempSensorData,
 )
 
 
@@ -407,3 +409,278 @@ class TestFanDataStructure:
         assert fan.rpm is None
         assert fan.temperature_celsius is None
         assert fan.temp_sensor_id is None
+
+
+class TestCpuSensorDetection:
+    """Tests for CPU temperature sensor detection across hwmon boundaries."""
+
+    def test_find_cpu_temp_sensor_k10temp(self, tmp_path, mock_settings):
+        """Test _find_cpu_temp_sensor finds k10temp driver."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        # Create Super I/O hwmon (board sensor, NOT CPU)
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("it8688e\n")
+        (hwmon0 / "temp1_input").write_text("26000\n")
+
+        # Create k10temp hwmon (CPU sensor)
+        hwmon1 = tmp_path / "hwmon1"
+        hwmon1.mkdir()
+        (hwmon1 / "name").write_text("k10temp\n")
+        (hwmon1 / "temp1_input").write_text("52000\n")
+
+        result = backend._find_cpu_temp_sensor()
+        assert result is not None
+        sensor_id, temp_path = result
+        assert sensor_id == "hwmon1_temp1"
+        assert temp_path == hwmon1 / "temp1_input"
+
+    def test_find_cpu_temp_sensor_coretemp(self, tmp_path, mock_settings):
+        """Test _find_cpu_temp_sensor finds coretemp (Intel) driver."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("coretemp\n")
+        (hwmon0 / "temp1_input").write_text("55000\n")
+
+        result = backend._find_cpu_temp_sensor()
+        assert result is not None
+        assert result[0] == "hwmon0_temp1"
+
+    def test_find_cpu_temp_sensor_no_cpu_driver(self, tmp_path, mock_settings):
+        """Test _find_cpu_temp_sensor returns None when no CPU driver exists."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("it8688e\n")
+        (hwmon0 / "temp1_input").write_text("26000\n")
+
+        result = backend._find_cpu_temp_sensor()
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_scan_pwm_fans_prefers_cpu_sensor(self, tmp_path, mock_settings):
+        """Test that _scan_pwm_fans uses CPU sensor instead of local board sensor."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        # Create Super I/O hwmon with PWM fans and board temp
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("it8688e\n")
+        (hwmon0 / "pwm1").write_text("128\n")
+        (hwmon0 / "fan1_input").write_text("1200\n")
+        (hwmon0 / "temp1_input").write_text("26000\n")  # Board sensor ~26°C
+
+        # Create k10temp hwmon (CPU sensor, separate directory)
+        hwmon1 = tmp_path / "hwmon1"
+        hwmon1.mkdir()
+        (hwmon1 / "name").write_text("k10temp\n")
+        (hwmon1 / "temp1_input").write_text("52000\n")  # CPU temp ~52°C
+
+        result = await backend._scan_pwm_fans()
+        assert len(result) == 1
+        fan_info = result["hwmon0_pwm1"]
+        # Should use CPU sensor (hwmon1) not board sensor (hwmon0)
+        assert fan_info["temp_sensor_id"] == "hwmon1_temp1"
+
+    @pytest.mark.asyncio
+    async def test_scan_pwm_fans_fallback_to_local_sensor(self, tmp_path, mock_settings):
+        """Test that _scan_pwm_fans falls back to local sensor when no CPU sensor exists."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        # Create hwmon with PWM fans and local temp (no CPU driver)
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("it8688e\n")
+        (hwmon0 / "pwm1").write_text("128\n")
+        (hwmon0 / "fan1_input").write_text("1200\n")
+        (hwmon0 / "temp1_input").write_text("26000\n")
+
+        result = await backend._scan_pwm_fans()
+        assert len(result) == 1
+        fan_info = result["hwmon0_pwm1"]
+        # Falls back to local sensor
+        assert fan_info["temp_sensor_id"] == "hwmon0_temp1"
+
+
+class TestAvailableTempSensors:
+    """Tests for get_available_temp_sensors."""
+
+    @pytest.mark.asyncio
+    async def test_dev_backend_returns_sensors(self, mock_settings):
+        """Test DevFanControlBackend returns simulated sensors."""
+        backend = DevFanControlBackend(mock_settings)
+        sensors = await backend.get_available_temp_sensors()
+
+        assert len(sensors) == 3
+        cpu_sensors = [s for s in sensors if s.is_cpu_sensor]
+        non_cpu_sensors = [s for s in sensors if not s.is_cpu_sensor]
+        assert len(cpu_sensors) == 2
+        assert len(non_cpu_sensors) == 1
+        assert cpu_sensors[0].sensor_id == "dev_cpu_temp"
+        assert non_cpu_sensors[0].sensor_id == "dev_ambient_temp"
+
+    @pytest.mark.asyncio
+    async def test_linux_backend_lists_all_sensors(self, tmp_path, mock_settings):
+        """Test LinuxFanControlBackend lists sensors from all hwmon dirs."""
+        backend = LinuxFanControlBackend(mock_settings)
+        backend._hwmon_base = tmp_path
+
+        # Create Super I/O hwmon
+        hwmon0 = tmp_path / "hwmon0"
+        hwmon0.mkdir()
+        (hwmon0 / "name").write_text("it8688e\n")
+        (hwmon0 / "temp1_input").write_text("26000\n")
+        (hwmon0 / "temp1_label").write_text("Board\n")
+
+        # Create k10temp hwmon
+        hwmon1 = tmp_path / "hwmon1"
+        hwmon1.mkdir()
+        (hwmon1 / "name").write_text("k10temp\n")
+        (hwmon1 / "temp1_input").write_text("52000\n")
+        (hwmon1 / "temp1_label").write_text("Tctl\n")
+
+        sensors = await backend.get_available_temp_sensors()
+
+        assert len(sensors) == 2
+
+        board_sensor = next(s for s in sensors if s.sensor_id == "hwmon0_temp1")
+        assert board_sensor.device_name == "it8688e"
+        assert board_sensor.label == "Board"
+        assert board_sensor.is_cpu_sensor is False
+        assert board_sensor.current_temp == 26.0
+
+        cpu_sensor = next(s for s in sensors if s.sensor_id == "hwmon1_temp1")
+        assert cpu_sensor.device_name == "k10temp"
+        assert cpu_sensor.label == "Tctl"
+        assert cpu_sensor.is_cpu_sensor is True
+        assert cpu_sensor.current_temp == 52.0
+
+
+class TestDbAutoCorrection:
+    """Tests for DB auto-correction of temp_sensor_id in _load_fan_configs."""
+
+    @pytest.mark.asyncio
+    async def test_autocorrect_board_sensor_to_cpu(self, mock_settings):
+        """Test that _load_fan_configs corrects non-CPU sensor to CPU sensor."""
+        from unittest.mock import MagicMock, patch
+        from app.models.fans import FanConfig
+
+        # Create a mock backend that returns fans and sensors
+        mock_backend = AsyncMock()
+        mock_backend.get_fans.return_value = [
+            FanData(
+                fan_id="hwmon0_pwm1",
+                name="Fan 1",
+                rpm=1200,
+                pwm_percent=50,
+                temperature_celsius=26.0,
+                mode=FanMode.AUTO,
+                min_pwm_percent=30,
+                max_pwm_percent=100,
+                emergency_temp_celsius=90.0,
+                temp_sensor_id="hwmon0_temp1",
+                curve_points=[FanCurvePoint(temp=35, pwm=30), FanCurvePoint(temp=85, pwm=100)],
+                is_active=True,
+            )
+        ]
+        mock_backend.get_available_temp_sensors.return_value = [
+            TempSensorData(
+                sensor_id="hwmon0_temp1", device_name="it8688e",
+                label="Board", is_cpu_sensor=False, current_temp=26.0,
+            ),
+            TempSensorData(
+                sensor_id="hwmon1_temp1", device_name="k10temp",
+                label="Tctl", is_cpu_sensor=True, current_temp=52.0,
+            ),
+        ]
+
+        # Create a mock DB with an existing config using board sensor
+        mock_config = MagicMock(spec=FanConfig)
+        mock_config.fan_id = "hwmon0_pwm1"
+        mock_config.temp_sensor_id = "hwmon0_temp1"  # Board sensor
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__enter__ = MagicMock(return_value=mock_db)
+        mock_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        # Patch the singleton check
+        with patch.object(FanControlService, '_instance', None):
+            service = FanControlService.__new__(FanControlService)
+            service.config = mock_settings
+            service.db_session_factory = mock_session_factory
+            service._backend = mock_backend
+
+            await service._load_fan_configs()
+
+        # Verify the config was corrected to CPU sensor
+        assert mock_config.temp_sensor_id == "hwmon1_temp1"
+
+    @pytest.mark.asyncio
+    async def test_no_correction_when_already_cpu_sensor(self, mock_settings):
+        """Test that _load_fan_configs doesn't change when already using CPU sensor."""
+        from unittest.mock import MagicMock, patch
+        from app.models.fans import FanConfig
+
+        mock_backend = AsyncMock()
+        mock_backend.get_fans.return_value = [
+            FanData(
+                fan_id="hwmon0_pwm1",
+                name="Fan 1",
+                rpm=1200,
+                pwm_percent=50,
+                temperature_celsius=52.0,
+                mode=FanMode.AUTO,
+                min_pwm_percent=30,
+                max_pwm_percent=100,
+                emergency_temp_celsius=90.0,
+                temp_sensor_id="hwmon1_temp1",
+                curve_points=[FanCurvePoint(temp=35, pwm=30), FanCurvePoint(temp=85, pwm=100)],
+                is_active=True,
+            )
+        ]
+        mock_backend.get_available_temp_sensors.return_value = [
+            TempSensorData(
+                sensor_id="hwmon1_temp1", device_name="k10temp",
+                label="Tctl", is_cpu_sensor=True, current_temp=52.0,
+            ),
+        ]
+
+        mock_config = MagicMock(spec=FanConfig)
+        mock_config.fan_id = "hwmon0_pwm1"
+        mock_config.temp_sensor_id = "hwmon1_temp1"  # Already CPU sensor
+
+        mock_result = MagicMock()
+        mock_result.scalar_one_or_none.return_value = mock_config
+
+        mock_db = MagicMock()
+        mock_db.execute.return_value = mock_result
+
+        mock_session_factory = MagicMock()
+        mock_session_factory.return_value.__enter__ = MagicMock(return_value=mock_db)
+        mock_session_factory.return_value.__exit__ = MagicMock(return_value=False)
+
+        with patch.object(FanControlService, '_instance', None):
+            service = FanControlService.__new__(FanControlService)
+            service.config = mock_settings
+            service.db_session_factory = mock_session_factory
+            service._backend = mock_backend
+
+            await service._load_fan_configs()
+
+        # Should remain unchanged
+        assert mock_config.temp_sensor_id == "hwmon1_temp1"

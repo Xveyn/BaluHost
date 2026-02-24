@@ -180,6 +180,7 @@ export interface UpdateFanConfigRequest {
   min_pwm_percent?: number;
   max_pwm_percent?: number;
   emergency_temp_celsius?: number;
+  temp_sensor_id?: string;
 }
 
 export interface UpdateFanConfigResponse {
@@ -189,7 +190,21 @@ export interface UpdateFanConfigResponse {
   min_pwm_percent: number;
   max_pwm_percent: number;
   emergency_temp_celsius: number;
+  temp_sensor_id: string | null;
   message?: string;
+}
+
+export interface TempSensorInfo {
+  sensor_id: string;
+  device_name: string;
+  label: string | null;
+  is_cpu_sensor: boolean;
+  current_temp: number | null;
+}
+
+export interface TempSensorListResponse {
+  sensors: TempSensorInfo[];
+  total_count: number;
 }
 
 // Profile types
@@ -375,6 +390,14 @@ export async function applyPreset(
 ): Promise<ApplyPresetResponse> {
   const request: ApplyPresetRequest = { fan_id: fanId, preset };
   const response = await apiClient.post<ApplyPresetResponse>('/api/fans/preset', request);
+  return response.data;
+}
+
+/**
+ * List all available temperature sensors
+ */
+export async function listTempSensors(): Promise<TempSensorListResponse> {
+  const response = await apiClient.get<TempSensorListResponse>('/api/fans/sensors');
   return response.data;
 }
 

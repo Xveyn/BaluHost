@@ -45,6 +45,8 @@ from app.schemas.fans import (
     UpdateFanCurveProfileRequest,
     FanCurveProfileListResponse,
     ApplyProfileRequest,
+    TempSensorInfo,
+    TempSensorListResponse,
 )
 from app.services.fan_control import get_fan_control_service, FanControlService
 
@@ -352,6 +354,37 @@ async def get_permission_status(
         raise HTTPException(status_code=500, detail=f"Failed to check permissions: {str(e)}")
 
 
+@router.get("/sensors", response_model=TempSensorListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_temp_sensors(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_admin),
+    service: FanControlService = Depends(get_fan_service),
+):
+    """
+    List all available temperature sensors.
+
+    Returns sensors from all hwmon directories with CPU sensor identification.
+    Requires admin role.
+    """
+    try:
+        sensors = await service.get_available_temp_sensors()
+        items = [
+            TempSensorInfo(
+                sensor_id=s.sensor_id,
+                device_name=s.device_name,
+                label=s.label,
+                is_cpu_sensor=s.is_cpu_sensor,
+                current_temp=s.current_temp,
+            )
+            for s in sensors
+        ]
+        return TempSensorListResponse(sensors=items, total_count=len(items))
+    except Exception as e:
+        logger.error(f"Failed to list temp sensors: {e}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Failed to list temp sensors: {str(e)}")
+
+
 @router.get("/presets", response_model=PresetsResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def get_presets(
@@ -448,6 +481,7 @@ async def update_fan_config(
             min_pwm_percent=body.min_pwm_percent,
             max_pwm_percent=body.max_pwm_percent,
             emergency_temp_celsius=body.emergency_temp_celsius,
+            temp_sensor_id=body.temp_sensor_id,
         )
 
         if result is None:
@@ -460,6 +494,7 @@ async def update_fan_config(
             min_pwm_percent=result["min_pwm_percent"],
             max_pwm_percent=result["max_pwm_percent"],
             emergency_temp_celsius=result["emergency_temp_celsius"],
+            temp_sensor_id=result.get("temp_sensor_id"),
             message="Configuration updated",
         )
 

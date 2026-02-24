@@ -51,6 +51,16 @@ class HysteresisState:
     last_update: float
 
 
+@dataclass
+class TempSensorData:
+    """Temperature sensor information."""
+    sensor_id: str
+    device_name: str
+    label: Optional[str]
+    is_cpu_sensor: bool
+    current_temp: Optional[float]
+
+
 class FanControlBackend(ABC):
     """Abstract base class for fan control backends."""
 
@@ -81,6 +91,11 @@ class FanControlBackend(ABC):
     @abstractmethod
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get temperature reading from a sensor."""
+        pass
+
+    @abstractmethod
+    async def get_available_temp_sensors(self) -> List[TempSensorData]:
+        """List all available temperature sensors."""
         pass
 
 
@@ -186,6 +201,33 @@ class DevFanControlBackend(FanControlBackend):
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get simulated temperature."""
         return self._temps.get(sensor_id)
+
+    async def get_available_temp_sensors(self) -> List[TempSensorData]:
+        """List simulated temperature sensors."""
+        self._update_simulated_state()
+        return [
+            TempSensorData(
+                sensor_id="dev_cpu_temp",
+                device_name="k10temp (Simulated)",
+                label="Tctl",
+                is_cpu_sensor=True,
+                current_temp=self._temps.get("dev_cpu_temp"),
+            ),
+            TempSensorData(
+                sensor_id="dev_package_temp",
+                device_name="k10temp (Simulated)",
+                label="Tccd1",
+                is_cpu_sensor=True,
+                current_temp=self._temps.get("dev_package_temp"),
+            ),
+            TempSensorData(
+                sensor_id="dev_ambient_temp",
+                device_name="it8688e (Simulated)",
+                label="Board",
+                is_cpu_sensor=False,
+                current_temp=self._temps.get("dev_ambient_temp"),
+            ),
+        ]
 
     def _update_simulated_state(self):
         """Update simulated fan RPM and temperatures with realistic behavior."""
@@ -348,6 +390,9 @@ class LinuxFanControlBackend(FanControlBackend):
             logger.error(f"Failed to write PWM for {fan_id}")
             return False
 
+    # CPU temperature driver names (same keywords as hardware/sensors.py)
+    _CPU_SENSOR_DRIVERS = {"k10temp", "coretemp", "cpu_thermal", "acpi"}
+
     async def get_temperature(self, sensor_id: str) -> Optional[float]:
         """Get temperature from hwmon sensor."""
         if not sensor_id:
@@ -367,12 +412,104 @@ class LinuxFanControlBackend(FanControlBackend):
 
         return None
 
+    def _find_cpu_temp_sensor(self) -> Optional[Tuple[str, Path]]:
+        """Find CPU temperature sensor across all hwmon directories.
+
+        Searches for known CPU temperature drivers (k10temp, coretemp, etc.)
+        in any hwmon directory, not just the one containing the PWM fan.
+
+        Returns:
+            Tuple of (sensor_id, temp_path) or None if not found
+        """
+        if not self._hwmon_base.exists():
+            return None
+
+        for hwmon_dir in sorted(self._hwmon_base.iterdir()):
+            if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
+                continue
+
+            name_file = hwmon_dir / "name"
+            if not name_file.exists():
+                continue
+
+            try:
+                driver_name = name_file.read_text().strip()
+            except Exception:
+                continue
+
+            if driver_name not in self._CPU_SENSOR_DRIVERS:
+                continue
+
+            # Found a CPU sensor driver — use its first temp input
+            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+                temp_num = temp_file.name.replace("temp", "").replace("_input", "")
+                sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                logger.info(
+                    f"Found CPU temp sensor: {sensor_id} (driver={driver_name})"
+                )
+                return sensor_id, temp_file
+
+        return None
+
+    async def get_available_temp_sensors(self) -> List[TempSensorData]:
+        """List all available temperature sensors across all hwmon directories."""
+        sensors: List[TempSensorData] = []
+
+        if not self._hwmon_base.exists():
+            return sensors
+
+        for hwmon_dir in sorted(self._hwmon_base.iterdir()):
+            if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
+                continue
+
+            name_file = hwmon_dir / "name"
+            device_name = "Unknown"
+            if name_file.exists():
+                try:
+                    device_name = name_file.read_text().strip()
+                except Exception:
+                    pass
+
+            is_cpu = device_name in self._CPU_SENSOR_DRIVERS
+
+            for temp_file in sorted(hwmon_dir.glob("temp*_input")):
+                temp_num = temp_file.name.replace("temp", "").replace("_input", "")
+                sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+
+                # Try to read label
+                label = None
+                label_file = hwmon_dir / f"temp{temp_num}_label"
+                if label_file.exists():
+                    try:
+                        label = label_file.read_text().strip()
+                    except Exception:
+                        pass
+
+                # Read current temperature
+                current_temp = None
+                temp_value = await self._read_hwmon_file(temp_file)
+                if temp_value is not None:
+                    current_temp = float(temp_value) / 1000.0
+
+                sensors.append(TempSensorData(
+                    sensor_id=sensor_id,
+                    device_name=device_name,
+                    label=label,
+                    is_cpu_sensor=is_cpu,
+                    current_temp=current_temp,
+                ))
+
+        return sensors
+
     async def _scan_pwm_fans(self) -> Dict[str, Dict]:
         """Scan hwmon for PWM fans.
 
         Builds a new dict from sysfs. Only replaces the cache if the scan
         found at least one fan (or the cache was empty), preventing
         transient sysfs I/O failures from clearing known fans.
+
+        Prefers CPU temperature sensor (k10temp, coretemp) over local
+        board sensors for fan control.
         """
         new_cache: Dict[str, Dict] = {}
 
@@ -381,6 +518,11 @@ class LinuxFanControlBackend(FanControlBackend):
                 return {}
             logger.debug("hwmon base missing but cache exists, keeping cached fans")
             return self._fan_cache
+
+        # Find CPU temp sensor across all hwmon directories
+        cpu_sensor = self._find_cpu_temp_sensor()
+        cpu_sensor_id = cpu_sensor[0] if cpu_sensor else None
+        cpu_temp_path = cpu_sensor[1] if cpu_sensor else None
 
         for hwmon_dir in self._hwmon_base.iterdir():
             if not hwmon_dir.is_dir() or not hwmon_dir.name.startswith("hwmon"):
@@ -411,16 +553,19 @@ class LinuxFanControlBackend(FanControlBackend):
                 # Find PWM enable
                 pwm_enable_path = hwmon_dir / f"pwm{pwm_num}_enable"
 
-                # Find associated temperature sensor (heuristic)
-                temp_sensor_id = None
-                temp_path = None
-
-                # Try to find temp1_input (usually CPU/package temp)
-                for temp_file in hwmon_dir.glob("temp*_input"):
-                    temp_num = temp_file.name.replace("temp", "").replace("_input", "")
-                    temp_sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
-                    temp_path = temp_file
-                    break  # Use first temperature sensor
+                # Prefer CPU sensor over local board sensor
+                if cpu_sensor_id:
+                    temp_sensor_id = cpu_sensor_id
+                    temp_path = cpu_temp_path
+                else:
+                    # Fallback: use first temp sensor in same hwmon dir
+                    temp_sensor_id = None
+                    temp_path = None
+                    for temp_file in hwmon_dir.glob("temp*_input"):
+                        temp_num = temp_file.name.replace("temp", "").replace("_input", "")
+                        temp_sensor_id = f"{hwmon_dir.name}_temp{temp_num}"
+                        temp_path = temp_file
+                        break
 
                 new_cache[fan_id] = {
                     "name": f"{hwmon_name_value} PWM{pwm_num}",
@@ -598,21 +743,45 @@ class FanControlService:
             self._use_linux_backend = False
 
     async def _load_fan_configs(self):
-        """Load fan configurations from database."""
+        """Load fan configurations from database.
+
+        Also auto-corrects temp_sensor_id if it points to a non-CPU sensor
+        and a CPU sensor is available (fixes board sensor ~26°C bug).
+        """
         if not self._backend:
             return
 
         fans = await self._backend.get_fans()
 
+        # Determine best CPU sensor for auto-correction
+        cpu_sensor_id: Optional[str] = None
+        try:
+            sensors = await self._backend.get_available_temp_sensors()
+            for s in sensors:
+                if s.is_cpu_sensor:
+                    cpu_sensor_id = s.sensor_id
+                    break
+        except Exception:
+            pass
+
+        # Build set of known CPU sensor IDs for checking existing configs
+        cpu_sensor_ids: set = set()
+        if cpu_sensor_id:
+            try:
+                for s in sensors:
+                    if s.is_cpu_sensor:
+                        cpu_sensor_ids.add(s.sensor_id)
+            except Exception:
+                pass
+
         with self.db_session_factory() as db:
             for fan in fans:
-                # Check if config exists
                 existing = db.execute(
                     select(FanConfig).where(FanConfig.fan_id == fan.fan_id)
                 ).scalar_one_or_none()
 
                 if not existing:
-                    # Create default config
+                    # Create new config with CPU sensor if available
                     config = FanConfig(
                         fan_id=fan.fan_id,
                         name=fan.name,
@@ -621,10 +790,18 @@ class FanControlService:
                         min_pwm_percent=fan.min_pwm_percent,
                         max_pwm_percent=fan.max_pwm_percent,
                         emergency_temp_celsius=fan.emergency_temp_celsius,
-                        temp_sensor_id=fan.temp_sensor_id,
+                        temp_sensor_id=cpu_sensor_id or fan.temp_sensor_id,
                         is_active=True,
                     )
                     db.add(config)
+                elif cpu_sensor_id and existing.temp_sensor_id not in cpu_sensor_ids:
+                    # Auto-correct: existing config uses non-CPU sensor
+                    old_sensor = existing.temp_sensor_id
+                    existing.temp_sensor_id = cpu_sensor_id
+                    logger.info(
+                        f"Auto-corrected {fan.fan_id} temp sensor: "
+                        f"{old_sensor} → {cpu_sensor_id}"
+                    )
 
             db.commit()
 
@@ -944,12 +1121,22 @@ class FanControlService:
                 if config:
                     curve_points = json.loads(config.curve_json) if config.curve_json else []
 
+                    # Use config's temp sensor for display (may differ from scan sensor)
+                    display_temp = fan.temperature_celsius
+                    if config.temp_sensor_id:
+                        try:
+                            sensor_temp = await self._backend.get_temperature(config.temp_sensor_id)
+                            if sensor_temp is not None:
+                                display_temp = sensor_temp
+                        except Exception:
+                            pass  # Keep fan.temperature_celsius as fallback
+
                     fan_entry = {
                         "fan_id": fan.fan_id,
                         "name": config.name,
                         "rpm": fan.rpm,
                         "pwm_percent": fan.pwm_percent,
-                        "temperature_celsius": fan.temperature_celsius,
+                        "temperature_celsius": display_temp,
                         "mode": config.mode,
                         "is_active": config.is_active,
                         "min_pwm_percent": config.min_pwm_percent,
@@ -1076,6 +1263,12 @@ class FanControlService:
 
         logger.info(f"Updated curve for {fan_id} with {len(curve_points)} point(s)")
         return True
+
+    async def get_available_temp_sensors(self) -> List["TempSensorData"]:
+        """Get all available temperature sensors from the backend."""
+        if not self._backend:
+            return []
+        return await self._backend.get_available_temp_sensors()
 
     async def get_history(
         self,
@@ -1511,7 +1704,8 @@ class FanControlService:
         hysteresis_celsius: Optional[float] = None,
         min_pwm_percent: Optional[int] = None,
         max_pwm_percent: Optional[int] = None,
-        emergency_temp_celsius: Optional[float] = None
+        emergency_temp_celsius: Optional[float] = None,
+        temp_sensor_id: Optional[str] = None,
     ) -> Optional[Dict]:
         """
         Update fan configuration.
@@ -1522,6 +1716,7 @@ class FanControlService:
             min_pwm_percent: Minimum PWM percentage
             max_pwm_percent: Maximum PWM percentage
             emergency_temp_celsius: Emergency temperature threshold
+            temp_sensor_id: Temperature sensor to use for this fan
 
         Returns:
             Updated configuration dict or None if fan not found
@@ -1550,6 +1745,9 @@ class FanControlService:
             if emergency_temp_celsius is not None:
                 config.emergency_temp_celsius = emergency_temp_celsius
 
+            if temp_sensor_id is not None:
+                config.temp_sensor_id = temp_sensor_id
+
             db.commit()
 
             logger.info(f"Updated config for {fan_id}: hysteresis={config.hysteresis_celsius}°C")
@@ -1560,6 +1758,7 @@ class FanControlService:
                 "min_pwm_percent": config.min_pwm_percent,
                 "max_pwm_percent": config.max_pwm_percent,
                 "emergency_temp_celsius": config.emergency_temp_celsius,
+                "temp_sensor_id": config.temp_sensor_id,
             }
 
 
