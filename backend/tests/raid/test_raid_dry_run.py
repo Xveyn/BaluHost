@@ -4,7 +4,8 @@ import tempfile
 
 from app.core.config import settings
 from app.schemas.system import RaidSimulationRequest
-import app.services.raid as raid
+import app.services.hardware.raid.api as raid
+from app.services.hardware.raid.dev_backend import DevRaidBackend
 from types import SimpleNamespace
 
 
@@ -40,7 +41,7 @@ def test_raid_dry_run_audit_and_response(tmp_path):
         assert record.get("dry_run") is True
 
         # If the real backend was not already the dev backend, the wrapper should return a DRY-RUN message
-        if not isinstance(raid._backend, raid.DevRaidBackend):
+        if not isinstance(raid._backend, DevRaidBackend):
             assert resp.message.startswith("[DRY-RUN]"), resp.message
 
     finally:

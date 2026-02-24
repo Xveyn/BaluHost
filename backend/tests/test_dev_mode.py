@@ -19,9 +19,9 @@ def client(db_session) -> Generator[TestClient, None, None]:
     reset_dev_storage()
 
     # Reset RAID backend state to avoid test pollution from module-level singleton
-    from app.services.hardware import raid as _raid_module
+    from app.services.hardware.raid import api as _raid_api
     from app.services.hardware.raid import DevRaidBackend as _DevRaidBackend
-    _raid_module._backend = _DevRaidBackend()
+    _raid_api._backend = _DevRaidBackend()
 
     # Override DB dependency to use the test in-memory session
     from app.core.database import get_db
