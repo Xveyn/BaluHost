@@ -384,7 +384,7 @@ def ensure_metadata(
             return meta
 
         # Check whether the path actually exists on disk
-        from app.services.files.operations import _resolve_path
+        from app.services.files.path_utils import _resolve_path
         try:
             resolved = _resolve_path(relative_path)
         except Exception:

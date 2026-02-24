@@ -1,11 +1,16 @@
+"""File CRUD operations (list, upload, delete, create, rename, move).
+
+Formerly contained path utilities, permission checks, and quota logic —
+those have been extracted to ``path_utils``, ``access``, and ``storage``
+respectively.  This module re-exports every moved symbol so that existing
+``from app.services.files.operations import X`` statements keep working.
+"""
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import logging
 import mimetypes
-import os
-import threading
-import time
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
 from typing import Iterable, Optional
@@ -13,373 +18,60 @@ from typing import Iterable, Optional
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from sqlalchemy import select, or_
-
 from app.core.config import settings
-
-# Cache for calculate_used_bytes() - avoids expensive filesystem scans on every request
-_used_bytes_cache: dict[str, tuple[int, float]] = {}  # {"value": (bytes, timestamp)}
-_used_bytes_cache_lock = threading.Lock()
-_used_bytes_inflight: threading.Event | None = None  # stampede protection
-_USED_BYTES_CACHE_TTL = 30.0  # Cache for 30 seconds
 from app.schemas.files import FileItem
 from app.schemas.user import UserPublic
 from app.services.files import metadata_db as file_metadata_db
+from app.services.files import path_utils
 from app.services.files.folder_size import get_folder_size, invalidate_folder_sizes_for_path
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.permissions import PermissionDeniedError, can_view, ensure_owner_or_privileged
 
+# ── Re-exports from path_utils (backward compatibility) ──────────────────────
+from app.services.files.path_utils import (  # noqa: F401
+    ROOT_DIR,
+    SHARED_DIR_NAME,
+    SHARED_WITH_ME_DIR,
+    SYSTEM_DIR_NAME,
+    SYSTEM_DIRS,
+    SYSTEM_DIR_PREFIXES,
+    FileAccessError,
+    QuotaExceededError,
+    SystemDirectoryError,
+    is_system_directory,
+    is_in_shared_dir,
+    _resolve_path,
+    _relative_posix,
+    get_absolute_path,
+)
+
+# ── Re-exports from access (backward compatibility) ──────────────────────────
+from app.services.files.access import (  # noqa: F401
+    is_path_shared_with_user,
+    get_share_permissions,
+    get_owner,
+    ensure_can_view,
+)
+
+# ── Re-exports from storage (backward compatibility) ─────────────────────────
+from app.services.files.storage import (  # noqa: F401
+    _used_bytes_cache,
+    _used_bytes_cache_lock,
+    _used_bytes_inflight,
+    _USED_BYTES_CACHE_TTL,
+    _invalidate_ssd_cache,
+    _calculate_used_bytes_uncached,
+    calculate_used_bytes,
+    invalidate_used_bytes_cache,
+    calculate_available_bytes,
+    calculate_used_bytes_async,
+    calculate_available_bytes_async,
+)
+
 logger = logging.getLogger(__name__)
 
 
-def _invalidate_ssd_cache(source_path: str, db: Optional[Session] = None) -> None:
-    """Invalidate SSD cache entry for a file path across all arrays. Never raises."""
-    if not db:
-        return
-    try:
-        from app.services.cache.ssd_file_cache import SSDFileCacheService
-        configs = SSDFileCacheService.get_all_configs(db)
-        for cfg in configs:
-            if cfg.is_enabled:
-                svc = SSDFileCacheService(db, str(cfg.array_name))
-                svc.invalidate_entry(source_path)
-    except Exception:
-        logger.debug("SSD cache invalidation failed for %s", source_path, exc_info=True)
-
-ROOT_DIR = Path(settings.nas_storage_path).expanduser().resolve()
-ROOT_DIR.mkdir(parents=True, exist_ok=True)
-
-SHARED_DIR_NAME = "Shared"
-SHARED_WITH_ME_DIR = "Shared with me"
-SYSTEM_DIR_NAME = ".system"
-SYSTEM_DIRS = {".system", "lost+found", ".tmp"}
-SYSTEM_DIR_PREFIXES = (".Trash-",)
-
-
-def is_system_directory(name: str) -> bool:
-    """Check if a directory name is a filesystem-managed system directory."""
-    return name in SYSTEM_DIRS or any(name.startswith(p) for p in SYSTEM_DIR_PREFIXES)
-
-
-def is_in_shared_dir(relative_path: str) -> bool:
-    """Check if a relative path is inside (or is) the Shared directory."""
-    return relative_path == SHARED_DIR_NAME or relative_path.startswith(f"{SHARED_DIR_NAME}/")
-
-
-def is_path_shared_with_user(db: Session, relative_path: str, user_id: int) -> bool:
-    """Check if path or any parent is shared with user via FileShare.
-
-    Returns True when *relative_path* itself — or any ancestor directory — has
-    an active (non-expired) FileShare granting ``can_read`` to *user_id*.
-    """
-    if db is None:
-        return False
-
-    from app.models.file_share import FileShare
-    from app.models.file_metadata import FileMetadata
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
-
-    # Build list of candidate paths: the path itself + all parent paths
-    candidates: list[str] = []
-    parts = PurePosixPath(relative_path).parts
-    for i in range(len(parts), 0, -1):
-        candidates.append(str(PurePosixPath(*parts[:i])))
-
-    if not candidates:
-        return False
-
-    # Single query: join FileShare → FileMetadata, filter by path candidates + user
-    stmt = (
-        select(FileShare.id)
-        .join(FileMetadata, FileShare.file_id == FileMetadata.id)
-        .where(
-            FileShare.shared_with_user_id == user_id,
-            FileShare.owner_id != user_id,
-            FileShare.can_read.is_(True),
-            FileMetadata.path.in_(candidates),
-            or_(
-                FileShare.expires_at.is_(None),
-                FileShare.expires_at > now,
-            ),
-        )
-        .limit(1)
-    )
-    return db.execute(stmt).first() is not None
-
-
-def get_share_permissions(db: Session, relative_path: str, user_id: int):
-    """Return the FileShare object granting access to *relative_path* for *user_id*.
-
-    Checks the path itself and all ancestor directories, returning the first
-    matching active (non-expired) share, or ``None`` if no share exists.
-    """
-    if db is None:
-        return None
-
-    from app.models.file_share import FileShare
-    from app.models.file_metadata import FileMetadata
-    from datetime import datetime, timezone
-
-    now = datetime.now(timezone.utc)
-
-    candidates: list[str] = []
-    parts = PurePosixPath(relative_path).parts
-    for i in range(len(parts), 0, -1):
-        candidates.append(str(PurePosixPath(*parts[:i])))
-
-    if not candidates:
-        return None
-
-    stmt = (
-        select(FileShare)
-        .join(FileMetadata, FileShare.file_id == FileMetadata.id)
-        .where(
-            FileShare.shared_with_user_id == user_id,
-            FileShare.owner_id != user_id,
-            FileShare.can_read.is_(True),
-            FileMetadata.path.in_(candidates),
-            or_(
-                FileShare.expires_at.is_(None),
-                FileShare.expires_at > now,
-            ),
-        )
-        .limit(1)
-    )
-    return db.execute(stmt).scalars().first()
-
-
-class FileAccessError(Exception):
-    """Raised when an operation would leave the permitted storage sandbox."""
-
-
-class QuotaExceededError(Exception):
-    """Raised when an operation would exceed the configured NAS quota."""
-
-
-class SystemDirectoryError(FileAccessError):
-    """Raised when an operation targets a protected system directory."""
-
-
-def _resolve_path(relative_path: str) -> Path:
-    normalized = Path(relative_path.strip("/")) if relative_path else Path()
-    target = (ROOT_DIR / normalized).resolve()
-    try:
-        target.relative_to(ROOT_DIR)
-    except ValueError as exc:  # pragma: no cover - simple guard
-        raise FileAccessError("Path is outside of the NAS storage boundary") from exc
-    return target
-
-
-def _relative_posix(path: Path) -> str:
-    return path.relative_to(ROOT_DIR).as_posix()
-
-
-def get_owner(relative_path: str, db: Optional[Session] = None) -> str | None:
-    """Get owner ID as string for a file/directory."""
-    return file_metadata_db.get_owner(relative_path, db=db)
-
-
-def ensure_can_view(relative_path: str, user: UserPublic, db: Optional[Session] = None) -> None:
-    """Ensure user can view a file/directory."""
-    if is_in_shared_dir(relative_path):
-        return  # All authenticated users may view Shared content
-    if not can_view(user, file_metadata_db.get_owner(relative_path, db=db)):
-        # Fallback: check if the path is shared with this user
-        if db and is_path_shared_with_user(db, relative_path, user.id):
-            return
-        raise PermissionDeniedError("Operation not permitted")
-
-
-def get_absolute_path(relative_path: str) -> Path:
-    """Expose resolved paths for read-only operations like downloads."""
-    return _resolve_path(relative_path)
-
-
-def list_directory(relative_path: str = "", user: UserPublic | None = None, db: Optional[Session] = None) -> Iterable[FileItem]:
-    """List files and directories with permission filtering."""
-    if user is None:
-        raise PermissionDeniedError("Authentication required")
-
-    target = _resolve_path(relative_path)
-    if not target.exists():
-        return []
-
-    directory_owner = get_owner(relative_path, db=db)
-    if directory_owner and not is_in_shared_dir(relative_path) and not can_view(user, directory_owner):
-        # Fallback: allow if path is shared with this user
-        if not (db and is_path_shared_with_user(db, relative_path, user.id)):
-            raise PermissionDeniedError("Operation not permitted")
-
-    items: list[FileItem] = []
-    for entry in target.iterdir():
-        # Hide system directories from non-admin users
-        if is_system_directory(entry.name) and user.role != "admin":
-            continue
-        relative_entry = str(entry.relative_to(ROOT_DIR).as_posix())
-        entry_owner = get_owner(relative_entry, db=db)
-        if not is_in_shared_dir(relative_entry) and not can_view(user, entry_owner):
-            # Fallback: show entry if it (or a parent) is shared with user
-            if not (db and is_path_shared_with_user(db, relative_entry, user.id)):
-                continue
-
-        stats = entry.stat()
-        
-        # Determine mime type for files
-        mime_type = None
-        if entry.is_file():
-            mime_type, _ = mimetypes.guess_type(entry.name)
-        
-        # Get file_id from metadata if exists
-        file_id = None
-        if db:
-            from app.services import file_metadata_db
-            if entry.is_file():
-                metadata = file_metadata_db.get_metadata(relative_entry, db=db)
-                if metadata:
-                    file_id = metadata.id
-            elif entry.is_dir():
-                metadata = file_metadata_db.ensure_metadata(
-                    relative_entry, requesting_user_id=user.id, db=db
-                )
-                if metadata:
-                    file_id = metadata.id
-        
-        item = FileItem(
-            name=entry.name,
-            path=relative_entry,
-            size=get_folder_size(entry) if entry.is_dir() else stats.st_size,
-            type="directory" if entry.is_dir() else "file",
-            modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
-            owner_id=entry_owner,
-            mime_type=mime_type,
-            file_id=file_id,
-        )
-        # Attach share permissions for non-owner shared files
-        if user and db and entry_owner and not can_view(user, entry_owner) and not is_in_shared_dir(relative_entry):
-            share = get_share_permissions(db, relative_entry, user.id)
-            if share:
-                item.can_read = share.can_read
-                item.can_write = share.can_write
-                item.can_delete = share.can_delete
-        items.append(item)
-
-    items.sort(key=lambda item: (item.type != "directory", item.name.lower()))
-    return items
-
-
-def _calculate_used_bytes_uncached() -> int:
-    """Internal: Actually scan the filesystem. Called by calculate_used_bytes().
-
-    Uses recursive os.scandir() for efficiency — DirEntry.stat() reuses
-    cached inode data from the directory listing (no extra syscall), and
-    system directories are skipped at the root level without descending.
-    """
-    if not ROOT_DIR.exists():
-        return 0
-
-    def _walk(path: str, skip_system: bool) -> int:
-        total = 0
-        try:
-            with os.scandir(path) as it:
-                for entry in it:
-                    try:
-                        if entry.is_dir(follow_symlinks=False):
-                            if skip_system and is_system_directory(entry.name):
-                                continue
-                            total += _walk(entry.path, skip_system=False)
-                        elif entry.is_file(follow_symlinks=False):
-                            total += entry.stat(follow_symlinks=False).st_size
-                    except (PermissionError, OSError):
-                        continue
-        except (PermissionError, OSError):
-            pass
-        return total
-
-    return _walk(str(ROOT_DIR), skip_system=True)
-
-
-def calculate_used_bytes() -> int:
-    """Calculate total used bytes in storage.
-
-    Uses a 30-second TTL cache to avoid expensive filesystem scans on every request.
-    Includes stampede protection: if a scan is already in-flight, concurrent callers
-    wait for it instead of launching their own.
-    """
-    global _used_bytes_cache, _used_bytes_inflight
-
-    now = time.time()
-    event = None
-
-    with _used_bytes_cache_lock:
-        if "value" in _used_bytes_cache:
-            cached_value, cached_time = _used_bytes_cache["value"]
-            if now - cached_time < _USED_BYTES_CACHE_TTL:
-                return cached_value
-        # Check if another thread is already scanning
-        if _used_bytes_inflight is not None:
-            event = _used_bytes_inflight
-
-    # Another thread is scanning — wait for it then return cached value
-    if event is not None:
-        event.wait(timeout=60.0)
-        with _used_bytes_cache_lock:
-            if "value" in _used_bytes_cache:
-                return _used_bytes_cache["value"][0]
-
-    # We'll do the scan — set inflight flag
-    done_event = threading.Event()
-    with _used_bytes_cache_lock:
-        _used_bytes_inflight = done_event
-
-    try:
-        total = _calculate_used_bytes_uncached()
-        with _used_bytes_cache_lock:
-            _used_bytes_cache["value"] = (total, time.time())
-        return total
-    finally:
-        with _used_bytes_cache_lock:
-            _used_bytes_inflight = None
-        done_event.set()
-
-
-def invalidate_used_bytes_cache() -> None:
-    """Invalidate the used_bytes cache. Call after file uploads/deletions."""
-    global _used_bytes_cache
-    with _used_bytes_cache_lock:
-        _used_bytes_cache.clear()
-
-
-def calculate_available_bytes() -> int:
-    """Calculate remaining storage capacity.
-
-    When a quota is configured (dev mode), returns ``quota - used``.
-    When no quota is set (production), returns actual free disk space
-    via ``shutil.disk_usage()`` on the storage root.
-    """
-    quota = settings.nas_quota_bytes
-    if quota is not None:
-        used = calculate_used_bytes()
-        return max(0, quota - used)
-    # No quota — check real disk space on the storage path
-    import shutil
-    try:
-        usage = shutil.disk_usage(ROOT_DIR)
-        return usage.free
-    except OSError:
-        return 0
-
-
-async def calculate_used_bytes_async() -> int:
-    """Async wrapper for calculate_used_bytes() — runs in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(calculate_used_bytes)
-
-
-async def calculate_available_bytes_async() -> int:
-    """Async wrapper for calculate_available_bytes() — runs in a thread to avoid blocking the event loop."""
-    return await asyncio.to_thread(calculate_available_bytes)
-
+# ── VCL helper (only used by save_uploads / chunked_upload) ──────────────────
 
 def _schedule_vcl_version(
     destination: Path,
@@ -421,6 +113,80 @@ def _schedule_vcl_version(
     asyncio.create_task(_create())
 
 
+# ── CRUD operations ──────────────────────────────────────────────────────────
+
+def list_directory(relative_path: str = "", user: UserPublic | None = None, db: Optional[Session] = None) -> Iterable[FileItem]:
+    """List files and directories with permission filtering."""
+    if user is None:
+        raise PermissionDeniedError("Authentication required")
+
+    target = path_utils._resolve_path(relative_path)
+    if not target.exists():
+        return []
+
+    directory_owner = get_owner(relative_path, db=db)
+    if directory_owner and not path_utils.is_in_shared_dir(relative_path) and not can_view(user, directory_owner):
+        # Fallback: allow if path is shared with this user
+        if not (db and is_path_shared_with_user(db, relative_path, user.id)):
+            raise PermissionDeniedError("Operation not permitted")
+
+    items: list[FileItem] = []
+    for entry in target.iterdir():
+        # Hide system directories from non-admin users
+        if path_utils.is_system_directory(entry.name) and user.role != "admin":
+            continue
+        relative_entry = str(entry.relative_to(path_utils.ROOT_DIR).as_posix())
+        entry_owner = get_owner(relative_entry, db=db)
+        if not path_utils.is_in_shared_dir(relative_entry) and not can_view(user, entry_owner):
+            # Fallback: show entry if it (or a parent) is shared with user
+            if not (db and is_path_shared_with_user(db, relative_entry, user.id)):
+                continue
+
+        stats = entry.stat()
+
+        # Determine mime type for files
+        mime_type = None
+        if entry.is_file():
+            mime_type, _ = mimetypes.guess_type(entry.name)
+
+        # Get file_id from metadata if exists
+        file_id = None
+        if db:
+            from app.services import file_metadata_db
+            if entry.is_file():
+                metadata = file_metadata_db.get_metadata(relative_entry, db=db)
+                if metadata:
+                    file_id = metadata.id
+            elif entry.is_dir():
+                metadata = file_metadata_db.ensure_metadata(
+                    relative_entry, requesting_user_id=user.id, db=db
+                )
+                if metadata:
+                    file_id = metadata.id
+
+        item = FileItem(
+            name=entry.name,
+            path=relative_entry,
+            size=get_folder_size(entry) if entry.is_dir() else stats.st_size,
+            type="directory" if entry.is_dir() else "file",
+            modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+            owner_id=entry_owner,
+            mime_type=mime_type,
+            file_id=file_id,
+        )
+        # Attach share permissions for non-owner shared files
+        if user and db and entry_owner and not can_view(user, entry_owner) and not path_utils.is_in_shared_dir(relative_entry):
+            share = get_share_permissions(db, relative_entry, user.id)
+            if share:
+                item.can_read = share.can_read
+                item.can_write = share.can_write
+                item.can_delete = share.can_delete
+        items.append(item)
+
+    items.sort(key=lambda item: (item.type != "directory", item.name.lower()))
+    return items
+
+
 async def save_uploads(
     relative_path: str,
     uploads: list[UploadFile],
@@ -431,7 +197,7 @@ async def save_uploads(
 ) -> list[str]:
     """
     Save uploaded files, optionally preserving folder structure.
-    
+
     Args:
         relative_path: Base destination path
         uploads: List of uploaded files
@@ -441,14 +207,13 @@ async def save_uploads(
         upload_ids: Optional list of upload session IDs for progress tracking
     """
     from app.services.upload_progress import get_upload_progress_manager
-    
+
     audit = get_audit_logger_db()
     progress_manager = get_upload_progress_manager()
-    
-    target = _resolve_path(relative_path)
+
+    target = path_utils._resolve_path(relative_path)
     # If the provided relative_path includes a filename (e.g. updating a single file),
     # use its parent directory as the target directory.
-    from pathlib import PurePosixPath
     override_filename: str | None = None
     if relative_path:
         last_part = PurePosixPath(relative_path).name
@@ -460,14 +225,13 @@ async def save_uploads(
 
     target.mkdir(parents=True, exist_ok=True)
 
-    if relative_path and not is_in_shared_dir(relative_path):
+    if relative_path and not path_utils.is_in_shared_dir(relative_path):
         # Determine ownership rules:
         # - If the provided path refers to a directory (no override filename),
         #   enforce ownership of that destination directory.
         # - If the provided path refers to a file (override_filename set),
         #   enforce ownership of the parent directory (if any).
         # Shared directory: all authenticated users may upload — skip check.
-        from pathlib import PurePosixPath
         path_obj = PurePosixPath(relative_path)
         if override_filename is None:
             # Destination is a directory path -> check its owner
@@ -536,13 +300,8 @@ async def save_uploads(
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
 
-            import hashlib
-
             if can_stream[idx]:
                 # Stream file to disk — only one STREAM_CHUNK in memory at a time.
-                # Read a chunk from the network, write+hash it in a thread,
-                # then read the next chunk. This keeps RAM usage constant
-                # regardless of file size (~8 MB max vs. entire file buffered).
                 written = 0
                 hasher = hashlib.sha256()
 
@@ -584,7 +343,7 @@ async def save_uploads(
                     # No quota: check real disk free space
                     import shutil
                     try:
-                        exceeded = shutil.disk_usage(ROOT_DIR).free <= 0
+                        exceeded = shutil.disk_usage(path_utils.ROOT_DIR).free <= 0
                     except OSError:
                         pass
                 if exceeded:
@@ -600,7 +359,7 @@ async def save_uploads(
                 await progress_manager.update_progress(upload_ids[idx], written)
 
             used_bytes = used_bytes - existing_size + written
-            relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
+            relative_destination = str(destination.relative_to(path_utils.ROOT_DIR).as_posix())
             saved_paths.append(relative_destination)
 
             # Create or update file metadata in database.
@@ -684,7 +443,7 @@ async def save_uploads(
 
     # Invalidate storage quota cache after uploads
     invalidate_used_bytes_cache()
-    invalidate_folder_sizes_for_path(_resolve_path(relative_path), ROOT_DIR)
+    invalidate_folder_sizes_for_path(path_utils._resolve_path(relative_path), path_utils.ROOT_DIR)
     return saved_paths
 
 
@@ -697,17 +456,17 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
     """
     audit = get_audit_logger_db()
 
-    target = _resolve_path(relative_path)
+    target = path_utils._resolve_path(relative_path)
     if not target.exists():
         return
 
-    if target.parent == ROOT_DIR and is_system_directory(target.name):
+    if target.parent == path_utils.ROOT_DIR and path_utils.is_system_directory(target.name):
         raise SystemDirectoryError(f"Cannot delete system directory '{target.name}'")
 
     is_directory = target.is_dir()
 
     if is_directory:
-        target_relative = _relative_posix(target)
+        target_relative = path_utils._relative_posix(target)
         if user:
             try:
                 ensure_owner_or_privileged(user, get_owner(target_relative, db=db))
@@ -722,10 +481,10 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
         # failures don't leave orphaned metadata.
         children = list(target.iterdir())
         for child in children:
-            delete_path(_relative_posix(child), user=user, db=db)
+            delete_path(path_utils._relative_posix(child), user=user, db=db)
         target.rmdir()
     else:
-        file_relative = _relative_posix(target)
+        file_relative = path_utils._relative_posix(target)
         if user:
             try:
                 ensure_owner_or_privileged(user, get_owner(file_relative, db=db))
@@ -757,28 +516,28 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
 
     # Invalidate storage quota cache after deletion
     invalidate_used_bytes_cache()
-    invalidate_folder_sizes_for_path(_resolve_path(relative_path), ROOT_DIR)
+    invalidate_folder_sizes_for_path(path_utils._resolve_path(relative_path), path_utils.ROOT_DIR)
 
 
 def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, db: Optional[Session] = None) -> Path:
     """Create a folder and store its metadata."""
     audit = get_audit_logger_db()
-    
-    base = _resolve_path(parent_path)
+
+    base = path_utils._resolve_path(parent_path)
     base.mkdir(parents=True, exist_ok=True)
 
-    if base == ROOT_DIR and is_system_directory(name):
+    if base == path_utils.ROOT_DIR and path_utils.is_system_directory(name):
         raise SystemDirectoryError(f"Cannot create folder with reserved name '{name}'")
 
-    if owner and parent_path and not is_in_shared_dir(parent_path):
+    if owner and parent_path and not path_utils.is_in_shared_dir(parent_path):
         parent_owner = get_owner(parent_path, db=db)
         ensure_owner_or_privileged(owner, parent_owner)
 
     folder = base / name
     folder.mkdir(parents=True, exist_ok=True)
     owner_id = owner.id if owner else None
-    relative_folder = str(folder.relative_to(ROOT_DIR).as_posix())
-    
+    relative_folder = str(folder.relative_to(path_utils.ROOT_DIR).as_posix())
+
     if owner_id:
         # Create directory metadata in database
         existing = file_metadata_db.get_metadata(relative_folder, db=db)
@@ -791,7 +550,7 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
                 is_directory=True,
                 db=db
             )
-    
+
     # Log folder creation
     audit.log_file_access(
         user=owner.username if owner else "system",
@@ -800,18 +559,18 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
         success=True,
         db=db
     )
-    
+
     return folder
 
 
 def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db: Optional[Session] = None) -> Path:
     """Rename a file or directory and update metadata."""
-    source = _resolve_path(old_path)
+    source = path_utils._resolve_path(old_path)
 
-    if source.parent == ROOT_DIR and is_system_directory(source.name):
+    if source.parent == path_utils.ROOT_DIR and path_utils.is_system_directory(source.name):
         raise SystemDirectoryError(f"Cannot rename system directory '{source.name}'")
 
-    source_relative = _relative_posix(source)
+    source_relative = path_utils._relative_posix(source)
 
     if user:
         try:
@@ -825,7 +584,7 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
                 raise
 
     target_relative = (PurePosixPath(source_relative).parent / new_name).as_posix()
-    target = _resolve_path(target_relative)
+    target = path_utils._resolve_path(target_relative)
 
     is_dir = source.is_dir()
     source.rename(target)
@@ -844,8 +603,8 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
 
     # Invalidate folder size cache for renamed directories
     if is_dir:
-        invalidate_folder_sizes_for_path(source, ROOT_DIR)
-        invalidate_folder_sizes_for_path(target, ROOT_DIR)
+        invalidate_folder_sizes_for_path(source, path_utils.ROOT_DIR)
+        invalidate_folder_sizes_for_path(target, path_utils.ROOT_DIR)
 
     return target
 
@@ -854,12 +613,12 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
     """Move a file or directory and update metadata."""
     audit = get_audit_logger_db()
 
-    source = _resolve_path(source_path)
+    source = path_utils._resolve_path(source_path)
 
-    if source.parent == ROOT_DIR and is_system_directory(source.name):
+    if source.parent == path_utils.ROOT_DIR and path_utils.is_system_directory(source.name):
         raise SystemDirectoryError(f"Cannot move system directory '{source.name}'")
 
-    source_relative = _relative_posix(source)
+    source_relative = path_utils._relative_posix(source)
 
     if user:
         try:
@@ -872,7 +631,7 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
             else:
                 raise
 
-    destination = _resolve_path(target_path)
+    destination = path_utils._resolve_path(target_path)
     if destination.is_dir():
         target_parent = destination
         final_target = destination / source.name
@@ -880,15 +639,15 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
         target_parent = destination.parent
         final_target = destination
 
-    target_parent_relative = _relative_posix(target_parent) if target_parent != ROOT_DIR else ""
+    target_parent_relative = path_utils._relative_posix(target_parent) if target_parent != path_utils.ROOT_DIR else ""
     if user and target_parent_relative:
         ensure_owner_or_privileged(user, get_owner(target_parent_relative, db=db))
 
     if not target_parent.exists():
         target_parent.mkdir(parents=True, exist_ok=True)
 
-    final_relative = _relative_posix(final_target)
-    final_target_resolved = _resolve_path(final_relative)
+    final_relative = path_utils._relative_posix(final_target)
+    final_target_resolved = path_utils._resolve_path(final_relative)
     source_parent = source.parent
     is_file = source.is_file()
     source.rename(final_target_resolved)
@@ -906,8 +665,8 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
         _invalidate_ssd_cache(source_relative, db=db)
 
     # Invalidate folder size cache for source parent and destination
-    invalidate_folder_sizes_for_path(source_parent, ROOT_DIR)
-    invalidate_folder_sizes_for_path(final_target_resolved.parent, ROOT_DIR)
+    invalidate_folder_sizes_for_path(source_parent, path_utils.ROOT_DIR)
+    invalidate_folder_sizes_for_path(final_target_resolved.parent, path_utils.ROOT_DIR)
 
     # Log move operation
     audit.log_file_access(

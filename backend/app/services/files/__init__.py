@@ -13,20 +13,35 @@ from app.services.files.folder_size import (
     invalidate_folder_sizes_for_path,
     invalidate_all_folder_sizes,
 )
-from app.services.files.operations import (
+from app.services.files.path_utils import (
+    ROOT_DIR,
+    SHARED_DIR_NAME,
+    SHARED_WITH_ME_DIR,
+    SYSTEM_DIR_NAME,
+    SYSTEM_DIRS,
+    SYSTEM_DIR_PREFIXES,
     FileAccessError,
     QuotaExceededError,
     SystemDirectoryError,
     is_system_directory,
+    is_in_shared_dir,
+    get_absolute_path,
+    _resolve_path,
+    _relative_posix,
+)
+from app.services.files.access import (
     is_path_shared_with_user,
-    SHARED_WITH_ME_DIR,
+    get_share_permissions,
     get_owner,
     ensure_can_view,
-    get_absolute_path,
-    list_directory,
+)
+from app.services.files.storage import (
     calculate_used_bytes,
     calculate_available_bytes,
     invalidate_used_bytes_cache,
+)
+from app.services.files.operations import (
+    list_directory,
     save_uploads,
     delete_path,
     create_folder,
@@ -70,20 +85,32 @@ __all__ = [
     "get_folder_size",
     "invalidate_folder_sizes_for_path",
     "invalidate_all_folder_sizes",
-    # Operations
+    # Path utilities
+    "ROOT_DIR",
+    "SHARED_DIR_NAME",
+    "SHARED_WITH_ME_DIR",
+    "SYSTEM_DIR_NAME",
+    "SYSTEM_DIRS",
+    "SYSTEM_DIR_PREFIXES",
     "FileAccessError",
     "QuotaExceededError",
     "SystemDirectoryError",
     "is_system_directory",
+    "is_in_shared_dir",
+    "get_absolute_path",
+    "_resolve_path",
+    "_relative_posix",
+    # Access / permissions
     "is_path_shared_with_user",
-    "SHARED_WITH_ME_DIR",
+    "get_share_permissions",
     "get_owner",
     "ensure_can_view",
-    "get_absolute_path",
-    "list_directory",
+    # Storage / quota
     "calculate_used_bytes",
     "calculate_available_bytes",
     "invalidate_used_bytes_cache",
+    # CRUD operations
+    "list_directory",
     "save_uploads",
     "delete_path",
     "create_folder",

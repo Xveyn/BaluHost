@@ -22,6 +22,8 @@ from app.schemas.user import UserPublic
 from app.services import users as user_service
 # Import the operations module directly
 import app.services.files.operations as file_ops
+import app.services.files.path_utils as path_utils
+import app.services.files.storage as file_storage
 from app.services.files.operations import (
     FileAccessError,
     QuotaExceededError,
@@ -37,9 +39,12 @@ def storage_root(tmp_path, monkeypatch):
     """Create temporary storage root for testing."""
     storage = tmp_path / "storage"
     storage.mkdir()
+    # Patch ROOT_DIR in path_utils (canonical location) so all consumers see it
+    monkeypatch.setattr(path_utils, "ROOT_DIR", storage)
+    # Also patch the re-export in operations for direct file_ops.ROOT_DIR reads
     monkeypatch.setattr(file_ops, "ROOT_DIR", storage)
     # Clear used-bytes cache so each test gets a fresh filesystem scan
-    file_ops._used_bytes_cache.clear()
+    file_storage._used_bytes_cache.clear()
     return storage
 
 
