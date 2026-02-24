@@ -47,6 +47,9 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
         self._previous_counters: Optional[Dict] = None
         # Separate buffers per disk (disk_name -> List[sample])
         self._disk_buffers: Dict[str, List[DiskIoSampleSchema]] = {}
+        # RAID member cache (refreshed every 60s)
+        self._raid_member_names: set[str] = set()
+        self._raid_members_last_refresh: float = 0.0
 
     def collect_sample(self) -> Optional[DiskIoSampleSchema]:
         """
@@ -65,6 +68,8 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
         timestamp_seconds = time.time()
 
         try:
+            self._refresh_raid_members()
+
             current_counters = psutil.disk_io_counters(perdisk=True)
             if current_counters is None:
                 logger.debug("Disk I/O counters not available")
@@ -73,7 +78,7 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
             if self._previous_counters is None:
                 # First sample — register detected disks for immediate listing
                 for disk_name in current_counters:
-                    if self._is_physical_disk(disk_name) and disk_name not in self._disk_buffers:
+                    if self._is_physical_disk(disk_name) and not self._is_raid_member(disk_name) and disk_name not in self._disk_buffers:
                         self._disk_buffers[disk_name] = []
 
             if self._previous_counters is not None:
@@ -81,7 +86,7 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
 
                 if time_delta > 0:
                     for disk_name, counters in current_counters.items():
-                        if not self._is_physical_disk(disk_name):
+                        if not self._is_physical_disk(disk_name) or self._is_raid_member(disk_name):
                             continue
 
                         prev_counters = self._previous_counters["counters"].get(disk_name)
@@ -188,6 +193,38 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
             return not re.search(r"\d+$", disk_name)
 
         return False
+
+    def _refresh_raid_members(self) -> None:
+        """Refresh the set of RAID member disk names (cached for 60s)."""
+        now = time.time()
+        if now - self._raid_members_last_refresh < 60.0:
+            return
+
+        try:
+            from app.services import raid as raid_service
+
+            raid_data = raid_service.get_status()
+            new_members: set[str] = set()
+            if raid_data and raid_data.arrays:
+                for array in raid_data.arrays:
+                    for member_dev in array.devices:
+                        # sda1 -> sda, nvme0n1p1 -> nvme0n1
+                        base_name = re.sub(r"p?\d+$", "", member_dev.name)
+                        new_members.add(base_name)
+
+            # Remove stale buffer entries for newly detected RAID members
+            for name in new_members - self._raid_member_names:
+                self._disk_buffers.pop(name, None)
+
+            self._raid_member_names = new_members
+            self._raid_members_last_refresh = now
+        except Exception as e:
+            logger.debug("Failed to refresh RAID members: %s", e)
+            # Keep previous cache on error
+
+    def _is_raid_member(self, disk_name: str) -> bool:
+        """Check if a disk is a member of a RAID array."""
+        return disk_name in self._raid_member_names
 
     def get_disk_history(self, disk_name: str) -> List[DiskIoSampleSchema]:
         """Get history for a specific disk."""

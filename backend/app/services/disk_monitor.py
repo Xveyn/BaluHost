@@ -36,6 +36,10 @@ _error_count: int = 0
 _last_error: Optional[str] = None
 _last_error_time: Optional[float] = None
 
+# RAID member cache
+_raid_member_names: set[str] = set()
+_raid_members_last_refresh: float = 0.0
+
 
 class DiskIOSample:
     """Represents a single disk I/O sample."""
@@ -71,21 +75,23 @@ def _sample_disk_io() -> None:
     timestamp_ms = int(timestamp_seconds * 1000)
     
     try:
+        _refresh_raid_members()
+
         # Get current disk I/O counters
         current_disk_io = psutil.disk_io_counters(perdisk=True)
-        
+
         if current_disk_io is None:
             logger.debug("Disk I/O counters not available")
             return
-        
+
         # Calculate rates if we have previous data
         if _previous_disk_io is not None:
             time_delta = timestamp_seconds - _previous_disk_io['timestamp']
             
             if time_delta > 0:
                 for disk_name, counters in current_disk_io.items():
-                    # Skip if not a physical disk (filter out partitions on Windows)
-                    if not _is_physical_disk(disk_name):
+                    # Skip partitions and RAID member disks
+                    if not _is_physical_disk(disk_name) or _is_raid_member(disk_name):
                         continue
                     
                     prev_counters = _previous_disk_io['counters'].get(disk_name)
@@ -154,6 +160,42 @@ def _sample_disk_io() -> None:
             success=False,
             error_message=str(exc)
         )
+
+
+def _refresh_raid_members() -> None:
+    """Refresh the set of RAID member disk names (cached for 60s)."""
+    import re
+
+    global _raid_member_names, _raid_members_last_refresh
+
+    now = time.time()
+    if now - _raid_members_last_refresh < 60.0:
+        return
+
+    try:
+        from app.services import raid as raid_service
+
+        raid_data = raid_service.get_status()
+        new_members: set[str] = set()
+        if raid_data and raid_data.arrays:
+            for array in raid_data.arrays:
+                for member_dev in array.devices:
+                    base_name = re.sub(r"p?\d+$", "", member_dev.name)
+                    new_members.add(base_name)
+
+        # Remove stale history entries for newly detected RAID members
+        for name in new_members - _raid_member_names:
+            _disk_io_history.pop(name, None)
+
+        _raid_member_names = new_members
+        _raid_members_last_refresh = now
+    except Exception as e:
+        logger.debug("Failed to refresh RAID members: %s", e)
+
+
+def _is_raid_member(disk_name: str) -> bool:
+    """Check if a disk is a member of a RAID array."""
+    return disk_name in _raid_member_names
 
 
 def _is_physical_disk(disk_name: str) -> bool:
