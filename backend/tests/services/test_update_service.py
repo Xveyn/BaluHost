@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch, AsyncMock
 import pytest
 from sqlalchemy.orm import Session
 
-from app.services.update_service import (
+from app.services.update import (
     parse_version,
     version_to_string,
     DevUpdateBackend,
@@ -584,8 +584,8 @@ class TestGetUpdateBackend:
         monkeypatch.setattr(config_module, "settings", mock_settings)
 
         # Re-import to get patched version
-        from app.services import update_service
-        monkeypatch.setattr(update_service, "settings", mock_settings)
+        from app.services.update import api as update_api
+        monkeypatch.setattr(update_api, "settings", mock_settings)
 
-        backend = update_service.get_update_backend()
+        backend = update_api.get_update_backend()
         assert isinstance(backend, DevUpdateBackend)

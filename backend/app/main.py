@@ -66,7 +66,7 @@ from app.services.service_status import (
 )
 from app.services.monitoring.orchestrator import get_status as orchestrator_get_status
 from app.plugins.manager import PluginManager
-from app.services.update_service import register_update_service, finalize_pending_updates
+from app.services.update.api import register_update_service, finalize_pending_updates
 
 logger = logging.getLogger(__name__)
 

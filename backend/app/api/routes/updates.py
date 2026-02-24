@@ -25,7 +25,7 @@ from app.schemas.update import (
     CommitDiffResponse,
     ReleaseListResponse,
 )
-from app.services.update_service import get_update_service, get_update_backend
+from app.services.update.api import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
 
 router = APIRouter(prefix="/updates", tags=["updates"])
