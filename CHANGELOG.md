@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.0] - 2026-02-24
+
+### Notifications, VCL Storage, File Sharing & Multi-Worker Stability
+
+Feature-rich release adding a notification event system, VCL blob storage, improved file sharing, and extensive multi-worker production fixes.
+
+### Added
+
+- **Notification event system** — Backend event emitters with cooldowns, snooze, and sync notifications across services
+- **Notification UI** — Grouping, snooze controls, and archive page
+- **VCL blob migration** — Migration service with admin UI for VCL storage
+- **Configurable VCL storage path** — Dedicated storage path with info endpoint
+- **File sharing permissions** — Granular per-user permissions and user list endpoint for shares
+- **Storage breakdown** — Cache/VCL-aware storage usage visualization
+- **ByteSizeInput component** — Unit-aware byte size editing in forms
+- **Binary/decimal byte units** — User setting to toggle between binary (GiB) and decimal (GB) display
+- **Persistent fan curve profiles** — DB-backed fan curve presets
+- **Releases list** — Show available releases on the update page
+- **Ownership transfer** — Cascade VCL versions and quota on file ownership transfer
+
+### Fixed
+
+- **Disk I/O on secondary workers** — Add DB fallback for `/disk-io/current` and derive `available_disks` from DB data when memory is empty
+- **RAID member disks in monitoring** — Filter RAID member disks from disk I/O monitoring
+- **Multi-worker deployment** — Stabilize with sticky sessions and DB fallbacks for all monitoring endpoints
+- **Fan control on secondary workers** — Initialize read-only, detect write permission at startup
+- **Fan disappearance** — Prevent fan data loss on transient hwmon scan failures
+- **Server uptime** — Initialize start time at module import for consistent multi-worker uptime
+- **Disk I/O detection** — Improve initial detection and polling speed
+- **CPU/memory endpoints** — Add DB fallback on secondary workers
+- **Settings page** — Fix slow load and broken quota display
+
+### Changed
+
+- **Cache system** — Replace bcache SSD cache with file-level cache system
+- **Public share links** — Removed public share link UI and backend in favor of granular user-based sharing
+
+---
+
 ## [1.9.0] - 2026-02-22
 
 ### Multi-Worker Production Support & Security Hardening
