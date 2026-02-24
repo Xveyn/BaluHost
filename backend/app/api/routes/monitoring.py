@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db, get_current_admin
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
-from app.models.monitoring import MetricType, CpuSample, MemorySample, NetworkSample
+from app.models.monitoring import MetricType, CpuSample, MemorySample, NetworkSample, DiskIoSample
 from app.schemas.monitoring import (
     DataSource,
     TimeRangeEnum,
@@ -282,10 +282,24 @@ async def get_disk_io_current(
     request: Request,
     response: Response,
     current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
 ):
     """Get current disk I/O metrics for all disks."""
     orchestrator = get_monitoring_orchestrator()
     disks = orchestrator.get_disk_io_current()
+
+    # Secondary worker fallback — query latest samples from DB
+    if not disks:
+        from sqlalchemy import func
+        latest_ts = db.query(func.max(DiskIoSample.timestamp)).scalar()
+        if latest_ts:
+            records = db.query(DiskIoSample).filter(
+                DiskIoSample.timestamp == latest_ts
+            ).all()
+            disks = {
+                r.disk_name: orchestrator.disk_io_collector.db_to_sample(r)
+                for r in records
+            }
 
     return CurrentDiskIoResponse(disks=disks)
 
@@ -350,9 +364,13 @@ async def get_disk_io_history(
 
     total_samples = sum(len(s) for s in disks.values())
 
+    # Derive available_disks from actual data when memory is empty (secondary worker)
+    memory_disks = orchestrator.disk_io_collector.get_available_disks()
+    available_disks = memory_disks if memory_disks else list(disks.keys())
+
     return DiskIoHistoryResponse(
         disks=disks,
-        available_disks=orchestrator.disk_io_collector.get_available_disks(),
+        available_disks=available_disks,
         sample_count=total_samples,
         source=source_str,
     )
