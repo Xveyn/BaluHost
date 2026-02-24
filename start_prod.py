@@ -319,6 +319,8 @@ def main() -> int:
         "uvicorn.*app.main:app",
         "gunicorn.*app.main:app",
         "from multiprocessing",      # spawned worker processes
+        "python.*scheduler_worker",  # scheduler from previous run
+        "python.*webdav_worker",     # webdav from previous run
         "node.*vite",
         "npm run dev",
         "npm run preview",
@@ -439,19 +441,20 @@ def main() -> int:
         print(f"[ready] Docs: http://{PROD_CONFIG['backend_host']}:{PROD_CONFIG['backend_port']}/docs")
         print(f"[ready] Press Ctrl+C to stop\n")
 
-        # Monitor processes
+        # Monitor processes — only shut down if backend dies
         while True:
-            loop_break = False
             for name, proc in processes:
                 retcode = proc.poll()
                 if retcode is not None and name not in exit_codes:
                     exit_codes[name] = retcode
                     print(f"[info] {name} exited with code {retcode}")
-                    loop_break = True
-                    break
-            if loop_break:
-                break
-            time.sleep(0.5)
+                    if name == "backend":
+                        print("[error] Backend process died, shutting down")
+                        break
+            else:
+                time.sleep(0.5)
+                continue
+            break  # backend died
 
         return max(exit_codes.values()) if exit_codes else 0
 
