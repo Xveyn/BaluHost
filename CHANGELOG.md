@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.10.1] - 2026-02-24
+
+### Refactoring, Bug Fixes & i18n
+
+### Added
+
+- **i18n for Tapo smart devices** — DE/EN translations for all Tapo device settings strings
+- **Apple/iOS SMB compatibility** — SMB settings for Apple device compatibility
+
+### Fixed
+
+- **Production process manager** — start_prod.py no longer kills backend when non-critical worker crashes
+- **Fan control temperature sensor** — Read CPU temp sensor instead of board sensor (~26°C)
+
+### Changed
+
+- **Refactored power manager** — Split power/manager.py into 5 sibling modules
+- **Refactored update service** — Split update_service.py into update/ sub-package with 7 modules
+- **Refactored RAID service** — Split raid.py into raid/ sub-package with 7 modules
+- **Refactored file operations** — Split files/operations.py into path_utils, access, and storage modules
+
+---
+
 ## [1.10.0] - 2026-02-24
 
 ### Notifications, VCL Storage, File Sharing & Multi-Worker Stability
