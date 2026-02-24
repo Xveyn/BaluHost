@@ -426,7 +426,8 @@ class TestPowerManagerServiceStartStop:
         service = PowerManagerService()
 
         # Mock database query to avoid DB dependency
-        with patch.object(service, '_load_auto_scaling_config_from_db', return_value=AutoScalingConfig()):
+        with patch('app.services.power.manager.load_auto_scaling_config', return_value=AutoScalingConfig()), \
+             patch('app.services.power.manager.load_dynamic_mode_config', return_value=None):
             await service.start()
 
         try:
@@ -441,7 +442,8 @@ class TestPowerManagerServiceStartStop:
         """Test that stop() cleans up properly."""
         service = PowerManagerService()
 
-        with patch.object(service, '_load_auto_scaling_config_from_db', return_value=AutoScalingConfig()):
+        with patch('app.services.power.manager.load_auto_scaling_config', return_value=AutoScalingConfig()), \
+             patch('app.services.power.manager.load_dynamic_mode_config', return_value=None):
             await service.start()
 
         await service.stop()
@@ -454,11 +456,13 @@ class TestPowerManagerServiceStartStop:
         """Test that starting twice logs warning."""
         service = PowerManagerService()
 
-        with patch.object(service, '_load_auto_scaling_config_from_db', return_value=AutoScalingConfig()):
+        with patch('app.services.power.manager.load_auto_scaling_config', return_value=AutoScalingConfig()), \
+             patch('app.services.power.manager.load_dynamic_mode_config', return_value=None):
             await service.start()
 
         # Second start should just warn
-        with patch.object(service, '_load_auto_scaling_config_from_db', return_value=AutoScalingConfig()):
+        with patch('app.services.power.manager.load_auto_scaling_config', return_value=AutoScalingConfig()), \
+             patch('app.services.power.manager.load_dynamic_mode_config', return_value=None):
             await service.start()  # Should not raise
 
         try:

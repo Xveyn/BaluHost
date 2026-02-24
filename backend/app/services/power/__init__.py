@@ -9,10 +9,10 @@ Provides power management with:
 - Fan control with temperature curves
 """
 
+from app.services.power.cpu_protocol import CpuPowerBackend
+from app.services.power.cpu_dev_backend import DevCpuPowerBackend
+from app.services.power.cpu_linux_backend import LinuxCpuPowerBackend
 from app.services.power.manager import (
-    CpuPowerBackend,
-    DevCpuPowerBackend,
-    LinuxCpuPowerBackend,
     PowerManagerService,
     get_power_manager,
     start_power_manager,
