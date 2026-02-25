@@ -149,6 +149,19 @@ from app.services import benchmark as _benchmark_service
 # NOTE: Do NOT override "app.services.benchmark" — it is a real package with __init__.py
 sys.modules["app.services.benchmark_service"] = _benchmark_service
 
+# ============================================================
+# Scheduler services (moved to scheduler/)
+# ============================================================
+from app.services.scheduler import execution as _scheduler_execution
+from app.services.scheduler import service as _scheduler_service_mod
+from app.services.scheduler import worker as _scheduler_worker_mod
+from app.services import scheduler as _scheduler_pkg
+
+# Register backward-compatible module paths in sys.modules
+# NOTE: Do NOT override "app.services.scheduler" — it is a real package with __init__.py
+sys.modules["app.services.scheduler_service"] = _scheduler_pkg
+sys.modules["app.services.scheduler_worker_service"] = _scheduler_worker_mod
+
 __all__ = [
     # Versioning
     "VCLService",

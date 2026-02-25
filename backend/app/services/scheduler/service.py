@@ -16,7 +16,6 @@ from sqlalchemy.orm import Session
 from sqlalchemy import desc
 
 from app.core.config import settings
-from app.core.database import SessionLocal
 from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
@@ -33,34 +32,9 @@ from app.schemas.scheduler import (
     SchedulerToggleResponse,
     SCHEDULER_REGISTRY,
 )
+from .execution import _format_interval, _is_worker_healthy
 
 logger = logging.getLogger(__name__)
-
-# Max age (seconds) for a worker heartbeat to be considered healthy
-WORKER_HEARTBEAT_MAX_AGE = 60
-
-
-def _format_interval(seconds: int) -> str:
-    """Convert seconds to human-readable interval."""
-    if seconds < 60:
-        return f"Every {seconds}s"
-    elif seconds < 3600:
-        minutes = seconds // 60
-        return f"Every {minutes} min" if minutes > 1 else "Every minute"
-    elif seconds < 86400:
-        hours = seconds // 3600
-        return f"Every {hours}h" if hours > 1 else "Every hour"
-    else:
-        days = seconds // 86400
-        return f"Every {days} days" if days > 1 else "Daily"
-
-
-def _is_worker_healthy(state: Optional[SchedulerState]) -> Optional[bool]:
-    """Check if the worker heartbeat is recent enough."""
-    if state is None or state.last_heartbeat is None:
-        return None
-    age = (datetime.now(timezone.utc) - state.last_heartbeat).total_seconds()
-    return age < WORKER_HEARTBEAT_MAX_AGE
 
 
 class SchedulerService:
@@ -420,110 +394,6 @@ class SchedulerService:
         return True
 
 
-def recover_stale_executions(db: Session) -> int:
-    """Mark any RUNNING scheduler executions as FAILED after a server restart."""
-    stale = (
-        db.query(SchedulerExecution)
-        .filter(SchedulerExecution.status == SchedulerStatus.RUNNING.value)
-        .all()
-    )
-    if not stale:
-        return 0
-    now = datetime.now(timezone.utc)
-    for execution in stale:
-        execution.status = SchedulerStatus.FAILED.value
-        execution.error_message = "Server restarted during execution"
-        execution.completed_at = now
-        if execution.started_at:
-            delta = now - execution.started_at
-            execution.duration_ms = int(delta.total_seconds() * 1000)
-    db.commit()
-    return len(stale)
-
-
 def get_scheduler_service(db: Session) -> SchedulerService:
     """Factory function to get scheduler service instance."""
     return SchedulerService(db)
-
-
-def log_scheduler_execution(
-    scheduler_name: str,
-    trigger_type: str = TriggerType.SCHEDULED.value,
-    job_id: Optional[str] = None,
-) -> int:
-    """
-    Log the start of a scheduler execution.
-
-    Called by scheduler jobs to track their executions.
-    Returns the execution ID for later completion.
-    """
-    db = SessionLocal()
-    try:
-        execution = SchedulerExecution(
-            scheduler_name=scheduler_name,
-            job_id=job_id,
-            trigger_type=trigger_type,
-            started_at=datetime.now(timezone.utc),
-            status=SchedulerStatus.RUNNING.value,
-        )
-        db.add(execution)
-        db.commit()
-        db.refresh(execution)
-        return execution.id
-    finally:
-        db.close()
-
-
-def complete_scheduler_execution(
-    execution_id: int,
-    success: bool,
-    result: Optional[dict] = None,
-    error: Optional[str] = None,
-) -> None:
-    """
-    Complete a scheduler execution.
-
-    Called by scheduler jobs when they finish.
-    """
-    db = SessionLocal()
-    try:
-        execution = db.query(SchedulerExecution).filter(
-            SchedulerExecution.id == execution_id
-        ).first()
-
-        if execution:
-            execution.completed_at = datetime.now(timezone.utc)
-
-            if success:
-                execution.status = SchedulerStatus.COMPLETED.value
-                execution.result_summary = json.dumps(result) if result else None
-            else:
-                execution.status = SchedulerStatus.FAILED.value
-                execution.error_message = error
-
-            if execution.started_at and execution.completed_at:
-                delta = execution.completed_at - execution.started_at
-                execution.duration_ms = int(delta.total_seconds() * 1000)
-
-            db.commit()
-    finally:
-        db.close()
-
-
-def is_worker_healthy_global() -> Optional[bool]:
-    """Check if the scheduler worker process is healthy (any scheduler has recent heartbeat)."""
-    db = SessionLocal()
-    try:
-        # Check if any scheduler_state has a recent heartbeat
-        states = db.query(SchedulerState).all()
-        if not states:
-            return None  # No state rows = worker never ran
-
-        for state in states:
-            healthy = _is_worker_healthy(state)
-            if healthy:
-                return True
-
-        return False
-    finally:
-        db.close()

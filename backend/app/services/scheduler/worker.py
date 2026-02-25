@@ -5,14 +5,13 @@ Runs all APScheduler-based jobs in a separate process to prevent
 heavy I/O (backup, RAID scrub, SMART scan) from blocking the web API.
 
 IPC with the web process is done via the PostgreSQL/SQLite database:
-- Web API writes "requested" execution rows → Worker picks them up
-- Worker writes scheduler_state rows → Web API reads them for status
+- Web API writes "requested" execution rows -> Worker picks them up
+- Worker writes scheduler_state rows -> Web API reads them for status
 """
 import asyncio
 import json
 import logging
 import os
-import signal
 import time
 from datetime import datetime, timezone, timedelta
 from typing import Optional
@@ -29,6 +28,8 @@ from app.models.scheduler_history import (
 )
 from app.models.scheduler_state import SchedulerState
 from app.schemas.scheduler import SCHEDULER_REGISTRY
+
+from .execution import log_scheduler_execution, complete_scheduler_execution
 
 logger = logging.getLogger(__name__)
 
@@ -144,7 +145,7 @@ class SchedulerWorker:
 
         logger.info("Scheduler worker shutdown complete")
 
-    # ─── Job Dispatching ─────────────────────────────────────────
+    # --- Job Dispatching ---------------------------------------------------
 
     def _poll_requested_executions(self) -> None:
         """Check for execution rows with status='requested' and run them."""
@@ -362,15 +363,10 @@ class SchedulerWorker:
 
         return None
 
-    # ─── APScheduler Job Callbacks ────────────────────────────────
+    # --- APScheduler Job Callbacks -----------------------------------------
 
     def _create_scheduled_callback(self, scheduler_name: str):
         """Create a callback for APScheduler periodic jobs."""
-        from app.services.scheduler_service import (
-            log_scheduler_execution,
-            complete_scheduler_execution,
-        )
-
         def callback():
             execution_id = log_scheduler_execution(
                 scheduler_name, job_id=f"{scheduler_name}_periodic"
@@ -397,7 +393,7 @@ class SchedulerWorker:
 
         return callback
 
-    # ─── Job Loading & Config ─────────────────────────────────────
+    # --- Job Loading & Config ----------------------------------------------
 
     def _load_and_schedule_jobs(self) -> None:
         """Load scheduler configs from DB and register APScheduler jobs."""
@@ -543,7 +539,7 @@ class SchedulerWorker:
 
                 elif new_enabled and new_interval != old_interval:
                     logger.info(
-                        "Scheduler %s interval changed: %ds → %ds",
+                        "Scheduler %s interval changed: %ds -> %ds",
                         name, old_interval or 0, new_interval,
                     )
                     self._add_job(name, new_interval)
@@ -553,7 +549,7 @@ class SchedulerWorker:
         finally:
             db.close()
 
-    # ─── State Management ─────────────────────────────────────────
+    # --- State Management --------------------------------------------------
 
     def _update_all_heartbeats(self) -> None:
         """Write heartbeat and next_run_at for all schedulers to scheduler_state."""
@@ -635,7 +631,7 @@ class SchedulerWorker:
         finally:
             db.close()
 
-    # ─── Recovery ─────────────────────────────────────────────────
+    # --- Recovery ----------------------------------------------------------
 
     def _recover_stale_executions(self) -> None:
         """Mark stale RUNNING and REQUESTED executions as FAILED after restart."""
