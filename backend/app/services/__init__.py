@@ -140,6 +140,15 @@ sys.modules["app.services.progressive_sync"] = _progressive_sync
 sys.modules["app.services.sync_background"] = _sync_background
 sys.modules["app.services.sync_scheduler"] = _sync_scheduler
 
+# ============================================================
+# Benchmark services (moved to benchmark/)
+# ============================================================
+from app.services import benchmark as _benchmark_service
+
+# Register backward-compatible module path in sys.modules
+# NOTE: Do NOT override "app.services.benchmark" — it is a real package with __init__.py
+sys.modules["app.services.benchmark_service"] = _benchmark_service
+
 __all__ = [
     # Versioning
     "VCLService",
