@@ -18,7 +18,7 @@ export type UpdateStatus =
   | 'rolled_back'
   | 'cancelled';
 
-export type UpdateChannel = 'stable' | 'beta';
+export type UpdateChannel = 'stable' | 'unstable';
 
 // Version information
 export interface VersionInfo {
@@ -477,11 +477,11 @@ export function getChannelInfo(channel: UpdateChannel): {
         color: 'text-emerald-400',
         description: 'Production-ready releases',
       };
-    case 'beta':
+    case 'unstable':
       return {
-        label: 'Beta',
+        label: 'Unstable',
         color: 'text-amber-400',
-        description: 'Preview releases with new features',
+        description: 'Pre-release versions with new features',
       };
     default:
       return {

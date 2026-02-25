@@ -47,7 +47,7 @@ class DevUpdateBackend(UpdateBackend):
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:
         # Simulate that an update is available
-        include_beta = channel == "beta"
+        include_beta = channel == "unstable"
 
         changelog = [
             ChangelogEntry(

@@ -800,7 +800,7 @@ export default function UpdatePage() {
               className="bg-slate-700 border border-slate-600 text-white rounded px-3 py-2 text-sm"
             >
               <option value="stable">{t('settings.stable')}</option>
-              <option value="beta">{t('settings.beta')}</option>
+              <option value="unstable">{t('settings.unstable')}</option>
             </select>
           </div>
 

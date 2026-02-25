@@ -105,7 +105,7 @@ class ProdUpdateBackend(UpdateBackend):
         tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
 
         # Filter tags based on channel
-        include_prerelease = channel == "beta"
+        include_prerelease = channel == "unstable"
         latest_tag = None
         latest_version = current_version
 

@@ -11,7 +11,7 @@ UpdateStatusEnum = Literal[
     "migrating", "restarting", "health_check", "completed", "failed",
     "rolled_back", "cancelled"
 ]
-UpdateChannelEnum = Literal["stable", "beta"]
+UpdateChannelEnum = Literal["stable", "unstable"]
 
 
 class VersionInfo(BaseModel):

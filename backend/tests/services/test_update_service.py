@@ -133,14 +133,14 @@ class TestDevUpdateBackend:
         assert changelog[0].is_prerelease is False
 
     @pytest.mark.asyncio
-    async def test_check_for_updates_beta(self, backend):
-        """Test checking for updates on beta channel."""
-        available, latest, changelog = await backend.check_for_updates("beta")
+    async def test_check_for_updates_unstable(self, backend):
+        """Test checking for updates on unstable channel."""
+        available, latest, changelog = await backend.check_for_updates("unstable")
 
         assert available is True
         assert latest is not None
         assert latest.version == "1.6.0-beta"
-        # Beta channel includes both beta and stable releases
+        # Unstable channel includes both prerelease and stable releases
         assert len(changelog) >= 1
         assert any(entry.is_prerelease for entry in changelog)
 
@@ -446,7 +446,7 @@ class TestUpdateService:
         existing = UpdateConfig(
             auto_check_enabled=False,
             check_interval_hours=12,
-            channel="beta",
+            channel="unstable",
         )
         db_session.add(existing)
         db_session.commit()
@@ -456,7 +456,7 @@ class TestUpdateService:
 
         assert config.auto_check_enabled is False
         assert config.check_interval_hours == 12
-        assert config.channel == "beta"
+        assert config.channel == "unstable"
 
     def test_progress_callbacks(self, db_session: Session, mock_backend):
         """Test registering and triggering progress callbacks."""
