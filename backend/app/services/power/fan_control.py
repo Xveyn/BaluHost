@@ -635,11 +635,11 @@ class LinuxFanControlBackend(FanControlBackend):
 
     def _pwm_to_percent(self, pwm_value: int) -> int:
         """Convert PWM value (0-255) to percentage (0-100)."""
-        return int((pwm_value / 255.0) * 100)
+        return round(pwm_value * 100 / 255)
 
     def _percent_to_pwm(self, percent: int) -> int:
         """Convert percentage (0-100) to PWM value (0-255)."""
-        return int((percent / 100.0) * 255)
+        return round(percent * 255 / 100)
 
     def _get_default_curve(self) -> List[FanCurvePoint]:
         """Get default temperature-PWM curve."""
@@ -945,7 +945,7 @@ class FanControlService:
                 # Linear interpolation
                 temp_ratio = (temperature - p1["temp"]) / (p2["temp"] - p1["temp"])
                 pwm = p1["pwm"] + (p2["pwm"] - p1["pwm"]) * temp_ratio
-                return int(pwm)
+                return round(pwm)
 
         return 50  # Fallback
 

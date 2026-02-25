@@ -301,33 +301,40 @@ class TestPWMConversion:
 
     def test_percent_to_pwm_zero(self):
         """Test converting 0% to PWM."""
-        pwm = int((0 / 100.0) * 255)
+        pwm = round(0 * 255 / 100)
         assert pwm == 0
 
     def test_percent_to_pwm_hundred(self):
         """Test converting 100% to PWM."""
-        pwm = int((100 / 100.0) * 255)
+        pwm = round(100 * 255 / 100)
         assert pwm == 255
 
     def test_percent_to_pwm_fifty(self):
         """Test converting 50% to PWM."""
-        pwm = int((50 / 100.0) * 255)
-        assert pwm == 127
+        pwm = round(50 * 255 / 100)
+        assert pwm == 128
 
     def test_pwm_to_percent_zero(self):
         """Test converting 0 PWM to percent."""
-        percent = int((0 / 255.0) * 100)
+        percent = round(0 * 100 / 255)
         assert percent == 0
 
     def test_pwm_to_percent_max(self):
         """Test converting 255 PWM to percent."""
-        percent = int((255 / 255.0) * 100)
+        percent = round(255 * 100 / 255)
         assert percent == 100
 
     def test_pwm_to_percent_mid(self):
-        """Test converting 127 PWM to percent."""
-        percent = int((127 / 255.0) * 100)
-        assert percent == 49  # Due to integer rounding
+        """Test converting 128 PWM to percent."""
+        percent = round(128 * 100 / 255)
+        assert percent == 50
+
+    def test_round_trip_all_values(self):
+        """Verify percent→PWM→percent round-trip for all 0-100 values."""
+        for pct in range(101):
+            pwm = round(pct * 255 / 100)
+            back = round(pwm * 100 / 255)
+            assert back == pct, f"Round-trip failed: {pct}% → PWM {pwm} → {back}%"
 
 
 class TestSimulatedStateUpdate:
