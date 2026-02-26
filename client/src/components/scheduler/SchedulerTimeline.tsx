@@ -16,10 +16,10 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
   const barHeight = maxCount > 0 ? Math.max(4, (total / maxCount) * 48) : 0;
 
   return (
-    <div className="flex flex-col items-center group relative">
+    <div className="flex flex-col items-center group relative flex-1 min-w-0">
       {/* Bar */}
       <div
-        className="w-6 rounded-t cursor-pointer transition-all hover:opacity-80"
+        className="w-full rounded-t cursor-pointer transition-all hover:opacity-80"
         style={{ height: `${barHeight}px` }}
         onClick={() => total > 0 && setIsExpanded(!isExpanded)}
       >
@@ -49,8 +49,10 @@ function TimelineBar({ entry, maxCount }: { entry: TimelineEntry; maxCount: numb
         )}
       </div>
 
-      {/* Hour label */}
-      <div className="text-[10px] text-slate-500 mt-1 -rotate-45 origin-top-left w-8">
+      {/* Hour label — show every 3rd hour on mobile, all on sm+ */}
+      <div className={`text-[10px] text-slate-500 mt-1 sm:-rotate-45 sm:origin-top-left sm:w-8 ${
+        parseInt(entry.hour) % 3 !== 0 ? 'hidden sm:block' : ''
+      }`}>
         {entry.hour}
       </div>
 
@@ -180,7 +182,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
           <div className="absolute left-10 right-0 top-6 border-b border-slate-800/30 border-dashed" />
 
           {/* Bars */}
-          <div className="flex items-end justify-between h-12 gap-1 pb-0">
+          <div className="flex items-end h-12 gap-px sm:gap-1 pb-0">
             {timelineData.map((entry, idx) => (
               <TimelineBar key={idx} entry={entry} maxCount={maxCount} />
             ))}
@@ -189,7 +191,7 @@ export function SchedulerTimeline({ executions, loading }: SchedulerTimelineProp
       </div>
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-6 mt-8 pt-4 border-t border-slate-800">
+      <div className="flex items-center justify-center gap-3 sm:gap-6 mt-8 pt-4 border-t border-slate-800">
         <div className="flex items-center gap-2">
           <div className="w-3 h-3 rounded bg-green-500" />
           <span className="text-xs text-slate-400">{t('scheduler:status.completed')}</span>
