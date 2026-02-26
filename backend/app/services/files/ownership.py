@@ -517,6 +517,13 @@ def _cascade_vcl_on_transfer(
         FileVersion.file_id.in_(file_ids)
     ).update({"user_id": new_owner_id}, synchronize_session=False)
 
+    # 3b. Clean up tracking rules for transferred files
+    from app.models.vcl import VCLFileTracking
+    db.query(VCLFileTracking).filter(
+        VCLFileTracking.user_id == old_owner_id,
+        VCLFileTracking.file_id.in_(file_ids),
+    ).delete(synchronize_session=False)
+
     # 4. Rebalance quota if there are stored bytes to transfer
     if quota_delta > 0:
         old_settings = db.query(VCLSettings).filter(

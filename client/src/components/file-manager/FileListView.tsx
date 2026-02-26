@@ -12,6 +12,8 @@ import {
   UserCheck,
   Monitor,
   Share2,
+  Shield,
+  ShieldOff,
 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatters';
 import type { FileItem } from './types';
@@ -32,6 +34,9 @@ export interface FileListViewProps {
   onShare: (file: FileItem) => void;
   onEditPermissions: (file: FileItem) => void;
   onTransferOwnership: (file: FileItem) => void;
+  onToggleTracking?: (file: FileItem) => void;
+  trackingStatus?: Record<number, boolean>;  // file_id -> is_tracked
+  vclMode?: 'automatic' | 'manual';
   onDragEnter: (e: React.DragEvent) => void;
   onDragLeave: (e: React.DragEvent) => void;
   onDragOver: (e: React.DragEvent) => void;
@@ -99,6 +104,9 @@ export function FileListView({
   onShare,
   onEditPermissions,
   onTransferOwnership,
+  onToggleTracking,
+  trackingStatus,
+  vclMode,
   onDragEnter,
   onDragLeave,
   onDragOver,
@@ -222,6 +230,24 @@ export function FileListView({
                         >
                           <Share2 className="w-4 h-4" />
                         </button>
+                      )}
+                      {file.file_id && onToggleTracking && (
+                        (() => {
+                          const isTracked = trackingStatus?.[file.file_id!] ?? (vclMode !== 'manual');
+                          return (
+                            <button
+                              onClick={() => onToggleTracking(file)}
+                              className={`p-2 rounded-lg border transition ${
+                                isTracked
+                                  ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/50 hover:bg-emerald-500/20'
+                                  : 'border-slate-700/30 bg-slate-800/30 text-slate-500 hover:border-slate-600 hover:text-slate-300'
+                              }`}
+                              title={isTracked ? 'VCL: Tracked' : 'VCL: Not tracked'}
+                            >
+                              {isTracked ? <Shield className="w-4 h-4" /> : <ShieldOff className="w-4 h-4" />}
+                            </button>
+                          );
+                        })()
                       )}
                       {file.type === 'file' && file.file_id && (
                         <button
@@ -377,6 +403,24 @@ export function FileListView({
                     <Share2 className="w-3.5 h-3.5" />
                     Share
                   </button>
+                )}
+                {file.file_id && onToggleTracking && (
+                  (() => {
+                    const isTracked = trackingStatus?.[file.file_id!] ?? (vclMode !== 'manual');
+                    return (
+                      <button
+                        onClick={() => onToggleTracking(file)}
+                        className={`flex-1 flex items-center justify-center gap-1.5 rounded-lg border px-3 py-2 text-xs font-medium transition touch-manipulation active:scale-95 ${
+                          isTracked
+                            ? 'border-emerald-500/30 bg-emerald-500/10 text-emerald-200 hover:border-emerald-500/50'
+                            : 'border-slate-700/30 bg-slate-800/30 text-slate-400 hover:text-slate-300'
+                        }`}
+                      >
+                        {isTracked ? <Shield className="w-3.5 h-3.5" /> : <ShieldOff className="w-3.5 h-3.5" />}
+                        VCL
+                      </button>
+                    );
+                  })()
                 )}
                 {file.type === 'file' && file.file_id && (
                   <button

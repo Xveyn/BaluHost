@@ -1,8 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
+import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
 import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
 import ByteUnitSettings from '../components/ByteUnitSettings';
@@ -406,7 +407,7 @@ export default function SettingsPage() {
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language' | 'api-keys'>('profile');
+  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language' | 'api-keys' | 'vcl'>('profile');
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -591,6 +592,7 @@ export default function SettingsPage() {
               { id: 'profile' as const, label: t('tabs.profile'), icon: User },
               { id: 'security' as const, label: t('tabs.security'), icon: Lock },
               { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
+              { id: 'vcl' as const, label: 'VCL', icon: GitBranch },
               { id: 'language' as const, label: t('tabs.language'), icon: Globe },
               ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
             ]).map(tab => (
@@ -927,6 +929,8 @@ export default function SettingsPage() {
             </div>
           </>
         )}
+
+        {activeTab === 'vcl' && <VCLTrackingPanel />}
 
       </div>
     </div>

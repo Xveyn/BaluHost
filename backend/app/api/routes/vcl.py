@@ -1,6 +1,7 @@
 """VCL (Version Control Light) API Routes."""
 from typing import List, Optional
 from datetime import datetime
+from pathlib import PurePosixPath
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
@@ -23,12 +24,25 @@ from app.schemas.vcl import (
     CleanupRequest,
     CleanupResponse,
     VCLStorageInfo,
+    ReconciliationPreview,
+    ReconciliationMismatch,
+    ReconciliationRequest,
+    ReconciliationResult,
+    AffectedUser,
+    QuotaTransfer,
+    FileTrackingEntry,
+    FileTrackingRequest,
+    FileTrackingListResponse,
+    FileTrackingCheckResponse,
+    BulkTrackingRequest,
 )
 from app.schemas.vcl_diff import VersionDiffResponse, DiffLine
 from app.services.vcl import VCLService
 from app.services.vcl_priority import VCLPriorityMode
+from app.services.versioning.reconciliation import VCLReconciliation
+from app.services.versioning.tracking import VCLTrackingService
 from app.services.audit_logger_db import get_audit_logger_db
-from app.models.vcl import VCLSettings, VCLStats, FileVersion, VersionBlob
+from app.models.vcl import VCLSettings, VCLStats, FileVersion, VersionBlob, VCLFileTracking
 from app.models.user import User
 from app.models.file_metadata import FileMetadata
 
@@ -534,6 +548,7 @@ async def get_vcl_settings(
         dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
         debounce_window_seconds=int(settings.debounce_window_seconds),  # type: ignore
         max_batch_window_seconds=int(settings.max_batch_window_seconds),  # type: ignore
+        vcl_mode=str(settings.vcl_mode) if settings.vcl_mode else "automatic",  # type: ignore
         created_at=settings.created_at,  # type: ignore
         updated_at=settings.updated_at,  # type: ignore
     )
@@ -580,7 +595,9 @@ async def update_vcl_settings(
         update_values['debounce_window_seconds'] = settings_update.debounce_window_seconds
     if settings_update.max_batch_window_seconds is not None:
         update_values['max_batch_window_seconds'] = settings_update.max_batch_window_seconds
-    
+    if settings_update.vcl_mode is not None:
+        update_values['vcl_mode'] = settings_update.vcl_mode
+
     # Apply updates with SQL to avoid Column assignment issues
     if update_values:
         from sqlalchemy import update as sql_update
@@ -591,7 +608,7 @@ async def update_vcl_settings(
         )
         db.commit()
         db.refresh(settings)
-    
+
     # Log settings change
     audit_logger = get_audit_logger_db()
     audit_logger.log_system_event(
@@ -600,7 +617,7 @@ async def update_vcl_settings(
         details=settings_update.model_dump(),
         db=db,
     )
-    
+
     # Cast Columns for response
     return VCLSettingsResponse(
         user_id=int(settings.user_id) if settings.user_id else None,  # type: ignore
@@ -613,9 +630,178 @@ async def update_vcl_settings(
         dedupe_enabled=bool(settings.dedupe_enabled),  # type: ignore
         debounce_window_seconds=int(settings.debounce_window_seconds),  # type: ignore
         max_batch_window_seconds=int(settings.max_batch_window_seconds),  # type: ignore
+        vcl_mode=str(settings.vcl_mode) if settings.vcl_mode else "automatic",  # type: ignore
         created_at=settings.created_at,  # type: ignore
         updated_at=settings.updated_at,  # type: ignore
     )
+
+
+# ============================================================================
+# TRACKING ENDPOINTS
+# ============================================================================
+
+@router.get("/tracking", response_model=FileTrackingListResponse)
+@user_limiter.limit(get_limit("file_list"))
+async def get_tracking_rules(
+    request: Request,
+    response: Response,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileTrackingListResponse:
+    """Get current user's VCL tracking rules and mode."""
+    tracking = VCLTrackingService(db)
+    settings = db.query(VCLSettings).filter(VCLSettings.user_id == user.id).first()
+    mode = str(settings.vcl_mode) if settings and settings.vcl_mode else "automatic"
+
+    rules = tracking.get_user_tracking_rules(user.id)
+    entries = []
+    for rule in rules:
+        file_path = None
+        file_name = None
+        if rule.file_id:
+            f = db.query(FileMetadata.path, FileMetadata.name).filter(
+                FileMetadata.id == rule.file_id
+            ).first()
+            if f:
+                file_path = str(f[0])
+                file_name = str(f[1])
+        entries.append(FileTrackingEntry(
+            id=int(rule.id),
+            file_id=int(rule.file_id) if rule.file_id else None,
+            file_path=file_path,
+            file_name=file_name,
+            path_pattern=str(rule.path_pattern) if rule.path_pattern else None,
+            action=str(rule.action),
+            is_directory=bool(rule.is_directory),
+            created_at=rule.created_at,
+        ))
+
+    return FileTrackingListResponse(
+        mode=mode,
+        rules=entries,
+        total=len(entries),
+    )
+
+
+@router.post("/tracking", response_model=FileTrackingEntry, status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("file_write"))
+async def add_tracking_rule(
+    request: Request,
+    response: Response,
+    rule_req: FileTrackingRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileTrackingEntry:
+    """Add a tracking/exclusion rule for VCL."""
+    tracking = VCLTrackingService(db)
+
+    if rule_req.file_id:
+        # Validate file exists and user owns it (or is admin)
+        file = db.query(FileMetadata).filter(FileMetadata.id == rule_req.file_id).first()
+        if not file:
+            raise HTTPException(status_code=404, detail="File not found")
+        if user.role != "admin" and int(file.owner_id) != user.id:
+            raise HTTPException(status_code=403, detail="Not file owner")
+        # Reject path traversal
+        if '..' in str(file.path):
+            raise HTTPException(status_code=400, detail="Invalid file path")
+
+        rule = tracking.set_file_tracking(
+            user.id, rule_req.file_id, rule_req.action, rule_req.is_directory
+        )
+    elif rule_req.path_pattern:
+        rule = tracking.add_pattern_rule(user.id, rule_req.path_pattern, rule_req.action)
+    else:
+        raise HTTPException(
+            status_code=400, detail="Either file_id or path_pattern is required"
+        )
+
+    db.commit()
+
+    file_path = None
+    file_name = None
+    if rule.file_id:
+        f = db.query(FileMetadata.path, FileMetadata.name).filter(
+            FileMetadata.id == rule.file_id
+        ).first()
+        if f:
+            file_path = str(f[0])
+            file_name = str(f[1])
+
+    return FileTrackingEntry(
+        id=int(rule.id),
+        file_id=int(rule.file_id) if rule.file_id else None,
+        file_path=file_path,
+        file_name=file_name,
+        path_pattern=str(rule.path_pattern) if rule.path_pattern else None,
+        action=str(rule.action),
+        is_directory=bool(rule.is_directory),
+        created_at=rule.created_at,
+    )
+
+
+@router.delete("/tracking/{rule_id}", status_code=status.HTTP_200_OK)
+@user_limiter.limit(get_limit("file_write"))
+async def remove_tracking_rule(
+    request: Request,
+    response: Response,
+    rule_id: int,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Remove a tracking rule."""
+    tracking = VCLTrackingService(db)
+    deleted = tracking.remove_file_tracking(user.id, rule_id)
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Rule not found")
+    db.commit()
+    return {"success": True, "message": "Rule removed"}
+
+
+@router.get("/tracking/check/{file_id}", response_model=FileTrackingCheckResponse)
+@user_limiter.limit(get_limit("file_list"))
+async def check_file_tracking(
+    request: Request,
+    response: Response,
+    file_id: int,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> FileTrackingCheckResponse:
+    """Check if a specific file is tracked for versioning."""
+    tracking = VCLTrackingService(db)
+    result = tracking.get_tracking_status(file_id, user.id)
+    return FileTrackingCheckResponse(**result)
+
+
+@router.post("/tracking/bulk", status_code=status.HTTP_201_CREATED)
+@user_limiter.limit(get_limit("file_write"))
+async def bulk_add_tracking(
+    request: Request,
+    response: Response,
+    bulk_req: BulkTrackingRequest,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Bulk add tracking rules."""
+    tracking = VCLTrackingService(db)
+    added = 0
+    for rule_req in bulk_req.rules:
+        if rule_req.file_id:
+            file = db.query(FileMetadata).filter(FileMetadata.id == rule_req.file_id).first()
+            if not file:
+                continue
+            if user.role != "admin" and int(file.owner_id) != user.id:
+                continue
+            tracking.set_file_tracking(
+                user.id, rule_req.file_id, rule_req.action, rule_req.is_directory
+            )
+            added += 1
+        elif rule_req.path_pattern:
+            tracking.add_pattern_rule(user.id, rule_req.path_pattern, rule_req.action)
+            added += 1
+
+    db.commit()
+    return {"success": True, "added": added}
 
 
 # ============================================================================
@@ -812,6 +998,7 @@ async def list_user_quotas(
             total_versions=total_versions,
             is_enabled=settings.is_enabled,
             cleanup_needed=cleanup_needed,
+            vcl_mode=str(settings.vcl_mode) if settings.vcl_mode else "automatic",
         ))
     
     return result
@@ -859,10 +1046,12 @@ async def admin_update_user_settings(
         settings.debounce_window_seconds = settings_update.debounce_window_seconds
     if settings_update.max_batch_window_seconds is not None:
         settings.max_batch_window_seconds = settings_update.max_batch_window_seconds
-    
+    if settings_update.vcl_mode is not None:
+        settings.vcl_mode = settings_update.vcl_mode
+
     db.commit()
     db.refresh(settings)
-    
+
     # Log admin action
     audit_logger = get_audit_logger_db()
     audit_logger.log_system_config_change(
@@ -872,7 +1061,7 @@ async def admin_update_user_settings(
         new_value=settings_update.model_dump(),
         db=db
     )
-    
+
     return VCLSettingsResponse(
         user_id=settings.user_id,
         max_size_bytes=settings.max_size_bytes,
@@ -884,6 +1073,7 @@ async def admin_update_user_settings(
         dedupe_enabled=settings.dedupe_enabled,
         debounce_window_seconds=settings.debounce_window_seconds,
         max_batch_window_seconds=settings.max_batch_window_seconds,
+        vcl_mode=str(settings.vcl_mode) if settings.vcl_mode else "automatic",
         created_at=settings.created_at,
         updated_at=settings.updated_at,
     )
@@ -1086,4 +1276,124 @@ async def get_detailed_stats(
         last_priority_mode_at=stats.last_priority_mode_at,
         last_deduplication_scan=stats.last_deduplication_scan,
         updated_at=stats.updated_at,
+    )
+
+
+# ============================================================================
+# ADMIN RECONCILIATION ENDPOINTS
+# ============================================================================
+
+@router.post("/admin/reconcile/preview", response_model=ReconciliationPreview)
+@user_limiter.limit(get_limit("admin_operations"))
+async def reconcile_preview(
+    request: Request,
+    response: Response,
+    reconcile_req: ReconciliationRequest,
+    admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> ReconciliationPreview:
+    """Scan for ownership mismatches between FileVersion and FileMetadata (Admin only)."""
+    reconciler = VCLReconciliation(db)
+    mismatches_raw = reconciler.scan_mismatches(reconcile_req.user_id)
+
+    # Build username cache
+    user_ids = set()
+    for m in mismatches_raw:
+        user_ids.add(m["version_user_id"])
+        user_ids.add(m["file_owner_id"])
+    username_map = {
+        u.id: u.username
+        for u in db.query(User.id, User.username).filter(User.id.in_(user_ids)).all()
+    } if user_ids else {}
+
+    mismatches = [
+        ReconciliationMismatch(
+            file_id=m["file_id"],
+            file_path=m["file_path"],
+            version_id=m["version_id"],
+            version_number=m["version_number"],
+            current_version_user_id=m["version_user_id"],
+            current_version_username=username_map.get(m["version_user_id"], "unknown"),
+            current_file_owner_id=m["file_owner_id"],
+            current_file_owner_username=username_map.get(m["file_owner_id"], "unknown"),
+            compressed_size=m["compressed_size"],
+        )
+        for m in mismatches_raw
+    ]
+
+    # Calculate affected users quota impact
+    quota_deltas: dict[int, int] = {}
+    for m in mismatches_raw:
+        if m["storage_type"] == "stored":
+            old_uid = m["version_user_id"]
+            new_uid = m["file_owner_id"]
+            quota_deltas[old_uid] = quota_deltas.get(old_uid, 0) - m["compressed_size"]
+            quota_deltas[new_uid] = quota_deltas.get(new_uid, 0) + m["compressed_size"]
+
+    affected_users = []
+    if quota_deltas:
+        settings_map = {
+            s.user_id: s
+            for s in db.query(VCLSettings).filter(
+                VCLSettings.user_id.in_(quota_deltas.keys())
+            ).all()
+        }
+        for uid, delta in quota_deltas.items():
+            s = settings_map.get(uid)
+            current = int(s.current_usage_bytes) if s else 0
+            max_size = int(s.max_size_bytes) if s else 10 * 1024 * 1024 * 1024
+            affected_users.append(AffectedUser(
+                user_id=uid,
+                username=username_map.get(uid, "unknown"),
+                quota_delta=delta,
+                current_usage=current,
+                max_size=max_size,
+                would_exceed_quota=(current + delta) > max_size if delta > 0 else False,
+            ))
+
+    return ReconciliationPreview(
+        total_mismatches=len(mismatches),
+        mismatches=mismatches,
+        affected_users=affected_users,
+    )
+
+
+@router.post("/admin/reconcile/apply", response_model=ReconciliationResult)
+@user_limiter.limit(get_limit("admin_operations"))
+async def reconcile_apply(
+    request: Request,
+    response: Response,
+    reconcile_req: ReconciliationRequest,
+    admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> ReconciliationResult:
+    """Apply ownership reconciliation (Admin only)."""
+    reconciler = VCLReconciliation(db)
+    result = reconciler.reconcile(
+        dry_run=False,
+        user_id=reconcile_req.user_id,
+        force_over_quota=reconcile_req.force_over_quota,
+    )
+    db.commit()
+
+    # Audit log
+    audit_logger = get_audit_logger_db()
+    audit_logger.log_system_config_change(
+        action="vcl_reconcile_apply",
+        user=admin.username,
+        config_key="vcl_reconciliation",
+        new_value={
+            "reconciled_versions": result["reconciled_versions"],
+            "skipped": result["skipped_due_to_quota"],
+            "force_over_quota": reconcile_req.force_over_quota,
+        },
+        db=db,
+    )
+
+    return ReconciliationResult(
+        success=result["success"],
+        reconciled_versions=result["reconciled_versions"],
+        skipped_due_to_quota=result["skipped_due_to_quota"],
+        quota_transfers=[QuotaTransfer(**qt) for qt in result["quota_transfers"]],
+        message=result["message"],
     )

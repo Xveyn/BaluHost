@@ -58,6 +58,9 @@ export interface QuotaInfo {
 
 // ========== Settings ==========
 
+export type VCLMode = 'automatic' | 'manual';
+export type TrackingAction = 'track' | 'exclude';
+
 export interface VCLSettingsResponse {
   user_id: number | null;
   max_size_bytes: number;
@@ -69,6 +72,7 @@ export interface VCLSettingsResponse {
   dedupe_enabled: boolean;
   debounce_window_seconds: number;
   max_batch_window_seconds: number;
+  vcl_mode: VCLMode;
   created_at: string;
   updated_at: string;
 }
@@ -82,6 +86,7 @@ export interface VCLSettingsUpdate {
   dedupe_enabled?: boolean;
   debounce_window_seconds?: number;
   max_batch_window_seconds?: number;
+  vcl_mode?: VCLMode;
 }
 
 // ========== Admin ==========
@@ -112,6 +117,7 @@ export interface UserVCLStats {
   usage_percent: number;
   total_versions: number;
   is_enabled: boolean;
+  vcl_mode?: VCLMode;
 }
 
 export interface AdminUsersResponse {
@@ -180,4 +186,88 @@ export interface VersionDiffResponse {
   new_size: number;
   diff_lines?: DiffLine[];
   message?: string;
+}
+
+// ========== Reconciliation ==========
+
+export interface ReconciliationMismatch {
+  file_id: number;
+  file_path: string;
+  version_id: number;
+  version_number: number;
+  current_version_user_id: number;
+  current_version_username: string;
+  current_file_owner_id: number;
+  current_file_owner_username: string;
+  compressed_size: number;
+}
+
+export interface AffectedUser {
+  user_id: number;
+  username: string;
+  quota_delta: number;
+  current_usage: number;
+  max_size: number;
+  would_exceed_quota: boolean;
+}
+
+export interface ReconciliationPreview {
+  total_mismatches: number;
+  mismatches: ReconciliationMismatch[];
+  affected_users: AffectedUser[];
+}
+
+export interface ReconciliationRequest {
+  user_id?: number;
+  force_over_quota?: boolean;
+  dry_run?: boolean;
+}
+
+export interface QuotaTransfer {
+  from_user_id: number;
+  from_username: string;
+  to_user_id: number;
+  to_username: string;
+  bytes_transferred: number;
+}
+
+export interface ReconciliationResult {
+  success: boolean;
+  reconciled_versions: number;
+  skipped_due_to_quota: number;
+  quota_transfers: QuotaTransfer[];
+  message: string;
+}
+
+// ========== Tracking ==========
+
+export interface FileTrackingEntry {
+  id: number;
+  file_id: number | null;
+  file_path: string | null;
+  file_name: string | null;
+  path_pattern: string | null;
+  action: TrackingAction;
+  is_directory: boolean;
+  created_at: string;
+}
+
+export interface FileTrackingRequest {
+  file_id?: number;
+  path_pattern?: string;
+  action: TrackingAction;
+  is_directory?: boolean;
+}
+
+export interface FileTrackingListResponse {
+  mode: VCLMode;
+  rules: FileTrackingEntry[];
+  total: number;
+}
+
+export interface FileTrackingCheckResponse {
+  file_id: number;
+  file_path: string;
+  is_tracked: boolean;
+  reason: string;
 }

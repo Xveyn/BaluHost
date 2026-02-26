@@ -12,7 +12,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { apiClient, getFilePermissions, setFilePermissions } from '../lib/api';
 import { getUsers } from '../api/users';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
-import { vclApi } from '../api/vcl';
+import { vclApi, addTrackingRule, removeTrackingRule, getTrackingRules, checkFileTracking } from '../api/vcl';
 import { formatBytes, formatNumber } from '../lib/formatters';
 import { FileViewer } from '../components/file-manager/FileViewer';
 import { StorageSelector } from '../components/file-manager/StorageSelector';
@@ -106,6 +106,8 @@ export default function FileManager() {
   const [showVersionHistory, setShowVersionHistory] = useState(false);
   const [versionHistoryFile, setVersionHistoryFile] = useState<FileItem | null>(null);
   const [versionCounts, setVersionCounts] = useState<Record<number, number>>({});
+  const [trackingStatus, setTrackingStatus] = useState<Record<number, boolean>>({});
+  const [vclMode, setVclMode] = useState<'automatic' | 'manual'>('automatic');
   const [vclQuota, setVclQuota] = useState<{
     usagePercent: number;
     warning: 'warning' | 'critical' | null;
@@ -204,6 +206,43 @@ export default function FileManager() {
     };
 
     loadVersionCounts();
+  }, [files]);
+
+  // Load VCL mode and tracking status
+  useEffect(() => {
+    const loadTrackingInfo = async () => {
+      try {
+        const rules = await getTrackingRules();
+        setVclMode(rules.mode as 'automatic' | 'manual');
+
+        // Build tracking status for files with explicit rules
+        const status: Record<number, boolean> = {};
+        for (const rule of rules.rules) {
+          if (rule.file_id) {
+            status[rule.file_id] = rule.action === 'track';
+          }
+        }
+
+        // For files with file_ids, check individual status via bulk approach
+        const fileIds = files.filter(f => f.file_id).map(f => f.file_id!);
+        if (fileIds.length > 0 && fileIds.length <= 50) {
+          await Promise.all(
+            fileIds.map(async (fid) => {
+              if (status[fid] !== undefined) return;
+              try {
+                const check = await checkFileTracking(fid);
+                status[fid] = check.is_tracked;
+              } catch { /* ignore */ }
+            })
+          );
+        }
+
+        setTrackingStatus(status);
+      } catch {
+        // Silently ignore
+      }
+    };
+    if (files.length > 0) loadTrackingInfo();
   }, [files]);
 
   // Load owner names when files change
@@ -558,6 +597,47 @@ export default function FileManager() {
     setShowVersionHistory(true);
   };
 
+  const handleToggleTracking = async (file: FileItem) => {
+    if (!file.file_id) return;
+    const isCurrentlyTracked = trackingStatus[file.file_id] ?? (vclMode !== 'manual');
+    try {
+      if (isCurrentlyTracked) {
+        // In automatic mode: add exclude rule. In manual mode: remove track rule.
+        if (vclMode === 'manual') {
+          // Find and remove the track rule for this file
+          const rules = await getTrackingRules();
+          const rule = rules.rules.find(r => r.file_id === file.file_id && r.action === 'track');
+          if (rule) await removeTrackingRule(rule.id);
+        } else {
+          await addTrackingRule({
+            file_id: file.file_id,
+            action: 'exclude',
+            is_directory: file.type === 'directory',
+          });
+        }
+        setTrackingStatus(prev => ({ ...prev, [file.file_id!]: false }));
+        toast.success(`VCL disabled for ${file.name}`);
+      } else {
+        // In automatic mode: remove exclude rule. In manual mode: add track rule.
+        if (vclMode === 'automatic') {
+          const rules = await getTrackingRules();
+          const rule = rules.rules.find(r => r.file_id === file.file_id && r.action === 'exclude');
+          if (rule) await removeTrackingRule(rule.id);
+        } else {
+          await addTrackingRule({
+            file_id: file.file_id,
+            action: 'track',
+            is_directory: file.type === 'directory',
+          });
+        }
+        setTrackingStatus(prev => ({ ...prev, [file.file_id!]: true }));
+        toast.success(`VCL enabled for ${file.name}`);
+      }
+    } catch {
+      toast.error('Failed to update tracking');
+    }
+  };
+
   const handleTransferOwnershipClick = (file: FileItem) => {
     setFileToTransfer(file);
     setShowOwnershipModal(true);
@@ -702,6 +782,9 @@ export default function FileManager() {
           onRename={startRename}
           onDelete={confirmDelete}
           onVersionHistory={handleVersionHistory}
+          onToggleTracking={handleToggleTracking}
+          trackingStatus={trackingStatus}
+          vclMode={vclMode}
           onShare={handleShareFile}
           onEditPermissions={handleEditPermissionsClick}
           onTransferOwnership={handleTransferOwnershipClick}

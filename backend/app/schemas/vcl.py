@@ -1,7 +1,7 @@
 """VCL Pydantic schemas for request/response validation."""
 from datetime import datetime
-from typing import Optional
-from pydantic import BaseModel, Field, ConfigDict
+from typing import Optional, List
+from pydantic import BaseModel, Field, ConfigDict, field_validator
 
 
 # ========== Version Blob Schemas ==========
@@ -97,6 +97,7 @@ class VCLSettingsUpdate(BaseModel):
     dedupe_enabled: Optional[bool] = None
     debounce_window_seconds: Optional[int] = Field(None, ge=0, le=300)
     max_batch_window_seconds: Optional[int] = Field(None, ge=0, le=3600)
+    vcl_mode: Optional[str] = Field(None, pattern="^(automatic|manual)$")
 
 
 class VCLSettingsInDB(VCLSettingsBase):
@@ -122,9 +123,10 @@ class VCLSettingsResponse(BaseModel):
     dedupe_enabled: bool
     debounce_window_seconds: int
     max_batch_window_seconds: int
+    vcl_mode: str = "automatic"
     created_at: datetime
     updated_at: datetime
-    
+
     model_config = ConfigDict(from_attributes=True)
 
 
@@ -247,6 +249,7 @@ class AdminUserQuota(BaseModel):
     total_versions: int
     is_enabled: bool
     cleanup_needed: bool
+    vcl_mode: str = "automatic"
 
 
 class CleanupRequest(BaseModel):
@@ -353,6 +356,119 @@ class VCLStorageInfo(BaseModel):
     disk_total_bytes: int
     disk_available_bytes: int
     disk_used_percent: float
+
+
+# ========== Reconciliation Schemas ==========
+
+class ReconciliationMismatch(BaseModel):
+    """Single ownership mismatch between FileVersion and FileMetadata."""
+    file_id: int
+    file_path: str
+    version_id: int
+    version_number: int
+    current_version_user_id: int
+    current_version_username: str
+    current_file_owner_id: int
+    current_file_owner_username: str
+    compressed_size: int
+
+
+class AffectedUser(BaseModel):
+    """Quota impact summary for a user affected by reconciliation."""
+    user_id: int
+    username: str
+    quota_delta: int  # Positive = gaining bytes, negative = losing bytes
+    current_usage: int
+    max_size: int
+    would_exceed_quota: bool
+
+
+class ReconciliationPreview(BaseModel):
+    """Preview result of reconciliation scan."""
+    total_mismatches: int
+    mismatches: List[ReconciliationMismatch]
+    affected_users: List[AffectedUser]
+
+
+class ReconciliationRequest(BaseModel):
+    """Request to run reconciliation."""
+    user_id: Optional[int] = None  # Scope to specific user
+    force_over_quota: bool = False
+    dry_run: bool = True
+
+
+class QuotaTransfer(BaseModel):
+    """Quota bytes transferred between users."""
+    from_user_id: int
+    from_username: str
+    to_user_id: int
+    to_username: str
+    bytes_transferred: int
+
+
+class ReconciliationResult(BaseModel):
+    """Result of reconciliation operation."""
+    success: bool
+    reconciled_versions: int
+    skipped_due_to_quota: int
+    quota_transfers: List[QuotaTransfer]
+    message: str
+
+
+# ========== Tracking Schemas ==========
+
+class VCLModeUpdate(BaseModel):
+    """Request to update VCL mode."""
+    vcl_mode: str = Field(..., pattern="^(automatic|manual)$")
+
+
+class FileTrackingEntry(BaseModel):
+    """A tracking/exclusion rule."""
+    id: int
+    file_id: Optional[int] = None
+    file_path: Optional[str] = None
+    file_name: Optional[str] = None
+    path_pattern: Optional[str] = None
+    action: str  # 'track' or 'exclude'
+    is_directory: bool
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class FileTrackingRequest(BaseModel):
+    """Request to add a tracking rule."""
+    file_id: Optional[int] = None
+    path_pattern: Optional[str] = Field(None, max_length=1000)
+    action: str = Field(..., pattern="^(track|exclude)$")
+    is_directory: bool = False
+
+    @field_validator('path_pattern')
+    @classmethod
+    def reject_path_traversal(cls, v: Optional[str]) -> Optional[str]:
+        if v and '..' in v:
+            raise ValueError("Path patterns must not contain '..'")
+        return v
+
+
+class FileTrackingListResponse(BaseModel):
+    """List of tracking rules for a user."""
+    mode: str
+    rules: List[FileTrackingEntry]
+    total: int
+
+
+class FileTrackingCheckResponse(BaseModel):
+    """Tracking status check for a single file."""
+    file_id: int
+    file_path: str
+    is_tracked: bool
+    reason: str
+
+
+class BulkTrackingRequest(BaseModel):
+    """Bulk add tracking rules."""
+    rules: List[FileTrackingRequest] = Field(..., min_length=1, max_length=100)
 
 
 # ========== Admin Schemas (moved from old duplicate) ==========

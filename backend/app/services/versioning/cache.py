@@ -78,10 +78,16 @@ class VCLCache:
             debounce_window: Custom debounce window (seconds)
             max_batch_window: Custom max batch window (seconds)
         """
+        # Check tracking rules before queueing
+        from app.services.versioning.tracking import VCLTrackingService
+        tracking = VCLTrackingService(db)
+        if not tracking.is_file_tracked(file, user_id):
+            return
+
         async with cls._lock:
             now = time.time()
             file_id = file.id
-            
+
             # Get user settings if not provided
             if debounce_window is None or max_batch_window is None:
                 vcl_service = VCLService(db)

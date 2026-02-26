@@ -318,7 +318,13 @@ class VCLService:
         is_enabled: bool = bool(user_settings.is_enabled)  # type: ignore
         if not is_enabled:
             return False, "VCL disabled for user"
-        
+
+        # Check file tracking rules (automatic/manual mode)
+        from app.services.versioning.tracking import VCLTrackingService
+        tracking = VCLTrackingService(self.db)
+        if not tracking.is_file_tracked(file, user_id):
+            return False, "File not tracked for versioning"
+
         current_usage: int = int(user_settings.current_usage_bytes)  # type: ignore
         max_size: int = int(user_settings.max_size_bytes)  # type: ignore
         if current_usage >= max_size:

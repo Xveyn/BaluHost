@@ -3,7 +3,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean, Float, BigInteger,
-    ForeignKey, UniqueConstraint, Index
+    ForeignKey, UniqueConstraint, Index, CheckConstraint
 )
 from sqlalchemy.orm import relationship
 from app.models.base import Base
@@ -104,6 +104,9 @@ class VCLSettings(Base):
     depth = Column(Integer, default=5, nullable=False)  # Max versions per file
     headroom_percent = Column(Integer, default=10, nullable=False)
     
+    # Mode: 'automatic' (version all files, exclude list) or 'manual' (version only tracked files)
+    vcl_mode = Column(String(20), default="automatic", server_default="automatic", nullable=False)
+
     # Feature Flags
     is_enabled = Column(Boolean, default=True, nullable=False)
     compression_enabled = Column(Boolean, default=True, nullable=False)
@@ -203,3 +206,34 @@ class VCLStats(Base):
     
     def __repr__(self):
         return f"<VCLStats(versions={self.total_versions}, size={self.total_size_bytes}, ratio={self.compression_ratio:.2f}x)>"
+
+
+class VCLFileTracking(Base):
+    """Per-file/pattern VCL tracking rules.
+
+    In automatic mode: action='exclude' entries skip versioning for matched files.
+    In manual mode: action='track' entries enable versioning for matched files.
+    """
+    __tablename__ = "vcl_file_tracking"
+
+    id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_id = Column(Integer, ForeignKey("file_metadata.id", ondelete="CASCADE"), nullable=True)
+    path_pattern = Column(String(1000), nullable=True)  # Glob patterns: "*.log", "node_modules/*"
+    action = Column(String(20), nullable=False)  # 'track' or 'exclude'
+    is_directory = Column(Boolean, default=False, nullable=False)
+    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+
+    # Relationships
+    user = relationship("User")
+    file = relationship("FileMetadata")
+
+    __table_args__ = (
+        UniqueConstraint('user_id', 'file_id', name='uq_vcl_tracking_user_file'),
+        Index('idx_vcl_tracking_user_action', 'user_id', 'action'),
+        CheckConstraint("action IN ('track', 'exclude')", name='ck_vcl_tracking_action'),
+    )
+
+    def __repr__(self):
+        target = f"file_id={self.file_id}" if self.file_id else f"pattern={self.path_pattern}"
+        return f"<VCLFileTracking(user_id={self.user_id}, {target}, action={self.action})>"

@@ -18,6 +18,13 @@ import type {
   CleanupResponse,
   VersionDiffResponse,
   VCLStorageInfo,
+  ReconciliationPreview,
+  ReconciliationRequest,
+  ReconciliationResult,
+  FileTrackingListResponse,
+  FileTrackingRequest,
+  FileTrackingEntry,
+  FileTrackingCheckResponse,
 } from '../types/vcl';
 
 // ========== User Endpoints ==========
@@ -184,6 +191,53 @@ export const downloadVersion = async (versionId: number): Promise<Blob> => {
   return response.data;
 };
 
+// ========== Reconciliation Endpoints ==========
+
+export const getReconciliationPreview = async (
+  data: ReconciliationRequest = {}
+): Promise<ReconciliationPreview> => {
+  const response = await apiClient.post('/api/vcl/admin/reconcile/preview', data);
+  return response.data;
+};
+
+export const applyReconciliation = async (
+  data: ReconciliationRequest = {}
+): Promise<ReconciliationResult> => {
+  const response = await apiClient.post('/api/vcl/admin/reconcile/apply', data);
+  return response.data;
+};
+
+// ========== Tracking Endpoints ==========
+
+export const getTrackingRules = async (): Promise<FileTrackingListResponse> => {
+  const response = await apiClient.get('/api/vcl/tracking');
+  return response.data;
+};
+
+export const addTrackingRule = async (
+  data: FileTrackingRequest
+): Promise<FileTrackingEntry> => {
+  const response = await apiClient.post('/api/vcl/tracking', data);
+  return response.data;
+};
+
+export const removeTrackingRule = async (ruleId: number): Promise<{ success: boolean }> => {
+  const response = await apiClient.delete(`/api/vcl/tracking/${ruleId}`);
+  return response.data;
+};
+
+export const checkFileTracking = async (fileId: number): Promise<FileTrackingCheckResponse> => {
+  const response = await apiClient.get(`/api/vcl/tracking/check/${fileId}`);
+  return response.data;
+};
+
+export const bulkAddTracking = async (
+  rules: FileTrackingRequest[]
+): Promise<{ success: boolean; added: number }> => {
+  const response = await apiClient.post('/api/vcl/tracking/bulk', { rules });
+  return response.data;
+};
+
 /**
  * Format bytes to human-readable string (re-export from shared formatters)
  */
@@ -226,6 +280,13 @@ export const vclApi = {
   getStorageInfo,
   updateUserSettingsAdmin,
   triggerCleanup,
+  getReconciliationPreview,
+  applyReconciliation,
+  getTrackingRules,
+  addTrackingRule,
+  removeTrackingRule,
+  checkFileTracking,
+  bulkAddTracking,
   formatBytes,
   formatCompressionRatio,
   calculateSavingsPercent,
