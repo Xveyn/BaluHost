@@ -38,6 +38,19 @@ export default defineConfig({
     '__GIT_BRANCH__': JSON.stringify(gitBranch),
     '__GIT_COMMIT__': JSON.stringify(gitCommit),
   },
+  build: {
+    chunkSizeWarningLimit: 600,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor-react': ['react', 'react-dom', 'react-router-dom'],
+          'vendor-charts': ['recharts'],
+          'vendor-i18n': ['i18next', 'react-i18next', 'i18next-browser-languagedetector'],
+          'vendor-icons': ['lucide-react'],
+        },
+      },
+    },
+  },
   test: {
     environment: 'jsdom',
     globals: true,
