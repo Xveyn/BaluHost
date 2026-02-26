@@ -31,6 +31,16 @@ from app.services.power import energy as energy_stats
 
 logger = logging.getLogger(__name__)
 
+
+def _shm_power_data() -> Optional[Dict]:
+    """Read power monitor snapshot from SHM (monitoring_worker process)."""
+    try:
+        from app.services.monitoring.shm import read_shm, POWER_MONITOR_FILE
+        return read_shm(POWER_MONITOR_FILE, max_age_seconds=15.0)
+    except Exception:
+        return None
+
+
 # Configuration
 _SAMPLE_INTERVAL_SECONDS = 5.0  # Sample every 5 seconds
 _FAST_START_SAMPLES = 3  # Quick initial samples
@@ -464,7 +474,25 @@ def get_power_history(db: Session) -> PowerMonitoringResponse:
             samples = _device_histories.get(device.id, [])
 
             if not samples:
-                # Secondary worker — read latest samples from DB
+                # SHM fallback: monitoring_worker writes snapshots
+                shm = _shm_power_data()
+                if shm and shm.get("device_histories"):
+                    shm_device = shm["device_histories"].get(str(device.id), [])
+                    if shm_device:
+                        from datetime import datetime as _dt
+                        samples = [
+                            PowerSample(
+                                timestamp=_dt.fromisoformat(s["timestamp"]) if isinstance(s["timestamp"], str) else s["timestamp"],
+                                watts=s["watts"],
+                                voltage=s.get("voltage"),
+                                current=s.get("current"),
+                                energy_today=s.get("energy_today"),
+                            )
+                            for s in shm_device
+                        ]
+
+            if not samples:
+                # DB fallback — read latest samples from DB
                 db_records = (
                     db.query(PowerSampleModel)
                     .filter(PowerSampleModel.device_id == device.id)
@@ -527,6 +555,22 @@ def get_current_power(device_id: int, db: Session) -> CurrentPowerResponse:
         samples = _device_histories.get(device_id, [])
         latest_sample = samples[-1] if samples else None
 
+    # SHM fallback
+    if latest_sample is None:
+        shm = _shm_power_data()
+        if shm and shm.get("device_histories"):
+            shm_device = shm["device_histories"].get(str(device_id), [])
+            if shm_device:
+                s = shm_device[-1]
+                from datetime import datetime as _dt
+                latest_sample = PowerSample(
+                    timestamp=_dt.fromisoformat(s["timestamp"]) if isinstance(s["timestamp"], str) else s["timestamp"],
+                    watts=s["watts"],
+                    voltage=s.get("voltage"),
+                    current=s.get("current"),
+                    energy_today=s.get("energy_today"),
+                )
+
     if latest_sample is None:
         # No data yet
         return CurrentPowerResponse(
@@ -560,6 +604,15 @@ def get_status() -> dict:
         Dict with service status information for admin dashboard
     """
     is_running = _monitor_task is not None and not _monitor_task.done() and _is_running
+
+    # SHM fallback: check if monitoring_worker is handling power monitoring
+    if not is_running:
+        try:
+            from app.services.monitoring.shm import is_monitoring_worker_alive
+            if is_monitoring_worker_alive():
+                is_running = True
+        except Exception:
+            pass
 
     started_at = None
     uptime_seconds = None

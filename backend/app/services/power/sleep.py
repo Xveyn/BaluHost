@@ -645,35 +645,55 @@ class SleepManagerService:
 
             # 2. Pause services
             paused = []
-            if config and config.pause_monitoring:
+            from app.core.config import settings as _sleep_settings
+            if not _sleep_settings.is_dev_mode:
+                # Production: send command to monitoring_worker via SHM
                 try:
-                    from app.services.monitoring.orchestrator import stop_monitoring
-                    await stop_monitoring()
-                    paused.append("monitoring_orchestrator")
-                    logger.info("Paused monitoring orchestrator for sleep mode")
-                except Exception as e:
-                    logger.warning("Could not pause monitoring: %s", e)
-
-            if config and config.pause_disk_io:
-                try:
-                    from app.services import disk_monitor
-                    disk_monitor.stop_monitoring()
-                    paused.append("disk_io_monitor")
-                    logger.info("Paused disk I/O monitor for sleep mode")
-                except Exception as e:
-                    logger.warning("Could not pause disk I/O monitor: %s", e)
-
-            # Reduce telemetry interval
-            if config:
-                try:
-                    from app.services import telemetry
-                    await telemetry.stop_telemetry_monitor()
-                    await telemetry.start_telemetry_monitor(
-                        interval_seconds=config.reduced_telemetry_interval
+                    from app.services.monitoring.shm import write_command
+                    write_command(
+                        "pause_monitoring",
+                        pause_monitoring=bool(config and config.pause_monitoring),
+                        pause_disk_io=bool(config and config.pause_disk_io),
+                        reduced_telemetry_interval=config.reduced_telemetry_interval if config else None,
                     )
-                    logger.info("Telemetry interval reduced to %ss", config.reduced_telemetry_interval)
+                    if config and config.pause_monitoring:
+                        paused.append("monitoring_orchestrator")
+                    if config and config.pause_disk_io:
+                        paused.append("disk_io_monitor")
+                    logger.info("Sent pause_monitoring command to monitoring_worker via SHM")
                 except Exception as e:
-                    logger.warning("Could not adjust telemetry interval: %s", e)
+                    logger.warning("Could not send pause command via SHM: %s", e)
+            else:
+                # Dev mode: direct in-process calls (like before)
+                if config and config.pause_monitoring:
+                    try:
+                        from app.services.monitoring.orchestrator import stop_monitoring
+                        await stop_monitoring()
+                        paused.append("monitoring_orchestrator")
+                        logger.info("Paused monitoring orchestrator for sleep mode")
+                    except Exception as e:
+                        logger.warning("Could not pause monitoring: %s", e)
+
+                if config and config.pause_disk_io:
+                    try:
+                        from app.services import disk_monitor
+                        disk_monitor.stop_monitoring()
+                        paused.append("disk_io_monitor")
+                        logger.info("Paused disk I/O monitor for sleep mode")
+                    except Exception as e:
+                        logger.warning("Could not pause disk I/O monitor: %s", e)
+
+                # Reduce telemetry interval
+                if config:
+                    try:
+                        from app.services import telemetry
+                        await telemetry.stop_telemetry_monitor()
+                        await telemetry.start_telemetry_monitor(
+                            interval_seconds=config.reduced_telemetry_interval
+                        )
+                        logger.info("Telemetry interval reduced to %ss", config.reduced_telemetry_interval)
+                    except Exception as e:
+                        logger.warning("Could not adjust telemetry interval: %s", e)
 
             self._paused_services = paused
 
@@ -781,33 +801,43 @@ class SleepManagerService:
                 logger.warning("Could not restore fan modes: %s", e)
             self._original_fan_modes = {}
 
-            # 3. Restore telemetry interval
-            if config:
+            # 3+4. Restore telemetry + resume services
+            from app.core.config import settings as _wake_settings
+            if not _wake_settings.is_dev_mode:
+                # Production: send resume command to monitoring_worker via SHM
                 try:
-                    from app.services import telemetry
-                    await telemetry.stop_telemetry_monitor()
-                    await telemetry.start_telemetry_monitor()  # uses default interval
-                    logger.info("Telemetry interval restored")
+                    from app.services.monitoring.shm import write_command
+                    write_command("resume_monitoring")
+                    logger.info("Sent resume_monitoring command to monitoring_worker via SHM")
                 except Exception as e:
-                    logger.warning("Could not restore telemetry interval: %s", e)
+                    logger.warning("Could not send resume command via SHM: %s", e)
+            else:
+                # Dev mode: direct in-process calls (like before)
+                if config:
+                    try:
+                        from app.services import telemetry
+                        await telemetry.stop_telemetry_monitor()
+                        await telemetry.start_telemetry_monitor()  # uses default interval
+                        logger.info("Telemetry interval restored")
+                    except Exception as e:
+                        logger.warning("Could not restore telemetry interval: %s", e)
 
-            # 4. Resume services
-            if "disk_io_monitor" in self._paused_services:
-                try:
-                    from app.services import disk_monitor
-                    disk_monitor.start_monitoring()
-                    logger.info("Resumed disk I/O monitor")
-                except Exception as e:
-                    logger.warning("Could not resume disk I/O monitor: %s", e)
+                if "disk_io_monitor" in self._paused_services:
+                    try:
+                        from app.services import disk_monitor
+                        disk_monitor.start_monitoring()
+                        logger.info("Resumed disk I/O monitor")
+                    except Exception as e:
+                        logger.warning("Could not resume disk I/O monitor: %s", e)
 
-            if "monitoring_orchestrator" in self._paused_services:
-                try:
-                    from app.services.monitoring.orchestrator import start_monitoring
-                    from app.core.database import get_db
-                    await start_monitoring(get_db)
-                    logger.info("Resumed monitoring orchestrator")
-                except Exception as e:
-                    logger.warning("Could not resume monitoring: %s", e)
+                if "monitoring_orchestrator" in self._paused_services:
+                    try:
+                        from app.services.monitoring.orchestrator import start_monitoring
+                        from app.core.database import get_db
+                        await start_monitoring(get_db)
+                        logger.info("Resumed monitoring orchestrator")
+                    except Exception as e:
+                        logger.warning("Could not resume monitoring: %s", e)
 
             self._paused_services = []
 

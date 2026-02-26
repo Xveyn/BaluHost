@@ -321,6 +321,7 @@ def main() -> int:
         "from multiprocessing",      # spawned worker processes
         "python.*scheduler_worker",  # scheduler from previous run
         "python.*webdav_worker",     # webdav from previous run
+        "python.*monitoring_worker", # monitoring from previous run
         "node.*vite",
         "npm run dev",
         "npm run preview",
@@ -332,6 +333,13 @@ def main() -> int:
     if lock_file.exists():
         lock_file.unlink()
         print("[cleanup] Removed stale primary worker lock file")
+
+    # Clean up stale SHM files from monitoring_worker
+    shm_dir = Path("/dev/shm/baluhost")
+    if shm_dir.exists():
+        import shutil as _shutil
+        _shutil.rmtree(shm_dir, ignore_errors=True)
+        print("[cleanup] Removed stale /dev/shm/baluhost")
 
     try:
         # Set production environment
@@ -396,6 +404,12 @@ def main() -> int:
             "scripts/webdav_worker.py",
         ]
 
+        # Monitoring worker runs telemetry, disk I/O, orchestrator, power monitor
+        monitoring_cmd = [
+            backend_python,
+            "scripts/monitoring_worker.py",
+        ]
+
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
@@ -407,6 +421,10 @@ def main() -> int:
             },
             "webdav": {
                 "cmd": webdav_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "monitoring": {
+                "cmd": monitoring_cmd,
                 "cwd": BACKEND_DIR,
             },
         }

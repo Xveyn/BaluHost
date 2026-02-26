@@ -21,6 +21,15 @@ from app.services.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 
+
+def _shm_telemetry_data() -> Optional[dict]:
+    """Read telemetry snapshot from SHM (monitoring_worker process)."""
+    try:
+        from app.services.monitoring.shm import read_shm, TELEMETRY_FILE
+        return read_shm(TELEMETRY_FILE, max_age_seconds=15.0)
+    except Exception:
+        return None
+
 _SAMPLE_INTERVAL_SECONDS = float(getattr(settings, "telemetry_interval_seconds", 3.0))
 _FAST_START_SAMPLES = 3  # Anzahl schneller Initial-Samples
 _FAST_START_INTERVAL = 0.5  # Abstand zwischen Fast-Start Samples
@@ -221,30 +230,61 @@ async def stop_telemetry_monitor() -> None:
 
 def get_history() -> TelemetryHistoryResponse:
     with _lock:
-        return TelemetryHistoryResponse(
-            cpu=[sample.model_copy(deep=True) for sample in _cpu_history],
-            memory=[sample.model_copy(deep=True) for sample in _memory_history],
-            network=[sample.model_copy(deep=True) for sample in _network_history],
-        )
+        if _cpu_history:
+            return TelemetryHistoryResponse(
+                cpu=[sample.model_copy(deep=True) for sample in _cpu_history],
+                memory=[sample.model_copy(deep=True) for sample in _memory_history],
+                network=[sample.model_copy(deep=True) for sample in _network_history],
+            )
+
+    # SHM fallback: monitoring_worker writes snapshots
+    shm = _shm_telemetry_data()
+    if shm:
+        try:
+            return TelemetryHistoryResponse(
+                cpu=[CpuTelemetrySample(**s) for s in shm.get("cpu", [])],
+                memory=[MemoryTelemetrySample(**s) for s in shm.get("memory", [])],
+                network=[NetworkTelemetrySample(**s) for s in shm.get("network", [])],
+            )
+        except Exception:
+            pass
+
+    return TelemetryHistoryResponse(cpu=[], memory=[], network=[])
 
 
 def get_latest_cpu_usage() -> Optional[float]:
     with _lock:
-        return _latest_cpu_usage
+        if _latest_cpu_usage is not None:
+            return _latest_cpu_usage
+
+    # SHM fallback
+    shm = _shm_telemetry_data()
+    if shm:
+        return shm.get("latest_cpu_usage")
+    return None
 
 
 def get_latest_memory_sample() -> Optional[MemoryTelemetrySample]:
     with _lock:
         if _latest_memory_sample:
             return _latest_memory_sample.model_copy(deep=True)
-        # In dev/test mode, provide a deterministic default memory sample
+
+    # SHM fallback
+    shm = _shm_telemetry_data()
+    if shm and shm.get("latest_memory_sample"):
         try:
-            from app.core.config import settings
-            if getattr(settings, 'is_dev_mode', False):
-                return MemoryTelemetrySample(timestamp=int(time.time() * 1000), used=3 * 1024 ** 3, total=8 * 1024 ** 3, percent=round((3 * 1024 ** 3) / (8 * 1024 ** 3) * 100, 2))
+            return MemoryTelemetrySample(**shm["latest_memory_sample"])
         except Exception:
             pass
-        return None
+
+    # In dev/test mode, provide a deterministic default memory sample
+    try:
+        from app.core.config import settings
+        if getattr(settings, 'is_dev_mode', False):
+            return MemoryTelemetrySample(timestamp=int(time.time() * 1000), used=3 * 1024 ** 3, total=8 * 1024 ** 3, percent=round((3 * 1024 ** 3) / (8 * 1024 ** 3) * 100, 2))
+    except Exception:
+        pass
+    return None
 
 
 def get_server_uptime() -> float:
@@ -262,6 +302,15 @@ def get_status() -> dict:
     from datetime import datetime
 
     is_running = _monitor_task is not None and not _monitor_task.done()
+
+    # SHM fallback: check if monitoring_worker is handling telemetry
+    if not is_running:
+        try:
+            from app.services.monitoring.shm import is_monitoring_worker_alive
+            if is_monitoring_worker_alive():
+                is_running = True
+        except Exception:
+            pass
 
     started_at = datetime.utcfromtimestamp(_SERVER_START_TIME)
     uptime_seconds = time.time() - _SERVER_START_TIME

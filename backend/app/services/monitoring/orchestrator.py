@@ -345,8 +345,27 @@ def get_status() -> dict:
     """
     orchestrator = get_monitoring_orchestrator()
 
+    is_running = orchestrator._is_running
+
+    # SHM fallback: check if monitoring_worker is handling orchestration
+    if not is_running:
+        try:
+            from app.services.monitoring.shm import read_shm, ORCHESTRATOR_STATUS_FILE
+            shm = read_shm(ORCHESTRATOR_STATUS_FILE, max_age_seconds=15.0)
+            if shm and shm.get("is_running"):
+                return shm
+        except Exception:
+            pass
+
+        try:
+            from app.services.monitoring.shm import is_monitoring_worker_alive
+            if is_monitoring_worker_alive():
+                is_running = True
+        except Exception:
+            pass
+
     return {
-        "is_running": orchestrator._is_running,
+        "is_running": is_running,
         "started_at": None,  # Not tracked separately
         "uptime_seconds": None,
         "sample_count": orchestrator._sample_count,

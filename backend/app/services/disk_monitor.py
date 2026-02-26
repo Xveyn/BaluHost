@@ -20,6 +20,16 @@ def get_audit_logger():
 
 logger = logging.getLogger(__name__)
 
+
+def _shm_disk_io_data() -> Optional[Dict]:
+    """Read disk I/O snapshot from SHM (monitoring_worker process)."""
+    try:
+        from app.services.monitoring.shm import read_shm, DISK_IO_FILE
+        return read_shm(DISK_IO_FILE, max_age_seconds=15.0)
+    except Exception:
+        return None
+
+
 # Configuration
 _SAMPLE_INTERVAL_SECONDS = 1.0  # Sample every second for real-time monitoring
 _MAX_SAMPLES = 120  # Keep 2 minutes of history
@@ -358,22 +368,43 @@ def stop_monitoring() -> None:
 def get_disk_io_history() -> Dict[str, List[Dict]]:
     """Get the complete disk I/O history for all disks."""
     with _lock:
-        return {disk: list(samples) for disk, samples in _disk_io_history.items()}
+        if _disk_io_history:
+            return {disk: list(samples) for disk, samples in _disk_io_history.items()}
+
+    # SHM fallback
+    shm = _shm_disk_io_data()
+    if shm and shm.get("history"):
+        return shm["history"]
+    return {}
 
 
 def get_available_disks() -> List[str]:
     """Get list of all physical disks being monitored."""
     with _lock:
-        return list(_disk_io_history.keys())
+        if _disk_io_history:
+            return list(_disk_io_history.keys())
+
+    # SHM fallback
+    shm = _shm_disk_io_data()
+    if shm and shm.get("available_disks"):
+        return shm["available_disks"]
+    return []
 
 
 def get_latest_disk_io() -> Dict[str, Optional[Dict]]:
     """Get the latest I/O sample for each disk."""
     with _lock:
-        return {
-            disk: samples[-1] if samples else None
-            for disk, samples in _disk_io_history.items()
-        }
+        if _disk_io_history:
+            return {
+                disk: samples[-1] if samples else None
+                for disk, samples in _disk_io_history.items()
+            }
+
+    # SHM fallback
+    shm = _shm_disk_io_data()
+    if shm and shm.get("latest"):
+        return shm["latest"]
+    return {}
 
 
 def get_status() -> dict:
@@ -386,6 +417,15 @@ def get_status() -> dict:
     from datetime import datetime
 
     is_running = _monitor_task is not None and not _monitor_task.done()
+
+    # SHM fallback: check if monitoring_worker is handling disk I/O
+    if not is_running:
+        try:
+            from app.services.monitoring.shm import is_monitoring_worker_alive
+            if is_monitoring_worker_alive():
+                is_running = True
+        except Exception:
+            pass
 
     started_at = None
     uptime_seconds = None

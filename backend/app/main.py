@@ -173,6 +173,8 @@ def _get_worker_scheduler_status(scheduler_name: str) -> dict:
 # Services that only run on the primary worker.  On secondary workers their
 # status function is replaced by a DB reader so the dashboard always shows
 # the correct state regardless of which worker handles the request.
+# Services that run exclusively on the primary worker (or monitoring_worker in prod).
+# On secondary workers, their status function is replaced by a DB reader.
 PRIMARY_ONLY_SERVICES = [
     "telemetry_monitor",
     "disk_io_monitor",
@@ -184,15 +186,31 @@ PRIMARY_ONLY_SERVICES = [
     "network_discovery",
 ]
 
+# Monitoring services that are offloaded to monitoring_worker in prod mode.
+# In prod, even the primary web worker reads from SHM/DB instead of in-process.
+_MONITORING_WORKER_SERVICES = [
+    "telemetry_monitor",
+    "disk_io_monitor",
+    "power_monitor",
+    "monitoring_orchestrator",
+]
+
 
 async def _do_heartbeat_write() -> None:
     """Write current service states to the service_heartbeats table once."""
     from app.models.service_heartbeat import ServiceHeartbeat
     from app.core.database import SessionLocal
 
+    # In prod mode, monitoring_worker writes its own heartbeats for these 4
+    # services.  Skip them here to avoid the circular DB-read-write loop
+    # (their get_status is a DB reader on the primary worker in prod).
+    skip = set(_MONITORING_WORKER_SERVICES) if not settings.is_dev_mode else set()
+
     db = SessionLocal()
     try:
         for name, registry in _service_registry.items():
+            if name in skip:
+                continue
             try:
                 status = registry["get_status"]()
             except Exception:
@@ -426,11 +444,38 @@ def _register_services() -> None:
         get_status_fn=_get_scheduler_worker_status,
     )
 
+    # Monitoring Worker Process Health (prod only)
+    def _get_monitoring_worker_status():
+        from app.services.monitoring.shm import is_monitoring_worker_alive, read_shm, HEARTBEAT_FILE
+        hb = read_shm(HEARTBEAT_FILE, max_age_seconds=30.0)
+        alive = hb is not None and hb.get("alive", False)
+        return {
+            "is_running": alive,
+            "pid": hb.get("pid") if hb else None,
+            "paused": hb.get("paused", False) if hb else False,
+            "services": hb.get("services", []) if hb else [],
+            "config_enabled": not settings.is_dev_mode,
+        }
+
+    if not settings.is_dev_mode:
+        register_service(
+            name="monitoring_worker",
+            display_name="Monitoring Worker",
+            get_status_fn=_get_monitoring_worker_status,
+        )
+
     # On secondary workers: replace in-process status functions for
     # primary-only services with DB readers so the dashboard shows
     # consistent data regardless of which worker handles the request.
     if not IS_PRIMARY_WORKER:
         for svc_name in PRIMARY_ONLY_SERVICES:
+            if svc_name in _service_registry:
+                _service_registry[svc_name]["get_status"] = _make_db_status_reader(svc_name)
+
+    # In prod mode, the primary worker also doesn't run monitoring in-process,
+    # so it needs DB readers for the 4 monitoring services too.
+    if IS_PRIMARY_WORKER and not settings.is_dev_mode:
+        for svc_name in _MONITORING_WORKER_SERVICES:
             if svc_name in _service_registry:
                 _service_registry[svc_name]["get_status"] = _make_db_status_reader(svc_name)
 
@@ -491,11 +536,16 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     # Hardware-controlling background tasks only run on the primary worker.
     # Secondary workers skip these to avoid duplicate hardware writes.
     if IS_PRIMARY_WORKER:
-        await telemetry.start_telemetry_monitor()
-        await power_monitor.start_power_monitor(get_db)
-        disk_monitor.start_monitoring()
-        await start_monitoring(get_db)
-        logger.info("System monitoring started (primary worker)")
+        if settings.is_dev_mode:
+            # Dev mode: all monitoring services run in-process (like before)
+            await telemetry.start_telemetry_monitor()
+            await power_monitor.start_power_monitor(get_db)
+            disk_monitor.start_monitoring()
+            await start_monitoring(get_db)
+            logger.info("System monitoring started in-process (dev mode, primary worker)")
+        else:
+            # Production: monitoring_worker process handles these 4 services
+            logger.info("Monitoring managed by monitoring_worker process (prod mode)")
 
         # Start CPU power management (if enabled)
         if settings.power_management_enabled:
@@ -635,7 +685,8 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         try:
             if not skip_init:
                 await jobs.stop_health_monitor()
-                if IS_PRIMARY_WORKER:
+                if IS_PRIMARY_WORKER and settings.is_dev_mode:
+                    # Only stop monitoring in dev mode (prod uses monitoring_worker)
                     await telemetry.stop_telemetry_monitor()
                     await power_monitor.stop_power_monitor()
                     disk_monitor.stop_monitoring()
