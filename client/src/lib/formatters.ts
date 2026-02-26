@@ -60,3 +60,23 @@ export function formatEta(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   return `${h}h ${m}m`;
 }
+
+/**
+ * Format a date string as a relative time (e.g. "Just now", "5m ago", "2h ago", "3d ago").
+ * Falls back to locale date string for dates older than 7 days.
+ * Returns "Never" for null/undefined input.
+ */
+export function formatRelativeTime(dateStr: string | null | undefined): string {
+  if (!dateStr) return 'Never';
+  const date = new Date(dateStr);
+  const diffMs = Date.now() - date.getTime();
+  const diffMins = Math.floor(diffMs / 60000);
+
+  if (diffMins < 1) return 'Just now';
+  if (diffMins < 60) return `${diffMins}m ago`;
+  const diffHours = Math.floor(diffMins / 60);
+  if (diffHours < 24) return `${diffHours}h ago`;
+  const diffDays = Math.floor(diffHours / 24);
+  if (diffDays < 7) return `${diffDays}d ago`;
+  return date.toLocaleDateString();
+}
