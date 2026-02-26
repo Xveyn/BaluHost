@@ -7,7 +7,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.11.0-unstable.1] - 2026-02-26
+## [1.11.0-unstable] - 2026-02-26
 
 ### VCL Tracking, Monitoring Worker & Frontend Refactoring
 

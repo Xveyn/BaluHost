@@ -1,7 +1,7 @@
 {
   "name": "baluhost-client",
   "private": true,
-  "version": "1.11.0-unstable.1",
+  "version": "1.11.0-unstable",
   "type": "module",
   "scripts": {
     "dev": "vite",
