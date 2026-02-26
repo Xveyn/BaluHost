@@ -7,6 +7,38 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.11.0-unstable.1] - 2026-02-26
+
+### VCL Tracking, Monitoring Worker & Frontend Refactoring
+
+Prerelease with VCL per-file tracking mode, a dedicated monitoring worker process for production, and several major frontend/backend refactors.
+
+### Added
+
+- **VCL tracking mode** — Automatic/manual mode with per-file tracking rules; users control which files are versioned
+- **VCL ownership reconciliation** — Admin tool to scan and fix version ownership mismatches after file transfers
+- **VCL tracking panel** — New Settings → VCL tab for managing tracking rules and exclusions
+- **File-level VCL toggle** — Shield icon in FileManager to enable/disable versioning per file
+- **Monitoring worker process** — Dedicated process for telemetry, disk I/O, power monitor, and orchestrator in production (SHM-based IPC)
+- **Shared `formatRelativeTime`** — Reusable relative time formatter in `lib/formatters.ts`
+- **Vendor chunk splitting** — Manual Rollup chunks for react, recharts, i18n, and lucide-react
+
+### Fixed
+
+- **SchedulerTimeline mobile** — Responsive bar widths, conditional hour labels, tighter spacing on small screens
+- **PWM percent conversion** — Use `round()` instead of `int()` to prevent truncation loss
+
+### Changed
+
+- **Refactored DeviceManagement** — Split 997-line monolith into hook + 6 sub-components (133 LOC page)
+- **Refactored scheduler service** — Split `scheduler_service.py` into `scheduler/` sub-package with 3 modules
+- **Refactored benchmark service** — Split `benchmark_service.py` into `benchmark/` sub-package with 7 modules
+- **Refactored SMART service** — Split `smart.py` into `smart/` sub-package with 7 modules
+- **Renamed update channel** — "beta" → "unstable" for clarity
+- **Production monitoring** — Web workers read from SHM with DB fallback instead of running monitoring in-process
+
+---
+
 ## [1.10.1] - 2026-02-24
 
 ### Refactoring, Bug Fixes & i18n
