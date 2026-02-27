@@ -1,404 +1,32 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import toast from 'react-hot-toast';
-import { buildApiUrl, extractErrorMessage } from '../lib/api';
-import { handleApiError, getApiErrorMessage } from '../lib/errorHandling';
-import { useAuth } from '../contexts/AuthContext';
-import { 
-  Search, 
-  ArrowUpDown, 
-  Trash2,
-  Edit,
-  Plus,
-  CheckCircle,
-  XCircle,
-  Download,
-  Users,
-  Shield,
-  X
-} from 'lucide-react';
-
-interface User {
-  id: number;
-  username: string;
-  email: string | null;
-  role: string;
-  is_active: boolean;
-  created_at: string;
-  updated_at: string | null;
-}
-
-interface UserStats {
-  total: number;
-  active: number;
-  inactive: number;
-  admins: number;
-}
-
-interface UserFormData {
-  username: string;
-  email: string;
-  password: string;
-  role: string;
-  is_active: boolean;
-}
+import { Download, Plus } from 'lucide-react';
+import { useUserManagement } from '../hooks/useUserManagement';
+import type { UserFormData } from '../hooks/useUserManagement';
+import type { UserPublic } from '../api/users';
+import {
+  UserStatsCards,
+  UserFilters,
+  UserTable,
+  UserCardList,
+  UserFormModal,
+} from '../components/user-management';
 
 export default function UserManagement() {
   const { t } = useTranslation(['admin', 'common']);
-  const { token } = useAuth();
-  const [users, setUsers] = useState<User[]>([]);
-  const [stats, setStats] = useState<UserStats>({ total: 0, active: 0, inactive: 0, admins: 0 });
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  
-  // Filter & Search
-  const [searchTerm, setSearchTerm] = useState('');
-  const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [roleFilter, setRoleFilter] = useState<string>('');
-  const [statusFilter, setStatusFilter] = useState<string>('');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
-  const debounceRef = useRef<ReturnType<typeof setTimeout>>();
+  const hook = useUserManagement();
 
-  // Debounce search input (300ms)
-  useEffect(() => {
-    debounceRef.current = setTimeout(() => setDebouncedSearch(searchTerm), 300);
-    return () => clearTimeout(debounceRef.current);
-  }, [searchTerm]);
+  // Modal state (local — only UI concern)
+  const [showModal, setShowModal] = useState(false);
+  const [editingUser, setEditingUser] = useState<UserPublic | null>(null);
 
-  // Selection & Bulk Actions
-  const [selectedUsers, setSelectedUsers] = useState<Set<number>>(new Set());
+  const openCreate = () => { setEditingUser(null); setShowModal(true); };
+  const openEdit = (user: UserPublic) => { setEditingUser(user); setShowModal(true); };
+  const closeModal = () => { setShowModal(false); setEditingUser(null); };
 
-  // Modal States
-  const [showUserModal, setShowUserModal] = useState(false);
-  const [editingUser, setEditingUser] = useState<User | null>(null);
-  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [userToDelete, setUserToDelete] = useState<number | null>(null);
-
-  // Form Data
-  const [formData, setFormData] = useState<UserFormData>({
-    username: '',
-    email: '',
-    password: '',
-    role: 'user',
-    is_active: true
-  });
-
-  useEffect(() => {
-    loadUsers();
-  }, [debouncedSearch, roleFilter, statusFilter, sortBy, sortOrder]);
-
-  const loadUsers = async () => {
-    setLoading(true);
-    setError(null);
-    
-    if (!token) {
-      const errorMsg = t('users.noToken');
-      setError(errorMsg);
-      toast.error(errorMsg);
-      setLoading(false);
-      return;
-    }
-
-    try {
-      const params = new URLSearchParams();
-      if (debouncedSearch) params.append('search', debouncedSearch);
-      if (roleFilter) params.append('role', roleFilter);
-      if (statusFilter) params.append('is_active', statusFilter);
-      params.append('sort_by', sortBy);
-      params.append('sort_order', sortOrder);
-
-      const url = buildApiUrl(`/api/users/?${params.toString()}`);
-      const response = await fetch(url, {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({ detail: response.statusText }));
-        const errorMsg = extractErrorMessage(errorData.detail, errorData.error || `HTTP ${response.status}: Failed to load users`);
-        setError(errorMsg);
-        toast.error(errorMsg);
-        setLoading(false);
-        return;
-      }
-
-      const data = await response.json();
-      
-      if (data.users) {
-        setUsers(data.users);
-        setStats({
-          total: data.total,
-          active: data.active,
-          inactive: data.inactive,
-          admins: data.admins
-        });
-      }
-    } catch (err) {
-      const errorMsg = getApiErrorMessage(err, 'Failed to load users');
-      setError(errorMsg);
-      handleApiError(err, 'Failed to load users');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCreateUser = async () => {
-    if (!token) return;
-
-    // Pflichtfelder validieren
-    if (!formData.username || !formData.password) {
-      toast.error(t('common:errors.requiredField'));
-      return;
-    }
-    // Email Format grob prüfen (nur wenn ausgefüllt)
-    if (formData.email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(formData.email)) {
-      toast.error(t('admin:users.messages.invalidEmail', 'Please enter a valid email address'));
-      return;
-    }
-
-    // Request-Body zusammenbauen
-    const payload: Record<string, unknown> = {
-      username: formData.username,
-      password: formData.password,
-      role: formData.role || 'user'
-    };
-
-    // Email nur hinzufügen wenn ausgefüllt
-    if (formData.email) {
-      payload.email = formData.email;
-    }
-
-    try {
-      const response = await fetch(buildApiUrl('/api/users/'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(payload)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(extractErrorMessage(errorData.detail, t('users.messages.createFailed')));
-        return;
-      }
-
-      toast.success(t('users.messages.created'));
-      setShowUserModal(false);
-      resetForm();
-      loadUsers();
-    } catch (err) {
-      toast.error(t('users.messages.createFailed'));
-    }
-  };
-
-  const handleUpdateUser = async () => {
-    if (!editingUser) return;
-    if (!token) return;
-
-    try {
-      const updateData: Record<string, unknown> = {};
-      if (formData.username !== editingUser.username) updateData.username = formData.username;
-      if (formData.email !== (editingUser.email ?? '')) updateData.email = formData.email || null;
-      if (formData.role !== editingUser.role) updateData.role = formData.role;
-      if (formData.is_active !== editingUser.is_active) updateData.is_active = formData.is_active;
-      if (formData.password) updateData.password = formData.password;
-
-      const response = await fetch(buildApiUrl(`/api/users/${editingUser.id}`), {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(updateData)
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json();
-        toast.error(extractErrorMessage(errorData.detail, t('users.messages.updateFailed')));
-        return;
-      }
-
-      toast.success(t('users.messages.updated'));
-      setShowUserModal(false);
-      setEditingUser(null);
-      resetForm();
-      loadUsers();
-    } catch (err) {
-      toast.error(t('users.messages.updateFailed'));
-    }
-  };
-
-  const handleDeleteUser = async (userId: number) => {
-    if (!token) return;
-
-    try {
-      const response = await fetch(buildApiUrl(`/api/users/${userId}`), {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        toast.error(extractErrorMessage(errorData.detail, t('users.messages.deleteFailed')));
-        return;
-      }
-
-      toast.success(t('users.messages.deleted'));
-      loadUsers();
-    } catch (err) {
-      toast.error(t('users.messages.deleteFailed'));
-    }
-  };
-
-  const handleBulkDelete = async () => {
-    if (selectedUsers.size === 0) return;
-    if (!token) return;
-
-    try {
-      const response = await fetch(buildApiUrl('/api/users/bulk-delete'), {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(Array.from(selectedUsers))
-      });
-
-      if (!response.ok) {
-        toast.error(t('users.messages.bulkDeleteFailed'));
-        return;
-      }
-
-      const result = await response.json();
-      toast.success(t('users.bulk.deleted', { count: result.deleted }));
-      setSelectedUsers(new Set());
-      loadUsers();
-    } catch (err) {
-      toast.error(t('users.messages.bulkDeleteFailed'));
-    }
-  };
-
-  const handleToggleActive = async (userId: number) => {
-    if (!token) return;
-
-    try {
-      const response = await fetch(buildApiUrl(`/api/users/${userId}/toggle-active`), {
-        method: 'PATCH',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-        }
-      });
-
-      if (!response.ok) {
-        toast.error(t('users.messages.toggleFailed'));
-        return;
-      }
-
-      toast.success(t('users.messages.statusUpdated'));
-      loadUsers();
-    } catch (err) {
-      toast.error(t('users.messages.toggleFailed'));
-    }
-  };
-
-  const handleExportCSV = () => {
-    const headers = ['Username', 'Email', 'Role', 'Status', 'Created At'];
-    const rows = users.map(u => [
-      u.username,
-      u.email,
-      u.role,
-      u.is_active ? 'Active' : 'Inactive',
-      new Date(u.created_at).toLocaleDateString()
-    ]);
-
-    const csv = [
-      headers.join(','),
-      ...rows.map(row => row.join(','))
-    ].join('\n');
-
-    const blob = new Blob([csv], { type: 'text/csv' });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `users-${new Date().toISOString().split('T')[0]}.csv`;
-    a.click();
-    window.URL.revokeObjectURL(url);
-    toast.success(t('users.messages.exported'));
-  };
-
-  const openCreateModal = () => {
-    resetForm();
-    setEditingUser(null);
-    setShowUserModal(true);
-  };
-
-  const openEditModal = (user: User) => {
-    setFormData({
-      username: user.username,
-      email: user.email ?? '',
-      password: '',
-      role: user.role,
-      is_active: user.is_active
-    });
-    setEditingUser(user);
-    setShowUserModal(true);
-  };
-
-  const openDeleteConfirm = (userId: number) => {
-    setUserToDelete(userId);
-    setShowDeleteConfirm(true);
-  };
-
-  const confirmDelete = () => {
-    if (userToDelete) {
-      handleDeleteUser(userToDelete);
-      setShowDeleteConfirm(false);
-      setUserToDelete(null);
-    }
-  };
-
-  const resetForm = () => {
-    setFormData({
-      username: '',
-      email: '',
-      password: '',
-      role: 'user',
-      is_active: true
-    });
-  };
-
-  const toggleUserSelection = (userId: number) => {
-    const newSelection = new Set(selectedUsers);
-    if (newSelection.has(userId)) {
-      newSelection.delete(userId);
-    } else {
-      newSelection.add(userId);
-    }
-    setSelectedUsers(newSelection);
-  };
-
-  const toggleAllUsers = () => {
-    if (selectedUsers.size === users.length) {
-      setSelectedUsers(new Set());
-    } else {
-      setSelectedUsers(new Set(users.map(u => u.id)));
-    }
-  };
-
-  const handleSort = (field: string) => {
-    if (sortBy === field) {
-      setSortOrder(sortOrder === 'asc' ? 'desc' : 'asc');
-    } else {
-      setSortBy(field);
-      setSortOrder('asc');
-    }
+  const handleSubmit = async (form: UserFormData, original: UserPublic | null): Promise<boolean> => {
+    if (original) return hook.handleUpdateUser(original.id, form, original);
+    return hook.handleCreateUser(form);
   };
 
   return (
@@ -406,14 +34,12 @@ export default function UserManagement() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-semibold text-white">
-            {t('users.title')}
-          </h1>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('users.title')}</h1>
           <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('users.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <button
-            onClick={handleExportCSV}
+            onClick={hook.handleExportCSV}
             className="btn btn-secondary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Download className="h-4 w-4" />
@@ -421,7 +47,7 @@ export default function UserManagement() {
             <span className="sm:hidden">{t('users.buttons.export')}</span>
           </button>
           <button
-            onClick={openCreateModal}
+            onClick={openCreate}
             className="btn btn-primary flex items-center gap-2 flex-1 sm:flex-initial justify-center touch-manipulation active:scale-95"
           >
             <Plus className="h-4 w-4" />
@@ -431,484 +57,62 @@ export default function UserManagement() {
         </div>
       </div>
 
-      {/* Statistics Cards */}
-      <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
-        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.totalUsers')}</p>
-              <p className="mt-1 text-xl sm:text-2xl font-semibold text-white">{stats.total}</p>
-            </div>
-            <Users className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
-          </div>
-        </div>
+      <UserStatsCards stats={hook.stats} />
 
-        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.active')}</p>
-              <p className="mt-1 text-xl sm:text-2xl font-semibold text-green-400">{stats.active}</p>
-            </div>
-            <CheckCircle className="h-6 w-6 sm:h-8 sm:w-8 text-green-500 flex-shrink-0 ml-2" />
-          </div>
-        </div>
+      <UserFilters
+        searchTerm={hook.searchTerm}
+        onSearchChange={hook.setSearchTerm}
+        roleFilter={hook.roleFilter}
+        onRoleFilterChange={hook.setRoleFilter}
+        statusFilter={hook.statusFilter}
+        onStatusFilterChange={hook.setStatusFilter}
+        selectedCount={hook.selectedUsers.size}
+        onBulkDelete={hook.handleBulkDelete}
+      />
 
-        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.inactive')}</p>
-              <p className="mt-1 text-xl sm:text-2xl font-semibold text-slate-400">{stats.inactive}</p>
-            </div>
-            <XCircle className="h-6 w-6 sm:h-8 sm:w-8 text-slate-500 flex-shrink-0 ml-2" />
-          </div>
-        </div>
-
-        <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
-          <div className="flex items-center justify-between">
-            <div className="min-w-0 flex-1">
-              <p className="text-xs sm:text-sm text-slate-400 truncate">{t('users.stats.admins')}</p>
-              <p className="mt-1 text-xl sm:text-2xl font-semibold text-sky-400">{stats.admins}</p>
-            </div>
-            <Shield className="h-6 w-6 sm:h-8 sm:w-8 text-sky-500 flex-shrink-0 ml-2" />
-          </div>
-        </div>
-      </div>
-
-      {/* Filters and Search */}
-      <div className="card border-slate-800/60 bg-slate-900/55 p-3 sm:p-4">
-        <div className="flex flex-col sm:flex-row gap-3 sm:gap-4">
-          <div className="flex-1 min-w-0">
-            <div className="relative">
-              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-              <input
-                type="text"
-                placeholder={t('users.placeholders.search')}
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                className="w-full rounded-lg border border-slate-700 bg-slate-900/70 py-2 pl-10 pr-4 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-              />
-            </div>
-          </div>
-          
-          <div className="flex gap-2">
-            <select
-              value={roleFilter}
-              onChange={(e) => setRoleFilter(e.target.value)}
-              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            >
-              <option value="">{t('users.filters.allRoles')}</option>
-              <option value="admin">{t('users.roles.admin')}</option>
-              <option value="user">{t('users.roles.user')}</option>
-            </select>
-
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              className="flex-1 sm:flex-initial rounded-lg border border-slate-700 bg-slate-900/70 px-3 sm:px-4 py-2 text-xs sm:text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-            >
-              <option value="">{t('users.filters.allStatus')}</option>
-              <option value="true">{t('users.status.active')}</option>
-              <option value="false">{t('users.status.inactive')}</option>
-            </select>
-          </div>
-        </div>
-
-        {selectedUsers.size > 0 && (
-          <div className="mt-4 flex items-center justify-between rounded-lg border border-rose-900/60 bg-rose-950/30 p-3">
-            <span className="text-sm text-rose-200">
-              {t('users.bulk.selected', { count: selectedUsers.size })}
-            </span>
-            <button
-              onClick={handleBulkDelete}
-              className="flex items-center gap-2 rounded-lg border border-rose-500/30 bg-rose-500/10 px-3 py-1.5 text-xs font-medium text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-            >
-              <Trash2 className="h-4 w-4" />
-              {t('users.buttons.deleteSelected')}
-            </button>
-          </div>
-        )}
-      </div>
-
-      {error && (
+      {hook.error && (
         <div className="card border-red-900/60 bg-red-950/30 p-4">
-          <p className="text-sm text-red-400">
-            <strong>Error:</strong> {error}
-          </p>
+          <p className="text-sm text-red-400"><strong>Error:</strong> {hook.error}</p>
         </div>
       )}
 
-      {/* Users List */}
-      {loading ? (
+      {hook.loading ? (
         <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
           <p className="text-sm text-slate-500">{t('users.loading')}</p>
         </div>
       ) : (
         <>
-          {/* Desktop Users Table */}
-          <div className="hidden lg:block card border-slate-800/60 bg-slate-900/55">
-            <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-slate-800/60">
-                <thead>
-                  <tr className="text-left text-xs uppercase tracking-[0.25em] text-slate-500">
-                    <th className="px-6 py-4">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.size === users.length && users.length > 0}
-                        onChange={toggleAllUsers}
-                        className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
-                      />
-                    </th>
-                    <th className="px-6 py-4">
-                      <button
-                        onClick={() => handleSort('username')}
-                        className="flex items-center gap-1 hover:text-slate-300"
-                      >
-                        {t('users.fields.username')}
-                        {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
-                      </button>
-                    </th>
-                    <th className="px-6 py-4">{t('users.fields.email')}</th>
-                    <th className="px-6 py-4">
-                      <button
-                        onClick={() => handleSort('role')}
-                        className="flex items-center gap-1 hover:text-slate-300"
-                      >
-                        {t('users.fields.role')}
-                        {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
-                      </button>
-                    </th>
-                    <th className="px-6 py-4">{t('users.fields.status')}</th>
-                    <th className="px-6 py-4">
-                      <button
-                        onClick={() => handleSort('created_at')}
-                        className="flex items-center gap-1 hover:text-slate-300"
-                      >
-                        {t('users.fields.created')}
-                        {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
-                      </button>
-                    </th>
-                    <th className="px-6 py-4">{t('users.fields.actions')}</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-800/60">
-                  {users.length === 0 ? (
-                    <tr>
-                      <td colSpan={7} className="px-6 py-12 text-center text-sm text-slate-500">
-                        {t('users.noUsersFound')}
-                      </td>
-                    </tr>
-                  ) : (
-                    users.map((user) => (
-                      <tr key={user.id} className="group transition hover:bg-slate-900/70">
-                        <td className="px-6 py-4">
-                          <input
-                            type="checkbox"
-                            checked={selectedUsers.has(user.id)}
-                            onChange={() => toggleUserSelection(user.id)}
-                            className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
-                          />
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-200">
-                          <div className="flex items-center gap-3">
-                            <span className="flex h-9 w-9 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-sm font-semibold text-slate-300">
-                              {(user.username ?? '?').charAt(0).toUpperCase()}
-                            </span>
-                            <span className="font-medium group-hover:text-white">{user.username}</span>
-                          </div>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-400">
-                          {user.email}
-                        </td>
-                        <td className="px-6 py-4">
-                          <span className={`rounded-full px-3 py-1 text-xs font-medium ${
-                            user.role === 'admin'
-                              ? 'border border-sky-500/40 bg-sky-500/15 text-sky-200'
-                              : 'border border-slate-700/70 bg-slate-900/70 text-slate-300'
-                          }`}>
-                            {user.role}
-                          </span>
-                        </td>
-                        <td className="px-6 py-4">
-                          <button
-                            onClick={() => handleToggleActive(user.id)}
-                            className={`flex items-center gap-1 rounded-full px-3 py-1 text-xs font-medium transition ${
-                              user.is_active
-                                ? 'border border-green-500/40 bg-green-500/15 text-green-200 hover:bg-green-500/25'
-                                : 'border border-slate-700/70 bg-slate-900/70 text-slate-400 hover:bg-slate-800/70'
-                            }`}
-                          >
-                            {user.is_active ? (
-                              <>
-                                <CheckCircle className="h-3 w-3" />
-                                {t('users.status.active')}
-                              </>
-                            ) : (
-                              <>
-                                <XCircle className="h-3 w-3" />
-                                {t('users.status.inactive')}
-                              </>
-                            )}
-                          </button>
-                        </td>
-                        <td className="px-6 py-4 text-sm text-slate-400">
-                          {new Date(user.created_at).toLocaleDateString()}
-                        </td>
-                        <td className="px-6 py-4 text-sm">
-                          <div className="flex items-center gap-2">
-                            <button
-                              onClick={() => openEditModal(user)}
-                              className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20"
-                              title={t('users.editUser')}
-                            >
-                              <Edit className="h-4 w-4" />
-                            </button>
-                            <button
-                              onClick={() => openDeleteConfirm(user.id)}
-                              className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                              title={t('users.deleteUser')}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </div>
-
-          {/* Mobile Users Card View */}
-          <div className="lg:hidden space-y-3">
-            {users.length === 0 ? (
-              <div className="card border-slate-800/60 bg-slate-900/55 py-12 text-center">
-                <p className="text-sm text-slate-500">{t('users.noUsersFound')}</p>
-              </div>
-            ) : (
-              users.map((user) => (
-                <div
-                  key={user.id}
-                  className="card border-slate-800/60 bg-slate-900/55 p-4"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <input
-                        type="checkbox"
-                        checked={selectedUsers.has(user.id)}
-                        onChange={() => toggleUserSelection(user.id)}
-                        className="h-5 w-5 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500 flex-shrink-0"
-                      />
-                      <span className="flex h-10 w-10 items-center justify-center rounded-2xl border border-slate-800 bg-slate-900/70 text-base font-semibold text-slate-300 flex-shrink-0">
-                        {(user.username ?? '?').charAt(0).toUpperCase()}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="font-medium text-white truncate">{user.username}</p>
-                        <p className="text-xs text-slate-400 truncate">{user.email || 'No email'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                      <button
-                        onClick={() => openEditModal(user)}
-                        className="rounded-lg border border-sky-500/30 bg-sky-500/10 p-2.5 text-sky-200 transition hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
-                        title={t('users.editUser')}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </button>
-                      <button
-                        onClick={() => openDeleteConfirm(user.id)}
-                        className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2.5 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
-                        title={t('users.deleteUser')}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </button>
-                    </div>
-                  </div>
-
-                  <div className="mt-3 flex flex-wrap items-center gap-2">
-                    <span className={`rounded-full px-2.5 py-1 text-xs font-medium ${
-                      user.role === 'admin'
-                        ? 'border border-sky-500/40 bg-sky-500/15 text-sky-200'
-                        : 'border border-slate-700/70 bg-slate-900/70 text-slate-300'
-                    }`}>
-                      {user.role}
-                    </span>
-                    <button
-                      onClick={() => handleToggleActive(user.id)}
-                      className={`flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-medium transition touch-manipulation active:scale-95 ${
-                        user.is_active
-                          ? 'border border-green-500/40 bg-green-500/15 text-green-200'
-                          : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
-                      }`}
-                    >
-                      {user.is_active ? (
-                        <>
-                          <CheckCircle className="h-3 w-3" />
-                          {t('users.status.active')}
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="h-3 w-3" />
-                          {t('users.status.inactive')}
-                        </>
-                      )}
-                    </button>
-                    <span className="text-xs text-slate-500">
-                      {t('users.fields.created')} {new Date(user.created_at).toLocaleDateString()}
-                    </span>
-                  </div>
-                </div>
-              ))
-            )}
-          </div>
+          <UserTable
+            users={hook.users}
+            selectedUsers={hook.selectedUsers}
+            sortBy={hook.sortBy}
+            sortOrder={hook.sortOrder}
+            onSort={hook.handleSort}
+            onToggleSelection={hook.toggleUserSelection}
+            onToggleAll={hook.toggleAllUsers}
+            onEdit={openEdit}
+            onDelete={hook.handleDeleteUser}
+            onToggleActive={hook.handleToggleActive}
+          />
+          <UserCardList
+            users={hook.users}
+            selectedUsers={hook.selectedUsers}
+            onToggleSelection={hook.toggleUserSelection}
+            onEdit={openEdit}
+            onDelete={hook.handleDeleteUser}
+            onToggleActive={hook.handleToggleActive}
+          />
         </>
       )}
 
-      {/* User Create/Edit Modal */}
-      {showUserModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-md rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl max-h-[90vh] overflow-y-auto">
-            <div className="mb-3 sm:mb-4 flex items-center justify-between">
-              <h2 className="text-lg sm:text-xl font-semibold text-white">
-                {editingUser ? t('users.editUser') : t('users.createUser')}
-              </h2>
-              <button
-                onClick={() => {
-                  setShowUserModal(false);
-                  setEditingUser(null);
-                  resetForm();
-                }}
-                className="rounded-lg p-2 hover:bg-slate-800 touch-manipulation active:scale-95"
-              >
-                <X className="h-5 w-5 text-slate-400" />
-              </button>
-            </div>
+      <UserFormModal
+        open={showModal}
+        editingUser={editingUser}
+        onClose={closeModal}
+        onSubmit={handleSubmit}
+      />
 
-            <div className="space-y-3 sm:space-y-4">
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  {t('users.fields.username')}
-                </label>
-                <input
-                  type="text"
-                  value={formData.username}
-                  onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder={t('users.placeholders.enterUsername')}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  {t('users.fields.emailOptional')}
-                </label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder={t('users.placeholders.enterEmail')}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  {editingUser ? t('users.fields.passwordKeep') : t('users.fields.password')}
-                </label>
-                <input
-                  type="password"
-                  value={formData.password}
-                  onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                  placeholder={t('users.placeholders.enterPassword')}
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-slate-300 mb-1">
-                  {t('users.fields.role')}
-                </label>
-                <select
-                  value={formData.role}
-                  onChange={(e) => setFormData({ ...formData, role: e.target.value })}
-                  className="w-full rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm text-slate-200 focus:border-sky-500 focus:outline-none focus:ring-1 focus:ring-sky-500"
-                >
-                  <option value="user">{t('users.roles.user')}</option>
-                  <option value="admin">{t('users.roles.admin')}</option>
-                </select>
-              </div>
-
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="is_active"
-                  checked={formData.is_active}
-                  onChange={(e) => setFormData({ ...formData, is_active: e.target.checked })}
-                  className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
-                />
-                <label htmlFor="is_active" className="text-sm text-slate-300">
-                  {t('users.fields.activeUser')}
-                </label>
-              </div>
-            </div>
-
-            <div className="mt-4 sm:mt-6 flex gap-2">
-              <button
-                onClick={() => {
-                  setShowUserModal(false);
-                  setEditingUser(null);
-                  resetForm();
-                }}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
-              >
-                {t('users.buttons.cancel')}
-              </button>
-              <button
-                onClick={editingUser ? handleUpdateUser : handleCreateUser}
-                className="flex-1 rounded-lg border border-sky-500/30 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-200 hover:border-sky-500/50 hover:bg-sky-500/20 touch-manipulation active:scale-95"
-              >
-                {editingUser ? t('users.buttons.update') : t('users.buttons.create')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-          <div className="w-full max-w-sm rounded-lg border border-slate-800 bg-slate-900 p-4 sm:p-6 shadow-xl">
-            <div className="mb-3 sm:mb-4 flex items-center gap-3">
-              <div className="rounded-full bg-rose-500/20 p-2 sm:p-3">
-                <Trash2 className="h-5 w-5 sm:h-6 sm:w-6 text-rose-500" />
-              </div>
-              <h2 className="text-lg sm:text-xl font-semibold text-white">{t('users.deleteUser')}</h2>
-            </div>
-
-            <p className="mb-4 sm:mb-6 text-sm text-slate-400">
-              {t('users.deleteConfirmGeneric')}
-            </p>
-
-            <div className="flex gap-2">
-              <button
-                onClick={() => {
-                  setShowDeleteConfirm(false);
-                  setUserToDelete(null);
-                }}
-                className="flex-1 rounded-lg border border-slate-700 bg-slate-900/70 px-4 py-2 text-sm font-medium text-slate-300 hover:bg-slate-800 touch-manipulation active:scale-95"
-              >
-                {t('users.buttons.cancel')}
-              </button>
-              <button
-                onClick={confirmDelete}
-                className="flex-1 rounded-lg border border-rose-500/30 bg-rose-500/10 px-4 py-2 text-sm font-medium text-rose-200 hover:border-rose-500/50 hover:bg-rose-500/20 touch-manipulation active:scale-95"
-              >
-                {t('common:buttons.delete')}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
+      {hook.confirmDialog}
     </div>
   );
 }
