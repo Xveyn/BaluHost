@@ -51,8 +51,8 @@ class ChunkedUploadManager:
     Designed to be a singleton — one instance per process.
     """
 
-    DEFAULT_CHUNK_SIZE = 10 * 1024 * 1024  # 10 MB
-    MAX_CONCURRENT_WRITES_PER_USER = 6
+    DEFAULT_CHUNK_SIZE = 32 * 1024 * 1024  # 32 MB
+    MAX_CONCURRENT_WRITES_PER_USER = 16
 
     def __init__(self) -> None:
         self._sessions: Dict[str, ChunkedUploadSession] = {}
