@@ -16,7 +16,7 @@ import {
   listSyncSchedules,
   disableSyncSchedule,
   type CreateScheduleRequest,
-} from '../api/sync-schedules';
+} from '../api/sync';
 import { generateMobileToken, type MobileRegistrationToken } from '../lib/api';
 
 export function useDeviceManagement() {

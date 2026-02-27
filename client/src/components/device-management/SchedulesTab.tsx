@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Calendar, Clock, Plus, X } from 'lucide-react';
 import { formatRelativeTime } from '../../lib/formatters';
 import type { Device } from '../../api/devices';
-import type { SyncSchedule, CreateScheduleRequest } from '../../api/sync-schedules';
+import type { SyncSchedule, CreateScheduleRequest } from '../../api/sync';
 
 interface SchedulesTabProps {
   devices: Device[];
