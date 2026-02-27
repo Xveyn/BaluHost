@@ -28,6 +28,7 @@ POWER_MONITOR_FILE = "power_monitor.json"
 ORCHESTRATOR_STATUS_FILE = "orchestrator_status.json"
 HEARTBEAT_FILE = "heartbeat.json"
 COMMANDS_FILE = "commands.json"
+ORCHESTRATOR_DATA_FILE = "orchestrator_data.json"
 
 
 def _ensure_dir() -> None:

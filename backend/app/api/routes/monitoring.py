@@ -106,7 +106,7 @@ async def get_cpu_history(
     duration = _parse_time_range(time_range)
 
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
-        samples = orchestrator.cpu_collector.get_history_memory(limit)
+        samples = orchestrator.get_cpu_history(limit)
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
@@ -119,7 +119,7 @@ async def get_cpu_history(
         source_str = "database"
         # Fallback to memory buffer if database is empty
         if not samples:
-            samples = orchestrator.cpu_collector.get_history_memory(limit)
+            samples = orchestrator.get_cpu_history(limit)
             source_str = "memory (fallback)"
 
     return CpuHistoryResponse(
@@ -178,7 +178,7 @@ async def get_memory_history(
     duration = _parse_time_range(time_range)
 
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
-        samples = orchestrator.memory_collector.get_history_memory(limit)
+        samples = orchestrator.get_memory_history(limit)
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
@@ -191,7 +191,7 @@ async def get_memory_history(
         source_str = "database"
         # Fallback to memory buffer if database is empty
         if not samples:
-            samples = orchestrator.memory_collector.get_history_memory(limit)
+            samples = orchestrator.get_memory_history(limit)
             source_str = "memory (fallback)"
 
     return MemoryHistoryResponse(
@@ -224,8 +224,8 @@ async def get_network_current(
     if sample is None:
         raise HTTPException(status_code=503, detail="No network data available yet")
 
-    # Get interface type from collector
-    interface_type = orchestrator.network_collector.get_active_interface_type()
+    # Get interface type (with SHM fallback)
+    interface_type = orchestrator.get_network_interface_type()
 
     return CurrentNetworkResponse(
         timestamp=sample.timestamp,
@@ -251,7 +251,7 @@ async def get_network_history(
     duration = _parse_time_range(time_range)
 
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
-        samples = orchestrator.network_collector.get_history_memory(limit)
+        samples = orchestrator.get_network_history(limit)
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
@@ -264,7 +264,7 @@ async def get_network_history(
         source_str = "database"
         # Fallback to memory buffer if database is empty
         if not samples:
-            samples = orchestrator.network_collector.get_history_memory(limit)
+            samples = orchestrator.get_network_history(limit)
             source_str = "memory (fallback)"
 
     return NetworkHistoryResponse(
@@ -321,10 +321,11 @@ async def get_disk_io_history(
     duration = _parse_time_range(time_range)
 
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
+        hist = orchestrator.get_disk_io_history(disk_name)
         if disk_name:
-            disks = {disk_name: orchestrator.disk_io_collector.get_disk_history(disk_name)}
+            disks = {disk_name: hist} if isinstance(hist, list) else {disk_name: []}
         else:
-            disks = orchestrator.disk_io_collector.get_all_disk_histories()
+            disks = hist if isinstance(hist, dict) else {}
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not any(disks.values()):
@@ -346,10 +347,11 @@ async def get_disk_io_history(
 
         # Fallback to memory buffer if database query returned no results at all
         if not samples:
+            hist = orchestrator.get_disk_io_history(disk_name)
             if disk_name:
-                disks = {disk_name: orchestrator.disk_io_collector.get_disk_history(disk_name)}
+                disks = {disk_name: hist} if isinstance(hist, list) else {disk_name: []}
             else:
-                disks = orchestrator.disk_io_collector.get_all_disk_histories()
+                disks = hist if isinstance(hist, dict) else {}
             source_str = "memory (fallback)"
         else:
             # Group by disk name
@@ -364,9 +366,10 @@ async def get_disk_io_history(
 
     total_samples = sum(len(s) for s in disks.values())
 
-    # Derive available_disks from actual data when memory is empty (secondary worker)
-    memory_disks = orchestrator.disk_io_collector.get_available_disks()
-    available_disks = memory_disks if memory_disks else list(disks.keys())
+    # Derive available_disks with SHM fallback
+    available_disks = orchestrator.get_disk_io_available_disks()
+    if not available_disks:
+        available_disks = list(disks.keys())
 
     return DiskIoHistoryResponse(
         disks=disks,

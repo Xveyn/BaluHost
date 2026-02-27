@@ -14,6 +14,12 @@ from typing import Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
+from app.schemas.monitoring import (
+    CpuSampleSchema,
+    MemorySampleSchema,
+    NetworkSampleSchema,
+    DiskIoSampleSchema,
+)
 from app.services.monitoring.cpu_collector import CpuMetricCollector
 from app.services.monitoring.memory_collector import MemoryMetricCollector
 from app.services.monitoring.network_collector import NetworkMetricCollector
@@ -236,26 +242,92 @@ class MonitoringOrchestrator:
         except Exception as e:
             logger.error(f"Retention cleanup failed: {e}")
 
+    # ===== SHM fallback =====
+
+    def _read_shm_data(self) -> Optional[dict]:
+        """Read orchestrator collector data from SHM (written by monitoring_worker)."""
+        try:
+            from app.services.monitoring.shm import read_shm, ORCHESTRATOR_DATA_FILE
+            return read_shm(ORCHESTRATOR_DATA_FILE, max_age_seconds=15.0)
+        except Exception:
+            return None
+
     # ===== Public API for current values =====
 
-    def get_cpu_current(self):
-        """Get current CPU sample."""
-        return self.cpu_collector.get_current()
+    def get_cpu_current(self) -> Optional[CpuSampleSchema]:
+        """Get current CPU sample (in-memory → SHM fallback)."""
+        sample = self.cpu_collector.get_current()
+        if sample is not None:
+            return sample
 
-    def get_memory_current(self):
-        """Get current memory sample."""
-        return self.memory_collector.get_current()
+        shm = self._read_shm_data()
+        if shm and shm.get("cpu_current"):
+            try:
+                return CpuSampleSchema(**shm["cpu_current"])
+            except Exception:
+                pass
+        return None
 
-    def get_network_current(self):
-        """Get current network sample."""
-        return self.network_collector.get_current()
+    def get_memory_current(self) -> Optional[MemorySampleSchema]:
+        """Get current memory sample (in-memory → SHM fallback)."""
+        sample = self.memory_collector.get_current()
+        if sample is not None:
+            return sample
+
+        shm = self._read_shm_data()
+        if shm and shm.get("memory_current"):
+            try:
+                return MemorySampleSchema(**shm["memory_current"])
+            except Exception:
+                pass
+        return None
+
+    def get_network_current(self) -> Optional[NetworkSampleSchema]:
+        """Get current network sample (in-memory → SHM fallback)."""
+        sample = self.network_collector.get_current()
+        if sample is not None:
+            return sample
+
+        shm = self._read_shm_data()
+        if shm and shm.get("network_current"):
+            try:
+                return NetworkSampleSchema(**shm["network_current"])
+            except Exception:
+                pass
+        return None
+
+    def get_network_interface_type(self) -> str:
+        """Get network interface type (in-memory → SHM fallback)."""
+        itype = self.network_collector.get_active_interface_type()
+        if itype != "unknown":
+            return itype
+
+        shm = self._read_shm_data()
+        if shm and shm.get("interface_type"):
+            return shm["interface_type"]
+        return itype
 
     def get_disk_io_current(self) -> Dict:
-        """Get current disk I/O samples for all disks."""
-        return {
+        """Get current disk I/O samples for all disks (in-memory → SHM fallback)."""
+        result = {
             disk: samples[-1] if samples else None
             for disk, samples in self.disk_io_collector.get_all_disk_histories().items()
         }
+        # Filter out None values
+        result = {k: v for k, v in result.items() if v is not None}
+        if result:
+            return result
+
+        shm = self._read_shm_data()
+        if shm and shm.get("disk_io_current"):
+            try:
+                return {
+                    disk: DiskIoSampleSchema(**data) if data else None
+                    for disk, data in shm["disk_io_current"].items()
+                }
+            except Exception:
+                pass
+        return {}
 
     def get_process_current(self):
         """Get current process status."""
@@ -263,23 +335,89 @@ class MonitoringOrchestrator:
 
     # ===== Public API for history =====
 
-    def get_cpu_history(self, limit: Optional[int] = None):
-        """Get CPU history from memory."""
-        return self.cpu_collector.get_history_memory(limit)
+    def get_cpu_history(self, limit: Optional[int] = None) -> List:
+        """Get CPU history from memory (in-memory → SHM fallback)."""
+        samples = self.cpu_collector.get_history_memory(limit)
+        if samples:
+            return samples
 
-    def get_memory_history(self, limit: Optional[int] = None):
-        """Get memory history from memory."""
-        return self.memory_collector.get_history_memory(limit)
+        shm = self._read_shm_data()
+        if shm and shm.get("cpu_history"):
+            try:
+                all_samples = [CpuSampleSchema(**s) for s in shm["cpu_history"]]
+                return all_samples[-limit:] if limit else all_samples
+            except Exception:
+                pass
+        return []
 
-    def get_network_history(self, limit: Optional[int] = None):
-        """Get network history from memory."""
-        return self.network_collector.get_history_memory(limit)
+    def get_memory_history(self, limit: Optional[int] = None) -> List:
+        """Get memory history from memory (in-memory → SHM fallback)."""
+        samples = self.memory_collector.get_history_memory(limit)
+        if samples:
+            return samples
 
-    def get_disk_io_history(self, disk_name: Optional[str] = None):
-        """Get disk I/O history from memory."""
+        shm = self._read_shm_data()
+        if shm and shm.get("memory_history"):
+            try:
+                all_samples = [MemorySampleSchema(**s) for s in shm["memory_history"]]
+                return all_samples[-limit:] if limit else all_samples
+            except Exception:
+                pass
+        return []
+
+    def get_network_history(self, limit: Optional[int] = None) -> List:
+        """Get network history from memory (in-memory → SHM fallback)."""
+        samples = self.network_collector.get_history_memory(limit)
+        if samples:
+            return samples
+
+        shm = self._read_shm_data()
+        if shm and shm.get("network_history"):
+            try:
+                all_samples = [NetworkSampleSchema(**s) for s in shm["network_history"]]
+                return all_samples[-limit:] if limit else all_samples
+            except Exception:
+                pass
+        return []
+
+    def get_disk_io_history(self, disk_name: Optional[str] = None) -> Dict:
+        """Get disk I/O history from memory (in-memory → SHM fallback)."""
         if disk_name:
-            return self.disk_io_collector.get_disk_history(disk_name)
-        return self.disk_io_collector.get_all_disk_histories()
+            samples = self.disk_io_collector.get_disk_history(disk_name)
+            if samples:
+                return samples
+        else:
+            result = self.disk_io_collector.get_all_disk_histories()
+            if any(v for v in result.values()):
+                return result
+
+        shm = self._read_shm_data()
+        if shm and shm.get("disk_io_history"):
+            try:
+                all_disks = {
+                    d: [DiskIoSampleSchema(**s) for s in samples]
+                    for d, samples in shm["disk_io_history"].items()
+                }
+                if disk_name:
+                    return all_disks.get(disk_name, [])
+                return all_disks
+            except Exception:
+                pass
+
+        if disk_name:
+            return []
+        return {}
+
+    def get_disk_io_available_disks(self) -> List[str]:
+        """Get available disks (in-memory → SHM fallback)."""
+        disks = self.disk_io_collector.get_available_disks()
+        if disks:
+            return disks
+
+        shm = self._read_shm_data()
+        if shm and shm.get("available_disks"):
+            return shm["available_disks"]
+        return []
 
     def get_process_history(self, process_name: Optional[str] = None):
         """Get process history from memory."""

@@ -24,6 +24,7 @@ from app.services.monitoring.shm import (
     DISK_IO_FILE,
     POWER_MONITOR_FILE,
     ORCHESTRATOR_STATUS_FILE,
+    ORCHESTRATOR_DATA_FILE,
     HEARTBEAT_FILE,
     write_shm,
     read_command,
@@ -40,6 +41,7 @@ _TELEMETRY_SNAPSHOT_INTERVAL = 3.0
 _DISK_IO_SNAPSHOT_INTERVAL = 1.0
 _POWER_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_SNAPSHOT_INTERVAL = 5.0
+_ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL = 5.0
 _COMMAND_POLL_INTERVAL = 2.0
 
 
@@ -109,6 +111,7 @@ class MonitoringWorker:
         last_disk_io = 0.0
         last_power = 0.0
         last_orchestrator = 0.0
+        last_orchestrator_data = 0.0
         last_command_poll = 0.0
 
         while self._running:
@@ -135,6 +138,11 @@ class MonitoringWorker:
                     if now - last_orchestrator >= _ORCHESTRATOR_SNAPSHOT_INTERVAL:
                         self._write_orchestrator_snapshot()
                         last_orchestrator = now
+
+                    # Write orchestrator collector data snapshot
+                    if now - last_orchestrator_data >= _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL:
+                        self._write_orchestrator_data_snapshot()
+                        last_orchestrator_data = now
 
                 # Write heartbeat (always, even when paused)
                 if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
@@ -262,6 +270,55 @@ class MonitoringWorker:
             write_shm(ORCHESTRATOR_STATUS_FILE, data)
         except Exception as exc:
             logger.debug("Orchestrator snapshot failed: %s", exc)
+
+    def _write_orchestrator_data_snapshot(self) -> None:
+        """Write orchestrator collector data (current + history) to SHM."""
+        try:
+            from app.services.monitoring.orchestrator import get_monitoring_orchestrator
+
+            orch = get_monitoring_orchestrator()
+
+            # Current values
+            cpu_cur = orch.get_cpu_current()
+            mem_cur = orch.get_memory_current()
+            net_cur = orch.get_network_current()
+            disk_io_cur = orch.get_disk_io_current()
+
+            # History buffers
+            cpu_hist = orch.get_cpu_history()
+            mem_hist = orch.get_memory_history()
+            net_hist = orch.get_network_history()
+            disk_io_hist = orch.get_disk_io_history()
+
+            # Interface type
+            interface_type = orch.network_collector.get_active_interface_type()
+
+            # Available disks
+            available_disks = orch.disk_io_collector.get_available_disks()
+
+            # Serialize via model_dump(mode="json") for datetime handling
+            data = {
+                "cpu_current": cpu_cur.model_dump(mode="json") if cpu_cur else None,
+                "memory_current": mem_cur.model_dump(mode="json") if mem_cur else None,
+                "network_current": net_cur.model_dump(mode="json") if net_cur else None,
+                "disk_io_current": {
+                    disk: s.model_dump(mode="json") if s else None
+                    for disk, s in disk_io_cur.items()
+                } if disk_io_cur else {},
+                "cpu_history": [s.model_dump(mode="json") for s in cpu_hist],
+                "memory_history": [s.model_dump(mode="json") for s in mem_hist],
+                "network_history": [s.model_dump(mode="json") for s in net_hist],
+                "disk_io_history": {
+                    disk: [s.model_dump(mode="json") for s in samples]
+                    for disk, samples in disk_io_hist.items()
+                } if isinstance(disk_io_hist, dict) else {},
+                "available_disks": available_disks,
+                "interface_type": interface_type,
+                "timestamp": time.time(),
+            }
+            write_shm(ORCHESTRATOR_DATA_FILE, data)
+        except Exception as exc:
+            logger.debug("Orchestrator data snapshot failed: %s", exc)
 
     def _write_heartbeat(self) -> None:
         """Write heartbeat to SHM and service status to DB."""
