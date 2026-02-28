@@ -62,7 +62,7 @@ export function PluginProvider({ children }: PluginProviderProps) {
     } finally {
       setIsLoading(false);
     }
-  }, []);
+  }, [token]);
 
   useEffect(() => {
     loadPlugins();
