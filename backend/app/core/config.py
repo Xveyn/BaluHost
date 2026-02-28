@@ -158,6 +158,11 @@ class Settings(BaseSettings):
     database_url: str | None = None
     database_type: str = "sqlite"
 
+    # Pi-hole DNS integration
+    pihole_enabled: bool = False  # Enable/disable Pi-hole integration
+    pihole_force_dev_backend: bool = False  # Force dev backend even with Docker available
+    pihole_web_port: int = 8053  # Pi-hole web UI port on host
+
     # Email notification configuration (SMTP)
     email_enabled: bool = False  # Enable email notifications
     smtp_host: str = ""  # SMTP server hostname

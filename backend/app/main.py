@@ -239,6 +239,30 @@ async def _write_service_heartbeats() -> None:
         await _do_heartbeat_write()
 
 
+async def _pihole_health_loop() -> None:
+    """Periodically check remote Pi-hole health and trigger failover/failback."""
+    from app.core.database import SessionLocal
+    from app.services.pihole.service import PiholeService
+
+    # Wait a bit on startup before first check
+    await asyncio.sleep(10)
+
+    while True:
+        interval = 30
+        try:
+            db = SessionLocal()
+            try:
+                svc = PiholeService(db)
+                if svc.has_remote_pi():
+                    await svc.check_health_and_failover()
+                    interval = svc.get_config().health_check_interval or 30
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("Pi-hole health check error: %s", e)
+        await asyncio.sleep(interval)
+
+
 def _make_db_status_reader(service_name: str):
     """Return a status function that reads from the service_heartbeats table."""
     def read_status():
@@ -464,6 +488,26 @@ def _register_services() -> None:
             get_status_fn=_get_monitoring_worker_status,
         )
 
+    # Pi-hole DNS Integration
+    def _get_pihole_status():
+        from app.services.pihole.service import PiholeService
+        from app.core.database import SessionLocal as _SL
+        db = _SL()
+        try:
+            svc = PiholeService(db)
+            return svc.get_service_status()
+        except Exception:
+            return {"is_running": False}
+        finally:
+            db.close()
+
+    register_service(
+        name="pihole_dns",
+        display_name="Pi-hole DNS",
+        get_status_fn=_get_pihole_status,
+        config_enabled_fn=lambda: settings.pihole_enabled,
+    )
+
     # On secondary workers: replace in-process status functions for
     # primary-only services with DB readers so the dashboard shows
     # consistent data regardless of which worker handles the request.
@@ -625,6 +669,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     # read accurate service status from the database.
     if IS_PRIMARY_WORKER:
         asyncio.create_task(_write_service_heartbeats())
+        asyncio.create_task(_pihole_health_loop())
 
     # Register update service
     register_update_service()

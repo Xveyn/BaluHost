@@ -68,6 +68,7 @@ from app.models.desktop_pairing import DesktopPairingCode
 from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.models.service_heartbeat import ServiceHeartbeat
 from app.models.migration_job import MigrationJob
+from app.models.pihole import PiholeConfig
 
 __all__ = [
     "Base",
@@ -139,4 +140,5 @@ __all__ = [
     "DesktopSyncFolder",
     "ServiceHeartbeat",
     "MigrationJob",
+    "PiholeConfig",
 ]
