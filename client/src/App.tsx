@@ -46,6 +46,7 @@ const NotificationPreferencesPage = lazyWithRetry(() => import('./pages/Notifica
 const NotificationsArchivePage = lazyWithRetry(() => import('./pages/NotificationsArchivePage'));
 const UpdatePage = lazyWithRetry(() => import('./pages/UpdatePage'));
 const CloudImportPage = lazyWithRetry(() => import('./pages/CloudImportPage'));
+const PiholePage = lazyWithRetry(() => import('./pages/PiholePage'));
 
 function LoadingFallback() {
   return (
@@ -434,6 +435,18 @@ function AppRoutes() {
               </Layout>
             ) : (
               <Navigate to="/login" />
+            )
+          }
+        />
+        <Route
+          path="/pihole"
+          element={
+            isAdmin ? (
+              <Layout>
+                <PiholePage />
+              </Layout>
+            ) : (
+              <Navigate to="/" />
             )
           }
         />

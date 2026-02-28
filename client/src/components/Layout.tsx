@@ -8,7 +8,7 @@ import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Plug, CloudDownload } from 'lucide-react';
+import { Plug, CloudDownload, Shield } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import { UploadProgressBar } from './UploadProgressBar';
 
@@ -234,6 +234,13 @@ export default function Layout({ children }: LayoutProps) {
       label: t('navigation.users'),
       description: t('navigation.usersDesc'),
       icon: navIcon.users,
+      adminOnly: true
+    },
+    {
+      path: '/pihole',
+      label: 'Pi-hole DNS',
+      description: 'DNS Filtering',
+      icon: <Shield className="h-5 w-5" />,
       adminOnly: true
     },
     {

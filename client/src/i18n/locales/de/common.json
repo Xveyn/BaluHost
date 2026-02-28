@@ -103,6 +103,8 @@
     "vpnManagementDesc": "WireGuard-Konfiguration",
     "cloudImport": "Cloud-Import",
     "cloudImportDesc": "Google Drive, OneDrive, iCloud",
+    "pihole": "Pi-hole DNS",
+    "piholeDesc": "DNS-Filterung",
     "systemControl": "Systemsteuerung",
     "systemControlDesc": "Hardware, Speicher, Netzwerk & System",
     "sections": {
@@ -274,5 +276,30 @@
       "mountpoint": "Mount",
       "noSubdirs": "Keine Unterverzeichnisse"
     }
+  },
+  "pihole": {
+    "passwordRevealTitle": "Pi-hole Passwort",
+    "passwordRevealWarning": "Dieses Passwort wird nur einmal angezeigt. Kopiere es jetzt.",
+    "passwordRevealInfo": "Verwende dieses Passwort, um dich im Pi-hole Admin-Panel anzumelden.",
+    "copyPassword": "Passwort kopieren",
+    "done": "Fertig",
+    "advancedDns": "Erweiterte DNS-Einstellungen",
+    "advancedDnsDesc": "Diese Einstellungen werden als FTLCONF-Umgebungsvariablen beim Container-Deploy gesetzt. Sie sind in der Pi-hole Web-UI schreibgeschützt.",
+    "dnssec": "DNSSEC",
+    "dnssecDesc": "DNS-Antworten mittels DNSSEC-Signaturen validieren",
+    "domainNeeded": "Nicht-FQDN nicht weiterleiten",
+    "domainNeededDesc": "A- und AAAA-Anfragen für einfache Namen nicht weiterleiten",
+    "bogusPriv": "Reverse Lookups nicht weiterleiten",
+    "bogusPrivDesc": "Reverse-Lookups für private IP-Bereiche nicht weiterleiten",
+    "expandHosts": "Hostnamen erweitern",
+    "expandHostsDesc": "Domainnamen zu einfachen Hostnamen in /etc/hosts hinzufügen",
+    "domainName": "Domainname",
+    "domainNameDesc": "Lokaler Domainname für dein Netzwerk",
+    "conditionalForwarding": "Bedingte Weiterleitung",
+    "conditionalForwardingDesc": "Format: aktiviert,Netzwerk/CIDR,Router-IP,lokale-Domain (leer lassen zum Deaktivieren)",
+    "rateLimiting": "Rate-Limiting",
+    "rateLimitQueriesPer": "Anfragen pro",
+    "rateLimitSeconds": "Sekunden",
+    "rateLimitDisableHint": "Anzahl auf 0 setzen um Rate-Limiting zu deaktivieren"
   }
 }
