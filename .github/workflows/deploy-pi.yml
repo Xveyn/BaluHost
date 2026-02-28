@@ -42,6 +42,6 @@ jobs:
         with:
           deploy_key: ${{ secrets.BALUPI_DEPLOY_KEY }}
           external_repository: Xveyn/BaluPi
-          publish_branch: ${{ steps.target.outputs.branch }}
+          publish_branch: frontend
           publish_dir: client/dist-pi
           commit_message: "deploy: Pi frontend from BaluHost@${{ github.sha }}"
