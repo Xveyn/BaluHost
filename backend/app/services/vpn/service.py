@@ -20,8 +20,28 @@ class VPNService:
     VPN_NETWORK = "10.8.0.0/24"
     VPN_SERVER_IP = "10.8.0.1"
     VPN_PORT = 51820
-    VPN_DNS = "1.1.1.1"  # Cloudflare DNS
-    
+    VPN_DNS_FALLBACK = "1.1.1.1"  # Cloudflare DNS (fallback when Pi-hole is not active)
+
+    @staticmethod
+    def get_vpn_dns(db: Optional['Session'] = None) -> str:
+        """Get the DNS server to use for VPN clients.
+
+        Returns Pi-hole IP (10.8.0.1) if Pi-hole is active and configured as VPN DNS,
+        otherwise falls back to Cloudflare (1.1.1.1).
+        """
+        try:
+            from app.services.pihole.service import PiholeService
+            if db is None:
+                from app.core.database import SessionLocal
+                db = SessionLocal()
+                try:
+                    return PiholeService(db).get_vpn_dns()
+                finally:
+                    db.close()
+            return PiholeService(db).get_vpn_dns()
+        except Exception:
+            return VPNService.VPN_DNS_FALLBACK
+
     @staticmethod
     def generate_wireguard_keypair() -> tuple[str, str]:
         """
@@ -160,7 +180,7 @@ class VPNService:
         config_content = f"""[Interface]
 PrivateKey = {client_private}
 Address = {client_ip}/32
-DNS = {VPNService.VPN_DNS}
+DNS = {VPNService.get_vpn_dns(db)}
 
 [Peer]
 PublicKey = {server_config.server_public_key}
