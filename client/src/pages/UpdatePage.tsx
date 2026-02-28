@@ -394,9 +394,14 @@ export default function UpdatePage() {
                     )}
                   </div>
                   <div className="flex items-center gap-2 text-sm">
-                    <span className={getChannelInfo(checkResult.channel).color}>
-                      {t('version.channel', { channel: getChannelInfo(checkResult.channel).label })}
-                    </span>
+                    {(() => {
+                      const isPrerelease = checkResult.current_version.version.includes('-');
+                      return (
+                        <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
+                          {isPrerelease ? 'Unstable' : 'Stable'}
+                        </span>
+                      );
+                    })()}
                   </div>
                 </div>
               )}
