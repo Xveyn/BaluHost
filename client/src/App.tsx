@@ -1,7 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
 import { useState, useEffect, lazy, Suspense } from 'react';
-import SyncSettings from './components/SyncSettings';
-import PluginPage from './components/PluginPage';
 import Layout from './components/Layout';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { PluginProvider } from './contexts/PluginContext';
@@ -12,6 +10,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext';
 import { buildApiUrl } from './lib/api';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
+import { FEATURES, isDesktop } from './lib/features';
 import './App.css';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -29,24 +28,32 @@ function lazyWithRetry(importFn: () => Promise<{ default: React.ComponentType<an
   });
 }
 
+// Pages available on both desktop and Pi
 const Login = lazyWithRetry(() => import('./pages/Login'));
 const Dashboard = lazyWithRetry(() => import('./pages/Dashboard'));
-const FileManager = lazyWithRetry(() => import('./pages/FileManager'));
-const UserManagement = lazyWithRetry(() => import('./pages/UserManagement'));
 const SystemMonitor = lazyWithRetry(() => import('./pages/SystemMonitor'));
-const SchedulerDashboard = lazyWithRetry(() => import('./pages/SchedulerDashboard'));
-const ApiCenterPage = lazyWithRetry(() => import('./pages/ApiCenterPage'));
-const SharesPage = lazyWithRetry(() => import('./pages/SharesPage'));
-const SettingsPage = lazyWithRetry(() => import('./pages/SettingsPage'));
-const AdminDatabase = lazyWithRetry(() => import('./pages/AdminDatabase'));
-const DevicesPage = lazyWithRetry(() => import('./pages/DevicesPage'));
-const SystemControlPage = lazyWithRetry(() => import('./pages/SystemControlPage'));
-const PluginsPage = lazyWithRetry(() => import('./pages/PluginsPage'));
-const NotificationPreferencesPage = lazyWithRetry(() => import('./pages/NotificationPreferencesPage'));
-const NotificationsArchivePage = lazyWithRetry(() => import('./pages/NotificationsArchivePage'));
-const UpdatePage = lazyWithRetry(() => import('./pages/UpdatePage'));
-const CloudImportPage = lazyWithRetry(() => import('./pages/CloudImportPage'));
-const PiholePage = lazyWithRetry(() => import('./pages/PiholePage'));
+
+// Desktop-only pages — NOT bundled in Pi builds (tree-shaken via __DEVICE_MODE__)
+const FileManager = isDesktop ? lazyWithRetry(() => import('./pages/FileManager')) : null;
+const UserManagement = isDesktop ? lazyWithRetry(() => import('./pages/UserManagement')) : null;
+const SchedulerDashboard = isDesktop ? lazyWithRetry(() => import('./pages/SchedulerDashboard')) : null;
+const ApiCenterPage = isDesktop ? lazyWithRetry(() => import('./pages/ApiCenterPage')) : null;
+const SharesPage = isDesktop ? lazyWithRetry(() => import('./pages/SharesPage')) : null;
+const SettingsPage = isDesktop ? lazyWithRetry(() => import('./pages/SettingsPage')) : null;
+const AdminDatabase = isDesktop ? lazyWithRetry(() => import('./pages/AdminDatabase')) : null;
+const DevicesPage = isDesktop ? lazyWithRetry(() => import('./pages/DevicesPage')) : null;
+const SystemControlPage = isDesktop ? lazyWithRetry(() => import('./pages/SystemControlPage')) : null;
+const PluginsPage = isDesktop ? lazyWithRetry(() => import('./pages/PluginsPage')) : null;
+const NotificationPreferencesPage = isDesktop ? lazyWithRetry(() => import('./pages/NotificationPreferencesPage')) : null;
+const NotificationsArchivePage = isDesktop ? lazyWithRetry(() => import('./pages/NotificationsArchivePage')) : null;
+const UpdatePage = isDesktop ? lazyWithRetry(() => import('./pages/UpdatePage')) : null;
+const CloudImportPage = isDesktop ? lazyWithRetry(() => import('./pages/CloudImportPage')) : null;
+const PiholePage = isDesktop ? lazyWithRetry(() => import('./pages/PiholePage')) : null;
+const SyncSettings = isDesktop ? lazyWithRetry(() => import('./components/SyncSettings')) : null;
+const PluginPage = isDesktop ? lazyWithRetry(() => import('./components/PluginPage')) : null;
+
+// Pi-only pages — NOT bundled in desktop builds
+const PiDashboard = FEATURES.piDashboard ? lazyWithRetry(() => import('./pages/PiDashboard')) : null;
 
 function LoadingFallback() {
   return (
@@ -170,70 +177,12 @@ function AppRoutes() {
           element={
             user ? (
               <Layout>
-                <Dashboard />
+                {PiDashboard ? <PiDashboard /> : <Dashboard />}
               </Layout>
             ) : (
               <Navigate to="/login" />
             )
           }
-        />
-        <Route
-          path="/files"
-          element={
-            user ? (
-              <Layout>
-                <FileManager />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/users"
-          element={
-            isAdmin ? (
-              <Layout>
-                <UserManagement />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        <Route
-          path="/admin-db"
-          element={
-            isAdmin ? (
-              <Layout>
-                <AdminDatabase />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        {/* Redirect: /raid -> /admin/system-control?tab=raid */}
-        <Route
-          path="/raid"
-          element={<Navigate to="/admin/system-control?tab=raid" replace />}
-        />
-        <Route
-          path="/schedulers"
-          element={
-            isAdmin ? (
-              <Layout>
-                <SchedulerDashboard />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        {/* Redirect: /health -> /system?tab=health */}
-        <Route
-          path="/health"
-          element={<Navigate to="/system?tab=health" replace />}
         />
         <Route
           path="/system"
@@ -247,209 +196,37 @@ function AppRoutes() {
             )
           }
         />
-        {/* Redirect: /power -> /admin/system-control?tab=energy */}
-        <Route
-          path="/power"
-          element={<Navigate to="/admin/system-control?tab=energy" replace />}
-        />
-        {/* Redirect: /fan-control -> /admin/system-control?tab=fan */}
-        <Route
-          path="/fan-control"
-          element={<Navigate to="/admin/system-control?tab=fan" replace />}
-        />
-        {/* Redirect: /logging -> /system?tab=logs */}
-        <Route
-          path="/logging"
-          element={<Navigate to="/system?tab=logs" replace />}
-        />
-        <Route
-          path="/shares"
-          element={
-            user ? (
-              <Layout>
-                <SharesPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/settings"
-          element={
-            user ? (
-              <Layout>
-                <SettingsPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/devices"
-          element={
-            user ? (
-              <Layout>
-                <DevicesPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/admin/system-control"
-          element={
-            isAdmin ? (
-              <Layout>
-                <SystemControlPage />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        <Route
-          path="/settings/notifications"
-          element={
-            user ? (
-              <Layout>
-                <NotificationPreferencesPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/notifications"
-          element={
-            user ? (
-              <Layout>
-                <NotificationsArchivePage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/notifications/settings"
-          element={
-            user ? (
-              <Layout>
-                <NotificationPreferencesPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/sync"
-          element={
-            user ? (
-              <Layout>
-                <SyncSettings />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        {/* Redirect: /sync-prototype -> /devices?tab=desktop */}
-        <Route
-          path="/sync-prototype"
-          element={<Navigate to="/devices?tab=desktop" replace />}
-        />
-        {/* Redirect: /mobile-devices -> /devices?tab=mobile */}
-        <Route
-          path="/mobile-devices"
-          element={<Navigate to="/devices?tab=mobile" replace />}
-        />
-        {/* Redirect: /admin/backup -> /admin/system-control?tab=backup */}
-        <Route
-          path="/admin/backup"
-          element={<Navigate to="/admin/system-control?tab=backup" replace />}
-        />
-        {/* Redirect: /admin/vpn -> /admin/system-control?tab=vpn */}
-        <Route
-          path="/admin/vpn"
-          element={<Navigate to="/admin/system-control?tab=vpn" replace />}
-        />
-        <Route
-          path="/docs"
-          element={
-            user ? (
-              <Layout>
-                <ApiCenterPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/plugins"
-          element={
-            isAdmin ? (
-              <Layout>
-                <PluginsPage />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        <Route
-          path="/plugins/:pluginName/*"
-          element={
-            user ? (
-              <Layout>
-                <PluginPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/updates"
-          element={
-            isAdmin ? (
-              <Layout>
-                <UpdatePage />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
-        <Route
-          path="/cloud-import"
-          element={
-            user ? (
-              <Layout>
-                <CloudImportPage />
-              </Layout>
-            ) : (
-              <Navigate to="/login" />
-            )
-          }
-        />
-        <Route
-          path="/pihole"
-          element={
-            isAdmin ? (
-              <Layout>
-                <PiholePage />
-              </Layout>
-            ) : (
-              <Navigate to="/" />
-            )
-          }
-        />
+
+        {/* Desktop-only routes (not bundled in Pi builds) */}
+        {FileManager && <Route path="/files" element={user ? <Layout><FileManager /></Layout> : <Navigate to="/login" />} />}
+        {UserManagement && <Route path="/users" element={isAdmin ? <Layout><UserManagement /></Layout> : <Navigate to="/" />} />}
+        {AdminDatabase && <Route path="/admin-db" element={isAdmin ? <Layout><AdminDatabase /></Layout> : <Navigate to="/" />} />}
+        {SchedulerDashboard && <Route path="/schedulers" element={isAdmin ? <Layout><SchedulerDashboard /></Layout> : <Navigate to="/" />} />}
+        {SharesPage && <Route path="/shares" element={user ? <Layout><SharesPage /></Layout> : <Navigate to="/login" />} />}
+        {SettingsPage && <Route path="/settings" element={user ? <Layout><SettingsPage /></Layout> : <Navigate to="/login" />} />}
+        {DevicesPage && <Route path="/devices" element={user ? <Layout><DevicesPage /></Layout> : <Navigate to="/login" />} />}
+        {SystemControlPage && <Route path="/admin/system-control" element={isAdmin ? <Layout><SystemControlPage /></Layout> : <Navigate to="/" />} />}
+        {NotificationPreferencesPage && <Route path="/settings/notifications" element={user ? <Layout><NotificationPreferencesPage /></Layout> : <Navigate to="/login" />} />}
+        {NotificationsArchivePage && <Route path="/notifications" element={user ? <Layout><NotificationsArchivePage /></Layout> : <Navigate to="/login" />} />}
+        {NotificationPreferencesPage && <Route path="/notifications/settings" element={user ? <Layout><NotificationPreferencesPage /></Layout> : <Navigate to="/login" />} />}
+        {SyncSettings && <Route path="/sync" element={user ? <Layout><SyncSettings /></Layout> : <Navigate to="/login" />} />}
+        {ApiCenterPage && <Route path="/docs" element={user ? <Layout><ApiCenterPage /></Layout> : <Navigate to="/login" />} />}
+        {PluginsPage && <Route path="/plugins" element={isAdmin ? <Layout><PluginsPage /></Layout> : <Navigate to="/" />} />}
+        {PluginPage && <Route path="/plugins/:pluginName/*" element={user ? <Layout><PluginPage /></Layout> : <Navigate to="/login" />} />}
+        {UpdatePage && <Route path="/updates" element={isAdmin ? <Layout><UpdatePage /></Layout> : <Navigate to="/" />} />}
+        {CloudImportPage && <Route path="/cloud-import" element={user ? <Layout><CloudImportPage /></Layout> : <Navigate to="/login" />} />}
+        {PiholePage && <Route path="/pihole" element={isAdmin ? <Layout><PiholePage /></Layout> : <Navigate to="/" />} />}
+
+        {/* Desktop-only redirects */}
+        {isDesktop && <Route path="/raid" element={<Navigate to="/admin/system-control?tab=raid" replace />} />}
+        {isDesktop && <Route path="/health" element={<Navigate to="/system?tab=health" replace />} />}
+        {isDesktop && <Route path="/power" element={<Navigate to="/admin/system-control?tab=energy" replace />} />}
+        {isDesktop && <Route path="/fan-control" element={<Navigate to="/admin/system-control?tab=fan" replace />} />}
+        {isDesktop && <Route path="/logging" element={<Navigate to="/system?tab=logs" replace />} />}
+        {isDesktop && <Route path="/sync-prototype" element={<Navigate to="/devices?tab=desktop" replace />} />}
+        {isDesktop && <Route path="/mobile-devices" element={<Navigate to="/devices?tab=mobile" replace />} />}
+        {isDesktop && <Route path="/admin/backup" element={<Navigate to="/admin/system-control?tab=backup" replace />} />}
+        {isDesktop && <Route path="/admin/vpn" element={<Navigate to="/admin/system-control?tab=vpn" replace />} />}
       </Routes>
       </Suspense>
       </NotificationProvider>

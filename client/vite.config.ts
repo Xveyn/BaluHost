@@ -31,15 +31,21 @@ const isDevelopmentBranch = gitBranch === 'development' || gitBranch === 'develo
 const buildType = process.env.VITE_BUILD_TYPE || (isDevelopmentBranch ? 'dev' : 'release');
 
 // https://vite.dev/config/
-export default defineConfig({
+export default defineConfig(({ mode }) => {
+  // "pi" mode produces a stripped-down build for the BaluPi companion device
+  const deviceMode = mode === 'pi' ? 'pi' : 'desktop';
+
+  return {
   plugins: [react()],
   define: {
     '__BUILD_TYPE__': JSON.stringify(buildType),
     '__GIT_BRANCH__': JSON.stringify(gitBranch),
     '__GIT_COMMIT__': JSON.stringify(gitCommit),
+    '__DEVICE_MODE__': JSON.stringify(deviceMode),
   },
   build: {
-    chunkSizeWarningLimit: 600,
+    outDir: deviceMode === 'pi' ? 'dist-pi' : 'dist',
+    chunkSizeWarningLimit: deviceMode === 'pi' ? 300 : 600,
     rollupOptions: {
       output: {
         manualChunks: {
@@ -93,4 +99,5 @@ export default defineConfig({
       },
     },
   },
+  };
 })
