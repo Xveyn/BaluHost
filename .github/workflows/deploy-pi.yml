@@ -1,0 +1,47 @@
+name: Deploy Pi Frontend
+
+on:
+  push:
+    branches: [main, development]
+    paths:
+      - 'client/**'
+      - '.github/workflows/deploy-pi.yml'
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: client/package-lock.json
+
+      - name: Install & Build Pi variant
+        working-directory: client
+        run: |
+          npm ci
+          npm run build:pi
+
+      - name: Determine target branch
+        id: target
+        env:
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          if [ "$REF_NAME" = "main" ]; then
+            echo "branch=main" >> "$GITHUB_OUTPUT"
+          else
+            echo "branch=dev" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push to BaluPi
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          deploy_key: ${{ secrets.BALUPI_DEPLOY_KEY }}
+          external_repository: Xveyn/BaluPi
+          publish_branch: ${{ steps.target.outputs.branch }}
+          publish_dir: client/dist-pi
+          commit_message: "deploy: Pi frontend from BaluHost@${{ github.sha }}"

@@ -27,6 +27,7 @@ backend/webdav-certs/
 # Node/React
 client/node_modules/
 client/dist/
+client/dist-pi/
 client/.vite/
 
 # Logs and misc
