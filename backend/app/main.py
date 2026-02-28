@@ -712,9 +712,30 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     except Exception as e:
         logger.warning(f"Plugin system could not initialize: {e}")
 
+    # Notify BaluPi companion device that NAS is online
+    if IS_PRIMARY_WORKER and settings.balupi_enabled:
+        try:
+            from app.services.balupi_handshake import notify_balupi_startup
+            await notify_balupi_startup()
+        except Exception as exc:
+            logger.warning("BaluPi startup notification failed: %s", exc)
+
     try:
         yield
     finally:
+        # Notify BaluPi companion device that NAS is going offline
+        if not skip_init and IS_PRIMARY_WORKER and settings.balupi_enabled:
+            try:
+                from app.services.snapshot_export import create_shutdown_snapshot
+                from app.services.balupi_handshake import notify_balupi_shutdown, close_client
+                from app.core.database import SessionLocal
+                with SessionLocal() as snap_db:
+                    snapshot = create_shutdown_snapshot(snap_db)
+                await notify_balupi_shutdown(snapshot)
+                await close_client()
+            except Exception as exc:
+                logger.warning("BaluPi shutdown notification failed: %s", exc)
+
         # Shutdown active benchmarks and kill orphan fio processes
         try:
             if not skip_init:

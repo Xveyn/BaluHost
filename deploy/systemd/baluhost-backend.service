@@ -24,6 +24,12 @@ ExecStart=/home/sven/projects/BaluHost/backend/.venv/bin/uvicorn app.main:app \
     --log-level info \
     --no-access-log
 
+# Fallback: notify BaluPi before SIGTERM (idempotent, harmless if Pi is offline or disabled).
+# The primary notification happens inside the FastAPI lifespan shutdown handler.
+# This curl fires before SIGTERM so it's race-free even if the app doesn't shut down cleanly.
+# Timeout 5s to avoid blocking systemd. Failure is silently ignored (-sf).
+ExecStop=/bin/sh -c 'curl -sf -m 5 -X POST http://${BALUPI_URL:-localhost:9999}/api/handshake/nas-going-offline -H "Content-Type: application/json" -d "{}" 2>/dev/null || true'
+
 # Restart policy
 Restart=always
 RestartSec=10s

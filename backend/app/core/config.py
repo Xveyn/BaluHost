@@ -173,6 +173,11 @@ class Settings(BaseSettings):
     email_from_address: str = "baluhost@example.com"  # Sender email address
     email_from_name: str = "BaluHost"  # Sender display name
 
+    # BaluPi integration (Raspberry Pi companion device)
+    balupi_enabled: bool = False  # Enable BaluPi handshake/notification integration
+    balupi_url: str = ""  # BaluPi backend URL, e.g. "http://192.168.178.20:8000"
+    balupi_handshake_secret: str = ""  # HMAC-SHA256 shared secret (32+ chars in prod)
+
     # WebSocket configuration
     ws_heartbeat_interval: int = 30  # WebSocket ping interval in seconds
 
@@ -250,6 +255,20 @@ class Settings(BaseSettings):
                 )
             if len(v) < 32:
                 raise ValueError("token_secret must be at least 32 characters for security")
+        return v
+
+    @field_validator("balupi_handshake_secret")
+    @classmethod
+    def validate_balupi_secret(cls, v: str, info) -> str:
+        """Ensure handshake secret is strong enough when BaluPi is enabled in production."""
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+        # Only validate in prod when BaluPi is actually enabled
+        # (we can't check balupi_enabled here since validators run per-field,
+        #  but the _apply_dev_defaults model_validator catches the combination)
+        if not (is_dev or is_test) and v and len(v) < 32:
+            raise ValueError("balupi_handshake_secret must be at least 32 characters for security")
         return v
 
     @field_validator("cors_origins", mode="before")
