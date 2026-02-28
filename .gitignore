@@ -97,3 +97,4 @@ test_*.env.production
 image.png
 tools/
 /backend/env.production
+balupi-deploy*
