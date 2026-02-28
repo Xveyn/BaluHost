@@ -7,6 +7,52 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.12.0] - 2026-03-01
+
+### BaluPi Groundwork, Pi-hole DNS & Performance
+
+Stable release laying the groundwork for BaluPi companion device support (handshake protocol,
+snapshot export, Pi frontend build pipeline), adding Pi-hole DNS integration for VPN, and
+several backend/frontend improvements.
+
+### Added
+
+- **BaluPi handshake groundwork** — HMAC-SHA256 signed notification service and snapshot export for future Pi integration
+- **Pi build pipeline** — Separate frontend build target for Raspberry Pi with tree-shaken desktop-only pages
+- **PiDashboard page** — View-only dashboard skeleton for Pi (NAS status, energy, storage, Pi health)
+- **Pi-hole DNS integration** — Backend service + frontend page for managing Pi-hole from BaluHost
+- **VPN DNS via Pi-hole** — Use Pi-hole as DNS server for VPN clients when active
+- **VCL tracking mode** — Automatic/manual mode with per-file tracking rules
+- **VCL ownership reconciliation** — Admin tool to scan and fix version ownership mismatches
+- **Dedicated monitoring worker** — Offloads CPU/RAM/network sampling to separate process in production
+- **GitHub Actions workflow** — Auto-deploy Pi frontend to BaluPi on release
+
+### Changed
+
+- **Chunked upload** — Increased chunk size to 32MB and concurrent writes to 16
+- **Vendor chunk splitting** — Better browser caching via separate vendor bundles
+- **Update channel** — Renamed "beta" to "unstable" for clarity
+
+### Fixed
+
+- **UpdatePage** — Show actual version stability instead of update channel name
+- **Plugin loading** — Add token dependency to prevent stale closure
+- **Monitoring API** — SHM fallback to serve fresh data in multi-worker production
+- **Scheduler timeline** — Improved mobile responsiveness
+- **Fan control** — Use round() instead of int() for PWM-percent conversion
+- **Prerelease tags** — Mark unstable and rc tags as prerelease in GitHub Actions
+
+### Refactored
+
+- Split UserManagement.tsx into hook + 5 sub-components
+- Split SyncSettings.tsx into hook + 5 sub-components
+- Split DeviceManagement.tsx into hook + 6 sub-components
+- Split scheduler_service.py into scheduler/ sub-package with 3 modules
+- Split benchmark_service.py into benchmark/ sub-package with 7 modules
+- Split smart.py into smart/ sub-package with 7 modules
+
+---
+
 ## [1.11.0-unstable] - 2026-02-26
 
 ### VCL Tracking, Monitoring Worker & Frontend Refactoring
