@@ -287,3 +287,122 @@ export async function getFailoverStatus(): Promise<FailoverStatus> {
   const { data } = await apiClient.get('/api/pihole/failover-status');
   return data;
 }
+
+// ── Stored Queries (PostgreSQL Analytics) ───────────────────────────
+
+export interface StoredQueryEntry {
+  id: number;
+  timestamp: string;
+  domain: string;
+  client: string;
+  query_type: string;
+  status: string;
+  reply_type: string | null;
+  response_time_ms: number | null;
+}
+
+export interface StoredQueryResponse {
+  queries: StoredQueryEntry[];
+  total: number;
+  page: number;
+  page_size: number;
+}
+
+export interface StoredStatsResponse {
+  total_queries: number;
+  blocked_queries: number;
+  cached_queries: number;
+  forwarded_queries: number;
+  unique_domains: number;
+  unique_clients: number;
+  avg_response_time_ms: number | null;
+  block_rate: number;
+  period: string;
+}
+
+export interface StoredDomainEntry {
+  domain: string;
+  count: number;
+}
+
+export interface StoredClientEntry {
+  client: string;
+  count: number;
+}
+
+export interface HourlyCountEntry {
+  hour: string;
+  total_queries: number;
+  blocked_queries: number;
+  cached_queries: number;
+  forwarded_queries: number;
+}
+
+export interface StoredHistoryResponse {
+  history: HourlyCountEntry[];
+  period: string;
+}
+
+export interface QueryCollectorStatus {
+  running: boolean;
+  is_enabled: boolean;
+  last_poll_at: string | null;
+  total_queries_stored: number;
+  last_error: string | null;
+  last_error_at: string | null;
+  poll_interval_seconds: number;
+  retention_days: number;
+}
+
+export type Period = '24h' | '7d' | '30d';
+
+export async function getStoredQueries(params: {
+  page?: number;
+  page_size?: number;
+  domain?: string;
+  client?: string;
+  status?: string;
+  period?: Period;
+}): Promise<StoredQueryResponse> {
+  const { data } = await apiClient.get('/api/pihole/stored-queries', { params });
+  return data;
+}
+
+export async function getStoredStats(period: Period = '24h'): Promise<StoredStatsResponse> {
+  const { data } = await apiClient.get('/api/pihole/stored-stats', { params: { period } });
+  return data;
+}
+
+export async function getStoredTopDomains(count = 10, period: Period = '24h'): Promise<{ top_domains: StoredDomainEntry[]; period: string }> {
+  const { data } = await apiClient.get('/api/pihole/stored-top-domains', { params: { count, period } });
+  return data;
+}
+
+export async function getStoredTopBlocked(count = 10, period: Period = '24h'): Promise<{ top_blocked: StoredDomainEntry[]; period: string }> {
+  const { data } = await apiClient.get('/api/pihole/stored-top-blocked', { params: { count, period } });
+  return data;
+}
+
+export async function getStoredTopClients(count = 10, period: Period = '24h'): Promise<{ top_clients: StoredClientEntry[]; period: string }> {
+  const { data } = await apiClient.get('/api/pihole/stored-top-clients', { params: { count, period } });
+  return data;
+}
+
+export async function getStoredHistory(period: Period = '24h'): Promise<StoredHistoryResponse> {
+  const { data } = await apiClient.get('/api/pihole/stored-history', { params: { period } });
+  return data;
+}
+
+export async function getCollectorStatus(): Promise<QueryCollectorStatus> {
+  const { data } = await apiClient.get('/api/pihole/query-collector/status');
+  return data;
+}
+
+export async function updateCollectorConfig(config: {
+  is_enabled?: boolean;
+  poll_interval_seconds?: number;
+  retention_days?: number;
+}): Promise<QueryCollectorStatus> {
+  const { data } = await apiClient.put('/api/pihole/query-collector/config', config);
+  return data;
+}
