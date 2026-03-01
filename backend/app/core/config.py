@@ -37,6 +37,9 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Refresh token TTL (long)
     privileged_roles: list[str] = ["admin"]
     
+    # Registration control
+    registration_enabled: bool = False  # Set False in production to require admin-created accounts (currently in Prod)
+
     # Local-only access enforcement (Option B security)
     enforce_local_only: bool = False  # Set True to restrict sensitive endpoints to localhost
     allow_public_profile_list: bool = True  # Allow unauthenticated profile list for login screen
@@ -269,6 +272,26 @@ class Settings(BaseSettings):
         #  but the _apply_dev_defaults model_validator catches the combination)
         if not (is_dev or is_test) and v and len(v) < 32:
             raise ValueError("balupi_handshake_secret must be at least 32 characters for security")
+        return v
+
+    @field_validator("admin_password")
+    @classmethod
+    def validate_admin_password(cls, v: str, info) -> str:
+        """Ensure admin_password is not using default value in production."""
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+
+        if not (is_dev or is_test):
+            if v == "DevMode2024":
+                raise ValueError(
+                    "ADMIN_PASSWORD must be changed from default 'DevMode2024' for production. "
+                    "Set ADMIN_PASSWORD environment variable."
+                )
+            if len(v) < 12:
+                raise ValueError(
+                    "ADMIN_PASSWORD must be at least 12 characters in production."
+                )
         return v
 
     @field_validator("cors_origins", mode="before")
