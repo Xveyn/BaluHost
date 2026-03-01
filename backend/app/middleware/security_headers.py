@@ -21,13 +21,22 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
 
     async def dispatch(self, request: Request, call_next) -> Response:
         response = await call_next(request)
-        
+
         # Content Security Policy - Prevents inline scripts and external script injection
-        # policy: default-src 'self' - only allow resources from same origin
+        # In dev mode, allow 'unsafe-inline' and 'unsafe-eval' for Vite HMR.
+        # In production, only 'self' is permitted for script-src to prevent XSS.
+        # style-src keeps 'unsafe-inline' in both modes because Tailwind CSS injects
+        # styles at runtime (removing it would break the UI in production builds).
+        if settings.is_dev_mode:
+            script_src = "'self' 'unsafe-inline' 'unsafe-eval'"
+        else:
+            script_src = "'self'"
+        style_src = "'self' 'unsafe-inline'"
+
         response.headers["Content-Security-Policy"] = (
             "default-src 'self'; "
-            "script-src 'self' 'unsafe-inline' 'unsafe-eval'; "  # Vite dev server needs eval
-            "style-src 'self' 'unsafe-inline'; "
+            f"script-src {script_src}; "
+            f"style-src {style_src}; "
             "img-src 'self' data: https:; "
             "font-src 'self' data:; "
             "connect-src 'self' https:; "
