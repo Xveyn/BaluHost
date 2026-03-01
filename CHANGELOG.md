@@ -41,6 +41,8 @@ several backend/frontend improvements.
 - **Scheduler timeline** — Improved mobile responsiveness
 - **Fan control** — Use round() instead of int() for PWM-percent conversion
 - **Prerelease tags** — Mark unstable and rc tags as prerelease in GitHub Actions
+- **E2E tests** — Fix StrictMode auth race condition causing navigation redirect; fix mock data schemas and missing mock routes
+- **Release workflow** — Handle existing releases on tag force-push instead of failing with 422
 
 ### Refactored
 
