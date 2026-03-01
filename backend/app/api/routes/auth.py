@@ -18,6 +18,7 @@ from app.services import auth as auth_service
 from app.services import users as user_service
 from app.services import totp_service
 from app.models.user import User as UserModel
+from app.core.config import settings
 from app.services.audit_logger_db import get_audit_logger_db
 from app.plugins.emit import emit_hook
 
@@ -370,6 +371,12 @@ async def regenerate_backup_codes(
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 @limiter.limit(get_limit("auth_register"))
 async def register(payload: RegisterRequest, request: Request, response: Response, db: Session = Depends(get_db)) -> TokenResponse:
+    if not settings.registration_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Public registration is disabled. Contact an administrator.",
+        )
+
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
