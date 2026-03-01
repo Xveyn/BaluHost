@@ -37,13 +37,21 @@ jobs:
             echo "flag=" >> "$GITHUB_OUTPUT"
           fi
 
-      - name: Create GitHub Release
+      - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAG: ${{ github.ref_name }}
           PRERELEASE_FLAG: ${{ steps.prerelease.outputs.flag }}
         run: |
-          gh release create "$TAG" \
-            --title "$TAG" \
-            --notes-file /tmp/release-notes.md \
-            $PRERELEASE_FLAG
+          if gh release view "$TAG" &>/dev/null; then
+            echo "Release $TAG already exists, updating..."
+            gh release edit "$TAG" \
+              --title "$TAG" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE_FLAG
+          else
+            gh release create "$TAG" \
+              --title "$TAG" \
+              --notes-file /tmp/release-notes.md \
+              $PRERELEASE_FLAG
+          fi
