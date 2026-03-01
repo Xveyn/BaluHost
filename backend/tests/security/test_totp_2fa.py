@@ -181,7 +181,7 @@ class TestTOTPService:
 
     def test_encryption_roundtrip(self, db_session):
         """Secret is encrypted at rest and can be decrypted for verification."""
-        from app.services.vpn.encryption import VPNEncryption
+        from app.services.totp_service import _totp_decrypt
 
         user = self._create_admin(db_session)
         setup = totp_service.generate_setup(user)
@@ -192,6 +192,6 @@ class TestTOTPService:
         db_session.refresh(user)
         # The stored value should be encrypted (not plain text)
         assert user.totp_secret_encrypted != secret
-        # Decrypting should give back the original secret
-        decrypted = VPNEncryption.decrypt_key(user.totp_secret_encrypted)
+        # Decrypting via the TOTP helper should give back the original secret
+        decrypted = _totp_decrypt(user.totp_secret_encrypted)
         assert decrypted == secret

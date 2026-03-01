@@ -14,10 +14,10 @@ from typing import Optional
 
 import pyotp
 import qrcode
+from cryptography.fernet import Fernet
 from sqlalchemy.orm import Session
 
 from app.models.user import User
-from app.services.vpn.encryption import VPNEncryption
 import logging
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,28 @@ logger = logging.getLogger(__name__)
 BACKUP_CODE_COUNT = 10
 BACKUP_CODE_LENGTH = 8
 ISSUER_NAME = "BaluHost"
+
+
+def _get_totp_fernet() -> Fernet:
+    """Get Fernet instance for TOTP encryption, using dedicated key or VPN key fallback."""
+    from app.core.config import settings
+    key = settings.totp_encryption_key or settings.vpn_encryption_key
+    if not key:
+        raise ValueError(
+            "No encryption key configured for TOTP "
+            "(set TOTP_ENCRYPTION_KEY or VPN_ENCRYPTION_KEY)"
+        )
+    return Fernet(key.encode() if isinstance(key, str) else key)
+
+
+def _totp_encrypt(plaintext: str) -> str:
+    """Encrypt a plain-text string for TOTP storage."""
+    return _get_totp_fernet().encrypt(plaintext.encode()).decode()
+
+
+def _totp_decrypt(ciphertext: str) -> str:
+    """Decrypt a TOTP-stored ciphertext."""
+    return _get_totp_fernet().decrypt(ciphertext.encode()).decode()
 
 
 def generate_setup(user: User) -> dict:
@@ -86,8 +108,7 @@ def verify_and_enable(db: Session, user_id: int, secret: str, code: str) -> list
         raise ValueError("User not found")
 
     # Encrypt and store secret
-    encrypted_secret = VPNEncryption.encrypt_key(secret)
-    user.totp_secret_encrypted = encrypted_secret
+    user.totp_secret_encrypted = _totp_encrypt(secret)
     user.totp_enabled = True
     user.totp_enabled_at = datetime.now(timezone.utc)
 
@@ -120,7 +141,7 @@ def verify_code(db: Session, user_id: int, code: str) -> bool:
     if not user.totp_enabled or not user.totp_secret_encrypted:
         raise ValueError("2FA is not enabled for this user")
 
-    secret = VPNEncryption.decrypt_key(user.totp_secret_encrypted)
+    secret = _totp_decrypt(user.totp_secret_encrypted)
     totp = pyotp.TOTP(secret)
     return totp.verify(code, valid_window=1)
 
@@ -147,7 +168,7 @@ def verify_backup_code(db: Session, user_id: int, code: str) -> bool:
         raise ValueError("2FA is not enabled or no backup codes available")
 
     # Decrypt backup codes
-    decrypted_json = VPNEncryption.decrypt_key(user.totp_backup_codes_encrypted)
+    decrypted_json = _totp_decrypt(user.totp_backup_codes_encrypted)
     hashed_codes: list[str] = json.loads(decrypted_json)
 
     # Hash the provided code and check
@@ -161,7 +182,7 @@ def verify_backup_code(db: Session, user_id: int, code: str) -> bool:
 
     # Re-encrypt and store
     updated_json = json.dumps(hashed_codes)
-    user.totp_backup_codes_encrypted = VPNEncryption.encrypt_key(updated_json)
+    user.totp_backup_codes_encrypted = _totp_encrypt(updated_json)
     db.commit()
 
     logger.info("Backup code consumed for user %d, %d remaining", user_id, len(hashed_codes))
@@ -232,7 +253,7 @@ def get_backup_codes_remaining(db: Session, user_id: int) -> int:
         return 0
 
     try:
-        decrypted_json = VPNEncryption.decrypt_key(user.totp_backup_codes_encrypted)
+        decrypted_json = _totp_decrypt(user.totp_backup_codes_encrypted)
         hashed_codes = json.loads(decrypted_json)
         return len(hashed_codes)
     except Exception:
@@ -251,4 +272,4 @@ def _store_backup_codes(user: User, plain_codes: list[str]) -> None:
     """Hash and encrypt backup codes, then store on user."""
     hashed = [hashlib.sha256(code.encode()).hexdigest() for code in plain_codes]
     json_str = json.dumps(hashed)
-    user.totp_backup_codes_encrypted = VPNEncryption.encrypt_key(json_str)
+    user.totp_backup_codes_encrypted = _totp_encrypt(json_str)

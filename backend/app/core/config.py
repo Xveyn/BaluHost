@@ -59,6 +59,9 @@ class Settings(BaseSettings):
 
     # VPN Configuration
     vpn_encryption_key: str = ""  # Fernet key for encrypting VPN private/preshared keys
+
+    # TOTP Configuration
+    totp_encryption_key: str = ""  # Dedicated key for TOTP secrets. Falls back to VPN_ENCRYPTION_KEY if not set.
     
     # RAID backend and safety options
     # Force using the development (simulated) RAID backend even on Linux.
