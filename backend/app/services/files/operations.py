@@ -51,6 +51,8 @@ from app.services.files.access import (  # noqa: F401
     get_share_permissions,
     get_owner,
     ensure_can_view,
+    are_paths_shared_with_user_bulk,
+    get_share_permissions_bulk,
 )
 
 # ── Re-exports from storage (backward compatibility) ─────────────────────────
@@ -116,7 +118,12 @@ def _schedule_vcl_version(
 # ── CRUD operations ──────────────────────────────────────────────────────────
 
 def list_directory(relative_path: str = "", user: UserPublic | None = None, db: Optional[Session] = None) -> Iterable[FileItem]:
-    """List files and directories with permission filtering."""
+    """List files and directories with permission filtering.
+
+    Uses batch DB queries to avoid the N+1 problem: instead of issuing 3-4
+    individual queries per filesystem entry, all metadata, ownership, and share
+    data is pre-fetched in 2-4 queries total regardless of directory size.
+    """
     if user is None:
         raise PermissionDeniedError("Authentication required")
 
@@ -130,53 +137,114 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         if not (db and is_path_shared_with_user(db, relative_path, user.id)):
             raise PermissionDeniedError("Operation not permitted")
 
-    items: list[FileItem] = []
+    # ── Pass 1: collect filesystem entries and their relative paths ────────
+    entries: list[tuple[Path, str, bool]] = []  # (entry, relative_path, is_dir)
     for entry in target.iterdir():
         # Hide system directories from non-admin users
         if path_utils.is_system_directory(entry.name) and user.role != "admin":
             continue
         relative_entry = str(entry.relative_to(path_utils.ROOT_DIR).as_posix())
-        entry_owner = get_owner(relative_entry, db=db)
+        entries.append((entry, relative_entry, entry.is_dir()))
+
+    if not entries:
+        return []
+
+    all_paths = [rel for _, rel, _ in entries]
+
+    # ── Batch fetch: metadata + owners (1 query) ──────────────────────────
+    metadata_map: dict[str, "FileMetadata"] = {}
+    owner_map: dict[str, str | None] = {}
+    if db:
+        metadata_map = file_metadata_db.get_metadata_bulk(all_paths, db=db)
+        # Build owner_map from the bulk metadata (no extra query needed)
+        owner_map = {
+            path: str(meta.owner_id) for path, meta in metadata_map.items()
+        }
+    else:
+        # Without a db session, owners are always None
+        pass
+
+    # ── Batch fetch: share visibility + share permissions (1-2 queries) ───
+    # Determine which entries need a share-based visibility check:
+    # those not in shared dir and not viewable by the current user.
+    needs_share_check: list[str] = []
+    for _, rel, _ in entries:
+        if not path_utils.is_in_shared_dir(rel) and not can_view(user, owner_map.get(rel)):
+            needs_share_check.append(rel)
+
+    shared_entries: set[str] = set()
+    if db and needs_share_check:
+        shared_entries = are_paths_shared_with_user_bulk(db, needs_share_check, user.id)
+
+    # Determine which visible entries need share permissions attached:
+    # non-owner, non-shared-dir entries that have an owner.
+    needs_permissions: list[str] = []
+    for _, rel, _ in entries:
+        entry_owner = owner_map.get(rel)
+        if not entry_owner:
+            continue
+        if path_utils.is_in_shared_dir(rel):
+            continue
+        if can_view(user, entry_owner):
+            continue
+        # Entry is visible only if shared — it needs permission info
+        if rel in shared_entries:
+            needs_permissions.append(rel)
+
+    share_perms_map: dict[str, object] = {}
+    if db and needs_permissions:
+        share_perms_map = get_share_permissions_bulk(db, needs_permissions, user.id)
+
+    # ── Ensure metadata exists for directories (side-effect preservation) ─
+    # Directories without metadata get auto-created via ensure_metadata.
+    # We only need to call this for dirs NOT already in metadata_map.
+    if db:
+        dir_paths_needing_ensure = [
+            rel for _, rel, is_dir in entries if is_dir and rel not in metadata_map
+        ]
+        for rel in dir_paths_needing_ensure:
+            meta = file_metadata_db.ensure_metadata(rel, requesting_user_id=user.id, db=db)
+            if meta:
+                metadata_map[rel] = meta
+                owner_map[rel] = str(meta.owner_id)
+
+    # ── Pass 2: build FileItem list using pre-fetched data ────────────────
+    items: list[FileItem] = []
+    for entry, relative_entry, is_dir in entries:
+        entry_owner = owner_map.get(relative_entry)
+
+        # Permission check: skip entries the user cannot see
         if not path_utils.is_in_shared_dir(relative_entry) and not can_view(user, entry_owner):
-            # Fallback: show entry if it (or a parent) is shared with user
-            if not (db and is_path_shared_with_user(db, relative_entry, user.id)):
+            if relative_entry not in shared_entries:
                 continue
 
         stats = entry.stat()
 
         # Determine mime type for files
         mime_type = None
-        if entry.is_file():
+        if not is_dir:
             mime_type, _ = mimetypes.guess_type(entry.name)
 
-        # Get file_id from metadata if exists
+        # Get file_id from pre-fetched metadata
         file_id = None
         if db:
-            from app.services import file_metadata_db
-            if entry.is_file():
-                metadata = file_metadata_db.get_metadata(relative_entry, db=db)
-                if metadata:
-                    file_id = metadata.id
-            elif entry.is_dir():
-                metadata = file_metadata_db.ensure_metadata(
-                    relative_entry, requesting_user_id=user.id, db=db
-                )
-                if metadata:
-                    file_id = metadata.id
+            meta = metadata_map.get(relative_entry)
+            if meta:
+                file_id = meta.id
 
         item = FileItem(
             name=entry.name,
             path=relative_entry,
-            size=get_folder_size(entry) if entry.is_dir() else stats.st_size,
-            type="directory" if entry.is_dir() else "file",
+            size=get_folder_size(entry) if is_dir else stats.st_size,
+            type="directory" if is_dir else "file",
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
             mime_type=mime_type,
             file_id=file_id,
         )
         # Attach share permissions for non-owner shared files
-        if user and db and entry_owner and not can_view(user, entry_owner) and not path_utils.is_in_shared_dir(relative_entry):
-            share = get_share_permissions(db, relative_entry, user.id)
+        if db and entry_owner and not can_view(user, entry_owner) and not path_utils.is_in_shared_dir(relative_entry):
+            share = share_perms_map.get(relative_entry)
             if share:
                 item.can_read = share.can_read
                 item.can_write = share.can_write

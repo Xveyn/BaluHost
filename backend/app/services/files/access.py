@@ -104,6 +104,118 @@ def get_share_permissions(db: Session, relative_path: str, user_id: int):
     return db.execute(stmt).scalars().first()
 
 
+def are_paths_shared_with_user_bulk(
+    db: Session,
+    relative_paths: list[str],
+    user_id: int,
+) -> set[str]:
+    """Check which paths (or their ancestors) are shared with a user.
+
+    Returns the subset of *relative_paths* that have an active share granting
+    ``can_read`` to *user_id*.  This replaces N individual calls to
+    ``is_path_shared_with_user`` with a single query.
+    """
+    if db is None or not relative_paths:
+        return set()
+
+    from app.models.file_share import FileShare
+    from app.models.file_metadata import FileMetadata
+
+    now = datetime.now(timezone.utc)
+
+    # Build a union of all candidate ancestor paths for every entry.
+    # We also need to know which *original* path each candidate belongs to so
+    # that we can map a match back to the entry.
+    candidate_to_entries: dict[str, list[str]] = {}
+    for rp in relative_paths:
+        for anc in _ancestor_paths(rp):
+            candidate_to_entries.setdefault(anc, []).append(rp)
+
+    all_candidates = list(candidate_to_entries.keys())
+    if not all_candidates:
+        return set()
+
+    # Single query: find which candidate paths have an active share
+    stmt = (
+        select(FileMetadata.path)
+        .join(FileShare, FileShare.file_id == FileMetadata.id)
+        .where(
+            FileShare.shared_with_user_id == user_id,
+            FileShare.owner_id != user_id,
+            FileShare.can_read.is_(True),
+            FileMetadata.path.in_(all_candidates),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+    )
+    matched_candidates = {row[0] for row in db.execute(stmt).all()}
+
+    # Map matched candidates back to original entry paths
+    shared_entries: set[str] = set()
+    for mc in matched_candidates:
+        for entry_path in candidate_to_entries.get(mc, []):
+            shared_entries.add(entry_path)
+
+    return shared_entries
+
+
+def get_share_permissions_bulk(
+    db: Session,
+    relative_paths: list[str],
+    user_id: int,
+) -> dict[str, "FileShare"]:
+    """Return FileShare objects for multiple paths in bulk.
+
+    For each path in *relative_paths*, checks the path itself and all ancestor
+    directories for an active share.  Returns a dict mapping relative_path to
+    the first matching FileShare, or omits the key if no share exists.
+    """
+    if db is None or not relative_paths:
+        return {}
+
+    from app.models.file_share import FileShare
+    from app.models.file_metadata import FileMetadata
+
+    now = datetime.now(timezone.utc)
+
+    # Build candidate → entry-path mapping (same pattern as bulk shared check)
+    candidate_to_entries: dict[str, list[str]] = {}
+    for rp in relative_paths:
+        for anc in _ancestor_paths(rp):
+            candidate_to_entries.setdefault(anc, []).append(rp)
+
+    all_candidates = list(candidate_to_entries.keys())
+    if not all_candidates:
+        return {}
+
+    stmt = (
+        select(FileShare, FileMetadata.path)
+        .join(FileMetadata, FileShare.file_id == FileMetadata.id)
+        .where(
+            FileShare.shared_with_user_id == user_id,
+            FileShare.owner_id != user_id,
+            FileShare.can_read.is_(True),
+            FileMetadata.path.in_(all_candidates),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+    )
+    rows = db.execute(stmt).all()
+
+    # Map: for each entry path, pick the first share found
+    result: dict[str, FileShare] = {}
+    for share_obj, matched_path in rows:
+        for entry_path in candidate_to_entries.get(matched_path, []):
+            if entry_path not in result:
+                result[entry_path] = share_obj
+
+    return result
+
+
 # ── Ownership / permission enforcement ────────────────────────────────────────
 
 def get_owner(relative_path: str, db: Optional[Session] = None) -> str | None:

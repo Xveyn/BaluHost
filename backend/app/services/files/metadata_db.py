@@ -275,6 +275,62 @@ def list_children(parent_path: str, db: Optional[Session] = None) -> List[FileMe
             db.close()
 
 
+def get_metadata_bulk(paths: list[str], db: Optional[Session] = None) -> dict[str, FileMetadata]:
+    """Fetch metadata for multiple paths in a single query.
+
+    Args:
+        paths: List of relative paths to fetch metadata for.
+        db: Database session (optional, creates new if None).
+
+    Returns:
+        Dict mapping normalised path to FileMetadata object.
+    """
+    if not paths:
+        return {}
+    should_close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        normalized = [_normalize_path(p) for p in paths]
+        results = (
+            db.query(FileMetadata)
+            .filter(FileMetadata.path.in_(normalized))
+            .all()
+        )
+        return {r.path: r for r in results}
+    finally:
+        if should_close:
+            db.close()
+
+
+def get_owners_bulk(paths: list[str], db: Optional[Session] = None) -> dict[str, int | None]:
+    """Fetch owner IDs for multiple paths in a single query.
+
+    Args:
+        paths: List of relative paths.
+        db: Database session (optional, creates new if None).
+
+    Returns:
+        Dict mapping normalised path to owner_id (or None if not found).
+    """
+    if not paths:
+        return {}
+    should_close = db is None
+    if db is None:
+        db = SessionLocal()
+    try:
+        normalized = [_normalize_path(p) for p in paths]
+        results = (
+            db.query(FileMetadata.path, FileMetadata.owner_id)
+            .filter(FileMetadata.path.in_(normalized))
+            .all()
+        )
+        return {r.path: r.owner_id for r in results}
+    finally:
+        if should_close:
+            db.close()
+
+
 def get_owner_id(relative_path: str, db: Optional[Session] = None) -> Optional[int]:
     """
     Get owner ID for a file/directory.
