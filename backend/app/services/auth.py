@@ -15,6 +15,10 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+# Precomputed dummy bcrypt hash used to normalize timing when a user is not found.
+# This prevents username enumeration via response-time side-channel attacks.
+_DUMMY_HASH = "$2b$12$LJ3m4ys3QS0pB/XfManNqeJShDW5F1.2JEOVBc6IeDPSq2G7z/5Oq"
+
 
 class InvalidTokenError(Exception):
     """Raised when a token cannot be decoded or validated."""
@@ -24,6 +28,10 @@ def authenticate_user(username: str, password: str, db: Optional[Session] = None
     """Authenticate user with username and password."""
     user = user_service.get_user_by_username(username, db=db)
     if not user:
+        # Perform a dummy password comparison to prevent timing-based user enumeration.
+        # Without this, an attacker could distinguish "user not found" from "wrong password"
+        # by measuring response time (bcrypt is intentionally slow).
+        user_service.verify_password(password, _DUMMY_HASH)
         return None
     if not user_service.verify_password(password, user.hashed_password):
         return None
