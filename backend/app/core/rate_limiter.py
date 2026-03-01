@@ -180,6 +180,8 @@ def get_limit(endpoint_type: str) -> str:
         strict_for_tests = {
             "auth_login",
             "auth_register",
+            "auth_password_change",
+            "auth_refresh",
             "mobile_register",
             "share_create",
         }

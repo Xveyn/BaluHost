@@ -23,15 +23,17 @@ class TestAuditLogger:
         """Create audit logger with logging enabled."""
         with patch('app.services.audit_logger.settings') as mock_settings:
             mock_settings.is_dev_mode = False
+            mock_settings.audit_logging_enabled = True
             mock_settings.nas_temp_path = str(temp_audit_dir)
             logger = AuditLogger()
             yield logger
-    
+
     @pytest.fixture
     def audit_logger_disabled(self, temp_audit_dir):
         """Create audit logger with logging disabled (dev mode)."""
         with patch('app.services.audit_logger.settings') as mock_settings:
             mock_settings.is_dev_mode = True
+            mock_settings.audit_logging_enabled = False
             mock_settings.nas_temp_path = str(temp_audit_dir)
             logger = AuditLogger()
             yield logger

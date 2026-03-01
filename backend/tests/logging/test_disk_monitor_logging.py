@@ -126,21 +126,27 @@ class TestDiskMonitorLogging:
     
     def test_start_monitoring_logs_failure(self):
         """Test that start_monitoring logs failures."""
-        with patch('app.services.disk_monitor.get_audit_logger') as mock_audit:
-            mock_logger = MagicMock()
-            mock_audit.return_value = mock_logger
-            
-            # Mock asyncio.get_event_loop to raise exception
-            with patch('asyncio.get_event_loop', side_effect=RuntimeError("No event loop")):
-                disk_monitor.start_monitoring()
-                
-                # Verify audit log was called for failure
-                mock_logger.log_disk_monitor.assert_called_once()
-                call_kwargs = mock_logger.log_disk_monitor.call_args[1]
-                
-                assert call_kwargs["action"] == "start_failed"
-                assert call_kwargs["success"] is False
-                assert "error_message" in call_kwargs
+        # Reset global state so start_monitoring doesn't bail out early
+        old_task = disk_monitor._monitor_task
+        disk_monitor._monitor_task = None
+        try:
+            with patch('app.services.disk_monitor.get_audit_logger') as mock_audit:
+                mock_logger = MagicMock()
+                mock_audit.return_value = mock_logger
+
+                # Mock asyncio.get_event_loop to raise exception
+                with patch('asyncio.get_event_loop', side_effect=RuntimeError("No event loop")):
+                    disk_monitor.start_monitoring()
+
+                    # Verify audit log was called for failure
+                    mock_logger.log_disk_monitor.assert_called_once()
+                    call_kwargs = mock_logger.log_disk_monitor.call_args[1]
+
+                    assert call_kwargs["action"] == "start_failed"
+                    assert call_kwargs["success"] is False
+                    assert "error_message" in call_kwargs
+        finally:
+            disk_monitor._monitor_task = old_task
     
     def test_stop_monitoring_logs_manual_stop(self):
         """Test that manually stopping monitoring creates audit log entry."""

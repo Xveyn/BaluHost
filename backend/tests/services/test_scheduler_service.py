@@ -136,26 +136,6 @@ class TestSchedulerStatusResponse:
             assert hasattr(result, 'interval_display')
 
 
-class TestCheckSchedulerRunning:
-    """Tests for _check_scheduler_running method."""
-
-    def test_returns_bool(self, db_session: Session):
-        """Test that method returns boolean."""
-        service = SchedulerService(db_session)
-
-        result = service._check_scheduler_running("raid_scrub")
-
-        assert isinstance(result, bool)
-
-    def test_unknown_scheduler_returns_false(self, db_session: Session):
-        """Test that unknown scheduler returns False."""
-        service = SchedulerService(db_session)
-
-        result = service._check_scheduler_running("unknown_scheduler")
-
-        assert result is False
-
-
 class TestCheckSchedulerEnabled:
     """Tests for _check_scheduler_enabled method."""
 

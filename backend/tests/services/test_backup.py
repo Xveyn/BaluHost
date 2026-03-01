@@ -42,7 +42,7 @@ def test_create_backup_success(backup_service: BackupService, temp_backup_dir: P
                     test_file = storage_path / "test.txt"
                     test_file.write_text("test content")
                     
-                    with patch('app.services.backup.settings') as mock_settings:
+                    with patch('app.services.backup.service.settings') as mock_settings:
                         mock_settings.nas_storage_path = str(storage_path)
                         mock_settings.nas_backup_max_count = 10
                         mock_settings.nas_backup_retention_days = 30
@@ -192,7 +192,7 @@ def test_backup_cleanup_old_backups(backup_service: BackupService, temp_backup_d
     from datetime import datetime, timedelta
     
     # Mock settings
-    with patch('app.services.backup.settings') as mock_settings:
+    with patch('app.services.backup.service.settings') as mock_settings:
         mock_settings.nas_backup_max_count = 3
         mock_settings.nas_backup_retention_days = 7
         

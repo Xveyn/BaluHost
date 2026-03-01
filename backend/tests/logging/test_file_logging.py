@@ -41,7 +41,7 @@ def temp_storage():
     """Create temporary storage directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
         with patch('app.services.files.ROOT_DIR', Path(tmpdir)):
-            with patch('app.services.files.settings') as mock_settings:
+            with patch('app.services.files.operations.settings') as mock_settings:
                 mock_settings.nas_storage_path = tmpdir
                 mock_settings.nas_quota_bytes = None
                 yield Path(tmpdir)

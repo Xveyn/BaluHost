@@ -546,18 +546,28 @@ class TestSyncPerformance:
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
         
+        # Ensure user home directory exists
+        username = test_user_credentials["username"]
+        await async_client.post(
+            "/api/files/folder",
+            json={"path": "", "name": "batch_test"},
+            headers=headers
+        )
+
         # Measure batch upload time
         num_files = 20
         start_time = time.time()
-        
+
         for i in range(num_files):
             response = await async_client.post(
                 "/api/files/upload",
                 files={"files": (f"batch{i}.txt", b"batch test content", "text/plain")},
-                data={"path": f"/batch_test/batch{i}.txt"},
+                data={"path": "/batch_test"},
                 headers=headers
             )
-            assert response.status_code == status.HTTP_200_OK
+            assert response.status_code == status.HTTP_200_OK, (
+                f"Upload failed with {response.status_code}: {response.text}"
+            )
         
         end_time = time.time()
         elapsed = end_time - start_time

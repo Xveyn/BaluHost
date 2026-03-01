@@ -61,24 +61,26 @@ def user_with_file(
     """Create a user with a file in their home directory."""
     # Patch ROOT_DIR
     monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
-    
+
     # Create user's home directory
     home_dir = storage_root / regular_user.username
     home_dir.mkdir(parents=True, exist_ok=True)
-    
-    # Create home dir metadata
-    home_meta = file_metadata_db.create_metadata(
-        relative_path=regular_user.username,
-        name=regular_user.username,
-        owner_id=regular_user.id,
-        is_directory=True,
-        db=db_session,
-    )
-    
+
+    # Create home dir metadata (skip if already created by user service)
+    home_meta = file_metadata_db.get_metadata(regular_user.username, db=db_session)
+    if not home_meta:
+        home_meta = file_metadata_db.create_metadata(
+            relative_path=regular_user.username,
+            name=regular_user.username,
+            owner_id=regular_user.id,
+            is_directory=True,
+            db=db_session,
+        )
+
     # Create a test file
     test_file = home_dir / "testfile.txt"
     test_file.write_text("Hello World")
-    
+
     # Create file metadata
     file_meta = file_metadata_db.create_metadata(
         relative_path=f"{regular_user.username}/testfile.txt",
@@ -88,7 +90,7 @@ def user_with_file(
         is_directory=False,
         db=db_session,
     )
-    
+
     return regular_user, file_meta, test_file
 
 
@@ -106,16 +108,17 @@ class TestTransferOwnership:
         """Test transferring a file to a new owner moves it physically."""
         monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
         old_owner, file_meta, old_path = user_with_file
-        
+
         # Create second user's home directory
         (storage_root / second_user.username).mkdir(parents=True, exist_ok=True)
-        file_metadata_db.create_metadata(
-            relative_path=second_user.username,
-            name=second_user.username,
-            owner_id=second_user.id,
-            is_directory=True,
-            db=db_session,
-        )
+        if not file_metadata_db.get_metadata(second_user.username, db=db_session):
+            file_metadata_db.create_metadata(
+                relative_path=second_user.username,
+                name=second_user.username,
+                owner_id=second_user.id,
+                is_directory=True,
+                db=db_session,
+            )
         
         result = ownership.transfer_ownership(
             path=file_meta.path,
@@ -210,16 +213,17 @@ class TestTransferOwnership:
         """Test that admin can transfer anyone's file."""
         monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
         old_owner, file_meta, old_path = user_with_file
-        
+
         # Create second user's home directory
         (storage_root / second_user.username).mkdir(parents=True, exist_ok=True)
-        file_metadata_db.create_metadata(
-            relative_path=second_user.username,
-            name=second_user.username,
-            owner_id=second_user.id,
-            is_directory=True,
-            db=db_session,
-        )
+        if not file_metadata_db.get_metadata(second_user.username, db=db_session):
+            file_metadata_db.create_metadata(
+                relative_path=second_user.username,
+                name=second_user.username,
+                owner_id=second_user.id,
+                is_directory=True,
+                db=db_session,
+            )
         
         # third_user as admin transfers old_owner's file
         result = ownership.transfer_ownership(
@@ -244,19 +248,20 @@ class TestTransferOwnership:
         """Test conflict resolution with rename strategy."""
         monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
         old_owner, file_meta, old_path = user_with_file
-        
+
         # Create second user's home directory with a file of the same name
         second_home = storage_root / second_user.username
         second_home.mkdir(parents=True, exist_ok=True)
         (second_home / "testfile.txt").write_text("Existing file")
-        
-        file_metadata_db.create_metadata(
-            relative_path=second_user.username,
-            name=second_user.username,
-            owner_id=second_user.id,
-            is_directory=True,
-            db=db_session,
-        )
+
+        if not file_metadata_db.get_metadata(second_user.username, db=db_session):
+            file_metadata_db.create_metadata(
+                relative_path=second_user.username,
+                name=second_user.username,
+                owner_id=second_user.id,
+                is_directory=True,
+                db=db_session,
+            )
         
         result = ownership.transfer_ownership(
             path=file_meta.path,
@@ -284,19 +289,20 @@ class TestTransferOwnership:
         """Test conflict resolution with skip strategy."""
         monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
         old_owner, file_meta, old_path = user_with_file
-        
+
         # Create second user's home directory with a file of the same name
         second_home = storage_root / second_user.username
         second_home.mkdir(parents=True, exist_ok=True)
         (second_home / "testfile.txt").write_text("Existing file")
-        
-        file_metadata_db.create_metadata(
-            relative_path=second_user.username,
-            name=second_user.username,
-            owner_id=second_user.id,
-            is_directory=True,
-            db=db_session,
-        )
+
+        if not file_metadata_db.get_metadata(second_user.username, db=db_session):
+            file_metadata_db.create_metadata(
+                relative_path=second_user.username,
+                name=second_user.username,
+                owner_id=second_user.id,
+                is_directory=True,
+                db=db_session,
+            )
         
         result = ownership.transfer_ownership(
             path=file_meta.path,
@@ -326,18 +332,19 @@ class TestTransferOwnership:
     ):
         """Test that home directories cannot be transferred."""
         monkeypatch.setattr(ownership, "ROOT_DIR", storage_root)
-        
+
         # Create user's home directory metadata
         home_dir = storage_root / regular_user.username
         home_dir.mkdir(parents=True, exist_ok=True)
-        
-        file_metadata_db.create_metadata(
-            relative_path=regular_user.username,
-            name=regular_user.username,
-            owner_id=regular_user.id,
-            is_directory=True,
-            db=db_session,
-        )
+
+        if not file_metadata_db.get_metadata(regular_user.username, db=db_session):
+            file_metadata_db.create_metadata(
+                relative_path=regular_user.username,
+                name=regular_user.username,
+                owner_id=regular_user.id,
+                is_directory=True,
+                db=db_session,
+            )
         
         result = ownership.transfer_ownership(
             path=regular_user.username,

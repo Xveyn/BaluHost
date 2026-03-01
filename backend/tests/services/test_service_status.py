@@ -55,7 +55,7 @@ class TestServerUptime:
         # creation time (shared across workers).  In tests this is the pytest
         # process, so the uptime may already be several seconds.  We just
         # verify it returns a non-negative, reasonable value.
-        assert 0 <= uptime < 120.0
+        assert 0 <= uptime < 600.0  # CI pytest process may run for several minutes
 
     def test_get_server_uptime_increases(self):
         """Test that uptime increases over time."""
