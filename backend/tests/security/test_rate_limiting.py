@@ -40,7 +40,7 @@ class TestRateLimiting:
                 json={
                     "username": f"newuser{i}",
                     "email": f"user{i}@test.com",
-                    "password": "testpass123"
+                    "password": "TestPass123!"
                 }
             )
             # Either succeeds (201) or rate limited (429)
@@ -54,7 +54,7 @@ class TestRateLimiting:
             json={
                 "username": "newuser4",
                 "email": "user4@test.com",
-                "password": "testpass123"
+                "password": "TestPass123!"
             }
         )
         assert response.status_code == 429

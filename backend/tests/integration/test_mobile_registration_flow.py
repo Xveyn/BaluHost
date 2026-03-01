@@ -31,7 +31,7 @@ def test_mobile_registration_flow():
     db = SessionLocal()
 
     # Create a test user
-    user_payload = UserCreate(username='test_register', email='test@example.com', password='testpass')
+    user_payload = UserCreate(username='test_register', email='test@example.com', password='TestPass123!')
     user = create_user(user_payload, db=db)
 
     # Create a one-time registration token (simulate /api/mobile/token/generate)

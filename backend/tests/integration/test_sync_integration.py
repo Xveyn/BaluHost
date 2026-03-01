@@ -111,7 +111,7 @@ def test_user_credentials():
     """Test user credentials."""
     return {
         "username": "sync_test_user",
-        "password": "sync_test_pass123",
+        "password": "TestPass123!",
         "email": "sync_test@example.com"
     }
 

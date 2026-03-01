@@ -96,20 +96,20 @@ def user1_token(client: TestClient) -> str:
     # Register user via API to ensure it's created in the test DB used by the client
     resp = client.post(
         f"{settings.api_prefix}/auth/register",
-        json={"username": "user1", "email": "user1@example.com", "password": "password1"},
+        json={"username": "user1", "email": "user1@example.com", "password": "TestPass123!"},
     )
     assert resp.status_code in (200, 201)
-    return _login(client, "user1", "password1")
+    return _login(client, "user1", "TestPass123!")
 
 
 @pytest.fixture
 def user2_token(client: TestClient) -> str:
     resp = client.post(
         f"{settings.api_prefix}/auth/register",
-        json={"username": "user2", "email": "user2@example.com", "password": "password2"},
+        json={"username": "user2", "email": "user2@example.com", "password": "TestPass123!"},
     )
     assert resp.status_code in (200, 201)
-    return _login(client, "user2", "password2")
+    return _login(client, "user2", "TestPass123!")
 
 
 def test_owner_can_delete_own_file(client: TestClient, user1_token: str) -> None:

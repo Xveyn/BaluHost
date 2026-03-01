@@ -17,7 +17,7 @@ def client_with_user(db_session, client):
     # Login first
     response = client.post(
         f"{settings.api_prefix}/auth/login",
-        json={"username": "testuser", "password": "testpass123"}
+        json={"username": "testuser", "password": "Testpass123!"}
     )
     assert response.status_code == 200
     token = response.json()["access_token"]
