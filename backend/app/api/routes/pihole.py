@@ -415,6 +415,12 @@ async def deploy_container(
         action="pihole_container_deployed",
         details={"image_tag": body.image_tag},
     )
+    # Re-register .local DNS records after fresh container deploy
+    if result.get("success"):
+        try:
+            await service.ensure_local_dns_records()
+        except Exception:
+            pass  # Logged inside the method
     return ContainerDeployResponse(**result)
 
 

@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import socket
 import time
 from collections.abc import Awaitable
 from datetime import datetime, timezone
@@ -592,6 +593,81 @@ class PiholeService:
             "failover_active": config.failover_active,
             "remote_configured": bool(config.remote_pihole_url),
         }
+
+    # ── Local DNS Auto-Registration ──────────────────────────────────
+
+    async def ensure_local_dns_records(self) -> None:
+        """Register .local DNS records in Pi-hole for LAN access.
+
+        Ensures that baluhost.local and baluhole.local resolve to the NAS IP.
+        Idempotent — skips records that already exist with the correct IP.
+        Errors are logged but not propagated (Pi-hole may not be ready yet).
+        """
+        config = self.get_config()
+        if config.mode == "disabled":
+            return
+
+        # Determine NAS LAN IP (same method as NetworkDiscoveryService)
+        try:
+            s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            s.connect(("8.8.8.8", 80))
+            nas_ip = s.getsockname()[0]
+            s.close()
+        except Exception as exc:
+            logger.warning("Cannot determine local IP for DNS registration: %s", exc)
+            return
+
+        # Records to ensure
+        required_records = {
+            f"{settings.mdns_hostname}.local": nas_ip,
+            "baluhole.local": nas_ip,
+        }
+
+        try:
+            backend = self._get_backend()
+            if not hasattr(backend, "_api"):
+                logger.debug("Pi-hole backend has no API client — DNS registration skipped (dev mode)")
+                return
+
+            api = backend._api
+
+            # Fetch existing local DNS records
+            existing_data = await api.get_local_dns()
+            # Pi-hole v6 returns {"config": {"dns": {"hosts": [...]}}}
+            hosts_raw = existing_data
+            if "config" in hosts_raw:
+                hosts_raw = hosts_raw["config"]
+            if "dns" in hosts_raw:
+                hosts_raw = hosts_raw["dns"]
+            hosts_list = hosts_raw.get("hosts", [])
+
+            # Build lookup: hostname → ip from existing records
+            # Each entry is "ip hostname" string
+            existing: dict[str, str] = {}
+            for entry in hosts_list:
+                if isinstance(entry, str):
+                    parts = entry.split(None, 1)
+                    if len(parts) == 2:
+                        existing[parts[1]] = parts[0]
+
+            # Create or update records
+            registered = []
+            for hostname, ip in required_records.items():
+                if existing.get(hostname) == ip:
+                    continue  # Already correct
+                if hostname in existing:
+                    # IP changed — remove old record first
+                    await api.remove_local_dns(hostname, existing[hostname])
+                await api.add_local_dns(hostname, ip)
+                registered.append(hostname)
+
+            if registered:
+                logger.info("Registered local DNS records in Pi-hole: %s → %s", registered, nas_ip)
+            else:
+                logger.debug("Local DNS records already up-to-date in Pi-hole")
+
+        except Exception as exc:
+            logger.warning("Failed to register local DNS records in Pi-hole: %s", exc)
 
 
 async def _safe_close(backend: Any) -> None:

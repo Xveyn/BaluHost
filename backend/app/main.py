@@ -247,6 +247,17 @@ async def _pihole_health_loop() -> None:
     # Wait a bit on startup before first check
     await asyncio.sleep(10)
 
+    # Register .local DNS records on first run (best-effort)
+    try:
+        db = SessionLocal()
+        try:
+            svc = PiholeService(db)
+            await svc.ensure_local_dns_records()
+        finally:
+            db.close()
+    except Exception as e:
+        logger.warning("Pi-hole DNS registration on startup failed: %s", e)
+
     while True:
         interval = 30
         try:
