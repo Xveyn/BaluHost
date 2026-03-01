@@ -24,10 +24,13 @@ from app.plugins.emit import emit_hook
 
 import time as _time
 
+from cachetools import TTLCache
+
 router = APIRouter()
 
 # Brute-force detection: IP -> list of failure timestamps
-_failed_login_attempts: dict[str, list[float]] = {}
+# TTLCache auto-evicts IPs after 30 minutes of inactivity, bounding memory usage.
+_failed_login_attempts: TTLCache = TTLCache(maxsize=10000, ttl=1800)
 _BRUTE_FORCE_WINDOW = 300  # 5 minutes
 _BRUTE_FORCE_THRESHOLD = 5  # failures before alert
 
