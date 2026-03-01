@@ -231,12 +231,16 @@ export const MOCK_TAPO_POWER_HISTORY = {
 export const MOCK_MOUNTPOINTS = {
   mountpoints: [
     {
+      id: 'md0',
       path: '/mnt/storage',
       name: 'Primary Storage',
+      type: 'raid',
+      status: 'optimal',
       is_default: true,
-      total_bytes: 500 * 1024 ** 3,
+      size_bytes: 500 * 1024 ** 3,
       used_bytes: 120 * 1024 ** 3,
       available_bytes: 380 * 1024 ** 3,
+      raid_level: 'raid1',
     },
   ],
 };
@@ -256,10 +260,16 @@ export const MOCK_FILE_LIST_DOCUMENTS = {
   ],
 };
 
-export const MOCK_USERS_LIST = [
-  { id: 1, username: 'admin', role: 'admin' },
-  { id: 2, username: 'testuser', role: 'user' },
-];
+export const MOCK_USERS_LIST = {
+  users: [
+    { id: 1, username: 'admin', role: 'admin' },
+    { id: 2, username: 'testuser', role: 'user' },
+  ],
+  total: 2,
+  active: 2,
+  inactive: 0,
+  admins: 1,
+};
 
 export const MOCK_SMART_MODE = {
   mode: 'active',
@@ -269,4 +279,19 @@ export const MOCK_SMART_MODE = {
 export const MOCK_VCL_QUOTA = {
   used_bytes: 0,
   limit_bytes: 1024 * 1024 * 100,
+  usage_percent: 0,
+  current_usage_bytes: 0,
+  max_size_bytes: 1024 * 1024 * 100,
+};
+
+export const MOCK_VCL_TRACKING = {
+  mode: 'automatic',
+  rules: [],
+};
+
+export const MOCK_SCHEDULER_HISTORY = {
+  executions: [],
+  total: 0,
+  page: 1,
+  page_size: 20,
 };

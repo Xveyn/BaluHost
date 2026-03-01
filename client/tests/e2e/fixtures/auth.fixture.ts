@@ -17,6 +17,7 @@ import {
   MOCK_SMART_MODE,
   MOCK_RAID_STATUS,
   MOCK_SCHEDULERS,
+  MOCK_SCHEDULER_HISTORY,
   MOCK_VERSION,
   MOCK_FAN_STATUS,
   MOCK_POWER_STATUS,
@@ -33,6 +34,7 @@ import {
   MOCK_FILE_LIST_DOCUMENTS,
   MOCK_USERS_LIST,
   MOCK_VCL_QUOTA,
+  MOCK_VCL_TRACKING,
 } from './mock-data';
 
 const FAKE_TOKEN = 'fake-jwt-token-for-e2e';
@@ -92,6 +94,8 @@ async function mockDashboardRoutes(context: BrowserContext) {
   await context.route('**/api/system/smart/status', (r) => r.fulfill(json(MOCK_SMART_STATUS)));
   await context.route('**/api/system/smart/mode', (r) => r.fulfill(json(MOCK_SMART_MODE)));
   await context.route('**/api/system/raid/status', (r) => r.fulfill(json(MOCK_RAID_STATUS)));
+  // Scheduler history must be registered before the catch-all /api/schedulers route
+  await context.route('**/api/schedulers/history/**', (r) => r.fulfill(json(MOCK_SCHEDULER_HISTORY)));
   await context.route('**/api/schedulers', (r) => r.fulfill(json(MOCK_SCHEDULERS)));
   await context.route('**/api/admin/debug', (r) => r.fulfill(json(MOCK_ADMIN_DEBUG)));
   await context.route('**/api/fans/status', (r) => r.fulfill(json(MOCK_FAN_STATUS)));
@@ -100,6 +104,9 @@ async function mockDashboardRoutes(context: BrowserContext) {
   await context.route('**/api/devices/all', (r) => r.fulfill(json(MOCK_DEVICES_ALL)));
   await context.route('**/api/logging/file-access**', (r) => r.fulfill(json(MOCK_FILE_ACCESS_LOGS)));
   await context.route('**/api/tapo/power/history**', (r) => r.fulfill(json(MOCK_TAPO_POWER_HISTORY)));
+  // Notifications (prevent proxy errors from unmocked routes)
+  await context.route('**/api/notifications/**', (r) => r.fulfill(json({ notifications: [], total: 0 })));
+  await context.route('**/api/notifications?**', (r) => r.fulfill(json({ notifications: [], total: 0 })));
 }
 
 /**
@@ -117,8 +124,10 @@ export async function mockFileManagerRoutes(context: BrowserContext) {
       await route.fulfill(json(MOCK_FILE_LIST));
     }
   });
+  await context.route('**/api/users/**', (r) => r.fulfill(json(MOCK_USERS_LIST)));
   await context.route('**/api/users', (r) => r.fulfill(json(MOCK_USERS_LIST)));
-  await context.route('**/api/files/vcl/quota', (r) => r.fulfill(json(MOCK_VCL_QUOTA)));
+  await context.route('**/api/vcl/quota', (r) => r.fulfill(json(MOCK_VCL_QUOTA)));
+  await context.route('**/api/vcl/tracking**', (r) => r.fulfill(json(MOCK_VCL_TRACKING)));
 }
 
 export const test = base.extend<Fixtures>({

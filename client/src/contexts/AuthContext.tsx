@@ -25,6 +25,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       return;
     }
 
+    let cancelled = false;
     const controller = new AbortController();
     setToken(storedToken);
     fetch(buildApiUrl('/api/auth/me'), {
@@ -36,6 +37,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         return res.json();
       })
       .then((data) => {
+        if (cancelled) return;
         const userData = data.user || data;
         if (userData?.username) {
           setUser(userData);
@@ -44,14 +46,20 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
       })
       .catch((err) => {
+        if (cancelled) return;
         if (err instanceof DOMException && err.name === 'AbortError') return;
         localStorage.removeItem('token');
         setToken(null);
         setUser(null);
       })
-      .finally(() => setLoading(false));
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
 
-    return () => controller.abort();
+    return () => {
+      cancelled = true;
+      controller.abort();
+    };
   }, []);
 
   const login = (userData: User, newToken: string) => {
