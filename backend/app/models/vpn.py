@@ -12,7 +12,7 @@ class VPNConfig(Base):
     __tablename__ = "vpn_config"
     
     id = Column(Integer, primary_key=True, index=True)
-    server_private_key = Column(String(64), nullable=False)
+    server_private_key = Column(String(255), nullable=False)  # Fernet-encrypted if VPN_ENCRYPTION_KEY set
     server_public_key = Column(String(64), nullable=False, unique=True)
     server_ip = Column(String(15), nullable=False)  # e.g., "10.8.0.1"
     server_port = Column(Integer, nullable=False, default=51820)
@@ -29,7 +29,7 @@ class VPNClient(Base):
     user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     device_name = Column(String(100), nullable=False)
     public_key = Column(String(64), nullable=False, unique=True)
-    preshared_key = Column(String(64), nullable=False)
+    preshared_key = Column(String(255), nullable=False)  # Fernet-encrypted if VPN_ENCRYPTION_KEY set
     assigned_ip = Column(String(15), nullable=False, unique=True)  # e.g., "10.8.0.2"
     is_active = Column(Boolean, default=True, nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)

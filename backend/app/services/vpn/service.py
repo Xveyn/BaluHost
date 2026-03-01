@@ -1,5 +1,6 @@
 """VPN service for WireGuard configuration and management."""
 
+import logging
 import secrets
 import base64
 import subprocess
@@ -12,15 +13,59 @@ from app.core.config import settings
 from app.models.vpn import VPNClient, VPNConfig
 from app.schemas.vpn import VPNClientCreate, VPNConfigResponse
 
+logger = logging.getLogger(__name__)
+
 
 class VPNService:
     """Service for managing WireGuard VPN configurations."""
-    
+
     # WireGuard default settings
     VPN_NETWORK = "10.8.0.0/24"
     VPN_SERVER_IP = "10.8.0.1"
     VPN_PORT = 51820
     VPN_DNS_FALLBACK = "1.1.1.1"  # Cloudflare DNS (fallback when Pi-hole is not active)
+
+    # ------------------------------------------------------------------
+    # Conditional encryption helpers
+    # ------------------------------------------------------------------
+    # VPN_ENCRYPTION_KEY may not be set (e.g. dev mode).  When absent we
+    # fall back to storing plaintext and log a warning.
+
+    @staticmethod
+    def _encryption_available() -> bool:
+        """Return True if VPN_ENCRYPTION_KEY is configured."""
+        return bool(settings.vpn_encryption_key)
+
+    @staticmethod
+    def _encrypt_key(plaintext: str) -> str:
+        """Encrypt *plaintext* if VPN_ENCRYPTION_KEY is available, else return as-is."""
+        if not VPNService._encryption_available():
+            logger.warning(
+                "VPN_ENCRYPTION_KEY not set — storing VPN key in plaintext. "
+                "Set VPN_ENCRYPTION_KEY in .env for production."
+            )
+            return plaintext
+        from app.services.vpn.encryption import VPNEncryption
+        return VPNEncryption.encrypt_key(plaintext)
+
+    @staticmethod
+    def _decrypt_key(stored: str) -> str:
+        """Decrypt *stored* value.  Handles both encrypted and legacy plaintext values."""
+        if not stored:
+            return stored
+        if not VPNService._encryption_available():
+            # No encryption key — assume the value is plaintext.
+            return stored
+        from app.services.vpn.encryption import VPNEncryption
+        try:
+            return VPNEncryption.decrypt_key(stored)
+        except Exception:
+            # Value may be legacy plaintext that was never encrypted.
+            # Return it as-is so existing configs keep working.
+            logger.debug(
+                "Could not decrypt VPN key — assuming legacy plaintext value."
+            )
+            return stored
 
     @staticmethod
     def get_vpn_dns(db: Optional['Session'] = None) -> str:
@@ -151,7 +196,7 @@ class VPNService:
         if not server_config:
             server_private, server_public = VPNService.generate_wireguard_keypair()
             server_config = VPNConfig(
-                server_private_key=server_private,
+                server_private_key=VPNService._encrypt_key(server_private),
                 server_public_key=server_public,
                 server_ip=VPNService.VPN_SERVER_IP,
                 server_port=VPNService.VPN_PORT,
@@ -160,13 +205,13 @@ class VPNService:
             db.add(server_config)
             db.commit()
             db.refresh(server_config)
-        
-        # Create client entry
+
+        # Create client entry — encrypt preshared key before storing
         client = VPNClient(
             user_id=user_id,
             device_name=device_name,
             public_key=client_public,
-            preshared_key=preshared_key,
+            preshared_key=VPNService._encrypt_key(preshared_key),
             assigned_ip=client_ip,
             is_active=True,
             created_at=datetime.now(timezone.utc),
@@ -175,8 +220,8 @@ class VPNService:
         db.add(client)
         db.commit()
         db.refresh(client)
-        
-        # Generate WireGuard config file
+
+        # Generate WireGuard config file — use plaintext keys (not the encrypted DB values)
         config_content = f"""[Interface]
 PrivateKey = {client_private}
 Address = {client_ip}/32
