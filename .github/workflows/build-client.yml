@@ -40,6 +40,10 @@ jobs:
         env:
           VITE_BUILD_TYPE: ${{ env.VITE_BUILD_TYPE }}
 
+      - name: Run unit tests
+        working-directory: client
+        run: npx vitest run
+
       - name: Upload build artifacts
         uses: actions/upload-artifact@v4
         with:
