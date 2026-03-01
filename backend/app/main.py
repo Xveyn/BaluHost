@@ -940,8 +940,8 @@ def create_app() -> FastAPI:
         CORSMiddleware,
         allow_origins=[str(origin) for origin in settings.cors_origins],
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type", "X-Device-ID", "X-Requested-With", "Accept", "Origin", "X-Chunk-Index"],
     )
 
     app.include_router(api_router, prefix=settings.api_prefix)
