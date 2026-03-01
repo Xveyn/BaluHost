@@ -482,7 +482,7 @@ async def get_mountpoints(
 
 @router.get("/list", response_model=FileListResponse)
 @user_limiter.limit(get_limit("file_list"))
-async def list_files(
+def list_files(
     request: Request,
     response: Response,
     path: str = "",
