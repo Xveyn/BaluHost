@@ -63,8 +63,8 @@ async def get_notifications(
 
     unread_count = service.get_unread_count(db, current_user.id)
 
-    # Get total count for pagination
-    total_notifications = service.get_user_notifications(
+    # Get total count for pagination using SQL COUNT(*)
+    total = service.count_user_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
@@ -73,15 +73,13 @@ async def get_notifications(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
-        limit=10000,
-        offset=0,
     )
 
     return NotificationListResponse(
         notifications=[
             NotificationResponse.from_db(n) for n in notifications
         ],
-        total=len(total_notifications),
+        total=total,
         unread_count=unread_count,
         page=page,
         page_size=page_size,
@@ -100,19 +98,14 @@ async def get_unread_count(
     Also returns breakdown by category.
     """
     service = get_notification_service()
-    total = service.get_unread_count(db, current_user.id)
 
-    # Get breakdown by category
-    categories = ["raid", "smart", "backup", "scheduler", "system", "security", "sync", "vpn"]
-    by_category = {}
-    for cat in categories:
-        count = service.get_unread_count(db, current_user.id, category=cat)
-        if count > 0:
-            by_category[cat] = count
+    # Single GROUP BY query instead of 9 separate queries
+    counts = service.get_unread_counts(db, current_user.id)
+    total = counts.pop("total", 0)
 
     return UnreadCountResponse(
         count=total,
-        by_category=by_category if by_category else None,
+        by_category=counts if counts else None,
     )
 
 

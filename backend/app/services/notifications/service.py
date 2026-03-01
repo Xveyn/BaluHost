@@ -9,7 +9,7 @@ from datetime import datetime, time, timezone
 from typing import Optional, Any
 
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, and_
+from sqlalchemy import desc, and_, func, or_
 
 from app.models.notification import (
     Notification,
@@ -327,7 +327,6 @@ class NotificationService:
 
         # Exclude snoozed notifications from default queries
         if hasattr(Notification, "snoozed_until"):
-            from sqlalchemy import or_
             query = query.filter(
                 or_(
                     Notification.snoozed_until.is_(None),
@@ -358,6 +357,109 @@ class NotificationService:
 
         return query.all()
 
+    def count_user_notifications(
+        self,
+        db: Session,
+        user_id: int,
+        unread_only: bool = False,
+        include_dismissed: bool = False,
+        category: Optional[str] = None,
+        notification_type: Optional[str] = None,
+        created_after: Optional[datetime] = None,
+        created_before: Optional[datetime] = None,
+    ) -> int:
+        """Count notifications for a user using SQL COUNT(*).
+
+        Applies the same filters as get_user_notifications but returns
+        only the count instead of loading all rows into memory.
+
+        Args:
+            db: Database session
+            user_id: User ID
+            unread_only: Only count unread notifications
+            include_dismissed: Include dismissed notifications
+            category: Filter by category
+            notification_type: Filter by type (info, warning, critical)
+            created_after: Only count notifications created after this time
+            created_before: Only count notifications created before this time
+
+        Returns:
+            Integer count of matching notifications
+        """
+        query = db.query(func.count(Notification.id)).filter(
+            Notification.user_id == user_id
+        )
+
+        # Exclude snoozed notifications from default queries
+        if hasattr(Notification, "snoozed_until"):
+            query = query.filter(
+                or_(
+                    Notification.snoozed_until.is_(None),
+                    Notification.snoozed_until <= datetime.now(timezone.utc),
+                )
+            )
+
+        if unread_only:
+            query = query.filter(Notification.is_read == False)
+
+        if not include_dismissed:
+            query = query.filter(Notification.is_dismissed == False)
+
+        if category:
+            query = query.filter(Notification.category == category)
+
+        if notification_type:
+            query = query.filter(Notification.notification_type == notification_type)
+
+        if created_after:
+            query = query.filter(Notification.created_at >= created_after)
+
+        if created_before:
+            query = query.filter(Notification.created_at <= created_before)
+
+        return query.scalar() or 0
+
+    def get_unread_counts(
+        self,
+        db: Session,
+        user_id: int,
+    ) -> dict[str, int]:
+        """Get unread notification counts grouped by category in a single query.
+
+        Uses SQL GROUP BY instead of issuing one query per category.
+
+        Args:
+            db: Database session
+            user_id: User ID
+
+        Returns:
+            Dict mapping category names to their unread counts,
+            plus a "total" key with the sum.
+        """
+        query = db.query(
+            Notification.category,
+            func.count(Notification.id),
+        ).filter(
+            Notification.user_id == user_id,
+            Notification.is_read == False,
+            Notification.is_dismissed == False,
+        )
+
+        # Exclude snoozed notifications
+        if hasattr(Notification, "snoozed_until"):
+            query = query.filter(
+                or_(
+                    Notification.snoozed_until.is_(None),
+                    Notification.snoozed_until <= datetime.now(timezone.utc),
+                )
+            )
+
+        results = query.group_by(Notification.category).all()
+
+        counts = {cat: count for cat, count in results}
+        counts["total"] = sum(counts.values())
+        return counts
+
     def get_unread_count(
         self,
         db: Session,
@@ -382,7 +484,6 @@ class NotificationService:
 
         # Exclude snoozed notifications
         if hasattr(Notification, "snoozed_until"):
-            from sqlalchemy import or_
             query = query.filter(
                 or_(
                     Notification.snoozed_until.is_(None),
