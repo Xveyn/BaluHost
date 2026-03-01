@@ -7,6 +7,7 @@ from app.core.rate_limiter import limiter, user_limiter, get_limit
 from app.core import security
 from app.schemas.auth import (
     LoginRequest, RegisterRequest, TokenResponse,
+    ChangePasswordRequest, RefreshTokenRequest,
     TwoFactorRequiredResponse, TwoFactorVerifyRequest,
     TwoFactorSetupResponse, TwoFactorVerifySetupRequest,
     TwoFactorDisableRequest, TwoFactorBackupCodesResponse,
@@ -427,7 +428,7 @@ async def read_current_user(request: Request, response: Response, current_user: 
 @router.post("/change-password")
 @limiter.limit(get_limit("auth_password_change"))  # ✅ Security Fix #5
 async def change_password(
-    payload: dict,
+    payload: ChangePasswordRequest,
     request: Request,
     response: Response,
     current_user = Depends(deps.get_current_user),
@@ -437,14 +438,8 @@ async def change_password(
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
-    current_password = payload.get("current_password")
-    new_password = payload.get("new_password")
-
-    if not current_password or not new_password:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Missing passwords")
-
     # Verify current password
-    user_record = auth_service.authenticate_user(current_user.username, current_password, db=db)
+    user_record = auth_service.authenticate_user(current_user.username, payload.current_password, db=db)
     if not user_record:
         audit_logger.log_security_event(
             action="password_change_failed",
@@ -456,13 +451,13 @@ async def change_password(
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid current password")
 
     # Update password
-    user_service.update_user_password(current_user.id, new_password, db=db)
+    user_service.update_user_password(current_user.id, payload.new_password, db=db)
 
     # Sync Samba password if SMB is enabled for this user
     user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
     if user_record and user_record.smb_enabled:
         from app.services import samba_service
-        await samba_service.sync_smb_password(current_user.username, new_password)
+        await samba_service.sync_smb_password(current_user.username, payload.new_password)
 
     # Log successful password change
     audit_logger.log_security_event(
@@ -485,7 +480,7 @@ async def logout(request: Request, response: Response) -> dict[str, str]:
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit(get_limit("auth_refresh"))  # ✅ Security Fix #5
 async def refresh_token(
-    payload: dict,
+    payload: RefreshTokenRequest,
     request: Request,
     response: Response,
     db: Session = Depends(get_db)
@@ -503,16 +498,9 @@ async def refresh_token(
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
-    refresh_token_str = payload.get("refresh_token")
-    if not refresh_token_str:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Missing refresh_token"
-        )
-
     # Verify refresh token
     try:
-        token_data = auth_service.decode_token(refresh_token_str)
+        token_data = auth_service.decode_token(payload.refresh_token)
         user_id = token_data.sub  # TokenPayload is a Pydantic model, use attribute access
 
         # ✅ Security Fix #6: Check if token has been revoked
