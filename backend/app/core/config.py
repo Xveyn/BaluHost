@@ -5,7 +5,7 @@ import logging
 
 class Settings(BaseSettings):
     app_name: str = "Baluhost NAS API"
-    debug: bool = True
+    debug: bool = False
     environment: str = "development"
 
     # Logging configuration
@@ -202,6 +202,9 @@ class Settings(BaseSettings):
         # Sync is_dev_mode field with nas_mode
         self.is_dev_mode = str(self.nas_mode).lower() == "dev"
         if self.is_dev_mode:
+            # Enable debug mode in dev (only if not explicitly set via env/config)
+            if not self.debug:
+                self.debug = True
             if self.nas_storage_path == "./storage":
                 self.nas_storage_path = "./dev-storage"
             if self.nas_temp_path == "./tmp":
