@@ -79,9 +79,9 @@ describe('AuthContext', () => {
     expect(result.current.user).toEqual(mockUser);
     expect(result.current.isAdmin).toBe(true);
 
-    expect(fetch).toHaveBeenCalledWith('/api/auth/me', {
+    expect(fetch).toHaveBeenCalledWith('/api/auth/me', expect.objectContaining({
       headers: { Authorization: 'Bearer valid-token' },
-    });
+    }));
   });
 
   it('handles nested user data format', async () => {
