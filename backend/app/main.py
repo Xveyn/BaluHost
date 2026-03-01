@@ -184,6 +184,7 @@ PRIMARY_ONLY_SERVICES = [
     "fan_control",
     "sleep_mode",
     "network_discovery",
+    "pihole_query_collector",
 ]
 
 # Monitoring services that are offloaded to monitoring_worker in prod mode.
@@ -516,7 +517,23 @@ def _register_services() -> None:
         name="pihole_dns",
         display_name="Pi-hole DNS",
         get_status_fn=_get_pihole_status,
-        config_enabled_fn=lambda: settings.pihole_enabled,
+        config_enabled_fn=lambda: True,
+    )
+
+    # Pi-hole DNS Query Collector
+    def _get_pihole_collector_status():
+        from app.services.pihole.query_collector import get_dns_query_collector
+        try:
+            status = get_dns_query_collector().get_status()
+            return {"is_running": status.get("running", False)}
+        except Exception:
+            return {"is_running": False}
+
+    register_service(
+        name="pihole_query_collector",
+        display_name="DNS Query Collector",
+        get_status_fn=_get_pihole_collector_status,
+        config_enabled_fn=lambda: True,
     )
 
     # On secondary workers: replace in-process status functions for
@@ -682,6 +699,17 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         asyncio.create_task(_write_service_heartbeats())
         asyncio.create_task(_pihole_health_loop())
 
+        # Start DNS query collector (polls Pi-hole API → PostgreSQL)
+        # Always start — the collector checks its own is_enabled DB state and
+        # handles missing Pi-hole backends gracefully.
+        try:
+            from app.services.pihole.query_collector import get_dns_query_collector
+            from app.core.database import SessionLocal
+            get_dns_query_collector().start(SessionLocal)
+            logger.info("DNS query collector started")
+        except Exception as e:
+            logger.warning("DNS query collector could not start: %s", e)
+
     # Register update service
     register_update_service()
 
@@ -806,6 +834,13 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         except Exception:
             logger.debug("Chunked upload manager shutdown skipped or failed")
         
+        # Stop DNS query collector
+        try:
+            from app.services.pihole.query_collector import get_dns_query_collector
+            await get_dns_query_collector().stop()
+        except Exception:
+            logger.debug("DNS query collector shutdown skipped or failed")
+
         # Stop network discovery
         if _discovery_service:
             _discovery_service.stop()
