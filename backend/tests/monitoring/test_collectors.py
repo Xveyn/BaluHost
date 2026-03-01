@@ -42,7 +42,7 @@ class TestCpuMetricCollector:
         """Test initial collector state."""
         collector = CpuMetricCollector()
 
-        assert collector._memory_buffer == []
+        assert len(collector._memory_buffer) == 0
         assert collector._persist_counter == 0
         assert collector._is_enabled is True
 
@@ -135,7 +135,7 @@ class TestMemoryMetricCollector:
         collector = MemoryMetricCollector()
 
         assert collector.metric_name == "Memory"
-        assert collector._memory_buffer == []
+        assert len(collector._memory_buffer) == 0
 
     def test_collect_sample_returns_schema(self):
         """Test that collect_sample returns proper schema."""

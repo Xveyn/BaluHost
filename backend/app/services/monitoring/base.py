@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import logging
 from abc import ABC, abstractmethod
+from collections import deque
 from datetime import datetime, timedelta
 from threading import Lock
 from typing import Generic, TypeVar, List, Optional, Type
@@ -54,7 +55,7 @@ class MetricCollector(ABC, Generic[T]):
         self.buffer_size = buffer_size
         self.persist_interval = persist_interval
 
-        self._memory_buffer: List[T] = []
+        self._memory_buffer: deque[T] = deque(maxlen=buffer_size)
         self._buffer_lock = Lock()
         self._persist_counter = 0
         self._is_enabled = True
@@ -124,11 +125,9 @@ class MetricCollector(ABC, Generic[T]):
         if sample is None:
             return None
 
-        # Store in memory buffer
+        # Store in memory buffer (deque(maxlen=...) handles eviction automatically)
         with self._buffer_lock:
             self._memory_buffer.append(sample)
-            if len(self._memory_buffer) > self.buffer_size:
-                self._memory_buffer.pop(0)
 
         # Check if we should persist to database
         self._persist_counter += 1
@@ -185,7 +184,8 @@ class MetricCollector(ABC, Generic[T]):
         """
         with self._buffer_lock:
             if limit:
-                return list(self._memory_buffer[-limit:])
+                # deque does not support slicing; convert to list first
+                return list(self._memory_buffer)[-limit:]
             return list(self._memory_buffer)
 
     def get_history_db(
