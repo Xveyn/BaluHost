@@ -1,311 +1,235 @@
 <div align="center">
 
-# 🌐 BaluHost
+# BaluHost
 
-**Modern Self-Hosted NAS Management Platform**
+**Self-Hosted NAS Management Platform**
 
-[![Python Version](https://img.shields.io/badge/python-3.11+-blue.svg)](https://www.python.org/downloads/)
-[![Node Version](https://img.shields.io/badge/node-18+-green.svg)](https://nodejs.org/)
-[![FastAPI](https://img.shields.io/badge/FastAPI-0.104+-teal.svg)](https://fastapi.tiangolo.com/)
+[![Version](https://img.shields.io/badge/version-1.12.0-blue.svg)](CHANGELOG.md)
+[![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg)](https://www.python.org/downloads/)
+[![Node](https://img.shields.io/badge/node-18+-339933.svg)](https://nodejs.org/)
+[![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
 [![React](https://img.shields.io/badge/React-18+-61dafb.svg)](https://react.dev/)
 [![License](https://img.shields.io/badge/license-MIT-purple.svg)](LICENSE)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
-*A powerful, user-friendly web interface for managing your Network Attached Storage (NAS) system*
+A full-stack web interface for managing your Network Attached Storage — file management, RAID monitoring, system telemetry, power control, VPN, and more.
 
-[Features](#-features) • [Quick Start](#-quick-start) • [Documentation](#-documentation) • [Contributing](#-contributing)
+[Features](#features) · [Quick Start](#quick-start) · [Architecture](#architecture) · [Documentation](#documentation)
 
 </div>
 
 ---
 
-## 📖 About
+## Production Status
 
-BaluHost is a full-stack NAS management application built with modern web technologies. It provides comprehensive file management, RAID monitoring, system telemetry, and user access control - all through an intuitive web interface.
-
-**Perfect for:**
-- 🏠 Home lab enthusiasts
-- 💼 Small office/home office (SOHO) setups
-- 🎓 Learning system administration
-- 🛠️ Self-hosted storage solutions
-
-### 🔐 Authentication & Security
-- JWT-based authentication with role-based access control (RBAC)
-- Admin and user roles with granular permissions
-- File ownership and access control
-- Comprehensive audit logging
-
-### 🏠 Home Network Integration (iCloud/OneDrive Alternative)
-- **Windows Service** - Auto-start on boot, runs in background
-- **Network Drive** - Mount as `Z:` drive via WebDAV on all devices
-- **Auto-Discovery** - mDNS/Bonjour finds servers automatically
-- **Desktop Sync Client** - Real-time folder synchronization
-- **Web Interface** - Access from any browser in your network
-- **Multi-Platform** - Windows, Mac, Linux, iOS, Android support
-
-### 📁 File Management
-- Drag & drop file upload
-- Multi-file/folder upload support
-- **File preview** - Images, videos, audio, PDFs, text files
-- **File sharing** - Public links with expiration & password protection
-- Create, rename, move, delete operations
-- Storage quota enforcement
-- File ownership tracking
-- Granular file permissions (per-user access control)
-
-### 💾 RAID Management
-- Real-time RAID array status monitoring
-- Disk health tracking with SMART data
-- Simulate degraded/rebuild scenarios (dev mode)
-- Production-ready mdadm integration
-- Support for RAID 0, 1, 5, 6, 10
-
-### 📊 System Monitoring
-- Live CPU, RAM, disk I/O, and network metrics
-- Historical telemetry data with charts (Recharts)
-- Process monitoring
-- SMART disk health status
-- Storage capacity tracking
-
-### 💾 Backup & Restore
-- Create full or incremental backups
-- Schedule automatic backups
-- Restore from backup with integrity verification
-- Backup compression and encryption support
-
-### 🔄 Sync System
-- Desktop sync client for real-time synchronization
-- Selective folder sync with conflict resolution
-- Multi-device support
-- Mobile camera backup (iOS/Android)
-- Network discovery via mDNS/Bonjour
-
-### 🎨 Modern UI/UX
-- Responsive design with Tailwind CSS
-- Real-time updates
-- Intuitive navigation
-- Dark-themed interface with glassmorphism effects
-- Settings page with user profile, security, storage, and activity logs
-- Fast loading with Vite HMR
-
-### ⚡ Power & Hardware Management (NEW)
-- **Power Management** - CPU frequency scaling (AMD Ryzen & Intel)
-- **Fan Control** - PWM control with custom temperature curves
-- **Energy Monitoring** - Tapo smart plug integration (P115/P110)
-- **Service Status** - Health monitoring dashboard for all services
-- **Admin Database** - Secure read-only database inspection
-
-### 📊 Advanced Monitoring (NEW)
-- **Per-thread CPU monitoring** - Task Manager-style display
-- **Monitoring Orchestrator** - Unified collector system
-- **Network Discovery** - mDNS/Bonjour auto-discovery
-- **Real-time metrics** - CPU, memory, disk I/O, network
-
-### 🗓️ Scheduler Dashboard (NEW)
-- **Unified Scheduler Management** - Control all 6 system schedulers
-- **Execution History** - Track runs with timing, status, and errors
-- **Run-Now Functionality** - Trigger any scheduler immediately
-- **Timeline View** - Visual execution history across all schedulers
-- **Retry Mechanism** - Re-run failed executions with one click
-
-### 🛠️ Developer-Friendly
-- **Dev Mode** - Full simulation environment (Windows-compatible!)
-- No database required for prototyping
-- Hot reload for both frontend and npmbackend
-- Comprehensive test suite (pytest)
-- Auto-generated API docs (Swagger/ReDoc)
-
-## 🚀 Production Status
-
-**✅ DEPLOYED** - January 25, 2026
+Deployed since January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM).
 
 | Component | Status | Details |
 |-----------|--------|---------|
-| **Server** | ✅ Active | Debian 13, Ryzen 5 5600GT, 16GB RAM |
-| **Database** | ✅ PostgreSQL 17.7 | Production database with backup automation |
-| **Proxy** | ✅ Nginx | Port 80, rate limiting, security headers |
-| **Backend** | ✅ Systemd | 4 Uvicorn workers, auto-restart |
-| **Testing** | ✅ 364 Tests | 40+ test files, CI/CD active |
-| **Monitoring** | ✅ Ready | Prometheus/Grafana integration |
+| **Server** | Active | Debian 13, systemd managed |
+| **Database** | PostgreSQL 17.7 | With Alembic migrations |
+| **Proxy** | Nginx | Port 80, rate limiting, security headers |
+| **Backend** | Systemd | 4 Uvicorn workers, auto-restart |
+| **Testing** | 1300+ tests | 73 test files, CI/CD via GitHub Actions |
+| **Monitoring** | Prometheus/Grafana | Ready |
 
-### Documentation
-- 📈 [Production Readiness](docs/deployment/PRODUCTION_READINESS.md) - Full status checklist
-- 📋 [Deployment Notes](docs/deployment/PRODUCTION_DEPLOYMENT_NOTES.md) - Deployment details
-- 🚀 [Quick Start](docs/deployment/PRODUCTION_QUICKSTART.md) - Getting started guide
+---
+
+## Features
+
+### File Management
+- Drag & drop upload with chunked transfer (32MB chunks)
+- File preview (images, videos, audio, PDFs, text)
+- File sharing with public links, expiration & password protection
+- Per-user storage quotas and ownership tracking
+- Multi-mountpoint support (multiple RAID arrays)
+
+### RAID & Storage
+- Real-time RAID array status (RAID 0, 1, 5, 6, 10)
+- SMART disk health monitoring
+- RAID setup wizard with guided array creation
+- OS-disk protection (prevents formatting boot drives)
+- Dev-mode simulation for testing without hardware
+
+### System Monitoring
+- Per-thread CPU usage (Task Manager-style)
+- Memory, network throughput, disk I/O metrics
+- Historical telemetry with Recharts visualizations
+- Monitoring orchestrator with configurable collectors
+- Prometheus metrics export
+
+### Power & Hardware
+- CPU frequency scaling (AMD Ryzen & Intel)
+- PWM fan control with custom temperature curves
+- Fan scheduling (time-based curve selection)
+- Energy monitoring via Tapo smart plugs (P110/P115)
+- Sleep mode management
+
+### Networking & Access
+- WireGuard VPN server with client management
+- WebDAV server for network drive mounting
+- Samba/SMB sharing
+- mDNS/Bonjour auto-discovery
+- Pi-hole DNS integration
+
+### Security
+- JWT authentication with role-based access (admin/user)
+- Rate limiting on all endpoints (slowapi)
+- Security headers (CSP, HSTS, X-Frame-Options)
+- Path jailing for user file isolation
+- Audit logging for all security-relevant actions
+- Encrypted VPN/SSH keys (Fernet AES)
+
+### Administration
+- Scheduler dashboard with execution history
+- Service health monitoring
+- Secure read-only database inspection (sensitive fields redacted)
+- Cloud import (rclone integration)
+- Plugin system
+- Self-hosted update mechanism
+- System benchmarking
+
+### Multi-Platform
+- **BaluHost** — Web UI (this repo)
+- **[BaluDesk](https://github.com/Xveyn/BaluDesk)** — Desktop sync client (C++/Electron)
+- **[BaluApp](https://github.com/Xveyn/BaluApp)** — Android app (Kotlin)
+- **TUI** — Terminal UI via [Textual](https://textual.textualize.io/) (`baluhost-tui`)
+
+---
+
+## Quick Start
+
+### Development (recommended)
+
+```bash
+# Start both backend (port 3001) and frontend (port 5173)
+python start_dev.py
+```
+
+This sets `NAS_MODE=dev`, creates a simulated RAID1 sandbox in `backend/dev-storage/`, and provides mock system data. Works on Windows, macOS, and Linux.
+
+**Default dev credentials:** `admin` / `DevMode2024`
+
+Open http://localhost:5173 in your browser.
+
+### Manual Setup
+
+```bash
+# Backend
+cd backend
+python -m venv .venv
+source .venv/bin/activate   # Windows: .venv\Scripts\activate
+pip install -e ".[dev]"
+uvicorn app.main:app --reload --port 3001
+
+# Frontend (separate terminal)
+cd client
+npm install
+npm run dev
+```
+
+### Production Deployment
+
+See [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.md) for full instructions.
+
+```bash
+# Start production (systemd alternative)
+python start_prod.py
+
+# Or via systemd
+sudo systemctl start baluhost-backend
+```
+
+Production uses PostgreSQL, Nginx reverse proxy, and 4 Uvicorn workers on port 8000.
 
 ---
 
 ## Architecture
 
-- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, React Router
-- **Backend (active):** FastAPI (Python 3.11+), Pydantic, SQLAlchemy, `uvicorn`, background jobs for telemetry
-- **Database:** SQLite (dev) / PostgreSQL (production) with Alembic migrations
-- **Start Script:** `python start_dev.py` boots FastAPI (Port 3001) and Vite Dev Server (Port 5173)
-
-## API Overview (FastAPI)
-
-- **Auth**
-   - `POST /api/auth/login`
-   - `POST /api/auth/logout`
-   - `GET /api/auth/me`
-- **Files**
-   - `GET /api/files/list?path=`
-   - `POST /api/files/upload`
-   - `GET /api/files/download?path=`
-   - `POST /api/files/folder`
-   - `PUT /api/files/rename`
-   - `PUT /api/files/move`
-   - `DELETE /api/files/{path}`
-   - `GET /api/files/permissions`
-   - `PUT /api/files/permissions`
-   - `GET /api/files/mountpoints`
-- **Shares**
-   - `GET /api/shares`
-   - `POST /api/shares`
-   - `GET /api/shares/{share_id}`
-   - `DELETE /api/shares/{share_id}`
-   - `GET /api/shares/public/{token}`
-- **Backups**
-   - `POST /api/backups`
-   - `GET /api/backups`
-   - `GET /api/backups/{backup_id}`
-   - `POST /api/backups/{backup_id}/restore`
-- **Sync**
-   - `GET /api/sync/folders`
-   - `POST /api/sync/folders`
-   - `GET /api/sync/conflicts`
-   - `POST /api/sync/conflicts/{conflict_id}/resolve`
-- **Mobile**
-   - `POST /api/mobile/token/generate`
-   - `POST /api/mobile/register`
-   - `GET /api/mobile/devices`
-   - `GET /api/mobile/camera/settings/{device_id}`
-- **Users (Admin)**
-   - `GET /api/users`
-   - `POST /api/users`
-   - `PUT /api/users/{id}`
-   - `DELETE /api/users/{id}`
-- **System & Monitoring**
-   - `GET /api/system/info`
-   - `GET /api/system/storage`
-   - `GET /api/system/quota`
-   - `GET /api/system/processes?limit=`
-   - `GET /api/system/telemetry/history`
-   - `GET /api/system/smart/status`
-   - `GET /api/system/raid/status`
-   - `POST /api/system/raid/degrade|rebuild|finalize` (Dev-Mode Simulation, Admin)
-   - `POST /api/system/raid/options` (Production/Dev configuration via mdadm or Simulator)
-- **Logging**
-   - `GET /api/logging/audit`
-   - `GET /api/logging/disk-io`
-   - `GET /api/logging/file-access`
-   - `GET /api/logging/stats`
-- **Schedulers** (NEW)
-   - `GET /api/schedulers`
-   - `GET /api/schedulers/{name}`
-   - `POST /api/schedulers/{name}/run-now`
-   - `GET /api/schedulers/{name}/history`
-   - `GET /api/schedulers/history/all`
-
-## Setup
-
-### 1. FastAPI Backend (recommended)
-
-```bash
-cd backend
-python -m venv .venv
-source .venv/bin/activate        # Windows: .venv\Scripts\activate
-pip install -e ".[dev]"
-
-# Development-Server
-uvicorn app.main:app --reload --port 3001
-
-# Tests
-python -m pytest
+```
+BaluHost/
+├── backend/                 # Python FastAPI
+│   ├── app/
+│   │   ├── api/routes/      # 43 API route modules
+│   │   ├── services/        # 110 service modules
+│   │   ├── models/          # 40 SQLAlchemy ORM models
+│   │   ├── schemas/         # 36 Pydantic schemas
+│   │   ├── core/            # Config, security, database
+│   │   └── middleware/      # Security headers, rate limiting
+│   ├── baluhost_tui/        # Terminal UI (Textual)
+│   ├── tests/               # 73 test files
+│   └── alembic/             # 68 database migrations
+├── client/                  # React + TypeScript + Vite
+│   └── src/
+│       ├── pages/           # 31 page components
+│       ├── components/      # 30+ component directories
+│       ├── api/             # Typed API clients
+│       ├── hooks/           # Custom React hooks
+│       ├── contexts/        # Auth context
+│       └── lib/             # Utilities, formatters
+├── deploy/                  # Deployment configs
+│   ├── nginx/               # Reverse proxy configs
+│   ├── systemd/             # Service files
+│   ├── samba/               # SMB configuration
+│   ├── prometheus/          # Metrics scraping
+│   └── grafana/             # Dashboard templates
+├── docs/                    # Documentation
+├── .github/workflows/       # CI/CD pipelines
+├── start_dev.py             # Dev launcher
+└── start_prod.py            # Production launcher
 ```
 
-### 2. Frontend
+**Tech Stack:**
+- **Frontend:** React 18, TypeScript, Vite, Tailwind CSS, Recharts, Lucide icons
+- **Backend:** FastAPI, SQLAlchemy 2.0, Pydantic, Uvicorn
+- **Database:** SQLite (dev) / PostgreSQL (prod), Alembic migrations
+- **Testing:** Pytest (backend), Vitest + Playwright (frontend)
 
-```bash
-cd client
-npm install
-npm run dev
+---
 
-# Build/Test
-npm run build
-```
+## API Overview
 
-### 3. Combined Dev Start (Recommended)
+Interactive API docs at http://localhost:3001/docs (Swagger UI) or `/redoc`.
 
-```bash
-python start_dev.py
-```
+All routes prefixed with `/api`:
 
-This script sets `NAS_MODE=dev`, starts FastAPI on Port 3001 and the Vite server on Port 5173, and maintains a 2x5GB RAID1 sandbox under `backend/dev-storage`.
+| Area | Endpoints | Description |
+|------|-----------|-------------|
+| **Auth** | `/auth/login`, `/auth/register`, `/auth/me`, `/auth/refresh` | JWT authentication |
+| **Files** | `/files/list`, `/files/upload`, `/files/download`, ... | File CRUD operations |
+| **Shares** | `/shares`, `/shares/public/{token}` | Public link sharing |
+| **Users** | `/users` (admin) | User management |
+| **System** | `/system/info`, `/system/storage`, `/system/raid/*`, `/system/smart/*` | System & RAID info |
+| **Monitoring** | `/monitoring/cpu`, `/monitoring/memory`, `/monitoring/network`, ... | Real-time metrics |
+| **Power** | `/power/profile`, `/power/presets` | CPU frequency scaling |
+| **Fans** | `/fans/config`, `/fans/status` | Fan control & curves |
+| **Energy** | `/energy/stats` | Power consumption |
+| **Tapo** | `/tapo/plugs`, `/tapo/readings` | Smart plug integration |
+| **VPN** | `/vpn/clients`, `/vpn/config` | WireGuard management |
+| **Backup** | `/backup`, `/backup/{id}/restore` | Backup & restore |
+| **Sync** | `/sync/folders`, `/sync/conflicts` | Desktop sync |
+| **Mobile** | `/mobile/register`, `/mobile/devices` | Mobile device pairing |
+| **Schedulers** | `/schedulers`, `/schedulers/{name}/run-now` | Scheduler control |
+| **Admin** | `/admin-db/*`, `/admin/*` | Database inspection, services |
+| **Logging** | `/logging/audit`, `/logging/disk-io` | Audit trail |
+| **Pi-hole** | `/pihole/*` | DNS management |
+| **Plugins** | `/plugins/*` | Plugin system |
 
-### 4. Production Deployment (Home Network)
-
-For using BaluHost as your personal cloud in your home network (like iCloud/OneDrive):
-
-```powershell
-# Install as Windows Service (requires Administrator)
-.\scripts\install_windows_service.ps1
-```
-
-This will:
-- ✅ Install BaluHost as a Windows Service with auto-start
-- ✅ Configure firewall rules for local network access
-- ✅ Set up WebDAV server for network drive mapping
-- ✅ Display your local IP for connecting other devices
-
-**Access your private cloud:**
-- 🌐 Web Interface: `https://YOUR-PC-IP:5173` (frontend) / `https://YOUR-PC-IP:8000` (backend)
-- 💾 Network Drive: `\\YOUR-PC-IP@8080\webdav`
-- 📱 Desktop Sync Client: `client-desktop/sync_client_gui_v2.py`
-
-### 5. HTTPS Setup (mkcert for Trusted Certificates)
-
-BaluHost uses **mkcert** for locally-trusted HTTPS certificates (no browser warnings):
-
-**✅ Already installed** - Certificates in `dev-certs/` are valid until March 2028
-
-**For mobile devices** (one-time setup):
-```powershell
-# Export CA certificate for your phone/tablet
-.\scripts\export-ca-for-mobile.ps1
-```
-
-Then install the CA certificate on your mobile device:
-- **Android**: Settings → Security → Install certificate
-- **iOS**: Open file → Install Profile → Trust Certificate
+---
 
 ## Configuration
 
-### Backend `.env` (FastAPI)
+### Backend `.env`
 
 ```env
-APP_NAME=Baluhost NAS API
-NAS_MODE=dev
-API_PREFIX=/api
-HOST=0.0.0.0
-PORT=3001
-
-TOKEN_SECRET=change-me-in-prod
-TOKEN_EXPIRE_MINUTES=720
-
-ADMIN_USERNAME=admin
-ADMIN_PASSWORD=changeme
-ADMIN_EMAIL=admin@example.com
+NAS_MODE=dev              # dev or prod
+SECRET_KEY=...            # 32+ chars required in prod
+TOKEN_SECRET=...          # 32+ chars required in prod
+DATABASE_URL=...          # PostgreSQL URL (prod)
 
 NAS_STORAGE_PATH=./dev-storage
-NAS_TEMP_PATH=./dev-tmp
-NAS_QUOTA_BYTES=5368709120  # 5 GB (RAID1: 2x5GB physisch, 5GB effektiv)
-
+NAS_QUOTA_BYTES=5368709120
 TELEMETRY_INTERVAL_SECONDS=3.0
-TELEMETRY_HISTORY_SIZE=60
 ```
-
-> In production mode (`NAS_MODE=prod`), real system values are used. In Dev mode, FastAPI provides mock data and initializes the sandbox storage.
 
 ### Frontend `.env`
 
@@ -313,222 +237,86 @@ TELEMETRY_HISTORY_SIZE=60
 VITE_API_BASE_URL=http://localhost:3001
 ```
 
-Alternatively, Vite uses the proxy from `client/vite.config.ts`, which automatically forwards `/api` and `/auth` to Port 3001.
+The Vite dev server proxies `/api` requests to port 3001 automatically (see `client/vite.config.ts`).
 
-## Usage
+---
 
-- Default login: Username `admin`, Password `changeme`
-- Change password after first login
-- RAID options only accessible with Admin token
+## Testing
 
-### Typical Dev Workflow
+```bash
+# Backend
+cd backend
+python -m pytest                            # All tests
+python -m pytest tests/test_permissions.py   # Specific test
+python -m pytest -v                          # Verbose
 
-1. `python start_dev.py`
-2. Open browser: `http://localhost:5173`
-3. Check dashboard (Quota, RAID, SMART)
-4. Tests: `cd backend && python -m pytest`, `cd client && npm run build`
-
-### 🗂️ Network Drive Access (Dev Mode)
-
-Access the Dev storage as a Windows network drive:
-
-```powershell
-# Automatically mount as drive Z:
-.\scripts\mount-dev-storage.ps1
-
-# Disconnect
-.\scripts\unmount-dev-storage.ps1
+# Frontend
+cd client
+npm run test          # Vitest unit tests
+npm run test:e2e      # Playwright E2E tests
+npm run build         # Type-check + production build
 ```
 
-Now you can manage files via drag & drop in `Z:\` and they are automatically visible in the frontend!
+---
 
-**Additional Options:**
-- With SMB (as in production): `.\scripts\mount-dev-storage.ps1 -UseSMB`
-- Different drive letter: `.\scripts\mount-dev-storage.ps1 -DriveLetter "Y:"`
-- Complete guide: [docs/NETWORK_DRIVE_QUICKSTART.md](docs/NETWORK_DRIVE_QUICKSTART.md)
+## Documentation
 
-## Project Structure
-
-```
-baluhost/
-├── backend/          # FastAPI Backend (active code path)
-│   ├── app/
-│   │   ├── api/
-│   │   ├── services/
-│   │   ├── schemas/
-│   │   └── main.py
-│   ├── scripts/
-│   ├── dev-storage/
-│   └── tests/
-├── client/           # React Frontend
-│   ├── src/
-│   └── vite.config.ts
-├── start_dev.py      # Dev orchestration
-└── README.md
-```
-
-## 📚 Documentation
-
-### Core Documentation
-- **[README.md](README.md)** - This file (project overview, quick start)
-- **[TECHNICAL_DOCUMENTATION.md](docs/TECHNICAL_DOCUMENTATION.md)** - Complete feature documentation
-- **[ARCHITECTURE.md](docs/ARCHITECTURE.md)** - System architecture and design decisions
-- **[CONTRIBUTING.md](CONTRIBUTING.md)** - How to contribute (code style, workflow)
-- **[TODO.md](TODO.md)** - Roadmap and planned features
-- **[SECURITY.md](docs/security/SECURITY.md)** - Security policy and best practices
-- **[LICENSE](LICENSE)** - MIT License
-
-### User Documentation
-- **[User Guide](docs/getting-started/USER_GUIDE.md)** - Complete user manual
-- **[API Reference](docs/api/API_REFERENCE.md)** - Full API documentation
-
-### Feature Documentation
-- [Audit Logging](docs/security/AUDIT_LOGGING.md) - Activity tracking system
-- [Disk I/O Monitor](docs/monitoring/DISK_IO_MONITOR.md) - Real-time disk monitoring
-- [RAID Setup Wizard](docs/storage/RAID_SETUP_WIZARD.md) - RAID configuration guide
-- [Network Drive Setup](docs/network/NETWORK_DRIVE_SETUP.md) - Mount as network drive
-- [Telemetry Configuration](docs/monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.md) - Monitoring setup
-
-### Auto-Generated API Documentation
-
-FastAPI provides interactive API documentation with custom BaluHost styling:
-- **Swagger UI:** http://localhost:3001/docs (Custom styled to match frontend)
-- **ReDoc:** http://localhost:3001/redoc
-
-### Documentation Structure
+| Document | Description |
+|----------|-------------|
+| [Technical Documentation](docs/TECHNICAL_DOCUMENTATION.md) | Complete feature reference |
+| [Architecture](docs/ARCHITECTURE.md) | System design & patterns |
+| [Production Readiness](docs/deployment/PRODUCTION_READINESS.md) | Deployment checklist |
+| [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.md) | Getting started in prod |
+| [User Guide](docs/getting-started/USER_GUIDE.md) | End-user manual |
+| [API Reference](docs/api/API_REFERENCE.md) | Full API documentation |
+| [Security Policy](docs/security/SECURITY.md) | Security guidelines |
+| [Contributing](CONTRIBUTING.md) | Contribution workflow |
+| [Changelog](CHANGELOG.md) | Version history |
+| [TODO](TODO.md) | Roadmap |
 
 ```
 docs/
-├── README.md               # Documentation overview
-├── ARCHITECTURE.md         # System architecture
-├── TECHNICAL_DOCUMENTATION.md
-├── api/                    # API documentation
-├── deployment/             # Deployment & ops
-├── features/               # Feature documentation
-├── getting-started/        # User guide & dev checklist
-├── monitoring/             # Monitoring & telemetry
-├── network/                # Network & VPN setup
-├── security/               # Security & audit
-└── storage/                # RAID & backup
+├── api/              # API documentation
+├── deployment/       # Deployment & ops guides
+├── features/         # Feature-specific docs
+├── getting-started/  # User guide & dev checklist
+├── monitoring/       # Monitoring & telemetry setup
+├── network/          # Network & VPN configuration
+├── security/         # Security & audit logging
+└── storage/          # RAID & backup guides
 ```
 
-## 🧪 Testing
+---
 
-### Backend Tests
-```bash
-cd backend
-python -m pytest                           # All tests
-python -m pytest tests/test_permissions.py # Specific test
-python -m pytest -v                        # Verbose output
-```
+## Project Stats
 
-### Frontend Tests
-```bash
-cd client
-npm run test        # Unit Tests (TODO)
-npm run test:e2e    # E2E Tests (TODO)
-```
+| Metric | Count |
+|--------|-------|
+| **Version** | 1.12.0 |
+| **Backend code** | ~76,000 lines |
+| **Frontend code** | ~64,000 lines |
+| **Test functions** | 1300+ |
+| **API route modules** | 43 |
+| **Service modules** | 110 |
+| **Database models** | 40 |
+| **Database migrations** | 68 |
+| **Frontend pages** | 31 |
+| **CI/CD workflows** | 6 |
 
-## TODO / Improvements
+---
 
-See **[TODO.md](TODO.md)** for the complete, prioritized list.
+## License
 
-**Completed (v1.4.0):**
-- [x] PostgreSQL integration - Production deployed
-- [x] Upload progress UI with WebSocket/SSE
-- [x] Backup/Restore functionality
-- [x] File preview (Images, PDFs, Videos)
-- [x] Dark Mode (6 themes)
-- [x] Docker/Systemd deployment
-- [x] CI/CD Pipeline (3 workflows)
-- [x] Power Management & Fan Control
-- [x] Monitoring Orchestrator
+[MIT License](LICENSE)
 
-**Pending:**
-- [ ] Email notifications
-- [ ] Internationalization (i18n)
-- [ ] PWA support
-- [ ] SSL/HTTPS (optional for internal network)
+## Author
 
-## 🤝 Contributing
-
-We welcome contributions! Please see [CONTRIBUTING.md](CONTRIBUTING.md) for:
-- Code style guidelines
-- Development workflow
-- Pull request process
-- How to report bugs
-
-**Good First Issues:**
-- Add tests for existing features
-- Improve documentation
-- Fix UI/UX issues
-- Add file type support in preview
-
-## 📸 Screenshots
-
-_(Coming soon - add screenshots here)_
-
-**Dashboard:**
-![Dashboard Screenshot](docs/images/dashboard.png)
-
-**File Manager:**
-![File Manager Screenshot](docs/images/filemanager.png)
-
-**RAID Management:**
-![RAID Management Screenshot](docs/images/raid.png)
-
-## 🗺️ Roadmap
-
-See [TODO.md](TODO.md) for the complete roadmap.
-
-**Recently Completed:**
-- ✅ File sharing with public links
-- ✅ Upload progress indicators
-- ✅ PostgreSQL production database
-- ✅ Dark mode (6 themes)
-- ✅ Settings page
-- ✅ Batch operations
-- ✅ Power & Fan Management
-- ✅ Energy Monitoring
-
-**Upcoming Features:**
-- 🔜 Email notifications
-- 🔜 Internationalization (i18n)
-- 🔜 PWA support
-- 🔜 Advanced search with full-text
-
-## 📊 Project Stats
-
-- **Version:** 1.4.2
-- **Lines of Code:** ~25,000+
-- **Test Coverage:** 80%+ (backend, 364 test functions)
-- **API Endpoints:** 80+
-- **React Components:** 40+
-- **Database Tables:** 15+
-- **Backend Services:** 18+
-
-## 🙏 Acknowledgments
-
-- Built with [FastAPI](https://fastapi.tiangolo.com/)
-- Frontend powered by [React](https://react.dev/) and [Vite](https://vitejs.dev/)
-- UI styling with [Tailwind CSS](https://tailwindcss.com/)
-- Charts by [Recharts](https://recharts.org/)
-- Icons from [Heroicons](https://heroicons.com/)
-
-## ⚖️ License
-
-This project is licensed under the **MIT License** - see the [LICENSE](LICENSE) file for details.
-
-## 👨‍💻 Author
-
-Created by the BaluHost Team with ❤️ and [GitHub Copilot](https://github.com/features/copilot)
+Created by [Xveyn](https://github.com/Xveyn)
 
 ---
 
 <div align="center">
 
-**⭐ Star this repo if you find it helpful!**
-
-[Report Bug](https://github.com/YOUR_USERNAME/BaluHost/issues) · [Request Feature](https://github.com/YOUR_USERNAME/BaluHost/issues) · [Discussions](https://github.com/YOUR_USERNAME/BaluHost/discussions)
+[Report Bug](https://github.com/Xveyn/BaluHost/issues) · [Request Feature](https://github.com/Xveyn/BaluHost/issues)
 
 </div>
