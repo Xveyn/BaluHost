@@ -38,7 +38,7 @@ class Settings(BaseSettings):
     privileged_roles: list[str] = ["admin"]
     
     # Registration control
-    registration_enabled: bool = False  # Set False in production to require admin-created accounts (currently in Prod)
+    registration_enabled: bool = True  # Set False in production (via REGISTRATION_ENABLED env var) to require admin-created accounts
 
     # Local-only access enforcement (Option B security)
     enforce_local_only: bool = False  # Set True to restrict sensitive endpoints to localhost
