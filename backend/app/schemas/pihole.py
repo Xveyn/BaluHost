@@ -259,3 +259,97 @@ class FailoverStatusResponse(BaseModel):
     active_source: str = Field(..., description="'remote' or 'local'")
     remote_url: Optional[str] = Field(None, description="Remote Pi-hole URL")
     last_failover_at: Optional[datetime] = Field(None, description="Last failover/failback timestamp")
+
+
+# ── Stored Queries (PostgreSQL) ──────────────────────────────────────
+
+class StoredQueryEntry(BaseModel):
+    """DNS query stored in PostgreSQL."""
+    id: int
+    timestamp: datetime
+    domain: str
+    client: str
+    query_type: str
+    status: str
+    reply_type: Optional[str] = None
+    response_time_ms: Optional[float] = None
+
+    model_config = {"from_attributes": True}
+
+class StoredQueryResponse(BaseModel):
+    """Paginated stored query response."""
+    queries: list[StoredQueryEntry] = []
+    total: int = 0
+    page: int = 1
+    page_size: int = 100
+
+class StoredStatsResponse(BaseModel):
+    """Aggregated stats for a time period."""
+    total_queries: int = 0
+    blocked_queries: int = 0
+    cached_queries: int = 0
+    forwarded_queries: int = 0
+    unique_domains: int = 0
+    unique_clients: int = 0
+    avg_response_time_ms: Optional[float] = None
+    block_rate: float = 0.0
+    period: str = "24h"
+
+class StoredDomainEntry(BaseModel):
+    """Domain with count from stored data."""
+    domain: str
+    count: int
+
+class StoredClientEntry(BaseModel):
+    """Client with count from stored data."""
+    client: str
+    count: int
+
+class StoredTopDomainsResponse(BaseModel):
+    """Top domains from stored data."""
+    top_domains: list[StoredDomainEntry] = []
+    period: str = "24h"
+
+class StoredTopBlockedResponse(BaseModel):
+    """Top blocked domains from stored data."""
+    top_blocked: list[StoredDomainEntry] = []
+    period: str = "24h"
+
+class StoredTopClientsResponse(BaseModel):
+    """Top clients from stored data."""
+    top_clients: list[StoredClientEntry] = []
+    period: str = "24h"
+
+class HourlyCountEntry(BaseModel):
+    """Single hourly data point."""
+    hour: datetime
+    total_queries: int = 0
+    blocked_queries: int = 0
+    cached_queries: int = 0
+    forwarded_queries: int = 0
+
+    model_config = {"from_attributes": True}
+
+class StoredHistoryResponse(BaseModel):
+    """Hourly timeline from stored data."""
+    history: list[HourlyCountEntry] = []
+    period: str = "24h"
+
+# ── Query Collector ──────────────────────────────────────────────────
+
+class QueryCollectorStatusResponse(BaseModel):
+    """Collector service status."""
+    running: bool = False
+    is_enabled: bool = True
+    last_poll_at: Optional[datetime] = None
+    total_queries_stored: int = 0
+    last_error: Optional[str] = None
+    last_error_at: Optional[datetime] = None
+    poll_interval_seconds: int = 30
+    retention_days: int = 30
+
+class QueryCollectorConfigUpdate(BaseModel):
+    """Update collector configuration."""
+    is_enabled: Optional[bool] = Field(None, description="Enable/disable the collector")
+    poll_interval_seconds: Optional[int] = Field(None, ge=10, le=300, description="Poll interval in seconds")
+    retention_days: Optional[int] = Field(None, ge=1, le=365, description="Data retention in days")

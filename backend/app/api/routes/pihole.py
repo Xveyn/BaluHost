@@ -3,12 +3,16 @@
 All endpoints are admin-only with rate limiting.
 """
 
+from datetime import datetime, timedelta, timezone
 from typing import Optional
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response, status
+from sqlalchemy import distinct, func
 from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.core.rate_limiter import user_limiter, get_limit
+from app.models.dns_queries import DnsQuery, DnsQueryCollectorState, DnsQueryHourlyStat
 from app.models.user import User
 from app.schemas.pihole import (
     PiholeStatusResponse,
@@ -37,6 +41,18 @@ from app.schemas.pihole import (
     PiholeConfigResponse,
     PiholeConfigUpdateRequest,
     FailoverStatusResponse,
+    StoredQueryEntry,
+    StoredQueryResponse,
+    StoredStatsResponse,
+    StoredDomainEntry,
+    StoredTopDomainsResponse,
+    StoredTopBlockedResponse,
+    StoredClientEntry,
+    StoredTopClientsResponse,
+    HourlyCountEntry,
+    StoredHistoryResponse,
+    QueryCollectorStatusResponse,
+    QueryCollectorConfigUpdate,
 )
 from app.services.pihole.service import get_pihole_service
 from app.services.audit import get_audit_logger_db
@@ -544,3 +560,224 @@ async def update_config(
         details={"fields": list(update_data.keys())},
     )
     return PiholeConfigResponse.model_validate(config)
+
+
+# ── Stored Queries (PostgreSQL) ──────────────────────────────────────
+
+def _period_to_delta(period: str) -> timedelta:
+    """Convert period string to timedelta."""
+    if period == "7d":
+        return timedelta(days=7)
+    if period == "30d":
+        return timedelta(days=30)
+    return timedelta(hours=24)
+
+
+@router.get("/stored-queries", response_model=StoredQueryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_queries(
+    request: Request, response: Response,
+    page: int = Query(1, ge=1),
+    page_size: int = Query(100, ge=1, le=500),
+    domain: Optional[str] = Query(None, max_length=253),
+    client: Optional[str] = Query(None, max_length=45),
+    query_status: Optional[str] = Query(None, alias="status", max_length=20),
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get paginated DNS query history from PostgreSQL."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    q = db.query(DnsQuery).filter(DnsQuery.timestamp >= since)
+
+    if domain:
+        q = q.filter(DnsQuery.domain.ilike(f"%{domain}%"))
+    if client:
+        q = q.filter(DnsQuery.client == client)
+    if query_status:
+        q = q.filter(DnsQuery.status == query_status)
+
+    total = q.count()
+    offset = (page - 1) * page_size
+    rows = q.order_by(DnsQuery.timestamp.desc()).offset(offset).limit(page_size).all()
+
+    return StoredQueryResponse(
+        queries=[StoredQueryEntry.model_validate(r) for r in rows],
+        total=total,
+        page=page,
+        page_size=page_size,
+    )
+
+
+@router.get("/stored-stats", response_model=StoredStatsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_stats(
+    request: Request, response: Response,
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get aggregated DNS stats for a time period from PostgreSQL."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    base = db.query(DnsQuery).filter(DnsQuery.timestamp >= since)
+
+    total = base.count()
+    blocked = base.filter(DnsQuery.status == "BLOCKED").count()
+    cached = base.filter(DnsQuery.status == "CACHED").count()
+    forwarded = base.filter(DnsQuery.status == "FORWARDED").count()
+    domains = db.query(func.count(distinct(DnsQuery.domain))).filter(DnsQuery.timestamp >= since).scalar() or 0
+    clients = db.query(func.count(distinct(DnsQuery.client))).filter(DnsQuery.timestamp >= since).scalar() or 0
+    avg_rt = db.query(func.avg(DnsQuery.response_time_ms)).filter(DnsQuery.timestamp >= since).scalar()
+
+    return StoredStatsResponse(
+        total_queries=total,
+        blocked_queries=blocked,
+        cached_queries=cached,
+        forwarded_queries=forwarded,
+        unique_domains=domains,
+        unique_clients=clients,
+        avg_response_time_ms=round(avg_rt, 2) if avg_rt else None,
+        block_rate=round(blocked / total * 100, 1) if total > 0 else 0.0,
+        period=period,
+    )
+
+
+@router.get("/stored-top-domains", response_model=StoredTopDomainsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_top_domains(
+    request: Request, response: Response,
+    count: int = Query(10, ge=1, le=100),
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get top queried domains from PostgreSQL."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    rows = (
+        db.query(DnsQuery.domain, func.count().label("cnt"))
+        .filter(DnsQuery.timestamp >= since)
+        .group_by(DnsQuery.domain)
+        .order_by(func.count().desc())
+        .limit(count)
+        .all()
+    )
+    return StoredTopDomainsResponse(
+        top_domains=[StoredDomainEntry(domain=r.domain, count=r.cnt) for r in rows],
+        period=period,
+    )
+
+
+@router.get("/stored-top-blocked", response_model=StoredTopBlockedResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_top_blocked(
+    request: Request, response: Response,
+    count: int = Query(10, ge=1, le=100),
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get top blocked domains from PostgreSQL."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    rows = (
+        db.query(DnsQuery.domain, func.count().label("cnt"))
+        .filter(DnsQuery.timestamp >= since, DnsQuery.status == "BLOCKED")
+        .group_by(DnsQuery.domain)
+        .order_by(func.count().desc())
+        .limit(count)
+        .all()
+    )
+    return StoredTopBlockedResponse(
+        top_blocked=[StoredDomainEntry(domain=r.domain, count=r.cnt) for r in rows],
+        period=period,
+    )
+
+
+@router.get("/stored-top-clients", response_model=StoredTopClientsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_top_clients(
+    request: Request, response: Response,
+    count: int = Query(10, ge=1, le=100),
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get top clients from PostgreSQL."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    rows = (
+        db.query(DnsQuery.client, func.count().label("cnt"))
+        .filter(DnsQuery.timestamp >= since)
+        .group_by(DnsQuery.client)
+        .order_by(func.count().desc())
+        .limit(count)
+        .all()
+    )
+    return StoredTopClientsResponse(
+        top_clients=[StoredClientEntry(client=r.client, count=r.cnt) for r in rows],
+        period=period,
+    )
+
+
+@router.get("/stored-history", response_model=StoredHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_stored_history(
+    request: Request, response: Response,
+    period: str = Query("24h", pattern="^(24h|7d|30d)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get hourly query timeline from pre-aggregated stats."""
+    since = datetime.now(timezone.utc) - _period_to_delta(period)
+    rows = (
+        db.query(DnsQueryHourlyStat)
+        .filter(DnsQueryHourlyStat.hour >= since)
+        .order_by(DnsQueryHourlyStat.hour.asc())
+        .all()
+    )
+    return StoredHistoryResponse(
+        history=[HourlyCountEntry.model_validate(r) for r in rows],
+        period=period,
+    )
+
+
+# ── Query Collector Management ───────────────────────────────────────
+
+@router.get("/query-collector/status", response_model=QueryCollectorStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_collector_status(
+    request: Request, response: Response,
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Get DNS query collector status."""
+    from app.services.pihole.query_collector import get_dns_query_collector
+    data = get_dns_query_collector().get_status()
+    return QueryCollectorStatusResponse(**data)
+
+
+@router.put("/query-collector/config", response_model=QueryCollectorStatusResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_collector_config(
+    request: Request, response: Response,
+    body: QueryCollectorConfigUpdate,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Update DNS query collector configuration."""
+    row = db.query(DnsQueryCollectorState).filter_by(id=1).first()
+    if not row:
+        row = DnsQueryCollectorState(id=1)
+        db.add(row)
+
+    update = body.model_dump(exclude_unset=True)
+    for key, val in update.items():
+        setattr(row, key, val)
+    db.commit()
+
+    get_audit_logger_db().log_event(
+        event_type="PIHOLE", user=current_user.username,
+        action="pihole_collector_config_updated",
+        details={"fields": list(update.keys())},
+    )
+
+    from app.services.pihole.query_collector import get_dns_query_collector
+    data = get_dns_query_collector().get_status()
+    return QueryCollectorStatusResponse(**data)
