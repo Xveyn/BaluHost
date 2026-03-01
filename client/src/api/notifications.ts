@@ -264,6 +264,15 @@ export function getActionLabel(category: NotificationCategory): string {
 }
 
 /**
+ * Fetch a short-lived, scoped token for WebSocket authentication.
+ * This avoids passing the full access token as a query parameter.
+ */
+export async function getWsToken(): Promise<string> {
+  const response = await apiClient.post<{ token: string }>('/api/notifications/ws-token');
+  return response.data.token;
+}
+
+/**
  * Get WebSocket URL for notifications.
  * Token is passed as parameter (single source of truth from AuthContext).
  */

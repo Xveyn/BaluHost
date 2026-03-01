@@ -136,6 +136,33 @@ def create_sse_token(user_id: int | str, upload_id: str, expires_seconds: int = 
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
+def create_ws_token(user_id: int | str, username: str, expires_seconds: int = 60) -> str:
+    """
+    Create a short-lived, scoped token for WebSocket notification streaming.
+
+    This token is intentionally minimal -- it only grants access to the
+    notification WebSocket and expires quickly, so it is safe to pass as a
+    query parameter (which gets logged by reverse proxies).
+
+    Args:
+        user_id: The authenticated user's ID.
+        username: The authenticated user's username.
+        expires_seconds: Token lifetime in seconds (default 60).
+
+    Returns:
+        Encoded JWT token string.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "type": "ws",
+        "exp": now + timedelta(seconds=expires_seconds),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
 def create_2fa_pending_token(user_id: int | str, expires_seconds: int = 300) -> str:
     """
     Create a short-lived token indicating that password was verified but 2FA is pending.

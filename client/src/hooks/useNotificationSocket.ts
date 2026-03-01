@@ -3,7 +3,7 @@
  */
 import { useEffect, useRef, useState, useCallback } from 'react';
 import type { Notification } from '../api/notifications';
-import { getWebSocketUrl } from '../api/notifications';
+import { getWebSocketUrl, getWsToken } from '../api/notifications';
 import { useAuth } from '../contexts/AuthContext';
 
 export interface NotificationSocketState {
@@ -60,7 +60,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   useEffect(() => { onNotificationRef.current = onNotification; }, [onNotification]);
   useEffect(() => { onUnreadCountChangeRef.current = onUnreadCountChange; }, [onUnreadCountChange]);
 
-  const connect = useCallback(() => {
+  const connect = useCallback(async () => {
     if (!enabledRef.current || !tokenRef.current) return;
 
     // CONNECTING + OPEN + CLOSING guard — prevent duplicate WebSockets
@@ -74,7 +74,15 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     }
 
     try {
-      const url = getWebSocketUrl(tokenRef.current);
+      // Fetch a short-lived, scoped WS token instead of passing the access token
+      let wsToken: string;
+      try {
+        wsToken = await getWsToken();
+      } catch {
+        // If ws-token endpoint is unavailable (e.g. older backend), fall back to access token
+        wsToken = tokenRef.current;
+      }
+      const url = getWebSocketUrl(wsToken);
       const ws = new WebSocket(url);
 
       ws.onopen = () => {
@@ -217,7 +225,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   // 1) Mount: connect if ready. Unmount: disconnect.
   useEffect(() => {
     if (enabledRef.current && tokenRef.current) {
-      connect();
+      void connect();
     }
     return () => { disconnect(); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -228,7 +236,7 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   //    NO cleanup function → effect re-runs can't trigger disconnect.
   useEffect(() => {
     if (token && enabled) {
-      connect(); // no-op if already OPEN/CONNECTING
+      void connect(); // no-op if already OPEN/CONNECTING
     } else if (!token) {
       disconnect();
     }

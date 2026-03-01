@@ -315,6 +315,26 @@ async def create_notification(
     return NotificationResponse.from_db(notification)
 
 
+# WebSocket token endpoint
+@router.post("/ws-token")
+@user_limiter.limit(get_limit("user_operations"))
+async def get_ws_token(
+    request: Request,
+    response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+):
+    """Get a short-lived, scoped token for WebSocket authentication.
+
+    The returned token is valid for 60 seconds and only grants access
+    to the notification WebSocket endpoint. This avoids passing the
+    full access token (which carries broader permissions) as a query
+    parameter where it would be logged by proxies and browsers.
+    """
+    from app.core.security import create_ws_token
+    token = create_ws_token(current_user.id, current_user.username)
+    return {"token": token}
+
+
 # WebSocket endpoint for real-time notifications
 @router.websocket("/ws")
 async def notification_websocket(
@@ -323,12 +343,14 @@ async def notification_websocket(
 ):
     """WebSocket endpoint for real-time notification delivery.
 
-    Requires JWT token as query parameter for authentication.
-    Sends notification events as they occur.
+    Requires a scoped WS token (from POST /ws-token) as query parameter.
+    Also accepts full access tokens for backwards compatibility (deprecated).
     """
     import logging
     from app.services.websocket_manager import get_websocket_manager
     from app.core.database import SessionLocal
+    from app.core.security import decode_token as decode_raw_token
+    import jwt as pyjwt
 
     logger = logging.getLogger(__name__)
 
@@ -338,18 +360,33 @@ async def notification_websocket(
         await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         return
 
-    # Authenticate user
+    # Authenticate user using scoped WS token (preferred) or access token (deprecated)
     user_id = None
     is_admin = False
     db = None
 
     try:
         db = SessionLocal()
-        payload = auth_service.decode_token(token)
+
+        # First try to decode as a scoped WS token
+        try:
+            payload = decode_raw_token(token, token_type="ws")
+        except pyjwt.InvalidTokenError:
+            # Fall back to access token for backwards compatibility
+            try:
+                payload = decode_raw_token(token, token_type="access")
+                logger.warning(
+                    "WebSocket: client used access token instead of scoped ws token "
+                    "(deprecated, use POST /api/notifications/ws-token)"
+                )
+            except pyjwt.InvalidTokenError:
+                raise auth_service.InvalidTokenError("Invalid WebSocket token")
+
+        user_sub = payload.get("sub")
         from app.services import users as user_service
-        user = user_service.get_user(payload.sub, db=db)
+        user = user_service.get_user(user_sub, db=db)
         if not user:
-            logger.warning(f"WebSocket: User not found for token sub={payload.sub}")
+            logger.warning(f"WebSocket: User not found for token sub={user_sub}")
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
             return
         user_id = user.id
