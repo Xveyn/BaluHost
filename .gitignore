@@ -98,3 +98,8 @@ image.png
 tools/
 /backend/env.production
 balupi-deploy*
+
+# Data artifacts
+backend/baluhost.db.backup-*
+backend/benchmark_results/
+backend/dev-backups/
