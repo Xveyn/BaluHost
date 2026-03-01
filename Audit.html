@@ -1,0 +1,1135 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Code Audit Report — BaluHost</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --surface: #1e293b;
+      --surface2: #334155;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --border: #475569;
+      --accent: #3b82f6;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.6;
+      padding: 2rem;
+    }
+    .container { max-width: 1100px; margin: 0 auto; }
+    header {
+      text-align: center;
+      padding: 2rem;
+      margin-bottom: 2rem;
+      background: var(--surface);
+      border-radius: 12px;
+      border: 1px solid var(--border);
+    }
+    header h1 { font-size: 2rem; margin-bottom: 0.5rem; }
+    header .subtitle { color: var(--text-muted); }
+    .overall-grade {
+      display: inline-flex;
+      align-items: center;
+      gap: 1rem;
+      margin: 1.5rem 0;
+      font-size: 1.5rem;
+    }
+    .overall-grade .grade {
+      font-size: 4rem;
+      font-weight: 800;
+      line-height: 1;
+    }
+    .overview-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+      gap: 1rem;
+      margin: 2rem 0;
+    }
+    .overview-card {
+      background: var(--surface);
+      padding: 1rem;
+      border-radius: 8px;
+      text-align: center;
+      border: 1px solid var(--border);
+    }
+    .overview-card .count { font-size: 2rem; font-weight: 700; }
+    .overview-card .label { color: var(--text-muted); font-size: 0.85rem; text-transform: uppercase; }
+    .executive-summary {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border);
+    }
+    .executive-summary h2 { margin-bottom: 0.75rem; }
+    .recommendations {
+      background: var(--surface);
+      padding: 1.5rem;
+      border-radius: 8px;
+      margin-bottom: 2rem;
+      border: 1px solid var(--border);
+    }
+    .recommendations h2 { margin-bottom: 0.75rem; }
+    .recommendations ol { padding-left: 1.5rem; }
+    .recommendations li { margin-bottom: 0.5rem; }
+    .category {
+      background: var(--surface);
+      border-radius: 8px;
+      margin-bottom: 1.5rem;
+      border: 1px solid var(--border);
+      overflow: hidden;
+    }
+    .category-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 1rem 1.5rem;
+      background: var(--surface2);
+    }
+    .category-header h2 { font-size: 1.25rem; }
+    .category-score { display: flex; align-items: center; gap: 0.75rem; }
+    .category-score .grade { font-size: 1.75rem; font-weight: 800; }
+    .category-score .score { color: var(--text-muted); }
+    .category-summary { padding: 1rem 1.5rem; color: var(--text-muted); }
+    .findings { padding: 0 1.5rem 1.5rem; }
+    .finding {
+      padding: 1rem;
+      margin-top: 0.75rem;
+      border-radius: 6px;
+      background: var(--bg);
+      border: 1px solid var(--border);
+    }
+    .finding-header { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.5rem; }
+    .severity-badge {
+      color: #fff;
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      font-weight: 700;
+      letter-spacing: 0.5px;
+    }
+    .finding-title { font-weight: 600; }
+    .finding-desc { color: var(--text-muted); margin-bottom: 0.5rem; }
+    .finding-location { font-size: 0.85rem; margin-bottom: 0.5rem; }
+    .finding-location code { background: var(--surface2); padding: 2px 6px; border-radius: 3px; }
+    .finding-rec { font-size: 0.9rem; }
+    footer {
+      text-align: center;
+      color: var(--text-muted);
+      padding: 2rem;
+      font-size: 0.85rem;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Code Audit Report</h1>
+      <p class="subtitle">BaluHost &mdash; March 1, 2026</p>
+      <div class="overall-grade">
+        <span class="grade" style="color:#ea580c">D</span>
+        <span>64/100</span>
+      </div>
+    </header>
+
+    <div class="overview-grid">
+      <div class="overview-card">
+        <div class="count" style="color:#dc2626">6</div>
+        <div class="label">Critical</div>
+      </div>
+      <div class="overview-card">
+        <div class="count" style="color:#ea580c">23</div>
+        <div class="label">High</div>
+      </div>
+      <div class="overview-card">
+        <div class="count" style="color:#d97706">37</div>
+        <div class="label">Medium</div>
+      </div>
+      <div class="overview-card">
+        <div class="count" style="color:#2563eb">12</div>
+        <div class="label">Low</div>
+      </div>
+      <div class="overview-card">
+        <div class="count" style="color:#6b7280">8</div>
+        <div class="label">Info</div>
+      </div>
+    </div>
+
+    <div class="executive-summary">
+      <h2>Executive Summary</h2>
+      <p>BaluHost is an ambitious and feature-rich NAS management platform with strong architectural foundations including a well-organized monorepo, clean hardware abstraction via Protocol patterns, a mature plugin system, multi-worker coordination, and device-aware frontend builds. The project has 1,322 backend tests and comprehensive security measures (JWT, 2FA, RBAC, rate limiting, audit logging). However, the audit reveals critical gaps: 5 critical security vulnerabilities (password validation bypass, open registration, hardcoded admin password, command injection surface, plaintext VPN keys), no CI execution of any test suite despite having 1,500+ tests, a critical N+1 query pattern generating 300-400 queries per file listing request, and significant coding practice debt (532 silent exception handlers, DRY violations). The overall score of 64/100 (D) reflects a project with excellent architecture and ambition that needs focused attention on security hardening, CI/CD test automation, performance optimization of the file listing pipeline, and code quality improvements.</p>
+    </div>
+
+    <div class="recommendations">
+      <h2>Top Recommendations</h2>
+      <ol>
+        <li>CRITICAL: Create Pydantic models for change-password and refresh-token endpoints to enforce input validation on security-critical operations</li>
+        <li>CRITICAL: Restrict user registration to admin-authorized paths (invitation tokens or admin approval) to prevent unauthorized account creation</li>
+        <li>CRITICAL: Add a production validator for the default admin password ('DevMode2024') and force password change on first login</li>
+        <li>CRITICAL: Fix the N+1 query pattern in directory listing by pre-fetching metadata, ownership, and share data in bulk queries</li>
+        <li>HIGH: Add GitHub Actions workflows to run pytest and Vitest on every push/PR — 1,500+ tests currently run only locally</li>
+        <li>HIGH: Move JWT tokens from localStorage to HTTP-only, Secure, SameSite cookies to mitigate XSS token theft</li>
+        <li>HIGH: Remove 'unsafe-inline' and 'unsafe-eval' from production CSP and make CSP conditional on environment</li>
+        <li>HIGH: Extract all 174 direct database calls from route handlers into corresponding service classes per documented coding standards</li>
+        <li>HIGH: Increase default Uvicorn workers from 1 to match CPU cores for production Docker deployment</li>
+        <li>MEDIUM: Globally replace 90+ datetime.utcnow() calls with datetime.now(timezone.utc) before Python 3.12 deprecation</li>
+        <li>MEDIUM: Create a session management context manager to eliminate 17+ duplicated should_close boilerplate patterns</li>
+        <li>MEDIUM: Implement application-level response caching for frequently polled monitoring endpoints</li>
+        <li>MEDIUM: Add API versioning (/api/v1/) before breaking changes affect the three client platforms (web, desktop, mobile)</li>
+        <li>MEDIUM: Convert 12 'assert True' placeholder tests in test_security_headers.py to actual header assertions</li>
+        <li>MEDIUM: Consolidate frontend polling (8-12 intervals) into WebSocket-based real-time updates or a batched dashboard API</li>
+        <li>LOW: Synchronize version numbers across __init__.py (1.8.2), pyproject.toml (1.12.0), and docs/ARCHITECTURE.md (1.4.2)</li>
+      </ol>
+    </div>
+
+    
+    <section class="category">
+      <div class="category-header">
+        <h2>Project Structure</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#d97706">C</span>
+          <span class="score">78/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The monorepo structure is well-organized with clear frontend/backend/deploy separation following FastAPI and React best practices. Key issues are committed data artifacts, version drift, and incremental refactoring debt (sys.modules patching, oversized main.py).</p>
+      <div class="findings">
+        
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Data artifacts committed to repository</span>
+      </div>
+      <p class="finding-desc">SQLite database backup (baluhost.db.backup-20251209-215648), benchmark result JSONs, and dev-backup tar.gz archives are tracked in git. These are runtime data files that should never be in version control.</p>
+      <p class="finding-location">📄 <code>backend/baluhost.db.backup-20251209-215648</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add backend/baluhost.db.backup-*, backend/benchmark_results/, and backend/dev-backups/ to .gitignore and remove from git tracking.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Version number drift across files</span>
+      </div>
+      <p class="finding-desc">backend/app/__init__.py reports version 1.8.2 while pyproject.toml and package.json both say 1.12.0, and docs/ARCHITECTURE.md says 1.4.2. Since main.py reads __version__ from app/__init__.py, the FastAPI app reports the wrong version.</p>
+      <p class="finding-location">📄 <code>backend/app/__init__.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Implement a single source of truth for versioning using importlib.metadata.version() or a version bump tool that updates all locations atomically.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Orphaned and misplaced files at repository root</span>
+      </div>
+      <p class="finding-desc">Documentation.html (standalone HTML with CDN deps), NETWORK_TEST.html (debug artifact), BALUPI_PLAN.md, TODO.md, and PGP_PUBLIC_KEY.asc sit at the repo root instead of organized locations.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Move BALUPI_PLAN.md and TODO.md to docs/. Move Documentation.html and NETWORK_TEST.html to tools/ or remove if superseded. Move PGP_PUBLIC_KEY.asc to a dedicated directory.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Services __init__.py contains heavy sys.modules patching</span>
+      </div>
+      <p class="finding-desc">backend/app/services/__init__.py uses 30+ sys.modules manipulations to maintain backward compatibility after refactoring services into subdirectories. This is fragile technical debt that can mask import errors.</p>
+      <p class="finding-location">📄 <code>backend/app/services/__init__.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Complete the migration by updating all consumers to use new package paths, then remove the sys.modules aliases.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">main.py is excessively large (933 lines)</span>
+      </div>
+      <p class="finding-desc">backend/app/main.py contains primary worker lock logic, service heartbeat writing, Pi-hole health loop, all service registration (~200 lines), full lifespan handler (~250 lines), and app factory. This violates single responsibility.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Extract service registration into app/core/service_registry.py, worker logic into app/core/worker.py, and lifespan into app/core/lifespan.py.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Inconsistent router prefix assignment</span>
+      </div>
+      <p class="finding-desc">In backend/app/api/routes/__init__.py, some routers have centralized prefixes while others (sync, mobile, devices, vpn) are included without prefix or tags, relying on internal definitions. This creates a mixed pattern.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/__init__.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Standardize on the centralized prefix approach for a single view of the full URL structure.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Mixed Alembic migration naming conventions</span>
+      </div>
+      <p class="finding-desc">67 migrations use three distinct naming patterns: sequential numbered (001-037), hash-based auto-generated (30 files), and ad-hoc without prefix (5 files).</p>
+      <p class="finding-location">📄 <code>backend/alembic/versions/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Standardize on sequential numbered format (NNN_descriptive_name.py) for all new migrations.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Phantom export in models/__init__.py</span>
+      </div>
+      <p class="finding-desc">backend/app/models/__init__.py exports SsdCacheConfig in __all__ but no corresponding import exists, causing potential AttributeError.</p>
+      <p class="finding-location">📄 <code>backend/app/models/__init__.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Either add the missing import for SsdCacheConfig or remove it from __all__.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Root-level test files mixed with organized subdirectories</span>
+      </div>
+      <p class="finding-desc">9 test files sit directly in backend/tests/ (test_admin_db.py, test_balupi.py, test_pihole.py, etc.) alongside well-organized subdirectories.</p>
+      <p class="finding-location">📄 <code>backend/tests/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Distribute root-level test files into appropriate subdirectories (api/, services/, etc.).</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">RemoteServers directory uses PascalCase</span>
+      </div>
+      <p class="finding-desc">client/src/components/RemoteServers/ uses PascalCase while all other subdirectories use lowercase (admin/, benchmark/, cloud/, dashboard/, ui/).</p>
+      <p class="finding-location">📄 <code>client/src/components/RemoteServers/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Rename to remote-servers/ (kebab-case) for consistency.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Stale architecture documentation</span>
+      </div>
+      <p class="finding-desc">docs/ARCHITECTURE.md shows version 1.4.2 and references pre-refactoring module paths. .claude/rules/architecture.md also references old flat service paths.</p>
+      <p class="finding-location">📄 <code>docs/ARCHITECTURE.md</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Update documentation to reflect current 1.12.0 version and refactored service structure.</p>
+    </div>
+      </div>
+    </section>
+
+    <section class="category">
+      <div class="category-header">
+        <h2>Coding Practices</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#ea580c">D</span>
+          <span class="score">69/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The codebase demonstrates strong architectural patterns with good dependency injection, type hint coverage, and Pydantic validation. However, significant DRY violations (session management, audit logger, monitoring patterns), 532 silent exception handlers, and untyped dict parameters in security-critical endpoints undermine code quality.</p>
+      <div class="findings">
+        
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Repetitive session management boilerplate</span>
+      </div>
+      <p class="finding-desc">The 'should_close = db is None' pattern is duplicated 17+ times across users.py and metadata_db.py, and likely more throughout services. Every function repeats the same try/finally session lifecycle.</p>
+      <p class="finding-location">📄 <code>backend/app/services/users.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Extract into a context manager: @contextmanager ensure_session(db=None) that yields a session and handles cleanup.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">532 bare except Exception handlers across 113 files</span>
+      </div>
+      <p class="finding-desc">Many except Exception blocks silently swallow errors without logging. Examples in main.py (lines 164-165, 225-226) and auth.py (line 68-69) use 'pass' or return defaults, masking real bugs.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Audit each handler. Replace with specific exception types where possible. At minimum add logger.debug('...', exc_info=True) to prevent silent failures.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Untyped payload: dict in route handlers bypasses validation</span>
+      </div>
+      <p class="finding-desc">Change-password, refresh-token, and several file operation endpoints accept raw dict instead of Pydantic models, bypassing FastAPI's automatic validation and documentation generation.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py:430</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Replace all payload: dict parameters with proper Pydantic request models to restore validation and OpenAPI documentation.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Deprecated datetime.utcnow() used in 90+ locations</span>
+      </div>
+      <p class="finding-desc">The codebase mixes deprecated datetime.utcnow() (returns naive datetimes) with modern datetime.now(timezone.utc) in newer code. Python 3.12 formally deprecates utcnow().</p>
+      <p class="finding-location">📄 <code>backend/app/services/power/manager.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Globally replace datetime.utcnow() with datetime.now(timezone.utc) across all 90+ locations.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">1290+ f-string logger calls defeat lazy evaluation</span>
+      </div>
+      <p class="finding-desc">Logger calls use f-strings instead of %s formatting, meaning strings are formatted even when the log level is disabled. The codebase inconsistently mixes both styles.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py:601</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use logger.warning('msg: %s', var) consistently for lazy evaluation. Many linting tools can auto-fix this.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Duplicated audit logger initialization in route handlers</span>
+      </div>
+      <p class="finding-desc">The line audit_logger = get_audit_logger_db() is called at the top of nearly every route handler across 10+ route files (47 occurrences).</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Make audit_logger a FastAPI dependency via Depends() to eliminate boilerplate.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Duplicated monitoring history endpoint pattern</span>
+      </div>
+      <p class="finding-desc">CPU, Memory, Network, DiskIO, and Process history endpoints all repeat the same 30-line data source selection and fallback pattern with only the model class differing.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/monitoring.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Extract into a generic _get_history_with_fallback() function parameterized by collector name and model.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Inconsistent response formats</span>
+      </div>
+      <p class="finding-desc">Some endpoints return raw dicts ({'message': '...'}) without response_model declarations, while others use proper Pydantic models. This creates inconsistent API documentation.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create standard response models like MessageResponse(BaseModel) and declare response_model on all endpoints.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Mixed Python Optional syntax across codebase</span>
+      </div>
+      <p class="finding-desc">109 files use Optional[...] from typing while 37 files use modern X | None syntax. Many files mix both styles.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Adopt X | None uniformly since the project uses Python 3.11+ and has from __future__ import annotations in several files.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">TypeScript any usage in 56 locations across 19 files</span>
+      </div>
+      <p class="finding-desc">The central API module (lib/api.ts) uses any in 5 places including CacheEntry type and memoizedApiRequest generic. Pi-hole components have 17 occurrences.</p>
+      <p class="finding-location">📄 <code>client/src/lib/api.ts</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Replace any with unknown or proper generic types, especially in the API layer where response types can be constrained.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">German comments scattered in source code</span>
+      </div>
+      <p class="finding-desc">German comments found in system.py, api.ts, and other files (e.g., 'Gibt aggregierte Speicherinformationen', '60 Sekunden').</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/system.py:86</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Standardize all comments and docstrings in English for international maintainability.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Dual secret keys create configuration confusion</span>
+      </div>
+      <p class="finding-desc">config.py has both SECRET_KEY and token_secret with identical defaults and validators. The comment says token_secret is 'Legacy' but both must be set.</p>
+      <p class="finding-location">📄 <code>backend/app/core/config.py:32</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Deprecate and remove token_secret if no longer used, or add a model validator that syncs them.</p>
+    </div>
+      </div>
+    </section>
+
+    <section class="category">
+      <div class="category-header">
+        <h2>Security</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#dc2626">F</span>
+          <span class="score">53/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The project shows strong security awareness with JWT implementation, 2FA, rate limiting, audit logging, bcrypt hashing, and path traversal prevention. However, 5 critical vulnerabilities (validation bypass on password change, open registration, hardcoded admin password, command injection surface, plaintext VPN keys) and 7 high-severity issues (CSP weaknesses, localStorage tokens, encryption key reuse, CORS misconfiguration) require immediate attention.</p>
+      <div class="findings">
+        
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">Change-password endpoint lacks input validation</span>
+      </div>
+      <p class="finding-desc">The /auth/change-password endpoint accepts a raw dict instead of a Pydantic model, completely bypassing password strength enforcement (min 8 chars, uppercase, lowercase, digit, common password blacklist). An authenticated user could set their password to 'a'.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py:427</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create a ChangePasswordRequest Pydantic model that applies the same password validation as RegisterRequest.</p>
+    </div>
+
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">Open user registration without authorization</span>
+      </div>
+      <p class="finding-desc">The /auth/register endpoint is publicly accessible with no admin approval or invitation mechanism. Any external attacker who can reach the API can create user accounts with filesystem home directories and access to shared files.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py:369</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Require admin-issued invitation tokens for registration, or add a configuration flag to disable public registration entirely.</p>
+    </div>
+
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">Hardcoded default admin password with no production validator</span>
+      </div>
+      <p class="finding-desc">The admin_password defaults to 'DevMode2024' (intentionally chosen to bypass the password blacklist). Unlike SECRET_KEY, there is NO validator that rejects this default in production. The admin is silently created with this password on first startup.</p>
+      <p class="finding-location">📄 <code>backend/app/core/config.py:47</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add a Pydantic validator that rejects default admin passwords in production mode. Force password change on first admin login.</p>
+    </div>
+
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">Command injection surface via username in Samba operations</span>
+      </div>
+      <p class="finding-desc">The username parameter is passed directly to sudo useradd, smbpasswd, and other system commands. While asyncio.create_subprocess_exec prevents shell injection, the Samba functions accept any str without re-validating the username regex.</p>
+      <p class="finding-location">📄 <code>backend/app/services/samba_service.py:52</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add username validation directly in Samba service functions using strict regex. Never trust that callers have validated input.</p>
+    </div>
+
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">VPN private key stored in plaintext in API response and database</span>
+      </div>
+      <p class="finding-desc">WireGuard client creation returns the private key in cleartext in the response body and stores server_private_key in the database without encryption, while the Fritz!Box path properly encrypts.</p>
+      <p class="finding-location">📄 <code>backend/app/services/vpn/service.py:180</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Encrypt all VPN private keys at rest using VPNEncryption.encrypt_key() before database storage. Mark config_content as one-time-display.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">CSP allows unsafe-inline and unsafe-eval in production</span>
+      </div>
+      <p class="finding-desc">The security headers middleware applies 'unsafe-inline' and 'unsafe-eval' in the script-src CSP directive for all environments, with a comment noting it is for Vite dev server. This significantly weakens XSS protection in production.</p>
+      <p class="finding-location">📄 <code>backend/app/middleware/security_headers.py:29</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Conditionally set CSP based on settings.is_dev_mode. Remove unsafe-inline and unsafe-eval from production CSP.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">WebSocket authentication token passed as query parameter</span>
+      </div>
+      <p class="finding-desc">The notification WebSocket endpoint accepts the full JWT access token (15-min TTL, full permissions) as a query parameter, where it gets logged in server access logs, proxy logs, and browser history.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/notifications.py:319</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create a short-lived, scoped WebSocket connection token similar to the existing SSE token pattern.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">JWT tokens stored in localStorage vulnerable to XSS</span>
+      </div>
+      <p class="finding-desc">JWT tokens are stored in localStorage which is accessible to any JavaScript on the page. Combined with the CSP allowing unsafe-inline/unsafe-eval, any XSS vulnerability directly exposes the authentication token.</p>
+      <p class="finding-location">📄 <code>client/src/lib/api.ts:155</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use HTTP-only, Secure, SameSite cookies for token storage. Set tokens via Set-Cookie response headers.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">VPN encryption key reused for TOTP secret encryption</span>
+      </div>
+      <p class="finding-desc">The VPN_ENCRYPTION_KEY Fernet key is reused for encrypting VPN private keys, SSH private keys, and TOTP secrets. Compromise of one encrypted value's context leads to compromise of all.</p>
+      <p class="finding-location">📄 <code>backend/app/services/totp_service.py:89</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use separate encryption keys for separate concerns. Add dedicated TOTP_ENCRYPTION_KEY and SSH_ENCRYPTION_KEY configuration.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Overly permissive CORS configuration</span>
+      </div>
+      <p class="finding-desc">CORS is configured with allow_credentials=True, allow_methods=['*'], and allow_headers=['*']. While origins are restricted, the wildcard methods and headers are overly permissive.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py:893</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Restrict allow_methods to specific HTTP methods used (GET, POST, PUT, DELETE, PATCH, OPTIONS). Restrict allow_headers to required headers.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Hardcoded database credentials in Docker and scripts</span>
+      </div>
+      <p class="finding-desc">docker-compose.yml uses fallback passwords (changeme_in_production), setup scripts contain hardcoded credentials (baluhost_password), and pgAdmin/Grafana use admin/admin defaults.</p>
+      <p class="finding-location">📄 <code>docker-compose.yml:14</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Remove default password fallbacks from docker-compose.yml. Require explicit environment variables for production credentials.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">No CSRF protection with allow_credentials=True</span>
+      </div>
+      <p class="finding-desc">Since CORS allows credentials and some authentication paths may use cookies, the application could be vulnerable to CSRF attacks on state-changing endpoints.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py:897</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add CSRF token validation for state-changing operations, or ensure Bearer-only authentication with no cookie fallback.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Debug mode enabled by default</span>
+      </div>
+      <p class="finding-desc">The config defaults debug=True and environment='development'. Anyone running the backend without explicitly setting these variables will have debug mode active, potentially exposing stack traces.</p>
+      <p class="finding-location">📄 <code>backend/app/core/config.py:8</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Default debug to False. Require explicit opt-in for debug mode.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Brute-force tracking dict grows without bound</span>
+      </div>
+      <p class="finding-desc">The _failed_login_attempts dict in auth.py has no maximum size. An attacker could flood with unique IPs to consume memory.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/auth.py:28</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use cachetools.TTLCache with a maximum size, or an external store like Redis.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">pgAdmin master password disabled in Docker</span>
+      </div>
+      <p class="finding-desc">pgAdmin runs with PGADMIN_CONFIG_MASTER_PASSWORD_REQUIRED=False, meaning anyone accessing port 5050 gets full database management access.</p>
+      <p class="finding-location">📄 <code>docker-compose.yml:138</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Enable master password requirement. Ensure pgAdmin port is not exposed to external networks.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Rate limiter uses in-memory storage only</span>
+      </div>
+      <p class="finding-desc">The rate limiter uses memory:// storage, meaning each worker process maintains independent counters. Multi-worker deployments have ineffective rate limiting.</p>
+      <p class="finding-location">📄 <code>backend/app/core/rate_limiter.py:52</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use Redis-based storage for production rate limiting when multiple workers are deployed.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Login endpoint vulnerable to timing-based user enumeration</span>
+      </div>
+      <p class="finding-desc">The authenticate_user function returns early when user is not found (skipping bcrypt), creating a timing difference that could enumerate valid usernames.</p>
+      <p class="finding-location">📄 <code>backend/app/services/auth.py:23</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Perform a dummy bcrypt hash comparison when user is not found to normalize timing.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Sensitive information in debug log messages</span>
+      </div>
+      <p class="finding-desc">Token subjects, usernames, and roles are logged at DEBUG level in deps.py. Debug log collection could expose user data.</p>
+      <p class="finding-location">📄 <code>backend/app/api/deps.py:74</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Ensure production log level is INFO or higher. Consider redacting user identifiers in debug logs.</p>
+    </div>
+      </div>
+    </section>
+
+    <section class="category">
+      <div class="category-header">
+        <h2>Testing</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#dc2626">F</span>
+          <span class="score">50/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The backend test suite is mature with 1,322 test functions demonstrating excellent test quality where coverage exists (auth, security, RAID, files). However, critical gaps include: no CI execution of any test suite, 35% of backend routes untested, 2% frontend component coverage, and 12 placeholder 'assert True' tests. The testing infrastructure (conftest, fixtures, mocking) is well-designed but underutilized.</p>
+      <div class="findings">
+        
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">No CI workflow runs backend pytest suite</span>
+      </div>
+      <p class="finding-desc">The 1,322 backend test functions across 76 files are never executed in GitHub Actions CI. There is no pytest step in any workflow. Tests exist only for local execution.</p>
+      <p class="finding-location">📄 <code>.github/workflows/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create a GitHub Actions workflow that runs 'python -m pytest backend -q' on every push/PR. This is the single most impactful improvement.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">No CI workflow runs frontend Vitest unit tests</span>
+      </div>
+      <p class="finding-desc">The build-client.yml workflow only runs 'npm run build', not 'npm test'. 154 frontend unit tests are not validated in CI.</p>
+      <p class="finding-location">📄 <code>.github/workflows/build-client.yml</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add 'npx vitest run' to the build-client.yml workflow.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">35% of backend routes have no test coverage</span>
+      </div>
+      <p class="finding-desc">15 of 43 route modules have no tests whatsoever. Notable gaps include vpn.py, vpn_profiles.py, webdav.py, cloud.py, samba.py, system.py, tapo.py, benchmark.py, and api_keys.py. Several handle security-sensitive network services.</p>
+      <p class="finding-location">📄 <code>backend/tests/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add at minimum authentication and authorization tests for VPN, WebDAV, Samba, and Cloud routes.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Frontend component test coverage is approximately 2%</span>
+      </div>
+      <p class="finding-desc">Only 2 of 90+ components have tests (ConfirmDialog and ErrorBoundary). Major untested components include Layout, NotificationCenter, RaidSetupWizard, FileListView, PowerWidget, SyncSettings, and all admin panel components. No page-level component tests exist.</p>
+      <p class="finding-location">📄 <code>client/src/__tests__/components/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Prioritize testing interactive components: FileListView, RaidSetupWizard, NotificationCenter, Layout, and form components.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">12 'assert True' placeholder tests in security headers</span>
+      </div>
+      <p class="finding-desc">test_security_headers.py contains 12 tests that always pass regardless of implementation correctness, providing a false sense of security coverage.</p>
+      <p class="finding-location">📄 <code>backend/tests/security/test_security_headers.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Convert to actual assertions against response headers, following the pattern in test_input_validation.py.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">No middleware test coverage</span>
+      </div>
+      <p class="finding-desc">None of the 5 middleware modules (device_tracking, error_counter, local_only, security_headers, sleep_auto_wake) have dedicated tests. local_only and security_headers are security-critical.</p>
+      <p class="finding-location">📄 <code>backend/app/middleware/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create unit tests for local_only and security_headers middleware using TestClient with controlled request headers.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">All tests run against SQLite while production uses PostgreSQL</span>
+      </div>
+      <p class="finding-desc">Integration tests use in-memory SQLite with StaticPool. PostgreSQL-specific features (JSON columns, sequences, advisory locks) are never exercised in tests.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add a PostgreSQL test mode for CI using a service container to catch database-specific issues.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">61-second sleep in upload progress test</span>
+      </div>
+      <p class="finding-desc">test_upload_progress.py contains 'await asyncio.sleep(61)' to wait for a 60-second cleanup timer, making the entire test suite very slow.</p>
+      <p class="finding-location">📄 <code>backend/tests/files/test_upload_progress.py:153</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use time mocking (freezegun) or dependency injection to control cleanup timing instead of real waits.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">No coverage reporting configured</span>
+      </div>
+      <p class="finding-desc">Neither pytest-cov for backend nor @vitest/coverage-v8 for frontend is configured. The project targets 80%+ coverage per coding-style.md but has no way to measure it.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Configure coverage reporting tools and add coverage thresholds to CI.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">E2E tests cover only 5 of 31 pages</span>
+      </div>
+      <p class="finding-desc">Playwright tests exist for Login, Auth Guards, Dashboard, File Manager, and Schedulers. No E2E tests for Settings, User Management, Power Management, RAID, Plugins, VPN, Monitoring, Backup, or Updates.</p>
+      <p class="finding-location">📄 <code>client/tests/e2e/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Expand E2E coverage to at least the core user flows: Settings, User Management, and Power Management.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">No pytest configuration in pyproject.toml</span>
+      </div>
+      <p class="finding-desc">No [tool.pytest] section exists, meaning pytest runs with all defaults. pytest-asyncio mode is not explicitly configured, which will cause deprecation warnings.</p>
+      <p class="finding-location">📄 <code>backend/pyproject.toml</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add [tool.pytest.ini_options] with asyncio_mode='auto', testpaths=['tests'], and custom markers.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">E2E tests use CSS class selectors instead of semantic locators</span>
+      </div>
+      <p class="finding-desc">Login tests use brittle selectors like '.text-rose-200' instead of role-based or data-testid selectors, making tests fragile to Tailwind class changes.</p>
+      <p class="finding-location">📄 <code>client/tests/e2e/login.spec.ts:108</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use getByRole, getByLabel, or data-testid attributes for resilient E2E selectors.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Only Chromium configured for Playwright</span>
+      </div>
+      <p class="finding-desc">Firefox and WebKit projects are not configured, potentially missing browser-specific rendering or API compatibility issues.</p>
+      <p class="finding-location">📄 <code>client/playwright.config.ts</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add Firefox and WebKit to the Playwright projects configuration.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Strong backend test quality where coverage exists</span>
+      </div>
+      <p class="finding-desc">Auth service tests (28 tests covering full attack surface), security vulnerability tests mapped to audit IDs, sync integration tests with 10-step workflows, and fan control tests (43 tests, 694 lines) demonstrate excellent test quality. The conftest.py is well-designed with proper isolation.</p>
+      <p class="finding-location">📄 <code>backend/tests/conftest.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use the existing high-quality test patterns as templates for expanding coverage to uncovered modules.</p>
+    </div>
+      </div>
+    </section>
+
+    <section class="category">
+      <div class="category-header">
+        <h2>Performance</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#dc2626">F</span>
+          <span class="score">58/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The most critical performance issue is the N+1 query pattern in directory listing, generating 300-400 queries per request. Combined with recursive folder size calculations and synchronous I/O in async contexts, file browsing can block the event loop for seconds. Single-worker Docker deployment, excessive frontend polling (8-12 intervals), and no response caching compound the throughput limitations.</p>
+      <div class="findings">
+        
+    <div class="finding finding-critical">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#dc2626">CRITICAL</span>
+        <span class="finding-title">N+1 query pattern in directory listing generates 300-400 queries per request</span>
+      </div>
+      <p class="finding-desc">list_directory() iterates over every filesystem entry and issues 3-4 individual database queries per entry (get_owner, is_path_shared_with_user, get_metadata, get_share_permissions). A directory with 100 files generates 300-400 SQL queries.</p>
+      <p class="finding-location">📄 <code>backend/app/services/files/operations.py:118</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Pre-fetch all metadata, ownership, and share data for the directory in bulk queries before iterating. Build lookup maps from single queries.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Recursive folder size calculation blocks during directory listing</span>
+      </div>
+      <p class="finding-desc">For every directory entry, get_folder_size() recursively walks the entire subdirectory tree using os.scandir(). First load of a directory with 20 subdirectories triggers 20 recursive filesystem walks, blocking the thread.</p>
+      <p class="finding-location">📄 <code>backend/app/services/files/folder_size.py:19</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Compute folder sizes lazily (on demand), use stored sizes from database, or offload to background task and serve cached/estimated values.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Notification pagination fetches up to 10,000 rows to count total</span>
+      </div>
+      <p class="finding-desc">To get the total count for pagination, the code re-runs the entire query with limit=10000 and uses len() on the result. This wastes database time and application memory.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/notifications.py:67</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use a separate COUNT(*) query. Add a count_user_notifications() method to the service.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Synchronous file listing blocks event loop in async context</span>
+      </div>
+      <p class="finding-desc">list_directory() is synchronous but performs heavy filesystem I/O and multiple database queries. When called from async route handlers, it blocks the event loop for seconds on large directories.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/files.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Wrap the synchronous call in asyncio.to_thread() or convert the route to a regular def function so FastAPI runs it in a threadpool.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Single Uvicorn worker in production Docker configuration</span>
+      </div>
+      <p class="finding-desc">The Dockerfile CMD uses '--workers 1'. On a multi-core NAS system, this severely limits throughput. A single synchronous database call blocks all other requests.</p>
+      <p class="finding-location">📄 <code>backend/Dockerfile:81</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Set --workers to min(2 * cpu_count + 1, 4) or make configurable via environment variable. The primary/secondary worker pattern already handles multi-worker correctly.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Notification count uses 9 separate database queries</span>
+      </div>
+      <p class="finding-desc">get_unread_count endpoint runs a separate query for each of 8 notification categories plus 1 for total, producing 9 database roundtrips per request.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/notifications.py:105</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use a single GROUP BY query: SELECT category, COUNT(*) FROM notifications WHERE ... GROUP BY category.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Multiple unbounded .all() queries without pagination</span>
+      </div>
+      <p class="finding-desc">Several endpoints fetch all records without limits: sync state fetches ALL files for a user, VCL fetches ALL users, server profiles and Tapo devices have no pagination.</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/sync.py:294</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add pagination parameters (limit/offset or cursor-based) to list endpoints. For sync, implement delta sync instead of full state dumps.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">8-12 simultaneous polling intervals on Dashboard</span>
+      </div>
+      <p class="finding-desc">When Dashboard is active, hooks set up 8-12 separate setInterval loops (monitoring, telemetry, services, plugins, activity feed, network status, energy), each making independent API requests.</p>
+      <p class="finding-location">📄 <code>client/src/hooks/</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Consolidate polling into a single WebSocket connection for real-time data, or implement a single 'dashboard snapshot' API endpoint.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">No application-level response caching</span>
+      </div>
+      <p class="finding-desc">No caching layer exists for API responses. Every request hits the database or filesystem directly. Monitoring endpoints polled every few seconds would benefit from even 2-3 second TTL caches.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Implement lightweight in-memory TTL cache (e.g., cachetools.TTLCache) for frequently polled endpoints like /monitoring/cpu/current and /system/telemetry.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Database stats function makes 3N queries for N metric types</span>
+      </div>
+      <p class="finding-desc">get_database_stats runs count(), min(timestamp), max(timestamp) as 3 separate queries per metric type (5 types = 15 queries).</p>
+      <p class="finding-location">📄 <code>backend/app/services/monitoring/retention_manager.py:184</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Combine into a single query per model using func.count(), func.min(), func.max() in one SELECT.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Memory buffer uses list.pop(0) which is O(n)</span>
+      </div>
+      <p class="finding-desc">The monitoring collector's circular buffer uses list.pop(0) which requires shifting all elements. Called every 5 seconds for 4 collectors.</p>
+      <p class="finding-location">📄 <code>backend/app/services/monitoring/base.py:128</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Replace List with collections.deque(maxlen=buffer_size) for O(1) append and automatic eviction.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Missing client_max_body_size in Docker nginx configuration</span>
+      </div>
+      <p class="finding-desc">The nginx config does not set client_max_body_size (default 1MB), preventing file uploads larger than 1MB from reaching the backend which allows 10GB.</p>
+      <p class="finding-location">📄 <code>client/nginx.conf</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Add 'client_max_body_size 10G;' to nginx.conf to match the backend's configured maximum.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Global in-memory caches without size bounds</span>
+      </div>
+      <p class="finding-desc">The _folder_size_cache and _used_bytes_cache dicts have no maximum size and never evict expired entries proactively. A NAS with thousands of directories could see unbounded growth.</p>
+      <p class="finding-location">📄 <code>backend/app/services/files/folder_size.py:14</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use functools.lru_cache with maxsize or implement periodic cache eviction.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">User model has 7 lazy-loaded relationships without explicit loading strategy</span>
+      </div>
+      <p class="finding-desc">The User model has 7 relationships with default lazy loading. No joinedload() or selectinload() calls found in query code. Accessing relationships triggers additional queries.</p>
+      <p class="finding-location">📄 <code>backend/app/models/user.py:44</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use lazy='raise' on rarely-needed relationships to catch accidental loading. Use joinedload()/selectinload() where relationships are needed.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Good code splitting and vendor chunking in frontend</span>
+      </div>
+      <p class="finding-desc">Frontend implements proper lazy loading with lazyWithRetry() for all pages, conditional loading for desktop/Pi builds, and manual vendor chunk splitting (react, charts, i18n, icons) in Vite config.</p>
+      <p class="finding-location">📄 <code>client/src/App.tsx</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. This is well-implemented.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Good PostgreSQL connection pool configuration</span>
+      </div>
+      <p class="finding-desc">Database.py has well-tuned connection pooling with configurable pool_size (10), max_overflow (20), pool_recycle (1hr), and pool_pre_ping. SQLite also has WAL mode, mmap, and foreign keys.</p>
+      <p class="finding-location">📄 <code>backend/app/core/database.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. Consider adjusting pool size if multi-worker deployment is enabled.</p>
+    </div>
+      </div>
+    </section>
+
+    <section class="category">
+      <div class="category-header">
+        <h2>Architecture</h2>
+        <div class="category-score">
+          <span class="grade" style="color:#d97706">C</span>
+          <span class="score">73/100</span>
+        </div>
+      </div>
+      <p class="category-summary">The architecture demonstrates strong patterns including hardware abstraction via Protocol types, a well-designed plugin system, multi-worker primary/secondary coordination, and device-aware frontend builds. However, the most significant violation is 174 direct database calls in route handlers violating documented layer separation standards. Additionally, synchronous DB sessions in async contexts, non-scalable WebSocket management, and lack of API versioning are notable gaps.</p>
+      <div class="findings">
+        
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">174 direct database calls in 25 route files violate layer separation</span>
+      </div>
+      <p class="finding-desc">Despite documented coding standards requiring business logic in services, 25 route files contain direct db.query/db.add/db.commit calls. Worst offenders: vcl.py (44 calls), plugins.py (14), server_profiles.py (13), sync.py (12), files.py (11).</p>
+      <p class="finding-location">📄 <code>backend/app/api/routes/vcl.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Extract all direct DB operations from route handlers into corresponding service classes. Each route with DB calls should have a matching service.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">Synchronous database sessions used in async background tasks</span>
+      </div>
+      <p class="finding-desc">Background tasks in main.py (heartbeat writing, status checking) use synchronous SessionLocal() inside async functions, blocking the event loop during database I/O.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py:209</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Migrate to AsyncSession with create_async_engine from SQLAlchemy 2.0+, or use run_in_executor for background DB tasks.</p>
+    </div>
+
+    <div class="finding finding-high">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#ea580c">HIGH</span>
+        <span class="finding-title">WebSocket manager not horizontally scalable</span>
+      </div>
+      <p class="finding-desc">WebSocket connections are stored in-process memory. In multi-worker deployment, broadcast_to_user() only reaches connections on the same worker. The primary/secondary worker pattern does not address this.</p>
+      <p class="finding-location">📄 <code>backend/app/services/websocket_manager.py:30</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Use Redis PubSub or similar message broker to relay WebSocket messages across workers.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Mixed service instantiation patterns</span>
+      </div>
+      <p class="finding-desc">The project uses three patterns: module-level functions (auth.py), class-based with DB injection (NotificationService), and global singletons (WebSocketManager, PluginManager). This inconsistency makes testing harder and creates hidden dependencies.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Standardize on FastAPI Depends() for request-scoped services and application-scoped singletons initialized during lifespan for global services.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">No API versioning strategy</span>
+      </div>
+      <p class="finding-desc">The global prefix is /api with no version segment. With three client platforms (web SPA, desktop client, mobile app), breaking API changes affect all clients simultaneously.</p>
+      <p class="finding-location">📄 <code>backend/app/core/config.py:18</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Introduce /api/v1/ versioning before breaking changes become necessary, especially since mobile and desktop clients cannot be force-updated alongside the backend.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Inconsistent error response format</span>
+      </div>
+      <p class="finding-desc">Auth routes raise HTTPException with simple string details while validation errors use a custom serialized format. No standardized error response envelope exists across the API.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Create a standard error response schema ({error: {code, message, details}}) and use it consistently across all endpoints.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Circular import risk from complex dependency graph</span>
+      </div>
+      <p class="finding-desc">main.py imports from 20+ service modules at the top level and uses deferred imports within functions to work around circular dependencies. deps.py also uses deferred import for ApiKeyService.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Consider a service registry or application container pattern to initialize services during lifespan startup.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">Monolithic api.ts mixes infrastructure and domain concerns</span>
+      </div>
+      <p class="finding-desc">client/src/lib/api.ts (352 lines) contains the axios instance setup, cache utilities, mobile device types/functions, file permissions API, admin DB types, ownership transfer API, and residency enforcement API alongside proper domain modules in src/api/.</p>
+      <p class="finding-location">📄 <code>client/src/lib/api.ts</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Move domain-specific types and API calls to their respective src/api/*.ts modules. Keep api.ts purely as axios client configuration.</p>
+    </div>
+
+    <div class="finding finding-medium">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#d97706">MEDIUM</span>
+        <span class="finding-title">No external message broker for inter-process communication</span>
+      </div>
+      <p class="finding-desc">The architecture relies on PostgreSQL polling (15s heartbeats) and /dev/shm files for inter-process communication. No pub/sub mechanism exists for event-driven updates across workers.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> For the NAS appliance use case this is acceptable, but document the limitation. Consider Redis for WebSocket relay and event broadcasting.</p>
+    </div>
+
+    <div class="finding finding-low">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#2563eb">LOW</span>
+        <span class="finding-title">Plugin isolation limited to declarative permissions</span>
+      </div>
+      <p class="finding-desc">Plugins run in the same Python process via importlib and can import any module. The permission system is declarative but not enforced at the Python level.</p>
+      <p class="finding-location">📄 <code>backend/app/plugins/manager.py:133</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> For third-party plugins, consider subprocess isolation or restricted import hooks. Current system is adequate for first-party plugins only.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Excellent hardware abstraction via Protocol pattern</span>
+      </div>
+      <p class="finding-desc">The Strategy pattern using Python Protocol types provides clean dev/prod switching for RAID (DevRaidBackend/MdadmRaidBackend), Power (cpu_dev_backend/cpu_linux_backend), Pi-hole (4 backends), and Updates (dev/prod backends).</p>
+      <p class="finding-location">📄 <code>backend/app/services/hardware/raid/protocol.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. This is a well-applied pattern that enables testing without hardware.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Well-designed plugin system architecture</span>
+      </div>
+      <p class="finding-desc">The plugin system uses pluggy for hooks, clean base class with lifecycle methods, separate permission management, event pub/sub, and installed plugins have consistent micro-architecture (models, service, UI bundle).</p>
+      <p class="finding-location">📄 <code>backend/app/plugins/base.py</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. This is well-architected.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Smart device-aware code splitting in frontend</span>
+      </div>
+      <p class="finding-desc">The frontend conditionally loads pages based on build target (desktop vs Pi), ensuring BaluPi builds exclude desktop-only pages and vice versa. lazyWithRetry handles chunk loading failures gracefully.</p>
+      <p class="finding-location">📄 <code>client/src/App.tsx</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. This is a good optimization.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Thoughtful multi-worker primary/secondary architecture</span>
+      </div>
+      <p class="finding-desc">File locking elects a primary worker for hardware-controlling tasks, database heartbeats share service status, and shared memory files enable monitoring data exchange. This is pragmatic for a single-host NAS appliance.</p>
+      <p class="finding-location">📄 <code>backend/app/main.py:76</code></p>
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> No action needed. Document the pattern for future maintainers.</p>
+    </div>
+
+    <div class="finding finding-info">
+      <div class="finding-header">
+        <span class="severity-badge" style="background:#6b7280">INFO</span>
+        <span class="finding-title">Comprehensive security implementation across multiple layers</span>
+      </div>
+      <p class="finding-desc">JWT with access/refresh tokens, 2FA via TOTP, API keys, RBAC, rate limiting, brute-force detection, security headers, input validation, secret key enforcement, and audit logging form a thorough security architecture.</p>
+      
+      <p class="finding-rec">💡 <strong>Recommendation:</strong> Continue maintaining the multi-layered security approach while addressing the critical findings from the security audit.</p>
+    </div>
+      </div>
+    </section>
+
+    <footer>
+      Generated by Code Auditer Agent &mdash; Powered by Claude
+    </footer>
+  </div>
+</body>
+</html>
