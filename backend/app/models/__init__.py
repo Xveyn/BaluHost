@@ -69,6 +69,7 @@ from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.models.service_heartbeat import ServiceHeartbeat
 from app.models.migration_job import MigrationJob
 from app.models.pihole import PiholeConfig
+from app.models.dns_queries import DnsQuery, DnsQueryHourlyStat, DnsQueryCollectorState
 
 __all__ = [
     "Base",
@@ -141,4 +142,7 @@ __all__ = [
     "ServiceHeartbeat",
     "MigrationJob",
     "PiholeConfig",
+    "DnsQuery",
+    "DnsQueryHourlyStat",
+    "DnsQueryCollectorState",
 ]
