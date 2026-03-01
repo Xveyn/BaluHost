@@ -113,147 +113,147 @@ def user2_token(client: TestClient) -> str:
 
 
 def test_owner_can_delete_own_file(client: TestClient, user1_token: str) -> None:
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("test.txt", BytesIO(b"content"), "text/plain")}
     upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert upload_resp.status_code == 200
 
     # Delete file as user1
     delete_resp = client.delete(
-        f"{settings.api_prefix}/files/test.txt",
+        f"{settings.api_prefix}/files/user1/test.txt",
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert delete_resp.status_code == 200
 
 
 def test_non_owner_cannot_delete_file(client: TestClient, user1_token: str, user2_token: str) -> None:
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("private.txt", BytesIO(b"user1 data"), "text/plain")}
     upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert upload_resp.status_code == 200
 
     # Try to delete as user2
     delete_resp = client.delete(
-        f"{settings.api_prefix}/files/private.txt",
+        f"{settings.api_prefix}/files/user1/private.txt",
         headers={"Authorization": f"Bearer {user2_token}"},
     )
     assert delete_resp.status_code == 403
 
 
 def test_admin_can_delete_any_file(client: TestClient, user1_token: str, admin_token: str) -> None:
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("user_file.txt", BytesIO(b"owned by user1"), "text/plain")}
     upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert upload_resp.status_code == 200
 
     # Admin deletes the file
     delete_resp = client.delete(
-        f"{settings.api_prefix}/files/user_file.txt",
+        f"{settings.api_prefix}/files/user1/user_file.txt",
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert delete_resp.status_code == 200
 
 
 def test_owner_can_rename_own_file(client: TestClient, user1_token: str) -> None:
-    # Upload file
+    # Upload file into user's home directory
     files = {"files": ("original.txt", BytesIO(b"content"), "text/plain")}
     client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
     # Rename file
     rename_resp = client.put(
         f"{settings.api_prefix}/files/rename",
-        json={"old_path": "original.txt", "new_name": "renamed.txt"},
+        json={"old_path": "user1/original.txt", "new_name": "renamed.txt"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert rename_resp.status_code == 200
 
 
 def test_non_owner_cannot_rename_file(client: TestClient, user1_token: str, user2_token: str) -> None:
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("locked.txt", BytesIO(b"content"), "text/plain")}
     client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
     # Try to rename as user2
     rename_resp = client.put(
         f"{settings.api_prefix}/files/rename",
-        json={"old_path": "locked.txt", "new_name": "hacked.txt"},
+        json={"old_path": "user1/locked.txt", "new_name": "hacked.txt"},
         headers={"Authorization": f"Bearer {user2_token}"},
     )
     assert rename_resp.status_code == 403
 
 
 def test_owner_can_move_own_file(client: TestClient, user1_token: str) -> None:
-    # Create folder
+    # Create folder in user's home directory
     client.post(
         f"{settings.api_prefix}/files/folder",
-        json={"path": "", "name": "myfolder"},
+        json={"path": "user1", "name": "myfolder"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
-    # Upload file
+    # Upload file into user's home directory
     files = {"files": ("moveme.txt", BytesIO(b"content"), "text/plain")}
     client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
-    # Move file
+    # Move file within user's home directory
     move_resp = client.put(
         f"{settings.api_prefix}/files/move",
-        json={"source_path": "moveme.txt", "target_path": "myfolder/moveme.txt"},
+        json={"source_path": "user1/moveme.txt", "target_path": "user1/myfolder/moveme.txt"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
     assert move_resp.status_code == 200
 
 
 def test_non_owner_cannot_move_file(client: TestClient, user1_token: str, user2_token: str) -> None:
-    # Create folder as user2
+    # Create folder as user2 in their home directory
     client.post(
         f"{settings.api_prefix}/files/folder",
-        json={"path": "", "name": "user2folder"},
+        json={"path": "user2", "name": "user2folder"},
         headers={"Authorization": f"Bearer {user2_token}"},
     )
 
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("nomove.txt", BytesIO(b"stay"), "text/plain")}
     client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
     # Try to move user1 file into user2 folder
     move_resp = client.put(
         f"{settings.api_prefix}/files/move",
-        json={"source_path": "nomove.txt", "target_path": "user2folder/nomove.txt"},
+        json={"source_path": "user1/nomove.txt", "target_path": "user2/user2folder/nomove.txt"},
         headers={"Authorization": f"Bearer {user2_token}"},
     )
     assert move_resp.status_code == 403
@@ -262,38 +262,38 @@ def test_non_owner_cannot_move_file(client: TestClient, user1_token: str, user2_
 def test_user_cannot_upload_to_other_user_folder(
     client: TestClient, user1_token: str, user2_token: str
 ) -> None:
-    # Create folder as user1
+    # Create folder as user1 in their home directory
     client.post(
         f"{settings.api_prefix}/files/folder",
-        json={"path": "", "name": "private"},
+        json={"path": "user1", "name": "private"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
-    # Try to upload as user2 into user1 folder
+    # Try to upload as user2 into user1's folder
     files = {"files": ("intrusion.txt", BytesIO(b"nope"), "text/plain")}
     upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": "private"},
+        data={"path": "user1/private"},
         headers={"Authorization": f"Bearer {user2_token}"},
     )
     assert upload_resp.status_code == 403
 
 
 def test_admin_can_upload_anywhere(client: TestClient, user1_token: str, admin_token: str) -> None:
-    # Create folder as user1
+    # Create folder as user1 in their home directory
     client.post(
         f"{settings.api_prefix}/files/folder",
-        json={"path": "", "name": "userfolder"},
+        json={"path": "user1", "name": "userfolder"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
-    # Admin uploads into user folder
+    # Admin uploads into user1's folder (admin can access any path)
     files = {"files": ("admin_note.txt", BytesIO(b"from admin"), "text/plain")}
     upload_resp = client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": "userfolder"},
+        data={"path": "user1/userfolder"},
         headers={"Authorization": f"Bearer {admin_token}"},
     )
     assert upload_resp.status_code == 200
@@ -302,12 +302,12 @@ def test_admin_can_upload_anywhere(client: TestClient, user1_token: str, admin_t
 def test_list_files_shows_only_accessible(
     client: TestClient, user1_token: str, user2_token: str
 ) -> None:
-    # Upload file as user1
+    # Upload file as user1 into their home directory
     files = {"files": ("visible.txt", BytesIO(b"user1"), "text/plain")}
     client.post(
         f"{settings.api_prefix}/files/upload",
         files=files,
-        data={"path": ""},
+        data={"path": "user1"},
         headers={"Authorization": f"Bearer {user1_token}"},
     )
 
