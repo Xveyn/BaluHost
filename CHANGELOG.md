@@ -7,6 +7,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.0] - 2026-03-02
+
+### Security Audit Remediation & Pi-hole Enhancements
+
+Comprehensive security hardening from audit remediation (20 fixes), new Pi-hole features
+(analytics dashboard, stored query log, DNS query collector), and mobile responsiveness
+improvements across the Pi-hole UI.
+
+### Added
+
+- **Pi-hole analytics dashboard** — DNS query statistics with period selector, summary cards, and timeline charts
+- **DNS query collector** — Background service collecting Pi-hole queries into local database for historical analysis
+- **Stored DNS query API** — Endpoints for searching and filtering collected DNS queries
+- **DNS query database models** — New tables and Alembic migration for query storage
+- **Registration restriction** — Configurable `registration_enabled` setting to disable public user registration
+- **Nginx Pi-hole proxy** — Reverse proxy config for Pi-hole web UI at baluhole.local
+- **Auto .local DNS registration** — Automatically register local DNS records in Pi-hole on startup
+- **CI workflows** — Added pytest and Vitest to GitHub Actions CI pipeline
+
+### Changed
+
+- **VPN key encryption** — Server and preshared keys now encrypted at rest with Fernet (AES-128-CBC)
+- **WebSocket auth** — Uses scoped short-lived tokens instead of long-lived access tokens
+- **CSP headers** — Strict `script-src 'self'` in production, relaxed only in dev mode
+- **CORS policy** — Restricted methods and headers to required set instead of wildcards
+- **TOTP encryption** — Dedicated `TOTP_ENCRYPTION_KEY` separate from VPN key
+- **Brute-force tracking** — Bounded with TTLCache instead of unbounded dict
+- **Monitoring buffer** — Replaced `list.pop(0)` with `deque(maxlen)` for O(1) performance
+- **Notification queries** — Optimized with COUNT and GROUP BY instead of fetching all rows
+- **Directory listing** — Fixed N+1 query pattern with bulk metadata fetches
+- **README** — Complete rewrite reflecting current project state
+
+### Fixed
+
+- **Pi-hole mobile responsiveness** — Scrollable tabs, wrapping forms, responsive grids across 9 components
+- **Change password validation** — Now uses Pydantic schema with password strength enforcement
+- **Refresh token validation** — Added Pydantic schema for token request body
+- **Admin password in production** — Rejects default password on startup
+- **Timing-safe auth** — Dummy hash comparison on failed user lookup prevents timing attacks
+- **`datetime.utcnow()` deprecation** — Replaced with `datetime.now(timezone.utc)` across codebase
+- **CI test failures** — Resolved 68 test failures across 11 test files
+- **`list_files` blocking** — Converted to sync def to prevent event loop blocking
+- **`debug=False` default** — Only enabled in dev mode, preventing debug leaks in production
+
+### Removed
+
+- **Obsolete artifacts** — Removed generated HTML reports, backup files, and stale data from git tracking
+
+---
+
 ## [1.12.0] - 2026-03-01
 
 ### BaluPi Groundwork, Pi-hole DNS & Performance
