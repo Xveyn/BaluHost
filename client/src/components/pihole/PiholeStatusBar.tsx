@@ -52,7 +52,7 @@ export default function PiholeStatusBar({
       </div>
 
       {/* Divider */}
-      <div className="h-5 w-px bg-slate-700" />
+      <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Version */}
       <div className="flex items-center gap-1.5 text-sm text-slate-400">
@@ -65,7 +65,7 @@ export default function PiholeStatusBar({
       </div>
 
       {/* Divider */}
-      <div className="h-5 w-px bg-slate-700" />
+      <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Mode badge */}
       <span
@@ -87,7 +87,7 @@ export default function PiholeStatusBar({
       {/* Failover badge */}
       {failover && failover.remote_configured && (
         <>
-          <div className="h-5 w-px bg-slate-700" />
+          <div className="hidden sm:block h-5 w-px bg-slate-700" />
           <div
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
               failover.failover_active
@@ -109,7 +109,7 @@ export default function PiholeStatusBar({
       )}
 
       {/* Divider */}
-      <div className="h-5 w-px bg-slate-700" />
+      <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Uptime */}
       <div className="flex items-center gap-1.5 text-sm text-slate-400">

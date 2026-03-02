@@ -91,7 +91,7 @@ export default function PiholeAnalytics() {
   return (
     <div className="space-y-6">
       {/* Period Selector + Refresh */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-wrap items-center justify-between gap-2">
         <h3 className="text-lg font-medium text-slate-200">DNS Analytics</h3>
         <div className="flex items-center gap-2">
           <button

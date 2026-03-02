@@ -137,7 +137,7 @@ export default function PiholeLocalDns() {
 
       {/* Add form */}
       <div className="border-t border-slate-700/50 p-4">
-        <form onSubmit={handleAdd} className="flex items-end gap-2">
+        <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-2">
           <div className="flex-1">
             <label className="mb-1 block text-xs text-slate-500">Domain</label>
             <input
@@ -163,7 +163,7 @@ export default function PiholeLocalDns() {
           <button
             type="submit"
             disabled={adding || !newDomain.trim() || !newIp.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {adding ? (
               <RefreshCw className="h-4 w-4 animate-spin" />

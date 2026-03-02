@@ -173,12 +173,12 @@ export default function PiholePage() {
       )}
 
       {/* Tab Navigation */}
-      <div className="flex gap-1 rounded-lg border border-slate-700/50 bg-slate-800/40 p-1">
+      <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-700/50 bg-slate-800/40 p-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? 'bg-slate-700/80 text-white'
                 : 'text-slate-400 hover:text-slate-200'

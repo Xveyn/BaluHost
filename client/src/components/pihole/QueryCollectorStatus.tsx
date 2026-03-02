@@ -75,7 +75,7 @@ export default function QueryCollectorStatus() {
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
-      <div className="flex items-center justify-between mb-4">
+      <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
           <Database className="h-5 w-5 text-slate-400" />
           <h4 className="text-sm font-medium text-slate-200">
@@ -116,7 +116,7 @@ export default function QueryCollectorStatus() {
       </div>
 
       {/* Status Info */}
-      <div className="grid grid-cols-2 gap-4 mb-4 text-sm">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm">
         <div>
           <span className="text-slate-400">Total Queries Stored</span>
           <p className="text-lg font-semibold text-slate-200">
@@ -151,7 +151,7 @@ export default function QueryCollectorStatus() {
       )}
 
       {/* Configuration */}
-      <div className="grid grid-cols-2 gap-4 border-t border-slate-700/50 pt-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-700/50 pt-4">
         <div>
           <label className="mb-1 block text-xs text-slate-400">
             Poll Interval (seconds)

@@ -227,7 +227,7 @@ export default function PiholeSettings() {
                 }
                 min={1}
                 max={65535}
-                className="w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
+                className="w-full sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
             </div>
           )}
@@ -352,7 +352,7 @@ export default function PiholeSettings() {
               }
               min={10}
               max={300}
-              className="w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
+              className="w-full sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
 
@@ -517,7 +517,7 @@ export default function PiholeSettings() {
                 value={config.dns_domain_name ?? "lan"}
                 onChange={(e) => updateField("dns_domain_name", e.target.value)}
                 placeholder="lan"
-                className="w-64 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
+                className="w-full sm:w-64 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
               <p className="mt-1 text-xs text-slate-600">
                 Local domain name for your network
@@ -549,7 +549,7 @@ export default function PiholeSettings() {
               <label className="mb-1.5 block text-xs font-medium text-slate-400">
                 Rate Limiting
               </label>
-              <div className="flex items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="number"

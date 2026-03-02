@@ -84,12 +84,12 @@ export default function PiholeDomainManagement() {
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60">
       {/* Tab bar */}
-      <div className="flex border-b border-slate-700/50">
+      <div className="flex overflow-x-auto border-b border-slate-700/50 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         {TABS.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
-            className={`flex-1 px-3 py-2.5 text-center text-sm font-medium transition-colors ${
+            className={`flex-shrink-0 whitespace-nowrap px-3 py-2.5 text-center text-sm font-medium transition-colors ${
               activeTab === tab.key
                 ? "border-b-2 border-sky-500 text-sky-400"
                 : "text-slate-400 hover:text-slate-200"
@@ -103,7 +103,7 @@ export default function PiholeDomainManagement() {
       {/* Content */}
       <div className="p-4">
         {/* Domain table */}
-        <div className="mb-4 max-h-80 overflow-y-auto">
+        <div className="mb-4 max-h-80 overflow-y-auto overflow-x-auto">
           {loading ? (
             <div className="space-y-2">
               {Array.from({ length: 4 }).map((_, i) => (

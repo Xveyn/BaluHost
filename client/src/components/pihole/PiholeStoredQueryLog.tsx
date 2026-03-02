@@ -68,7 +68,7 @@ export default function PiholeStoredQueryLog() {
     <div className="space-y-4">
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
-        <div className="flex-1 min-w-[180px]">
+        <div className="flex-1 min-w-[140px]">
           <label className="mb-1 block text-xs text-slate-400">Domain</label>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
@@ -82,7 +82,7 @@ export default function PiholeStoredQueryLog() {
             />
           </div>
         </div>
-        <div className="min-w-[140px]">
+        <div className="min-w-[100px]">
           <label className="mb-1 block text-xs text-slate-400">Client</label>
           <input
             type="text"

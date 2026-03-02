@@ -123,7 +123,7 @@ export default function PiholeAdlistManagement() {
       </div>
 
       {/* Table */}
-      <div className="max-h-96 overflow-y-auto p-4">
+      <div className="max-h-96 overflow-y-auto overflow-x-auto p-4">
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
@@ -203,8 +203,8 @@ export default function PiholeAdlistManagement() {
 
       {/* Add form */}
       <div className="border-t border-slate-700/50 p-4">
-        <form onSubmit={handleAdd} className="flex items-end gap-2">
-          <div className="flex-1">
+        <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-2">
+          <div className="min-w-0 flex-1 basis-full sm:basis-0">
             <label className="mb-1 block text-xs text-slate-500">URL</label>
             <input
               type="url"
@@ -214,7 +214,7 @@ export default function PiholeAdlistManagement() {
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
-          <div className="w-48">
+          <div className="w-full sm:w-48">
             <label className="mb-1 block text-xs text-slate-500">
               Comment (optional)
             </label>
@@ -229,7 +229,7 @@ export default function PiholeAdlistManagement() {
           <button
             type="submit"
             disabled={adding || !newUrl.trim()}
-            className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
             {adding ? (
               <RefreshCw className="h-4 w-4 animate-spin" />
