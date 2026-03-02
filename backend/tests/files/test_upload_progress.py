@@ -149,8 +149,7 @@ async def test_cleanup_after_completion():
     assert progress is not None
     assert progress.status == "completed"
     
-    # After cleanup delay, session should be gone
-    await asyncio.sleep(61)  # Wait for cleanup (60s + buffer)
-    
+    # In dev/test mode cleanup delay is 0s, so a short wait suffices
+    await asyncio.sleep(0.2)
+
     progress = manager.get_progress(upload_id)
-    # Note: This might still exist in real scenarios, testing cleanup timing is tricky

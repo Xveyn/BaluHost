@@ -52,6 +52,11 @@ class FileUploadResponse(FileOperationResponse):
     upload_ids: list[str] | None = None
 
 
+class PathRequest(BaseModel):
+    """Request containing a single file/directory path."""
+    path: str
+
+
 class FolderCreateRequest(BaseModel):
     path: str | None = ""
     name: str

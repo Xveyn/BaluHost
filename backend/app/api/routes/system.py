@@ -30,6 +30,7 @@ from app.schemas.system import (
     SystemInfo,
     TelemetryHistoryResponse,
 )
+from typing import Any
 from pydantic import BaseModel
 from app.schemas.user import UserPublic
 from app.services import disk_monitor
@@ -636,7 +637,7 @@ async def trigger_raid_scrub(
 # Two-step confirmation API for destructive RAID operations
 class ConfirmRequest(BaseModel):
     action: str
-    payload: dict
+    payload: dict[str, Any]
     ttl_seconds: int | None = 3600
 
 

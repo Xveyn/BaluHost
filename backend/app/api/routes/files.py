@@ -18,6 +18,7 @@ from app.schemas.files import (
     FileUploadResponse,
     FolderCreateRequest,
     MoveRequest,
+    PathRequest,
     RenameRequest,
     FilePermissions,
     FilePermissionsRequest,
@@ -854,14 +855,11 @@ async def delete_path_raw(
 async def delete_path_body(
     request: Request,
     response: Response,
-    payload: dict = Body(...),
+    payload: PathRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
-    path = payload.get("path")
-    if not path:
-        raise HTTPException(status_code=400, detail="Path required")
-    path = _jail_path(path, user, db)
+    path = _jail_path(payload.path, user, db)
     audit_logger = get_audit_logger_db()
     try:
         file_service.delete_path(path, user=user, db=db)
@@ -888,7 +886,7 @@ async def delete_path_body(
 async def delete_path_post(
     request: Request,
     response: Response,
-    payload: dict = Body(...),
+    payload: PathRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
@@ -924,7 +922,7 @@ async def create_folder(
 async def mkdir_compat(
     request: Request,
     response: Response,
-    payload: dict = Body(...),
+    payload: PathRequest,
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
@@ -933,9 +931,7 @@ async def mkdir_compat(
     """
     import os
 
-    path = payload.get("path")
-    if not path:
-        raise HTTPException(status_code=400, detail="Path required")
+    path = payload.path
 
     # normalize and split into parent + name
     norm = path.rstrip("/")

@@ -743,7 +743,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         # Mount plugin API routes dynamically
         plugin_router = _plugin_manager.get_router()
         if plugin_router.routes:
-            app.include_router(plugin_router, prefix="/api")
+            app.include_router(plugin_router, prefix=settings.api_prefix)
             logger.info(f"Mounted {len(plugin_router.routes)} plugin routes")
         # Emit system startup hook
         _plugin_manager.emit_hook("on_system_startup")

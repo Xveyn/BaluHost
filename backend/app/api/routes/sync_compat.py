@@ -5,6 +5,7 @@ to register a device without the one-time registration token used by
 the newer secure registration flow.
 """
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 import uuid
 
@@ -17,6 +18,12 @@ from app.core.rate_limiter import user_limiter, get_limit
 router = APIRouter(prefix="/sync", tags=["sync"])
 
 
+class LegacyDeviceRequest(BaseModel):
+    """Request for legacy device registration (dev mode only)."""
+    name: str | None = None
+    device_name: str | None = None
+
+
 def get_sync_service(db: Session = Depends(get_db)) -> FileSyncService:
     return FileSyncService(db)
 
@@ -26,7 +33,7 @@ def get_sync_service(db: Session = Depends(get_db)) -> FileSyncService:
 async def legacy_register_device(
     request: Request,
     response: Response,
-    payload: dict,
+    payload: LegacyDeviceRequest,
     current_user=Depends(get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service),
 ):
@@ -35,7 +42,7 @@ async def legacy_register_device(
     if not settings.is_dev_mode:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Legacy device registration disabled")
 
-    name = payload.get("name") or payload.get("device_name") or "unnamed"
+    name = payload.name or payload.device_name or "unnamed"
     device_id = str(uuid.uuid4())
 
     sync_state = sync_service.register_device(user_id=current_user.id, device_id=device_id, device_name=name)
