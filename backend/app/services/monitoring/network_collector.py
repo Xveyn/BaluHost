@@ -10,7 +10,7 @@ import logging
 import random
 import socket
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, Tuple, Type
 
 import psutil
@@ -54,7 +54,7 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
     def collect_sample(self) -> Optional[NetworkSampleSchema]:
         """Collect network metrics sample."""
         try:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
             timestamp_seconds = time.time()
 
             # Always try to collect real network data

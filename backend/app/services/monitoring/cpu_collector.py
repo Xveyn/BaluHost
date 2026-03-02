@@ -11,7 +11,7 @@ import logging
 import platform
 import re
 import subprocess
-from datetime import datetime
+from datetime import datetime, timezone
 from functools import lru_cache
 from typing import Optional, Tuple, Type
 
@@ -155,7 +155,7 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
     def collect_sample(self) -> Optional[CpuSampleSchema]:
         """Collect CPU metrics sample."""
         try:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
 
             # Get CPU usage
             usage = psutil.cpu_percent(interval=None)

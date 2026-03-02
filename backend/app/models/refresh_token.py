@@ -1,5 +1,5 @@
 """RefreshToken database model for token revocation support."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import hashlib
 
@@ -102,7 +102,7 @@ class RefreshToken(Base):
             reason: Optional reason for revocation (e.g., "logout", "security_event")
         """
         self.revoked = True
-        self.revoked_at = datetime.utcnow()
+        self.revoked_at = datetime.now(timezone.utc)
         self.revocation_reason = reason
 
     @staticmethod

@@ -9,6 +9,7 @@ These tests document the vulnerabilities and will PASS once fixes are implemente
 import pytest
 from fastapi.testclient import TestClient
 from app.core.config import settings
+from datetime import timezone
 
 
 class TestCriticalVulnerability1:
@@ -237,15 +238,15 @@ class TestCriticalVulnerability6:
 
 
 class TestCriticalVulnerability7:
-    """Test: Deprecated datetime.utcnow()"""
+    """Test: Deprecated datetime.utcnow() usage"""
 
     def test_no_deprecated_datetime_usage(self):
-        """Verify datetime.utcnow() is not used (deprecated in Python 3.14)."""
-        import ast
-        import os
+        """Verify datetime.utcnow() is not used (deprecated in Python 3.12)."""
         from pathlib import Path
 
-        # Check deps.py for datetime.utcnow() usage
+        deprecated_call = "datetime.utcnow()"
+
+        # Check deps.py for deprecated usage
         deps_file = Path(__file__).parent.parent.parent / "app" / "api" / "deps.py"
 
         if not deps_file.exists():
@@ -254,9 +255,9 @@ class TestCriticalVulnerability7:
         with open(deps_file, "r") as f:
             source = f.read()
 
-        # Should use datetime.now(timezone.utc) instead of datetime.utcnow()
-        assert "datetime.utcnow()" not in source, (
-            "Found deprecated datetime.utcnow() usage! "
+        # Should use datetime.now(timezone.utc) instead of deprecated call
+        assert deprecated_call not in source, (
+            f"Found deprecated {deprecated_call} usage! "
             "Replace with: datetime.now(timezone.utc)"
         )
 

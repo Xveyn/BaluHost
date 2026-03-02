@@ -5,7 +5,7 @@ Provides endpoints for CPU power profile management and monitoring.
 """
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -162,7 +162,7 @@ async def set_power_profile(
         message=f"Profile changed to {body.profile.value}",
         previous_profile=status_before.current_profile,
         new_profile=body.profile,
-        applied_at=datetime.utcnow()
+        applied_at=datetime.now(timezone.utc)
     )
 
 

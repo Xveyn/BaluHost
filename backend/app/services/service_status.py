@@ -13,7 +13,7 @@ import logging
 import os
 import shutil
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Callable, Any
 
@@ -201,7 +201,7 @@ class ServiceStatusCollector:
                     state=ServiceStateEnum.ERROR,
                     error_count=1,
                     last_error=str(e),
-                    last_error_at=datetime.utcnow(),
+                    last_error_at=datetime.now(timezone.utc),
                     config_enabled=True,
                     restartable=False,
                 ))
@@ -653,7 +653,7 @@ class ServiceStatusCollector:
             AdminDebugResponse with all status information
         """
         return AdminDebugResponse(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             services=self.get_all_services(),
             dependencies=self.get_dependencies(),
             metrics=self.get_app_metrics(),

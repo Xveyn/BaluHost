@@ -8,7 +8,7 @@ Provides endpoints for:
 - Database statistics
 """
 
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
@@ -110,11 +110,11 @@ async def get_cpu_history(
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             samples = orchestrator.cpu_collector.get_history_db(db, start=start, limit=limit)
             source_str = "database (fallback)"
     else:
-        start = datetime.utcnow() - duration
+        start = datetime.now(timezone.utc) - duration
         samples = orchestrator.cpu_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
         # Fallback to memory buffer if database is empty
@@ -182,11 +182,11 @@ async def get_memory_history(
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             samples = orchestrator.memory_collector.get_history_db(db, start=start, limit=limit)
             source_str = "database (fallback)"
     else:
-        start = datetime.utcnow() - duration
+        start = datetime.now(timezone.utc) - duration
         samples = orchestrator.memory_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
         # Fallback to memory buffer if database is empty
@@ -255,11 +255,11 @@ async def get_network_history(
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not samples:
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             samples = orchestrator.network_collector.get_history_db(db, start=start, limit=limit)
             source_str = "database (fallback)"
     else:
-        start = datetime.utcnow() - duration
+        start = datetime.now(timezone.utc) - duration
         samples = orchestrator.network_collector.get_history_db(db, start=start, limit=limit)
         source_str = "database"
         # Fallback to memory buffer if database is empty
@@ -329,7 +329,7 @@ async def get_disk_io_history(
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not any(disks.values()):
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             samples = orchestrator.disk_io_collector.get_history_db(db, start=start, limit=limit)
             if samples:
                 disks = {}
@@ -342,7 +342,7 @@ async def get_disk_io_history(
                 source_str = "database (fallback)"
     else:
         # Get from database
-        start = datetime.utcnow() - duration
+        start = datetime.now(timezone.utc) - duration
         samples = orchestrator.disk_io_collector.get_history_db(db, start=start, limit=limit)
 
         # Fallback to memory buffer if database query returned no results at all
@@ -418,7 +418,7 @@ async def get_processes_history(
         source_str = "memory"
         # Fallback to DB when memory buffer is empty (e.g. secondary worker)
         if not any(processes.values()):
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             samples = orchestrator.process_tracker.get_history_db(db, process_name=process_name, start=start)
             if samples:
                 processes = {}
@@ -429,7 +429,7 @@ async def get_processes_history(
                 source_str = "database (fallback)"
     else:
         # Get from database
-        start = datetime.utcnow() - duration
+        start = datetime.now(timezone.utc) - duration
         samples = orchestrator.process_tracker.get_history_db(db, process_name=process_name, start=start)
 
         # Fallback to memory buffer if database query returned no results at all

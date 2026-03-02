@@ -6,7 +6,7 @@ Provides storage usage analytics and insights including:
 - Storage trends over time
 - Top files by size
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict, List, Optional
 
 from fastapi import APIRouter, Depends
@@ -118,7 +118,7 @@ def _perform_storage_scan() -> None:
         {"path": "/videos/documentary.mp4", "size_bytes": 2.5 * 1024 * 1024 * 1024, "owner": "user"},
     ]
 
-    _storage_cache["last_scan"] = datetime.utcnow().isoformat()
+    _storage_cache["last_scan"] = datetime.now(timezone.utc).isoformat()
 
 
 # Create the API router

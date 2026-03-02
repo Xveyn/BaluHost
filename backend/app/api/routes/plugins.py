@@ -1,6 +1,6 @@
 """API routes for plugin management."""
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
 
@@ -232,13 +232,13 @@ async def toggle_plugin(
                 granted_permissions=permissions_to_grant,
                 config=plugin.get_default_config(),
                 installed_by=current_user.username,
-                enabled_at=datetime.utcnow(),
+                enabled_at=datetime.now(timezone.utc),
             )
             db.add(db_record)
         else:
             db_record.is_enabled = True
             db_record.granted_permissions = permissions_to_grant
-            db_record.enabled_at = datetime.utcnow()
+            db_record.enabled_at = datetime.now(timezone.utc)
             db_record.disabled_at = None
 
         db.commit()
@@ -270,7 +270,7 @@ async def toggle_plugin(
 
         if db_record:
             db_record.is_enabled = False
-            db_record.disabled_at = datetime.utcnow()
+            db_record.disabled_at = datetime.now(timezone.utc)
             db.commit()
 
         if not success:

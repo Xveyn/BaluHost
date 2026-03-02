@@ -4,7 +4,7 @@ import threading
 import os
 import logging
 import signal
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.api import deps
 from app.core.rate_limiter import limiter, user_limiter, get_limit
@@ -120,7 +120,7 @@ def _telemetry_history_from_db(db: Session) -> TelemetryHistoryResponse:
     from app.schemas.system import CpuTelemetrySample, MemoryTelemetrySample, NetworkTelemetrySample
     import time
 
-    cutoff = datetime.utcnow() - timedelta(minutes=3)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=3)
 
     cpu_rows = (
         db.query(CpuSample)

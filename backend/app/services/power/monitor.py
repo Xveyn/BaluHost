@@ -11,7 +11,7 @@ import asyncio
 import logging
 import random
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from threading import Lock
 from typing import Dict, List, Optional
 
@@ -131,7 +131,7 @@ async def _sample_device(
     Returns:
         PowerSample or None if device is offline/error
     """
-    timestamp = datetime.utcnow()
+    timestamp = datetime.now(timezone.utc)
 
     # Always query real Tapo device (even in dev mode) when a device is configured
     # Mock data is only used for testing without hardware
@@ -304,7 +304,7 @@ async def _sample_all_devices() -> None:
         samples = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Store samples and update device status
-        timestamp_now = datetime.utcnow()
+        timestamp_now = datetime.now(timezone.utc)
         for device, sample in zip(devices, samples):
             if isinstance(sample, Exception):
                 # Handle exception from gather
@@ -529,7 +529,7 @@ def get_power_history(db: Session) -> PowerMonitoringResponse:
     return PowerMonitoringResponse(
         devices=device_histories,
         total_current_power=round(total_current_power, 1),
-        last_updated=datetime.utcnow()
+        last_updated=datetime.now(timezone.utc)
     )
 
 
@@ -580,7 +580,7 @@ def get_current_power(device_id: int, db: Session) -> CurrentPowerResponse:
             voltage=None,
             current=None,
             energy_today=None,
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             is_online=False
         )
 

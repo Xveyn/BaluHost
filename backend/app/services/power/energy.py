@@ -8,7 +8,7 @@ and historical analysis of power usage from Tapo devices.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from sqlalchemy import func, and_
 from sqlalchemy.orm import Session
@@ -77,7 +77,7 @@ def save_power_sample(
     """
     sample = PowerSample(
         device_id=device_id,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         watts=watts,
         voltage=voltage,
         current=current,
@@ -172,14 +172,14 @@ def get_period_stats(
 
 def get_today_stats(db: Session, device_id: int) -> Optional[EnergyPeriod]:
     """Get statistics for today."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_of_day = now.replace(hour=0, minute=0, second=0, microsecond=0)
     return get_period_stats(db, device_id, start_of_day, now)
 
 
 def get_week_stats(db: Session, device_id: int) -> Optional[EnergyPeriod]:
     """Get statistics for the current week."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_of_week = now - timedelta(days=now.weekday())
     start_of_week = start_of_week.replace(hour=0, minute=0, second=0, microsecond=0)
     return get_period_stats(db, device_id, start_of_week, now)
@@ -187,7 +187,7 @@ def get_week_stats(db: Session, device_id: int) -> Optional[EnergyPeriod]:
 
 def get_month_stats(db: Session, device_id: int) -> Optional[EnergyPeriod]:
     """Get statistics for the current month."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     start_of_month = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     return get_period_stats(db, device_id, start_of_month, now)
 
@@ -208,7 +208,7 @@ def get_hourly_samples(
     Returns:
         List of dicts with timestamp and avg_watts
     """
-    start_time = datetime.utcnow() - timedelta(hours=hours)
+    start_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
     # Query and group by hour (SQLite compatible using strftime)
     # strftime('%Y-%m-%d %H:00:00', timestamp) groups by hour
@@ -245,7 +245,7 @@ def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
     Returns:
         Number of deleted samples
     """
-    cutoff_date = datetime.utcnow() - timedelta(days=days_to_keep)
+    cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
     deleted = db.query(PowerSample).filter(
         PowerSample.timestamp < cutoff_date
@@ -277,7 +277,7 @@ def get_energy_price_config(db: Session) -> EnergyPriceConfig:
             id=1,
             cost_per_kwh=0.40,
             currency="EUR",
-            updated_at=datetime.utcnow()
+            updated_at=datetime.now(timezone.utc)
         )
         db.add(config)
         db.commit()
@@ -308,7 +308,7 @@ def update_energy_price_config(
     config = get_energy_price_config(db)
     config.cost_per_kwh = cost_per_kwh
     config.currency = currency
-    config.updated_at = datetime.utcnow()
+    config.updated_at = datetime.now(timezone.utc)
     config.updated_by_user_id = user_id
 
     db.commit()
@@ -342,7 +342,7 @@ def get_cumulative_energy_data(
         return None
 
     # Determine time range
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     if period == "today":
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":

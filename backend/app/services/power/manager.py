@@ -16,7 +16,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Callable, Dict, List, Optional, Tuple
 
@@ -163,7 +163,7 @@ class PowerManagerService:
         # Record in history
         freq = await self._backend.get_current_frequency_mhz()
         entry = PowerHistoryEntry(
-            timestamp=datetime.utcnow(),
+            timestamp=datetime.now(timezone.utc),
             profile=self._current_profile,
             reason="dynamic_mode_enabled",
             source="admin",
@@ -301,7 +301,7 @@ class PowerManagerService:
             try:
                 freq = await self._backend.get_current_frequency_mhz()
                 entry = PowerHistoryEntry(
-                    timestamp=datetime.utcnow(),
+                    timestamp=datetime.now(timezone.utc),
                     profile=self._current_profile,
                     reason=f"backend_switch:{new_backend_name.lower()}",
                     source="admin",
@@ -370,7 +370,7 @@ class PowerManagerService:
     async def _check_expired_demands(self) -> None:
         """Remove expired demands and recalculate profile."""
         async with self._state_lock:
-            now = datetime.utcnow()
+            now = datetime.now(timezone.utc)
             expired = [
                 source for source, demand in self._demands.items()
                 if demand.expires_at and demand.expires_at <= now
@@ -405,7 +405,7 @@ class PowerManagerService:
         if not self._auto_scaling_config.use_cpu_monitoring:
             return
 
-        if self._manual_override_until and datetime.utcnow() < self._manual_override_until:
+        if self._manual_override_until and datetime.now(timezone.utc) < self._manual_override_until:
             return
 
         # Get CPU usage from callback
@@ -428,7 +428,7 @@ class PowerManagerService:
 
         # Don't downgrade if cooldown active
         if PROFILE_PRIORITY[target] < PROFILE_PRIORITY[self._current_profile]:
-            if self._cooldown_until and datetime.utcnow() < self._cooldown_until:
+            if self._cooldown_until and datetime.now(timezone.utc) < self._cooldown_until:
                 return
 
         # Apply if different (but only if no higher demand registered)
@@ -508,18 +508,18 @@ class PowerManagerService:
             old_profile = self._current_profile
             self._current_profile = profile
             self._current_property = power_property
-            self._last_profile_change = datetime.utcnow()
+            self._last_profile_change = datetime.now(timezone.utc)
 
             # Set cooldown for downgrades
             if PROFILE_PRIORITY[profile] < PROFILE_PRIORITY[old_profile]:
-                self._cooldown_until = datetime.utcnow() + timedelta(
+                self._cooldown_until = datetime.now(timezone.utc) + timedelta(
                     seconds=self._auto_scaling_config.cooldown_seconds
                 )
 
             # Record history
             freq = await self._backend.get_current_frequency_mhz()
             entry = PowerHistoryEntry(
-                timestamp=datetime.utcnow(),
+                timestamp=datetime.now(timezone.utc),
                 profile=profile,
                 reason=reason,
                 source=source,
@@ -617,7 +617,7 @@ class PowerManagerService:
         """
         async with self._state_lock:
             if duration_seconds:
-                self._manual_override_until = datetime.utcnow() + timedelta(seconds=duration_seconds)
+                self._manual_override_until = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
             else:
                 self._manual_override_until = None
 
@@ -649,7 +649,7 @@ class PowerManagerService:
         async with self._state_lock:
             expires_at = None
             if timeout_seconds:
-                expires_at = datetime.utcnow() + timedelta(seconds=timeout_seconds)
+                expires_at = datetime.now(timezone.utc) + timedelta(seconds=timeout_seconds)
 
             # If power_property not provided, derive from level
             if power_property is None:
@@ -659,7 +659,7 @@ class PowerManagerService:
                 source=source,
                 level=level,
                 power_property=power_property,
-                registered_at=datetime.utcnow(),
+                registered_at=datetime.now(timezone.utc),
                 expires_at=expires_at,
                 description=description
             )
@@ -727,7 +727,7 @@ class PowerManagerService:
 
         cooldown_remaining = None
         if self._cooldown_until:
-            remaining = (self._cooldown_until - datetime.utcnow()).total_seconds()
+            remaining = (self._cooldown_until - datetime.now(timezone.utc)).total_seconds()
             if remaining > 0:
                 cooldown_remaining = int(remaining)
 
@@ -957,7 +957,7 @@ def get_status() -> dict:
     uptime_seconds = None
     if manager._last_profile_change is not None:
         started_at = manager._last_profile_change
-        uptime_seconds = (datetime.utcnow() - manager._last_profile_change).total_seconds()
+        uptime_seconds = (datetime.now(timezone.utc) - manager._last_profile_change).total_seconds()
 
     return {
         "is_running": is_running,

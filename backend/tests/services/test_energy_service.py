@@ -11,7 +11,7 @@ Covers:
 """
 
 import pytest
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from app.models.power_sample import PowerSample
 from app.models.tapo_device import TapoDevice
@@ -48,7 +48,7 @@ def tapo_device(db_session) -> TapoDevice:
 @pytest.fixture
 def sample_data(db_session, tapo_device) -> list[PowerSample]:
     """Create some power samples for testing."""
-    now = datetime.utcnow()
+    now = datetime.now(timezone.utc)
     samples = []
     for i in range(10):
         sample = PowerSample(
@@ -111,7 +111,7 @@ class TestPeriodStats:
     """Test energy period statistics aggregation."""
 
     def test_get_period_stats(self, db_session, tapo_device, sample_data):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         start = now - timedelta(hours=2)
 
         stats = get_period_stats(db_session, tapo_device.id, start, now)
@@ -126,19 +126,19 @@ class TestPeriodStats:
         assert stats.uptime_percentage == 100.0
 
     def test_get_period_stats_no_data(self, db_session, tapo_device):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         start = now - timedelta(hours=1)
 
         stats = get_period_stats(db_session, tapo_device.id, start, now)
         assert stats is None
 
     def test_get_period_stats_unknown_device(self, db_session):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         stats = get_period_stats(db_session, 999999, now - timedelta(hours=1), now)
         assert stats is None
 
     def test_get_period_stats_with_offline_samples(self, db_session, tapo_device):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Add online and offline samples
         for i in range(5):
             db_session.add(PowerSample(
@@ -202,7 +202,7 @@ class TestCleanup:
     """Test old sample cleanup."""
 
     def test_cleanup_old_samples(self, db_session, tapo_device):
-        now = datetime.utcnow()
+        now = datetime.now(timezone.utc)
         # Add old and new samples
         db_session.add(PowerSample(
             device_id=tapo_device.id,

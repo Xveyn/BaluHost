@@ -7,7 +7,7 @@ Manages data retention policies and cleanup for all metric types.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Dict, Optional
 
 from sqlalchemy.orm import Session
@@ -140,18 +140,18 @@ class RetentionManager:
             return 0
 
         try:
-            cutoff = datetime.utcnow() - timedelta(hours=config.retention_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=config.retention_hours)
 
             deleted = db.query(model).filter(
                 model.timestamp < cutoff
             ).delete(synchronize_session=False)
 
             # Update config
-            config.last_cleanup = datetime.utcnow()
+            config.last_cleanup = datetime.now(timezone.utc)
             config.samples_cleaned += deleted
             db.commit()
 
-            self._last_cleanup[metric_type] = datetime.utcnow()
+            self._last_cleanup[metric_type] = datetime.now(timezone.utc)
             logger.info(f"Cleaned up {deleted} {metric_type.value} samples (retention={config.retention_hours}h)")
 
             return deleted
@@ -264,6 +264,6 @@ class RetentionManager:
             return True
 
         oldest_cleanup = min(self._last_cleanup.values())
-        elapsed = datetime.utcnow() - oldest_cleanup
+        elapsed = datetime.now(timezone.utc) - oldest_cleanup
 
         return elapsed >= timedelta(hours=interval_hours)

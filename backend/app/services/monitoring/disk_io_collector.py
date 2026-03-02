@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 import re
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List, Optional, Type
 
 import psutil
@@ -64,7 +64,7 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
     def collect_all_samples(self) -> List[DiskIoSampleSchema]:
         """Collect disk I/O samples for all physical disks."""
         samples = []
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
         timestamp_seconds = time.time()
 
         try:

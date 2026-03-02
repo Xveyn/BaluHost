@@ -8,7 +8,7 @@ import logging
 import os
 import re
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Dict, List, Optional, Tuple
 
@@ -555,7 +555,7 @@ class OpticalDriveService:
         if status:
             job.status = status
             if status in (JobStatus.COMPLETED, JobStatus.FAILED, JobStatus.CANCELLED):
-                job.completed_at = datetime.utcnow()
+                job.completed_at = datetime.now(timezone.utc)
         if progress is not None:
             job.progress_percent = min(100.0, max(0.0, progress))
         if error is not None:

@@ -11,7 +11,7 @@ import time
 from abc import ABC, abstractmethod
 from collections import deque
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -913,7 +913,7 @@ class FanControlService:
 
                 # Add sample to buffer
                 self._sample_buffer.append({
-                    "timestamp": datetime.utcnow(),
+                    "timestamp": datetime.now(timezone.utc),
                     "fan_id": fan.fan_id,
                     "pwm_percent": target_pwm,
                     "rpm": fan.rpm,

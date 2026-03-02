@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Callable, Dict, List, Optional
 
 from sqlalchemy.orm import Session
@@ -221,7 +221,7 @@ class MonitoringOrchestrator:
             return self._sample_count > (3600 / self.sample_interval)
 
         from datetime import timedelta
-        elapsed = datetime.utcnow() - self._last_cleanup
+        elapsed = datetime.now(timezone.utc) - self._last_cleanup
         return elapsed >= timedelta(hours=DEFAULT_CLEANUP_INTERVAL)
 
     async def _run_cleanup(self) -> None:
@@ -233,7 +233,7 @@ class MonitoringOrchestrator:
             db = next(self._db_session_factory())
             try:
                 results = self.retention_manager.run_all_cleanup(db)
-                self._last_cleanup = datetime.utcnow()
+                self._last_cleanup = datetime.now(timezone.utc)
                 total = sum(results.values())
                 if total > 0:
                     logger.info(f"Retention cleanup completed: {total} total samples removed")

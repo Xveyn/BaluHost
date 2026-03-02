@@ -10,7 +10,7 @@ Determines the power intensity of running services by combining data from:
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 
 from app.schemas.power import (
@@ -226,7 +226,7 @@ async def get_service_intensities(
 
     return ServiceIntensityResponse(
         services=services,
-        timestamp=datetime.utcnow(),
+        timestamp=datetime.now(timezone.utc),
         total_services=len(services),
         active_demands_count=sum(1 for s in services if s.has_active_demand),
         highest_intensity=highest_intensity,

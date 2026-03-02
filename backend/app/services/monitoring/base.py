@@ -10,7 +10,7 @@ from __future__ import annotations
 import logging
 from abc import ABC, abstractmethod
 from collections import deque
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Generic, TypeVar, List, Optional, Type
 
@@ -250,7 +250,7 @@ class MetricCollector(ABC, Generic[T]):
             return self.get_history_memory()
         else:
             # Use database
-            start = datetime.utcnow() - duration
+            start = datetime.now(timezone.utc) - duration
             return self.get_history_db(db, start=start)
 
     def cleanup_old_data(self, db: Session, retention_hours: int) -> int:
@@ -266,7 +266,7 @@ class MetricCollector(ABC, Generic[T]):
         """
         try:
             model_class = self.get_db_model()
-            cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
 
             deleted = db.query(model_class).filter(
                 model_class.timestamp < cutoff

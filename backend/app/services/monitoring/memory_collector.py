@@ -7,7 +7,7 @@ Collects RAM usage data including BaluHost process memory.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import List, Optional, Type
 
 import psutil
@@ -82,7 +82,7 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
     def collect_sample(self) -> Optional[MemorySampleSchema]:
         """Collect memory metrics sample."""
         try:
-            timestamp = datetime.utcnow()
+            timestamp = datetime.now(timezone.utc)
 
             # Get memory info
             mem = psutil.virtual_memory()

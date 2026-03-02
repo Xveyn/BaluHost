@@ -1,5 +1,5 @@
 """Notification request and response schemas."""
-from datetime import datetime, time
+from datetime import datetime, time, timezone
 from typing import Optional, Literal, Any
 
 from pydantic import BaseModel, Field
@@ -79,7 +79,7 @@ class NotificationResponse(NotificationBase):
         """Convert database model to response schema."""
         time_ago = None
         if notification.created_at:
-            delta = datetime.utcnow() - notification.created_at.replace(tzinfo=None)
+            delta = datetime.now(timezone.utc) - notification.created_at.replace(tzinfo=None)
             if delta.days > 0:
                 time_ago = f"{delta.days}d ago" if delta.days < 7 else notification.created_at.strftime("%d.%m.%Y")
             elif delta.seconds >= 3600:

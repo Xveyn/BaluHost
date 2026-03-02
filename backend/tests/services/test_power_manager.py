@@ -6,7 +6,7 @@ Tests:
 - PowerManagerService: profile management, demand registration, auto-scaling
 """
 import asyncio
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -252,7 +252,7 @@ class TestPowerManagerServiceDemands:
 
         demand = service._demands["timeout_test"]
         assert demand.expires_at is not None
-        assert demand.expires_at > datetime.utcnow()
+        assert demand.expires_at > datetime.now(timezone.utc)
 
     @pytest.mark.asyncio
     async def test_unregister_demand(self, service):
@@ -350,7 +350,7 @@ class TestPowerManagerServiceProfiles:
         await service.apply_profile(PowerProfile.SURGE, duration_seconds=300)
 
         assert service._manual_override_until is not None
-        assert service._manual_override_until > datetime.utcnow()
+        assert service._manual_override_until > datetime.now(timezone.utc)
 
 
 class TestPowerManagerServiceAutoScaling:

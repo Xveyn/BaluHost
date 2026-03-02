@@ -8,7 +8,7 @@ for historical analysis and crash detection.
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from threading import Lock
 from typing import Dict, List, Optional, Type
 
@@ -60,7 +60,7 @@ class ProcessTracker:
             List of process samples
         """
         samples = []
-        timestamp = datetime.utcnow()
+        timestamp = datetime.now(timezone.utc)
 
         for process_def in BALUHOST_PROCESS_PATTERNS:
             process_name = process_def["name"]
@@ -186,7 +186,7 @@ class ProcessTracker:
             List of crash samples (is_alive=False)
         """
         crashes = []
-        cutoff = datetime.utcnow() - since
+        cutoff = datetime.now(timezone.utc) - since
 
         with self._lock:
             for process_name, samples in self._process_buffers.items():
@@ -268,7 +268,7 @@ class ProcessTracker:
     def cleanup_old_data(self, db: Session, retention_hours: int) -> int:
         """Delete old process samples from database."""
         try:
-            cutoff = datetime.utcnow() - timedelta(hours=retention_hours)
+            cutoff = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
             deleted = db.query(ProcessSample).filter(
                 ProcessSample.timestamp < cutoff
             ).delete(synchronize_session=False)
