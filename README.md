@@ -132,14 +132,32 @@ npm run dev
 See [Production Quickstart](docs/deployment/PRODUCTION_QUICKSTART.md) for full instructions.
 
 ```bash
-# Start production (systemd alternative)
-python start_prod.py
+# Fresh install (modular installer)
+sudo ./deploy/install/install.sh
 
-# Or via systemd
+# Or via systemd (if already installed)
 sudo systemctl start baluhost-backend
 ```
 
-Production uses PostgreSQL, Nginx reverse proxy, and 4 Uvicorn workers on port 8000.
+Production runs at `/opt/baluhost` with:
+- **4 Uvicorn workers** on port 8000 (behind Nginx)
+- **Nginx** serves static frontend (`client/dist/`) and proxies `/api/*`
+- **PostgreSQL 17.7** for data persistence
+- **Auto-deploy** on push to `main` via GitHub Actions (self-hosted runner)
+
+### Deployment Pipeline
+
+```
+push to main → CI checks (GitHub-hosted) → Deploy (self-hosted on NAS)
+                                            ├── DB backup (pg_dump)
+                                            ├── git pull + pip install
+                                            ├── Alembic migrations
+                                            ├── Frontend build (npm)
+                                            ├── Service restart
+                                            └── Health check (auto-rollback on failure)
+```
+
+See [Infrastructure](docs/deployment/infrastructure.md) and [Emergency Runbook](docs/deployment/emergency-runbook.md) for operational details.
 
 ---
 

@@ -119,13 +119,18 @@ class TestLoginWith2FA:
 class TestSetupEndpoints:
     """Test 2FA setup and management endpoints."""
 
-    def test_setup_admin_only(self, client, user_headers):
-        """Non-admin users cannot access 2FA setup."""
+    def test_setup_any_authenticated_user(self, client, user_headers):
+        """Any authenticated user can access 2FA setup (uses get_current_user)."""
         response = client.post(
             f"{settings.api_prefix}/auth/2fa/setup",
             headers=user_headers,
         )
-        assert response.status_code == 403
+        # Endpoint uses get_current_user, not get_current_admin,
+        # so regular users can set up 2FA for their own account.
+        assert response.status_code == 200
+        data = response.json()
+        assert "qr_code" in data
+        assert "secret" in data
 
     def test_setup_returns_qr_and_secret(self, client, admin_headers):
         """Setup endpoint returns QR code and secret."""
@@ -258,13 +263,16 @@ class TestSetupEndpoints:
         assert "backup_codes" in data
         assert len(data["backup_codes"]) == 10
 
-    def test_regenerate_non_admin_forbidden(self, client, user_headers):
-        """Non-admin users cannot regenerate backup codes."""
+    def test_regenerate_without_2fa_enabled_returns_400(self, client, user_headers):
+        """Regenerating backup codes without 2FA enabled returns 400."""
+        # Endpoint uses get_current_user (not admin-only).
+        # When 2FA is not enabled, totp_service.regenerate_backup_codes
+        # raises ValueError -> 400.
         response = client.post(
             f"{settings.api_prefix}/auth/2fa/backup-codes",
             headers=user_headers,
         )
-        assert response.status_code == 403
+        assert response.status_code == 400
 
     def test_setup_already_enabled_rejected(self, client, admin_headers, db_session):
         """Setup when 2FA is already enabled returns 400."""

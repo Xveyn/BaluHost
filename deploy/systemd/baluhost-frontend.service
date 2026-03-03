@@ -1,5 +1,10 @@
+# DEPRECATED: Frontend is now served by Nginx as static files (client/dist/).
+# This service used Vite preview which is not suitable for production.
+# See deploy/install/templates/baluhost-nginx-http.conf for the replacement.
+# This file is kept for reference only — do not install or enable.
+
 [Unit]
-Description=BaluHost NAS Frontend (React/Vite)
+Description=BaluHost NAS Frontend (React/Vite) [DEPRECATED - use Nginx]
 After=network.target baluhost-backend.service
 Wants=baluhost-backend.service
 

@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.1] - 2026-03-03
+
+### Deployment Professionalisierung
+
+Native Systemd-Deployment mit CI/CD-Pipeline: automatisierter Deploy bei Push auf main,
+Datenbank-Backups vor jedem Deploy, atomisches Rollback, und Nginx für statisches Frontend.
+
+### Added
+
+- **CI/CD pipeline** — GitHub Actions CI Check workflow (backend tests + frontend build)
+- **Auto-deploy** — Production deploy workflow triggered on push to main via self-hosted runner
+- **Auto-merge** — PRs to main automatically merge when CI checks pass
+- **Deploy script** (`ci-deploy.sh`) — Atomic deploys with pre-deploy DB backup, Alembic migration, health checks, and automatic rollback
+- **DB backup/restore scripts** — `db-backup-daily.sh` (14-day retention cron) and `db-restore.sh` for manual recovery
+- **Migration script** (`migrate-to-opt.sh`) — One-time migration from `/home/sven/projects/BaluHost` to `/opt/baluhost`
+- **Systemd monitoring template** — Templated `baluhost-monitoring.service` with placeholder system
+- **Deploy sudoers template** — Passwordless systemctl for deploy user
+- **Self-hosted runner** — Setup docs and health check script (`deploy/runner/`)
+- **Emergency runbook** — Step-by-step rollback and DB restore procedures
+- **Infrastructure docs** — Production architecture overview
+
+### Changed
+
+- **Backend service template** — Updated to 4 workers, added primary lock cleanup and PostgreSQL dependency
+- **Systemd module** — Extended to include monitoring service
+- **Nginx config** — Verified SPA fallback and API proxy for static frontend serving
+
+### Fixed
+
+- **CI test compatibility** — Patched SessionLocal at all import sites for CI environment
+- **62 CI test failures** — Resolved missing .env, SQLite advisory lock compat, SessionLocal bypass
+- **Move endpoint** — Corrected variable name and SQLite advisory lock compatibility
+- **qrcode dependency** — Moved from dev to core dependencies
+- **Deploy scripts** — Fixed npm build and manual uvicorn handling
+- **Hardware commands** — Added sudo for mdadm, smartctl, fan PWM in deploy scripts
+
+---
+
 ## [1.13.0] - 2026-03-02
 
 ### Security Audit Remediation & Pi-hole Enhancements

@@ -194,7 +194,16 @@ def _ensure_home_directory_exists(username: str, user_id: int, db: Session) -> P
 
 
 def _acquire_advisory_lock(db: Session, path: str) -> None:
-    """Acquire PostgreSQL advisory lock for path."""
+    """Acquire PostgreSQL advisory lock for path.
+
+    On SQLite (used in tests) the lock is silently skipped because
+    ``pg_advisory_xact_lock`` is a PostgreSQL-only function.
+    """
+    dialect_name = db.bind.dialect.name if db.bind else ""
+    if dialect_name != "postgresql":
+        # Advisory locks are only available on PostgreSQL; skip on SQLite
+        # and other dialects to allow tests to run with in-memory databases.
+        return
     path_hash = _get_path_hash(path)
     db.execute(select(1).where(True))  # Ensure transaction is started
     # pg_advisory_xact_lock is automatically released at end of transaction

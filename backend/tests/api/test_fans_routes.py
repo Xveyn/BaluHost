@@ -12,7 +12,68 @@ Covers:
 """
 
 import pytest
+from unittest.mock import AsyncMock, MagicMock
 from fastapi.testclient import TestClient
+
+from app.api.routes.fans import get_fan_service
+
+
+@pytest.fixture(autouse=True)
+def mock_fan_service(client):
+    """Override the fan service dependency with a mock for all fan tests."""
+    mock_service = AsyncMock()
+
+    # Mock get_status to return a valid dev-mode-like response
+    mock_service.get_status.return_value = {
+        "fans": [
+            {
+                "fan_id": "fan1",
+                "name": "System Fan 1",
+                "rpm": 1200,
+                "pwm_percent": 50,
+                "temperature_celsius": 45.0,
+                "mode": "auto",
+                "min_pwm_percent": 20,
+                "max_pwm_percent": 100,
+                "emergency_temp_celsius": 85.0,
+                "temp_sensor_id": None,
+                "curve_points": [{"temp": 30, "pwm": 30}, {"temp": 80, "pwm": 100}],
+                "is_active": True,
+                "hysteresis_celsius": 3.0,
+            }
+        ],
+        "is_dev_mode": True,
+        "is_using_linux_backend": False,
+        "permission_status": "ok",
+        "backend_available": True,
+    }
+
+    # Mock get_history
+    mock_service.get_history.return_value = ([], 0)
+
+    # Mock write operations
+    mock_service.set_fan_mode.return_value = True
+    mock_service.set_fan_pwm.return_value = (True, 1200)
+    mock_service.update_fan_curve.return_value = True
+    mock_service.apply_preset.return_value = (True, [{"temp": 30, "pwm": 30}])
+    mock_service.update_fan_config.return_value = {
+        "fan_id": "fan1",
+        "hysteresis_celsius": 3.0,
+        "min_pwm_percent": 20,
+        "max_pwm_percent": 100,
+        "emergency_temp_celsius": 85.0,
+    }
+
+    # Mock schedule operations
+    mock_service.get_schedule_entries.return_value = []
+    mock_service.create_schedule_entry.return_value = None  # triggers 422
+    mock_service.delete_schedule_entry.return_value = False
+    mock_service.get_active_schedule_entry.return_value = (None, None)
+
+    from app.main import app
+    app.dependency_overrides[get_fan_service] = lambda: mock_service
+    yield mock_service
+    app.dependency_overrides.pop(get_fan_service, None)
 
 
 # ============================================================================

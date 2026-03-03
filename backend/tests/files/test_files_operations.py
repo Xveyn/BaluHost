@@ -34,6 +34,23 @@ from app.services.files.operations import (
 from app.services.permissions import PermissionDeniedError
 
 
+@pytest.fixture(autouse=True)
+def _patch_session_local(db_session, monkeypatch):
+    """Patch ``SessionLocal`` so service code that bypasses DI uses the test DB.
+
+    ``save_uploads`` calls ``file_metadata_db.create_metadata(..., db=None)``
+    which opens its own ``SessionLocal()`` session.  In CI the app engine
+    points to an empty SQLite file, causing "no such table" errors.
+    """
+    from sqlalchemy.orm import sessionmaker
+    test_engine = db_session.get_bind()
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    monkeypatch.setattr("app.core.database.SessionLocal", TestSessionLocal)
+    # Also patch the module-level reference that metadata_db already imported
+    monkeypatch.setattr("app.services.files.metadata_db.SessionLocal", TestSessionLocal)
+    monkeypatch.setattr("app.services.files.ownership.SessionLocal", TestSessionLocal)
+
+
 @pytest.fixture
 def storage_root(tmp_path, monkeypatch):
     """Create temporary storage root for testing."""
@@ -412,7 +429,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         assert (storage_root / "test.txt").exists()
         assert (storage_root / "test.txt").read_bytes() == b"file content"
 
@@ -434,7 +451,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 3
+        assert len(saved) == 3
 
     @pytest.mark.asyncio
     async def test_save_upload_to_subdirectory(self, storage_root, db_session, user_public, regular_user):
@@ -464,7 +481,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         assert (storage_root / "subdir" / "nested.txt").exists()
 
     @pytest.mark.asyncio
@@ -501,7 +518,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         # Default filename is "upload.bin"
         assert (storage_root / "upload.bin").exists()
 

@@ -1,0 +1,40 @@
+name: Auto-Merge PR
+
+on:
+  workflow_run:
+    workflows: ["CI Check"]
+    types: [completed]
+
+jobs:
+  auto-merge:
+    # Only when CI Check succeeded and was triggered by a pull_request
+    if: >
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'pull_request'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      pull-requests: write
+
+    steps:
+      - name: Find and merge PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          HEAD_BRANCH: ${{ github.event.workflow_run.head_branch }}
+        run: |
+          PR_NUMBER=$(gh pr list --repo "$REPO" --state open --base main --head "$HEAD_BRANCH" --json number --jq '.[0].number')
+
+          if [ -z "$PR_NUMBER" ] || [ "$PR_NUMBER" = "null" ]; then
+            echo "No open PR targeting main for branch '$HEAD_BRANCH' — skipping"
+            exit 0
+          fi
+
+          echo "Auto-merging PR #$PR_NUMBER (branch: $HEAD_BRANCH)"
+
+          if [ "$HEAD_BRANCH" = "development" ]; then
+            # Never delete the development branch
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --merge
+          else
+            gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --delete-branch
+          fi

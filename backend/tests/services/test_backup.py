@@ -232,22 +232,23 @@ def test_backup_cleanup_old_backups(backup_service: BackupService, temp_backup_d
 def test_create_backup_handles_errors(backup_service: BackupService, temp_backup_dir: Path, db_session: Session):
     """Test that backup creation handles errors gracefully."""
     with patch.object(backup_service, 'backup_dir', temp_backup_dir):
-        # Mock _get_database_path to raise an error
-        with patch.object(backup_service, '_get_database_path', side_effect=ValueError("Test error")):
+        # Mock _get_database_info (called by create_backup) to raise an error.
+        # Note: the legacy _get_database_path is not called directly by create_backup.
+        with patch.object(backup_service, '_get_database_info', side_effect=ValueError("Test error")):
             backup_data = BackupCreate(
                 backup_type="full",
                 includes_database=True,
                 includes_files=True,
                 includes_config=False
             )
-            
+
             with pytest.raises(ValueError):
                 backup_service.create_backup(
                     backup_data=backup_data,
                     creator_id=1,
                     creator_username="test_user"
                 )
-            
+
             # Check that backup record was marked as failed
             failed_backup = db_session.query(Backup).filter(Backup.status == "failed").first()
             assert failed_backup is not None

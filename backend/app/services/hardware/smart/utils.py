@@ -90,9 +90,9 @@ def _run_smartctl(smartctl_path: str, dev_type: str, device_name: str) -> tuple[
     entries) are informational — the JSON output is still valid.
     """
     import json, subprocess, re as _re
-    base_args = [smartctl_path, '-H', '-i', '-l', 'selftest', '-j', '-d', dev_type, device_name]
+    base_args = ["sudo", "-n", smartctl_path, '-H', '-i', '-l', 'selftest', '-j', '-d', dev_type, device_name]
     if not _re.search(r'nvme', dev_type, _re.IGNORECASE) and 'nvme' not in device_name.lower():
-        base_args.insert(1, '-A')
+        base_args.insert(3, '-A')
     result = subprocess.run(base_args, capture_output=True, text=True, check=False, timeout=20)
     # Only abort on bit 0 (parse error) or bit 1 (device open failed)
     if result.returncode & 0b11:

@@ -12,11 +12,14 @@ WorkingDirectory=@@INSTALL_DIR@@/backend
 # Load production environment variables
 EnvironmentFile=@@INSTALL_DIR@@/.env.production
 
+# Clean up stale primary worker lock before start
+ExecStartPre=/usr/bin/rm -f /tmp/baluhost-primary.lock
+
 # Virtual environment activation and uvicorn start
 ExecStart=@@VENV_BIN@@/uvicorn app.main:app \
     --host 0.0.0.0 \
     --port 8000 \
-    --workers 1 \
+    --workers 4 \
     --log-level info \
     --no-access-log
 
@@ -25,7 +28,7 @@ Restart=always
 RestartSec=10s
 
 # Security hardening
-NoNewPrivileges=true
+# NoNewPrivileges must remain false — backend needs sudo for mdadm, hwmon/PWM, cpufreq
 PrivateTmp=true
 
 # Resource limits

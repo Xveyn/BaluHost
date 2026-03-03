@@ -7,6 +7,24 @@ from fastapi.testclient import TestClient
 from fastapi import status
 
 
+def _database_url_from_env() -> str:
+    """Read DATABASE_URL from env or .env file."""
+    url = os.environ.get("DATABASE_URL", "")
+    if not url:
+        env_file = os.path.join(os.path.dirname(__file__), "..", "..", ".env")
+        if os.path.isfile(env_file):
+            with open(env_file) as f:
+                for line in f:
+                    if line.startswith("DATABASE_URL="):
+                        url = line.split("=", 1)[1].strip()
+                        break
+    return url
+
+
+@pytest.mark.skipif(
+    "postgresql" in _database_url_from_env(),
+    reason="Test manages its own DB engine; cannot override a live PostgreSQL connection"
+)
 def test_mobile_registration_flow():
     """Test the complete mobile device registration flow using a token."""
     # Use an in-memory database for isolation and skip full app init

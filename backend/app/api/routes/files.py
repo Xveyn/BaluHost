@@ -1009,7 +1009,7 @@ async def move_path(
     emit_hook(
         "on_file_moved",
         old_path=payload.source_path,
-        new_path=payload.dest_path,
+        new_path=payload.target_path,
         user_id=user.id,
     )
 
