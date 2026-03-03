@@ -1,0 +1,32 @@
+name: Deploy Production
+
+on:
+  push:
+    branches: [main]
+
+concurrency:
+  group: production-deploy
+  cancel-in-progress: false
+
+jobs:
+  ci-check:
+    uses: ./.github/workflows/ci-check.yml
+
+  deploy:
+    needs: ci-check
+    runs-on: self-hosted
+    environment: production
+    timeout-minutes: 15
+
+    steps:
+      - name: Run deploy script
+        env:
+          INSTALL_DIR: /opt/baluhost
+          DEPLOY_ACTOR: ${{ github.actor }}
+        run: |
+          export GITHUB_ACTOR="$DEPLOY_ACTOR"
+          /opt/baluhost/deploy/scripts/ci-deploy.sh
+
+      - name: Show deploy state
+        if: always()
+        run: cat /opt/baluhost/.deploy-state 2>/dev/null || echo "No deploy state file"
