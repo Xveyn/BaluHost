@@ -12,6 +12,23 @@ import pytest
 from fastapi.testclient import TestClient
 
 
+@pytest.fixture(autouse=True)
+def _patch_session_local(db_session, monkeypatch):
+    """Patch ``SessionLocal`` so code that bypasses DI uses the test DB.
+
+    The ``_get_admin_or_service_token`` dependency in the power routes module
+    creates its own ``SessionLocal()`` session (bypassing FastAPI dependency
+    injection).  In CI the app engine points to an empty SQLite file with no
+    tables, causing "no such table: users" errors.  This fixture replaces
+    ``SessionLocal`` with a factory bound to the test engine so all code paths
+    share the same database that already has tables and seed users.
+    """
+    from sqlalchemy.orm import sessionmaker
+    test_engine = db_session.get_bind()
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    monkeypatch.setattr("app.core.database.SessionLocal", TestSessionLocal)
+
+
 class TestPowerStatus:
     """Tests for GET /api/power/status."""
 

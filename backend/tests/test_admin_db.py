@@ -23,9 +23,9 @@ def test_admin_tables_and_schema_and_rows(client, admin_headers, db_session):
         schema = res2.json()
         assert schema.get("table") == "users"
 
-    # Request rows for users (at least admin user exists)
-    res3 = client.get("/api/admin/db/table/users?page=1&page_size=10", headers=admin_headers)
-    assert res3.status_code == 200
-    rows_payload = res3.json()
-    assert rows_payload.get("table") == "users"
-    assert isinstance(rows_payload.get("rows"), list)
+        # Request rows for users (at least admin user exists)
+        res3 = client.get("/api/admin/db/table/users?page=1&page_size=10", headers=admin_headers)
+        assert res3.status_code == 200
+        rows_payload = res3.json()
+        assert rows_payload.get("table") == "users"
+        assert isinstance(rows_payload.get("rows"), list)

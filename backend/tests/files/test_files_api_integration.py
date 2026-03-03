@@ -5,10 +5,23 @@ Tests the complete flow: API → Service → Database
 """
 import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
 from app.services import file_metadata_db
+
+
+@pytest.fixture(autouse=True)
+def _patch_session_local(db_session, monkeypatch):
+    """Patch ``SessionLocal`` so service code that bypasses DI uses the test DB.
+
+    Several file services (``file_metadata_db``, ``audit``, ``vcl``) call
+    ``SessionLocal()`` directly when ``db=None`` is passed.  In CI the app
+    engine points to an empty SQLite file, causing "no such table" errors.
+    """
+    test_engine = db_session.get_bind()
+    TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
+    monkeypatch.setattr("app.core.database.SessionLocal", TestSessionLocal)
 
 
 def test_create_folder_creates_metadata(client: TestClient, user_headers: dict, db_session: Session):
