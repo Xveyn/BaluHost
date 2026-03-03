@@ -28,7 +28,7 @@ Restart=always
 RestartSec=10s
 
 # Security hardening
-NoNewPrivileges=true
+# NoNewPrivileges must remain false — backend needs sudo for mdadm, hwmon/PWM, cpufreq
 PrivateTmp=true
 
 # Resource limits

@@ -368,7 +368,7 @@ class MdadmRaidBackend:
     def _scan_arrays() -> List[str]:
         try:
             result = subprocess.run(
-                ["mdadm", "--detail", "--scan"],
+                ["sudo", "-n", "mdadm", "--detail", "--scan"],
                 capture_output=True,
                 text=True,
                 check=True,
@@ -396,8 +396,14 @@ class MdadmRaidBackend:
             raise ValueError(f"Device '{device}' not found on this system")
         return path
 
+    # Commands that require root privileges via sudo
+    _SUDO_COMMANDS = {"mdadm", "smartctl"}
+
     def _run(self, command: List[str], *, check: bool = True, timeout: int = 60,
              stdin_input: str | None = None) -> subprocess.CompletedProcess[str]:
+        # Prepend sudo -n for commands that need root
+        if command and command[0] in self._SUDO_COMMANDS:
+            command = ["sudo", "-n", *command]
         logger.debug("Executing command: %s", " ".join(command))
         try:
             return subprocess.run(command, check=check, capture_output=True, text=True,

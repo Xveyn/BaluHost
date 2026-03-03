@@ -73,7 +73,7 @@ def run_smart_self_test(device: str, test_type: str = "short") -> str:
     smartctl = _get_smartctl_path()
     import subprocess
     try:
-        result = subprocess.run([smartctl, "-t", test_type, device], check=False, capture_output=True, text=True, timeout=10)
+        result = subprocess.run(["sudo", "-n", smartctl, "-t", test_type, device], check=False, capture_output=True, text=True, timeout=10)
         # Bits 0-1: command-line parse error / device open failed → fatal
         if result.returncode & 0b11:
             logger.error("smartctl -t failed (code %d): %s", result.returncode, result.stderr or result.stdout)

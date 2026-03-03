@@ -33,7 +33,7 @@ def _read_real_smart_data() -> SmartStatusResponse:
         raise FileNotFoundError("smartctl not found in PATH")
 
     now = datetime.now(tz=timezone.utc)
-    scan_result = subprocess.run([smartctl_path, '--scan', '-j'], capture_output=True, text=True, check=False, timeout=10)
+    scan_result = subprocess.run(["sudo", "-n", smartctl_path, '--scan', '-j'], capture_output=True, text=True, check=False, timeout=10)
     if scan_result.returncode not in [0, 4]:
         raise SmartUnavailableError("Scan failed")
     try:

@@ -1,0 +1,22 @@
+# BaluHost Hardware - sudoers rules
+# Allows the baluhost backend to manage RAID arrays, disk health,
+# fan control (PWM), CPU frequency, and power management.
+# Installed by module 10 (systemd-services).
+
+# RAID management (mdadm)
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /sbin/mdadm
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/mdadm
+
+# Disk health (smartctl)
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/smartctl
+
+# Fan control & CPU frequency (write to sysfs via tee)
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/tee /sys/class/hwmon/*
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/tee /sys/devices/system/cpu/cpu*/cpufreq/*
+
+# System info
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/dmidecode
+
+# Power management
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl suspend
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/sbin/rtcwake
