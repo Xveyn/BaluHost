@@ -11,6 +11,23 @@ BACKUP_DIR="${BACKUP_DIR:-/opt/baluhost/backups/daily}"
 RETENTION_DAYS="${RETENTION_DAYS:-14}"
 DB_NAME="${DB_NAME:-baluhost}"
 DB_USER="${DB_USER:-baluhost}"
+INSTALL_DIR="${INSTALL_DIR:-/opt/baluhost}"
+
+# Extract PGPASSWORD from DATABASE_URL in .env.production
+load_db_password() {
+    local env_file="$INSTALL_DIR/.env.production"
+    if [[ -f "$env_file" ]]; then
+        local db_url
+        db_url=$(grep -m1 '^DATABASE_URL=' "$env_file" | cut -d= -f2-)
+        export PGPASSWORD
+        PGPASSWORD=$(echo "$db_url" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    fi
+    if [[ -z "${PGPASSWORD:-}" ]]; then
+        echo "ERROR: Could not extract database password from $env_file" >&2
+        exit 1
+    fi
+}
+load_db_password
 
 mkdir -p "$BACKUP_DIR"
 
