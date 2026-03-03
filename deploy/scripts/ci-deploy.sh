@@ -27,6 +27,23 @@ DB_NAME="baluhost"
 DB_USER="baluhost"
 BACKUP_RETENTION=10
 
+# Extract PGPASSWORD from DATABASE_URL in .env.production
+load_db_password() {
+    local env_file="$INSTALL_DIR/.env.production"
+    if [[ -f "$env_file" ]]; then
+        local db_url
+        db_url=$(grep -m1 '^DATABASE_URL=' "$env_file" | cut -d= -f2-)
+        # Parse password from postgresql://user:password@host:port/db
+        export PGPASSWORD
+        PGPASSWORD=$(echo "$db_url" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    fi
+    if [[ -z "${PGPASSWORD:-}" ]]; then
+        echo "ERROR: Could not extract database password from $env_file" >&2
+        exit 1
+    fi
+}
+load_db_password
+
 # Services to restart (order matters)
 SERVICES=(
     baluhost-backend

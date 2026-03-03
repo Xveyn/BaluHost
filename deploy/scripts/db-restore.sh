@@ -18,6 +18,21 @@ VENV_BIN="$INSTALL_DIR/backend/.venv/bin"
 DB_NAME="baluhost"
 DB_USER="baluhost"
 
+# Extract PGPASSWORD from DATABASE_URL in .env.production
+load_db_password() {
+    local env_file="$INSTALL_DIR/.env.production"
+    if [[ -f "$env_file" ]]; then
+        local db_url
+        db_url=$(grep -m1 '^DATABASE_URL=' "$env_file" | cut -d= -f2-)
+        export PGPASSWORD
+        PGPASSWORD=$(echo "$db_url" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    fi
+    if [[ -z "${PGPASSWORD:-}" ]]; then
+        log_warn "Could not extract database password. pg_dump/psql may prompt for password."
+    fi
+}
+load_db_password
+
 SERVICES=(
     baluhost-backend
     baluhost-scheduler
