@@ -1,19 +1,23 @@
 #!/bin/bash
 # Manual backup script for BaluHost production deployments
-# This script triggers a backup via the Docker container or direct Python execution
+# Triggers a backup via the BaluHost BackupService (Python).
+#
+# Default: native execution (systemd deployment).
+# Use --docker for legacy Docker-based execution.
 
-set -e  # Exit on error
+set -e
 
 # Color codes for output
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
 # Default values
 BACKUP_TYPE="full"
+INSTALL_DIR="${INSTALL_DIR:-/opt/baluhost}"
 CONTAINER_NAME="baluhost-backend"
-USE_DOCKER=true
+USE_DOCKER=false
 
 # Display usage
 usage() {
@@ -21,14 +25,14 @@ usage() {
     echo ""
     echo "Options:"
     echo "  -t, --type TYPE      Backup type: full|incremental|database_only|files_only (default: full)"
+    echo "  -d, --docker         Execute via Docker container (legacy)"
     echo "  -c, --container NAME Docker container name (default: baluhost-backend)"
-    echo "  --no-docker          Execute directly (not via Docker)"
     echo "  -h, --help           Display this help message"
     echo ""
     echo "Examples:"
-    echo "  $0                            # Full backup via Docker"
+    echo "  $0                            # Full backup (native)"
     echo "  $0 --type database_only       # Database-only backup"
-    echo "  $0 --no-docker                # Direct execution (no Docker)"
+    echo "  $0 --docker                   # Legacy Docker execution"
     exit 1
 }
 
@@ -39,13 +43,14 @@ while [[ $# -gt 0 ]]; do
             BACKUP_TYPE="$2"
             shift 2
             ;;
+        -d|--docker)
+            USE_DOCKER=true
+            shift
+            ;;
         -c|--container)
             CONTAINER_NAME="$2"
+            USE_DOCKER=true
             shift 2
-            ;;
-        --no-docker)
-            USE_DOCKER=false
-            shift
             ;;
         -h|--help)
             usage
@@ -70,8 +75,7 @@ esac
 
 echo -e "${GREEN}BaluHost Manual Backup Script${NC}"
 echo "Backup type: $BACKUP_TYPE"
-echo "Container: $CONTAINER_NAME"
-echo "Use Docker: $USE_DOCKER"
+echo "Mode: $([ "$USE_DOCKER" = true ] && echo 'Docker' || echo 'Native')"
 echo ""
 
 # Python script to execute backup
@@ -87,7 +91,6 @@ db = SessionLocal()
 try:
     service = BackupService(db)
 
-    # Determine backup parameters
     backup_type = '${BACKUP_TYPE}'
     includes_database = backup_type in ['full', 'database_only', 'incremental']
     includes_files = backup_type in ['full', 'files_only', 'incremental']
@@ -112,7 +115,7 @@ try:
     )
 
     print('')
-    print('[Backup] ✅ Backup created successfully!')
+    print('[Backup] Backup created successfully!')
     print(f'[Backup] ID: {backup.id}')
     print(f'[Backup] Filename: {backup.filename}')
     print(f'[Backup] Size: {backup.size_bytes / (1024*1024):.2f} MB')
@@ -121,7 +124,7 @@ try:
     sys.exit(0)
 
 except Exception as e:
-    print(f'[Backup] ❌ Error: {e}', file=sys.stderr)
+    print(f'[Backup] Error: {e}', file=sys.stderr)
     import traceback
     traceback.print_exc()
     sys.exit(1)
@@ -131,7 +134,7 @@ finally:
 
 # Execute backup
 if [ "$USE_DOCKER" = true ]; then
-    # Check if container is running
+    # Legacy Docker execution
     if ! docker ps --format '{{.Names}}' | grep -q "^${CONTAINER_NAME}$"; then
         echo -e "${RED}Error: Container '${CONTAINER_NAME}' is not running${NC}"
         echo "Available containers:"
@@ -141,36 +144,40 @@ if [ "$USE_DOCKER" = true ]; then
 
     echo -e "${YELLOW}Executing backup in Docker container...${NC}"
     echo ""
-
-    # Execute Python script in container
     docker exec -i "$CONTAINER_NAME" python -c "$PYTHON_SCRIPT"
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Backup completed successfully!${NC}"
-        exit 0
-    else
-        echo -e "${RED}Backup failed!${NC}"
-        exit 1
-    fi
-
 else
-    # Direct execution (assumes current directory is backend/)
-    echo -e "${YELLOW}Executing backup directly (no Docker)...${NC}"
+    # Native execution (systemd deployment)
+    BACKEND_DIR="$INSTALL_DIR/backend"
+    VENV_PYTHON="$BACKEND_DIR/.venv/bin/python"
+
+    if [[ ! -f "$VENV_PYTHON" ]]; then
+        echo -e "${RED}Error: Python venv not found at $VENV_PYTHON${NC}"
+        echo "Is INSTALL_DIR correct? (current: $INSTALL_DIR)"
+        exit 1
+    fi
+
+    if [[ ! -d "$BACKEND_DIR/app" ]]; then
+        echo -e "${RED}Error: Backend app not found at $BACKEND_DIR/app${NC}"
+        exit 1
+    fi
+
+    # Load environment
+    if [[ -f "$INSTALL_DIR/.env.production" ]]; then
+        set -a
+        source "$INSTALL_DIR/.env.production"
+        set +a
+    fi
+
+    echo -e "${YELLOW}Executing backup (native)...${NC}"
     echo ""
-
-    if [ ! -d "app" ]; then
-        echo -e "${RED}Error: Not in backend directory${NC}"
-        echo "Please run this script from the backend/ directory or use --container option"
-        exit 1
-    fi
-
-    python -c "$PYTHON_SCRIPT"
-
-    if [ $? -eq 0 ]; then
-        echo -e "${GREEN}Backup completed successfully!${NC}"
-        exit 0
-    else
-        echo -e "${RED}Backup failed!${NC}"
-        exit 1
-    fi
+    cd "$BACKEND_DIR"
+    "$VENV_PYTHON" -c "$PYTHON_SCRIPT"
 fi
+
+EXIT_CODE=$?
+if [ $EXIT_CODE -eq 0 ]; then
+    echo -e "${GREEN}Backup completed successfully!${NC}"
+else
+    echo -e "${RED}Backup failed!${NC}"
+fi
+exit $EXIT_CODE
