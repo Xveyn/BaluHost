@@ -40,7 +40,8 @@ dependencies = [
   "cryptography>=43.0.0,<45.0.0",
   "pyotp>=2.9.0,<3.0.0",
   "apscheduler>=3.10.0,<4.0.0",
-  "docker>=7.0.0,<8.0.0"
+  "docker>=7.0.0,<8.0.0",
+  "qrcode>=7.0.0"
 ]
 
 [project.optional-dependencies]
