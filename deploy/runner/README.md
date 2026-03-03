@@ -18,7 +18,7 @@ Go to the repository **Settings > Actions > Runners > New self-hosted runner** a
 
 ```bash
 # Download (check GitHub for latest version)
-curl -o actions-runner-linux-x64.tar.gz -L https://github.com/actions/runner/releases/download/v2.321.0/actions-runner-linux-x64-2.321.0.tar.gz
+curl -o actions-runner-linux-x64.tar.gz -L https://github.com/actions/runner/releases/download/v2.332.0/actions-runner-linux-x64-2.332.0.tar.gz
 tar xzf actions-runner-linux-x64.tar.gz
 
 # Configure (use the token from GitHub Settings)
@@ -36,7 +36,7 @@ When prompted:
 ```bash
 sudo ./svc.sh install sven
 sudo ./svc.sh start
-sudo systemctl enable actions.runner.Xveyn-BaluHost.baluhost-nas.service
+sudo systemctl enable actions.runner.Xveyn-BaluHost.BaluNode.service
 ```
 
 ### 4. Verify
@@ -44,7 +44,7 @@ sudo systemctl enable actions.runner.Xveyn-BaluHost.baluhost-nas.service
 ```bash
 sudo ./svc.sh status
 # Or:
-sudo systemctl status actions.runner.Xveyn-BaluHost.baluhost-nas.service
+sudo systemctl status actions.runner.Xveyn-BaluHost.BaluNode.service
 ```
 
 The runner should appear as "Online" in GitHub Settings > Actions > Runners.
@@ -60,7 +60,7 @@ The runner should appear as "Online" in GitHub Settings > Actions > Runners.
 ### Restart runner
 
 ```bash
-sudo systemctl restart actions.runner.Xveyn-BaluHost.baluhost-nas.service
+sudo systemctl restart actions.runner.Xveyn-BaluHost.BaluNode.service
 ```
 
 ### Update runner
