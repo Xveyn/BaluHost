@@ -1,0 +1,10 @@
+# BaluHost Deploy - sudoers rules
+# Allows the baluhost user to restart services and reload nginx during deploys.
+# Installed by module 10 (systemd-services).
+
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-backend
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-scheduler
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-monitoring
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-webdav
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl status baluhost-*

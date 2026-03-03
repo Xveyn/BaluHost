@@ -1,6 +1,6 @@
 [Unit]
-Description=BaluHost NAS Backend (FastAPI/Uvicorn)
-After=network.target postgresql.service
+Description=BaluHost Monitoring Worker
+After=network.target postgresql.service baluhost-backend.service
 Wants=postgresql.service
 
 [Service]
@@ -12,20 +12,15 @@ WorkingDirectory=@@INSTALL_DIR@@/backend
 # Load production environment variables
 EnvironmentFile=@@INSTALL_DIR@@/.env.production
 
-# Clean up stale primary worker lock before start
-ExecStartPre=/usr/bin/rm -f /tmp/baluhost-primary.lock
+# Run the monitoring worker process
+ExecStart=@@VENV_BIN@@/python scripts/monitoring_worker.py
 
-# Virtual environment activation and uvicorn start
-ExecStart=@@VENV_BIN@@/uvicorn app.main:app \
-    --host 0.0.0.0 \
-    --port 8000 \
-    --workers 4 \
-    --log-level info \
-    --no-access-log
+# Clean up SHM on stop
+ExecStopPost=/usr/bin/rm -rf /dev/shm/baluhost
 
 # Restart policy
 Restart=always
-RestartSec=10s
+RestartSec=5s
 
 # Security hardening
 NoNewPrivileges=true
@@ -37,7 +32,7 @@ LimitNOFILE=65536
 # Logging
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=baluhost-backend
+SyslogIdentifier=baluhost-monitoring
 
 [Install]
 WantedBy=multi-user.target

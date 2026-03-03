@@ -14,6 +14,7 @@ SERVICES=(
     "baluhost-backend"
     "baluhost-scheduler"
     "baluhost-webdav"
+    "baluhost-monitoring"
 )
 
 # ─── Main ───────────────────────────────────────────────────────────
@@ -65,6 +66,29 @@ if [[ -f "$SUDOERS_TEMPLATE" ]]; then
     fi
 else
     log_warn "Update sudoers template not found: $SUDOERS_TEMPLATE (skipping)"
+fi
+
+# --- Install deploy sudoers rule ---
+log_step "Deploy Sudoers"
+
+DEPLOY_SUDOERS_TEMPLATE="$TEMPLATE_DIR/baluhost-deploy-sudoers"
+DEPLOY_SUDOERS_OUTPUT="/etc/sudoers.d/baluhost-deploy"
+
+if [[ -f "$DEPLOY_SUDOERS_TEMPLATE" ]]; then
+    process_template "$DEPLOY_SUDOERS_TEMPLATE" "$DEPLOY_SUDOERS_OUTPUT" \
+        "BALUHOST_USER=$BALUHOST_USER"
+    chmod 440 "$DEPLOY_SUDOERS_OUTPUT"
+    log_info "Installed deploy sudoers rule: $DEPLOY_SUDOERS_OUTPUT"
+
+    if visudo -cf "$DEPLOY_SUDOERS_OUTPUT" &>/dev/null; then
+        log_info "Deploy sudoers syntax OK."
+    else
+        log_error "Deploy sudoers syntax check failed! Removing $DEPLOY_SUDOERS_OUTPUT"
+        rm -f "$DEPLOY_SUDOERS_OUTPUT"
+        exit 1
+    fi
+else
+    log_warn "Deploy sudoers template not found: $DEPLOY_SUDOERS_TEMPLATE (skipping)"
 fi
 
 # --- Reload systemd ---
