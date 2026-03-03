@@ -334,7 +334,7 @@ log_info "Migration: $OLD_DB_REV -> $NEW_DB_REV"
 log_step "Frontend Build"
 
 cd "$INSTALL_DIR/client"
-npm ci --omit=dev
+npm ci
 npm run build
 
 log_info "Frontend build complete."

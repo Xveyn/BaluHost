@@ -104,9 +104,20 @@ for svc in baluhost-backend baluhost-scheduler baluhost-monitoring baluhost-webd
         systemctl stop "$svc"
         log_info "Stopped $svc"
     else
-        log_info "$svc was not running"
+        log_info "$svc was not running (systemd)"
     fi
 done
+
+# Kill any manually started uvicorn processes (legacy from pre-systemd setup)
+if pgrep -f "uvicorn app.main:app" &>/dev/null; then
+    log_warn "Found manually started uvicorn process — killing it"
+    pkill -f "uvicorn app.main:app" || true
+    sleep 2
+    if pgrep -f "uvicorn app.main:app" &>/dev/null; then
+        pkill -9 -f "uvicorn app.main:app" || true
+    fi
+    log_info "Manually started uvicorn stopped."
+fi
 
 # ─── 3. Rsync Application Code ───────────────────────────────────────
 
@@ -159,7 +170,7 @@ log_info "Virtual environment created and dependencies installed."
 log_step "Frontend Build"
 
 cd "$TARGET_DIR/client"
-sudo -u "$OWNER" npm ci --omit=dev
+sudo -u "$OWNER" npm ci
 sudo -u "$OWNER" npm run build
 log_info "Frontend built: $TARGET_DIR/client/dist/"
 
