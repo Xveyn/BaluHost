@@ -27,22 +27,28 @@ DB_NAME="baluhost"
 DB_USER="baluhost"
 BACKUP_RETENTION=10
 
-# Extract PGPASSWORD from DATABASE_URL in .env.production
-load_db_password() {
+# Load .env.production into environment (needed by Alembic/Pydantic)
+load_env_production() {
     local env_file="$INSTALL_DIR/.env.production"
-    if [[ -f "$env_file" ]]; then
-        local db_url
-        db_url=$(grep -m1 '^DATABASE_URL=' "$env_file" | cut -d= -f2-)
-        # Parse password from postgresql://user:password@host:port/db
-        export PGPASSWORD
-        PGPASSWORD=$(echo "$db_url" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
+    if [[ ! -f "$env_file" ]]; then
+        echo "ERROR: $env_file not found" >&2
+        exit 1
     fi
+    # Export all KEY=VALUE lines (skip comments and empty lines)
+    set -a
+    # shellcheck disable=SC1090
+    source <(grep -v '^\s*#' "$env_file" | grep -v '^\s*$')
+    set +a
+
+    # Extract PGPASSWORD from DATABASE_URL for pg_dump
+    export PGPASSWORD
+    PGPASSWORD=$(echo "$DATABASE_URL" | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')
     if [[ -z "${PGPASSWORD:-}" ]]; then
-        echo "ERROR: Could not extract database password from $env_file" >&2
+        echo "ERROR: Could not extract database password from DATABASE_URL" >&2
         exit 1
     fi
 }
-load_db_password
+load_env_production
 
 # Services to restart (order matters)
 SERVICES=(
