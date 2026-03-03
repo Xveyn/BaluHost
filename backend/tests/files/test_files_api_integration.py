@@ -22,6 +22,8 @@ def _patch_session_local(db_session, monkeypatch):
     test_engine = db_session.get_bind()
     TestSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=test_engine)
     monkeypatch.setattr("app.core.database.SessionLocal", TestSessionLocal)
+    monkeypatch.setattr("app.services.files.metadata_db.SessionLocal", TestSessionLocal)
+    monkeypatch.setattr("app.services.files.ownership.SessionLocal", TestSessionLocal)
 
 
 def test_create_folder_creates_metadata(client: TestClient, user_headers: dict, db_session: Session):
