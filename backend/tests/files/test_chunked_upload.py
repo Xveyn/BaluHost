@@ -216,10 +216,11 @@ class TestSessionCompletion:
         )
         await manager.write_chunk(session.upload_id, 0, b"Hello")
 
-        temp_path = await manager.complete_session(session.upload_id)
+        temp_path, sha256_hex = await manager.complete_session(session.upload_id)
 
         assert temp_path.exists()
         assert temp_path.read_bytes() == b"Hello"
+        assert isinstance(sha256_hex, str)
         # Session should be removed
         assert manager.get_session(session.upload_id) is None
 

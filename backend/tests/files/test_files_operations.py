@@ -412,7 +412,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         assert (storage_root / "test.txt").exists()
         assert (storage_root / "test.txt").read_bytes() == b"file content"
 
@@ -434,7 +434,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 3
+        assert len(saved) == 3
 
     @pytest.mark.asyncio
     async def test_save_upload_to_subdirectory(self, storage_root, db_session, user_public, regular_user):
@@ -464,7 +464,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         assert (storage_root / "subdir" / "nested.txt").exists()
 
     @pytest.mark.asyncio
@@ -501,7 +501,7 @@ class TestSaveUploads:
             db=db_session
         )
 
-        assert saved == 1
+        assert len(saved) == 1
         # Default filename is "upload.bin"
         assert (storage_root / "upload.bin").exists()
 

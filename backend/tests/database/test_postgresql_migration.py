@@ -52,18 +52,18 @@ class TestMigrationScripts:
     def test_migration_script_exists(self):
         """Test: Migration-Skript existiert."""
         from pathlib import Path
-        script = Path("backend/scripts/migrate_sqlite_to_postgresql.py")
+        script = Path("backend/scripts/migration/migrate_sqlite_to_postgresql.py")
         # Alternative wenn we're already in backend directory
         if not script.exists():
-            script = Path("scripts/migrate_sqlite_to_postgresql.py")
+            script = Path("scripts/migration/migrate_sqlite_to_postgresql.py")
         assert script.exists(), f"Migration script not found at {script}"
-    
+
     def test_setup_postgresql_exists(self):
         """Test: PostgreSQL Setup-Skript existiert."""
         from pathlib import Path
-        script = Path("backend/scripts/setup_postgresql.py")
+        script = Path("backend/scripts/setup/setup_postgresql.py")
         if not script.exists():
-            script = Path("scripts/setup_postgresql.py")
+            script = Path("scripts/setup/setup_postgresql.py")
         assert script.exists(), f"Setup script not found at {script}"
     
     def test_alembic_config_exists(self):

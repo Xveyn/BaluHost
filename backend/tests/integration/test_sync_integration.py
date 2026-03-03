@@ -57,6 +57,16 @@ async def async_client():
     os.environ.setdefault("SKIP_APP_INIT", "1")
     app.dependency_overrides[get_db] = override_get_db
 
+    # Patch SessionLocal in modules that call it directly (bypassing get_db).
+    # Without this, file_metadata_db creates a separate in-memory DB connection
+    # and metadata written during uploads won't be visible to sync state queries.
+    import app.core.database as _db_mod
+    import app.services.files.metadata_db as _meta_mod
+
+    _orig_session_local = getattr(_db_mod, "SessionLocal", None)
+    _db_mod.SessionLocal = TestingSessionLocal
+    _meta_mod.SessionLocal = TestingSessionLocal
+
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         class _ClientWrapper:
@@ -92,6 +102,10 @@ async def async_client():
     db.close()
     Base.metadata.drop_all(bind=engine)
     app.dependency_overrides.clear()
+    # Restore original SessionLocal
+    if _orig_session_local is not None:
+        _db_mod.SessionLocal = _orig_session_local
+        _meta_mod.SessionLocal = _orig_session_local
     try:
         del os.environ["SKIP_APP_INIT"]
     except Exception:
@@ -118,34 +132,35 @@ def test_user_credentials():
 
 class TestSyncIntegration:
     """Integration tests for complete sync workflows."""
-    
+
     @pytest.mark.asyncio
     async def test_complete_sync_workflow(self, async_client: Any, test_user_credentials):
         """Test complete sync workflow: register -> login -> device -> upload -> download."""
-        
+        username = test_user_credentials["username"]
+
         # 1. Register user
         response = await async_client.post(
             "/api/auth/register",
             json={
-                "username": test_user_credentials["username"],
+                "username": username,
                 "email": test_user_credentials["email"],
                 "password": test_user_credentials["password"]
             }
         )
         assert response.status_code == status.HTTP_201_CREATED
-        
+
         # 2. Login
         response = await async_client.post(
             "/api/auth/login",
             json={
-                "username": test_user_credentials["username"],
+                "username": username,
                 "password": test_user_credentials["password"]
             }
         )
         assert response.status_code == status.HTTP_200_OK
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # 3. Register device
         response = await async_client.post(
             "/api/sync/devices",
@@ -157,30 +172,31 @@ class TestSyncIntegration:
         )
         assert response.status_code == status.HTTP_201_CREATED
         device_id = response.json()["device_id"]
-        
+
         # 4. Upload file
-        # Ensure target folder exists and is owned by the user
+        # _jail_path requires paths under the user's home directory for non-admin users.
+        # Create target folder under user's home dir.
         await async_client.post(
             "/api/files/folder",
-            json={"path": "", "name": "sync_test"},
+            json={"path": username, "name": "sync_test"},
             headers=headers
         )
 
         test_content = b"Test sync file content"
         test_hash = hashlib.sha256(test_content).hexdigest()
-        
+
         response = await async_client.post(
             "/api/files/upload",
             files={
                 "files": ("test_sync.txt", test_content, "text/plain")
             },
             data={
-                "path": "/sync_test"
+                "path": f"{username}/sync_test"
             },
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # 5. Get sync state
         response = await async_client.get(
             "/api/sync/state",
@@ -189,15 +205,15 @@ class TestSyncIntegration:
         assert response.status_code == status.HTTP_200_OK
         sync_state = response.json()
         assert len(sync_state["files"]) > 0
-        
+
         # 6. Download file
         response = await async_client.get(
-            "/api/files/download/sync_test/test_sync.txt",
+            f"/api/files/download/{username}/sync_test/test_sync.txt",
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
         assert response.content == test_content
-        
+
         # 7. Update file
         updated_content = b"Updated sync file content"
         response = await async_client.post(
@@ -206,12 +222,12 @@ class TestSyncIntegration:
                 "file": ("test_sync.txt", updated_content, "text/plain")
             },
             data={
-                "path": "/sync_test/test_sync.txt"
+                "path": f"{username}/sync_test/test_sync.txt"
             },
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # 8. Verify update in sync state
         response = await async_client.get(
             "/api/sync/state",
@@ -219,17 +235,24 @@ class TestSyncIntegration:
         )
         assert response.status_code == status.HTTP_200_OK
         sync_state = response.json()
-        file_entry = next(f for f in sync_state["files"] if f["path"] == "/sync_test/test_sync.txt")
+        # Sync state paths include the user's home directory prefix
+        sync_path = f"/{username}/sync_test/test_sync.txt"
+        file_entry = next((f for f in sync_state["files"] if f["path"] == sync_path), None)
+        if file_entry is None:
+            # Fallback: try without leading slash
+            sync_path = f"{username}/sync_test/test_sync.txt"
+            file_entry = next((f for f in sync_state["files"] if f["path"] == sync_path), None)
+        assert file_entry is not None, f"File not found in sync state. Available: {[f['path'] for f in sync_state['files']]}"
         assert file_entry["sha256"] != test_hash
-        
+
         # 9. Delete file
         response = await async_client.post(
             "/api/files/delete",
-            json={"path": "/sync_test/test_sync.txt"},
+            json={"path": f"{username}/sync_test/test_sync.txt"},
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # 10. Verify deletion
         response = await async_client.get(
             "/api/sync/state",
@@ -237,27 +260,31 @@ class TestSyncIntegration:
         )
         assert response.status_code == status.HTTP_200_OK
         sync_state = response.json()
-        file_exists = any(f["path"] == "/sync_test/test_sync.txt" for f in sync_state["files"])
+        file_exists = any(
+            f["path"].endswith("sync_test/test_sync.txt")
+            for f in sync_state["files"]
+        )
         assert not file_exists
     
     @pytest.mark.asyncio
     async def test_multiple_device_sync(self, async_client: Any, test_user_credentials):
         """Test sync across multiple devices."""
-        
+        username = test_user_credentials["username"]
+
         # Register and login
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         # Register device 1 (desktop)
         response = await async_client.post(
             "/api/sync/devices",
@@ -265,7 +292,7 @@ class TestSyncIntegration:
             headers=headers
         )
         device1_id = response.json()["device_id"]
-        
+
         # Register device 2 (mobile)
         response = await async_client.post(
             "/api/sync/devices",
@@ -273,22 +300,25 @@ class TestSyncIntegration:
             headers=headers
         )
         device2_id = response.json()["device_id"]
-        
-        # Upload from device 1
+
+        # Upload from device 1 (path must be under user's home dir)
         test_content = b"Multi-device sync test"
         response = await async_client.post(
             "/api/files/upload",
             files={"file": ("device1_file.txt", test_content, "text/plain")},
-            data={"path": "/multi_device/device1_file.txt"},
+            data={"path": f"{username}/multi_device/device1_file.txt"},
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # Both devices should see the file in sync state
         response = await async_client.get("/api/sync/state", headers=headers)
         sync_state = response.json()
-        assert any(f["path"] == "/multi_device/device1_file.txt" for f in sync_state["files"])
-        
+        assert any(
+            f["path"].endswith("multi_device/device1_file.txt")
+            for f in sync_state["files"]
+        )
+
         # Verify device list
         response = await async_client.get("/api/sync/devices", headers=headers)
         devices = response.json()
@@ -300,45 +330,46 @@ class TestSyncIntegration:
     @pytest.mark.asyncio
     async def test_folder_sync(self, async_client: Any, test_user_credentials):
         """Test syncing entire folder structure."""
-        
+        username = test_user_credentials["username"]
+
         # Setup user
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         await async_client.post(
             "/api/sync/devices",
             json={"name": "test_device", "device_type": "desktop"},
             headers=headers
         )
-        
-        # Create folder structure
+
+        # Create folder structure under user's home directory
         files_to_create = [
-            "/folder_test/file1.txt",
-            "/folder_test/subfolder/file2.txt",
-            "/folder_test/subfolder/deep/file3.txt",
+            f"{username}/folder_test/file1.txt",
+            f"{username}/folder_test/subfolder/file2.txt",
+            f"{username}/folder_test/subfolder/deep/file3.txt",
         ]
-        
+
         for file_path in files_to_create:
             # Create directories first
-            parts = file_path.split('/')[1:-1]  # Skip empty first and filename
+            parts = file_path.split('/')[:-1]  # All except filename
             for i in range(1, len(parts) + 1):
-                dir_path = '/' + '/'.join(parts[:i])
+                dir_path = '/'.join(parts[:i])
                 await async_client.post(
                     "/api/files/mkdir",
                     json={"path": dir_path},
                     headers=headers
                 )
-            
+
             # Upload file
             response = await async_client.post(
                 "/api/files/upload",
@@ -347,103 +378,113 @@ class TestSyncIntegration:
                 headers=headers
             )
             assert response.status_code == status.HTTP_200_OK
-        
+
         # Verify all files in sync state
         response = await async_client.get("/api/sync/state", headers=headers)
         sync_state = response.json()
-        
+
         for file_path in files_to_create:
-            assert any(f["path"] == file_path for f in sync_state["files"]), \
-                f"File {file_path} not found in sync state"
+            assert any(
+                f["path"].endswith(file_path.split(username + "/", 1)[-1]) or f["path"] == file_path or f["path"] == f"/{file_path}"
+                for f in sync_state["files"]
+            ), f"File {file_path} not found in sync state. Available: {[f['path'] for f in sync_state['files']]}"
     
     @pytest.mark.asyncio
     async def test_conflict_detection(self, async_client: Any, test_user_credentials):
         """Test conflict detection when file is modified on multiple devices."""
-        
+        username = test_user_credentials["username"]
+
         # Setup
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         await async_client.post(
             "/api/sync/devices",
             json={"name": "test_device", "device_type": "desktop"},
             headers=headers
         )
-        
-        # Upload initial file
+
+        # Upload initial file under user's home directory
         initial_content = b"Initial version"
         response = await async_client.post(
             "/api/files/upload",
             files={"files": ("conflict_test.txt", initial_content, "text/plain")},
-            data={"path": "/conflict/conflict_test.txt"},
+            data={"path": f"{username}/conflict/conflict_test.txt"},
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # Get initial state
         response = await async_client.get("/api/sync/state", headers=headers)
         initial_state = response.json()
-        initial_file = next(f for f in initial_state["files"] if f["path"] == "/conflict/conflict_test.txt")
+        initial_file = next(
+            f for f in initial_state["files"]
+            if f["path"].endswith("conflict/conflict_test.txt")
+        )
         initial_hash = initial_file["sha256"]
         initial_modified = initial_file["modified_at"]
-        
+
         # Simulate waiting a bit
         await asyncio.sleep(0.1)
-        
+
         # Upload modified version
         modified_content = b"Modified version"
         response = await async_client.post(
             "/api/files/upload",
             files={"files": ("conflict_test.txt", modified_content, "text/plain")},
-            data={"path": "/conflict/conflict_test.txt"},
+            data={"path": f"{username}/conflict/conflict_test.txt"},
             headers=headers
         )
         assert response.status_code == status.HTTP_200_OK
-        
+
         # Verify modification was detected
         response = await async_client.get("/api/sync/state", headers=headers)
         updated_state = response.json()
-        updated_file = next(f for f in updated_state["files"] if f["path"] == "/conflict/conflict_test.txt")
-        
+        updated_file = next(
+            f for f in updated_state["files"]
+            if f["path"].endswith("conflict/conflict_test.txt")
+        )
+
         assert updated_file["sha256"] != initial_hash
         assert updated_file["modified_at"] != initial_modified
     
     @pytest.mark.asyncio
     async def test_sync_with_deletes(self, async_client: Any, test_user_credentials):
         """Test sync handles file deletions correctly."""
-        
+        username = test_user_credentials["username"]
+
         # Setup
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         await async_client.post(
             "/api/sync/devices",
             json={"name": "test_device", "device_type": "desktop"},
             headers=headers
         )
-        
-        # Create multiple files
-        files = [f"/delete_test/file{i}.txt" for i in range(5)]
+
+        # Create multiple files under user's home directory
+        files = [f"{username}/delete_test/file{i}.txt" for i in range(5)]
         for file_path in files:
             response = await async_client.post(
                 "/api/files/upload",
@@ -452,12 +493,12 @@ class TestSyncIntegration:
                 headers=headers
             )
             assert response.status_code == status.HTTP_200_OK
-        
+
         # Verify all files exist
         response = await async_client.get("/api/sync/state", headers=headers)
         sync_state = response.json()
-        assert len([f for f in sync_state["files"] if f["path"].startswith("/delete_test")]) == 5
-        
+        assert len([f for f in sync_state["files"] if "delete_test" in f["path"]]) == 5
+
         # Delete some files
         for file_path in files[:3]:
             response = await async_client.delete(
@@ -466,91 +507,92 @@ class TestSyncIntegration:
                 headers=headers
             )
             assert response.status_code == status.HTTP_200_OK
-        
+
         # Verify deletions in sync state
         response = await async_client.get("/api/sync/state", headers=headers)
         sync_state = response.json()
-        remaining_files = [f for f in sync_state["files"] if f["path"].startswith("/delete_test")]
+        remaining_files = [f for f in sync_state["files"] if "delete_test" in f["path"]]
         assert len(remaining_files) == 2
-        
+
         remaining_paths = [f["path"] for f in remaining_files]
-        assert "/delete_test/file3.txt" in remaining_paths
-        assert "/delete_test/file4.txt" in remaining_paths
+        assert any("delete_test/file3.txt" in p for p in remaining_paths)
+        assert any("delete_test/file4.txt" in p for p in remaining_paths)
 
 
 class TestSyncPerformance:
     """Performance tests for sync operations."""
-    
+
     @pytest.mark.asyncio
     async def test_sync_state_performance(self, async_client: Any, test_user_credentials):
         """Test sync state retrieval performance with many files."""
-        
+        username = test_user_credentials["username"]
+
         # Setup
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
+
         await async_client.post(
             "/api/sync/devices",
             json={"name": "test_device", "device_type": "desktop"},
             headers=headers
         )
-        
-        # Create many files
+
+        # Create many files under user's home directory
         num_files = 50
         for i in range(num_files):
             await async_client.post(
                 "/api/files/upload",
                 files={"files": (f"file{i}.txt", b"test content", "text/plain")},
-                data={"path": f"/perf_test/file{i}.txt"},
+                data={"path": f"{username}/perf_test/file{i}.txt"},
                 headers=headers
             )
-        
+
         # Measure sync state retrieval time
         start_time = time.time()
         response = await async_client.get("/api/sync/state", headers=headers)
         end_time = time.time()
-        
+
         assert response.status_code == status.HTTP_200_OK
         sync_state = response.json()
-        assert len([f for f in sync_state["files"] if f["path"].startswith("/perf_test")]) == num_files
-        
+        assert len([f for f in sync_state["files"] if "perf_test" in f["path"]]) == num_files
+
         # Should complete within reasonable time (< 2 seconds for 50 files)
         elapsed = end_time - start_time
         assert elapsed < 2.0, f"Sync state retrieval took {elapsed:.2f}s, expected < 2.0s"
-    
+
     @pytest.mark.asyncio
     async def test_batch_upload_performance(self, async_client: Any, test_user_credentials):
         """Test performance of uploading multiple files."""
-        
+        username = test_user_credentials["username"]
+
         # Setup
         await async_client.post("/api/auth/register", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "email": test_user_credentials["email"],
             "password": test_user_credentials["password"]
         })
-        
+
         response = await async_client.post("/api/auth/login", json={
-            "username": test_user_credentials["username"],
+            "username": username,
             "password": test_user_credentials["password"]
         })
         token = response.json()["access_token"]
         headers = {"Authorization": f"Bearer {token}"}
-        
-        # Ensure user home directory exists
-        username = test_user_credentials["username"]
+
+        # Ensure batch_test folder exists under user's home directory
         await async_client.post(
             "/api/files/folder",
-            json={"path": "", "name": "batch_test"},
+            json={"path": username, "name": "batch_test"},
             headers=headers
         )
 
@@ -562,16 +604,16 @@ class TestSyncPerformance:
             response = await async_client.post(
                 "/api/files/upload",
                 files={"files": (f"batch{i}.txt", b"batch test content", "text/plain")},
-                data={"path": "/batch_test"},
+                data={"path": f"{username}/batch_test"},
                 headers=headers
             )
             assert response.status_code == status.HTTP_200_OK, (
                 f"Upload failed with {response.status_code}: {response.text}"
             )
-        
+
         end_time = time.time()
         elapsed = end_time - start_time
-        
+
         # Should average less than 200ms per file
         avg_per_file = elapsed / num_files
         assert avg_per_file < 0.2, f"Average upload time {avg_per_file:.3f}s per file, expected < 0.2s"

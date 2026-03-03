@@ -20,9 +20,9 @@ class TestListUsers:
         response = client.get("/api/users/")
         assert response.status_code == 401
 
-    def test_list_returns_users(self, client: TestClient, user_headers: dict):
+    def test_list_returns_users(self, client: TestClient, admin_headers: dict):
         """Test that listing users returns user list."""
-        response = client.get("/api/users/", headers=user_headers)
+        response = client.get("/api/users/", headers=admin_headers)
         assert response.status_code == 200
 
         data = response.json()
@@ -31,30 +31,30 @@ class TestListUsers:
         assert "active" in data
         assert isinstance(data["users"], list)
 
-    def test_list_with_search(self, client: TestClient, user_headers: dict):
+    def test_list_with_search(self, client: TestClient, admin_headers: dict):
         """Test listing users with search parameter."""
         response = client.get(
             "/api/users/",
             params={"search": "admin"},
-            headers=user_headers
+            headers=admin_headers
         )
         assert response.status_code == 200
 
-    def test_list_with_role_filter(self, client: TestClient, user_headers: dict):
+    def test_list_with_role_filter(self, client: TestClient, admin_headers: dict):
         """Test listing users with role filter."""
         response = client.get(
             "/api/users/",
             params={"role": "admin"},
-            headers=user_headers
+            headers=admin_headers
         )
         assert response.status_code == 200
 
-    def test_list_with_sorting(self, client: TestClient, user_headers: dict):
+    def test_list_with_sorting(self, client: TestClient, admin_headers: dict):
         """Test listing users with sorting."""
         response = client.get(
             "/api/users/",
             params={"sort_by": "username", "sort_order": "asc"},
-            headers=user_headers
+            headers=admin_headers
         )
         assert response.status_code == 200
 

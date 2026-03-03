@@ -190,14 +190,25 @@ class TestCriticalVulnerability4:
 class TestCriticalVulnerability5:
     """Test: Missing Rate Limiting on Critical Endpoints"""
 
+    @pytest.fixture(autouse=True)
+    def enable_rate_limits(self):
+        """Enable rate limits for these tests (disabled by default in test env)."""
+        import os
+        old_val = os.environ.get("ENABLE_RATE_LIMITS_IN_TESTS", "0")
+        os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = "1"
+        yield
+        os.environ["ENABLE_RATE_LIMITS_IN_TESTS"] = old_val
+
     def test_password_change_rate_limited(self, client: TestClient, auth_headers):
         """Verify /change-password is rate limited."""
-        # Make rapid password change attempts
+        # Make rapid password change attempts.
+        # new_password must pass Pydantic validation (8+ chars, upper+lower+digit)
+        # otherwise 422 is returned before the rate limiter runs.
         responses = []
         for i in range(10):
             response = client.post(
                 "/api/auth/change-password",
-                json={"current_password": "wrong", "new_password": "new"},
+                json={"current_password": "wrong", "new_password": "NewPass123!"},
                 headers=auth_headers
             )
             responses.append(response)

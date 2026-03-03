@@ -23,7 +23,7 @@ from app.models.base import Base
 
 
 @pytest.fixture(scope="function")
-def client() -> Generator[TestClient, None, None]:
+def client(monkeypatch) -> Generator[TestClient, None, None]:
     reset_dev_storage()
 
     # In-memory SQLite for test isolation
@@ -43,6 +43,22 @@ def client() -> Generator[TestClient, None, None]:
             pass
 
     app.dependency_overrides[get_db] = override_get_db
+
+    # Also patch SessionLocal so that code paths using db=None (e.g.
+    # save_uploads metadata tracking) create sessions from the same
+    # in-memory engine instead of the production database.
+    import app.core.database as database_module
+    monkeypatch.setattr(database_module, "SessionLocal", TestingSessionLocal)
+    # Patch the SessionLocal import in metadata_db module too, since it
+    # imports SessionLocal at module level.
+    import app.services.files.metadata_db as metadata_db_module
+    monkeypatch.setattr(metadata_db_module, "SessionLocal", TestingSessionLocal)
+    # Also patch in audit logger modules that may create their own sessions
+    try:
+        import app.services.audit.logger_db as audit_logger_db_module
+        monkeypatch.setattr(audit_logger_db_module, "SessionLocal", TestingSessionLocal)
+    except (ImportError, AttributeError):
+        pass
 
     # Ensure admin exists in test DB
     if not user_service.get_user_by_username(settings.admin_username, db=db):
@@ -73,16 +89,6 @@ def _login(client: TestClient, username: str, password: str) -> str:
     )
     assert response.status_code == 200
     return response.json()["access_token"]
-
-
-def _create_user(username: str, email: str, password: str, role: str = "user") -> str:
-    # Create user via service but ensure it uses test DB by passing no db here is unsafe.
-    # Prefer using API registration in fixtures below. Keep as fallback creating via service
-    # if needed by passing db in future.
-    user = user_service.create_user(
-        UserCreate(username=username, email=email, password=password, role=role)
-    )
-    return user.id
 
 
 @pytest.fixture
@@ -318,7 +324,7 @@ def test_list_files_shows_only_accessible(
     )
     assert list_resp.status_code == 200
     files_data = list_resp.json()["files"]
-    
+
     # User2 should not see user1's files (unless no owner or admin override)
     user1_files = [f for f in files_data if f.get("owner_id") and f["owner_id"] != "1"]
     # Since we're filtering on backend now, files without ownership or visible should appear
