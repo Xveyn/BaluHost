@@ -59,6 +59,10 @@ class Settings(BaseSettings):
 
     # VPN Configuration
     vpn_encryption_key: str = ""  # Fernet key for encrypting VPN private/preshared keys
+    vpn_lan_network: str = "192.168.178.0/24"  # LAN subnet for client AllowedIPs
+    vpn_lan_interface: str = ""  # LAN interface for NAT (auto-detect if empty)
+    vpn_include_lan: bool = True  # Include LAN subnet in VPN client AllowedIPs
+    vpn_config_path: str = "/etc/wireguard/wg0.conf"  # Server config file path
 
     # TOTP Configuration
     totp_encryption_key: str = ""  # Dedicated key for TOTP secrets. Falls back to VPN_ENCRYPTION_KEY if not set.

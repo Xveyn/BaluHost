@@ -1,0 +1,8 @@
+# BaluHost WireGuard management — allow backend to control wg0 without full root
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/wg syncconf wg0 *
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/wg-quick up wg0
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/wg-quick down wg0
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/wg-quick strip wg0
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/wg show *
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/tee /etc/wireguard/wg0.conf
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/chmod 600 /etc/wireguard/wg0.conf
