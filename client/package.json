@@ -1,7 +1,7 @@
 {
   "name": "baluhost-client",
   "private": true,
-  "version": "1.13.1",
+  "version": "1.13.2",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,7 +18,7 @@
     "test:e2e:debug": "playwright test --debug"
   },
   "dependencies": {
-    "axios": "^1.13.2",
+    "axios": "^1.13.1",
     "i18next": "^25.8.0",
     "i18next-browser-languagedetector": "^8.2.0",
     "lucide-react": "^0.554.0",

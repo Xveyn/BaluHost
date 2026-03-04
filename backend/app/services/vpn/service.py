@@ -1,9 +1,11 @@
 """VPN service for WireGuard configuration and management."""
 
 import logging
+import os
 import secrets
 import base64
 import subprocess
+import tempfile
 from typing import Optional
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -66,6 +68,183 @@ class VPNService:
                 "Could not decrypt VPN key — assuming legacy plaintext value."
             )
             return stored
+
+    # ------------------------------------------------------------------
+    # Server config generation & application
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def get_lan_interface() -> str:
+        """Detect the LAN interface for NAT rules.
+
+        Uses ``vpn_lan_interface`` setting if set, otherwise auto-detects
+        from the default route.  Returns ``"eth0"`` in dev mode.
+        """
+        if settings.vpn_lan_interface:
+            return settings.vpn_lan_interface
+
+        if settings.is_dev_mode:
+            return "eth0"
+
+        try:
+            result = subprocess.run(
+                ["ip", "route", "show", "default"],
+                capture_output=True, text=True, timeout=5,
+            )
+            # e.g. "default via 192.168.178.1 dev enp9s0 proto ..."
+            for part in result.stdout.split():
+                idx = result.stdout.split().index(part)
+                if part == "dev" and idx + 1 < len(result.stdout.split()):
+                    return result.stdout.split()[idx + 1]
+        except Exception as exc:
+            logger.warning("Failed to detect LAN interface: %s", exc)
+
+        return "eth0"
+
+    @staticmethod
+    def generate_server_config(db: Session) -> str:
+        """Generate a WireGuard server config from database state.
+
+        Returns the config file content as a string.
+        """
+        server_config = db.query(VPNConfig).first()
+        if not server_config:
+            raise RuntimeError("No VPN server config in database. Generate a client first to initialise keys.")
+
+        server_private = VPNService._decrypt_key(server_config.server_private_key)
+        lan_iface = VPNService.get_lan_interface()
+
+        lines: list[str] = [
+            "[Interface]",
+            f"PrivateKey = {server_private}",
+            f"Address = {server_config.server_ip}/24",
+            f"ListenPort = {server_config.server_port}",
+        ]
+
+        if settings.vpn_include_lan:
+            lines.append(
+                f"PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; "
+                f"iptables -t nat -A POSTROUTING -o {lan_iface} -j MASQUERADE; "
+                f"sysctl -w net.ipv4.ip_forward=1"
+            )
+            lines.append(
+                f"PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; "
+                f"iptables -t nat -D POSTROUTING -o {lan_iface} -j MASQUERADE"
+            )
+
+        # Add active client peers
+        clients = db.query(VPNClient).filter(VPNClient.is_active == True).all()
+        for client in clients:
+            lines.append("")
+            lines.append("[Peer]")
+            lines.append(f"PublicKey = {client.public_key}")
+            psk = VPNService._decrypt_key(client.preshared_key)
+            if psk:
+                lines.append(f"PresharedKey = {psk}")
+            lines.append(f"AllowedIPs = {client.assigned_ip}/32")
+
+        lines.append("")
+        return "\n".join(lines)
+
+    @staticmethod
+    def apply_server_config(db: Session) -> tuple[bool, str]:
+        """Generate and apply WireGuard server config.
+
+        In dev mode the config is generated but not written/applied.
+        Returns ``(success, message)``.
+        """
+        try:
+            config_content = VPNService.generate_server_config(db)
+        except RuntimeError as exc:
+            return False, str(exc)
+
+        if settings.is_dev_mode:
+            logger.info("Dev mode: generated WireGuard server config (not applying)")
+            return True, "Server config generated (dev mode — not applied)"
+
+        config_path = settings.vpn_config_path
+
+        # Write config via sudo tee (backend user needs sudoers entry)
+        try:
+            proc = subprocess.run(
+                ["sudo", "tee", config_path],
+                input=config_content, capture_output=True, text=True, timeout=10,
+            )
+            if proc.returncode != 0:
+                return False, f"Failed to write config: {proc.stderr.strip()}"
+            # Restrict permissions
+            subprocess.run(
+                ["sudo", "chmod", "600", config_path],
+                capture_output=True, text=True, timeout=5,
+            )
+        except Exception as exc:
+            return False, f"Failed to write config: {exc}"
+
+        # Check if wg0 interface is already up
+        try:
+            check = subprocess.run(
+                ["ip", "link", "show", "wg0"],
+                capture_output=True, text=True, timeout=5,
+            )
+            wg0_up = check.returncode == 0
+        except Exception:
+            wg0_up = False
+
+        if wg0_up:
+            # Live-reload without disconnecting clients
+            # wg syncconf needs a stripped config (no Interface Address/PostUp/PostDown)
+            try:
+                strip_proc = subprocess.run(
+                    ["sudo", "wg-quick", "strip", "wg0"],
+                    capture_output=True, text=True, timeout=10,
+                )
+                if strip_proc.returncode != 0:
+                    return False, f"wg-quick strip failed: {strip_proc.stderr.strip()}"
+
+                # Write stripped config to temp file for syncconf
+                with tempfile.NamedTemporaryFile(mode="w", suffix=".conf", delete=False) as tmp:
+                    tmp.write(strip_proc.stdout)
+                    tmp_path = tmp.name
+
+                try:
+                    sync_proc = subprocess.run(
+                        ["sudo", "wg", "syncconf", "wg0", tmp_path],
+                        capture_output=True, text=True, timeout=10,
+                    )
+                    if sync_proc.returncode != 0:
+                        return False, f"wg syncconf failed: {sync_proc.stderr.strip()}"
+                finally:
+                    os.unlink(tmp_path)
+
+                logger.info("WireGuard server config synced (live reload)")
+                return True, "Server config synced (live reload)"
+            except Exception as exc:
+                return False, f"Failed to sync config: {exc}"
+        else:
+            # Interface not up — start it
+            try:
+                up_proc = subprocess.run(
+                    ["sudo", "wg-quick", "up", "wg0"],
+                    capture_output=True, text=True, timeout=15,
+                )
+                if up_proc.returncode != 0:
+                    return False, f"wg-quick up failed: {up_proc.stderr.strip()}"
+                logger.info("WireGuard interface wg0 started")
+                return True, "Server config applied and wg0 started"
+            except Exception as exc:
+                return False, f"Failed to start wg0: {exc}"
+
+    @staticmethod
+    def _try_apply_server_config(db: Session) -> None:
+        """Best-effort server config sync.  Errors are logged, not raised."""
+        try:
+            success, message = VPNService.apply_server_config(db)
+            if not success:
+                logger.warning("Server config sync failed: %s", message)
+            else:
+                logger.info("Server config sync: %s", message)
+        except Exception as exc:
+            logger.warning("Server config sync error: %s", exc)
 
     @staticmethod
     def get_vpn_dns(db: Optional['Session'] = None) -> str:
@@ -221,6 +400,11 @@ class VPNService:
         db.commit()
         db.refresh(client)
 
+        # Build AllowedIPs — VPN network + optional LAN
+        allowed_ips = VPNService.VPN_NETWORK
+        if settings.vpn_include_lan and settings.vpn_lan_network:
+            allowed_ips += f", {settings.vpn_lan_network}"
+
         # Generate WireGuard config file — use plaintext keys (not the encrypted DB values)
         config_content = f"""[Interface]
 PrivateKey = {client_private}
@@ -231,13 +415,16 @@ DNS = {VPNService.get_vpn_dns(db)}
 PublicKey = {server_config.server_public_key}
 PresharedKey = {preshared_key}
 Endpoint = {server_public_endpoint}:{server_config.server_port}
-AllowedIPs = {VPNService.VPN_NETWORK}
+AllowedIPs = {allowed_ips}
 PersistentKeepalive = 25
 """
         
+        # Sync server config so the new client peer is active immediately
+        VPNService._try_apply_server_config(db)
+
         # Base64 encode config for QR code
         config_base64 = base64.b64encode(config_content.encode()).decode()
-        
+
         return VPNConfigResponse(
             client_id=client.id,
             device_name=device_name,
@@ -265,9 +452,10 @@ PersistentKeepalive = 25
         client = VPNService.get_client_by_id(db, client_id)
         if not client:
             return False
-        
+
         client.is_active = False
         db.commit()
+        VPNService._try_apply_server_config(db)
         return True
     
     @staticmethod
@@ -276,9 +464,10 @@ PersistentKeepalive = 25
         client = VPNService.get_client_by_id(db, client_id)
         if not client:
             return False
-        
+
         db.delete(client)
         db.commit()
+        VPNService._try_apply_server_config(db)
         return True
     
     @staticmethod

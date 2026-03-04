@@ -266,6 +266,38 @@ async def revoke_vpn_client(
         )
 
 
+@router.post("/sync-server")
+@user_limiter.limit(get_limit("vpn_operations"))
+async def sync_server_config(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_admin),
+):
+    """Regenerate and apply WireGuard server config from DB state (admin only)."""
+    audit_logger = get_audit_logger_db()
+
+    success, message = VPNService.apply_server_config(db)
+
+    audit_logger.log_vpn_operation(
+        action="vpn_server_config_sync",
+        user=current_user.username,
+        vpn_client="server",
+        details={"message": message},
+        success=success,
+        error_message=message if not success else None,
+        db=db,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=message,
+        )
+
+    return {"success": True, "message": message}
+
+
 @router.get("/server-config", response_model=VPNServerConfig)
 @user_limiter.limit(get_limit("vpn_operations"))
 async def get_server_config(

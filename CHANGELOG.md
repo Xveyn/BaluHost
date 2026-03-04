@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.2] - 2026-03-04
+
+### WireGuard Server Config & VPN-Erreichbarkeit
+
+### Added
+
+- **WireGuard server config generation** — `generate_server_config()` builds `wg0.conf` from DB state (server keys + active client peers)
+- **Live config sync** — `apply_server_config()` writes config and runs `wg syncconf` for seamless reload without disconnecting clients
+- **Auto-sync on client changes** — Server config automatically updates when clients are created, revoked, or deleted
+- **LAN routing via VPN** — Client AllowedIPs now include LAN subnet (`192.168.178.0/24`) for webapp access over VPN
+- **`POST /api/vpn/sync-server`** — Admin-only endpoint to manually trigger server config regeneration
+- **WireGuard setup script** (`deploy/scripts/setup-wireguard.sh`) — One-time server setup: `/etc/wireguard/`, IP forwarding, sudoers, systemd service, optional Pi-hole DNS
+- **Sudoers template** (`deploy/install/templates/baluhost-wireguard-sudoers`) — Scoped sudo rules for WireGuard management
+- **VPN config settings** — `vpn_lan_network`, `vpn_lan_interface`, `vpn_include_lan`, `vpn_config_path`
+
+### Fixed
+
+- **Deploy scripts** — Fixed `PGPASSWORD` extraction and `.env.production` sourcing for Alembic migrations
+- **CI workflow** — Added `workflow_dispatch` trigger, fixed `DEPLOY_PAT` for auto-merge
+
+---
+
 ## [1.13.1] - 2026-03-03
 
 ### Deployment Professionalisierung
