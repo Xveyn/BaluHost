@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
     api_prefix: str = "/api"
+    api_version: str = "1"  # Current API version
+    api_min_version: str = "1"  # Minimum supported API version
     host: str = "0.0.0.0"
     port: int = 8000
 

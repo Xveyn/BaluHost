@@ -125,6 +125,8 @@ export async function setFilePermissions(data: {
 }
 import axios from 'axios';
 
+export const API_VERSION = '1';
+
 // For local development, we DON'T set a baseURL so axios uses relative URLs
 // which trigger the Vite proxy. Only set baseURL for production builds.
 const isDevelopment = import.meta.env.DEV;
@@ -167,8 +169,17 @@ export function fireAuthExpired(): void {
 }
 
 // Handle 401 responses — signal auth expiration
+// Check server API version compatibility via X-API-Min-Version header
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const minVersion = response.headers?.['x-api-min-version'];
+    if (minVersion && parseInt(minVersion, 10) > parseInt(API_VERSION, 10)) {
+      window.dispatchEvent(new CustomEvent('api:upgrade-required', {
+        detail: { serverMin: minVersion, clientVersion: API_VERSION },
+      }));
+    }
+    return response;
+  },
   (error) => {
     if (error.response?.status === 401) {
       fireAuthExpired();
