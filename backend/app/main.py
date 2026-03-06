@@ -37,27 +37,27 @@ from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
 from app import __version__
-from app.api.routes import api_router
 from app.core.config import settings
 from app.core.database import init_db, get_db
 from app.core.rate_limiter import limiter, rate_limit_exceeded_handler
 from app.services.users import ensure_admin_user
 from app.services import disk_monitor, jobs, seed, telemetry
-from app.services import power_monitor
-from app.services import power_manager
-from app.services import fan_control
+from app.services.power import monitor as power_monitor
+from app.services.power import manager as power_manager
+from app.services.power import fan_control
 from app.services.power import sleep as sleep_mode
 from app.services.monitoring.orchestrator import start_monitoring, stop_monitoring
 from app.services.network_discovery import NetworkDiscoveryService
-from app.services.firebase_service import FirebaseService
+from app.services.notifications.firebase import FirebaseService
 from app.services.websocket_manager import init_websocket_manager
 from app.services.email_service import init_email_service
-from app.services.event_emitter import init_event_emitter
+from app.services.notifications.events import init_event_emitter
 from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.error_counter import ErrorCounterMiddleware
 from app.middleware.sleep_auto_wake import SleepAutoWakeMiddleware
+from app.middleware.api_version import ApiVersionMiddleware
 from app.services.service_status import (
     set_server_start_time,
     register_service,
@@ -101,7 +101,7 @@ def _try_become_primary() -> bool:
 
     # On non-Linux (Windows dev-mode), skip file locking
     try:
-        import fcntl
+        import fcntl as _fcntl  # type: ignore[import-not-found]
     except ImportError:
         return True
 
@@ -118,7 +118,7 @@ def _try_become_primary() -> bool:
         return False
 
     try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+        _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
     except (IOError, OSError):
         fd.close()
         return False
@@ -267,7 +267,7 @@ async def _pihole_health_loop() -> None:
                 svc = PiholeService(db)
                 if svc.has_remote_pi():
                     await svc.check_health_and_failover()
-                    interval = svc.get_config().health_check_interval or 30
+                    interval = int(svc.get_config().health_check_interval or 30)
             finally:
                 db.close()
         except Exception as e:
@@ -467,7 +467,7 @@ def _register_services() -> None:
 
     # Scheduler Worker Process Health
     def _get_scheduler_worker_status():
-        from app.services.scheduler_service import is_worker_healthy_global
+        from app.services.scheduler.execution import is_worker_healthy_global
         healthy = is_worker_healthy_global()
         return {
             "is_running": healthy is True,
@@ -552,6 +552,34 @@ def _register_services() -> None:
                 _service_registry[svc_name]["get_status"] = _make_db_status_reader(svc_name)
 
 
+def _log_dev_mode_summary() -> None:
+    """Log which backends are active in dev mode (runtime verification)."""
+    if not settings.is_dev_mode:
+        return
+
+    def _backend_name(get_obj, *attrs):
+        """Safely traverse attribute chain and return class name."""
+        obj = get_obj()
+        for attr in attrs:
+            obj = getattr(obj, attr, None)
+            if obj is None:
+                return "not started"
+        return type(obj).__name__
+
+    from app.services.hardware.raid.api import _backend as raid_backend
+    from app.services.power.manager import PowerManagerService
+    from app.services.power.fan_control import FanControlService
+    from app.services.power.sleep import SleepManagerService
+
+    lines = ["Dev mode backends active:"]
+    lines.append(f"  RAID: {type(raid_backend).__name__}")
+    lines.append(f"  Power: {_backend_name(lambda: PowerManagerService._instance, '_backend')}")
+    lines.append(f"  Fans: {_backend_name(lambda: FanControlService._instance, '_backend')}")
+    lines.append(f"  Sleep: {_backend_name(lambda: SleepManagerService._instance, '_backend')}")
+    lines.append("  Sensors: dev-mock")
+    logger.info("\n".join(lines))
+
+
 @asynccontextmanager
 async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     global _discovery_service
@@ -578,7 +606,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     seed.seed_dev_data()
 
     # Recover stale benchmarks and kill orphan fio processes from previous runs
-    from app.services.benchmark_service import recover_stale_benchmarks, kill_orphan_fio_processes
+    from app.services.benchmark.lifecycle import recover_stale_benchmarks, kill_orphan_fio_processes
     from app.core.database import SessionLocal
     with SessionLocal() as bench_db:
         recovered = recover_stale_benchmarks(bench_db)
@@ -587,7 +615,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     kill_orphan_fio_processes()
 
     # Recover stale scheduler executions from previous run
-    from app.services.scheduler_service import recover_stale_executions
+    from app.services.scheduler.execution import recover_stale_executions
     with SessionLocal() as sched_db:
         recovered = recover_stale_executions(sched_db)
         if recovered:
@@ -646,7 +674,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
         # Start network discovery (mDNS/Bonjour)
         try:
-            port = int(settings.api_port) if hasattr(settings, 'api_port') else 8000
+            port = settings.port
             _discovery_service = NetworkDiscoveryService(
                 port=port,
                 webdav_port=settings.webdav_port,
@@ -692,6 +720,8 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
 
     # Register all services with the service status collector
     _register_services()
+
+    _log_dev_mode_summary()
 
     # Start heartbeat writer on primary worker so secondary workers can
     # read accurate service status from the database.
@@ -778,7 +808,7 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         # Shutdown active benchmarks and kill orphan fio processes
         try:
             if not skip_init:
-                from app.services.benchmark_service import shutdown_benchmarks
+                from app.services.benchmark.lifecycle import shutdown_benchmarks
                 from app.core.database import SessionLocal
                 with SessionLocal() as bench_db:
                     await shutdown_benchmarks(bench_db)
@@ -873,7 +903,7 @@ def create_app() -> FastAPI:
     
     # Add rate limiting state and exception handler
     app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)
+    app.add_exception_handler(RateLimitExceeded, rate_limit_exceeded_handler)  # type: ignore[arg-type]
 
     # Map specific validation errors (e.g. SSH private key format) to 400
     def _validation_exception_handler(request, exc: RequestValidationError):
@@ -909,11 +939,14 @@ def create_app() -> FastAPI:
         # Default behavior: return standard 422 response body
         return JSONResponse(status_code=422, content={"detail": serializable_errors})
 
-    app.add_exception_handler(RequestValidationError, _validation_exception_handler)
+    app.add_exception_handler(RequestValidationError, _validation_exception_handler)  # type: ignore[arg-type]
 
     # ✅ Security Fix #2: Add security headers to all responses
     # Adds: Content-Security-Policy, X-Frame-Options, X-Content-Type-Options, HSTS
     app.add_middleware(SecurityHeadersMiddleware)
+
+    # Add API version headers (X-API-Version, X-API-Min-Version) to /api/ responses
+    app.add_middleware(ApiVersionMiddleware)
 
     # Add error counter middleware for admin metrics
     app.add_middleware(ErrorCounterMiddleware)
@@ -944,7 +977,8 @@ def create_app() -> FastAPI:
         allow_headers=["Authorization", "Content-Type", "X-Device-ID", "X-Requested-With", "Accept", "Origin", "X-Chunk-Index"],
     )
 
-    app.include_router(api_router, prefix=settings.api_prefix)
+    from app.api.versioned import create_versioned_router
+    app.include_router(create_versioned_router(), prefix=settings.api_prefix)
     
     # Mount static files for avatars
     avatars_path = Path(settings.nas_storage_path) / ".system" / "avatars"
