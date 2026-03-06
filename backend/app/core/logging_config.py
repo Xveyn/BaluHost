@@ -62,6 +62,13 @@ def setup_logging() -> None:
     # Suppress plugp100 Tapo library internal errors (device queries still work despite these logs)
     logging.getLogger("plugp100").setLevel(logging.WARNING)
 
+    # Dev-mode: silence expected noise (mDNS fails on Windows, urllib3 version warnings)
+    if settings.is_dev_mode:
+        logging.getLogger("zeroconf").setLevel(logging.CRITICAL)
+
+    import warnings
+    warnings.filterwarnings("ignore", message=".*RequestsDependencyWarning.*")
+
     # Log startup configuration
     logger = logging.getLogger(__name__)
     logger.info(

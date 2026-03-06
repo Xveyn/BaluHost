@@ -8,13 +8,15 @@ import socket
 import logging
 from typing import Optional
 
+from app.core.config import settings
+
 logger = logging.getLogger(__name__)
 
 
 class NetworkDiscoveryService:
     """Publishes BaluHost service via mDNS/Bonjour for automatic discovery."""
     
-    def __init__(self, port: int = 8000, webdav_port: int = 8080, hostname: str = None, webdav_ssl_enabled: bool = True):
+    def __init__(self, port: int = 8000, webdav_port: int = 8080, hostname: Optional[str] = None, webdav_ssl_enabled: bool = True):
         self.port = port
         self.webdav_port = webdav_port
         self.hostname = hostname or "baluhost"  # Default to "baluhost"
@@ -111,8 +113,11 @@ class NetworkDiscoveryService:
             logger.info(f"  - Discovery enabled for local network")
             
         except Exception as e:
-            logger.error(f"Failed to start mDNS service: {e}")
-            logger.warning("Network discovery will not be available")
+            if settings.is_dev_mode:
+                logger.debug(f"mDNS service unavailable (expected in dev mode): {e}")
+            else:
+                logger.error(f"Failed to start mDNS service: {e}")
+                logger.warning("Network discovery will not be available")
     
     def stop(self):
         """Stop broadcasting the service."""
