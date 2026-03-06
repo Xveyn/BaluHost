@@ -14,6 +14,7 @@ from typing import Any, Callable
 from sqlalchemy import delete, distinct, func
 from sqlalchemy.orm import Session
 
+from app.core.database import DATABASE_URL
 from app.models.dns_queries import (
     DnsQuery,
     DnsQueryCollectorState,
@@ -154,7 +155,7 @@ class DnsQueryCollector:
                 })
 
             if to_insert:
-                db.bulk_insert_mappings(DnsQuery, to_insert)  # type: ignore[arg-type]
+                db.add_all([DnsQuery(**row) for row in to_insert])
                 new_count = len(to_insert)
 
             # Update watermark
@@ -189,8 +190,13 @@ class DnsQueryCollector:
             # Truncate to hour boundary
             since = since.replace(minute=0, second=0, microsecond=0)
 
-            # Get distinct hours with data
-            hour_expr = func.date_trunc("hour", DnsQuery.timestamp)
+            # Get distinct hours with data (cross-database compatible)
+            if DATABASE_URL.startswith("sqlite"):
+                # SQLite: use strftime to truncate to hour
+                hour_expr = func.strftime("%Y-%m-%d %H:00:00", DnsQuery.timestamp)
+            else:
+                # PostgreSQL
+                hour_expr = func.date_trunc("hour", DnsQuery.timestamp)
             rows = (
                 db.query(
                     hour_expr.label("hour"),
@@ -207,9 +213,17 @@ class DnsQueryCollector:
                 .all()
             )
 
+            _is_sqlite = DATABASE_URL.startswith("sqlite")
             for row in rows:
+                # SQLite strftime returns a string — parse to datetime
+                hour_val = (
+                    datetime.strptime(row.hour, "%Y-%m-%d %H:%M:%S")
+                    .replace(tzinfo=timezone.utc)
+                    if _is_sqlite and isinstance(row.hour, str)
+                    else row.hour
+                )
                 # Upsert
-                existing = db.query(DnsQueryHourlyStat).filter_by(hour=row.hour).first()
+                existing = db.query(DnsQueryHourlyStat).filter_by(hour=hour_val).first()
                 if existing:
                     existing.total_queries = row.total
                     existing.blocked_queries = row.blocked
@@ -220,7 +234,7 @@ class DnsQueryCollector:
                     existing.avg_response_time_ms = round(row.avg_rt, 2) if row.avg_rt else None
                 else:
                     db.add(DnsQueryHourlyStat(
-                        hour=row.hour,
+                        hour=hour_val,
                         total_queries=row.total,
                         blocked_queries=row.blocked,
                         cached_queries=row.cached,
@@ -249,12 +263,14 @@ class DnsQueryCollector:
             retention = state_row.retention_days if state_row else 30
             cutoff = datetime.now(timezone.utc) - timedelta(days=retention)
 
-            deleted_queries = db.execute(
+            q_result: Any = db.execute(
                 delete(DnsQuery).where(DnsQuery.timestamp < cutoff)
-            ).rowcount
-            deleted_stats = db.execute(
+            )
+            deleted_queries: int = q_result.rowcount or 0
+            s_result: Any = db.execute(
                 delete(DnsQueryHourlyStat).where(DnsQueryHourlyStat.hour < cutoff)
-            ).rowcount
+            )
+            deleted_stats: int = s_result.rowcount or 0
 
             db.commit()
             if deleted_queries or deleted_stats:
