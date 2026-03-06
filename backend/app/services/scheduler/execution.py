@@ -64,7 +64,8 @@ def recover_stale_executions(db: Session) -> int:
         execution.error_message = "Server restarted during execution"
         execution.completed_at = now
         if execution.started_at:
-            delta = now - execution.started_at
+            started = execution.started_at if execution.started_at.tzinfo else execution.started_at.replace(tzinfo=timezone.utc)
+            delta = now - started
             execution.duration_ms = int(delta.total_seconds() * 1000)
     db.commit()
     return len(stale)
@@ -125,8 +126,10 @@ def complete_scheduler_execution(
                 execution.status = SchedulerStatus.FAILED.value
                 execution.error_message = error
 
-            if execution.started_at and execution.completed_at:
-                delta = execution.completed_at - execution.started_at
+            started = execution.started_at
+            completed = execution.completed_at
+            if started and completed:
+                delta = completed - started
                 execution.duration_ms = int(delta.total_seconds() * 1000)
 
             db.commit()
