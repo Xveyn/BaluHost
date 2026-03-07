@@ -278,6 +278,6 @@ export async function getWsToken(): Promise<string> {
  */
 export function getWebSocketUrl(token: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  const host = import.meta.env.DEV ? '127.0.0.1:3001' : window.location.host;
+  const host = window.location.host;
   return `${protocol}//${host}/api/notifications/ws?token=${token}`;
 }
