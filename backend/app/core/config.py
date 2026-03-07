@@ -16,6 +16,8 @@ class Settings(BaseSettings):
     nas_mode: str = "dev"
     is_dev_mode: bool = True  # Added as a field for Pydantic compatibility
     api_prefix: str = "/api"
+    api_version: str = "1"  # Current API version
+    api_min_version: str = "1"  # Minimum supported API version
     host: str = "0.0.0.0"
     port: int = 8000
 
@@ -218,6 +220,18 @@ class Settings(BaseSettings):
                 self.nas_temp_path = "./dev-tmp"
             if self.nas_backup_path == "./backups":
                 self.nas_backup_path = "./dev-backups"
+            # Reduce sampling frequencies for better dev performance
+            if self.telemetry_interval_seconds == 2.0:
+                self.telemetry_interval_seconds = 5.0
+            if self.monitoring_sample_interval == 5.0:
+                self.monitoring_sample_interval = 10.0
+            if self.fan_sample_interval_seconds == 5.0:
+                self.fan_sample_interval_seconds = 15.0
+            # Disable no-op services in dev
+            if self.sleep_mode_enabled:
+                self.sleep_mode_enabled = False
+            if self.pihole_enabled:
+                self.pihole_enabled = False
         else:
             # Production mode: enable audit logging by default
             if not self.audit_logging_enabled:

@@ -1,10 +1,8 @@
 """
-Shared-memory IPC via /dev/shm/baluhost/.
+Shared-memory IPC via /dev/shm/baluhost/ (Linux) or %TEMP%/baluhost-shm/ (Windows).
 
 Provides atomic JSON read/write for inter-process communication between
 the monitoring_worker process and the main Uvicorn web workers.
-
-Dev mode does NOT use SHM — everything runs in-process.
 """
 
 from __future__ import annotations
@@ -12,6 +10,7 @@ from __future__ import annotations
 import json
 import logging
 import os
+import sys
 import tempfile
 import time
 from pathlib import Path
@@ -19,7 +18,10 @@ from typing import Any, Optional
 
 logger = logging.getLogger(__name__)
 
-SHM_DIR = Path("/dev/shm/baluhost")
+if sys.platform == "win32":
+    SHM_DIR = Path(tempfile.gettempdir()) / "baluhost-shm"
+else:
+    SHM_DIR = Path("/dev/shm/baluhost")
 
 # SHM file names
 TELEMETRY_FILE = "telemetry.json"
@@ -54,7 +56,7 @@ def write_shm(filename: str, data: Any) -> None:
         try:
             with os.fdopen(fd, "w") as f:
                 json.dump(data, f, default=str)
-            os.rename(tmp_path, str(target))
+            os.replace(tmp_path, str(target))
         except BaseException:
             # Clean up temp file on failure
             try:

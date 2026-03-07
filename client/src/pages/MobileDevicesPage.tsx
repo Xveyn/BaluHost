@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User } from 'lucide-react';
+import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User, Eye, EyeOff, Copy } from 'lucide-react';
 import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
@@ -28,6 +28,7 @@ export default function MobileDevicesPage() {
   const [deviceName, setDeviceName] = useState('');
   const [tokenValidityDays, setTokenValidityDays] = useState(90);
   const [generating, setGenerating] = useState(false);
+  const [showToken, setShowToken] = useState(false);
 
   useEffect(() => {
     // User-Info aus Token laden
@@ -370,6 +371,7 @@ export default function MobileDevicesPage() {
                   setSelectedDevice(null);
                   setDeviceName('');
                   setIncludeVpn(false);
+                  setShowToken(false);
                   if (qrData) loadDevices(); // Nur bei neuem Token neu laden
                 }}
                 className="text-slate-400 hover:text-white transition-colors p-2 -mr-2 touch-manipulation active:scale-95 min-w-[44px] min-h-[44px] flex items-center justify-center flex-shrink-0"
@@ -383,11 +385,37 @@ export default function MobileDevicesPage() {
               <>
                 <div className="bg-white p-4 rounded-lg mb-4">
                   <img
-                    src={`data:image/png;base64,${qrData.qr_code}`}
+                    src={`data:${qrData.qr_code.startsWith('iVBOR') ? 'image/png' : 'image/svg+xml'};base64,${qrData.qr_code}`}
                     alt="QR Code"
                     className="w-full h-auto"
                   />
                 </div>
+
+                <button
+                  onClick={() => setShowToken(!showToken)}
+                  className="w-full text-xs text-slate-400 hover:text-sky-400 transition-colors py-1.5 flex items-center justify-center gap-1.5 mb-3"
+                >
+                  {showToken ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                  {showToken ? 'Token verbergen' : 'Token manuell anzeigen'}
+                </button>
+                {showToken && (
+                  <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-3 mb-4">
+                    <p className="text-xs text-slate-400 mb-1">Registrierungs-Token:</p>
+                    <div className="flex items-center gap-2">
+                      <code className="text-sm text-white font-mono break-all flex-1">{qrData.token}</code>
+                      <button
+                        onClick={() => {
+                          navigator.clipboard.writeText(qrData.token);
+                          toast.success('Token kopiert');
+                        }}
+                        title="Kopieren"
+                        className="text-slate-400 hover:text-sky-400 transition-colors p-1 flex-shrink-0"
+                      >
+                        <Copy className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                )}
 
                 <div className="space-y-2 text-sm text-slate-300 mb-4">
                   <p>✓ Scanne diesen QR-Code mit der BaluHost Mobile App</p>

@@ -1,5 +1,5 @@
 """Scheduler execution history database model."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 
 from sqlalchemy import String, DateTime, Integer, Text, Index, Enum as SQLEnum
@@ -109,27 +109,30 @@ class SchedulerExecution(Base):
     def complete(self, result: Optional[str] = None) -> None:
         """Mark execution as completed successfully."""
         self.status = SchedulerStatus.COMPLETED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = datetime.now(timezone.utc)
         self.result_summary = result
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            started = self.started_at if self.started_at.tzinfo else self.started_at.replace(tzinfo=timezone.utc)
+            delta = self.completed_at - started
             self.duration_ms = int(delta.total_seconds() * 1000)
 
     def fail(self, error: str) -> None:
         """Mark execution as failed with error message."""
         self.status = SchedulerStatus.FAILED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = datetime.now(timezone.utc)
         self.error_message = error
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            started = self.started_at if self.started_at.tzinfo else self.started_at.replace(tzinfo=timezone.utc)
+            delta = self.completed_at - started
             self.duration_ms = int(delta.total_seconds() * 1000)
 
     def cancel(self) -> None:
         """Mark execution as cancelled."""
         self.status = SchedulerStatus.CANCELLED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = datetime.now(timezone.utc)
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            started = self.started_at if self.started_at.tzinfo else self.started_at.replace(tzinfo=timezone.utc)
+            delta = self.completed_at - started
             self.duration_ms = int(delta.total_seconds() * 1000)
 
 

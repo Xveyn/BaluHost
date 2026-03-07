@@ -96,7 +96,7 @@ class SchedulerService:
         )
 
         last_run_at = last_exec.started_at if last_exec else None
-        last_status = last_exec.status if last_exec else None
+        last_status: Any = last_exec.status if last_exec else None
         last_error = last_exec.error_message if last_exec else None
         last_duration = last_exec.duration_ms if last_exec else None
 

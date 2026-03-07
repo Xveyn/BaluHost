@@ -32,9 +32,25 @@ jobs:
 
           echo "Auto-merging PR #$PR_NUMBER (branch: $HEAD_BRANCH)"
 
+          # Get PR title before merging (for tag extraction)
+          PR_TITLE=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json title --jq '.title')
+
           if [ "$HEAD_BRANCH" = "development" ]; then
             # Never delete the development branch
             gh pr merge "$PR_NUMBER" --repo "$REPO" --merge
           else
             gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --delete-branch
+          fi
+
+          # Auto-tag if PR title starts with "v" (e.g. "v1.13.2: ...")
+          TAG=$(echo "$PR_TITLE" | grep -oP '^v\d+\.\d+\.\d+' || true)
+          if [ -n "$TAG" ]; then
+            echo "Creating tag $TAG from PR title"
+            git clone --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" /tmp/repo
+            cd /tmp/repo
+            git tag -a "$TAG" -m "Release $TAG"
+            git push origin "$TAG"
+            echo "Tag $TAG pushed — release workflow will create GitHub Release"
+          else
+            echo "PR title does not start with version tag — skipping auto-tag"
           fi

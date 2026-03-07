@@ -108,9 +108,33 @@ class MobileService:
         qr.add_data(json.dumps(qr_data))
         qr.make(fit=True)
         
-        img = qr.make_image(fill_color="black", back_color="white")
         buffer = io.BytesIO()
-        img.save(buffer, format='PNG')
+        try:
+            img = qr.make_image(fill_color="black", back_color="white")
+            img.save(buffer, format='PNG')
+        except ImportError:
+            # Pillow not available (e.g. dev mode on Windows) — build SVG manually.
+            # Library SVG classes produce namespace-prefixed elements (ns0:path)
+            # that browsers cannot render in data-URI context.
+            modules = qr.modules
+            box = 10
+            border = 4
+            size = (len(modules) + 2 * border) * box
+            parts = []
+            for r, row in enumerate(modules):
+                for c, val in enumerate(row):
+                    if val:
+                        x = (c + border) * box
+                        y = (r + border) * box
+                        parts.append(f"M{x},{y}h{box}v{box}h-{box}z")
+            svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" '
+                f'viewBox="0 0 {size} {size}" width="{size}" height="{size}">'
+                f'<rect width="{size}" height="{size}" fill="#fff"/>'
+                f'<path d="{"".join(parts)}" fill="#000"/>'
+                f'</svg>'
+            )
+            buffer.write(svg.encode("utf-8"))
         qr_code_base64 = base64.b64encode(buffer.getvalue()).decode()
         
         return MobileRegistrationTokenSchema(

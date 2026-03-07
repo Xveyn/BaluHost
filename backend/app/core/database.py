@@ -5,6 +5,7 @@ import os
 import logging
 
 from sqlalchemy import create_engine, event
+from sqlalchemy.exc import OperationalError
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import NullPool, QueuePool
@@ -141,4 +142,10 @@ def init_db() -> None:
     if DATABASE_URL.startswith("postgresql"):
         logger.debug("PostgreSQL detected — schema managed by Alembic, skipping create_all()")
         return
-    Base.metadata.create_all(bind=engine)
+    try:
+        Base.metadata.create_all(bind=engine)
+    except OperationalError as exc:
+        if "already exists" in str(exc):
+            logger.debug("Tables already created by another process, skipping")
+        else:
+            raise

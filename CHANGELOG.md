@@ -7,6 +7,45 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.3] - 2026-03-07
+
+### Dev-Mode Stabilität & Architektur
+
+Umfangreiche Bugfixes für den Windows Dev-Mode: QR-Codes werden jetzt korrekt
+als SVG gerendert, WebSocket-Notifications funktionieren über den Vite-Proxy,
+und die Monitoring-Architektur nutzt einheitlich den monitoring_worker-Prozess.
+
+### Added
+
+- **API versioning headers** — Infrastructure for API version negotiation
+- **Token display in QR dialog** — Reveal/copy registration token manually
+- **DEV_FAST mode** — `DEV_FAST=1` disables hot-reload and uses 2 workers
+
+### Changed
+
+- **Unified monitoring architecture** — Dev and prod both use monitoring_worker process via SHM IPC
+- **Windows SHM support** — Shared-memory IPC falls back to `%TEMP%/baluhost-shm` on Windows
+- **Dynamic dev update versioning** — Mock versions derived from installed package version
+- **Dev sampling intervals** — Reduced frequencies for better dev performance
+- **Reorganized service imports** — Updated to match new service package structure
+
+### Fixed
+
+- **QR code SVG fallback** — Manual SVG generation when Pillow is unavailable
+- **QR code MIME type** — Auto-detect PNG vs SVG from base64 prefix
+- **WebSocket URL** — Use Vite proxy instead of hardcoded `127.0.0.1:3001`
+- **Scheduler timezone** — Handle naive `started_at` timestamps in duration calculation
+- **psutil sensors** — Handle missing temperature sensors on Windows
+- **DNS query collector** — Cross-database compatibility fix
+- **DateTime arithmetic** — SQLite compatibility for timezone-aware datetimes
+
+### Dependencies
+
+- **bcrypt** bumped to 4.x
+- **cryptography** upper bound widened to <47.0.0
+
+---
+
 ## [1.13.2] - 2026-03-04
 
 ### WireGuard Server Config & VPN-Erreichbarkeit

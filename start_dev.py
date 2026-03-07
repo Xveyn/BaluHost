@@ -11,6 +11,35 @@ Platform Support:
     - Windows: Full support with proper process group handling
     - Linux/Debian: Full support with python3, process groups via setsid
     - macOS: Full support with Unix process handling
+
+Dev-Mode Reference (NAS_MODE=dev):
+    This launcher is the authoritative reference for what happens in dev mode.
+    Setting NAS_MODE=dev (done automatically here) triggers the following chain:
+
+    1. config.py._apply_dev_defaults() configures SQLite, dev-storage paths, seed users
+    2. Each service selects its backend at init time based on settings.is_dev_mode
+       or platform detection (non-Linux → dev backend)
+
+    Mocked services (Dev*Backend classes):
+        RAID            → DevRaidBackend          (7 virtual disks, RAID1 sim)
+        CPU Power       → DevCpuPowerBackend      (simulated frequency scaling)
+        Fan Control     → DevFanControlBackend    (3 virtual fans)
+        Sleep Mode      → DevSleepBackend         (no-op suspend/hibernate)
+        Pi-hole DNS     → DevPiholeBackend        (mock query stats)
+        Cloud Import    → DevCloudAdapter         (simulated cloud providers)
+        Benchmark       → DevBenchmarkBackend     (fake fio results)
+        Update Service  → DevUpdateBackend        (simulated update checks)
+        VPN Keys        → Mock generation         (no wg command needed)
+        SMART Data      → Mock sensor data        (simulated disk health)
+        Samba/SMB       → No-op commands          (no smbpasswd/net needed)
+        CPU Sensors     → Simulated temperatures  (no hwmon/lm-sensors)
+
+    Real (cross-platform via psutil):
+        CPU/RAM usage, Disk I/O counters, Network counters
+
+    Override a single backend:
+        Set <SERVICE>_FORCE_DEV_BACKEND=true (e.g. RAID_FORCE_DEV_BACKEND=true)
+        to force the dev backend even in prod mode. These flags are opt-in.
 """
 
 from __future__ import annotations
@@ -181,6 +210,39 @@ def terminate_processes(processes: List[ProcessInfo]) -> None:
             proc.kill()
 
 
+def _print_dev_banner() -> None:
+    """Print a structured overview of the dev-mode configuration."""
+    quota_gb = int(os.environ.get("NAS_QUOTA_BYTES", 0)) / (1024 ** 3)
+    print("""
+============================================
+  BaluHost Dev Mode
+============================================
+  NAS_MODE    = dev
+  Storage     = ./dev-storage (RAID1 sim, 2x5GB)
+  Database    = SQLite (baluhost.db)
+  Quota       = {quota:.1f} GB
+  Seed Users  = admin/DevMode2024, user/User123
+
+  Mocked Services:
+    RAID .............. DevRaidBackend (7 mock disks)
+    CPU Power ......... DevCpuPowerBackend
+    Fan Control ....... DevFanControlBackend (3 fans)
+    Sleep Mode ........ DevSleepBackend
+    Pi-hole DNS ....... DevPiholeBackend
+    Cloud Import ...... DevCloudAdapter
+    Benchmark ......... DevBenchmarkBackend
+    Update Service .... DevUpdateBackend
+    VPN Keys .......... Mock generation
+    SMART Data ........ Mock sensor data
+    Samba/SMB ......... No-op commands
+    CPU Sensors ....... Simulated temperatures
+
+  Real (cross-platform via psutil):
+    CPU/RAM, Disk I/O, Network counters
+============================================
+""".format(quota=quota_gb))
+
+
 def main() -> int:
     processes: List[ProcessInfo] = []
     backend_python = resolve_backend_python()
@@ -251,7 +313,7 @@ def main() -> int:
 
     # Only run the kill step on POSIX/Linux to avoid Windows side effects
     if os.name != "nt":
-        kill_patterns = ["uvicorn", "scheduler_worker", "webdav_worker", "vite", "npm run dev", "node .*vite", "node .*@vite"]
+        kill_patterns = ["uvicorn", "scheduler_worker", "webdav_worker", "monitoring_worker", "vite", "npm run dev", "node .*vite", "node .*@vite"]
         try:
             kill_conflicting_processes(kill_patterns, grace_seconds=3)
         except Exception as e:
@@ -263,6 +325,8 @@ def main() -> int:
         # Ensure development-specific environment toggles are present during local runs
         os.environ.setdefault("NAS_MODE", "dev")
         os.environ.setdefault("NAS_QUOTA_BYTES", str(5 * 1024 * 1024 * 1024))  # 5 GB effektiv (RAID1: 2x5GB)
+
+        _print_dev_banner()
 
         npm_binary = resolve_npm_binary()
         
@@ -287,17 +351,21 @@ def main() -> int:
         except Exception:
             local_ip = "localhost"
         
-        backend_cmd = [
-            backend_python,
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--reload",
-            "--host",
-            "0.0.0.0",  # Bind to all interfaces for network access
-            "--port",
-            "8000",
-        ]
+        # DEV_FAST=1 disables --reload and uses multiple workers for performance
+        fast_mode = os.environ.get("DEV_FAST", "").lower() in ("1", "true")
+        if fast_mode:
+            backend_cmd = [
+                backend_python, "-m", "uvicorn", "app.main:app",
+                "--workers", "2",
+                "--host", "0.0.0.0", "--port", "8000",
+            ]
+            print("[info] DEV_FAST mode: 2 workers, no hot-reload")
+        else:
+            backend_cmd = [
+                backend_python, "-m", "uvicorn", "app.main:app",
+                "--reload",
+                "--host", "0.0.0.0", "--port", "8000",
+            ]
         
         if use_https:
             backend_cmd.extend([
@@ -316,6 +384,10 @@ def main() -> int:
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "monitoring": {
+                "cmd": [backend_python, "scripts/monitoring_worker.py"],
                 "cwd": BACKEND_DIR,
             },
             "scheduler": {

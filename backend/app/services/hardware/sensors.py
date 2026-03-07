@@ -9,10 +9,12 @@ when sensors are unavailable.
 import logging
 import os
 import glob
-from typing import Dict, Optional, List, Tuple
-from pathlib import Path
+import random
+from typing import Any, Dict, Optional
 
 import psutil
+
+from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,9 +70,10 @@ def get_cpu_temperatures() -> Dict[str, float]:
     """
     temperatures = {}
     
-    # Method 1: psutil (uses lm-sensors/hwmon)
+    # Method 1: psutil (uses lm-sensors/hwmon, Linux only)
+    _sensors_temps = getattr(psutil, "sensors_temperatures", None)
     try:
-        temp_sensors = psutil.sensors_temperatures()
+        temp_sensors: Dict[str, Any] = _sensors_temps() if _sensors_temps else {}
         if temp_sensors:
             for sensor_name, sensor_list in temp_sensors.items():
                 # Focus on CPU-related sensors
@@ -89,9 +92,9 @@ def get_cpu_temperatures() -> Dict[str, float]:
         except Exception as e:
             logger.debug("hwmon temperature reading failed: %s", e)
     
-    if not temperatures:
+    if not temperatures and not settings.is_dev_mode:
         logger.warning("No CPU temperature sensors found")
-    
+
     return temperatures
 
 
@@ -163,16 +166,26 @@ def get_cpu_sensor_data() -> CPUSensorData:
     # Get frequency
     data.frequency_mhz = get_cpu_frequency()
     if data.frequency_mhz:
-        data.source_info['frequency'] = 'psutil' if psutil.cpu_freq() else 'sysfs'
-    
+        data.source_info['frequency'] = 'detected'
+
     # Get temperatures
     temps = get_cpu_temperatures()
     if temps:
         # Pick the first/primary temperature for the main field
         data.temperature_celsius = next(iter(temps.values()))
         data.per_core_temps = temps
-        data.source_info['temperature'] = 'psutil' if psutil.sensors_temperatures() else 'hwmon'
-    
+        data.source_info['temperature'] = 'detected'
+    elif settings.is_dev_mode:
+        # Simulate CPU temperature in dev mode for better DX
+        base_temp = 45.0 + random.uniform(-5, 10)
+        core_count = psutil.cpu_count(logical=False) or 4
+        data.temperature_celsius = round(base_temp, 1)
+        data.per_core_temps = {
+            f"core_{i}": round(base_temp + random.uniform(-3, 3), 1)
+            for i in range(core_count)
+        }
+        data.source_info['temperature'] = 'dev-mock'
+
     return data
 
 
@@ -196,10 +209,12 @@ def check_sensor_availability() -> Dict[str, bool]:
     except Exception:
         pass
     
-    # Check psutil temperatures
+    # Check psutil temperatures (not available on Windows)
     try:
-        temps = psutil.sensors_temperatures()
-        availability['psutil_temperatures'] = bool(temps)
+        _temps_fn = getattr(psutil, "sensors_temperatures", None)
+        if _temps_fn is not None:
+            temps = _temps_fn()
+            availability['psutil_temperatures'] = bool(temps)
     except Exception:
         pass
     

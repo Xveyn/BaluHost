@@ -33,6 +33,12 @@ from .execution import log_scheduler_execution, complete_scheduler_execution
 
 logger = logging.getLogger(__name__)
 
+
+def _ensure_aware(dt: datetime) -> datetime:
+    """Ensure a datetime is timezone-aware (SQLite returns naive datetimes)."""
+    return dt if dt.tzinfo else dt.replace(tzinfo=timezone.utc)
+
+
 # Power level mapping per scheduler
 SCHEDULER_POWER_LEVELS: dict[str, str] = {
     "backup": "surge",
@@ -253,10 +259,12 @@ class SchedulerWorker:
                 execution = db.query(SchedulerExecution).get(execution_id)
                 if execution:
                     execution.status = SchedulerStatus.COMPLETED.value
-                    execution.completed_at = datetime.now(timezone.utc)
+                    completed_at = datetime.now(timezone.utc)
+                    execution.completed_at = completed_at
                     execution.result_summary = json.dumps(result) if result else None
-                    if execution.started_at:
-                        delta = execution.completed_at - execution.started_at
+                    started_at = execution.started_at
+                    if started_at:
+                        delta = completed_at - _ensure_aware(started_at)
                         execution.duration_ms = int(delta.total_seconds() * 1000)
                     db.commit()
             finally:
@@ -279,10 +287,12 @@ class SchedulerWorker:
                 execution = db.query(SchedulerExecution).get(execution_id)
                 if execution:
                     execution.status = SchedulerStatus.FAILED.value
-                    execution.completed_at = datetime.now(timezone.utc)
+                    completed_at = datetime.now(timezone.utc)
+                    execution.completed_at = completed_at
                     execution.error_message = str(e)
-                    if execution.started_at:
-                        delta = execution.completed_at - execution.started_at
+                    started_at = execution.started_at
+                    if started_at:
+                        delta = completed_at - _ensure_aware(started_at)
                         execution.duration_ms = int(delta.total_seconds() * 1000)
                     db.commit()
             finally:
@@ -296,12 +306,12 @@ class SchedulerWorker:
     def _dispatch_job(self, name: str) -> Optional[dict]:
         """Dispatch to the appropriate job function. Returns result dict or None."""
         if name == "raid_scrub":
-            from app.services.raid import scrub_now
+            from app.services.hardware.raid.scrub import scrub_now
             result = scrub_now(None)
             return {"message": result.message}
 
         elif name == "smart_scan":
-            from app.services.smart import invalidate_smart_cache, get_smart_status
+            from app.services.hardware.smart import invalidate_smart_cache, get_smart_status
             invalidate_smart_cache()
             status = get_smart_status()
             return {
@@ -327,7 +337,7 @@ class SchedulerWorker:
         elif name == "sync_check":
             loop = asyncio.new_event_loop()
             try:
-                from app.services.sync_background import get_scheduler
+                from app.services.sync.background import get_scheduler
                 scheduler = get_scheduler()
                 loop.run_until_complete(scheduler.check_and_run_due_syncs())
                 return {"checked": True}
@@ -342,7 +352,7 @@ class SchedulerWorker:
         elif name == "upload_cleanup":
             loop = asyncio.new_event_loop()
             try:
-                from app.services.sync_background import get_scheduler
+                from app.services.sync.background import get_scheduler
                 scheduler = get_scheduler()
                 loop.run_until_complete(scheduler.cleanup_expired_uploads())
                 return {"cleaned": True}
@@ -422,23 +432,13 @@ class SchedulerWorker:
 
         callback = self._create_scheduled_callback(name)
 
-        # Convert interval to appropriate trigger kwargs
-        if interval_seconds >= 86400:
-            trigger_kwargs = {"hours": interval_seconds // 3600}
-        elif interval_seconds >= 3600:
-            trigger_kwargs = {"hours": interval_seconds // 3600}
-        elif interval_seconds >= 60:
-            trigger_kwargs = {"minutes": interval_seconds // 60}
-        else:
-            trigger_kwargs = {"seconds": interval_seconds}
-
         self.scheduler.add_job(
             func=callback,
             trigger="interval",
             id=name,
             name=f"Scheduled: {name}",
             replace_existing=True,
-            **trigger_kwargs,
+            seconds=interval_seconds,
         )
 
         logger.info("Scheduled job: %s (every %ds)", name, interval_seconds)
@@ -649,8 +649,9 @@ class SchedulerWorker:
                 execution.status = SchedulerStatus.FAILED.value
                 execution.error_message = "Worker restarted during execution"
                 execution.completed_at = now
-                if execution.started_at:
-                    delta = now - execution.started_at
+                started_at = execution.started_at
+                if started_at:
+                    delta = now - _ensure_aware(started_at)
                     execution.duration_ms = int(delta.total_seconds() * 1000)
 
             # Recover stale REQUESTED executions (>5 min old)
@@ -667,8 +668,9 @@ class SchedulerWorker:
                 execution.status = SchedulerStatus.FAILED.value
                 execution.error_message = "Request expired (worker was not running)"
                 execution.completed_at = now
-                if execution.started_at:
-                    delta = now - execution.started_at
+                started_at = execution.started_at
+                if started_at:
+                    delta = now - _ensure_aware(started_at)
                     execution.duration_ms = int(delta.total_seconds() * 1000)
 
             total = len(stale_running) + len(stale_requested)
@@ -709,8 +711,9 @@ class SchedulerWorker:
                 execution.status = SchedulerStatus.CANCELLED.value
                 execution.completed_at = now
                 execution.error_message = "Worker shutdown during execution"
-                if execution.started_at:
-                    delta = now - execution.started_at
+                started_at = execution.started_at
+                if started_at:
+                    delta = now - _ensure_aware(started_at)
                     execution.duration_ms = int(delta.total_seconds() * 1000)
             if running:
                 db.commit()
