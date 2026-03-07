@@ -2,6 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
+from importlib.metadata import version as pkg_version
 from typing import Optional
 
 from app.schemas.update import (
@@ -27,12 +28,28 @@ from app.services.update.utils import (
 logger = logging.getLogger(__name__)
 
 
+def _get_installed_version() -> tuple[int, int, int, str]:
+    """Read the installed package version dynamically."""
+    try:
+        ver = pkg_version("baluhost-backend")
+        return parse_version(ver)
+    except Exception:
+        logger.warning("Could not read installed version, falling back to 0.0.0")
+        return (0, 0, 0, "")
+
+
+def _next_minor(ver: tuple[int, int, int, str]) -> tuple[int, int, int, str]:
+    """Compute the next minor version (e.g. 1.13.2 → 1.14.0)."""
+    major, minor, _patch, _pre = ver
+    return (major, minor + 1, 0, "")
+
+
 class DevUpdateBackend(UpdateBackend):
     """Development backend that simulates updates without real changes."""
 
     def __init__(self):
-        self._simulated_version = parse_version("1.4.2")
-        self._latest_version = parse_version("1.5.0")
+        self._simulated_version = _get_installed_version()
+        self._latest_version = _next_minor(self._simulated_version)
         self._current_commit = "abc1234567890abcdef1234567890abcdef12"
         self._latest_commit = "def7890123456789abcdef1234567890abcd56"
 
@@ -49,9 +66,13 @@ class DevUpdateBackend(UpdateBackend):
         # Simulate that an update is available
         include_beta = channel == "unstable"
 
+        latest_str = version_to_string(self._latest_version)
+        beta_ver = _next_minor(self._latest_version)
+        beta_str = version_to_string((beta_ver[0], beta_ver[1], beta_ver[2], "beta"))
+
         changelog = [
             ChangelogEntry(
-                version="1.5.0",
+                version=latest_str,
                 date=datetime.now(timezone.utc),
                 changes=[
                     "Added self-update functionality",
@@ -65,17 +86,17 @@ class DevUpdateBackend(UpdateBackend):
 
         if include_beta:
             changelog.insert(0, ChangelogEntry(
-                version="1.6.0-beta",
+                version=beta_str,
                 date=datetime.now(timezone.utc),
                 changes=["Early preview of new dashboard widgets"],
                 breaking_changes=["API endpoint changes for monitoring"],
                 is_prerelease=True,
             ))
             return True, VersionInfo(
-                version="1.6.0-beta",
+                version=beta_str,
                 commit="beta123456789abcdef1234567890abcdef12",
                 commit_short="beta123",
-                tag="v1.6.0-beta",
+                tag=f"v{beta_str}",
                 date=datetime.now(timezone.utc),
             ), changelog
 
@@ -91,7 +112,7 @@ class DevUpdateBackend(UpdateBackend):
         """Return mock release notes for dev mode."""
         return ReleaseNotesResponse(
             version=version_to_string(self._simulated_version),
-            previous_version="1.1.0-alpha",
+            previous_version=version_to_string((self._simulated_version[0], self._simulated_version[1] - 1, 0, "")) if self._simulated_version[1] > 0 else "0.0.0",
             date=datetime.now(timezone.utc),
             categories=[
                 ReleaseNoteCategory(
@@ -218,8 +239,8 @@ class DevUpdateBackend(UpdateBackend):
             total_commits=7,
             groups=[
                 VersionGroup(tag=None, version="Unreleased", date=None, commit_count=2, commits=commits_unreleased),
-                VersionGroup(tag="v1.5.0-alpha", version="1.5.0-alpha", date=now, commit_count=3, commits=commits_v2),
-                VersionGroup(tag="v1.0.0-alpha", version="1.0.0-alpha", date=now, commit_count=2, commits=commits_v1),
+                VersionGroup(tag=f"v{version_to_string(self._simulated_version)}", version=version_to_string(self._simulated_version), date=now, commit_count=3, commits=commits_v2),
+                VersionGroup(tag="v1.0.0", version="1.0.0", date=now, commit_count=2, commits=commits_v1),
             ],
         )
 
@@ -241,17 +262,18 @@ class DevUpdateBackend(UpdateBackend):
         )
 
     async def get_all_releases(self) -> ReleaseListResponse:
-        """Return mock releases for dev mode."""
-        releases = [
-            ReleaseInfo(tag="v1.9.0", version="1.9.0", date="2026-02-22T12:00:00Z", is_prerelease=False, commit_short="abc1234"),
-            ReleaseInfo(tag="v1.8.2", version="1.8.2", date="2026-02-20T10:30:00Z", is_prerelease=False, commit_short="def5678"),
-            ReleaseInfo(tag="v1.8.1", version="1.8.1", date="2026-02-20T09:00:00Z", is_prerelease=False, commit_short="ghi9012"),
-            ReleaseInfo(tag="v1.8.0", version="1.8.0", date="2026-02-19T14:00:00Z", is_prerelease=False, commit_short="jkl3456"),
-            ReleaseInfo(tag="v1.8.0-beta", version="1.8.0-beta", date="2026-02-18T16:00:00Z", is_prerelease=True, commit_short="mno7890"),
-            ReleaseInfo(tag="v1.7.0", version="1.7.0", date="2026-02-15T11:00:00Z", is_prerelease=False, commit_short="pqr1234"),
-            ReleaseInfo(tag="v1.6.0", version="1.6.0", date="2026-02-10T09:00:00Z", is_prerelease=False, commit_short="stu5678"),
-            ReleaseInfo(tag="v1.5.0-alpha", version="1.5.0-alpha", date="2026-02-05T14:00:00Z", is_prerelease=True, commit_short="vwx9012"),
-            ReleaseInfo(tag="v1.5.0", version="1.5.0", date="2026-02-01T10:00:00Z", is_prerelease=False, commit_short="yza3456"),
-            ReleaseInfo(tag="v1.0.0-alpha", version="1.0.0-alpha", date="2026-01-15T08:00:00Z", is_prerelease=True, commit_short="bcd7890"),
-        ]
+        """Return mock releases relative to the current version."""
+        major = self._simulated_version[0]
+        minor = self._simulated_version[1]
+        commit_shorts = ["abc1234", "def5678", "ghi9012", "jkl3456", "mno7890", "pqr1234", "stu5678", "vwx9012", "yza3456", "bcd7890"]
+        releases: list[ReleaseInfo] = []
+        idx = 0
+        for m in range(minor, max(minor - 5, 0), -1):
+            if idx >= len(commit_shorts):
+                break
+            ver_str = f"{major}.{m}.0"
+            releases.append(ReleaseInfo(tag=f"v{ver_str}", version=ver_str, date=f"2026-02-{22 - idx:02d}T12:00:00Z", is_prerelease=False, commit_short=commit_shorts[idx]))
+            idx += 1
+        if idx < len(commit_shorts):
+            releases.append(ReleaseInfo(tag="v1.0.0", version="1.0.0", date="2026-01-15T08:00:00Z", is_prerelease=False, commit_short=commit_shorts[idx]))
         return ReleaseListResponse(releases=releases, total=len(releases))

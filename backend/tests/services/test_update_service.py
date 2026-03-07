@@ -115,7 +115,7 @@ class TestDevUpdateBackend:
         version = await backend.get_current_version()
 
         assert version is not None
-        assert version.version == "1.4.2"
+        assert version.version == version_to_string(backend._simulated_version)
         assert version.commit is not None
         # Commit hash length depends on backend implementation
         assert len(version.commit) >= 7
@@ -128,7 +128,7 @@ class TestDevUpdateBackend:
 
         assert available is True
         assert latest is not None
-        assert latest.version == "1.5.0"
+        assert latest.version == version_to_string(backend._latest_version)
         assert len(changelog) >= 1
         assert changelog[0].is_prerelease is False
 
@@ -139,7 +139,9 @@ class TestDevUpdateBackend:
 
         assert available is True
         assert latest is not None
-        assert latest.version == "1.6.0-beta"
+        # Beta version is next minor after latest
+        major, minor, _, _ = backend._latest_version
+        assert latest.version == f"{major}.{minor + 1}.0-beta"
         # Unstable channel includes both prerelease and stable releases
         assert len(changelog) >= 1
         assert any(entry.is_prerelease for entry in changelog)
