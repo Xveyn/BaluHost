@@ -313,7 +313,7 @@ def main() -> int:
 
     # Only run the kill step on POSIX/Linux to avoid Windows side effects
     if os.name != "nt":
-        kill_patterns = ["uvicorn", "scheduler_worker", "webdav_worker", "vite", "npm run dev", "node .*vite", "node .*@vite"]
+        kill_patterns = ["uvicorn", "scheduler_worker", "webdav_worker", "monitoring_worker", "vite", "npm run dev", "node .*vite", "node .*@vite"]
         try:
             kill_conflicting_processes(kill_patterns, grace_seconds=3)
         except Exception as e:
@@ -351,17 +351,21 @@ def main() -> int:
         except Exception:
             local_ip = "localhost"
         
-        backend_cmd = [
-            backend_python,
-            "-m",
-            "uvicorn",
-            "app.main:app",
-            "--reload",
-            "--host",
-            "0.0.0.0",  # Bind to all interfaces for network access
-            "--port",
-            "8000",
-        ]
+        # DEV_FAST=1 disables --reload and uses multiple workers for performance
+        fast_mode = os.environ.get("DEV_FAST", "").lower() in ("1", "true")
+        if fast_mode:
+            backend_cmd = [
+                backend_python, "-m", "uvicorn", "app.main:app",
+                "--workers", "2",
+                "--host", "0.0.0.0", "--port", "8000",
+            ]
+            print("[info] DEV_FAST mode: 2 workers, no hot-reload")
+        else:
+            backend_cmd = [
+                backend_python, "-m", "uvicorn", "app.main:app",
+                "--reload",
+                "--host", "0.0.0.0", "--port", "8000",
+            ]
         
         if use_https:
             backend_cmd.extend([
@@ -380,6 +384,10 @@ def main() -> int:
         commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
+                "cwd": BACKEND_DIR,
+            },
+            "monitoring": {
+                "cmd": [backend_python, "scripts/monitoring_worker.py"],
                 "cwd": BACKEND_DIR,
             },
             "scheduler": {

@@ -636,16 +636,9 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     # Hardware-controlling background tasks only run on the primary worker.
     # Secondary workers skip these to avoid duplicate hardware writes.
     if IS_PRIMARY_WORKER:
-        if settings.is_dev_mode:
-            # Dev mode: all monitoring services run in-process (like before)
-            await telemetry.start_telemetry_monitor()
-            await power_monitor.start_power_monitor(get_db)
-            disk_monitor.start_monitoring()
-            await start_monitoring(get_db)
-            logger.info("System monitoring started in-process (dev mode, primary worker)")
-        else:
-            # Production: monitoring_worker process handles these 4 services
-            logger.info("Monitoring managed by monitoring_worker process (prod mode)")
+        # Both dev and prod: monitoring_worker process handles telemetry,
+        # disk I/O, power monitor, and orchestrator services via SHM IPC.
+        logger.info("Monitoring managed by monitoring_worker process")
 
         # Start CPU power management (if enabled)
         if settings.power_management_enabled:
@@ -820,13 +813,9 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
         try:
             if not skip_init:
                 await jobs.stop_health_monitor()
-                if IS_PRIMARY_WORKER and settings.is_dev_mode:
-                    # Only stop monitoring in dev mode (prod uses monitoring_worker)
-                    await telemetry.stop_telemetry_monitor()
-                    await power_monitor.stop_power_monitor()
-                    disk_monitor.stop_monitoring()
-                    await stop_monitoring()
-                    logger.info("System monitoring stopped")
+                if IS_PRIMARY_WORKER:
+                    # Monitoring (telemetry, disk I/O, power monitor, orchestrator)
+                    # is handled by the monitoring_worker process — nothing to stop here.
                     # Stop CPU power management
                     try:
                         await power_manager.stop_power_manager()
