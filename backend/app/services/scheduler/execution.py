@@ -129,6 +129,8 @@ def complete_scheduler_execution(
             started = execution.started_at
             completed = execution.completed_at
             if started and completed:
+                if started.tzinfo is None:
+                    started = started.replace(tzinfo=timezone.utc)
                 delta = completed - started
                 execution.duration_ms = int(delta.total_seconds() * 1000)
 
