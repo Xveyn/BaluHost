@@ -96,7 +96,7 @@ export interface SchedulerConfigUpdate {
  * Get status for all schedulers (admin only)
  */
 export async function getSchedulers(): Promise<SchedulerListResponse> {
-  const response = await apiClient.get<SchedulerListResponse>('/api/schedulers');
+  const response = await apiClient.get<SchedulerListResponse>('/api/schedulers/');
   return response.data;
 }
 

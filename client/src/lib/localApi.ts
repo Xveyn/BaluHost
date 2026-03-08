@@ -11,7 +11,7 @@ import { getToken, storeToken, clearToken } from './secureStore';
 // In production: use same origin (via Nginx proxy)
 // In development: use localhost:3001
 const isDevelopment = import.meta.env.DEV;
-const LOCAL_API_BASE = isDevelopment ? 'http://127.0.0.1:3001' : '';
+const LOCAL_API_BASE = isDevelopment ? 'http://127.0.0.1:8000' : '';
 const API_PREFIX = '/api';
 
 export interface LocalApiConfig {
