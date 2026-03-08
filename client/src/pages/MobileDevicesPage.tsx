@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User, Eye, EyeOff, Copy } from 'lucide-react';
-import { generateMobileToken, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
+import { generateMobileToken, getAvailableVpnTypes, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 
@@ -25,6 +25,8 @@ export default function MobileDevicesPage() {
   const [showQrDialog, setShowQrDialog] = useState(false);
   const [selectedDevice, setSelectedDevice] = useState<MobileDevice | null>(null); // Für existierenden QR-Code
   const [includeVpn, setIncludeVpn] = useState(false);
+  const [vpnType, setVpnType] = useState<string>('auto');
+  const [availableVpnTypes, setAvailableVpnTypes] = useState<string[]>([]);
   const [deviceName, setDeviceName] = useState('');
   const [tokenValidityDays, setTokenValidityDays] = useState(90);
   const [generating, setGenerating] = useState(false);
@@ -42,7 +44,8 @@ export default function MobileDevicesPage() {
     }
 
     loadDevices();
-    
+    loadAvailableVpnTypes();
+
     // Auto-refresh every 10 seconds to detect changes from mobile app
     const interval = setInterval(() => {
       loadDevices();
@@ -63,6 +66,15 @@ export default function MobileDevicesPage() {
     }
   };
 
+  const loadAvailableVpnTypes = async () => {
+    try {
+      const types = await getAvailableVpnTypes();
+      setAvailableVpnTypes(types);
+    } catch {
+      // Non-critical, fallback to no type selection
+    }
+  };
+
   const handleGenerateToken = async () => {
     if (!deviceName.trim()) {
       toast.error(t('mobile.enterDeviceName', 'Bitte Gerätenamen eingeben'));
@@ -71,7 +83,7 @@ export default function MobileDevicesPage() {
 
     try {
       setGenerating(true);
-      const token = await generateMobileToken(includeVpn, deviceName.trim(), tokenValidityDays);
+      const token = await generateMobileToken(includeVpn, deviceName.trim(), tokenValidityDays, vpnType);
       setQrData(token);
       // Persist last generated token briefly so other UIs (SyncSettings) can auto-fill
       try {
@@ -192,17 +204,52 @@ export default function MobileDevicesPage() {
             </div>
           </div>
           
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              id="includeVpn"
-              checked={includeVpn}
-              onChange={(e) => setIncludeVpn(e.target.checked)}
-              className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
-            />
-            <label htmlFor="includeVpn" className="text-sm text-slate-300">
-              VPN-Konfiguration einschließen (WireGuard)
-            </label>
+          <div className="space-y-3">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="includeVpn"
+                checked={includeVpn}
+                onChange={(e) => setIncludeVpn(e.target.checked)}
+                className="w-4 h-4 rounded border-slate-700 bg-slate-800 text-sky-500 focus:ring-sky-500"
+              />
+              <label htmlFor="includeVpn" className="text-sm text-slate-300">
+                VPN-Konfiguration einschließen (WireGuard)
+              </label>
+            </div>
+
+            {includeVpn && availableVpnTypes.length > 1 && (
+              <div className="ml-6 space-y-2">
+                <label className="block text-sm font-medium text-slate-300">
+                  VPN-Typ
+                </label>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { value: 'auto', label: 'Automatisch' },
+                    ...(availableVpnTypes.includes('fritzbox') ? [{ value: 'fritzbox', label: 'FritzBox VPN' }] : []),
+                    { value: 'wireguard', label: 'WireGuard Server' },
+                  ].map((opt) => (
+                    <button
+                      key={opt.value}
+                      type="button"
+                      onClick={() => setVpnType(opt.value)}
+                      className={`px-3 py-1.5 text-sm rounded-lg border transition-colors ${
+                        vpnType === opt.value
+                          ? 'border-sky-500 bg-sky-500/20 text-sky-300'
+                          : 'border-slate-700 bg-slate-800 text-slate-400 hover:border-slate-600'
+                      }`}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <p className="text-xs text-slate-500">
+                  {vpnType === 'auto' && 'FritzBox hat Priorität, WireGuard Server als Fallback'}
+                  {vpnType === 'fritzbox' && 'Nutzt die vom Admin hochgeladene FritzBox-Konfiguration'}
+                  {vpnType === 'wireguard' && 'Generiert eine eigene WireGuard-Client-Konfiguration'}
+                </p>
+              </div>
+            )}
           </div>
           <button
             onClick={handleGenerateToken}
@@ -371,6 +418,7 @@ export default function MobileDevicesPage() {
                   setSelectedDevice(null);
                   setDeviceName('');
                   setIncludeVpn(false);
+                  setVpnType('auto');
                   setShowToken(false);
                   if (qrData) loadDevices(); // Nur bei neuem Token neu laden
                 }}

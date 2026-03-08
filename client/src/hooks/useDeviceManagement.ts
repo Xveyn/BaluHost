@@ -54,13 +54,13 @@ export function useDeviceManagement() {
   );
 
   const handleGenerateToken = useCallback(
-    async (name: string, includeVpn: boolean, validityDays: number): Promise<MobileRegistrationToken | null> => {
+    async (name: string, includeVpn: boolean, validityDays: number, vpnType: string = 'auto'): Promise<MobileRegistrationToken | null> => {
       if (!name.trim()) {
         toast.error(t('common:toast.enterDeviceName'));
         return null;
       }
       try {
-        const token = await generateMobileToken(includeVpn, name.trim(), validityDays);
+        const token = await generateMobileToken(includeVpn, name.trim(), validityDays, vpnType);
         toast.success(t('common:toast.qrGenerated'));
         return token;
       } catch (err) {

@@ -43,18 +43,25 @@ export interface MobileDevice {
 }
 
 export async function generateMobileToken(
-  includeVpn: boolean = false, 
+  includeVpn: boolean = false,
   deviceName: string = 'Mobile Device',
-  tokenValidityDays: number = 90
+  tokenValidityDays: number = 90,
+  vpnType: string = 'auto'
 ): Promise<MobileRegistrationToken> {
   const res = await apiClient.post('/api/mobile/token/generate', null, {
-    params: { 
-      include_vpn: includeVpn, 
+    params: {
+      include_vpn: includeVpn,
       device_name: deviceName,
-      token_validity_days: tokenValidityDays
+      token_validity_days: tokenValidityDays,
+      vpn_type: vpnType
     }
   });
   return res.data;
+}
+
+export async function getAvailableVpnTypes(): Promise<string[]> {
+  const res = await apiClient.get('/api/vpn/available-types');
+  return res.data.available_types;
 }
 
 export async function getMobileDevices(): Promise<MobileDevice[]> {
