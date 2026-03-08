@@ -45,7 +45,10 @@ def _is_worker_healthy(state: Optional[SchedulerState]) -> Optional[bool]:
     """Check if the worker heartbeat is recent enough."""
     if state is None or state.last_heartbeat is None:
         return None
-    age = (datetime.now(timezone.utc) - state.last_heartbeat).total_seconds()
+    hb = state.last_heartbeat
+    if hb.tzinfo is None:
+        hb = hb.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - hb).total_seconds()
     return age < WORKER_HEARTBEAT_MAX_AGE
 
 
