@@ -40,7 +40,8 @@ async def generate_registration_token(
     current_user: UserPublic = Depends(get_current_user),
     include_vpn: bool = False,
     device_name: str = "iOS Device",
-    token_validity_days: int = 90
+    token_validity_days: int = 90,
+    vpn_type: str = "auto",
 ):
     """
     Generate a QR code token for mobile device registration.
@@ -53,13 +54,22 @@ async def generate_registration_token(
     - include_vpn: Include WireGuard VPN configuration in QR code
     - device_name: Device name for VPN client registration
     - token_validity_days: Device token validity (30-180 days, default 90)
+    - vpn_type: VPN config type — "auto" (default, FritzBox priority),
+                "fritzbox", or "wireguard"
 
     Raises:
     - 401: If not authenticated
-    - 400: If token_validity_days is out of range
+    - 400: If token_validity_days is out of range or vpn_type is invalid
     """
     from app.core.config import get_settings
     settings = get_settings()
+
+    # Validate vpn_type
+    if vpn_type not in ("auto", "fritzbox", "wireguard"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="vpn_type must be 'auto', 'fritzbox', or 'wireguard'"
+        )
 
     # Validate token_validity_days range (30 days minimum, 180 days maximum)
     if token_validity_days < 30 or token_validity_days > 180:
@@ -99,7 +109,8 @@ async def generate_registration_token(
         expires_minutes=5,
         include_vpn=include_vpn,
         device_name=device_name,
-        token_validity_days=token_validity_days
+        token_validity_days=token_validity_days,
+        vpn_type=vpn_type,
     )
 
 

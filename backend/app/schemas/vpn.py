@@ -1,7 +1,7 @@
 """Pydantic schemas for VPN configuration."""
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Literal, Optional
 from pydantic import BaseModel, Field
 
 
@@ -98,6 +98,22 @@ class FritzBoxConfigSummary(BaseModel):
     dns_servers: str
     is_active: bool
     created_at: datetime
-    
+
     class Config:
         from_attributes = True
+
+
+class VPNAvailableTypesResponse(BaseModel):
+    """Response listing which VPN config types are available."""
+    available_types: List[Literal["fritzbox", "wireguard"]]
+
+
+class FetchConfigByTypeRequest(BaseModel):
+    """Request to fetch a VPN config of a specific type."""
+    vpn_type: Literal["fritzbox", "wireguard"] = Field(
+        ..., description="VPN config type: 'fritzbox' or 'wireguard'"
+    )
+    device_name: str = Field(..., description="Device name for WireGuard client config")
+    server_public_endpoint: str = Field(
+        ..., description="Server public IP or domain for WireGuard endpoint"
+    )
