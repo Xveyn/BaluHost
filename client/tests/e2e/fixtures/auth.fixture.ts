@@ -96,7 +96,7 @@ async function mockDashboardRoutes(context: BrowserContext) {
   await context.route('**/api/system/raid/status', (r) => r.fulfill(json(MOCK_RAID_STATUS)));
   // Scheduler history must be registered before the catch-all /api/schedulers route
   await context.route('**/api/schedulers/history/**', (r) => r.fulfill(json(MOCK_SCHEDULER_HISTORY)));
-  await context.route('**/api/schedulers', (r) => r.fulfill(json(MOCK_SCHEDULERS)));
+  await context.route('**/api/schedulers/', (r) => r.fulfill(json(MOCK_SCHEDULERS)));
   await context.route('**/api/admin/debug', (r) => r.fulfill(json(MOCK_ADMIN_DEBUG)));
   await context.route('**/api/fans/status', (r) => r.fulfill(json(MOCK_FAN_STATUS)));
   await context.route('**/api/power/status', (r) => r.fulfill(json(MOCK_POWER_STATUS)));
