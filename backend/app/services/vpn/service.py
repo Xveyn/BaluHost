@@ -122,14 +122,20 @@ class VPNService:
         ]
 
         if settings.vpn_include_lan:
+            # Extract VPN subnet from server IP (e.g. 10.8.0.1 -> 10.8.0.0/24)
+            vpn_parts = server_config.server_ip.rsplit(".", 1)
+            vpn_subnet = f"{vpn_parts[0]}.0/24"
+
             lines.append(
-                f"PostUp = iptables -A FORWARD -i wg0 -j ACCEPT; "
-                f"iptables -t nat -A POSTROUTING -o {lan_iface} -j MASQUERADE; "
-                f"sysctl -w net.ipv4.ip_forward=1"
+                f"PostUp = sysctl -w net.ipv4.ip_forward=1; "
+                f"iptables -A FORWARD -i wg0 -j ACCEPT; "
+                f"iptables -A FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT; "
+                f"iptables -t nat -A POSTROUTING -s {vpn_subnet} -o {lan_iface} -j MASQUERADE"
             )
             lines.append(
                 f"PostDown = iptables -D FORWARD -i wg0 -j ACCEPT; "
-                f"iptables -t nat -D POSTROUTING -o {lan_iface} -j MASQUERADE"
+                f"iptables -D FORWARD -o wg0 -m state --state RELATED,ESTABLISHED -j ACCEPT; "
+                f"iptables -t nat -D POSTROUTING -s {vpn_subnet} -o {lan_iface} -j MASQUERADE"
             )
 
         # Add active client peers
