@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.4] - 2026-03-08
+
+### Scheduler Dashboard & Mobile API
+
+Worker Health Status im Scheduler Dashboard zeigt jetzt den Zustand aller
+Worker-Prozesse an. Stale Executions werden korrekt als CANCELLED markiert,
+und ein neuer Mobile Power Summary Endpoint erweitert die Mobile-API.
+
+### Added
+
+- **Worker health status** — Scheduler Dashboard zeigt Worker-Prozess-Status
+- **Mobile power summary** — Neuer API-Endpoint für mobile Energieübersicht
+
+### Fixed
+
+- **Stale execution recovery** — CANCELLED statt FAILED für abgebrochene Executions
+- **WebSocket StrictMode** — Verzögerter Connect verhindert ECONNRESET
+- **Frontend API URLs** — Korrekte URLs in allen API-Clients
+- **Scheduler heartbeat** — Timezone-naive Heartbeat-Behandlung
+
+### Changed
+
+- **CI release workflow** — Liest Version aus pyproject.toml statt PR-Titel
+
+---
+
 ## [1.13.3] - 2026-03-07
 
 ### Dev-Mode Stabilität & Architektur

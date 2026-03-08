@@ -136,6 +136,11 @@
     "running": "running",
     "recentFailures": "Recent Failures"
   },
+  "worker": {
+    "unhealthy": "Scheduler Worker Not Responding",
+    "unhealthyDescription": "The scheduler worker has not sent a heartbeat in over 60 seconds. Scheduled tasks may not be running.",
+    "down": "Worker Down"
+  },
   "card": {
     "active": "Active",
     "disabled": "Disabled",

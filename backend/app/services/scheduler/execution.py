@@ -45,12 +45,15 @@ def _is_worker_healthy(state: Optional[SchedulerState]) -> Optional[bool]:
     """Check if the worker heartbeat is recent enough."""
     if state is None or state.last_heartbeat is None:
         return None
-    age = (datetime.now(timezone.utc) - state.last_heartbeat).total_seconds()
+    hb = state.last_heartbeat
+    if hb.tzinfo is None:
+        hb = hb.replace(tzinfo=timezone.utc)
+    age = (datetime.now(timezone.utc) - hb).total_seconds()
     return age < WORKER_HEARTBEAT_MAX_AGE
 
 
 def recover_stale_executions(db: Session) -> int:
-    """Mark any RUNNING scheduler executions as FAILED after a server restart."""
+    """Mark any RUNNING scheduler executions as CANCELLED after a server restart."""
     stale = (
         db.query(SchedulerExecution)
         .filter(SchedulerExecution.status == SchedulerStatus.RUNNING.value)
@@ -60,7 +63,7 @@ def recover_stale_executions(db: Session) -> int:
         return 0
     now = datetime.now(timezone.utc)
     for execution in stale:
-        execution.status = SchedulerStatus.FAILED.value
+        execution.status = SchedulerStatus.CANCELLED.value
         execution.error_message = "Server restarted during execution"
         execution.completed_at = now
         if execution.started_at:

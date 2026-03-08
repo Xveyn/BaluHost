@@ -634,7 +634,7 @@ class SchedulerWorker:
     # --- Recovery ----------------------------------------------------------
 
     def _recover_stale_executions(self) -> None:
-        """Mark stale RUNNING and REQUESTED executions as FAILED after restart."""
+        """Mark stale RUNNING and REQUESTED executions as CANCELLED after restart."""
         db = SessionLocal()
         try:
             now = datetime.now(timezone.utc)
@@ -646,8 +646,8 @@ class SchedulerWorker:
                 .all()
             )
             for execution in stale_running:
-                execution.status = SchedulerStatus.FAILED.value
-                execution.error_message = "Worker restarted during execution"
+                execution.status = SchedulerStatus.CANCELLED.value
+                execution.error_message = "[recovery] Worker restarted during execution"
                 execution.completed_at = now
                 started_at = execution.started_at
                 if started_at:
@@ -665,8 +665,8 @@ class SchedulerWorker:
                 .all()
             )
             for execution in stale_requested:
-                execution.status = SchedulerStatus.FAILED.value
-                execution.error_message = "Request expired (worker was not running)"
+                execution.status = SchedulerStatus.CANCELLED.value
+                execution.error_message = "[recovery] Request expired (worker was not running)"
                 execution.completed_at = now
                 started_at = execution.started_at
                 if started_at:
@@ -710,7 +710,7 @@ class SchedulerWorker:
             for execution in running:
                 execution.status = SchedulerStatus.CANCELLED.value
                 execution.completed_at = now
-                execution.error_message = "Worker shutdown during execution"
+                execution.error_message = "[recovery] Worker shutdown during execution"
                 started_at = execution.started_at
                 if started_at:
                     delta = now - _ensure_aware(started_at)

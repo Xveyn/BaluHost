@@ -223,11 +223,17 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
   }, []);
 
   // 1) Mount: connect if ready. Unmount: disconnect.
+  //    Delayed to avoid ECONNRESET from React StrictMode double-mount.
   useEffect(() => {
-    if (enabledRef.current && tokenRef.current) {
-      void connect();
-    }
-    return () => { disconnect(); };
+    const timer = setTimeout(() => {
+      if (enabledRef.current && tokenRef.current) {
+        void connect();
+      }
+    }, 50);
+    return () => {
+      clearTimeout(timer);
+      disconnect();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []); // Runs ONCE on mount, cleanup on unmount
 

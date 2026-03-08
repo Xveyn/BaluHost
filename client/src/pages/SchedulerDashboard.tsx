@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2, BarChart3 } from 'lucide-react';
+import { Calendar, Clock, History, Settings, Wrench, RefreshCw, Loader2, BarChart3, AlertTriangle } from 'lucide-react';
 import { useSchedulers, useSchedulerHistory } from '../hooks/useSchedulers';
 import { SchedulerCard } from '../components/scheduler/SchedulerCard';
 import { SchedulerConfigModal } from '../components/scheduler/SchedulerConfigModal';
@@ -39,6 +39,7 @@ export default function SchedulerDashboard() {
     schedulers,
     totalRunning,
     totalEnabled,
+    workerHealthy,
     loading: schedulersLoading,
     error: schedulersError,
     refetch: refetchSchedulers,
@@ -167,6 +168,17 @@ export default function SchedulerDashboard() {
           </button>
         </div>
       </div>
+
+      {/* Worker Health Warning */}
+      {workerHealthy === false && (
+        <div className="flex items-start gap-3 rounded-lg border border-amber-800 bg-amber-900/20 px-4 py-3">
+          <AlertTriangle className="h-5 w-5 text-amber-400 mt-0.5 flex-shrink-0" />
+          <div>
+            <p className="text-sm font-medium text-amber-300">{t('worker.unhealthy')}</p>
+            <p className="text-xs text-amber-400/80 mt-0.5">{t('worker.unhealthyDescription')}</p>
+          </div>
+        </div>
+      )}
 
       {/* Tabs */}
       <div className="relative">

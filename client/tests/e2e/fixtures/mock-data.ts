@@ -120,9 +120,9 @@ export const MOCK_RAID_STATUS = {
 export const MOCK_SCHEDULERS = {
   schedulers: [
     {
-      name: 'smart_short',
-      display_name: 'SMART Short Test',
-      description: 'Short SMART self-test',
+      name: 'smart_scan',
+      display_name: 'SMART Scan',
+      description: 'Scans disk health using SMART data to detect potential failures',
       is_running: false,
       is_enabled: true,
       interval_seconds: 86400,
