@@ -1216,5 +1216,53 @@
     "passwordHint": "Leave empty if you don't know the password. The user can change their password later to sync it.",
     "cancel": "Cancel",
     "enable": "Enable SMB"
+  },
+  "envConfig": {
+    "warning": {
+      "title": "Caution: Direct Configuration Editing",
+      "message": "Editing these values directly modifies .env config files. Incorrect values may prevent the system from starting.",
+      "restartTitle": "Restart Required",
+      "restartMessage": "Changes saved. A restart may be required for changes to take effect."
+    },
+    "files": {
+      "backend": "Backend (.env)",
+      "client": "Frontend (.env)"
+    },
+    "categories": {
+      "application": "Application & Mode",
+      "security": "Security",
+      "database": "Database",
+      "admin_user": "Admin User",
+      "server": "CORS & Server",
+      "storage": "Storage & Backup",
+      "vpn": "VPN",
+      "monitoring": "Monitoring",
+      "power": "Power Management",
+      "fan": "Fan Control",
+      "raid": "RAID & SMART",
+      "webdav": "WebDAV",
+      "samba": "Samba",
+      "email": "Email / SMTP",
+      "mobile": "Mobile",
+      "cloud": "Cloud & OAuth",
+      "network": "Network",
+      "pihole": "Pi-hole",
+      "balupi": "BaluPi",
+      "notifications": "Notifications",
+      "sleep": "Sleep Mode",
+      "ssd_cache": "SSD Cache",
+      "client": "Frontend"
+    },
+    "labels": {
+      "default": "Default",
+      "modified": "changed",
+      "reveal": "Reveal",
+      "hide": "Hide"
+    },
+    "actions": {
+      "save": "Save Changes",
+      "discard": "Discard",
+      "refresh": "Refresh"
+    }
   }
 }

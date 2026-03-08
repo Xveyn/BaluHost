@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -22,8 +22,9 @@ import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
 import SleepMode from './SleepMode';
 import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
+import { SystemVariablesTab } from '../components/env-config';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba' | 'envconfig';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -79,6 +80,7 @@ const CATEGORIES: CategoryConfig[] = [
       { id: 'vcl', labelKey: 'systemControl.tabs.vcl', icon: <History className="h-5 w-5" /> },
       { id: 'smart', labelKey: 'systemControl.tabs.smart', icon: <Plug className="h-5 w-5" /> },
       { id: 'ratelimits', labelKey: 'systemControl.tabs.rateLimits', icon: <Gauge className="h-5 w-5" /> },
+      { id: 'envconfig', labelKey: 'systemControl.tabs.envConfig', icon: <Variable className="h-5 w-5" /> },
     ],
   },
 ];
@@ -190,6 +192,7 @@ export default function SystemControlPage() {
         {activeTab === 'ratelimits' && <RateLimitsTab />}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
         {activeTab === 'samba' && <SambaManagementCard />}
+        {activeTab === 'envconfig' && <SystemVariablesTab />}
       </div>
     </div>
   );

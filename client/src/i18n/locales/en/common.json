@@ -179,7 +179,8 @@
       "webdav": "WebDAV",
       "samba": "SMB/CIFS",
       "sleep": "Sleep",
-      "ssdCache": "SSD Cache"
+      "ssdCache": "SSD Cache",
+      "envConfig": "System Variables"
     }
   },
   "devices": {
