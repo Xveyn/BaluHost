@@ -149,11 +149,21 @@ export function SchedulerCard({
             </span>
           )}
         </div>
-        {scheduler.last_error && (
-          <div className="mt-2 text-xs text-red-400 bg-red-900/20 rounded px-2 py-1 truncate">
-            {scheduler.last_error}
-          </div>
-        )}
+        {scheduler.last_error && (() => {
+          const isRecovery = scheduler.last_error.startsWith('[recovery]');
+          const displayError = isRecovery
+            ? scheduler.last_error.replace(/^\[recovery\]\s*/, '')
+            : scheduler.last_error;
+          return (
+            <div className={`mt-2 text-xs rounded px-2 py-1 truncate ${
+              isRecovery
+                ? 'text-amber-400 bg-amber-900/20'
+                : 'text-red-400 bg-red-900/20'
+            }`}>
+              {displayError}
+            </div>
+          );
+        })()}
       </div>
 
       {/* Actions */}

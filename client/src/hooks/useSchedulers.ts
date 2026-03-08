@@ -28,6 +28,7 @@ interface UseSchedulersReturn {
   schedulers: SchedulerStatus[];
   totalRunning: number;
   totalEnabled: number;
+  workerHealthy: boolean | null;
   loading: boolean;
   error: string | null;
   refetch: () => Promise<void>;
@@ -131,6 +132,7 @@ export function useSchedulers(options: UseSchedulersOptions = {}): UseSchedulers
     schedulers: data?.schedulers || [],
     totalRunning: data?.total_running || 0,
     totalEnabled: data?.total_enabled || 0,
+    workerHealthy: data?.worker_healthy ?? null,
     loading,
     error,
     refetch: loadData,

@@ -44,6 +44,7 @@ export interface SchedulerListResponse {
   schedulers: SchedulerStatus[];
   total_running: number;
   total_enabled: number;
+  worker_healthy: boolean | null;
 }
 
 export interface SchedulerExecution {

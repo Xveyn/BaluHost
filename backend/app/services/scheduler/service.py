@@ -54,10 +54,19 @@ class SchedulerService:
         running = sum(1 for s in schedulers if s.is_running)
         enabled = sum(1 for s in schedulers if s.is_enabled)
 
+        # Global worker health: True if any scheduler reports healthy,
+        # False if all report unhealthy, None if no heartbeat data
+        health_values = [s.worker_healthy for s in schedulers if s.worker_healthy is not None]
+        if health_values:
+            worker_healthy = any(health_values)
+        else:
+            worker_healthy = None
+
         return SchedulerListResponse(
             schedulers=schedulers,
             total_running=running,
             total_enabled=enabled,
+            worker_healthy=worker_healthy,
         )
 
     def get_scheduler(self, name: str) -> Optional[SchedulerStatusResponse]:
@@ -80,12 +89,13 @@ class SchedulerService:
         )
 
         worker_healthy = _is_worker_healthy(state)
-        is_running = state.is_running if state else False
+        raw_is_running = state.is_running if state else False
+        is_running = raw_is_running and worker_healthy is not False
         is_enabled = self._check_scheduler_enabled(name)
         interval = self._get_scheduler_interval(name, info)
 
-        # next_run_at from worker state (accurate, from APScheduler)
-        next_run_at = state.next_run_at if state else None
+        # next_run_at only meaningful when worker is alive
+        next_run_at = state.next_run_at if (state and worker_healthy is not False) else None
 
         # Get last execution from DB
         last_exec = (

@@ -60,6 +60,10 @@ class SchedulerListResponse(BaseModel):
     schedulers: list[SchedulerStatusResponse]
     total_running: int = Field(description="Number of running schedulers")
     total_enabled: int = Field(description="Number of enabled schedulers")
+    worker_healthy: Optional[bool] = Field(
+        default=None,
+        description="Global worker health: True if worker heartbeat is recent, False if stale, None if unknown",
+    )
 
 
 class SchedulerExecutionResponse(BaseModel):
