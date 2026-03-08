@@ -1,10 +1,12 @@
 """API routes for VPN configuration and management."""
 
+import logging
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
+from app.models.vpn import VPNClient
 from app.core.rate_limiter import user_limiter, get_limit
 from app.api.deps import get_current_user, get_current_admin
 from app.schemas.user import UserPublic
@@ -18,11 +20,126 @@ from app.schemas.vpn import (
     FritzBoxConfigUpload,
     FritzBoxConfigResponse,
     FritzBoxConfigSummary,
+    VPNAvailableTypesResponse,
+    FetchConfigByTypeRequest,
 )
 from app.services.vpn import VPNService
 from app.services.audit_logger_db import get_audit_logger_db
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(prefix="/vpn", tags=["vpn"])
+
+
+@router.get("/available-types", response_model=VPNAvailableTypesResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
+async def get_available_vpn_types(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """
+    Get available VPN config types.
+
+    Returns which config sources are available:
+    - 'fritzbox': Admin has uploaded an active Fritz!Box config
+    - 'wireguard': Always available (per-client generated configs)
+    """
+    from app.models.vpn import FritzBoxVPNConfig
+
+    has_fritzbox = db.query(FritzBoxVPNConfig).filter(
+        FritzBoxVPNConfig.is_active == True
+    ).first() is not None
+
+    available: list[str] = []
+    if has_fritzbox:
+        available.append("fritzbox")
+    available.append("wireguard")
+
+    return VPNAvailableTypesResponse(available_types=available)
+
+
+@router.post("/fetch-config-by-type")
+@user_limiter.limit(get_limit("vpn_operations"))
+async def fetch_config_by_type(
+    request: Request,
+    response: Response,
+    body: FetchConfigByTypeRequest,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """
+    Fetch a VPN config of a specific type.
+
+    Allows the client (e.g. Android app) to explicitly choose between
+    Fritz!Box shared config and a per-client WireGuard server config.
+    """
+    audit_logger = get_audit_logger_db()
+
+    if body.vpn_type == "fritzbox":
+        try:
+            config_base64 = VPNService.get_fritzbox_config_base64(db)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No active Fritz!Box VPN config available",
+            )
+
+        audit_logger.log_vpn_operation(
+            action="vpn_config_fetched",
+            user=current_user.username,
+            vpn_client=body.device_name,
+            details={"vpn_type": "fritzbox"},
+            success=True,
+            db=db,
+        )
+
+        return {
+            "vpn_type": "fritzbox",
+            "config_base64": config_base64,
+            "device_name": body.device_name,
+        }
+    else:
+        # Generate a new per-client WireGuard config
+        try:
+            vpn_response = VPNService.create_client_config(
+                db=db,
+                user_id=current_user.id,
+                device_name=body.device_name,
+                server_public_endpoint=body.server_public_endpoint,
+            )
+        except RuntimeError as e:
+            audit_logger.log_vpn_operation(
+                action="vpn_config_fetch_failed",
+                user=current_user.username,
+                vpn_client=body.device_name,
+                details={"vpn_type": "wireguard", "error": str(e)},
+                success=False,
+                error_message=str(e),
+                db=db,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=str(e),
+            )
+
+        audit_logger.log_vpn_operation(
+            action="vpn_config_fetched",
+            user=current_user.username,
+            vpn_client=body.device_name,
+            details={"vpn_type": "wireguard", "client_id": vpn_response.client_id},
+            success=True,
+            db=db,
+        )
+
+        return {
+            "vpn_type": "wireguard",
+            "config_base64": vpn_response.config_base64,
+            "device_name": body.device_name,
+            "client_id": vpn_response.client_id,
+            "assigned_ip": vpn_response.assigned_ip,
+        }
 
 
 @router.post("/generate-config", response_model=VPNConfigResponse)
@@ -323,7 +440,7 @@ async def get_server_config(
         )
     
     # Count active clients
-    active_clients = db.query(VPNService).filter_by(is_active=True).count()
+    active_clients = db.query(VPNClient).filter_by(is_active=True).count()
     
     return VPNServerConfig(
         server_ip=config.server_ip,
@@ -471,4 +588,10 @@ async def get_fritzbox_qr_code(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e)
+        )
+    except Exception as e:
+        logger.error("Failed to generate Fritz!Box QR data: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to generate QR code data"
         )

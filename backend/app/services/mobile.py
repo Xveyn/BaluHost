@@ -42,12 +42,15 @@ class MobileService:
         expires_minutes: int = 5,
         include_vpn: bool = False,
         device_name: str = "iOS Device",
-        token_validity_days: int = 90
+        token_validity_days: int = 90,
+        vpn_type: str = "auto",
     ) -> MobileRegistrationTokenSchema:
         """Generate a one-time registration token for mobile device pairing.
-        
+
         Args:
             token_validity_days: How long the device authorization will be valid (30-180 days)
+            vpn_type: VPN config source — "auto" (FritzBox priority, WireGuard fallback),
+                      "fritzbox" (only FritzBox), or "wireguard" (only WireGuard server).
         """
         # Generate secure random token
         token = f"reg_{secrets.token_urlsafe(32)}"
@@ -65,21 +68,33 @@ class MobileService:
         
         # Generate VPN config if requested
         vpn_config_base64 = None
+        vpn_config_type = None
         if include_vpn:
             try:
                 from app.services.vpn import VPNService
                 from app.models.vpn import FritzBoxVPNConfig
-                
-                # PRIORITY 1: Check for Fritz!Box config (uploaded by admin)
-                fritzbox_config = db.query(FritzBoxVPNConfig).filter(
-                    FritzBoxVPNConfig.is_active == True
-                ).first()
-                
-                if fritzbox_config:
-                    # Use Fritz!Box config (shared for all clients)
-                    vpn_config_base64 = VPNService.get_fritzbox_config_base64(db)
+
+                use_fritzbox = False
+                use_wireguard = False
+
+                if vpn_type == "fritzbox":
+                    use_fritzbox = True
+                elif vpn_type == "wireguard":
+                    use_wireguard = True
                 else:
-                    # FALLBACK: Auto-generate client-specific config (existing behavior)
+                    # "auto": FritzBox priority, WireGuard fallback
+                    has_fritzbox = db.query(FritzBoxVPNConfig).filter(
+                        FritzBoxVPNConfig.is_active == True
+                    ).first() is not None
+                    if has_fritzbox:
+                        use_fritzbox = True
+                    else:
+                        use_wireguard = True
+
+                if use_fritzbox:
+                    vpn_config_base64 = VPNService.get_fritzbox_config_base64(db)
+                    vpn_config_type = "fritzbox"
+                elif use_wireguard:
                     server_endpoint = server_url.replace("http://", "").replace("https://", "").split(":")[0]
                     vpn_response = VPNService.create_client_config(
                         db=db,
@@ -88,6 +103,7 @@ class MobileService:
                         server_public_endpoint=server_endpoint,
                     )
                     vpn_config_base64 = vpn_response.config_base64
+                    vpn_config_type = "wireguard"
             except Exception as e:
                 # VPN generation failed, continue without VPN
                 logger.warning(f"VPN config generation failed: {e}")
@@ -102,6 +118,8 @@ class MobileService:
         }
         if vpn_config_base64:
             qr_data["vpn_config"] = vpn_config_base64
+        if vpn_config_type:
+            qr_data["vpn_type"] = vpn_config_type
         
         # Create QR code image with JSON data
         qr = qrcode.QRCode(version=1, box_size=10, border=4)

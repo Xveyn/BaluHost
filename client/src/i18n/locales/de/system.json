@@ -1216,5 +1216,53 @@
     "passwordHint": "Leer lassen, wenn Sie das Passwort nicht kennen. Der Benutzer kann sein Passwort später ändern, um es zu synchronisieren.",
     "cancel": "Abbrechen",
     "enable": "SMB aktivieren"
+  },
+  "envConfig": {
+    "warning": {
+      "title": "Achtung: Direkte Konfigurationsbearbeitung",
+      "message": "Änderungen bearbeiten direkt die .env-Konfigurationsdateien. Fehlerhafte Werte können den Systemstart verhindern.",
+      "restartTitle": "Neustart erforderlich",
+      "restartMessage": "Änderungen gespeichert. Ein Neustart kann erforderlich sein, damit die Änderungen wirksam werden."
+    },
+    "files": {
+      "backend": "Backend (.env)",
+      "client": "Frontend (.env)"
+    },
+    "categories": {
+      "application": "Anwendung & Modus",
+      "security": "Sicherheit",
+      "database": "Datenbank",
+      "admin_user": "Admin-Benutzer",
+      "server": "CORS & Server",
+      "storage": "Speicher & Backup",
+      "vpn": "VPN",
+      "monitoring": "Überwachung",
+      "power": "Energieverwaltung",
+      "fan": "Lüftersteuerung",
+      "raid": "RAID & SMART",
+      "webdav": "WebDAV",
+      "samba": "Samba",
+      "email": "E-Mail / SMTP",
+      "mobile": "Mobil",
+      "cloud": "Cloud & OAuth",
+      "network": "Netzwerk",
+      "pihole": "Pi-hole",
+      "balupi": "BaluPi",
+      "notifications": "Benachrichtigungen",
+      "sleep": "Schlafmodus",
+      "ssd_cache": "SSD-Cache",
+      "client": "Frontend"
+    },
+    "labels": {
+      "default": "Standard",
+      "modified": "geändert",
+      "reveal": "Anzeigen",
+      "hide": "Verbergen"
+    },
+    "actions": {
+      "save": "Änderungen speichern",
+      "discard": "Verwerfen",
+      "refresh": "Aktualisieren"
+    }
   }
 }
