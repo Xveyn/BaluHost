@@ -614,12 +614,8 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             logger.info("Recovered %d stale benchmark(s) from previous run", recovered)
     kill_orphan_fio_processes()
 
-    # Recover stale scheduler executions from previous run
-    from app.services.scheduler.execution import recover_stale_executions
-    with SessionLocal() as sched_db:
-        recovered = recover_stale_executions(sched_db)
-        if recovered:
-            logger.info("Recovered %d stale scheduler execution(s) from previous run", recovered)
+    # NOTE: Scheduler execution recovery is handled by the worker process
+    # itself in _recover_stale_executions() to avoid duplicate recovery.
 
     # Ensure home directories for all users and Shared folder
     from app.services.users import ensure_user_home_directories
