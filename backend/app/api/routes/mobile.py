@@ -1,5 +1,7 @@
 """API routes for mobile device management (BaluMobile)."""
 
+import logging
+from datetime import datetime, timezone
 from typing import List
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
@@ -14,6 +16,8 @@ from app.schemas.mobile import (
     MobileDeviceUpdate,
     MobileRegistrationToken,
     MobileRegistrationResponse,
+    MobilePowerSummary,
+    TapoDevicePowerInfo,
     CameraBackupSettings,
     CameraBackupStatus,
     SyncFolder as SyncFolderSchema,
@@ -21,6 +25,8 @@ from app.schemas.mobile import (
 )
 from app.models.mobile import MobileDevice
 from app.services.mobile import MobileService
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/mobile", tags=["mobile"])
 
@@ -417,4 +423,134 @@ async def create_sync_folder(
         db=db,
         device_id=device_id,
         folder_data=folder_data
+    )
+
+
+# Power Summary Endpoint
+
+
+@router.get("/power-summary", response_model=MobilePowerSummary)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_power_summary(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """
+    Get combined power consumption summary for mobile app.
+
+    Returns CPU power profile, Tapo device power readings,
+    today's energy statistics, and cost estimates in a single call.
+    """
+    from app.services.power.manager import get_power_manager
+    from app.services.power import energy as energy_stats
+    from app.services.power import monitor as power_monitor
+    from app.models.tapo_device import TapoDevice
+
+    now = datetime.now(timezone.utc)
+
+    # 1. CPU power profile (in-memory, fast)
+    power_profile = None
+    power_profile_frequency_mhz = None
+    auto_scaling_enabled = False
+    active_demands_count = 0
+
+    try:
+        manager = get_power_manager()
+        power_status = await manager.get_power_status()
+        power_profile = power_status.current_profile
+        power_profile_frequency_mhz = power_status.current_frequency_mhz
+        auto_scaling_enabled = power_status.auto_scaling_enabled
+        active_demands_count = len(power_status.active_demands) if power_status.active_demands else 0
+    except Exception as e:
+        logger.warning(f"Failed to get power status: {e}")
+
+    # 2. Tapo devices
+    devices_info: List[TapoDevicePowerInfo] = []
+    total_current_watts = 0.0
+    devices_online = 0
+    today_energy_kwh = 0.0
+    today_avg_watts_sum = 0.0
+    today_max_watts = 0.0
+    has_today_stats = False
+
+    try:
+        tapo_devices = db.query(TapoDevice).filter(TapoDevice.is_active == True).all()
+    except Exception as e:
+        logger.warning(f"Failed to query Tapo devices: {e}")
+        tapo_devices = []
+
+    for device in tapo_devices:
+        current_watts = 0.0
+        is_online = False
+        device_energy_today = None
+
+        # Current power from in-memory buffer
+        try:
+            current_power = power_monitor.get_current_power(device.id, db)
+            current_watts = current_power.current_watts
+            is_online = current_power.is_online
+        except Exception as e:
+            logger.debug(f"No current power for device {device.id}: {e}")
+
+        # Today's stats from DB
+        try:
+            today_stats = energy_stats.get_today_stats(db, device.id)
+            if today_stats:
+                has_today_stats = True
+                device_energy_today = today_stats.total_energy_kwh
+                today_energy_kwh += today_stats.total_energy_kwh
+                today_avg_watts_sum += today_stats.avg_watts
+                if today_stats.max_watts > today_max_watts:
+                    today_max_watts = today_stats.max_watts
+        except Exception as e:
+            logger.debug(f"No today stats for device {device.id}: {e}")
+
+        if is_online:
+            devices_online += 1
+            total_current_watts += current_watts
+
+        devices_info.append(TapoDevicePowerInfo(
+            device_id=device.id,
+            device_name=device.name,
+            current_watts=current_watts,
+            is_online=is_online,
+            energy_today_kwh=device_energy_today,
+        ))
+
+    # 3. Energy price config
+    cost_per_kwh = None
+    currency = None
+    estimated_cost_today = None
+
+    try:
+        price_config = energy_stats.get_energy_price_config(db)
+        cost_per_kwh = price_config.cost_per_kwh
+        currency = price_config.currency
+        if has_today_stats and cost_per_kwh:
+            estimated_cost_today = round(today_energy_kwh * cost_per_kwh, 4)
+    except Exception as e:
+        logger.debug(f"Failed to get energy price config: {e}")
+
+    devices_total = len(tapo_devices)
+    today_avg = round(today_avg_watts_sum / devices_total, 1) if devices_total and has_today_stats else None
+
+    return MobilePowerSummary(
+        total_current_watts=round(total_current_watts, 1),
+        devices_online=devices_online,
+        devices_total=devices_total,
+        devices=devices_info,
+        today_energy_kwh=round(today_energy_kwh, 3) if has_today_stats else None,
+        today_avg_watts=today_avg,
+        today_max_watts=round(today_max_watts, 1) if has_today_stats else None,
+        estimated_cost_today=estimated_cost_today,
+        cost_per_kwh=cost_per_kwh,
+        currency=currency,
+        power_profile=power_profile,
+        power_profile_frequency_mhz=power_profile_frequency_mhz,
+        auto_scaling_enabled=auto_scaling_enabled,
+        active_demands_count=active_demands_count,
+        has_tapo_devices=devices_total > 0,
+        timestamp=now,
     )

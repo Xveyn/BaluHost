@@ -1,7 +1,7 @@
 """Pydantic schemas for mobile device management and registration."""
 
 from datetime import datetime
-from typing import Optional
+from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
@@ -142,6 +142,44 @@ class ExpirationNotification(BaseModel):
     fcm_message_id: Optional[str] = None
     error_message: Optional[str] = None
     device_expires_at: datetime
-    
+
     class Config:
         from_attributes = True
+
+
+class TapoDevicePowerInfo(BaseModel):
+    """Power info for a single Tapo device."""
+    device_id: int
+    device_name: str
+    current_watts: float = 0.0
+    is_online: bool = False
+    energy_today_kwh: Optional[float] = None
+
+
+class MobilePowerSummary(BaseModel):
+    """Combined power summary for mobile app."""
+    # Aggregated device power
+    total_current_watts: float = 0.0
+    devices_online: int = 0
+    devices_total: int = 0
+    devices: List[TapoDevicePowerInfo] = []
+
+    # Today's energy
+    today_energy_kwh: Optional[float] = None
+    today_avg_watts: Optional[float] = None
+    today_max_watts: Optional[float] = None
+
+    # Cost
+    estimated_cost_today: Optional[float] = None
+    cost_per_kwh: Optional[float] = None
+    currency: Optional[str] = None
+
+    # CPU power profile
+    power_profile: Optional[str] = None
+    power_profile_frequency_mhz: Optional[int] = None
+    auto_scaling_enabled: bool = False
+    active_demands_count: int = 0
+
+    # Meta
+    has_tapo_devices: bool = False
+    timestamp: datetime
