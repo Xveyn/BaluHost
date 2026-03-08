@@ -353,16 +353,26 @@ class VPNService:
     ) -> VPNConfigResponse:
         """
         Create a new WireGuard client configuration.
-        
+
         Args:
             db: Database session
             user_id: User ID
             device_name: Device name (e.g., "iPhone 13 Pro")
             server_public_endpoint: Server public IP or domain
-            
+
         Returns:
             VPNConfigResponse: Configuration with client keys and config file
         """
+        # Strip protocol and port from endpoint URL to get bare hostname/IP
+        from urllib.parse import urlparse
+        endpoint = server_public_endpoint
+        if "://" in endpoint:
+            parsed = urlparse(endpoint)
+            endpoint = parsed.hostname or endpoint
+        elif ":" in endpoint:
+            endpoint = endpoint.split(":")[0]
+        server_public_endpoint = endpoint
+
         # Generate client keypair
         client_private, client_public = VPNService.generate_wireguard_keypair()
         preshared_key = VPNService.generate_preshared_key()
@@ -616,15 +626,14 @@ PersistentKeepalive = 25
             FritzBoxConfigResponse
         """
         from app.models.vpn import FritzBoxVPNConfig
-        from app.services.vpn.encryption import VPNEncryption
         from app.schemas.vpn import FritzBoxConfigResponse
 
         # Parse config
         parsed = VPNService.parse_fritzbox_config(config_content, public_endpoint)
-        
-        # Encrypt sensitive keys
-        private_key_encrypted = VPNEncryption.encrypt_key(parsed['private_key'])
-        preshared_key_encrypted = VPNEncryption.encrypt_key(parsed.get('preshared_key', ''))
+
+        # Encrypt sensitive keys (use safe wrappers with fallback)
+        private_key_encrypted = VPNService._encrypt_key(parsed['private_key'])
+        preshared_key_encrypted = VPNService._encrypt_key(parsed.get('preshared_key', ''))
         
         # Deactivate old configs
         db.query(FritzBoxVPNConfig).update({"is_active": False})
@@ -678,8 +687,7 @@ PersistentKeepalive = 25
             Base64 encoded config string
         """
         from app.models.vpn import FritzBoxVPNConfig
-        from app.services.vpn.encryption import VPNEncryption
-        
+
         if config_id:
             config = db.query(FritzBoxVPNConfig).filter(
                 FritzBoxVPNConfig.id == config_id
@@ -688,13 +696,13 @@ PersistentKeepalive = 25
             config = db.query(FritzBoxVPNConfig).filter(
                 FritzBoxVPNConfig.is_active == True
             ).first()
-        
+
         if not config:
             raise ValueError("No Fritz!Box VPN config found")
-        
-        # Decrypt keys
-        private_key = VPNEncryption.decrypt_key(config.private_key_encrypted)
-        preshared_key = VPNEncryption.decrypt_key(config.preshared_key_encrypted) if config.preshared_key_encrypted else ''
+
+        # Decrypt keys (use safe wrappers with fallback)
+        private_key = VPNService._decrypt_key(config.private_key_encrypted)
+        preshared_key = VPNService._decrypt_key(config.preshared_key_encrypted) if config.preshared_key_encrypted else ''
         
         # Rebuild config file
         dns_lines = '\n'.join([f"DNS = {dns.strip()}" for dns in config.dns_servers.split(',') if dns.strip()])
