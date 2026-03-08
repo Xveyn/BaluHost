@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.5] - 2026-03-08
+
+### System Variables & VPN Improvements
+
+Admin-UI zum Bearbeiten von .env-Konfigurationsdateien direkt aus der
+Web-Oberfläche. VPN-Typ-Auswahl (Full Tunnel / Split Tunnel) bei der
+Mobilgeräte-Registrierung und mehrere VPN-Bugfixes.
+
+### Added
+
+- **System Variables page** — Admin-UI für .env-Bearbeitung mit Kategorie-Gruppierung und Sensitive-Value-Masking
+- **VPN type selection** — Full/Split Tunnel Auswahl bei Mobile-Registrierung
+- **VPN config type endpoints** — Backend-Unterstützung für vpn_type Parameter
+
+### Fixed
+
+- **VPN FORWARD rule** — Fehlende iptables FORWARD-Regel für VPN-Return-Traffic
+- **VPN encryption** — Sichere Encryption-Wrapper und Endpoint-URL-Bereinigung
+- **QR code loading** — Verbesserte Resilienz beim Laden von VPN-QR-Codes
+
+### Documentation
+
+- VPN Server Troubleshooting Guide
+
+---
+
 ## [1.13.4] - 2026-03-08
 
 ### Scheduler Dashboard & Mobile API
