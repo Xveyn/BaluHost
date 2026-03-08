@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { Upload, Wifi, Trash2, Check, AlertCircle, Download } from 'lucide-react';
-import { useTranslation } from 'react-i18next';
+import { Trans, useTranslation } from 'react-i18next';
 import { apiClient } from '../lib/api';
 
 interface FritzBoxConfig {
@@ -30,13 +30,18 @@ export default function VpnManagement() {
     try {
       setLoading(true);
       setError(null);
-      
+
       const response = await apiClient.get('/api/vpn/fritzbox/config');
       setConfig(response.data);
-      
-      // Load QR code data
-      const qrResponse = await apiClient.get('/api/vpn/fritzbox/qr');
-      setQrData(qrResponse.data.config_base64);
+
+      // Load QR code data separately so a QR failure doesn't block config display
+      try {
+        const qrResponse = await apiClient.get('/api/vpn/fritzbox/qr');
+        setQrData(qrResponse.data.config_base64);
+      } catch {
+        // QR code generation failed — config is still usable
+        setQrData(null);
+      }
     } catch (err: unknown) {
       const status = err != null && typeof err === 'object' && 'response' in err
         ? (err as { response?: { status?: number } }).response?.status
@@ -263,7 +268,7 @@ export default function VpnManagement() {
 
           <div className="mt-4 p-3 bg-sky-500/10 border border-sky-500/30 rounded-lg">
             <p className="text-xs text-sky-300">
-              ✅ {t('vpn.distributionInfo')}
+              ✅ <Trans i18nKey="vpn.distributionInfo" ns="settings" components={{ strong: <strong /> }} />
             </p>
           </div>
         </div>
