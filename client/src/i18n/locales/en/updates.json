@@ -60,6 +60,17 @@
     "prerelease": "Prerelease",
     "noReleases": "No releases found"
   },
+  "versionHistory": {
+    "title": "Version History",
+    "description": "All versions that have ever run on this system",
+    "noHistory": "No version history yet",
+    "current": "Current",
+    "timesStarted": "{{count}}x started",
+    "firstSeen": "First seen",
+    "lastSeen": "Last seen",
+    "branch": "Branch",
+    "python": "Python"
+  },
   "status": {
     "pending": "Pending",
     "downloading": "Downloading",

@@ -24,6 +24,8 @@ from app.schemas.update import (
     CommitHistoryResponse,
     CommitDiffResponse,
     ReleaseListResponse,
+    VersionHistoryResponse,
+    VersionHistoryEntry,
 )
 from app.services.update.api import get_update_service, get_update_backend
 from app.services.audit_logger_db import get_audit_logger_db
@@ -373,6 +375,43 @@ async def get_commit_diff(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(e),
         )
+
+
+@router.get("/version-history", response_model=VersionHistoryResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_version_history(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> VersionHistoryResponse:
+    """Get the history of all versions that have ever run on this system.
+
+    Returns all recorded (version, commit) pairs sorted by first_seen descending.
+
+    Requires admin privileges.
+    """
+    from app.models.version_history import VersionHistory
+    from app import __version__
+
+    rows = (
+        db.query(VersionHistory)
+        .order_by(VersionHistory.first_seen.desc())
+        .all()
+    )
+
+    # Determine current commit
+    current_commit = "unknown"
+    if rows:
+        # The most recently seen entry is likely the current one
+        newest = max(rows, key=lambda r: r.last_seen)
+        current_commit = newest.git_commit_short
+
+    return VersionHistoryResponse(
+        versions=[VersionHistoryEntry.model_validate(r) for r in rows],
+        total=len(rows),
+        current_version=__version__,
+        current_commit=current_commit,
+    )
 
 
 @router.get("/releases", response_model=ReleaseListResponse)

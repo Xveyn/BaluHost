@@ -60,6 +60,17 @@
     "prerelease": "Vorabversion",
     "noReleases": "Keine Releases gefunden"
   },
+  "versionHistory": {
+    "title": "Versionsverlauf",
+    "description": "Alle Versionen, die jemals auf diesem System gelaufen sind",
+    "noHistory": "Noch kein Versionsverlauf vorhanden",
+    "current": "Aktuell",
+    "timesStarted": "{{count}}x gestartet",
+    "firstSeen": "Erstmals gesehen",
+    "lastSeen": "Zuletzt gesehen",
+    "branch": "Branch",
+    "python": "Python"
+  },
   "status": {
     "pending": "Ausstehend",
     "downloading": "Wird heruntergeladen",

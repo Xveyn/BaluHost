@@ -219,6 +219,26 @@ export interface ReleaseListResponse {
   total: number;
 }
 
+// Version history types (Version Tracker)
+export interface VersionHistoryEntry {
+  id: number;
+  version: string;
+  git_commit: string;
+  git_commit_short: string;
+  git_branch: string | null;
+  python_version: string | null;
+  first_seen: string;
+  last_seen: string;
+  times_started: number;
+}
+
+export interface VersionHistoryResponse {
+  versions: VersionHistoryEntry[];
+  total: number;
+  current_version: string;
+  current_commit: string;
+}
+
 // API Functions
 
 /**
@@ -329,6 +349,14 @@ export async function getCommitDiff(commitHash: string): Promise<CommitDiffRespo
  */
 export async function getAllReleases(): Promise<ReleaseListResponse> {
   const response = await apiClient.get<ReleaseListResponse>('/api/updates/releases');
+  return response.data;
+}
+
+/**
+ * Get version history (all versions that have ever run on this system)
+ */
+export async function getVersionHistory(): Promise<VersionHistoryResponse> {
+  const response = await apiClient.get<VersionHistoryResponse>('/api/updates/version-history');
   return response.data;
 }
 
