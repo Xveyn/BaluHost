@@ -457,7 +457,7 @@ export default function UpdatePage() {
                       </div>
                       <div className="flex items-center gap-3 text-xs text-slate-400">
                         <span className="font-mono">{checkResult.dev_version.commit_short}</span>
-                        <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead })}</span>
+                        <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead ?? 0 })}</span>
                       </div>
                     </div>
                   )}
