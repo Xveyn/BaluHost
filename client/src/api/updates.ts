@@ -51,6 +51,7 @@ export interface UpdateCheckResponse {
   dev_version_available: boolean;
   dev_version: VersionInfo | null;
   dev_commits_ahead: number | null;
+  dev_commits: CommitInfo[];
 }
 
 // Start request/response

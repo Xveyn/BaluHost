@@ -393,10 +393,18 @@ export default function UpdatePage() {
                   <div className="flex items-center gap-2 text-sm">
                     {(() => {
                       const isPrerelease = checkResult.current_version.version.includes('-');
+                      const isDevBuild = checkResult.dev_version_available;
                       return (
-                        <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
-                          {isPrerelease ? 'Unstable' : 'Stable'}
-                        </span>
+                        <>
+                          <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
+                            {isPrerelease ? 'Unstable' : 'Stable'}
+                          </span>
+                          {isDevBuild && (
+                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
+                              {t('version.devBuild')}
+                            </span>
+                          )}
+                        </>
                       );
                     })()}
                   </div>
@@ -450,7 +458,7 @@ export default function UpdatePage() {
                     {t('version.upToDateDesc')}
                   </p>
                   {checkResult?.dev_version_available && checkResult.dev_version && (
-                    <div className="pt-2 border-t border-slate-700/50 space-y-1.5">
+                    <div className="pt-2 border-t border-slate-700/50 space-y-2">
                       <div className="flex items-center gap-2 text-sm text-amber-400">
                         <GitBranch className="h-3.5 w-3.5" />
                         <span className="font-medium">{t('version.devVersionAvailable')}</span>
@@ -459,6 +467,27 @@ export default function UpdatePage() {
                         <span className="font-mono">{checkResult.dev_version.commit_short}</span>
                         <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead ?? 0 })}</span>
                       </div>
+                      {checkResult.dev_commits && checkResult.dev_commits.length > 0 && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {checkResult.dev_commits.map((commit) => (
+                            <div key={commit.hash_short} className="flex items-start gap-2 text-xs">
+                              <span className="font-mono text-slate-500 shrink-0">{commit.hash_short}</span>
+                              <span className="text-slate-300 break-all">
+                                {commit.type && (
+                                  <span className={`font-medium ${
+                                    commit.type === 'feat' ? 'text-emerald-400' :
+                                    commit.type === 'fix' ? 'text-blue-400' :
+                                    'text-slate-400'
+                                  }`}>
+                                    {commit.type}{commit.scope ? `(${commit.scope})` : ''}:
+                                  </span>
+                                )}{' '}
+                                {commit.message.includes(':') ? commit.message.split(':').slice(1).join(':').trim() : commit.message}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

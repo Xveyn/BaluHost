@@ -5,6 +5,7 @@ from typing import Optional
 from app.schemas.update import (
     VersionInfo,
     ChangelogEntry,
+    CommitInfo,
     ReleaseNotesResponse,
     CommitHistoryResponse,
     CommitDiffResponse,
@@ -95,11 +96,11 @@ class UpdateBackend(ABC):
         """Get list of all releases (git tags)."""
         pass
 
-    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int]]:
+    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int], list[CommitInfo]]:
         """Check if the development branch has unreleased commits ahead of latest tag.
 
         Returns:
-            Tuple of (dev_available, dev_version_info, commits_ahead).
+            Tuple of (dev_available, dev_version_info, commits_ahead, commits).
             Default implementation returns no dev version.
         """
-        return False, None, None
+        return False, None, None, []

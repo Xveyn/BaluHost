@@ -219,11 +219,12 @@ class DevUpdateBackend(UpdateBackend):
         """Simulate health check."""
         return True, []
 
-    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int]]:
+    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int], list[CommitInfo]]:
         """Return mock dev branch info for dev mode."""
         base_version = version_to_string(self._simulated_version)
         commits_ahead = 5
         dev_version_str = f"{base_version}+dev.{commits_ahead}"
+        now = datetime.now(timezone.utc).isoformat()
 
         dev_info = VersionInfo(
             version=dev_version_str,
@@ -232,7 +233,14 @@ class DevUpdateBackend(UpdateBackend):
             tag=None,
             date=datetime.now(timezone.utc),
         )
-        return True, dev_info, commits_ahead
+        dev_commits = [
+            CommitInfo(hash="aaa1111111111111111111111111111111111111", hash_short="aaa1111", message="feat(updates): add dev branch indicator", date=now, author="Dev User", type="feat", scope="updates"),
+            CommitInfo(hash="bbb2222222222222222222222222222222222222", hash_short="bbb2222", message="fix: use available memory instead of free", date=now, author="Dev User", type="fix", scope=None),
+            CommitInfo(hash="ccc3333333333333333333333333333333333333", hash_short="ccc3333", message="chore: add pytest-cov for coverage reporting", date=now, author="Dev User", type="chore", scope=None),
+            CommitInfo(hash="ddd4444444444444444444444444444444444444", hash_short="ddd4444", message="feat: add upload queue endpoint for mobile", date=now, author="Dev User", type="feat", scope=None),
+            CommitInfo(hash="eee5555555555555555555555555555555555555", hash_short="eee5555", message="fix(ci): add git identity for auto-tag", date=now, author="Dev User", type="fix", scope="ci"),
+        ]
+        return True, dev_info, commits_ahead, dev_commits
 
     async def get_commit_history(self) -> CommitHistoryResponse:
         """Return mock commit history for dev mode."""

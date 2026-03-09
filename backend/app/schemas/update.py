@@ -1,4 +1,6 @@
 """Update service request and response schemas."""
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Optional, Literal, Any
 
@@ -73,6 +75,10 @@ class UpdateCheckResponse(BaseModel):
     dev_commits_ahead: Optional[int] = Field(
         default=None,
         description="Commits ahead of latest release"
+    )
+    dev_commits: list[CommitInfo] = Field(
+        default_factory=list,
+        description="Commit messages on dev branch since latest release"
     )
 
 

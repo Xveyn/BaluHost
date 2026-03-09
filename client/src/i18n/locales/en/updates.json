@@ -25,7 +25,9 @@
     "lastChecked": "Last checked:",
     "channel": "{{channel}} Channel",
     "devVersionAvailable": "Dev version available",
-    "devCommitsAhead": "{{count}} commit(s) ahead"
+    "devCommitsAhead": "{{count}} commit(s) ahead",
+    "devBuild": "Dev Build",
+    "devUpToDate": "Dev branch is up to date"
   },
   "blockers": {
     "title": "Update Blocked",
