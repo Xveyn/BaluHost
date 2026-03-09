@@ -433,3 +433,13 @@ class MobileService:
         db.commit()
         db.refresh(sync_folder)
         return sync_folder
+
+    @staticmethod
+    def delete_sync_folder(db: Session, folder_id: str) -> None:
+        """Delete a sync folder configuration."""
+        folder = db.query(SyncFolder).filter(SyncFolder.id == folder_id).first()
+        if not folder:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Sync folder not found")
+        db.delete(folder)
+        db.commit()

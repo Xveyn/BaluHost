@@ -1,4 +1,6 @@
 """Update service request and response schemas."""
+from __future__ import annotations
+
 from datetime import datetime
 from typing import Optional, Literal, Any
 
@@ -73,6 +75,10 @@ class UpdateCheckResponse(BaseModel):
     dev_commits_ahead: Optional[int] = Field(
         default=None,
         description="Commits ahead of latest release"
+    )
+    dev_commits: list[CommitInfo] = Field(
+        default_factory=list,
+        description="Commit messages on dev branch since latest release"
     )
 
 
@@ -400,3 +406,31 @@ class ReleaseListResponse(BaseModel):
 
     releases: list[ReleaseInfo] = Field(default_factory=list, description="All releases (newest first)")
     total: int = Field(description="Total number of releases")
+
+
+# --- Version History Schemas (Version Tracker) ---
+
+
+class VersionHistoryEntry(BaseModel):
+    """Single entry in the version history (every build that ever ran)."""
+
+    id: int
+    version: str
+    git_commit: str
+    git_commit_short: str
+    git_branch: Optional[str] = None
+    python_version: Optional[str] = None
+    first_seen: datetime
+    last_seen: datetime
+    times_started: int
+
+    model_config = {"from_attributes": True}
+
+
+class VersionHistoryResponse(BaseModel):
+    """Response for version history endpoint."""
+
+    versions: list[VersionHistoryEntry]
+    total: int
+    current_version: str
+    current_commit: str

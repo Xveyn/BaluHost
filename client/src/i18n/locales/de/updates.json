@@ -25,7 +25,9 @@
     "lastChecked": "Zuletzt geprüft:",
     "channel": "{{channel}} Channel",
     "devVersionAvailable": "Dev-Version verfügbar",
-    "devCommitsAhead": "{{count}} Commit(s) voraus"
+    "devCommitsAhead": "{{count}} Commit(s) voraus",
+    "devBuild": "Dev Build",
+    "devUpToDate": "Dev-Branch ist aktuell"
   },
   "blockers": {
     "title": "Update blockiert",
@@ -57,6 +59,17 @@
     "stable": "Stabil",
     "prerelease": "Vorabversion",
     "noReleases": "Keine Releases gefunden"
+  },
+  "versionHistory": {
+    "title": "Versionsverlauf",
+    "description": "Alle Versionen, die jemals auf diesem System gelaufen sind",
+    "noHistory": "Noch kein Versionsverlauf vorhanden",
+    "current": "Aktuell",
+    "timesStarted": "{{count}}x gestartet",
+    "firstSeen": "Erstmals gesehen",
+    "lastSeen": "Zuletzt gesehen",
+    "branch": "Branch",
+    "python": "Python"
   },
   "status": {
     "pending": "Ausstehend",

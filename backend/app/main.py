@@ -605,9 +605,14 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
     logger.info("Admin user ensured with username '%s'", settings.admin_username)
     seed.seed_dev_data()
 
+    # Record current version in database
+    from app.services.version_tracker import record_version_on_startup
+    from app.core.database import SessionLocal
+    with SessionLocal() as version_db:
+        record_version_on_startup(version_db)
+
     # Recover stale benchmarks and kill orphan fio processes from previous runs
     from app.services.benchmark.lifecycle import recover_stale_benchmarks, kill_orphan_fio_processes
-    from app.core.database import SessionLocal
     with SessionLocal() as bench_db:
         recovered = recover_stale_benchmarks(bench_db)
         if recovered:

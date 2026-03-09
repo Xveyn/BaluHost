@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.7] - 2026-03-09
+
+### Version History & Mobile Sync
+
+Automatische Versionsverfolgung bei jedem Server-Start, Delete-Endpoint
+für Sync-Ordner und Verbesserungen an der Update-Seite.
+
+### Added
+
+- **Version history tracking** — Erfasst jede gestartete Version+Commit in der DB mit Startzähler
+- **Version history UI** — Neue Sektion im Verlauf-Tab zeigt alle jemals gelaufenen Versionen
+- **Delete sync folder endpoint** — Mobile Sync-Ordner können jetzt gelöscht werden
+- **Dev commit messages** — Dev-Version-Sektion zeigt Commit-Messages und Dev Build Badge
+
+### Fixed
+
+- **CI auto-tag** — Globale Git-Config für auto-tag im geklonten Repo
+
+---
+
 ## [1.13.6] - 2026-03-09
 
 ### Mobile Upload Queue & Update-UI

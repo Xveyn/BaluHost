@@ -67,6 +67,7 @@ from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
 from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.models.service_heartbeat import ServiceHeartbeat
+from app.models.version_history import VersionHistory
 from app.models.migration_job import MigrationJob
 from app.models.pihole import PiholeConfig
 from app.models.dns_queries import DnsQuery, DnsQueryHourlyStat, DnsQueryCollectorState
@@ -140,6 +141,7 @@ __all__ = [
     "DesktopPairingCode",
     "DesktopSyncFolder",
     "ServiceHeartbeat",
+    "VersionHistory",
     "MigrationJob",
     "PiholeConfig",
     "DnsQuery",

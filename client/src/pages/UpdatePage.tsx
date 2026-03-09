@@ -25,7 +25,6 @@ import {
   Clock,
   Loader2,
   RotateCcw,
-  ArrowRight,
   Zap,
   Sparkles,
   Bug,
@@ -44,22 +43,20 @@ import {
   getUpdateProgress,
   getCurrentUpdate,
   rollbackUpdate,
-  getUpdateHistory,
   getUpdateConfig,
   updateConfig,
   getReleaseNotes,
   getAllReleases,
-  getStatusInfo,
-  formatDuration,
+  getVersionHistory,
   isUpdateInProgress,
   getChannelInfo,
   type UpdateCheckResponse,
   type UpdateProgressResponse,
-  type UpdateHistoryEntry,
   type UpdateConfig,
   type UpdateChannel,
   type ReleaseNotesResponse,
   type ReleaseInfo,
+  type VersionHistoryResponse,
 } from '../api/updates';
 import { handleApiError } from '../lib/errorHandling';
 import UpdateProgress from '../components/updates/UpdateProgress';
@@ -116,13 +113,12 @@ export default function UpdatePage() {
   // Data state
   const [checkResult, setCheckResult] = useState<UpdateCheckResponse | null>(null);
   const [currentUpdate, setCurrentUpdate] = useState<UpdateProgressResponse | null>(null);
-  const [history, setHistory] = useState<UpdateHistoryEntry[]>([]);
-  const [historyTotal, setHistoryTotal] = useState(0);
-  const [historyPage, setHistoryPage] = useState(1);
   const [config, setConfig] = useState<UpdateConfig | null>(null);
   const [releaseNotes, setReleaseNotes] = useState<ReleaseNotesResponse | null>(null);
   const [releases, setReleases] = useState<ReleaseInfo[]>([]);
   const [releasesLoading, setReleasesLoading] = useState(false);
+  const [versionHistory, setVersionHistory] = useState<VersionHistoryResponse | null>(null);
+  const [versionHistoryLoading, setVersionHistoryLoading] = useState(false);
 
   // Confirmation states
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
@@ -153,17 +149,6 @@ export default function UpdatePage() {
       return null;
     }
   }, []);
-
-  // Fetch history
-  const fetchHistory = useCallback(async () => {
-    try {
-      const result = await getUpdateHistory({ page: historyPage, page_size: 10 });
-      setHistory(result.updates);
-      setHistoryTotal(result.total);
-    } catch (err: unknown) {
-      handleApiError(err, t('common:toast.historyFailed'));
-    }
-  }, [historyPage]);
 
   // Fetch release notes
   const fetchReleaseNotes = useCallback(async () => {
@@ -198,6 +183,19 @@ export default function UpdatePage() {
     }
   }, []);
 
+  // Fetch version history
+  const fetchVersionHistory = useCallback(async () => {
+    setVersionHistoryLoading(true);
+    try {
+      const result = await getVersionHistory();
+      setVersionHistory(result);
+    } catch {
+      // Non-critical, don't show error toast
+    } finally {
+      setVersionHistoryLoading(false);
+    }
+  }, []);
+
   // Initial load
   useEffect(() => {
     const loadAll = async () => {
@@ -208,13 +206,13 @@ export default function UpdatePage() {
     loadAll();
   }, [fetchCheck, fetchCurrentUpdate, fetchConfig, fetchReleaseNotes]);
 
-  // Fetch history when tab changes
+  // Fetch history tab data when tab changes
   useEffect(() => {
     if (activeTab === 'history') {
-      fetchHistory();
       fetchReleases();
+      fetchVersionHistory();
     }
-  }, [activeTab, fetchHistory]);
+  }, [activeTab]);
 
   // Poll for update progress when update is running
   useEffect(() => {
@@ -277,7 +275,6 @@ export default function UpdatePage() {
       if (result.success) {
         toast.success(t('common:toast.rollbackSuccess', { version: result.rolled_back_to }));
         await fetchCheck();
-        await fetchHistory();
         setCurrentUpdate(null);
       } else {
         toast.error(result.message);
@@ -393,10 +390,18 @@ export default function UpdatePage() {
                   <div className="flex items-center gap-2 text-sm">
                     {(() => {
                       const isPrerelease = checkResult.current_version.version.includes('-');
+                      const isDevBuild = checkResult.dev_version_available;
                       return (
-                        <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
-                          {isPrerelease ? 'Unstable' : 'Stable'}
-                        </span>
+                        <>
+                          <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
+                            {isPrerelease ? 'Unstable' : 'Stable'}
+                          </span>
+                          {isDevBuild && (
+                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
+                              {t('version.devBuild')}
+                            </span>
+                          )}
+                        </>
                       );
                     })()}
                   </div>
@@ -450,7 +455,7 @@ export default function UpdatePage() {
                     {t('version.upToDateDesc')}
                   </p>
                   {checkResult?.dev_version_available && checkResult.dev_version && (
-                    <div className="pt-2 border-t border-slate-700/50 space-y-1.5">
+                    <div className="pt-2 border-t border-slate-700/50 space-y-2">
                       <div className="flex items-center gap-2 text-sm text-amber-400">
                         <GitBranch className="h-3.5 w-3.5" />
                         <span className="font-medium">{t('version.devVersionAvailable')}</span>
@@ -459,6 +464,27 @@ export default function UpdatePage() {
                         <span className="font-mono">{checkResult.dev_version.commit_short}</span>
                         <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead ?? 0 })}</span>
                       </div>
+                      {checkResult.dev_commits && checkResult.dev_commits.length > 0 && (
+                        <div className="space-y-1 max-h-48 overflow-y-auto">
+                          {checkResult.dev_commits.map((commit) => (
+                            <div key={commit.hash_short} className="flex items-start gap-2 text-xs">
+                              <span className="font-mono text-slate-500 shrink-0">{commit.hash_short}</span>
+                              <span className="text-slate-300 break-all">
+                                {commit.type && (
+                                  <span className={`font-medium ${
+                                    commit.type === 'feat' ? 'text-emerald-400' :
+                                    commit.type === 'fix' ? 'text-blue-400' :
+                                    'text-slate-400'
+                                  }`}>
+                                    {commit.type}{commit.scope ? `(${commit.scope})` : ''}:
+                                  </span>
+                                )}{' '}
+                                {commit.message.includes(':') ? commit.message.split(':').slice(1).join(':').trim() : commit.message}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>
@@ -599,112 +625,6 @@ export default function UpdatePage() {
 
       {activeTab === 'history' && (
         <>
-        <div className="bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-700 bg-slate-800/50">
-                <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  {t('history.version')}
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  {t('history.status')}
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  {t('history.date')}
-                </th>
-                <th className="text-left px-4 py-3 text-sm font-medium text-slate-400">
-                  {t('history.duration')}
-                </th>
-                <th className="text-right px-4 py-3 text-sm font-medium text-slate-400">
-                  {t('history.actions')}
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {history.length === 0 ? (
-                <tr>
-                  <td colSpan={5} className="px-4 py-8 text-center text-slate-400">
-                    {t('history.noHistory')}
-                  </td>
-                </tr>
-              ) : (
-                history.map((entry) => {
-                  const statusInfo = getStatusInfo(entry.status);
-                  return (
-                    <tr
-                      key={entry.id}
-                      className="border-b border-slate-700/50 hover:bg-slate-700/30"
-                    >
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="text-slate-400 font-mono text-sm">
-                            {entry.from_version}
-                          </span>
-                          <ArrowRight className="h-3 w-3 text-slate-500" />
-                          <span className="text-white font-mono text-sm">
-                            {entry.to_version}
-                          </span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3">
-                        <span
-                          className={`inline-flex items-center gap-1.5 px-2 py-1 rounded text-xs ${statusInfo.bgColor} ${statusInfo.color}`}
-                        >
-                          {statusInfo.icon} {statusInfo.label}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-400">
-                        {new Date(entry.started_at).toLocaleString()}
-                      </td>
-                      <td className="px-4 py-3 text-sm text-slate-400">
-                        {formatDuration(entry.duration_seconds)}
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        {entry.can_rollback && entry.status === 'completed' && (
-                          <button
-                            onClick={() => {
-                              setRollbackTarget(entry.id);
-                              setShowRollbackConfirm(true);
-                            }}
-                            className="text-amber-400 hover:text-amber-300 text-sm transition-all touch-manipulation active:scale-95"
-                          >
-                            <RotateCcw className="h-4 w-4" />
-                          </button>
-                        )}
-                      </td>
-                    </tr>
-                  );
-                })
-              )}
-            </tbody>
-          </table>
-
-          {/* Pagination */}
-          {historyTotal > 10 && (
-            <div className="flex items-center justify-between px-4 py-3 border-t border-slate-700">
-              <span className="text-sm text-slate-400">
-                {t('history.page', { current: historyPage, total: Math.ceil(historyTotal / 10) })}
-              </span>
-              <div className="flex gap-2">
-                <button
-                  onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
-                  disabled={historyPage === 1}
-                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
-                >
-                  {t('buttons.previous')}
-                </button>
-                <button
-                  onClick={() => setHistoryPage((p) => p + 1)}
-                  disabled={historyPage >= Math.ceil(historyTotal / 10)}
-                  className="px-3 py-1 bg-slate-700 hover:bg-slate-600 disabled:opacity-50 text-white rounded text-sm transition-all touch-manipulation active:scale-95"
-                >
-                  {t('buttons.next')}
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
         {/* All Releases Section */}
         <div className="mt-6 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
           <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/80">
@@ -751,6 +671,80 @@ export default function UpdatePage() {
                   </div>
                 </div>
               ))}
+            </div>
+          )}
+        </div>
+
+        {/* Version History Section */}
+        <div className="mt-6 bg-slate-800 rounded-lg border border-slate-700 overflow-hidden">
+          <div className="px-4 py-3 border-b border-slate-700 bg-slate-800/80">
+            <h3 className="font-medium text-white flex items-center gap-2">
+              <GitBranch className="h-4 w-4 text-slate-400" />
+              {t('versionHistory.title')}
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">{t('versionHistory.description')}</p>
+          </div>
+          {versionHistoryLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <Loader2 className="h-6 w-6 animate-spin text-blue-500" />
+            </div>
+          ) : !versionHistory || versionHistory.versions.length === 0 ? (
+            <div className="px-4 py-8 text-center text-slate-400">
+              {t('versionHistory.noHistory')}
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-700/50">
+              {versionHistory.versions.map((entry) => {
+                const isCurrent =
+                  entry.version === versionHistory.current_version &&
+                  entry.git_commit_short === versionHistory.current_commit;
+                return (
+                  <div
+                    key={entry.id}
+                    className="px-4 py-3 hover:bg-slate-700/30 transition-colors"
+                  >
+                    <div className="flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <span className="font-mono text-white font-medium">
+                          v{entry.version}
+                        </span>
+                        <span className="font-mono text-xs text-slate-500">
+                          {entry.git_commit_short}
+                        </span>
+                        {entry.git_branch && (
+                          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs bg-slate-700 text-slate-300">
+                            <GitBranch className="h-3 w-3" />
+                            {entry.git_branch}
+                          </span>
+                        )}
+                        {isCurrent && (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-emerald-500/20 text-emerald-400">
+                            {t('versionHistory.current')}
+                          </span>
+                        )}
+                      </div>
+                      <div className="flex items-center gap-3 text-sm text-slate-400">
+                        <span title={t('versionHistory.timesStarted', { count: entry.times_started })}>
+                          {t('versionHistory.timesStarted', { count: entry.times_started })}
+                        </span>
+                      </div>
+                    </div>
+                    <div className="mt-1.5 flex items-center gap-4 text-xs text-slate-500">
+                      <span>
+                        {t('versionHistory.firstSeen')}: {new Date(entry.first_seen).toLocaleDateString()}
+                      </span>
+                      <span>
+                        {t('versionHistory.lastSeen')}: {new Date(entry.last_seen).toLocaleDateString()}
+                      </span>
+                      {entry.python_version && (
+                        <span>
+                          {t('versionHistory.python')} {entry.python_version}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
