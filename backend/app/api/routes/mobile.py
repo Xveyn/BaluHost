@@ -438,6 +438,21 @@ async def create_sync_folder(
     )
 
 
+@router.delete("/sync/folders/{folder_id}", status_code=204)
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_sync_folder(
+    request: Request,
+    response: Response,
+    folder_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Delete a sync folder configuration.
+    """
+    MobileService.delete_sync_folder(db=db, folder_id=folder_id)
+
+
 # Upload Queue Endpoints
 
 
