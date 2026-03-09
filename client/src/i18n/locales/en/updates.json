@@ -23,7 +23,9 @@
     "upToDate": "Up to Date",
     "upToDateDesc": "You're running the latest version.",
     "lastChecked": "Last checked:",
-    "channel": "{{channel}} Channel"
+    "channel": "{{channel}} Channel",
+    "devVersionAvailable": "Dev version available",
+    "devCommitsAhead": "{{count}} commit(s) ahead"
   },
   "blockers": {
     "title": "Update Blocked",

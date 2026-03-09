@@ -48,6 +48,9 @@ export interface UpdateCheckResponse {
   last_checked: string | null;
   blockers: string[];
   can_update: boolean;
+  dev_version_available: boolean;
+  dev_version: VersionInfo | null;
+  dev_commits_ahead: number | null;
 }
 
 // Start request/response

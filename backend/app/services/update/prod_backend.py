@@ -541,6 +541,68 @@ class ProdUpdateBackend(UpdateBackend):
             diff=diff_text,
         )
 
+    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int]]:
+        """Check if origin/development has unreleased commits ahead of latest tag."""
+        # Fetch all refs including tags
+        success, _, err = self._run_git("fetch", "--all", "--tags", "--prune")
+        if not success:
+            logger.warning(f"Failed to fetch for dev branch check: {err}")
+            return False, None, None
+
+        # Get latest tag by semver
+        success, tags_output, _ = self._run_git("tag", "-l", "--sort=-version:refname")
+        if not success or not tags_output.strip():
+            return False, None, None
+
+        tags = [t.strip() for t in tags_output.split("\n") if t.strip()]
+        if not tags:
+            return False, None, None
+        latest_tag = tags[0]
+
+        # Check if origin/development exists
+        success, _, _ = self._run_git("rev-parse", "--verify", "origin/development")
+        if not success:
+            return False, None, None
+
+        # Count commits ahead
+        success, count_str, _ = self._run_git(
+            "rev-list", "--count", f"{latest_tag}..origin/development"
+        )
+        if not success or not count_str.strip():
+            return False, None, None
+
+        commits_ahead = int(count_str.strip())
+        if commits_ahead <= 0:
+            return False, None, None
+
+        # Get tip commit info
+        success, tip_output, _ = self._run_git(
+            "log", "-1", "--format=%H|%h|%aI", "origin/development"
+        )
+        if not success or not tip_output.strip():
+            return False, None, None
+
+        parts = tip_output.split("|", 2)
+        if len(parts) < 3:
+            return False, None, None
+
+        full_hash, short_hash, date_str = parts
+        tip_date = datetime.fromisoformat(date_str) if date_str else None
+
+        # Format version as X.Y.Z+dev.N
+        base_version = latest_tag.lstrip("v")
+        dev_version_str = f"{base_version}+dev.{commits_ahead}"
+
+        dev_info = VersionInfo(
+            version=dev_version_str,
+            commit=full_hash,
+            commit_short=short_hash,
+            tag=None,
+            date=tip_date,
+        )
+
+        return True, dev_info, commits_ahead
+
     async def get_all_releases(self) -> ReleaseListResponse:
         """Get list of all releases from git tags."""
         # Get all tags sorted by semver (newest first)

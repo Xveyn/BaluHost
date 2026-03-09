@@ -250,8 +250,8 @@ def get_system_info() -> SystemInfo:
         memory_free = telemetry_memory_sample.total - telemetry_memory_sample.used
     else:
         memory_total = virtual_mem.total
-        memory_used = virtual_mem.used
-        memory_free = virtual_mem.free
+        memory_used = virtual_mem.total - virtual_mem.available
+        memory_free = virtual_mem.available
 
     # Use server uptime (since backend started)
     server_uptime = telemetry_service.get_server_uptime()

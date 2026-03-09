@@ -22,8 +22,9 @@ from app.schemas.mobile import (
     CameraBackupStatus,
     SyncFolder as SyncFolderSchema,
     SyncFolderCreate,
+    UploadQueueListResponse,
 )
-from app.models.mobile import MobileDevice
+from app.models.mobile import MobileDevice, UploadQueue
 from app.services.mobile import MobileService
 
 logger = logging.getLogger(__name__)
@@ -435,6 +436,33 @@ async def create_sync_folder(
         device_id=device_id,
         folder_data=folder_data
     )
+
+
+# Upload Queue Endpoints
+
+
+@router.get("/upload/queue/{device_id}", response_model=UploadQueueListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_upload_queue(
+    request: Request,
+    response: Response,
+    device_id: str,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """
+    Get pending/in-progress uploads for a device.
+    """
+    items = (
+        db.query(UploadQueue)
+        .filter(
+            UploadQueue.device_id == device_id,
+            UploadQueue.status.in_(["pending", "uploading", "failed"]),
+        )
+        .order_by(UploadQueue.created_at.desc())
+        .all()
+    )
+    return UploadQueueListResponse(items=items)
 
 
 # Power Summary Endpoint

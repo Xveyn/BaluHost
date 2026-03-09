@@ -1,6 +1,6 @@
 [project]
 name = "baluhost-backend"
-version = "1.13.5"
+version = "1.13.6"
 description = "Mocked NAS management backend built with FastAPI"
 authors = [{ name = "Baluhost" }]
 requires-python = ">=3.11"
@@ -54,7 +54,8 @@ dev = [
   "requests>=2.31.0,<3.0.0",
   "qrcode>=7.0.0",
   "apscheduler>=3.10.0,<4.0.0",
-  "pytest-timeout>=2.2.0,<3.0.0"
+  "pytest-timeout>=2.2.0,<3.0.0",
+  "pytest-cov>=4.1.0,<5.0.0"
 ]
 
 scheduler = [
@@ -82,3 +83,24 @@ exclude = ["storage*", "tmp*", "tests*"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 asyncio_mode = "auto"
+addopts = "--cov=app --cov-report=term-missing --cov-report=html"
+
+[tool.coverage.run]
+source = ["app"]
+omit = [
+    "app/main.py",
+    "app/core/config.py",
+]
+
+[tool.coverage.report]
+show_missing = true
+skip_empty = true
+exclude_lines = [
+    "pragma: no cover",
+    "if __name__ == .__main__.",
+    "if TYPE_CHECKING:",
+    "pass",
+]
+
+[tool.coverage.html]
+directory = "htmlcov"

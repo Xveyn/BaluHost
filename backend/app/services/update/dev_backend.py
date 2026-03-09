@@ -219,6 +219,21 @@ class DevUpdateBackend(UpdateBackend):
         """Simulate health check."""
         return True, []
 
+    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int]]:
+        """Return mock dev branch info for dev mode."""
+        base_version = version_to_string(self._simulated_version)
+        commits_ahead = 5
+        dev_version_str = f"{base_version}+dev.{commits_ahead}"
+
+        dev_info = VersionInfo(
+            version=dev_version_str,
+            commit="dev9876543210abcdef9876543210abcdef98",
+            commit_short="dev9876",
+            tag=None,
+            date=datetime.now(timezone.utc),
+        )
+        return True, dev_info, commits_ahead
+
     async def get_commit_history(self) -> CommitHistoryResponse:
         """Return mock commit history for dev mode."""
         now = datetime.now(timezone.utc).isoformat()

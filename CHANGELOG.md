@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.6] - 2026-03-09
+
+### Mobile Upload Queue & Update-UI
+
+Upload-Queue für Mobile-Geräte und Verbesserungen an der Update-Seite
+(Dev-Branch-Indikator, Versions-Tab jetzt auch in Production sichtbar).
+Speicher-Anzeige nutzt jetzt verfügbaren statt freien Speicher.
+
+### Added
+
+- **Upload queue endpoint** — Neuer API-Endpoint und Schemas für Mobile-Upload-Queue
+- **Dev branch indicator** — Update-Seite zeigt aktiven Branch im Dev-Modus
+- **Versions tab in production** — Versions-Tab jetzt auch in Production sichtbar
+
+### Fixed
+
+- **Memory info** — Verfügbarer Speicher statt freiem Speicher für akkurate Anzeige
+- **Version sync** — Korrekte Version in `__init__.py` und `package-lock.json`
+- **CI auto-tag** — Git-Identität für auto-tag im Merge-Workflow
+
+### Changed
+
+- **pytest-cov** — Coverage-Reporting zu Test-Dependencies hinzugefügt
+
+---
+
 ## [1.13.5] - 2026-03-08
 
 ### System Variables & VPN Improvements

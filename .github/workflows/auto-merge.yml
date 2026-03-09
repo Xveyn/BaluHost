@@ -42,6 +42,8 @@ jobs:
           # Auto-tag from version in pyproject.toml on main
           git clone --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" /tmp/repo
           cd /tmp/repo
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
           TAG="v${VERSION}"
           if [ -z "$VERSION" ]; then

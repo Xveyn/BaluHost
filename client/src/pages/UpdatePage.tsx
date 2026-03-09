@@ -74,15 +74,12 @@ interface Tab {
   icon: React.ReactNode;
 }
 
-const baseTabs: Tab[] = [
+const tabs: Tab[] = [
   { id: 'overview', label: 'tabs.overview', icon: <Package className="h-4 w-4" /> },
   { id: 'history', label: 'tabs.history', icon: <History className="h-4 w-4" /> },
   { id: 'settings', label: 'tabs.settings', icon: <Settings className="h-4 w-4" /> },
+  { id: 'versions', label: 'tabs.versions', icon: <GitCommit className="h-4 w-4" /> },
 ];
-
-const tabs: Tab[] = __BUILD_TYPE__ === 'dev'
-  ? [...baseTabs, { id: 'versions' as TabId, label: 'tabs.versions', icon: <GitCommit className="h-4 w-4" /> }]
-  : baseTabs;
 
 const CATEGORY_ICONS: Record<string, React.ReactNode> = {
   sparkles: <Sparkles className="h-4 w-4" />,
@@ -412,12 +409,16 @@ export default function UpdatePage() {
               className={`bg-slate-800 rounded-lg p-5 border ${
                 checkResult?.update_available
                   ? 'border-blue-500/50 bg-blue-500/5'
-                  : 'border-slate-700'
+                  : !checkResult?.update_available && checkResult?.dev_version_available
+                    ? 'border-amber-500/30 bg-amber-500/5'
+                    : 'border-slate-700'
               }`}
             >
               <div className="flex items-center gap-2 mb-4">
                 {checkResult?.update_available ? (
                   <Zap className="h-5 w-5 text-blue-400" />
+                ) : !checkResult?.update_available && checkResult?.dev_version_available ? (
+                  <GitBranch className="h-5 w-5 text-amber-400" />
                 ) : (
                   <CheckCircle className="h-5 w-5 text-emerald-400" />
                 )}
@@ -444,9 +445,23 @@ export default function UpdatePage() {
                   )}
                 </div>
               ) : (
-                <p className="text-slate-400">
-                  {t('version.upToDateDesc')}
-                </p>
+                <div className="space-y-3">
+                  <p className="text-slate-400">
+                    {t('version.upToDateDesc')}
+                  </p>
+                  {checkResult?.dev_version_available && checkResult.dev_version && (
+                    <div className="pt-2 border-t border-slate-700/50 space-y-1.5">
+                      <div className="flex items-center gap-2 text-sm text-amber-400">
+                        <GitBranch className="h-3.5 w-3.5" />
+                        <span className="font-medium">{t('version.devVersionAvailable')}</span>
+                      </div>
+                      <div className="flex items-center gap-3 text-xs text-slate-400">
+                        <span className="font-mono">{checkResult.dev_version.commit_short}</span>
+                        <span>{t('version.devCommitsAhead', { count: checkResult.dev_commits_ahead ?? 0 })}</span>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           </div>

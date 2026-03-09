@@ -61,6 +61,19 @@ class UpdateCheckResponse(BaseModel):
         default=True,
         description="Whether update can proceed (no blockers)"
     )
+    # Dev branch info (informational only)
+    dev_version_available: bool = Field(
+        default=False,
+        description="Whether development branch has unreleased commits ahead of latest tag"
+    )
+    dev_version: Optional[VersionInfo] = Field(
+        default=None,
+        description="Development branch tip info"
+    )
+    dev_commits_ahead: Optional[int] = Field(
+        default=None,
+        description="Commits ahead of latest release"
+    )
 
 
 class UpdateStartRequest(BaseModel):
