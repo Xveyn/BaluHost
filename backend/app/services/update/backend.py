@@ -94,3 +94,12 @@ class UpdateBackend(ABC):
     async def get_all_releases(self) -> ReleaseListResponse:
         """Get list of all releases (git tags)."""
         pass
+
+    async def check_dev_branch(self) -> tuple[bool, Optional[VersionInfo], Optional[int]]:
+        """Check if the development branch has unreleased commits ahead of latest tag.
+
+        Returns:
+            Tuple of (dev_available, dev_version_info, commits_ahead).
+            Default implementation returns no dev version.
+        """
+        return False, None, None

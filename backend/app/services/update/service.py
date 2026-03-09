@@ -113,6 +113,9 @@ class UpdateService:
         # Check for updates
         available, latest, changelog = await self.backend.check_for_updates(config.channel)
 
+        # Check dev branch for unreleased commits
+        dev_available, dev_version, dev_commits_ahead = await self.backend.check_dev_branch()
+
         # Update last check time
         db_config = self.db.query(UpdateConfig).first()
         if db_config:
@@ -130,6 +133,9 @@ class UpdateService:
             last_checked=datetime.now(timezone.utc),
             blockers=blockers,
             can_update=available and len(blockers) == 0,
+            dev_version_available=dev_available,
+            dev_version=dev_version,
+            dev_commits_ahead=dev_commits_ahead,
         )
 
     async def get_release_notes(self) -> ReleaseNotesResponse:
