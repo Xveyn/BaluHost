@@ -132,6 +132,30 @@ class UploadProgress(BaseModel):
     eta_seconds: Optional[int] = None
 
 
+class UploadQueueItem(BaseModel):
+    """Schema for a single upload queue entry."""
+    id: str
+    device_id: str
+    folder_id: Optional[str] = None
+    filename: str
+    remote_path: str
+    file_size: int = Field(0, alias="file_size_bytes")
+    uploaded_bytes: int = 0
+    status: str = "pending"
+    error_message: Optional[str] = None
+    retry_count: int = 0
+    created_at: datetime
+
+    class Config:
+        from_attributes = True
+        populate_by_name = True
+
+
+class UploadQueueListResponse(BaseModel):
+    """Response schema for upload queue list."""
+    items: List[UploadQueueItem] = []
+
+
 class ExpirationNotification(BaseModel):
     """Schema for expiration notification history."""
     id: str
