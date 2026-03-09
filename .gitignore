@@ -46,6 +46,7 @@ Thumbs.db
 # Testing
 coverage/
 htmlcov/
+.coverage
 
 # Local data
 storage/
