@@ -522,8 +522,7 @@ export default function Layout({ children }: LayoutProps) {
                     setPendingMessage(t('powerMenu.restartStarted', 'Restart initiated...'));
 
                     try {
-                      const res = await localApi.restart();
-                      const eta = (res && typeof res === 'object' && 'eta_seconds' in res ? (res as { eta_seconds: number }).eta_seconds : 1);
+                      await localApi.restart();
                       setPendingMessage(t('powerMenu.restartingWait', 'Restarting — waiting for server...'));
 
                       // Poll until server is back
