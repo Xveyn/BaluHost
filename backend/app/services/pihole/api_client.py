@@ -88,7 +88,7 @@ class PiholeApiClient:
             write_shm(self._sid_filename(), {"sid": self._sid, "csrf": self._csrf, "base_url": self._base_url})
             logger.debug("Pi-hole authenticated, SID obtained and shared via SHM")
         except httpx.HTTPError as exc:
-            logger.error("Pi-hole authentication failed: %s: %s", type(exc).__name__, exc)
+            logger.error("Pi-hole authentication failed (%s): %s: %s", self._base_url, type(exc).__name__, exc)
             raise
 
     async def _logout(self, sid: str) -> None:

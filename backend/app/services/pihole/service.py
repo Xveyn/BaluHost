@@ -41,7 +41,10 @@ def _create_backend(mode: str, pihole_url: str = "", password: str = "", web_por
     """Create a backend instance based on mode."""
     if mode == "docker":
         from app.services.pihole.docker_backend import LocalDockerPiholeBackend
-        url = pihole_url or f"http://localhost:{web_port}"
+        # Always use 127.0.0.1 for docker mode — avoids IPv6 resolution issues
+        # and DNS lookup failures when Pi-hole IS the DNS server on the host.
+        # The pihole_url config field is for remote mode only.
+        url = f"http://127.0.0.1:{web_port}"
         return LocalDockerPiholeBackend(url, password)
     elif mode == "remote":
         from app.services.pihole.remote_backend import RemotePiholeBackend
@@ -199,7 +202,13 @@ class PiholeService:
         _backend = _create_backend(effective_mode, config.pihole_url or "", password, config.web_port)
         _backend_mode = effective_mode
         _backend_created_at = time.time()
-        logger.info("Pi-hole backend initialized: %s", effective_mode)
+        has_pw = "with password" if password else "no password"
+        if effective_mode == "docker":
+            logger.info("Pi-hole backend initialized: %s → http://127.0.0.1:%d (%s)", effective_mode, config.web_port, has_pw)
+        elif effective_mode == "remote":
+            logger.info("Pi-hole backend initialized: %s → %s (%s)", effective_mode, config.pihole_url, has_pw)
+        else:
+            logger.info("Pi-hole backend initialized: %s", effective_mode)
         return _backend
 
     @property

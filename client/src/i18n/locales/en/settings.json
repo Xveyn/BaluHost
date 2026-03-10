@@ -10,7 +10,8 @@
     "vpn": "VPN",
     "vcl": "Version Control",
     "language": "Language",
-    "apiKeys": "API Keys"
+    "apiKeys": "API Keys",
+    "notifications": "Notifications"
   },
   "profile": {
     "title": "Profile Information",

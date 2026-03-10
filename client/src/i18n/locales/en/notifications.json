@@ -41,5 +41,13 @@
     "saved": "Settings saved",
     "loadFailed": "Failed to load settings",
     "saveFailed": "Failed to save"
-  }
+  },
+  "noNotifications": "No notifications",
+  "connected": "Connected",
+  "markedAllRead": "All marked as read",
+  "markError": "Failed to mark as read",
+  "allRead": "All read",
+  "settings": "Settings",
+  "viewAll": "View all",
+  "markAllRead": "Mark all as read"
 }

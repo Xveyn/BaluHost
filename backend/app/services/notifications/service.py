@@ -30,6 +30,27 @@ class NotificationService:
         self._websocket_manager = None
         self._email_service = None
 
+    @staticmethod
+    def _user_filter(user_id: int, is_admin: bool = False):
+        """Build SQLAlchemy filter for user-owned + system notifications.
+
+        Admin/system notifications are stored with user_id=NULL.
+        Admin users should see these alongside their personal notifications.
+
+        Args:
+            user_id: The current user's ID
+            is_admin: Whether the user has admin role
+
+        Returns:
+            SQLAlchemy filter expression
+        """
+        if is_admin:
+            return or_(
+                Notification.user_id == user_id,
+                Notification.user_id.is_(None),
+            )
+        return Notification.user_id == user_id
+
     def set_websocket_manager(self, manager: Any) -> None:
         """Set the WebSocket manager for real-time delivery.
 
@@ -305,6 +326,7 @@ class NotificationService:
         created_before: Optional[datetime] = None,
         limit: int = 50,
         offset: int = 0,
+        is_admin: bool = False,
     ) -> list[Notification]:
         """Get notifications for a user.
 
@@ -319,11 +341,12 @@ class NotificationService:
             created_before: Only return notifications created before this time
             limit: Maximum number of results
             offset: Number of results to skip
+            is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
             List of Notification objects
         """
-        query = db.query(Notification).filter(Notification.user_id == user_id)
+        query = db.query(Notification).filter(self._user_filter(user_id, is_admin))
 
         # Exclude snoozed notifications from default queries
         if hasattr(Notification, "snoozed_until"):
@@ -367,6 +390,7 @@ class NotificationService:
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
         created_before: Optional[datetime] = None,
+        is_admin: bool = False,
     ) -> int:
         """Count notifications for a user using SQL COUNT(*).
 
@@ -382,12 +406,13 @@ class NotificationService:
             notification_type: Filter by type (info, warning, critical)
             created_after: Only count notifications created after this time
             created_before: Only count notifications created before this time
+            is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
             Integer count of matching notifications
         """
         query = db.query(func.count(Notification.id)).filter(
-            Notification.user_id == user_id
+            self._user_filter(user_id, is_admin)
         )
 
         # Exclude snoozed notifications from default queries
@@ -423,6 +448,7 @@ class NotificationService:
         self,
         db: Session,
         user_id: int,
+        is_admin: bool = False,
     ) -> dict[str, int]:
         """Get unread notification counts grouped by category in a single query.
 
@@ -431,6 +457,7 @@ class NotificationService:
         Args:
             db: Database session
             user_id: User ID
+            is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
             Dict mapping category names to their unread counts,
@@ -440,7 +467,7 @@ class NotificationService:
             Notification.category,
             func.count(Notification.id),
         ).filter(
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
             Notification.is_read == False,
             Notification.is_dismissed == False,
         )
@@ -465,6 +492,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         category: Optional[str] = None,
+        is_admin: bool = False,
     ) -> int:
         """Get count of unread notifications for a user.
 
@@ -472,12 +500,13 @@ class NotificationService:
             db: Database session
             user_id: User ID
             category: Optional category filter
+            is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
             Count of unread notifications
         """
         query = db.query(Notification).filter(
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
             Notification.is_read == False,
             Notification.is_dismissed == False,
         )
@@ -501,6 +530,7 @@ class NotificationService:
         db: Session,
         notification_id: int,
         user_id: int,
+        is_admin: bool = False,
     ) -> Optional[Notification]:
         """Mark a notification as read.
 
@@ -508,13 +538,14 @@ class NotificationService:
             db: Database session
             notification_id: Notification ID
             user_id: User ID (for ownership check)
+            is_admin: Whether the user is an admin (can mark system notifications)
 
         Returns:
             Updated Notification or None if not found
         """
         notification = db.query(Notification).filter(
             Notification.id == notification_id,
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
         ).first()
 
         if notification:
@@ -530,6 +561,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         category: Optional[str] = None,
+        is_admin: bool = False,
     ) -> int:
         """Mark all notifications as read for a user.
 
@@ -537,12 +569,13 @@ class NotificationService:
             db: Database session
             user_id: User ID
             category: Optional category filter
+            is_admin: Whether the user is an admin (includes system notifications)
 
         Returns:
             Number of notifications updated
         """
         query = db.query(Notification).filter(
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
             Notification.is_read == False,
         )
 
@@ -560,6 +593,7 @@ class NotificationService:
         db: Session,
         notification_id: int,
         user_id: int,
+        is_admin: bool = False,
     ) -> Optional[Notification]:
         """Dismiss a notification.
 
@@ -567,13 +601,14 @@ class NotificationService:
             db: Database session
             notification_id: Notification ID
             user_id: User ID (for ownership check)
+            is_admin: Whether the user is an admin (can dismiss system notifications)
 
         Returns:
             Updated Notification or None if not found
         """
         notification = db.query(Notification).filter(
             Notification.id == notification_id,
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
         ).first()
 
         if notification:
@@ -591,6 +626,7 @@ class NotificationService:
         notification_id: int,
         user_id: int,
         duration_hours: int,
+        is_admin: bool = False,
     ) -> Optional[Notification]:
         """Snooze a notification for a given duration.
 
@@ -599,6 +635,7 @@ class NotificationService:
             notification_id: Notification ID
             user_id: User ID (for ownership check)
             duration_hours: Number of hours to snooze
+            is_admin: Whether the user is an admin (can snooze system notifications)
 
         Returns:
             Updated Notification or None if not found
@@ -607,7 +644,7 @@ class NotificationService:
 
         notification = db.query(Notification).filter(
             Notification.id == notification_id,
-            Notification.user_id == user_id,
+            self._user_filter(user_id, is_admin),
         ).first()
 
         if notification and hasattr(notification, "snoozed_until"):

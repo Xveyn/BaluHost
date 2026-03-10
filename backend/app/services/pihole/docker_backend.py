@@ -499,7 +499,7 @@ class LocalDockerPiholeBackend:
         # Reinitialize API client with actual deploy port and new password
         if result.get("password"):
             new_password = result["password"]
-            new_url = f"http://localhost:{web_port}"
+            new_url = f"http://127.0.0.1:{web_port}"
             await self._api.close()
             self._api = PiholeApiClient(new_url, new_password)
             self._pihole_url = new_url

@@ -46,7 +46,7 @@ const PRIORITY_LABELS = [
   { value: 3, label: 'priority.critical', description: 'priority.criticalDesc' },
 ];
 
-export default function NotificationPreferencesPage() {
+export default function NotificationPreferencesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
   const [loading, setLoading] = useState(true);
@@ -142,34 +142,56 @@ export default function NotificationPreferencesPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => navigate(-1)}
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
-          >
-            <ChevronLeft className="h-5 w-5" />
-          </button>
+      {embedded ? (
+        <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-slate-100">{t('title')}</h1>
             <p className="text-sm text-slate-400">
               {t('description')}
             </p>
           </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-xl border border-sky-500 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/20 disabled:opacity-50"
+          >
+            {saving ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {t('buttons.save')}
+          </button>
         </div>
-        <button
-          onClick={handleSave}
-          disabled={saving}
-          className="flex items-center gap-2 rounded-xl border border-sky-500 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/20 disabled:opacity-50"
-        >
-          {saving ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          {t('buttons.save')}
-        </button>
-      </div>
+      ) : (
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <button
+              onClick={() => navigate(-1)}
+              className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 transition hover:border-sky-500/50 hover:text-sky-400"
+            >
+              <ChevronLeft className="h-5 w-5" />
+            </button>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-100">{t('title')}</h1>
+              <p className="text-sm text-slate-400">
+                {t('description')}
+              </p>
+            </div>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            className="flex items-center gap-2 rounded-xl border border-sky-500 bg-sky-500/10 px-4 py-2 text-sm font-medium text-sky-400 transition hover:bg-sky-500/20 disabled:opacity-50"
+          >
+            {saving ? (
+              <RefreshCw className="h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="h-4 w-4" />
+            )}
+            {t('buttons.save')}
+          </button>
+        </div>
+      )}
 
       {/* Global Channel Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">

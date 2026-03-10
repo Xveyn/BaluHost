@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.14.0] - 2026-03-10
+
+### Notification Settings & Stability Fixes
+
+Notification-Einstellungen in die Settings-Seite integriert, verbesserte
+Rate-Limiter-Konfiguration und mehrere Bugfixes für Notifications und Pi-hole.
+
+### Added
+
+- **Notification Settings tab** — Benachrichtigungseinstellungen als neuen Tab in die Settings-Seite verschoben
+
+### Fixed
+
+- **Rate-Limiter** — File/Sync-Limits erhöht und neue `mobile_sync`-Kategorie hinzugefügt
+- **Notifications** — Naive datetime in `time_ago`-Berechnung korrekt behandelt
+- **Notifications** — System-Benachrichtigungen (user_id=NULL) für Admin-Benutzer eingeschlossen
+- **Pi-hole** — 127.0.0.1 statt localhost verwenden um ConnectError nach Deploy zu vermeiden
+- **i18n** — Fehlende Notification-Center-Übersetzungsschlüssel ergänzt
+- **Frontend** — Unbenutzte eta-Variable im Layout.tsx Restart-Handler entfernt
+
+---
+
 ## [1.13.9] - 2026-03-10
 
 ### Backend Logs, Power Menu & API Documentation
