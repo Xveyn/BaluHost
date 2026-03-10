@@ -41,5 +41,13 @@
     "saved": "Einstellungen gespeichert",
     "loadFailed": "Fehler beim Laden der Einstellungen",
     "saveFailed": "Fehler beim Speichern"
-  }
+  },
+  "noNotifications": "Keine Benachrichtigungen",
+  "connected": "Verbunden",
+  "markedAllRead": "Alle als gelesen markiert",
+  "markError": "Fehler beim Markieren",
+  "allRead": "Alle gelesen",
+  "settings": "Einstellungen",
+  "viewAll": "Alle anzeigen",
+  "markAllRead": "Alle als gelesen markieren"
 }
