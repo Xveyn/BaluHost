@@ -1,7 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
+import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch } from 'lucide-react';
+import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch, Bell } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
 import { apiClient } from '../lib/api';
@@ -9,6 +10,8 @@ import LanguageSettings from '../components/LanguageSettings';
 import ByteUnitSettings from '../components/ByteUnitSettings';
 import { formatBytes } from '../lib/formatters';
 import { get2FAStatus, setup2FA, verifySetup2FA, disable2FA, regenerateBackupCodes, type TwoFactorStatus, type TwoFactorSetupData } from '../api/two-factor';
+
+const NotificationPreferencesPage = lazy(() => import('./NotificationPreferencesPage'));
 
 interface UserProfile {
   id: number;
@@ -404,10 +407,22 @@ function TwoFactorCard() {
 
 export default function SettingsPage() {
   const { t } = useTranslation('settings');
+  const [searchParams, setSearchParams] = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
-  const [activeTab, setActiveTab] = useState<'profile' | 'security' | 'storage' | 'language' | 'api-keys' | 'vcl'>('profile');
+
+  type SettingsTab = 'profile' | 'security' | 'storage' | 'language' | 'api-keys' | 'vcl' | 'notifications';
+  const validTabs: SettingsTab[] = ['profile', 'security', 'storage', 'language', 'api-keys', 'vcl', 'notifications'];
+  const tabParam = searchParams.get('tab') as SettingsTab | null;
+  const [activeTab, setActiveTab] = useState<SettingsTab>(
+    tabParam && validTabs.includes(tabParam) ? tabParam : 'profile'
+  );
+
+  const handleTabChange = (tab: SettingsTab) => {
+    setActiveTab(tab);
+    setSearchParams(tab === 'profile' ? {} : { tab });
+  };
   
   // Profile update
   const [email, setEmail] = useState('');
@@ -594,11 +609,12 @@ export default function SettingsPage() {
               { id: 'storage' as const, label: t('tabs.storage'), icon: HardDrive },
               { id: 'vcl' as const, label: 'VCL', icon: GitBranch },
               { id: 'language' as const, label: t('tabs.language'), icon: Globe },
+              { id: 'notifications' as const, label: t('tabs.notifications'), icon: Bell },
               ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
             ]).map(tab => (
               <button
                 key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+                onClick={() => handleTabChange(tab.id)}
                 className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
                   activeTab === tab.id
                     ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
@@ -931,6 +947,13 @@ export default function SettingsPage() {
         )}
 
         {activeTab === 'vcl' && <VCLTrackingPanel />}
+
+        {/* Notifications Tab */}
+        {activeTab === 'notifications' && (
+          <Suspense fallback={<div className="text-center py-8 text-slate-400">{t('profile.loading')}</div>}>
+            <NotificationPreferencesPage embedded />
+          </Suspense>
+        )}
 
       </div>
     </div>

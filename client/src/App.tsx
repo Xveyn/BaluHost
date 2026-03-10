@@ -44,7 +44,6 @@ const AdminDatabase = isDesktop ? lazyWithRetry(() => import('./pages/AdminDatab
 const DevicesPage = isDesktop ? lazyWithRetry(() => import('./pages/DevicesPage')) : null;
 const SystemControlPage = isDesktop ? lazyWithRetry(() => import('./pages/SystemControlPage')) : null;
 const PluginsPage = isDesktop ? lazyWithRetry(() => import('./pages/PluginsPage')) : null;
-const NotificationPreferencesPage = isDesktop ? lazyWithRetry(() => import('./pages/NotificationPreferencesPage')) : null;
 const NotificationsArchivePage = isDesktop ? lazyWithRetry(() => import('./pages/NotificationsArchivePage')) : null;
 const UpdatePage = isDesktop ? lazyWithRetry(() => import('./pages/UpdatePage')) : null;
 const CloudImportPage = isDesktop ? lazyWithRetry(() => import('./pages/CloudImportPage')) : null;
@@ -206,9 +205,9 @@ function AppRoutes() {
         {SettingsPage && <Route path="/settings" element={user ? <Layout><SettingsPage /></Layout> : <Navigate to="/login" />} />}
         {DevicesPage && <Route path="/devices" element={user ? <Layout><DevicesPage /></Layout> : <Navigate to="/login" />} />}
         {SystemControlPage && <Route path="/admin/system-control" element={isAdmin ? <Layout><SystemControlPage /></Layout> : <Navigate to="/" />} />}
-        {NotificationPreferencesPage && <Route path="/settings/notifications" element={user ? <Layout><NotificationPreferencesPage /></Layout> : <Navigate to="/login" />} />}
+        {isDesktop && <Route path="/settings/notifications" element={<Navigate to="/settings?tab=notifications" replace />} />}
         {NotificationsArchivePage && <Route path="/notifications" element={user ? <Layout><NotificationsArchivePage /></Layout> : <Navigate to="/login" />} />}
-        {NotificationPreferencesPage && <Route path="/notifications/settings" element={user ? <Layout><NotificationPreferencesPage /></Layout> : <Navigate to="/login" />} />}
+        {isDesktop && <Route path="/notifications/settings" element={<Navigate to="/settings?tab=notifications" replace />} />}
         {SyncSettings && <Route path="/sync" element={user ? <Layout><SyncSettings /></Layout> : <Navigate to="/login" />} />}
         {ApiCenterPage && <Route path="/docs" element={user ? <Layout><ApiCenterPage /></Layout> : <Navigate to="/login" />} />}
         {PluginsPage && <Route path="/plugins" element={isAdmin ? <Layout><PluginsPage /></Layout> : <Navigate to="/" />} />}

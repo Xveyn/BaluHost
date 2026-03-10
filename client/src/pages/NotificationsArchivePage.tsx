@@ -123,7 +123,7 @@ export default function NotificationsArchivePage() {
             Alle gelesen
           </button>
           <button
-            onClick={() => navigate('/settings/notifications')}
+            onClick={() => navigate('/settings?tab=notifications')}
             className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-sky-500/50 hover:text-sky-400"
           >
             <Settings className="h-4 w-4" />

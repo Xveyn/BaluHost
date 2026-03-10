@@ -153,7 +153,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
               <button
                 onClick={() => {
                   setIsOpen(false);
-                  navigate('/settings/notifications');
+                  navigate('/settings?tab=notifications');
                 }}
                 className="flex items-center justify-center rounded-lg p-1.5 text-slate-400 transition hover:bg-slate-800 hover:text-slate-100"
                 title={t('settings')}
