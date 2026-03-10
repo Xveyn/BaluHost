@@ -11,3 +11,4 @@ export type { TimeRangeSelectorProps } from './TimeRangeSelector';
 export { HealthTab } from './HealthTab';
 export { LogsTab } from './LogsTab';
 export { ActivityTab } from './ActivityTab';
+export { BackendLogsTab } from './BackendLogsTab';

@@ -19,7 +19,27 @@
       "services": "Services",
       "health": "Health",
       "logs": "Logs",
-      "activity": "Activity"
+      "activity": "Activity",
+      "backendLogs": "Backend Logs"
+    },
+    "backendLogs": {
+      "title": "Backend Logs",
+      "description": "Real-time application log stream from the Python backend",
+      "connected": "Connected",
+      "disconnected": "Disconnected",
+      "reconnecting": "Reconnecting...",
+      "pause": "Pause",
+      "resume": "Resume",
+      "clear": "Clear",
+      "clearConfirm": "Clear all buffered logs?",
+      "cleared": "Cleared {{count}} log entries",
+      "search": "Search logs...",
+      "allLevels": "All Levels",
+      "autoScroll": "Auto-scroll",
+      "entries": "{{count}} entries",
+      "noLogs": "No log entries yet",
+      "showTraceback": "Show traceback",
+      "hideTraceback": "Hide traceback"
     },
     "cpuUsage": "CPU Usage",
     "cpuUsagePerThread": "CPU Usage (Per Thread)",

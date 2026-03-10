@@ -19,7 +19,27 @@
       "services": "Dienste",
       "health": "Gesundheit",
       "logs": "Protokolle",
-      "activity": "Aktivität"
+      "activity": "Aktivität",
+      "backendLogs": "Backend-Logs"
+    },
+    "backendLogs": {
+      "title": "Backend-Logs",
+      "description": "Echtzeit-Logstream der Python-Backend-Anwendung",
+      "connected": "Verbunden",
+      "disconnected": "Getrennt",
+      "reconnecting": "Verbinde erneut...",
+      "pause": "Pause",
+      "resume": "Fortsetzen",
+      "clear": "Leeren",
+      "clearConfirm": "Alle gepufferten Logs leeren?",
+      "cleared": "{{count}} Logeinträge gelöscht",
+      "search": "Logs durchsuchen...",
+      "allLevels": "Alle Level",
+      "autoScroll": "Auto-Scroll",
+      "entries": "{{count}} Einträge",
+      "noLogs": "Noch keine Logeinträge",
+      "showTraceback": "Traceback anzeigen",
+      "hideTraceback": "Traceback ausblenden"
     },
     "cpuUsage": "CPU-Auslastung",
     "cpuUsagePerThread": "CPU-Auslastung (Per Thread)",
