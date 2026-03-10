@@ -251,6 +251,50 @@ async def shutdown_system(
     return {"message": "Shutdown scheduled", "initiated_by": user.username, "eta_seconds": eta}
 
 
+@router.post("/restart")
+@user_limiter.limit(get_limit("admin_operations"))
+async def restart_system(
+    request: Request,
+    response: Response,
+    user: UserPublic = Depends(deps.get_current_admin),
+) -> dict:
+    """Schedule a graceful application restart (admin only).
+
+    In production this restarts the systemd service. In dev mode it sends
+    SIGINT so the dev launcher can detect the exit and the client can
+    reconnect.
+    """
+    from app.core.config import settings
+
+    audit = get_audit_logger()
+    audit.log_system_event(action="restart_initiated", user=user.username, details={"method": "api"}, success=True)
+    logging.getLogger(__name__).info("Restart requested via API by user %s", user.username)
+
+    def _perform_restart() -> None:
+        logger = logging.getLogger(__name__)
+        if not settings.is_dev_mode:
+            logger.info("Performing production restart via systemctl")
+            try:
+                import subprocess
+                subprocess.run(
+                    ["sudo", "systemctl", "restart", "baluhost-backend"],
+                    timeout=10,
+                )
+            except Exception as e:
+                logger.warning(f"systemctl restart failed: {e}, falling back to SIGINT")
+                os.kill(os.getpid(), signal.SIGINT)
+        else:
+            logger.info("Dev mode: sending SIGINT to trigger restart")
+            os.kill(os.getpid(), signal.SIGINT)
+
+    eta = 1
+    timer = threading.Timer(float(eta), _perform_restart)
+    timer.daemon = True
+    timer.start()
+
+    return {"message": "Restart scheduled", "initiated_by": user.username, "eta_seconds": eta}
+
+
 @router.get("/smart/status", response_model=SmartStatusResponse)
 @user_limiter.limit(get_limit("system_monitor"))
 async def get_smart_status(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> SmartStatusResponse:
