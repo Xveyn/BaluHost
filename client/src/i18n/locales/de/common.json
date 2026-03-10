@@ -224,6 +224,22 @@
     "retryFailed": "Erneuter Versuch fehlgeschlagen",
     "revokeFailed": "Widerrufen fehlgeschlagen"
   },
+  "powerMenu": {
+    "title": "Power-Menü",
+    "shutdown": "Herunterfahren",
+    "shutdownDesc": "Server herunterfahren",
+    "shutdownConfirm": "Server herunterfahren? Alle Dienste werden beendet.",
+    "restart": "Neustart",
+    "restartDesc": "Server neu starten",
+    "restartConfirm": "Server neu starten? Alle Dienste werden kurz unterbrochen.",
+    "logout": "Abmelden",
+    "shuttingDown": "Wird heruntergefahren...",
+    "shutdownStarted": "Shutdown gestartet...",
+    "shutdownEta": "Shutdown geplant — beendet in ~{{eta}}s",
+    "restarting": "Wird neu gestartet...",
+    "restartStarted": "Neustart gestartet...",
+    "restartingWait": "Neustart — warte auf Server..."
+  },
   "adminOnly": "Nur für Admins",
   "ssdCache": {
     "migration": {

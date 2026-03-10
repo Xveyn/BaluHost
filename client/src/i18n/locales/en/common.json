@@ -224,6 +224,22 @@
     "retryFailed": "Retry failed",
     "revokeFailed": "Failed to revoke"
   },
+  "powerMenu": {
+    "title": "Power Menu",
+    "shutdown": "Shutdown",
+    "shutdownDesc": "Shut down server",
+    "shutdownConfirm": "Shut down the server? All services will be stopped.",
+    "restart": "Restart",
+    "restartDesc": "Restart server",
+    "restartConfirm": "Restart the server? All services will be briefly interrupted.",
+    "logout": "Logout",
+    "shuttingDown": "Shutting down...",
+    "shutdownStarted": "Shutdown initiated...",
+    "shutdownEta": "Shutdown scheduled — stopping in ~{{eta}}s",
+    "restarting": "Restarting...",
+    "restartStarted": "Restart initiated...",
+    "restartingWait": "Restarting — waiting for server..."
+  },
   "adminOnly": "Admin only",
   "ssdCache": {
     "migration": {

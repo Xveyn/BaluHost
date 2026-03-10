@@ -437,7 +437,14 @@ export const coreSections: ApiSection[] = [
         path: '/api/system/shutdown',
         description: 'Schedule Application Shutdown (Admin)',
         requiresAuth: true,
-        response: '{ "message": "Shutdown scheduled", "initiated_by": "admin", "eta_seconds": 3 }',
+        response: '{ "message": "Shutdown scheduled", "initiated_by": "admin", "eta_seconds": 1 }',
+      },
+      {
+        method: 'POST',
+        path: '/api/system/restart',
+        description: 'Schedule Application Restart (Admin)',
+        requiresAuth: true,
+        response: '{ "message": "Restart scheduled", "initiated_by": "admin", "eta_seconds": 1 }',
       },
       {
         method: 'GET',

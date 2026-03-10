@@ -296,6 +296,38 @@ export class LocalApi {
       }
     }
   }
+
+  /**
+   * Request a backend restart (admin only).
+   */
+  async restart(): Promise<{ message?: string; initiated_by?: string; eta_seconds?: number }> {
+    const token = localStorage.getItem('token');
+
+    if (!token) {
+      throw new LocalApiError('No authentication token found', 401);
+    }
+
+    try {
+      return await this.request('/system/restart', { method: 'POST' });
+    } catch (err) {
+      try {
+        const res = await fetch(`${API_PREFIX}/system/restart`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${token}`,
+          },
+        });
+        if (!res.ok) {
+          const errData = await res.json().catch(() => ({}));
+          throw new LocalApiError(errData.detail || `HTTP ${res.status}`, res.status);
+        }
+        return await res.json();
+      } catch (err2) {
+        throw err2;
+      }
+    }
+  }
 }
 
 // Singleton instance
