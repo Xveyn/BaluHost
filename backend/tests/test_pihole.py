@@ -445,10 +445,10 @@ class TestPiholeService:
         svc.update_config(mode="docker", web_port=9090)
 
         backend = _create_backend("docker", pihole_url="", password="test", web_port=9090)
-        assert backend._pihole_url == "http://localhost:9090"
-        # Explicit URL takes precedence
+        assert backend._pihole_url == "http://127.0.0.1:9090"
+        # Docker mode always uses 127.0.0.1, ignoring pihole_url
         backend2 = _create_backend("docker", pihole_url="http://10.0.0.5:80", password="", web_port=9090)
-        assert backend2._pihole_url == "http://10.0.0.5:80"
+        assert backend2._pihole_url == "http://127.0.0.1:9090"
 
     def test_deploy_resets_backend_singleton(self, db_session: Session):
         """After deploy_container(), the backend singleton is reset."""
