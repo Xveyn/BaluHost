@@ -404,7 +404,7 @@ async def update_camera_backup_settings(
 
 
 @router.get("/sync/folders/{device_id}", response_model=List[SyncFolderSchema])
-@user_limiter.limit(get_limit("admin_operations"))
+@user_limiter.limit(get_limit("mobile_sync"))
 async def get_sync_folders(
     request: Request,
     response: Response,
@@ -419,7 +419,7 @@ async def get_sync_folders(
 
 
 @router.post("/sync/folders/{device_id}", response_model=SyncFolderSchema)
-@user_limiter.limit(get_limit("admin_operations"))
+@user_limiter.limit(get_limit("mobile_sync"))
 async def create_sync_folder(
     request: Request,
     response: Response,
@@ -439,7 +439,7 @@ async def create_sync_folder(
 
 
 @router.delete("/sync/folders/{folder_id}", status_code=204)
-@user_limiter.limit(get_limit("admin_operations"))
+@user_limiter.limit(get_limit("mobile_sync"))
 async def delete_sync_folder(
     request: Request,
     response: Response,
@@ -457,7 +457,7 @@ async def delete_sync_folder(
 
 
 @router.get("/upload/queue/{device_id}", response_model=UploadQueueListResponse)
-@user_limiter.limit(get_limit("admin_operations"))
+@user_limiter.limit(get_limit("mobile_sync"))
 async def get_upload_queue(
     request: Request,
     response: Response,

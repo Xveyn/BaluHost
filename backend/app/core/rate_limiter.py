@@ -73,8 +73,8 @@ RATE_LIMITS = {
     
     # File operations - moderate limits
     "file_upload": "50000/minute",
-    "file_download": "100/minute",
-    "file_list": "60/minute",
+    "file_download": "500/minute",
+    "file_list": "200/minute",
     "file_delete": "30/minute",
     "file_write": "30/minute",
     
@@ -100,8 +100,11 @@ RATE_LIMITS = {
     # Backup operations - strict limits (resource intensive)
     "backup_operations": "10/minute",
 
-    # Sync operations - moderate limits
-    "sync_operations": "30/minute",
+    # Sync operations - generous limits for folder sync
+    "sync_operations": "300/minute",
+
+    # Mobile sync & upload queue - generous limits for folder sync
+    "mobile_sync": "300/minute",
 
     # Chunked upload operations
     "file_chunked": "50000/minute",
