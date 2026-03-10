@@ -10,6 +10,7 @@ import { useFormattedVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { Plug, CloudDownload, Shield } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
+import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
 
 interface LayoutProps {
@@ -111,8 +112,8 @@ export default function Layout({ children }: LayoutProps) {
   const { t } = useTranslation('common');
   const { user, logout, isAdmin } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-  const [shutdownPending, setShutdownPending] = useState(false);
-  const [shutdownMessage, setShutdownMessage] = useState<string | null>(null);
+  const [pendingAction, setPendingAction] = useState<'shutdown' | 'restart' | null>(null);
+  const [pendingMessage, setPendingMessage] = useState<string | null>(null);
   const { pluginNavItems } = usePlugins();
   const formattedVersion = useFormattedVersion('');
 
@@ -446,17 +447,17 @@ export default function Layout({ children }: LayoutProps) {
         </aside>
 
         <div className="flex flex-1 flex-col lg:pl-72 overflow-x-hidden">
-          {shutdownPending && (
+          {pendingAction && (
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
               <div className="flex flex-col items-center gap-4 rounded-2xl bg-slate-900/90 border border-slate-800 p-6">
-                <div className="h-12 w-12 flex items-center justify-center rounded-full bg-rose-500/10 text-rose-400">
+                <div className={`h-12 w-12 flex items-center justify-center rounded-full ${pendingAction === 'restart' ? 'bg-amber-500/10 text-amber-400' : 'bg-rose-500/10 text-rose-400'}`}>
                   <svg className="h-6 w-6 animate-spin" viewBox="0 0 24 24" fill="none" strokeWidth={2}>
                     <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v4M12 18v4M4.2 4.2l2.8 2.8M17 17l2.8 2.8M2 12h4M18 12h4M4.2 19.8l2.8-2.8M17 7l2.8-2.8" />
                   </svg>
                 </div>
                 <div className="text-center">
-                  <p className="font-semibold">Shutting down</p>
-                  <p className="text-sm text-slate-100-tertiary">{shutdownMessage}</p>
+                  <p className="font-semibold">{pendingAction === 'restart' ? t('powerMenu.restarting', 'Restarting...') : t('powerMenu.shuttingDown', 'Shutting down...')}</p>
+                  <p className="text-sm text-slate-100-tertiary">{pendingMessage}</p>
                 </div>
               </div>
             </div>
@@ -481,69 +482,77 @@ export default function Layout({ children }: LayoutProps) {
                 </div>
               </div>
 
-              {/* Desktop Header Left */}
-              <div className="hidden lg:flex flex-col items-start">
-                <span className="text-sm font-medium text-slate-100">{user?.username}</span>
-                <span className="text-xs text-slate-100-tertiary">
-                  {isAdmin ? 'Administrator' : 'Standard Access'} - <span className="text-sky-400">Online</span>
-                </span>
-              </div>
+              {/* Spacer to push right section */}
+              <div className="hidden lg:block flex-1" />
 
               {/* Header Right */}
               <div className="flex items-center gap-3">
                 <NotificationCenter />
-                <div className="hidden md:flex h-10 w-10 items-center justify-center rounded-full border border-sky-500/20 bg-sky-500/10 text-sky-400">
-                  {user?.username?.charAt(0).toUpperCase()}
+                <div className="hidden md:flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-1.5 transition hover:border-sky-500/50 hover:shadow-[0_0_12px_rgba(56,189,248,0.15)]">
+                  <div className="flex flex-col">
+                    <span className="text-sm font-medium text-slate-100">{user?.username}</span>
+                    <span className="text-[11px] text-slate-100-tertiary">{isAdmin ? 'Admin' : 'User'}</span>
+                  </div>
                 </div>
-                {isAdmin && (
-                  <button
-                    onClick={async () => {
-                      const ok = window.confirm('Server herunterfahren? Alle Dienste werden beendet. Fortfahren?');
-                      if (!ok) return;
-                      setShutdownPending(true);
-                      setShutdownMessage('Shutdown gestartet — warte auf Bestätigung...');
+                <PowerMenu
+                  isAdmin={isAdmin}
+                  onShutdown={async () => {
+                    setPendingAction('shutdown');
+                    setPendingMessage(t('powerMenu.shutdownStarted', 'Shutdown initiated...'));
 
-                      try {
-                        const res = await localApi.shutdown();
-                        const eta = (res && typeof res === 'object' && 'eta_seconds' in res ? (res as { eta_seconds: number }).eta_seconds : 1);
-                        setShutdownMessage(`Shutdown geplant — beendet in ~${eta}s`);
+                    try {
+                      const res = await localApi.shutdown();
+                      const eta = (res && typeof res === 'object' && 'eta_seconds' in res ? (res as { eta_seconds: number }).eta_seconds : 1);
+                      setPendingMessage(t('powerMenu.shutdownEta', 'Shutdown scheduled — stopping in ~{{eta}}s', { eta }));
 
-                        // Wait for shutdown to complete, then logout
-                        setTimeout(() => {
-                          setShutdownPending(false);
+                      setTimeout(() => {
+                        setPendingAction(null);
+                        logout();
+                      }, (eta + 1) * 1000);
+                    } catch {
+                      setPendingMessage(t('powerMenu.shuttingDown', 'Shutting down...'));
+                      setTimeout(() => {
+                        setPendingAction(null);
+                        logout();
+                      }, 2000);
+                    }
+                  }}
+                  onRestart={async () => {
+                    setPendingAction('restart');
+                    setPendingMessage(t('powerMenu.restartStarted', 'Restart initiated...'));
+
+                    try {
+                      await localApi.restart();
+                      setPendingMessage(t('powerMenu.restartingWait', 'Restarting — waiting for server...'));
+
+                      // Poll until server is back
+                      const startTime = Date.now();
+                      const pollInterval = setInterval(async () => {
+                        const available = await localApi.isAvailable();
+                        if (available) {
+                          clearInterval(pollInterval);
+                          setPendingAction(null);
+                          window.location.reload();
+                        }
+
+                        // Timeout after 60s
+                        if (Date.now() - startTime > 60000) {
+                          clearInterval(pollInterval);
+                          setPendingAction(null);
+                          setPendingMessage(null);
                           logout();
-                        }, (eta + 1) * 1000);
-                      } catch {
-                        setShutdownMessage('Server wird heruntergefahren...');
-
-                        // Still logout after a short delay
-                        setTimeout(() => {
-                          setShutdownPending(false);
-                          logout();
-                        }, 2000);
-                      }
-                    }}
-                    className="rounded-xl border border-rose-600 bg-rose-600/10 px-3 py-2 text-sm font-medium text-rose-400 transition hover:border-rose-500/50 md:px-4"
-                  >
-                    <span className="hidden sm:inline">Shutdown</span>
-                    <span className="sm:hidden">
-                      <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-4 w-4">
-                        <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M12 2v10M6 12h12" />
-                      </svg>
-                    </span>
-                  </button>
-                )}
-                <button
-                  onClick={logout}
-                  className="rounded-xl border border-slate-800 px-3 py-2 text-sm font-medium text-slate-100 transition hover:border-sky-500/50 hover:text-slate-100 md:px-4"
-                >
-                  <span className="hidden sm:inline">Logout</span>
-                  <span className="sm:hidden">
-                    <svg viewBox="0 0 24 24" fill="none" strokeWidth={2} className="h-4 w-4">
-                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
-                    </svg>
-                  </span>
-                </button>
+                        }
+                      }, 2000);
+                    } catch {
+                      setPendingMessage(t('powerMenu.restartingWait', 'Restarting — waiting for server...'));
+                      setTimeout(() => {
+                        setPendingAction(null);
+                        logout();
+                      }, 5000);
+                    }
+                  }}
+                  onLogout={logout}
+                />
               </div>
             </div>
           </header>

@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Zap, Shield, Wind, BarChart3, Clock, Cpu } from 'lucide-react';
+import { Zap, Shield, Wind, BarChart3, Clock, Cpu, Moon } from 'lucide-react';
 import type { ApiSection } from './types';
 
 const icon = (Icon: React.ComponentType<{ className?: string }>) =>
@@ -279,6 +279,64 @@ export const systemSections: ApiSection[] = [
       { method: 'GET', path: '/api/monitoring/stats/database', description: 'Get Monitoring DB Stats', requiresAuth: true, response: '{ "total_samples": 50000, "size_bytes": 10485760 }' },
       { method: 'GET', path: '/api/monitoring/status', description: 'Get Monitoring Status', requiresAuth: true, response: '{ "collectors": [...], "is_running": true }' },
       { method: 'POST', path: '/api/monitoring/cleanup', description: 'Run Monitoring Cleanup (Admin)', requiresAuth: true, response: '{ "deleted_samples": 1000 }' },
+    ],
+  },
+  {
+    title: 'Sleep Mode',
+    icon: icon(Moon),
+    endpoints: [
+      { method: 'GET', path: '/api/sleep/status', description: 'Get Sleep Status', requiresAuth: true, response: '{ "state": "awake", "since": "...", "soft_sleep_available": true }' },
+      {
+        method: 'POST',
+        path: '/api/sleep/soft',
+        description: 'Enter Soft Sleep (Admin)',
+        requiresAuth: true,
+        body: [{ field: 'reason', type: 'string', required: false, description: 'Reason for entering sleep' }],
+        response: '{ "success": true, "message": "Entered soft sleep mode" }',
+      },
+      { method: 'POST', path: '/api/sleep/wake', description: 'Wake from Sleep (Admin)', requiresAuth: true, response: '{ "success": true, "message": "Exited soft sleep mode" }' },
+      {
+        method: 'POST',
+        path: '/api/sleep/suspend',
+        description: 'Enter System Suspend (Admin)',
+        requiresAuth: true,
+        body: [
+          { field: 'reason', type: 'string', required: false, description: 'Reason for suspend' },
+          { field: 'wake_at', type: 'string', required: false, description: 'ISO datetime to wake up (RTC alarm)' },
+        ],
+        response: '{ "success": true, "message": "System suspended" }',
+      },
+      {
+        method: 'POST',
+        path: '/api/sleep/wol',
+        description: 'Send Wake-on-LAN Packet (Admin)',
+        requiresAuth: true,
+        body: [
+          { field: 'mac_address', type: 'string', required: false, description: 'Target MAC address (default: configured)' },
+          { field: 'broadcast_address', type: 'string', required: false, description: 'Broadcast address' },
+        ],
+        response: '{ "success": true, "message": "WoL packet sent" }',
+      },
+      { method: 'GET', path: '/api/sleep/config', description: 'Get Sleep Config (Admin)', requiresAuth: true, response: '{ "idle_timeout_minutes": 30, "wol_mac": "AA:BB:CC:DD:EE:FF", "auto_sleep_enabled": false }' },
+      {
+        method: 'PUT',
+        path: '/api/sleep/config',
+        description: 'Update Sleep Config (Admin)',
+        requiresAuth: true,
+        response: '{ "idle_timeout_minutes": 30, "auto_sleep_enabled": true }',
+      },
+      {
+        method: 'GET',
+        path: '/api/sleep/history',
+        description: 'Get Sleep History (Admin)',
+        requiresAuth: true,
+        params: [
+          { name: 'limit', type: 'integer', required: false, description: 'Max entries (default: 50)' },
+          { name: 'offset', type: 'integer', required: false, description: 'Offset for pagination' },
+        ],
+        response: '{ "entries": [{ "state": "soft_sleep", "entered_at": "...", "exited_at": "...", "trigger": "manual" }] }',
+      },
+      { method: 'GET', path: '/api/sleep/capabilities', description: 'Get Sleep Capabilities (Admin)', requiresAuth: true, response: '{ "soft_sleep": true, "suspend": false, "wol": true, "rtc_wake": false }' },
     ],
   },
   {

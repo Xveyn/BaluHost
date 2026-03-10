@@ -10,6 +10,7 @@ export const sharingSections: ApiSection[] = [
     title: 'Shares',
     icon: icon(Share2),
     endpoints: [
+      { method: 'GET', path: '/api/shares/users', description: 'List Shareable Users', requiresAuth: true, response: '[{ "id": 1, "username": "colleague" }, { "id": 2, "username": "friend" }]' },
       {
         method: 'POST',
         path: '/api/shares/user-shares',
@@ -181,6 +182,15 @@ export const sharingSections: ApiSection[] = [
       { method: 'GET', path: '/api/sync/selective/list/{device_id}', description: 'List Selective Sync Folders', requiresAuth: true, response: '[{ "path": "/Documents", "enabled": true }]' },
       { method: 'POST', path: '/api/sync/devices', description: 'Register Device (Compat)', requiresAuth: true, response: '{ "device_id": "..." }' },
       { method: 'GET', path: '/api/sync/devices', description: 'List Devices (Compat)', requiresAuth: true, response: '[{ "device_id": "...", "name": "Desktop" }]' },
+      {
+        method: 'POST',
+        path: '/api/sync/report-folders',
+        description: 'Report Active Sync Folders',
+        requiresAuth: true,
+        body: [{ field: 'folders', type: 'array', required: true, description: 'Array of folder objects with path and device_id' }],
+        response: '{ "updated": 3, "deactivated": 1 }',
+      },
+      { method: 'GET', path: '/api/sync/synced-folders', description: 'List Synced Folders', requiresAuth: true, response: '{ "folders": [{ "id": 1, "path": "/Documents", "device_id": "...", "is_active": true }] }' },
     ],
   },
   {

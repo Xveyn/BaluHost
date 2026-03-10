@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Settings, HardDrive, ShieldCheck, Heart, BarChart } from 'lucide-react';
+import { Settings, HardDrive, ShieldCheck, Heart, BarChart, Key, ScrollText, Wrench } from 'lucide-react';
 import type { ApiSection } from './types';
 
 const icon = (Icon: React.ComponentType<{ className?: string }>) =>
@@ -120,6 +120,105 @@ export const adminSections: ApiSection[] = [
         response: '204 No Content',
       },
       { method: 'POST', path: '/api/admin/rate-limits/seed-defaults', description: 'Seed Default Rate Limits (Admin)', requiresAuth: true, response: '204 No Content' },
+    ],
+  },
+  {
+    title: 'API Keys',
+    icon: icon(Key),
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/api-keys',
+        description: 'Create API Key (Admin)',
+        requiresAuth: true,
+        body: [
+          { field: 'name', type: 'string', required: true, description: 'Key name/label' },
+          { field: 'target_user_id', type: 'integer', required: true, description: 'User the key acts as' },
+          { field: 'expires_in_days', type: 'integer', required: false, description: 'Expiry in days (null = never)' },
+        ],
+        response: '{ "id": 1, "name": "CI Pipeline", "key": "bh_abc123...", "key_prefix": "bh_abc1", "expires_at": "2026-06-01T00:00:00" }',
+      },
+      { method: 'GET', path: '/api/api-keys', description: 'List API Keys (Admin)', requiresAuth: true, response: '{ "keys": [{ "id": 1, "name": "CI Pipeline", "key_prefix": "bh_abc1", "is_active": true, "use_count": 42 }], "total": 1 }' },
+      { method: 'GET', path: '/api/api-keys/eligible-users', description: 'Get Eligible Users (Admin)', requiresAuth: true, response: '[{ "id": 1, "username": "admin", "role": "admin" }, { "id": 2, "username": "user1", "role": "user" }]' },
+      {
+        method: 'GET',
+        path: '/api/api-keys/{key_id}',
+        description: 'Get API Key Detail (Admin)',
+        requiresAuth: true,
+        params: [{ name: 'key_id', type: 'integer', required: true, description: 'API key ID' }],
+        response: '{ "id": 1, "name": "CI Pipeline", "key_prefix": "bh_abc1", "is_active": true, "use_count": 42, "last_used_at": "..." }',
+      },
+      {
+        method: 'DELETE',
+        path: '/api/api-keys/{key_id}',
+        description: 'Revoke API Key (Admin)',
+        requiresAuth: true,
+        params: [{ name: 'key_id', type: 'integer', required: true, description: 'API key ID' }],
+        response: '{ "detail": "API key revoked successfully" }',
+      },
+    ],
+  },
+  {
+    title: 'Backend Logs',
+    icon: icon(ScrollText),
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/admin/backend-logs',
+        description: 'Get Buffered Backend Logs (Admin)',
+        requiresAuth: true,
+        params: [
+          { name: 'since_id', type: 'integer', required: false, description: 'Return entries with id > since_id' },
+          { name: 'level', type: 'string', required: false, description: 'Min log level (DEBUG/INFO/WARNING/ERROR/CRITICAL)' },
+          { name: 'search', type: 'string', required: false, description: 'Case-insensitive substring search' },
+          { name: 'limit', type: 'integer', required: false, description: 'Max entries (default: 200, max: 1000)' },
+        ],
+        response: '{ "entries": [{ "id": 1, "timestamp": "...", "level": "INFO", "message": "...", "logger": "app.main" }], "latest_id": 100, "total_buffered": 500 }',
+      },
+      {
+        method: 'GET',
+        path: '/api/admin/backend-logs/stream',
+        description: 'Stream Backend Logs (SSE, Admin)',
+        requiresAuth: true,
+        params: [
+          { name: 'token', type: 'string', required: true, description: 'Admin JWT token (query param for SSE)' },
+          { name: 'level', type: 'string', required: false, description: 'Min log level filter' },
+        ],
+        response: 'Server-Sent Events stream (event: log, data: { id, timestamp, level, message })',
+      },
+      { method: 'DELETE', path: '/api/admin/backend-logs', description: 'Clear Backend Log Buffer (Admin)', requiresAuth: true, response: '{ "cleared": 500 }' },
+    ],
+  },
+  {
+    title: 'Environment Config',
+    icon: icon(Wrench),
+    endpoints: [
+      {
+        method: 'GET',
+        path: '/api/env-config',
+        description: 'Read Environment Variables (Admin)',
+        requiresAuth: true,
+        response: '{ "backend": [{ "key": "SECRET_KEY", "value": "••••••••", "sensitive": true }], "client": [...] }',
+      },
+      {
+        method: 'PUT',
+        path: '/api/env-config',
+        description: 'Update Environment Variables (Admin)',
+        requiresAuth: true,
+        body: [
+          { field: 'file', type: 'string', required: true, description: 'File: backend/client' },
+          { field: 'updates', type: 'array', required: true, description: 'Array of { key, value } updates' },
+        ],
+        response: '{ "changed": ["SOME_KEY"], "count": 1 }',
+      },
+      {
+        method: 'GET',
+        path: '/api/env-config/reveal/{key}',
+        description: 'Reveal Sensitive Variable (Admin)',
+        requiresAuth: true,
+        params: [{ name: 'key', type: 'string', required: true, description: 'Environment variable key' }],
+        response: '{ "key": "SECRET_KEY", "value": "actual-secret-value" }',
+      },
     ],
   },
   {

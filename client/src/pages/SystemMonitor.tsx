@@ -9,7 +9,7 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Cpu, ArrowLeftRight, Settings, FileText } from 'lucide-react';
+import { Cpu, ArrowLeftRight, Settings, FileText, Terminal } from 'lucide-react';
 import { TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
 import { ServicesStatusTab } from '../components/services';
@@ -17,6 +17,7 @@ import { AdminBadge } from '../components/ui/AdminBadge';
 import { HealthTab } from '../components/monitoring/HealthTab';
 import { LogsTab } from '../components/monitoring/LogsTab';
 import { ActivityTab } from '../components/monitoring/ActivityTab';
+import { BackendLogsTab } from '../components/monitoring/BackendLogsTab';
 import { CpuTab } from '../components/system-monitor/CpuTab';
 import { MemoryTab } from '../components/system-monitor/MemoryTab';
 import { NetworkTab } from '../components/system-monitor/NetworkTab';
@@ -24,7 +25,7 @@ import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
 import { useAuth } from '../contexts/AuthContext';
 
-type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services' | 'health' | 'logs' | 'activity';
+type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
 
 interface TabConfig {
@@ -129,6 +130,12 @@ const CATEGORIES: CategoryConfig[] = [
             <path d="M22 12h-4l-3 9L9 3l-3 9H2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         ),
+      },
+      {
+        id: 'backend-logs',
+        labelKey: 'monitor.tabs.backendLogs',
+        icon: <Terminal className="h-5 w-5" />,
+        adminOnly: true,
       },
     ],
   },
@@ -287,6 +294,7 @@ export default function SystemMonitor() {
         {activeTab === 'power' && <PowerTab />}
         {activeTab === 'services' && <ServicesStatusTab isAdmin={isAdmin} />}
         {activeTab === 'health' && <HealthTab />}
+        {activeTab === 'backend-logs' && <BackendLogsTab />}
         {activeTab === 'logs' && <LogsTab />}
         {activeTab === 'activity' && <ActivityTab user={user ?? undefined} />}
       </div>

@@ -54,6 +54,13 @@ def setup_logging() -> None:
     console_handler.setFormatter(formatter)
     root_logger.addHandler(console_handler)
 
+    # Add in-memory ring buffer handler for backend log streaming
+    from app.services.log_buffer import get_log_buffer_handler
+    buffer_handler = get_log_buffer_handler()
+    buffer_handler.setLevel(log_level)
+    buffer_handler.setFormatter(formatter)
+    root_logger.addHandler(buffer_handler)
+
     # Reduce noise from third-party libraries
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("watchfiles").setLevel(logging.WARNING)

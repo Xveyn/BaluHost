@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.13.9] - 2026-03-10
+
+### Backend Logs, Power Menu & API Documentation
+
+Neues Backend-Log-Monitoring mit Echtzeit-Streaming, überarbeitetes Power-Menü
+in der Header-Leiste und umfassende API-Dokumentation im API Center.
+
+### Added
+
+- **Backend Logs monitoring** — Neuer Backend Logs Tab im System Monitor mit REST + SSE Endpoints und Log-Buffer-Service mit Subscriber-Support
+- **PowerMenu dropdown** — Header-Buttons für Shutdown/Logout durch kompaktes Dropdown-Menü ersetzt
+- **Restart API endpoint** — Neuer System-Restart-Endpoint
+- **API Center documentation** — ~115 fehlende API-Endpoints dokumentiert
+
+---
+
 ## [1.13.8] - 2026-03-10
 
 ### Energy Dashboard Fix & Version History
