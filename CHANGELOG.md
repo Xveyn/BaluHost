@@ -7,12 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.13.7] - 2026-03-09
+## [1.13.8] - 2026-03-10
 
-### Version History & Mobile Sync
+### Energy Dashboard Fix & Version History
 
-Automatische Versionsverfolgung bei jedem Server-Start, Delete-Endpoint
-für Sync-Ordner und Verbesserungen an der Update-Seite.
+Kritischer Bugfix für das Energy Dashboard auf PostgreSQL (Production),
+plus neue Features für Versionsverfolgung und Mobile Sync.
 
 ### Added
 
@@ -23,6 +23,8 @@ für Sync-Ordner und Verbesserungen an der Update-Seite.
 
 ### Fixed
 
+- **Energy dashboard 500 on PostgreSQL** — `get_hourly_samples()` nutzte SQLite-spezifisches `func.strftime()`, jetzt cross-database kompatibel mit `date_trunc()` für PostgreSQL
+- **Dashboard error handling** — `get_current_power()` ValueError wird jetzt im Dashboard-Handler abgefangen
 - **CI auto-tag** — Globale Git-Config für auto-tag im geklonten Repo
 
 ---
