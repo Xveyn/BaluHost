@@ -89,6 +89,63 @@ export const coreSections: ApiSection[] = [
   "token_type": "bearer"
 }`,
       },
+      {
+        method: 'POST',
+        path: '/api/auth/verify-2fa',
+        description: 'Verify 2FA Code',
+        body: [
+          { field: 'pending_token', type: 'string', required: true, description: 'Pending token from login' },
+          { field: 'code', type: 'string', required: true, description: 'TOTP code or backup code' },
+        ],
+        response: `{
+  "access_token": "eyJhbGc...",
+  "token_type": "bearer",
+  "user": { "id": 1, "username": "admin", "role": "admin" }
+}`,
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/2fa/setup',
+        description: 'Setup 2FA (Generate TOTP Secret)',
+        requiresAuth: true,
+        response: '{ "secret": "JBSWY3DPEHPK3PXP", "qr_code": "data:image/png;base64,..." }',
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/2fa/verify-setup',
+        description: 'Verify 2FA Setup',
+        requiresAuth: true,
+        body: [
+          { field: 'secret', type: 'string', required: true, description: 'TOTP secret from setup' },
+          { field: 'code', type: 'string', required: true, description: 'TOTP code to verify' },
+        ],
+        response: '{ "backup_codes": ["abc123", "def456", "..."] }',
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/2fa/disable',
+        description: 'Disable 2FA',
+        requiresAuth: true,
+        body: [
+          { field: 'password', type: 'string', required: true, description: 'Current password' },
+          { field: 'code', type: 'string', required: true, description: 'TOTP code or backup code' },
+        ],
+        response: '{ "message": "2FA disabled successfully" }',
+      },
+      {
+        method: 'GET',
+        path: '/api/auth/2fa/status',
+        description: 'Get 2FA Status',
+        requiresAuth: true,
+        response: '{ "enabled": true, "enabled_at": "2026-01-15T10:30:00", "backup_codes_remaining": 8 }',
+      },
+      {
+        method: 'POST',
+        path: '/api/auth/2fa/backup-codes',
+        description: 'Regenerate Backup Codes',
+        requiresAuth: true,
+        response: '{ "backup_codes": ["abc123", "def456", "..."] }',
+      },
     ],
   },
   {

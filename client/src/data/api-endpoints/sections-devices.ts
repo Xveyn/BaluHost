@@ -1,5 +1,5 @@
 import { createElement } from 'react';
-import { Smartphone, Wifi, MonitorSmartphone, Network, KeyRound } from 'lucide-react';
+import { Smartphone, Wifi, MonitorSmartphone, Network, KeyRound, Link } from 'lucide-react';
 import type { ApiSection } from './types';
 
 const icon = (Icon: React.ComponentType<{ className?: string }>) =>
@@ -118,9 +118,66 @@ export const deviceSections: ApiSection[] = [
     ],
   },
   {
+    title: 'Desktop Pairing',
+    icon: icon(Link),
+    endpoints: [
+      {
+        method: 'POST',
+        path: '/api/desktop-pairing/device-code',
+        description: 'Request Device Pairing Code',
+        body: [
+          { field: 'device_id', type: 'string', required: true, description: 'Unique device identifier' },
+          { field: 'device_name', type: 'string', required: true, description: 'Device name' },
+          { field: 'platform', type: 'string', required: false, description: 'Platform (windows/linux/macos)' },
+        ],
+        response: '{ "device_code": "abc123", "user_code": "ABCD-1234", "expires_in": 300, "interval": 5 }',
+      },
+      {
+        method: 'POST',
+        path: '/api/desktop-pairing/poll',
+        description: 'Poll Pairing Status',
+        body: [{ field: 'device_code', type: 'string', required: true, description: 'Device code from request' }],
+        response: '{ "status": "pending" | "approved" | "denied" | "expired", "access_token": "..." }',
+      },
+      {
+        method: 'POST',
+        path: '/api/desktop-pairing/verify',
+        description: 'Verify User Code (Web UI)',
+        requiresAuth: true,
+        body: [{ field: 'user_code', type: 'string', required: true, description: 'User code to verify' }],
+        response: '{ "device_name": "Work PC", "device_id": "...", "platform": "windows" }',
+      },
+      {
+        method: 'POST',
+        path: '/api/desktop-pairing/approve',
+        description: 'Approve Pairing Request (Web UI)',
+        requiresAuth: true,
+        body: [{ field: 'user_code', type: 'string', required: true, description: 'User code to approve' }],
+        response: '{ "status": "approved" }',
+      },
+      {
+        method: 'POST',
+        path: '/api/desktop-pairing/deny',
+        description: 'Deny Pairing Request (Web UI)',
+        requiresAuth: true,
+        body: [{ field: 'user_code', type: 'string', required: true, description: 'User code to deny' }],
+        response: '{ "status": "denied" }',
+      },
+    ],
+  },
+  {
     title: 'VPN',
     icon: icon(Wifi),
     endpoints: [
+      { method: 'GET', path: '/api/vpn/available-types', description: 'Get Available VPN Config Types', requiresAuth: true, response: '{ "types": ["wireguard", "fritzbox"] }' },
+      {
+        method: 'POST',
+        path: '/api/vpn/fetch-config-by-type',
+        description: 'Fetch VPN Config by Type',
+        requiresAuth: true,
+        body: [{ field: 'type', type: 'string', required: true, description: 'Config type: wireguard/fritzbox' }],
+        response: '{ "config": "[Interface]\\n..." }',
+      },
       {
         method: 'POST',
         path: '/api/vpn/generate-config',
@@ -166,6 +223,7 @@ export const deviceSections: ApiSection[] = [
         params: [{ name: 'client_id', type: 'integer', required: true, description: 'Client ID' }],
         response: '204 No Content',
       },
+      { method: 'POST', path: '/api/vpn/sync-server', description: 'Sync VPN Server Config (Admin)', requiresAuth: true, response: '{ "success": true, "peers_synced": 3 }' },
       { method: 'GET', path: '/api/vpn/server-config', description: 'Get VPN Server Config (Admin)', requiresAuth: true, response: '{ "listen_port": 51820, "address": "10.0.0.1/24" }' },
       {
         method: 'POST',
