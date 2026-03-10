@@ -22,6 +22,7 @@ from app.schemas.notification import (
 )
 from app.services.notification_service import get_notification_service
 from app.services import auth as auth_service
+from app.services.permissions import is_privileged
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
 
@@ -47,6 +48,7 @@ async def get_notifications(
     """
     service = get_notification_service()
     offset = (page - 1) * page_size
+    admin = is_privileged(current_user)
 
     notifications = service.get_user_notifications(
         db=db,
@@ -59,9 +61,10 @@ async def get_notifications(
         created_before=created_before,
         limit=page_size,
         offset=offset,
+        is_admin=admin,
     )
 
-    unread_count = service.get_unread_count(db, current_user.id)
+    unread_count = service.get_unread_count(db, current_user.id, is_admin=admin)
 
     # Get total count for pagination using SQL COUNT(*)
     total = service.count_user_notifications(
@@ -73,6 +76,7 @@ async def get_notifications(
         notification_type=notification_type,
         created_after=created_after,
         created_before=created_before,
+        is_admin=admin,
     )
 
     return NotificationListResponse(
@@ -100,7 +104,7 @@ async def get_unread_count(
     service = get_notification_service()
 
     # Single GROUP BY query instead of 9 separate queries
-    counts = service.get_unread_counts(db, current_user.id)
+    counts = service.get_unread_counts(db, current_user.id, is_admin=is_privileged(current_user))
     total = counts.pop("total", 0)
 
     return UnreadCountResponse(
@@ -119,7 +123,7 @@ async def mark_notification_as_read(
 ) -> NotificationResponse:
     """Mark a specific notification as read."""
     service = get_notification_service()
-    notification = service.mark_as_read(db, notification_id, current_user.id)
+    notification = service.mark_as_read(db, notification_id, current_user.id, is_admin=is_privileged(current_user))
 
     if not notification:
         raise HTTPException(
@@ -145,7 +149,7 @@ async def mark_all_as_read(
     service = get_notification_service()
     category = body.category if body else None
 
-    count = service.mark_all_as_read(db, current_user.id, category=category)
+    count = service.mark_all_as_read(db, current_user.id, category=category, is_admin=is_privileged(current_user))
 
     return MarkReadResponse(success=True, count=count)
 
@@ -163,7 +167,7 @@ async def dismiss_notification(
     Dismissed notifications are hidden from the default list but can be retrieved with include_dismissed=true.
     """
     service = get_notification_service()
-    notification = service.dismiss(db, notification_id, current_user.id)
+    notification = service.dismiss(db, notification_id, current_user.id, is_admin=is_privileged(current_user))
 
     if not notification:
         raise HTTPException(
@@ -189,7 +193,7 @@ async def snooze_notification(
     until the snooze period expires.
     """
     service = get_notification_service()
-    notification = service.snooze(db, notification_id, current_user.id, duration_hours)
+    notification = service.snooze(db, notification_id, current_user.id, duration_hours, is_admin=is_privileged(current_user))
 
     if not notification:
         raise HTTPException(
@@ -414,7 +418,7 @@ async def notification_websocket(
         service = get_notification_service()
         db = SessionLocal()
         try:
-            unread_count = service.get_unread_count(db, user_id)
+            unread_count = service.get_unread_count(db, user_id, is_admin=is_admin)
             await websocket.send_json({
                 "type": "unread_count",
                 "payload": {"count": unread_count},
@@ -437,8 +441,8 @@ async def notification_websocket(
                         # Use fresh db session for mark_read
                         db = SessionLocal()
                         try:
-                            service.mark_as_read(db, notification_id, user_id)
-                            unread_count = service.get_unread_count(db, user_id)
+                            service.mark_as_read(db, notification_id, user_id, is_admin=is_admin)
+                            unread_count = service.get_unread_count(db, user_id, is_admin=is_admin)
                             await websocket.send_json({
                                 "type": "unread_count",
                                 "payload": {"count": unread_count},
