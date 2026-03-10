@@ -597,6 +597,10 @@ async def _lifespan(app: FastAPI):  # pragma: no cover - startup/shutdown hook
             pass
         return
 
+    # Wire the log buffer handler to the running event loop for SSE streaming
+    from app.services.log_buffer import get_log_buffer_handler
+    get_log_buffer_handler().set_event_loop(asyncio.get_running_loop())
+
     # Initialize database tables
     init_db()
     logger.info("Database initialized")
