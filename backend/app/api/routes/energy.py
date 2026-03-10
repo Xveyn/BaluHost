@@ -63,7 +63,16 @@ async def get_energy_dashboard(
     ]
 
     # Get current power from live monitoring
-    current_power_data = power_monitor.get_current_power(device_id, db)
+    try:
+        current_power_data = power_monitor.get_current_power(device_id, db)
+    except ValueError:
+        # Device exists in DB but power monitor has no data yet
+        from datetime import datetime, timezone
+        class _FallbackPower:
+            current_watts = 0.0
+            is_online = False
+            timestamp = datetime.now(timezone.utc)
+        current_power_data = _FallbackPower()
 
     # Convert EnergyPeriod objects to Pydantic models
     today_model = None

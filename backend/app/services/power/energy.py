@@ -17,6 +17,7 @@ from app.models.power_sample import PowerSample
 from app.models.tapo_device import TapoDevice
 from app.models.energy_price_config import EnergyPriceConfig
 from app.core.config import settings
+from app.core.database import DATABASE_URL
 
 logger = logging.getLogger(__name__)
 
@@ -210,10 +211,15 @@ def get_hourly_samples(
     """
     start_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    # Query and group by hour (SQLite compatible using strftime)
-    # strftime('%Y-%m-%d %H:00:00', timestamp) groups by hour
+    # Cross-database compatible hour grouping
+    if DATABASE_URL.startswith("sqlite"):
+        hour_expr = func.strftime('%Y-%m-%d %H:00:00', PowerSample.timestamp)
+    else:
+        # PostgreSQL
+        hour_expr = func.date_trunc('hour', PowerSample.timestamp)
+
     hourly_data = db.query(
-        func.strftime('%Y-%m-%d %H:00:00', PowerSample.timestamp).label('hour'),
+        hour_expr.label('hour'),
         func.avg(PowerSample.watts).label('avg_watts'),
         func.count(PowerSample.id).label('sample_count')
     ).filter(
@@ -226,7 +232,7 @@ def get_hourly_samples(
 
     return [
         {
-            'timestamp': row.hour,  # Already formatted as ISO-like string
+            'timestamp': str(row.hour) if not isinstance(row.hour, str) else row.hour,
             'avg_watts': round(row.avg_watts, 1),
             'sample_count': row.sample_count
         }
