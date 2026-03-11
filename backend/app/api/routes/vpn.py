@@ -415,6 +415,115 @@ async def sync_server_config(
     return {"success": True, "message": message}
 
 
+@router.post("/sync-server-keys")
+@user_limiter.limit(get_limit("vpn_operations"))
+async def sync_server_keys(
+    request: Request,
+    response: Response,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_admin),
+):
+    """Sync server keys in DB from the running wg0 interface (admin only).
+
+    Use this if client configs were generated with a wrong server public
+    key.  After syncing, regenerate affected client configs.
+    """
+    audit_logger = get_audit_logger_db()
+
+    success, message = VPNService.sync_server_keys_from_interface(db)
+
+    audit_logger.log_vpn_operation(
+        action="vpn_server_keys_synced",
+        user=current_user.username,
+        vpn_client="server",
+        details={"message": message},
+        success=success,
+        error_message=message if not success else None,
+        db=db,
+    )
+
+    if not success:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=message,
+        )
+
+    return {"success": True, "message": message}
+
+
+@router.post(
+    "/clients/{client_id}/regenerate-config",
+    response_model=VPNConfigResponse,
+)
+@user_limiter.limit(get_limit("vpn_operations"))
+async def regenerate_client_config(
+    request: Request,
+    response: Response,
+    client_id: int,
+    config_data: VPNClientCreate,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """Regenerate config for an existing VPN client.
+
+    Generates a new client keypair (the old private key is not stored)
+    and returns a fresh config with the current server public key.
+    The client must import this new config to replace the old one.
+    """
+    audit_logger = get_audit_logger_db()
+
+    # Verify ownership
+    client = VPNService.get_client_by_id(db, client_id)
+    if not client:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VPN client not found",
+        )
+    if (
+        str(client.user_id) != str(current_user.id)
+        and current_user.role != "admin"
+    ):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Not authorized to regenerate this VPN client config",
+        )
+
+    try:
+        config = VPNService.regenerate_client_config(
+            db=db,
+            client_id=client_id,
+            server_public_endpoint=config_data.server_public_endpoint,
+        )
+
+        audit_logger.log_vpn_operation(
+            action="vpn_client_config_regenerated",
+            user=current_user.username,
+            vpn_client=client.device_name,
+            details={
+                "client_id": client_id,
+                "server_endpoint": config_data.server_public_endpoint,
+            },
+            success=True,
+            db=db,
+        )
+
+        return config
+    except (ValueError, RuntimeError) as e:
+        audit_logger.log_vpn_operation(
+            action="vpn_client_config_regenerate_failed",
+            user=current_user.username,
+            vpn_client=client.device_name,
+            details={"error": str(e)},
+            success=False,
+            error_message=str(e),
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e),
+        )
+
+
 @router.get("/server-config", response_model=VPNServerConfig)
 @user_limiter.limit(get_limit("vpn_operations"))
 async def get_server_config(
