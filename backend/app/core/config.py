@@ -65,6 +65,9 @@ class Settings(BaseSettings):
     vpn_lan_interface: str = ""  # LAN interface for NAT (auto-detect if empty)
     vpn_include_lan: bool = True  # Include LAN subnet in VPN client AllowedIPs
     vpn_config_path: str = "/etc/wireguard/wg0.conf"  # Server config file path
+    vpn_public_endpoint: str = ""  # DDNS hostname for VPN endpoint (e.g. "myhost.myfritz.net")
+    vpn_public_port: int = 0  # External port for NAS WireGuard (0 = use internal VPN port 51820)
+    vpn_server_public_key: str = ""  # Override server public key (use when wg0 interface is not available)
 
     # TOTP Configuration
     totp_encryption_key: str = ""  # Dedicated key for TOTP secrets. Falls back to VPN_ENCRYPTION_KEY if not set.

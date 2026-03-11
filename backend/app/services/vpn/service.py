@@ -70,6 +70,46 @@ class VPNService:
             return stored
 
     # ------------------------------------------------------------------
+    # Effective endpoint / key resolution
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _get_effective_endpoint(caller_endpoint: str) -> tuple[str, int]:
+        """Get the effective endpoint hostname and port for client configs.
+
+        Priority:
+            1. ``vpn_public_endpoint`` setting (DDNS override)
+            2. ``caller_endpoint`` (value supplied by the API caller)
+
+        For the port:
+            1. ``vpn_public_port`` setting (external port, e.g. port-forwarded)
+            2. ``VPN_PORT`` (internal WireGuard listen port, 51820)
+        """
+        hostname = (
+            settings.vpn_public_endpoint
+            if settings.vpn_public_endpoint
+            else caller_endpoint
+        )
+        port = (
+            settings.vpn_public_port
+            if settings.vpn_public_port
+            else VPNService.VPN_PORT
+        )
+        return hostname, port
+
+    @staticmethod
+    def _get_effective_server_public_key(server_config: 'VPNConfig') -> str:
+        """Get the server public key to embed in client configs.
+
+        Priority:
+            1. ``vpn_server_public_key`` setting (explicit override)
+            2. DB-stored key from *server_config*
+        """
+        if settings.vpn_server_public_key:
+            return settings.vpn_server_public_key
+        return server_config.server_public_key
+
+    # ------------------------------------------------------------------
     # Read existing server keys from running WireGuard interface
     # ------------------------------------------------------------------
 
@@ -554,6 +594,14 @@ class VPNService:
         db.commit()
         db.refresh(client)
 
+        # Resolve effective endpoint and server public key
+        effective_hostname, effective_port = VPNService._get_effective_endpoint(
+            server_public_endpoint
+        )
+        effective_server_pubkey = VPNService._get_effective_server_public_key(
+            server_config
+        )
+
         # Build AllowedIPs — VPN network + optional LAN
         allowed_ips = VPNService.VPN_NETWORK
         if settings.vpn_include_lan and settings.vpn_lan_network:
@@ -566,13 +614,13 @@ Address = {client_ip}/32
 DNS = {VPNService.get_vpn_dns(db)}
 
 [Peer]
-PublicKey = {server_config.server_public_key}
+PublicKey = {effective_server_pubkey}
 PresharedKey = {preshared_key}
-Endpoint = {server_public_endpoint}:{server_config.server_port}
+Endpoint = {effective_hostname}:{effective_port}
 AllowedIPs = {allowed_ips}
 PersistentKeepalive = 25
 """
-        
+
         # Sync server config so the new client peer is active immediately
         VPNService._try_apply_server_config(db)
 
@@ -584,8 +632,8 @@ PersistentKeepalive = 25
             device_name=device_name,
             assigned_ip=client_ip,
             client_public_key=client_public,
-            server_public_key=server_config.server_public_key,
-            server_endpoint=f"{server_public_endpoint}:{server_config.server_port}",
+            server_public_key=effective_server_pubkey,
+            server_endpoint=f"{effective_hostname}:{effective_port}",
             config_content=config_content,
             config_base64=config_base64,
         )
@@ -686,6 +734,14 @@ PersistentKeepalive = 25
         db.commit()
         db.refresh(client)
 
+        # Resolve effective endpoint and server public key
+        effective_hostname, effective_port = VPNService._get_effective_endpoint(
+            endpoint
+        )
+        effective_server_pubkey = VPNService._get_effective_server_public_key(
+            server_config
+        )
+
         # Build AllowedIPs
         allowed_ips = VPNService.VPN_NETWORK
         if settings.vpn_include_lan and settings.vpn_lan_network:
@@ -697,9 +753,9 @@ Address = {client.assigned_ip}/32
 DNS = {VPNService.get_vpn_dns(db)}
 
 [Peer]
-PublicKey = {server_config.server_public_key}
+PublicKey = {effective_server_pubkey}
 PresharedKey = {preshared_key}
-Endpoint = {endpoint}:{server_config.server_port}
+Endpoint = {effective_hostname}:{effective_port}
 AllowedIPs = {allowed_ips}
 PersistentKeepalive = 25
 """
@@ -714,8 +770,8 @@ PersistentKeepalive = 25
             device_name=client.device_name,
             assigned_ip=client.assigned_ip,
             client_public_key=client_public,
-            server_public_key=server_config.server_public_key,
-            server_endpoint=f"{endpoint}:{server_config.server_port}",
+            server_public_key=effective_server_pubkey,
+            server_endpoint=f"{effective_hostname}:{effective_port}",
             config_content=config_content,
             config_base64=config_base64,
         )
