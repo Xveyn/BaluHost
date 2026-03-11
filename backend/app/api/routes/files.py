@@ -1,5 +1,5 @@
 from typing import Optional
-from pathlib import PurePosixPath
+from pathlib import Path, PurePosixPath
 
 from fastapi import APIRouter, Depends, File, Form, HTTPException, Header, Request, Response, UploadFile, status
 from fastapi import Body
@@ -34,12 +34,13 @@ from app.schemas.user import UserPublic
 from app.services import files as file_service
 from app.services.files.operations import is_path_shared_with_user, get_share_permissions, SHARED_WITH_ME_DIR
 from app.services.permissions import PermissionDeniedError, is_privileged
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.models.file_metadata import FileMetadata
 from app.plugins.emit import emit_hook
 
 from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.services.cache.ssd_file_cache import SSDFileCacheService
+from app.services.file_activity import track_activity
 from app.schemas.sync import SyncDeviceInfo
 
 SHARED_DIR_NAME = "Shared"
@@ -51,7 +52,7 @@ _cache_logger = _logging.getLogger(__name__)
 def _schedule_cache_file(
     db: Session,
     resource_path: str,
-    file_path: "Path",
+    file_path: Path,
     file_id: Optional[int] = None,
 ) -> None:
     """Schedule background caching of a file to SSD."""
@@ -207,7 +208,7 @@ async def check_files_exist(
     """Check which files already exist in the target directory."""
     from datetime import datetime as dt, timezone as tz
     from app.services.files.operations import _resolve_path, ROOT_DIR
-    from app.services import file_metadata_db
+    from app.services.files import metadata_db as file_metadata_db
 
     jailed = _jail_path(payload.target_path, user, db)
     target_dir = _resolve_path(jailed)
@@ -243,7 +244,7 @@ async def get_permissions(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FilePermissions:
-    from app.services import file_metadata_db
+    from app.services.files import metadata_db as file_metadata_db
     from app.models.file_share import FileShare
     path = _jail_path(path, user, db)
     metadata = file_metadata_db.ensure_metadata(path, requesting_user_id=user.id, db=db)
@@ -282,7 +283,7 @@ async def set_permissions(
     NOTE: owner_id in payload is ignored for backwards compatibility.
     To change ownership, use POST /api/files/transfer-ownership instead.
     """
-    from app.services import file_metadata_db
+    from app.services.files import metadata_db as file_metadata_db
     from app.models.file_share import FileShare
     # Nur Owner/Admin darf setzen
     payload.path = _jail_path(payload.path, user, db)
@@ -324,6 +325,7 @@ async def set_permissions(
         for share in shares
     ]
     from app.schemas.files import FilePermissions, FilePermissionRule
+    track_activity(user.id, "file.permission", payload.path)
     return FilePermissions(
         path=payload.path,
         owner_id=current_owner_id,  # Return actual owner
@@ -341,7 +343,7 @@ async def get_mountpoints(
 ):
     """Get list of available storage mountpoints (RAID arrays, disks, etc.)."""
     from app.schemas.storage import MountpointsResponse, StorageMountpoint
-    from app.services import raid as raid_service
+    from app.services.hardware import raid as raid_service
     from app.services.storage_breakdown import compute_storage_breakdown
     from app.core.config import settings
     
@@ -679,6 +681,7 @@ async def download_file(
     except Exception:
         pass  # Cache failures never block delivery
 
+    track_activity(user.id, "file.download", resource_path)
     return FileResponse(path=file_path, filename=file_path.name)
 
 
@@ -734,6 +737,7 @@ async def download_file_by_id(
     except Exception:
         pass
 
+    track_activity(user.id, "file.download", file_metadata.path, file_name=file_metadata.name)
     return FileResponse(path=file_path, filename=file_metadata.name)
 
 
@@ -794,6 +798,9 @@ async def upload_files(
             content_type=None,
         )
 
+    for saved_path in saved:
+        track_activity(user.id, "file.upload", saved_path)
+
     return FileUploadResponse(message="Files uploaded", uploaded=len(saved), upload_ids=upload_ids)
 
 
@@ -807,7 +814,8 @@ async def get_available_storage(
     """Get remaining storage capacity in bytes. Returns None if no quota is set."""
     available = file_service.calculate_available_bytes()
     used = file_service.calculate_used_bytes()
-    quota = file_service.settings.nas_quota_bytes
+    from app.core.config import settings as _settings
+    quota = _settings.nas_quota_bytes
     return {
         "available_bytes": available,
         "used_bytes": used,
@@ -846,6 +854,7 @@ async def delete_path_raw(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+    track_activity(user.id, "file.delete", resource_path)
 
     return FileOperationResponse(message="Deleted")
 
@@ -877,6 +886,7 @@ async def delete_path_body(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=path, user_id=user.id)
+    track_activity(user.id, "file.delete", path)
 
     return FileOperationResponse(message="Deleted")
 
@@ -913,6 +923,9 @@ async def create_folder(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    folder_path = f"{jailed_parent}/{payload.name}".strip("/")
+    track_activity(user.id, "folder.create", folder_path, file_name=payload.name, is_directory=True)
 
     return FileOperationResponse(message="Folder created")
 
@@ -975,6 +988,11 @@ async def rename_path(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    track_activity(
+        user.id, "file.rename", jailed_old_path,
+        metadata={"old_name": jailed_old_path.rsplit("/", 1)[-1], "new_name": payload.new_name},
+    )
+
     return FileOperationResponse(message="Renamed")
 
 
@@ -1012,6 +1030,10 @@ async def move_path(
         new_path=payload.target_path,
         user_id=user.id,
     )
+    track_activity(
+        user.id, "file.move", jailed_target,
+        metadata={"from": jailed_source, "to": jailed_target},
+    )
 
     return FileOperationResponse(message="Moved")
 
@@ -1046,6 +1068,7 @@ async def delete_path_param(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+    track_activity(user.id, "file.delete", resource_path)
 
     return FileOperationResponse(message="Deleted")
 

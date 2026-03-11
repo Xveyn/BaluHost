@@ -15,6 +15,7 @@ import {
   createSyncSchedule,
   listSyncSchedules,
   disableSyncSchedule,
+  enableSyncSchedule,
   type CreateScheduleRequest,
 } from '../api/sync';
 import { generateMobileToken, type MobileRegistrationToken } from '../lib/api';
@@ -94,10 +95,23 @@ export function useDeviceManagement() {
     async (scheduleId: number) => {
       try {
         await disableSyncSchedule(scheduleId);
-        toast.success(t('common:toast.scheduleDisabled'));
+        toast.success(t('toast.scheduleDisabled'));
         refetchSchedules();
       } catch {
-        toast.error(t('common:toast.disableFailed'));
+        toast.error(t('toast.disableFailed'));
+      }
+    },
+    [t, refetchSchedules],
+  );
+
+  const handleEnableSchedule = useCallback(
+    async (scheduleId: number) => {
+      try {
+        await enableSyncSchedule(scheduleId);
+        toast.success(t('toast.scheduleEnabled'));
+        refetchSchedules();
+      } catch {
+        toast.error(t('toast.enableFailed'));
       }
     },
     [t, refetchSchedules],
@@ -165,6 +179,7 @@ export function useDeviceManagement() {
     handleGenerateToken,
     handleCreateSchedule,
     handleDisableSchedule,
+    handleEnableSchedule,
     handleSaveDeviceName,
     handleDeleteDevice,
   };

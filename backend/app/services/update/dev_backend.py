@@ -60,6 +60,7 @@ class DevUpdateBackend(UpdateBackend):
             commit_short=self._current_commit[:7],
             tag=f"v{version_to_string(self._simulated_version)}",
             date=datetime.now(timezone.utc),
+            is_dev_build=True,
         )
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:

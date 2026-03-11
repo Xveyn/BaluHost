@@ -103,6 +103,7 @@ export default function DeviceManagement() {
           schedulesLoading={dm.schedulesLoading}
           onCreateSchedule={dm.handleCreateSchedule}
           onDisableSchedule={dm.handleDisableSchedule}
+          onEnableSchedule={dm.handleEnableSchedule}
         />
       )}
 

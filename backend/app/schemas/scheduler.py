@@ -239,4 +239,11 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "default_interval": 3600,  # 1 hour
         "can_run_manually": True,
     },
+    "file_activity_cleanup": {
+        "display_name": "Activity Cleanup",
+        "description": "Removes old file activity records (90 days default, 7 days for low-value actions)",
+        "config_key": None,
+        "default_interval": 86400,  # 24 hours
+        "can_run_manually": True,
+    },
 }

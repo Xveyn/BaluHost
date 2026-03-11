@@ -390,7 +390,7 @@ export default function UpdatePage() {
                   <div className="flex items-center gap-2 text-sm">
                     {(() => {
                       const isPrerelease = checkResult.current_version.version.includes('-');
-                      const isDevBuild = checkResult.dev_version_available;
+                      const isDevBuild = checkResult.current_version.is_dev_build;
                       return (
                         <>
                           <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>

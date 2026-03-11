@@ -83,7 +83,9 @@
     "dayOfMonth": "Tag des Monats",
     "nextRun": "Nächste Ausführung:",
     "noSchedules": "Keine Sync-Zeitpläne konfiguriert",
-    "loadingSchedules": "Zeitpläne werden geladen..."
+    "loadingSchedules": "Zeitpläne werden geladen...",
+    "autoVpn": "Auto-VPN",
+    "autoVpnHint": "Bei aktiviertem Auto-VPN verbindet sich das Gerät vor dem Sync automatisch per VPN und trennt die Verbindung danach."
   },
   "days": {
     "sunday": "Sonntag",
@@ -112,7 +114,8 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "create": "Erstellen",
-    "disable": "Deaktivieren"
+    "disable": "Deaktivieren",
+    "enable": "Aktivieren"
   },
   "platforms": {
     "ios": "iOS",
@@ -133,6 +136,8 @@
     "deleteFailed": "Gerät konnte nicht gelöscht werden",
     "scheduleFailed": "Zeitplan konnte nicht erstellt werden",
     "disableFailed": "Zeitplan konnte nicht deaktiviert werden",
+    "scheduleEnabled": "Zeitplan erfolgreich aktiviert",
+    "enableFailed": "Zeitplan konnte nicht aktiviert werden",
     "enterDeviceName": "Bitte geben Sie einen Gerätenamen ein",
     "selectDevice": "Bitte wählen Sie ein Gerät",
     "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",

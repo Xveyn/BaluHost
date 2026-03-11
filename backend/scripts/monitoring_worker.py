@@ -15,8 +15,8 @@ import os
 import signal
 import sys
 
-# Ensure the backend package is importable
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Ensure the backend package is importable (parent of scripts/ = backend/)
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
 async def async_main() -> int:

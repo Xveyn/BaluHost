@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.0] - 2026-03-11
+
+### File Activity, Sync Auto-VPN & VPN Config Improvements
+
+Neues File-Activity-Tracking-System mit Recent-Files-API, Auto-VPN-Option für
+Sync-Schedules und verbesserte VPN-Konfigurationsgenerierung mit konfigurierbarem
+DDNS-Endpoint.
+
+### Added
+
+- **File activity tracking** — Neues System zur Erfassung von Dateiaktivitäten mit Recent Files API
+- **Sync auto-VPN** — `auto_vpn` Feld für Sync-Schedules mit UI-Toggle zum Aktivieren/Deaktivieren
+- **Dev build flag** — `is_dev_build` Flag in Version-Info für bessere Build-Erkennung
+
+### Fixed
+
+- **VPN config generation** — Konfigurierbarer DDNS-Endpoint und Server Public Key in generierten Configs
+- **VPN server key** — Server Public Key wird von laufendem wg0 Interface gelesen statt neu generiert
+- **Files routes** — Pylance Static-Analysis-Warnungen in Files-Routes behoben
+- **Worker imports** — sys.path korrigiert für App-Module-Imports in Workern
+- **CI** — Development-Branch wird nach PR-Merge zu main synchronisiert
+
+### Tests
+
+- **Sync tests** — Sync-Scheduler-Service und Route-Tests hinzugefügt
+
+---
+
 ## [1.14.0] - 2026-03-10
 
 ### Notification Settings & Stability Fixes

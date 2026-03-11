@@ -8,6 +8,7 @@ from app.api.routes import (
     notifications, updates, chunked_upload, webdav, samba, cloud, sleep,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
     backend_logs,
+    activity,
 )
 
 api_router = APIRouter()
@@ -56,5 +57,6 @@ api_router.include_router(migration.router, prefix="/ssd", tags=["ssd-migration"
 api_router.include_router(pihole.router, tags=["pihole"])
 api_router.include_router(env_config.router, prefix="/admin", tags=["admin"])
 api_router.include_router(backend_logs.router, tags=["admin"])
+api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 
 __all__ = ["api_router"]

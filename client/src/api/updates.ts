@@ -27,6 +27,7 @@ export interface VersionInfo {
   commit_short: string;
   tag: string | null;
   date: string | null;
+  is_dev_build: boolean;
 }
 
 // Changelog entry

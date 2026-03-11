@@ -77,12 +77,17 @@ class ProdUpdateBackend(UpdateBackend):
         success, date_str, _ = self._run_git("log", "-1", "--format=%cI")
         date = datetime.fromisoformat(date_str) if success and date_str else None
 
+        # Check if HEAD is exactly on a tag
+        exact_success, _, _ = self._run_git("describe", "--tags", "--exact-match")
+        is_dev_build = not exact_success
+
         return VersionInfo(
             version=version,
             commit=commit,
             commit_short=commit[:7] if commit != "unknown" else "unknown",
             tag=tag,
             date=date,
+            is_dev_build=is_dev_build,
         )
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:

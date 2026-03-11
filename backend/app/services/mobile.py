@@ -95,7 +95,13 @@ class MobileService:
                     vpn_config_base64 = VPNService.get_fritzbox_config_base64(db)
                     vpn_config_type = "fritzbox"
                 elif use_wireguard:
-                    server_endpoint = server_url.replace("http://", "").replace("https://", "").split(":")[0]
+                    # Use configured DDNS endpoint if available, else derive from server_url
+                    from app.core.config import get_settings as _get_settings
+                    _cfg = _get_settings()
+                    if _cfg.vpn_public_endpoint:
+                        server_endpoint = _cfg.vpn_public_endpoint
+                    else:
+                        server_endpoint = server_url.replace("http://", "").replace("https://", "").split(":")[0]
                     vpn_response = VPNService.create_client_config(
                         db=db,
                         user_id=int(user_id),
