@@ -40,7 +40,7 @@ jobs:
           fi
 
           # Auto-tag from version in pyproject.toml on main
-          git clone --depth 1 --branch main "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" /tmp/repo
+          git clone --branch main "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" /tmp/repo
           cd /tmp/repo
           git config --global user.name "github-actions[bot]"
           git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
@@ -56,3 +56,15 @@ jobs:
             git push origin "$TAG"
             echo "Tag $TAG pushed — release workflow will create GitHub Release"
           fi
+
+      - name: Sync development with main
+        if: github.event.workflow_run.head_branch == 'development'
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
+          cd /tmp/repo
+          git fetch origin development
+          git checkout development
+          git merge origin/main --no-edit
+          git push origin development
