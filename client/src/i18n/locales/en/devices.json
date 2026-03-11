@@ -83,7 +83,9 @@
     "dayOfMonth": "Day of Month",
     "nextRun": "Next run:",
     "noSchedules": "No sync schedules configured",
-    "loadingSchedules": "Loading schedules..."
+    "loadingSchedules": "Loading schedules...",
+    "autoVpn": "Auto-VPN",
+    "autoVpnHint": "When Auto-VPN is enabled, the device will automatically connect via VPN before syncing and disconnect afterwards."
   },
   "days": {
     "sunday": "Sunday",
@@ -112,7 +114,8 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "create": "Create",
-    "disable": "Disable"
+    "disable": "Disable",
+    "enable": "Enable"
   },
   "platforms": {
     "ios": "iOS",
@@ -133,6 +136,8 @@
     "deleteFailed": "Failed to delete device",
     "scheduleFailed": "Failed to create schedule",
     "disableFailed": "Failed to disable schedule",
+    "scheduleEnabled": "Schedule enabled successfully",
+    "enableFailed": "Failed to enable schedule",
     "enterDeviceName": "Please enter a device name",
     "selectDevice": "Please select a device",
     "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",

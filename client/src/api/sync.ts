@@ -34,6 +34,7 @@ export interface SyncSchedule {
   sync_deletions?: boolean;
   resolve_conflicts?: string;
   is_enabled?: boolean;
+  auto_vpn?: boolean;
   created_at?: string;
 }
 
@@ -56,6 +57,7 @@ export interface CreateScheduleRequest {
   day_of_month?: number | null;
   sync_deletions?: boolean;
   resolve_conflicts?: string;
+  auto_vpn?: boolean;
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +66,11 @@ export interface CreateScheduleRequest {
 
 export async function listSyncSchedules(): Promise<SyncSchedule[]> {
   const res = await apiClient.get('/api/sync/schedule/list');
-  return res.data.schedules || [];
+  const schedules = res.data.schedules || [];
+  return schedules.map((s: Record<string, unknown>) => ({
+    ...s,
+    is_enabled: s.is_enabled ?? s.enabled ?? true,
+  })) as SyncSchedule[];
 }
 
 export async function createSyncSchedule(data: CreateScheduleRequest): Promise<SyncSchedule> {
@@ -82,6 +88,10 @@ export async function updateSyncSchedule(
 
 export async function disableSyncSchedule(id: number): Promise<void> {
   await apiClient.post(`/api/sync/schedule/${id}/disable`);
+}
+
+export async function enableSyncSchedule(id: number): Promise<void> {
+  await apiClient.post(`/api/sync/schedule/${id}/enable`);
 }
 
 // ---------------------------------------------------------------------------

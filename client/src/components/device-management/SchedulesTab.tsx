@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Calendar, Clock, Plus, X } from 'lucide-react';
+import { Calendar, Clock, Plus, X, Check, Shield } from 'lucide-react';
 import { formatRelativeTime } from '../../lib/formatters';
 import type { Device } from '../../api/devices';
 import type { SyncSchedule, CreateScheduleRequest } from '../../api/sync';
@@ -11,6 +11,7 @@ interface SchedulesTabProps {
   schedulesLoading: boolean;
   onCreateSchedule: (data: CreateScheduleRequest) => Promise<boolean>;
   onDisableSchedule: (scheduleId: number) => void;
+  onEnableSchedule: (scheduleId: number) => void;
 }
 
 export function SchedulesTab({
@@ -19,6 +20,7 @@ export function SchedulesTab({
   schedulesLoading,
   onCreateSchedule,
   onDisableSchedule,
+  onEnableSchedule,
 }: SchedulesTabProps) {
   const { t } = useTranslation(['devices', 'common']);
   const [selectedDeviceId, setSelectedDeviceId] = useState('');
@@ -26,6 +28,7 @@ export function SchedulesTab({
   const [timeOfDay, setTimeOfDay] = useState('02:00');
   const [dayOfWeek, setDayOfWeek] = useState<number | null>(null);
   const [dayOfMonth, setDayOfMonth] = useState<number | null>(null);
+  const [autoVpn, setAutoVpn] = useState(false);
 
   const handleCreate = async () => {
     const ok = await onCreateSchedule({
@@ -36,6 +39,7 @@ export function SchedulesTab({
       day_of_month: scheduleType === 'monthly' ? dayOfMonth : null,
       sync_deletions: true,
       resolve_conflicts: 'ask',
+      auto_vpn: autoVpn,
     });
     if (ok) {
       setSelectedDeviceId('');
@@ -43,6 +47,7 @@ export function SchedulesTab({
       setTimeOfDay('02:00');
       setDayOfWeek(null);
       setDayOfMonth(null);
+      setAutoVpn(false);
     }
   };
 
@@ -137,6 +142,22 @@ export function SchedulesTab({
             </div>
           )}
 
+          {/* Auto-VPN Toggle */}
+          <div className="flex items-end">
+            <label className="flex items-center gap-2 cursor-pointer w-full rounded-lg border border-slate-700 bg-slate-900/70 px-3 py-2">
+              <input
+                type="checkbox"
+                checked={autoVpn}
+                onChange={(e) => setAutoVpn(e.target.checked)}
+                className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500 focus:ring-offset-0"
+              />
+              <div className="flex items-center gap-1.5">
+                <Shield className="h-3.5 w-3.5 text-sky-400" />
+                <span className="text-sm text-slate-200">{t('schedules.autoVpn')}</span>
+              </div>
+            </label>
+          </div>
+
           <div className="flex items-end">
             <button
               onClick={handleCreate}
@@ -147,6 +168,8 @@ export function SchedulesTab({
             </button>
           </div>
         </div>
+
+        <p className="mt-2 text-xs text-slate-500">{t('schedules.autoVpnHint')}</p>
       </div>
 
       {/* Schedules List */}
@@ -163,11 +186,16 @@ export function SchedulesTab({
           {schedules.map((schedule) => {
             const device = devices.find((d) => d.id === schedule.device_id);
             const deviceName = device?.name || schedule.device_id;
+            const isEnabled = schedule.is_enabled !== false;
 
             return (
               <div
                 key={schedule.schedule_id}
-                className="rounded-2xl border border-slate-800 bg-slate-900/70 p-4 transition hover:border-amber-500/30"
+                className={`rounded-2xl border bg-slate-900/70 p-4 transition ${
+                  isEnabled
+                    ? 'border-slate-800 hover:border-amber-500/30'
+                    : 'border-slate-800/50 opacity-60'
+                }`}
               >
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0 flex-1">
@@ -185,29 +213,44 @@ export function SchedulesTab({
                   </div>
 
                   <div className="flex items-center gap-2 flex-shrink-0">
+                    {schedule.auto_vpn && (
+                      <span className="rounded-full px-2.5 py-1 text-xs font-medium border border-sky-500/40 bg-sky-500/15 text-sky-200 flex items-center gap-1">
+                        <Shield className="h-3 w-3" />
+                        VPN
+                      </span>
+                    )}
+
                     <span
                       className={`rounded-full px-3 py-1 text-xs font-medium ${
-                        schedule.is_enabled
+                        isEnabled
                           ? 'border border-emerald-500/40 bg-emerald-500/15 text-emerald-200'
                           : 'border border-slate-700/70 bg-slate-900/70 text-slate-400'
                       }`}
                     >
-                      {schedule.is_enabled ? t('common:enabled') : t('common:disabled')}
+                      {isEnabled ? t('common:enabled') : t('common:disabled')}
                     </span>
 
-                    {schedule.is_enabled && (
+                    {isEnabled ? (
                       <button
                         onClick={() => onDisableSchedule(schedule.schedule_id)}
                         className="rounded-lg border border-rose-500/30 bg-rose-500/10 p-2 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
-                        title="Disable schedule"
+                        title={t('buttons.disable')}
                       >
                         <X className="h-4 w-4" />
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onEnableSchedule(schedule.schedule_id)}
+                        className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2 text-emerald-200 transition hover:border-emerald-500/50 hover:bg-emerald-500/20"
+                        title={t('buttons.enable')}
+                      >
+                        <Check className="h-4 w-4" />
                       </button>
                     )}
                   </div>
                 </div>
 
-                {schedule.next_run_at && (
+                {schedule.next_run_at && isEnabled && (
                   <div className="mt-3 flex items-center gap-2 text-xs text-slate-400">
                     <Clock className="h-3 w-3" />
                     <span>{t('schedules.nextRun')} {formatRelativeTime(schedule.next_run_at)}</span>
