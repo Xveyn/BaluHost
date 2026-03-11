@@ -84,6 +84,7 @@ class SyncSchedule(Base):
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
     sync_deletions: Mapped[bool] = mapped_column(Boolean, default=True)
     resolve_conflicts: Mapped[str] = mapped_column(String(20), default="keep_newest")  # keep_newest, keep_local, keep_server
+    auto_vpn: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
     
     # Tracking
     last_run_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

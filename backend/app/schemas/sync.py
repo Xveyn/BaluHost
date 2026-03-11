@@ -144,6 +144,7 @@ class CreateSyncScheduleRequest(BaseModel):
     day_of_month: Optional[int] = None
     sync_deletions: bool = True
     resolve_conflicts: str = "keep_newest"
+    auto_vpn: bool = False
 
 
 class UpdateSyncScheduleRequest(BaseModel):
@@ -155,6 +156,7 @@ class UpdateSyncScheduleRequest(BaseModel):
     sync_deletions: Optional[bool] = None
     resolve_conflicts: Optional[str] = None
     is_active: Optional[bool] = None
+    auto_vpn: Optional[bool] = None
 
 
 class SyncScheduleResponse(BaseModel):
@@ -170,6 +172,7 @@ class SyncScheduleResponse(BaseModel):
     enabled: bool
     sync_deletions: bool = True
     resolve_conflicts: str = "keep_newest"
+    auto_vpn: bool = False
 
 
 class SelectiveSyncFolder(BaseModel):

@@ -26,10 +26,11 @@ class SyncSchedulerService:
         day_of_week: Optional[int] = None,  # 0=Monday
         day_of_month: Optional[int] = None,
         sync_deletions: bool = True,
-        resolve_conflicts: str = "keep_newest"
+        resolve_conflicts: str = "keep_newest",
+        auto_vpn: bool = False
     ) -> dict:
         """Create a sync schedule."""
-        
+
         schedule = SyncSchedule(
             user_id=user_id,
             device_id=device_id,
@@ -38,20 +39,16 @@ class SyncSchedulerService:
             day_of_week=day_of_week,
             day_of_month=day_of_month,
             sync_deletions=sync_deletions,
-            resolve_conflicts=resolve_conflicts
+            resolve_conflicts=resolve_conflicts,
+            auto_vpn=auto_vpn
         )
-        
+
         self._calculate_next_run(schedule)
         self.db.add(schedule)
         self.db.commit()
         self.db.refresh(schedule)
-        
-        return {
-            "schedule_id": schedule.id,
-            "device_id": device_id,
-            "schedule_type": schedule_type,
-            "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None
-        }
+
+        return self._schedule_to_dict(schedule)
     
     def update_schedule(
         self,
@@ -60,61 +57,78 @@ class SyncSchedulerService:
         **kwargs
     ) -> Optional[dict]:
         """Update a sync schedule."""
-        
+
         schedule = self.db.query(SyncSchedule).filter(
             SyncSchedule.id == schedule_id,
             SyncSchedule.user_id == user_id
         ).first()
-        
+
         if not schedule:
             return None
-        
+
         for key, value in kwargs.items():
             if hasattr(schedule, key) and value is not None:
                 setattr(schedule, key, value)
-        
+
         self._calculate_next_run(schedule)
         self.db.commit()
-        
-        return {
-            "schedule_id": schedule.id,
-            "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None
-        }
+        self.db.refresh(schedule)
+
+        return self._schedule_to_dict(schedule)
     
     def get_schedules(self, user_id: int) -> list[dict]:
-        """Get all schedules for a user."""
+        """Get all schedules for a user (including disabled)."""
         schedules = self.db.query(SyncSchedule).filter(
-            SyncSchedule.user_id == user_id,
-            SyncSchedule.is_active == True
+            SyncSchedule.user_id == user_id
         ).all()
-        
-        return [
-            {
-                "schedule_id": s.id,
-                "device_id": s.device_id,
-                "schedule_type": s.schedule_type,
-                "time_of_day": s.time_of_day,
-                "day_of_week": s.day_of_week,
-                "day_of_month": s.day_of_month,
-                "next_run_at": s.next_run_at.isoformat() if s.next_run_at else None,
-                "last_run_at": s.last_run_at.isoformat() if s.last_run_at else None
-            }
-            for s in schedules
-        ]
-    
+
+        return [self._schedule_to_dict(s) for s in schedules]
+
     def disable_schedule(self, schedule_id: int, user_id: int) -> bool:
         """Disable a schedule."""
         schedule = self.db.query(SyncSchedule).filter(
             SyncSchedule.id == schedule_id,
             SyncSchedule.user_id == user_id
         ).first()
-        
+
         if not schedule:
             return False
-        
+
         schedule.is_active = False
         self.db.commit()
         return True
+
+    def enable_schedule(self, schedule_id: int, user_id: int) -> bool:
+        """Enable a previously disabled schedule."""
+        schedule = self.db.query(SyncSchedule).filter(
+            SyncSchedule.id == schedule_id,
+            SyncSchedule.user_id == user_id
+        ).first()
+
+        if not schedule:
+            return False
+
+        schedule.is_active = True
+        self._calculate_next_run(schedule)
+        self.db.commit()
+        return True
+
+    def _schedule_to_dict(self, schedule: SyncSchedule) -> dict:
+        """Convert a SyncSchedule model to a response dict."""
+        return {
+            "schedule_id": schedule.id,
+            "device_id": schedule.device_id,
+            "schedule_type": schedule.schedule_type,
+            "time_of_day": schedule.time_of_day,
+            "day_of_week": schedule.day_of_week,
+            "day_of_month": schedule.day_of_month,
+            "next_run_at": schedule.next_run_at.isoformat() if schedule.next_run_at else None,
+            "last_run_at": schedule.last_run_at.isoformat() if schedule.last_run_at else None,
+            "enabled": schedule.is_active,
+            "sync_deletions": schedule.sync_deletions,
+            "resolve_conflicts": schedule.resolve_conflicts,
+            "auto_vpn": schedule.auto_vpn,
+        }
     
     async def run_due_syncs(self):
         """

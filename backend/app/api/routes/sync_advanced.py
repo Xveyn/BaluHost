@@ -211,7 +211,8 @@ async def create_sync_schedule(
         day_of_week=payload.day_of_week,
         day_of_month=payload.day_of_month,
         sync_deletions=payload.sync_deletions,
-        resolve_conflicts=payload.resolve_conflicts
+        resolve_conflicts=payload.resolve_conflicts,
+        auto_vpn=payload.auto_vpn
     )
     return result
 
@@ -247,6 +248,24 @@ async def disable_sync_schedule(
     return {"disabled": True, "schedule_id": schedule_id}
 
 
+@router.post("/schedule/{schedule_id}/enable")
+@user_limiter.limit(get_limit("sync_operations"))
+async def enable_sync_schedule(
+    request: Request,
+    response: Response,
+    schedule_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
+):
+    """Enable a previously disabled sync schedule."""
+    success = scheduler.enable_schedule(schedule_id, current_user.id)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
+
+    return {"enabled": True, "schedule_id": schedule_id}
+
+
 @router.put("/schedule/{schedule_id}")
 @user_limiter.limit(get_limit("sync_operations"))
 async def update_sync_schedule(
@@ -268,6 +287,7 @@ async def update_sync_schedule(
         sync_deletions=payload.sync_deletions,
         resolve_conflicts=payload.resolve_conflicts,
         is_active=payload.is_active,
+        auto_vpn=payload.auto_vpn,
     )
 
     if not result:
