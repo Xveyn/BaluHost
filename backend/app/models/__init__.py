@@ -71,6 +71,7 @@ from app.models.version_history import VersionHistory
 from app.models.migration_job import MigrationJob
 from app.models.pihole import PiholeConfig
 from app.models.dns_queries import DnsQuery, DnsQueryHourlyStat, DnsQueryCollectorState
+from app.models.file_activity import FileActivity
 
 __all__ = [
     "Base",
@@ -147,4 +148,5 @@ __all__ = [
     "DnsQuery",
     "DnsQueryHourlyStat",
     "DnsQueryCollectorState",
+    "FileActivity",
 ]

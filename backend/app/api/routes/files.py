@@ -40,6 +40,7 @@ from app.plugins.emit import emit_hook
 
 from app.models.desktop_sync_folder import DesktopSyncFolder
 from app.services.cache.ssd_file_cache import SSDFileCacheService
+from app.services.file_activity import track_activity
 from app.schemas.sync import SyncDeviceInfo
 
 SHARED_DIR_NAME = "Shared"
@@ -324,6 +325,7 @@ async def set_permissions(
         for share in shares
     ]
     from app.schemas.files import FilePermissions, FilePermissionRule
+    track_activity(user.id, "file.permission", payload.path)
     return FilePermissions(
         path=payload.path,
         owner_id=current_owner_id,  # Return actual owner
@@ -679,6 +681,7 @@ async def download_file(
     except Exception:
         pass  # Cache failures never block delivery
 
+    track_activity(user.id, "file.download", resource_path)
     return FileResponse(path=file_path, filename=file_path.name)
 
 
@@ -734,6 +737,7 @@ async def download_file_by_id(
     except Exception:
         pass
 
+    track_activity(user.id, "file.download", file_metadata.path, file_name=file_metadata.name)
     return FileResponse(path=file_path, filename=file_metadata.name)
 
 
@@ -794,6 +798,9 @@ async def upload_files(
             content_type=None,
         )
 
+    for saved_path in saved:
+        track_activity(user.id, "file.upload", saved_path)
+
     return FileUploadResponse(message="Files uploaded", uploaded=len(saved), upload_ids=upload_ids)
 
 
@@ -846,6 +853,7 @@ async def delete_path_raw(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+    track_activity(user.id, "file.delete", resource_path)
 
     return FileOperationResponse(message="Deleted")
 
@@ -877,6 +885,7 @@ async def delete_path_body(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=path, user_id=user.id)
+    track_activity(user.id, "file.delete", path)
 
     return FileOperationResponse(message="Deleted")
 
@@ -913,6 +922,9 @@ async def create_folder(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    folder_path = f"{jailed_parent}/{payload.name}".strip("/")
+    track_activity(user.id, "folder.create", folder_path, file_name=payload.name, is_directory=True)
 
     return FileOperationResponse(message="Folder created")
 
@@ -975,6 +987,11 @@ async def rename_path(
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
     except file_service.FileAccessError as exc:
         raise HTTPException(status_code=403, detail=str(exc)) from exc
+    track_activity(
+        user.id, "file.rename", jailed_old_path,
+        metadata={"old_name": jailed_old_path.rsplit("/", 1)[-1], "new_name": payload.new_name},
+    )
+
     return FileOperationResponse(message="Renamed")
 
 
@@ -1012,6 +1029,10 @@ async def move_path(
         new_path=payload.target_path,
         user_id=user.id,
     )
+    track_activity(
+        user.id, "file.move", jailed_target,
+        metadata={"from": jailed_source, "to": jailed_target},
+    )
 
     return FileOperationResponse(message="Moved")
 
@@ -1046,6 +1067,7 @@ async def delete_path_param(
 
     # Emit plugin hook for file deletion
     emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+    track_activity(user.id, "file.delete", resource_path)
 
     return FileOperationResponse(message="Deleted")
 

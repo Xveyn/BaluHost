@@ -49,6 +49,7 @@ SCHEDULER_POWER_LEVELS: dict[str, str] = {
     "upload_cleanup": "low",
     "auto_update": "low",
     "cloud_sync": "medium",
+    "file_activity_cleanup": "low",
 }
 
 # How often to poll for requested executions (seconds)
@@ -368,6 +369,16 @@ class SchedulerWorker:
             db = SessionLocal()
             try:
                 return CloudSyncScheduler.run_sync(db)
+            finally:
+                db.close()
+
+        elif name == "file_activity_cleanup":
+            from app.services.file_activity import FileActivityService
+            db = SessionLocal()
+            try:
+                svc = FileActivityService(db)
+                deleted = svc.cleanup()
+                return f"Deleted {deleted} old activity records"
             finally:
                 db.close()
 
