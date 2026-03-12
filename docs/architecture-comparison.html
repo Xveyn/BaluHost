@@ -1,0 +1,1706 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BaluHost vs BaluApp — Architekturvergleich</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+  :root {
+    --bg-primary: #0a0e1a;
+    --bg-secondary: #111827;
+    --bg-card: rgba(17, 24, 39, 0.7);
+    --bg-glass: rgba(255, 255, 255, 0.03);
+    --border: rgba(255, 255, 255, 0.08);
+    --border-active: rgba(99, 102, 241, 0.5);
+    --text-primary: #f1f5f9;
+    --text-secondary: #94a3b8;
+    --text-muted: #64748b;
+    --accent-web: #6366f1;
+    --accent-web-glow: rgba(99, 102, 241, 0.3);
+    --accent-mobile: #10b981;
+    --accent-mobile-glow: rgba(16, 185, 129, 0.3);
+    --accent-shared: #f59e0b;
+    --accent-shared-glow: rgba(245, 158, 11, 0.3);
+    --code-bg: rgba(0, 0, 0, 0.4);
+    --danger: #ef4444;
+    --info: #3b82f6;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    line-height: 1.6;
+    overflow-x: hidden;
+  }
+
+  /* Background */
+  .bg-pattern {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background:
+      radial-gradient(ellipse 80% 50% at 50% -20%, rgba(99, 102, 241, 0.08), transparent),
+      radial-gradient(ellipse 60% 40% at 80% 100%, rgba(16, 185, 129, 0.06), transparent),
+      var(--bg-primary);
+  }
+
+  .bg-grid {
+    position: fixed;
+    inset: 0;
+    z-index: -1;
+    background-image:
+      linear-gradient(rgba(255,255,255,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(255,255,255,0.02) 1px, transparent 1px);
+    background-size: 60px 60px;
+  }
+
+  /* Header */
+  .hero {
+    text-align: center;
+    padding: 80px 24px 60px;
+    position: relative;
+  }
+
+  .hero-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    padding: 6px 16px;
+    border-radius: 999px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-bottom: 24px;
+    backdrop-filter: blur(12px);
+  }
+
+  .hero h1 {
+    font-size: clamp(2rem, 5vw, 3.5rem);
+    font-weight: 800;
+    letter-spacing: -0.03em;
+    background: linear-gradient(135deg, #f1f5f9 0%, #94a3b8 100%);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    margin-bottom: 16px;
+  }
+
+  .hero p {
+    font-size: 1.1rem;
+    color: var(--text-secondary);
+    max-width: 640px;
+    margin: 0 auto;
+  }
+
+  .hero-labels {
+    display: flex;
+    justify-content: center;
+    gap: 32px;
+    margin-top: 32px;
+  }
+
+  .hero-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 14px;
+    font-weight: 500;
+  }
+
+  .hero-label .dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+  }
+
+  .dot-web { background: var(--accent-web); box-shadow: 0 0 8px var(--accent-web-glow); }
+  .dot-mobile { background: var(--accent-mobile); box-shadow: 0 0 8px var(--accent-mobile-glow); }
+  .dot-shared { background: var(--accent-shared); box-shadow: 0 0 8px var(--accent-shared-glow); }
+
+  /* Main Layout */
+  .container {
+    max-width: 1280px;
+    margin: 0 auto;
+    padding: 0 24px;
+  }
+
+  section {
+    margin-bottom: 80px;
+  }
+
+  .section-header {
+    text-align: center;
+    margin-bottom: 48px;
+  }
+
+  .section-header h2 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    margin-bottom: 8px;
+  }
+
+  .section-header p {
+    color: var(--text-secondary);
+    font-size: 1rem;
+  }
+
+  /* Cards */
+  .card {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 32px;
+    backdrop-filter: blur(16px);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+
+  .card:hover {
+    border-color: var(--border-active);
+    box-shadow: 0 0 40px rgba(99, 102, 241, 0.05);
+  }
+
+  .card h3 {
+    font-size: 1.2rem;
+    font-weight: 600;
+    margin-bottom: 16px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .card-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 18px;
+    flex-shrink: 0;
+  }
+
+  .icon-web { background: rgba(99, 102, 241, 0.15); color: var(--accent-web); }
+  .icon-mobile { background: rgba(16, 185, 129, 0.15); color: var(--accent-mobile); }
+  .icon-shared { background: rgba(245, 158, 11, 0.15); color: var(--accent-shared); }
+
+  /* Architecture Diagrams */
+  .arch-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 32px;
+    margin-bottom: 48px;
+  }
+
+  @media (max-width: 900px) {
+    .arch-grid { grid-template-columns: 1fr; }
+  }
+
+  .arch-diagram {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+  }
+
+  .arch-layer {
+    position: relative;
+    padding: 20px 24px;
+    border-left: 3px solid;
+    margin-left: 20px;
+  }
+
+  .arch-layer::before {
+    content: '';
+    position: absolute;
+    left: -9px;
+    top: 24px;
+    width: 15px;
+    height: 15px;
+    border-radius: 50%;
+    border: 3px solid;
+    background: var(--bg-primary);
+  }
+
+  .arch-layer .layer-name {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 4px;
+  }
+
+  .arch-layer .layer-tech {
+    font-size: 12px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .arch-layer .layer-files {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-top: 6px;
+  }
+
+  .arch-layer.web { border-color: var(--accent-web); }
+  .arch-layer.web::before { border-color: var(--accent-web); }
+  .arch-layer.mobile { border-color: var(--accent-mobile); }
+  .arch-layer.mobile::before { border-color: var(--accent-mobile); }
+
+  .arch-connector {
+    margin-left: 20px;
+    padding: 6px 0 6px 24px;
+    border-left: 3px dashed var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  /* Data Flow SVG Diagrams */
+  .flow-container {
+    width: 100%;
+    overflow-x: auto;
+    padding: 20px 0;
+  }
+
+  .flow-svg {
+    display: block;
+    margin: 0 auto;
+  }
+
+  /* Comparison Table */
+  .compare-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 14px;
+  }
+
+  .compare-table th {
+    padding: 14px 16px;
+    text-align: left;
+    font-weight: 600;
+    border-bottom: 2px solid var(--border);
+    color: var(--text-secondary);
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+  }
+
+  .compare-table td {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+    vertical-align: top;
+  }
+
+  .compare-table tr:hover td {
+    background: var(--bg-glass);
+  }
+
+  .compare-table .aspect {
+    font-weight: 500;
+    color: var(--text-primary);
+    white-space: nowrap;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 6px;
+    font-size: 12px;
+    font-weight: 500;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .badge-web { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+  .badge-mobile { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+  .badge-shared { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+  .badge-danger { background: rgba(239, 68, 68, 0.15); color: #fca5a5; }
+
+  /* Code Blocks */
+  .code-compare {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+    margin-top: 24px;
+  }
+
+  @media (max-width: 900px) {
+    .code-compare { grid-template-columns: 1fr; }
+  }
+
+  .code-block {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    overflow: hidden;
+  }
+
+  .code-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 16px;
+    border-bottom: 1px solid var(--border);
+    font-size: 12px;
+    font-family: 'JetBrains Mono', monospace;
+  }
+
+  .code-header .file-name {
+    color: var(--text-secondary);
+  }
+
+  .code-header .lang-tag {
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+
+  .lang-tsx { background: rgba(99, 102, 241, 0.15); color: #a5b4fc; }
+  .lang-kt { background: rgba(16, 185, 129, 0.15); color: #6ee7b7; }
+  .lang-py { background: rgba(245, 158, 11, 0.15); color: #fcd34d; }
+
+  pre {
+    padding: 16px;
+    overflow-x: auto;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 12.5px;
+    line-height: 1.7;
+    color: #e2e8f0;
+    tab-size: 2;
+  }
+
+  .kw { color: #c084fc; }
+  .fn { color: #67e8f9; }
+  .str { color: #86efac; }
+  .cm { color: #64748b; font-style: italic; }
+  .tp { color: #fbbf24; }
+  .num { color: #fb923c; }
+  .op { color: #94a3b8; }
+  .an { color: #f472b6; }
+  .pr { color: #a78bfa; }
+
+  /* Tabs */
+  .tabs {
+    display: flex;
+    gap: 4px;
+    margin-bottom: 24px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    width: fit-content;
+  }
+
+  .tab {
+    padding: 8px 20px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    cursor: pointer;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    transition: all 0.2s;
+  }
+
+  .tab:hover {
+    color: var(--text-primary);
+    background: rgba(255, 255, 255, 0.05);
+  }
+
+  .tab.active {
+    background: var(--accent-web);
+    color: white;
+    box-shadow: 0 2px 8px var(--accent-web-glow);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* Animated Flow */
+  .flow-arrow {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 8px 0;
+    color: var(--text-muted);
+    font-size: 13px;
+    gap: 8px;
+  }
+
+  .flow-arrow svg {
+    animation: pulse-arrow 2s ease-in-out infinite;
+  }
+
+  @keyframes pulse-arrow {
+    0%, 100% { opacity: 0.4; transform: translateY(0); }
+    50% { opacity: 1; transform: translateY(3px); }
+  }
+
+  /* Feature Cards */
+  .feature-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .feature-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    transition: all 0.3s;
+  }
+
+  .feature-card:hover {
+    border-color: var(--border-active);
+    transform: translateY(-2px);
+  }
+
+  .feature-card h4 {
+    font-size: 15px;
+    font-weight: 600;
+    margin-bottom: 8px;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .feature-card p {
+    font-size: 13px;
+    color: var(--text-secondary);
+    line-height: 1.6;
+  }
+
+  /* Counter Stat */
+  .stats-row {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 16px;
+    margin-bottom: 48px;
+  }
+
+  .stat {
+    text-align: center;
+    padding: 24px;
+    background: var(--bg-glass);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+  }
+
+  .stat-value {
+    font-size: 2rem;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+  }
+
+  .stat-value.web { color: var(--accent-web); }
+  .stat-value.mobile { color: var(--accent-mobile); }
+  .stat-value.shared { color: var(--accent-shared); }
+
+  .stat-label {
+    font-size: 13px;
+    color: var(--text-secondary);
+    margin-top: 4px;
+  }
+
+  /* Side-by-Side Diagram */
+  .diagram-box {
+    background: var(--code-bg);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 32px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 13px;
+    line-height: 1.6;
+  }
+
+  .diagram-box .layer-block {
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 16px 20px;
+    margin-bottom: 12px;
+    position: relative;
+    transition: all 0.3s;
+  }
+
+  .diagram-box .layer-block:hover {
+    transform: translateX(4px);
+  }
+
+  .diagram-box .layer-block.web-layer {
+    border-color: rgba(99, 102, 241, 0.3);
+    background: rgba(99, 102, 241, 0.05);
+  }
+
+  .diagram-box .layer-block.mobile-layer {
+    border-color: rgba(16, 185, 129, 0.3);
+    background: rgba(16, 185, 129, 0.05);
+  }
+
+  .diagram-box .layer-block.shared-layer {
+    border-color: rgba(245, 158, 11, 0.3);
+    background: rgba(245, 158, 11, 0.05);
+  }
+
+  .layer-title {
+    font-weight: 600;
+    font-size: 14px;
+    margin-bottom: 8px;
+  }
+
+  .layer-content {
+    font-size: 12px;
+    color: var(--text-secondary);
+  }
+
+  .layer-content code {
+    background: rgba(0,0,0,0.3);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  /* Lifecycle Comparison */
+  .lifecycle-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 24px;
+  }
+
+  @media (max-width: 768px) {
+    .lifecycle-grid { grid-template-columns: 1fr; }
+  }
+
+  .lifecycle-step {
+    display: flex;
+    gap: 12px;
+    padding: 12px 0;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .lifecycle-step:last-child {
+    border-bottom: none;
+  }
+
+  .step-number {
+    width: 28px;
+    height: 28px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 13px;
+    font-weight: 600;
+    flex-shrink: 0;
+  }
+
+  .step-number.web { background: rgba(99, 102, 241, 0.2); color: var(--accent-web); }
+  .step-number.mobile { background: rgba(16, 185, 129, 0.2); color: var(--accent-mobile); }
+
+  .step-text {
+    font-size: 13px;
+  }
+
+  .step-text strong {
+    display: block;
+    margin-bottom: 2px;
+  }
+
+  .step-text span {
+    color: var(--text-secondary);
+    font-size: 12px;
+  }
+
+  /* Footer */
+  footer {
+    text-align: center;
+    padding: 48px 24px;
+    border-top: 1px solid var(--border);
+    margin-top: 80px;
+  }
+
+  footer p {
+    color: var(--text-muted);
+    font-size: 13px;
+  }
+
+  /* SVG Styles */
+  .node-rect {
+    rx: 8;
+    ry: 8;
+    stroke-width: 1.5;
+  }
+
+  .node-text {
+    font-family: 'Inter', sans-serif;
+    font-size: 12px;
+    fill: var(--text-primary);
+    font-weight: 500;
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  .node-sub {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 10px;
+    fill: var(--text-muted);
+    text-anchor: middle;
+    dominant-baseline: central;
+  }
+
+  .edge {
+    stroke-width: 1.5;
+    fill: none;
+    marker-end: url(#arrowhead);
+  }
+
+  .edge-label {
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 9px;
+    fill: var(--text-muted);
+    text-anchor: middle;
+  }
+
+  @keyframes dash-flow {
+    to { stroke-dashoffset: -20; }
+  }
+
+  .edge-animated {
+    stroke-dasharray: 6 4;
+    animation: dash-flow 1.5s linear infinite;
+  }
+
+  /* Scrollbar */
+  ::-webkit-scrollbar { width: 8px; height: 8px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 4px; }
+  ::-webkit-scrollbar-thumb:hover { background: rgba(255,255,255,0.2); }
+
+  /* File count comparison */
+  .file-bar {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin: 8px 0;
+  }
+
+  .file-bar-label {
+    font-size: 13px;
+    width: 120px;
+    flex-shrink: 0;
+    text-align: right;
+    color: var(--text-secondary);
+  }
+
+  .file-bar-track {
+    flex: 1;
+    height: 28px;
+    background: rgba(255,255,255,0.03);
+    border-radius: 6px;
+    overflow: hidden;
+    position: relative;
+  }
+
+  .file-bar-fill {
+    height: 100%;
+    border-radius: 6px;
+    display: flex;
+    align-items: center;
+    padding-left: 12px;
+    font-size: 12px;
+    font-weight: 600;
+    font-family: 'JetBrains Mono', monospace;
+    transition: width 1s ease-out;
+  }
+
+  .fill-web { background: linear-gradient(90deg, var(--accent-web), rgba(99, 102, 241, 0.4)); }
+  .fill-mobile { background: linear-gradient(90deg, var(--accent-mobile), rgba(16, 185, 129, 0.4)); }
+</style>
+</head>
+<body>
+<div class="bg-pattern"></div>
+<div class="bg-grid"></div>
+
+<!-- Hero -->
+<header class="hero">
+  <div class="hero-badge">
+    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/></svg>
+    Architecture Comparison
+  </div>
+  <h1>Web App vs. Mobile App</h1>
+  <p>Wie sich BaluHost (React + FastAPI) und BaluApp (Kotlin + Compose) architektonisch unterscheiden — am echten Code erklärt.</p>
+  <div class="hero-labels">
+    <div class="hero-label"><span class="dot dot-web"></span> Web (BaluHost)</div>
+    <div class="hero-label"><span class="dot dot-mobile"></span> Mobile (BaluApp)</div>
+    <div class="hero-label"><span class="dot dot-shared"></span> Shared Backend</div>
+  </div>
+</header>
+
+<div class="container">
+
+  <!-- Stats -->
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-value web">~5</div>
+      <div class="stat-label">Dateien pro Feature (Web)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value mobile">~12</div>
+      <div class="stat-label">Dateien pro Feature (Mobile)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value web">2</div>
+      <div class="stat-label">Schichten (Web)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value mobile">4</div>
+      <div class="stat-label">Schichten (Mobile)</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value shared">1</div>
+      <div class="stat-label">Gemeinsames Backend</div>
+    </div>
+  </div>
+
+  <!-- Section 1: Grundstruktur -->
+  <section>
+    <div class="section-header">
+      <h2>1. Grundstruktur im Vergleich</h2>
+      <p>Thin Client vs. Fat Client — wo lebt die Logik?</p>
+    </div>
+
+    <div class="arch-grid">
+      <!-- Web Architecture -->
+      <div class="card">
+        <h3><span class="card-icon icon-web">&#x1F310;</span> BaluHost Web App</h3>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">
+          <strong>Thin Client</strong> — Der Browser zeigt an, was der Server liefert. Ohne Netz: nichts.
+        </p>
+        <div class="arch-diagram">
+          <div class="arch-layer web">
+            <div class="layer-name">Browser (React)</div>
+            <div class="layer-tech">useState · useEffect · useMemo</div>
+            <div class="layer-files">Dashboard.tsx, FileManager.tsx, ...</div>
+          </div>
+          <div class="arch-connector">↕ axios HTTP + WebSocket</div>
+          <div class="arch-layer web">
+            <div class="layer-name">API Client</div>
+            <div class="layer-tech">axios.create() + interceptors</div>
+            <div class="layer-files">lib/api.ts</div>
+          </div>
+          <div class="arch-connector">↕ JSON over HTTPS</div>
+          <div class="arch-layer web" style="border-color: var(--accent-shared);">
+            <div class="layer-name" style="color: var(--accent-shared);">FastAPI Backend</div>
+            <div class="layer-tech">Routes → Services → SQLAlchemy</div>
+            <div class="layer-files">backend/app/ (Auth, Files, RAID, ...)</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Mobile Architecture -->
+      <div class="card">
+        <h3><span class="card-icon icon-mobile">&#x1F4F1;</span> BaluApp Android</h3>
+        <p style="font-size:13px;color:var(--text-secondary);margin-bottom:20px;">
+          <strong>Fat Client</strong> — Eigene DB, Offline-Queue, Background-Worker. Eigenständig.
+        </p>
+        <div class="arch-diagram">
+          <div class="arch-layer mobile">
+            <div class="layer-name">Presentation Layer</div>
+            <div class="layer-tech">@Composable · collectAsState()</div>
+            <div class="layer-files">screens/dashboard/DashboardScreen.kt</div>
+          </div>
+          <div class="arch-connector">↕ StateFlow&lt;UiState&gt;</div>
+          <div class="arch-layer mobile">
+            <div class="layer-name">ViewModel</div>
+            <div class="layer-tech">@HiltViewModel · viewModelScope</div>
+            <div class="layer-files">DashboardViewModel.kt</div>
+          </div>
+          <div class="arch-connector">↕ suspend fun / Flow&lt;T&gt;</div>
+          <div class="arch-layer mobile">
+            <div class="layer-name">Domain Layer</div>
+            <div class="layer-tech">UseCase · Repository Interface</div>
+            <div class="layer-files">GetFilesUseCase.kt, FilesRepository.kt</div>
+          </div>
+          <div class="arch-connector">↕ Result&lt;T&gt; sealed class</div>
+          <div class="arch-layer mobile">
+            <div class="layer-name">Data Layer</div>
+            <div class="layer-tech">Retrofit + Room + DataStore</div>
+            <div class="layer-files">FilesApi.kt, FileDao.kt, FilesRepositoryImpl.kt</div>
+          </div>
+          <div class="arch-connector">↕ JSON over HTTPS + SQLite lokal</div>
+          <div class="arch-layer mobile" style="border-color: var(--accent-shared);">
+            <div class="layer-name" style="color: var(--accent-shared);">FastAPI Backend</div>
+            <div class="layer-tech">Gleicher Server wie Web</div>
+            <div class="layer-files">/api/mobile/*, /api/files/*, ...</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 2: Data Flow Diagrams -->
+  <section>
+    <div class="section-header">
+      <h2>2. Datenfluss: Notifications laden</h2>
+      <p>Dasselbe Feature — zwei komplett verschiedene Wege</p>
+    </div>
+
+    <div class="arch-grid">
+      <!-- Web Flow -->
+      <div class="card">
+        <h3><span class="card-icon icon-web">&#x1F310;</span> Web: 3 Schritte, 2 Dateien</h3>
+        <div class="flow-container">
+          <svg class="flow-svg" width="340" height="420" viewBox="0 0 340 420">
+            <defs>
+              <marker id="arrowhead" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#6366f1"/>
+              </marker>
+              <marker id="arrowhead-amber" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#f59e0b"/>
+              </marker>
+            </defs>
+
+            <!-- Component -->
+            <rect x="40" y="20" width="260" height="56" class="node-rect" fill="rgba(99,102,241,0.1)" stroke="#6366f1"/>
+            <text x="170" y="40" class="node-text">NotificationList.tsx</text>
+            <text x="170" y="58" class="node-sub">useState + useEffect</text>
+
+            <!-- Arrow 1 -->
+            <line x1="170" y1="76" x2="170" y2="120" class="edge" stroke="#6366f1"/>
+            <text x="245" y="100" class="edge-label">GET /api/notifications</text>
+
+            <!-- API Client -->
+            <rect x="40" y="120" width="260" height="56" class="node-rect" fill="rgba(99,102,241,0.1)" stroke="#6366f1"/>
+            <text x="170" y="140" class="node-text">api.ts (axios)</text>
+            <text x="170" y="158" class="node-sub">Bearer Token auto-injected</text>
+
+            <!-- Arrow 2 -->
+            <line x1="170" y1="176" x2="170" y2="220" class="edge edge-animated" stroke="#f59e0b" marker-end="url(#arrowhead-amber)"/>
+            <text x="245" y="200" class="edge-label">HTTP / JSON</text>
+
+            <!-- Backend -->
+            <rect x="40" y="220" width="260" height="56" class="node-rect" fill="rgba(245,158,11,0.1)" stroke="#f59e0b"/>
+            <text x="170" y="240" class="node-text" fill="#f59e0b">FastAPI Route</text>
+            <text x="170" y="258" class="node-sub">Depends(get_current_user)</text>
+
+            <!-- Arrow 3 -->
+            <line x1="170" y1="276" x2="170" y2="320" class="edge" stroke="#f59e0b" marker-end="url(#arrowhead-amber)"/>
+
+            <!-- DB -->
+            <rect x="40" y="320" width="260" height="56" class="node-rect" fill="rgba(245,158,11,0.1)" stroke="#f59e0b"/>
+            <text x="170" y="340" class="node-text" fill="#f59e0b">PostgreSQL</text>
+            <text x="170" y="358" class="node-sub">SELECT * FROM notifications</text>
+
+            <!-- Summary -->
+            <text x="170" y="405" class="node-text" fill="#94a3b8" font-size="11">Kein Cache. Kein Offline. Tab zu = weg.</text>
+          </svg>
+        </div>
+      </div>
+
+      <!-- Mobile Flow -->
+      <div class="card">
+        <h3><span class="card-icon icon-mobile">&#x1F4F1;</span> Mobile: 8 Schritte, 10 Dateien</h3>
+        <div class="flow-container">
+          <svg class="flow-svg" width="340" height="620" viewBox="0 0 340 620">
+            <defs>
+              <marker id="arr-green" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+                <polygon points="0 0, 8 3, 0 6" fill="#10b981"/>
+              </marker>
+            </defs>
+
+            <!-- Screen -->
+            <rect x="40" y="10" width="260" height="48" class="node-rect" fill="rgba(16,185,129,0.1)" stroke="#10b981"/>
+            <text x="170" y="28" class="node-text">NotificationScreen.kt</text>
+            <text x="170" y="44" class="node-sub">@Composable · collectAsState()</text>
+
+            <line x1="170" y1="58" x2="170" y2="82" class="edge" stroke="#10b981" marker-end="url(#arr-green)"/>
+            <text x="260" y="72" class="edge-label">StateFlow</text>
+
+            <!-- ViewModel -->
+            <rect x="40" y="82" width="260" height="48" class="node-rect" fill="rgba(16,185,129,0.1)" stroke="#10b981"/>
+            <text x="170" y="100" class="node-text">NotificationViewModel.kt</text>
+            <text x="170" y="116" class="node-sub">@HiltViewModel · viewModelScope</text>
+
+            <line x1="170" y1="130" x2="170" y2="154" class="edge" stroke="#10b981" marker-end="url(#arr-green)"/>
+            <text x="268" y="144" class="edge-label">suspend fun</text>
+
+            <!-- UseCase -->
+            <rect x="40" y="154" width="260" height="48" class="node-rect" fill="rgba(16,185,129,0.1)" stroke="#10b981"/>
+            <text x="170" y="172" class="node-text">GetNotificationsUseCase.kt</text>
+            <text x="170" y="188" class="node-sub">operator fun invoke()</text>
+
+            <line x1="170" y1="202" x2="170" y2="226" class="edge" stroke="#10b981" marker-end="url(#arr-green)"/>
+            <text x="265" y="216" class="edge-label">Repository</text>
+
+            <!-- Repository -->
+            <rect x="40" y="226" width="260" height="48" class="node-rect" fill="rgba(16,185,129,0.1)" stroke="#10b981"/>
+            <text x="170" y="244" class="node-text">NotificationRepositoryImpl.kt</text>
+            <text x="170" y="260" class="node-sub">Cache-first Strategie</text>
+
+            <!-- Branch: two paths -->
+            <line x1="100" y1="274" x2="100" y2="310" class="edge" stroke="#10b981" marker-end="url(#arr-green)"/>
+            <text x="68" y="294" class="edge-label">Room</text>
+
+            <line x1="240" y1="274" x2="240" y2="310" class="edge edge-animated" stroke="#f59e0b" marker-end="url(#arrowhead-amber)"/>
+            <text x="275" y="294" class="edge-label">Retrofit</text>
+
+            <!-- Room DB -->
+            <rect x="20" y="310" width="160" height="48" class="node-rect" fill="rgba(16,185,129,0.08)" stroke="rgba(16,185,129,0.5)"/>
+            <text x="100" y="328" class="node-text" font-size="11">Room DB (lokal)</text>
+            <text x="100" y="344" class="node-sub">NotificationDao.kt</text>
+
+            <!-- API -->
+            <rect x="200" y="310" width="120" height="48" class="node-rect" fill="rgba(245,158,11,0.08)" stroke="rgba(245,158,11,0.5)"/>
+            <text x="260" y="328" class="node-text" font-size="11" fill="#f59e0b">API</text>
+            <text x="260" y="344" class="node-sub">NotificationApi.kt</text>
+
+            <!-- API to Backend -->
+            <line x1="260" y1="358" x2="260" y2="392" class="edge edge-animated" stroke="#f59e0b" marker-end="url(#arrowhead-amber)"/>
+
+            <!-- Backend -->
+            <rect x="180" y="392" width="140" height="42" class="node-rect" fill="rgba(245,158,11,0.1)" stroke="#f59e0b"/>
+            <text x="250" y="408" class="node-text" font-size="11" fill="#f59e0b">FastAPI</text>
+            <text x="250" y="422" class="node-sub">Gleicher Server</text>
+
+            <!-- Backend to PostgreSQL -->
+            <line x1="250" y1="434" x2="250" y2="458" class="edge" stroke="#f59e0b" marker-end="url(#arrowhead-amber)"/>
+
+            <rect x="180" y="458" width="140" height="42" class="node-rect" fill="rgba(245,158,11,0.1)" stroke="#f59e0b"/>
+            <text x="250" y="474" class="node-text" font-size="11" fill="#f59e0b">PostgreSQL</text>
+            <text x="250" y="488" class="node-sub">Remote DB</text>
+
+            <!-- Sync arrow from API back to Room -->
+            <path d="M 200 370 Q 150 380 110 358" fill="none" stroke="rgba(16,185,129,0.4)" stroke-width="1" stroke-dasharray="3 3"/>
+            <text x="145" y="378" class="edge-label" fill="rgba(16,185,129,0.6)">sync</text>
+
+            <!-- Additional components -->
+            <rect x="20" y="400" width="140" height="42" class="node-rect" fill="rgba(16,185,129,0.05)" stroke="rgba(16,185,129,0.3)"/>
+            <text x="90" y="416" class="node-text" font-size="10">+ FCM Push</text>
+            <text x="90" y="430" class="node-sub">BaluFirebaseMessagingService</text>
+
+            <rect x="20" y="458" width="140" height="42" class="node-rect" fill="rgba(16,185,129,0.05)" stroke="rgba(16,185,129,0.3)"/>
+            <text x="90" y="474" class="node-text" font-size="10">+ WebSocket</text>
+            <text x="90" y="488" class="node-sub">Real-time Updates</text>
+
+            <rect x="20" y="516" width="140" height="42" class="node-rect" fill="rgba(16,185,129,0.05)" stroke="rgba(16,185,129,0.3)"/>
+            <text x="90" y="532" class="node-text" font-size="10">+ WorkManager</text>
+            <text x="90" y="546" class="node-sub">Background Sync</text>
+
+            <!-- Summary -->
+            <text x="170" y="590" class="node-text" fill="#94a3b8" font-size="11">Cache-first. Offline-fähig. Überlebt Process Death.</text>
+          </svg>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 3: Code Comparison -->
+  <section>
+    <div class="section-header">
+      <h2>3. Code-Vergleich: Dasselbe Feature</h2>
+      <p>Notifications laden und anzeigen — Seite an Seite</p>
+    </div>
+
+    <!-- Tab Navigation -->
+    <div class="tabs" id="code-tabs">
+      <button class="tab active" data-tab="state">State Management</button>
+      <button class="tab" data-tab="fetch">Daten laden</button>
+      <button class="tab" data-tab="ui">UI Rendering</button>
+      <button class="tab" data-tab="di">Dependency Injection</button>
+    </div>
+
+    <!-- Tab: State Management -->
+    <div class="tab-content active" id="tab-state">
+      <div class="code-compare">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">client/src/pages/NotificationList.tsx</span>
+            <span class="lang-tag lang-tsx">TSX</span>
+          </div>
+<pre><span class="cm">// Web: State lebt im Component — flüchtig</span>
+<span class="kw">const</span> [notifications, setNotifications] =
+  <span class="fn">useState</span>&lt;<span class="tp">Notification</span>[]&gt;([]);
+<span class="kw">const</span> [loading, setLoading] =
+  <span class="fn">useState</span>(<span class="num">true</span>);
+<span class="kw">const</span> [error, setError] =
+  <span class="fn">useState</span>&lt;<span class="tp">string</span> | <span class="tp">null</span>&gt;(<span class="num">null</span>);
+
+<span class="cm">// Tab schließen = alles weg</span>
+<span class="cm">// Kein Offline-Cache</span>
+<span class="cm">// Kein Lifecycle-Problem</span></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">NotificationViewModel.kt</span>
+            <span class="lang-tag lang-kt">Kotlin</span>
+          </div>
+<pre><span class="cm">// Mobile: State überlebt Rotation + Config-Change</span>
+<span class="kw">private val</span> _uiState = <span class="fn">MutableStateFlow</span>(
+  <span class="tp">NotificationUiState</span>()
+)
+<span class="kw">val</span> uiState: <span class="tp">StateFlow</span>&lt;<span class="tp">NotificationUiState</span>&gt; =
+  _uiState.<span class="fn">asStateFlow</span>()
+
+<span class="cm">// Rotation? State bleibt.</span>
+<span class="cm">// Process Death? SavedStateHandle.</span>
+<span class="cm">// Offline? Room DB als Cache.</span>
+
+<span class="kw">data class</span> <span class="tp">NotificationUiState</span>(
+  <span class="kw">val</span> notifications: <span class="tp">List</span>&lt;<span class="tp">Notification</span>&gt; = <span class="fn">emptyList</span>(),
+  <span class="kw">val</span> isLoading: <span class="tp">Boolean</span> = <span class="num">false</span>,
+  <span class="kw">val</span> error: <span class="tp">String</span>? = <span class="num">null</span>,
+  <span class="kw">val</span> unreadCount: <span class="tp">Int</span> = <span class="num">0</span>
+)</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: Data Fetching -->
+    <div class="tab-content" id="tab-fetch">
+      <div class="code-compare">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">client/src/pages/NotificationList.tsx</span>
+            <span class="lang-tag lang-tsx">TSX</span>
+          </div>
+<pre><span class="cm">// Web: Ein useEffect, fertig.</span>
+<span class="fn">useEffect</span>(() => {
+  <span class="kw">const</span> <span class="fn">load</span> = <span class="kw">async</span> () => {
+    <span class="kw">try</span> {
+      <span class="kw">const</span> res = <span class="kw">await</span> api.<span class="fn">get</span>(<span class="str">'/api/notifications'</span>);
+      <span class="fn">setNotifications</span>(res.data.notifications);
+    } <span class="kw">catch</span> (e) {
+      <span class="fn">setError</span>(<span class="str">'Fehler beim Laden'</span>);
+    } <span class="kw">finally</span> {
+      <span class="fn">setLoading</span>(<span class="num">false</span>);
+    }
+  };
+  <span class="fn">load</span>();
+}, []);
+
+<span class="cm">// Kein Cache, kein Retry, kein Offline.</span>
+<span class="cm">// Server ist die einzige Wahrheit.</span></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">NotificationRepositoryImpl.kt</span>
+            <span class="lang-tag lang-kt">Kotlin</span>
+          </div>
+<pre><span class="cm">// Mobile: Cache-first + Network-Sync</span>
+<span class="kw">override fun</span> <span class="fn">getNotifications</span>(
+  forceRefresh: <span class="tp">Boolean</span>
+): <span class="tp">Flow</span>&lt;<span class="tp">List</span>&lt;<span class="tp">Notification</span>&gt;&gt; = <span class="fn">flow</span> {
+  <span class="cm">// 1. Sofort lokale Daten zeigen</span>
+  <span class="kw">val</span> cached = notificationDao.<span class="fn">getAll</span>()
+  <span class="fn">emit</span>(cached.<span class="fn">map</span> { it.<span class="fn">toDomain</span>() })
+
+  <span class="cm">// 2. Im Hintergrund Server fragen</span>
+  <span class="kw">if</span> (forceRefresh || <span class="fn">isCacheStale</span>()) {
+    <span class="kw">try</span> {
+      <span class="kw">val</span> remote = api.<span class="fn">getNotifications</span>()
+      notificationDao.<span class="fn">insertAll</span>(
+        remote.<span class="fn">map</span> { it.<span class="fn">toEntity</span>() }
+      )
+      <span class="cm">// 3. Aktualisierte Daten emittieren</span>
+      <span class="fn">emit</span>(remote.<span class="fn">map</span> { it.<span class="fn">toDomain</span>() })
+    } <span class="kw">catch</span> (e: <span class="tp">Exception</span>) {
+      <span class="cm">// Offline? Kein Problem, Cache reicht.</span>
+    }
+  }
+}</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: UI Rendering -->
+    <div class="tab-content" id="tab-ui">
+      <div class="code-compare">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">NotificationList.tsx</span>
+            <span class="lang-tag lang-tsx">TSX</span>
+          </div>
+<pre><span class="cm">// Web: JSX — HTML mit JavaScript</span>
+<span class="kw">return</span> (
+  &lt;<span class="tp">div</span> className=<span class="str">"space-y-2"</span>&gt;
+    {loading &amp;&amp; &lt;<span class="tp">Spinner</span> /&gt;}
+    {error &amp;&amp; &lt;<span class="tp">Alert</span> variant=<span class="str">"error"</span>&gt;{error}&lt;/<span class="tp">Alert</span>&gt;}
+    {notifications.<span class="fn">map</span>(n =&gt; (
+      &lt;<span class="tp">div</span> key={n.id}
+        className=<span class="str">"p-4 rounded-lg border"</span>&gt;
+        &lt;<span class="tp">h3</span>&gt;{n.title}&lt;/<span class="tp">h3</span>&gt;
+        &lt;<span class="tp">p</span>&gt;{n.message}&lt;/<span class="tp">p</span>&gt;
+      &lt;/<span class="tp">div</span>&gt;
+    ))}
+  &lt;/<span class="tp">div</span>&gt;
+);
+
+<span class="cm">// Styling: Tailwind CSS Klassen</span>
+<span class="cm">// Rendering: React Virtual DOM Diff</span></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">NotificationScreen.kt</span>
+            <span class="lang-tag lang-kt">Kotlin</span>
+          </div>
+<pre><span class="cm">// Mobile: Compose — deklarative Kotlin-DSL</span>
+<span class="an">@Composable</span>
+<span class="kw">fun</span> <span class="fn">NotificationScreen</span>(
+  viewModel: <span class="tp">NotificationViewModel</span> = <span class="fn">hiltViewModel</span>()
+) {
+  <span class="kw">val</span> state <span class="kw">by</span> viewModel.uiState
+    .<span class="fn">collectAsState</span>()
+
+  <span class="fn">LazyColumn</span> {
+    <span class="fn">items</span>(state.notifications) { n -&gt;
+      <span class="fn">Card</span>(
+        modifier = <span class="tp">Modifier</span>
+          .<span class="fn">fillMaxWidth</span>()
+          .<span class="fn">padding</span>(<span class="num">8</span>.dp)
+      ) {
+        <span class="fn">Text</span>(n.title, style = <span class="tp">MaterialTheme</span>
+          .typography.titleMedium)
+        <span class="fn">Text</span>(n.message, color = <span class="tp">Color</span>.Gray)
+      }
+    }
+  }
+}
+<span class="cm">// Styling: Modifier-Chain + Material3</span>
+<span class="cm">// Rendering: Compose Recomposition</span></pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tab: DI -->
+    <div class="tab-content" id="tab-di">
+      <div class="code-compare">
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">notifications.py (FastAPI)</span>
+            <span class="lang-tag lang-py">Python</span>
+          </div>
+<pre><span class="cm"># Web Backend: Depends() — zur Laufzeit injiziert</span>
+<span class="an">@router.get</span>(<span class="str">""</span>)
+<span class="an">@user_limiter.limit</span>(<span class="fn">get_limit</span>(<span class="str">"admin_ops"</span>))
+<span class="kw">async def</span> <span class="fn">get_notifications</span>(
+    request: <span class="tp">Request</span>,
+    current_user: <span class="tp">UserPublic</span> = <span class="fn">Depends</span>(
+        deps.<span class="fn">get_current_user</span>  <span class="cm"># JWT Auth</span>
+    ),
+    db: <span class="tp">Session</span> = <span class="fn">Depends</span>(<span class="fn">get_db</span>),  <span class="cm"># DB</span>
+) -> <span class="tp">NotificationListResponse</span>:
+    service = <span class="fn">get_notification_service</span>()
+    <span class="kw">return</span> service.<span class="fn">get_user_notifications</span>(
+        db=db, user_id=current_user.id
+    )
+
+<span class="cm"># DI per Funktionsparameter</span>
+<span class="cm"># Kein Container nötig</span>
+<span class="cm"># Automatisch validiert (Pydantic)</span></pre>
+        </div>
+        <div class="code-block">
+          <div class="code-header">
+            <span class="file-name">di/NetworkModule.kt (Hilt)</span>
+            <span class="lang-tag lang-kt">Kotlin</span>
+          </div>
+<pre><span class="cm">// Mobile: Hilt DI Container — Compile-time</span>
+<span class="an">@Module</span>
+<span class="an">@InstallIn</span>(<span class="tp">SingletonComponent</span>::<span class="kw">class</span>)
+<span class="kw">object</span> <span class="tp">NetworkModule</span> {
+
+  <span class="an">@Provides</span> <span class="an">@Singleton</span>
+  <span class="kw">fun</span> <span class="fn">provideRetrofit</span>(
+    okHttp: <span class="tp">OkHttpClient</span>
+  ): <span class="tp">Retrofit</span> = <span class="tp">Retrofit</span>.<span class="tp">Builder</span>()
+    .<span class="fn">baseUrl</span>(BASE_URL)
+    .<span class="fn">client</span>(okHttp)
+    .<span class="fn">addConverterFactory</span>(
+      <span class="tp">GsonConverterFactory</span>.<span class="fn">create</span>()
+    ).<span class="fn">build</span>()
+
+  <span class="an">@Provides</span> <span class="an">@Singleton</span>
+  <span class="kw">fun</span> <span class="fn">provideNotificationApi</span>(
+    retrofit: <span class="tp">Retrofit</span>
+  ): <span class="tp">NotificationApi</span> =
+    retrofit.<span class="fn">create</span>(<span class="tp">NotificationApi</span>::<span class="kw">class</span>)
+}
+
+<span class="cm">// DI per Annotation-Prozessor</span>
+<span class="cm">// Compile-time Überprüfung</span>
+<span class="cm">// Dependency Graph automatisch</span></pre>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 4: Why so many layers? -->
+  <section>
+    <div class="section-header">
+      <h2>4. Warum braucht Mobile so viele Schichten?</h2>
+      <p>Jede Schicht löst ein Problem, das Web-Apps nicht haben</p>
+    </div>
+
+    <div class="feature-grid">
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><path d="M18.36 6.64a9 9 0 11-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/></svg>
+          Process Death
+        </h4>
+        <p><strong>Problem:</strong> Android kann die App jederzeit killen (RAM-Druck).<br>
+        <strong>Web:</strong> Gibt es nicht — Tab offen = läuft.<br>
+        <strong>Mobile:</strong> ViewModel überlebt Config-Changes, SavedStateHandle überlebt Process Death, Room DB überlebt alles.</p>
+      </div>
+
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>
+          Offline-Fähigkeit
+        </h4>
+        <p><strong>Problem:</strong> Nutzer erwartet, dass die App ohne Netz funktioniert.<br>
+        <strong>Web:</strong> Ohne Server → weiße Seite.<br>
+        <strong>Mobile:</strong> Repository zeigt zuerst Room-Cache, synct im Hintergrund wenn Netz da.</p>
+      </div>
+
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><rect x="5" y="2" width="14" height="20" rx="2" ry="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+          Rotation / Config Change
+        </h4>
+        <p><strong>Problem:</strong> Handy drehen = Activity wird zerstört und neu erstellt.<br>
+        <strong>Web:</strong> Browser-Resize ändert nichts am State.<br>
+        <strong>Mobile:</strong> ViewModel existiert außerhalb der Activity → State bleibt erhalten.</p>
+      </div>
+
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>
+          Push Notifications
+        </h4>
+        <p><strong>Problem:</strong> App ist geschlossen, aber Nutzer soll benachrichtigt werden.<br>
+        <strong>Web:</strong> WebSocket nur wenn Tab offen.<br>
+        <strong>Mobile:</strong> FCM weckt die App auf → BaluFirebaseMessagingService → System-Notification.</p>
+      </div>
+
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          Background Work
+        </h4>
+        <p><strong>Problem:</strong> Upload läuft, aber Nutzer wechselt zur anderen App.<br>
+        <strong>Web:</strong> Tab im Hintergrund → gedrosselt oder gestoppt.<br>
+        <strong>Mobile:</strong> WorkManager garantiert Ausführung — auch nach Neustart.</p>
+      </div>
+
+      <div class="feature-card">
+        <h4>
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+          Permissions
+        </h4>
+        <p><strong>Problem:</strong> App braucht Kamera, Notifications, Dateizugriff.<br>
+        <strong>Web:</strong> Browser fragt automatisch.<br>
+        <strong>Mobile:</strong> Runtime Permissions mit explizitem Request-Flow, Fallback-UI wenn verweigert.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 5: File Count Comparison -->
+  <section>
+    <div class="section-header">
+      <h2>5. Feature-Aufwand: Notifications</h2>
+      <p>Wie viele Dateien braucht dasselbe Feature?</p>
+    </div>
+
+    <div class="card">
+      <div style="margin-bottom: 24px;">
+        <div class="file-bar">
+          <span class="file-bar-label">UI / View</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 15%;">1</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 15%;">1</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">State</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 10%;">0</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 20%;">1+</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">API Client</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 15%;">1</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 30%;">2</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">Domain</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 5%;">—</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 40%;">3</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">Caching</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 5%;">—</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 30%;">2</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">Mapping</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 10%;">0-1</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 40%;">3</div>
+          </div>
+        </div>
+        <div class="file-bar">
+          <span class="file-bar-label">DI Setup</span>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-web" style="width: 5%;">—</div>
+          </div>
+          <div class="file-bar-track">
+            <div class="file-bar-fill fill-mobile" style="width: 20%;">1</div>
+          </div>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 24px; justify-content: center; padding-top: 16px; border-top: 1px solid var(--border);">
+        <div style="text-align: center;">
+          <div style="font-size: 28px; font-weight: 700; color: var(--accent-web);">~3</div>
+          <div style="font-size: 13px; color: var(--text-secondary);">Web-Dateien</div>
+        </div>
+        <div style="font-size: 28px; color: var(--text-muted); align-self: center;">vs.</div>
+        <div style="text-align: center;">
+          <div style="font-size: 28px; font-weight: 700; color: var(--accent-mobile);">~12</div>
+          <div style="font-size: 13px; color: var(--text-secondary);">Mobile-Dateien</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 6: Comparison Table -->
+  <section>
+    <div class="section-header">
+      <h2>6. Detailvergleich</h2>
+      <p>Technologie-Stack und Patterns gegenübergestellt</p>
+    </div>
+
+    <div class="card" style="overflow-x: auto;">
+      <table class="compare-table">
+        <thead>
+          <tr>
+            <th>Aspekt</th>
+            <th>BaluHost Web</th>
+            <th>BaluApp Mobile</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td class="aspect">Sprache</td>
+            <td><span class="badge badge-web">TypeScript</span></td>
+            <td><span class="badge badge-mobile">Kotlin</span></td>
+          </tr>
+          <tr>
+            <td class="aspect">UI Framework</td>
+            <td>React 18 + JSX</td>
+            <td>Jetpack Compose + Material 3</td>
+          </tr>
+          <tr>
+            <td class="aspect">Styling</td>
+            <td><span class="badge badge-web">Tailwind CSS</span> Klassen</td>
+            <td><span class="badge badge-mobile">Modifier</span> Chain + Theme</td>
+          </tr>
+          <tr>
+            <td class="aspect">State Management</td>
+            <td><code>useState</code> + <code>useContext</code></td>
+            <td><code>StateFlow</code> + <code>collectAsState()</code></td>
+          </tr>
+          <tr>
+            <td class="aspect">Side Effects</td>
+            <td><code>useEffect</code></td>
+            <td><code>LaunchedEffect</code> + <code>viewModelScope</code></td>
+          </tr>
+          <tr>
+            <td class="aspect">HTTP Client</td>
+            <td>axios (+ interceptors)</td>
+            <td>Retrofit 2.9 + OkHttp 4.12</td>
+          </tr>
+          <tr>
+            <td class="aspect">Auth Token</td>
+            <td><code>localStorage</code></td>
+            <td><code>EncryptedSharedPreferences</code></td>
+          </tr>
+          <tr>
+            <td class="aspect">Lokale DB</td>
+            <td><span class="badge badge-danger">Keine</span></td>
+            <td>Room (SQLite) — 4 Entities, 4 DAOs</td>
+          </tr>
+          <tr>
+            <td class="aspect">Offline-Support</td>
+            <td><span class="badge badge-danger">Nein</span></td>
+            <td>Cache-first + OfflineQueueManager</td>
+          </tr>
+          <tr>
+            <td class="aspect">Real-time</td>
+            <td>WebSocket (nur bei offenem Tab)</td>
+            <td>WebSocket + FCM Push + Foreground Service</td>
+          </tr>
+          <tr>
+            <td class="aspect">Background Tasks</td>
+            <td><span class="badge badge-danger">Nicht möglich</span></td>
+            <td>WorkManager (CacheCleanup, OfflineRetry)</td>
+          </tr>
+          <tr>
+            <td class="aspect">Navigation</td>
+            <td>React Router (URL-basiert)</td>
+            <td>Navigation Compose (Backstack + Deep Links)</td>
+          </tr>
+          <tr>
+            <td class="aspect">DI Pattern</td>
+            <td>Props / Context / Imports</td>
+            <td>Hilt (@Module, @Provides, @Inject)</td>
+          </tr>
+          <tr>
+            <td class="aspect">Serialisierung</td>
+            <td>JSON.parse (automatisch)</td>
+            <td>Gson + DTO → Entity → Domain Mapping</td>
+          </tr>
+          <tr>
+            <td class="aspect">Architektur</td>
+            <td><span class="badge badge-web">Component-based</span></td>
+            <td><span class="badge badge-mobile">MVVM + Clean Architecture</span></td>
+          </tr>
+          <tr>
+            <td class="aspect">Testbarkeit</td>
+            <td>Jest (Komponenten-Tests)</td>
+            <td>JUnit + Mockk + Compose UI Tests</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- Section 7: Lifecycle -->
+  <section>
+    <div class="section-header">
+      <h2>7. Lifecycle: Warum Mobile so komplex ist</h2>
+      <p>Was passiert, wenn der Nutzer die App öffnet, dreht, wechselt, und zurückkehrt?</p>
+    </div>
+
+    <div class="lifecycle-grid">
+      <div class="card">
+        <h3><span class="card-icon icon-web">&#x1F310;</span> Web Lifecycle</h3>
+        <div class="lifecycle-step">
+          <span class="step-number web">1</span>
+          <div class="step-text">
+            <strong>Tab öffnen</strong>
+            <span>React mountet → useEffect feuert → API Call</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number web">2</span>
+          <div class="step-text">
+            <strong>Daten anzeigen</strong>
+            <span>setState → Re-Render → DOM Update</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number web">3</span>
+          <div class="step-text">
+            <strong>Tab wechseln</strong>
+            <span>Bleibt im Hintergrund, Timer werden gedrosselt</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number web">4</span>
+          <div class="step-text">
+            <strong>Tab schließen</strong>
+            <span>useEffect Cleanup → alles weg. Kein State, kein Cache.</span>
+          </div>
+        </div>
+        <div style="margin-top: 20px; padding: 16px; background: rgba(99,102,241,0.08); border-radius: 10px; font-size: 13px; color: var(--text-secondary);">
+          <strong style="color: var(--accent-web);">Einfach.</strong> Mount → Run → Unmount. Das war's. Kein Process Death, keine Rotation, keine Permissions. Der Browser kümmert sich um den Rest.
+        </div>
+      </div>
+
+      <div class="card">
+        <h3><span class="card-icon icon-mobile">&#x1F4F1;</span> Android Lifecycle</h3>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">1</span>
+          <div class="step-text">
+            <strong>App öffnen</strong>
+            <span>Activity.onCreate → Compose setzt auf → ViewModel initialisiert</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">2</span>
+          <div class="step-text">
+            <strong>Daten laden</strong>
+            <span>ViewModel → UseCase → Repository (Room zuerst, dann API)</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">3</span>
+          <div class="step-text">
+            <strong>Handy drehen</strong>
+            <span>Activity.onDestroy → Activity.onCreate (NEU!) → ViewModel lebt weiter</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">4</span>
+          <div class="step-text">
+            <strong>App wechseln</strong>
+            <span>onPause → onStop → ViewModel und Room bleiben</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">5</span>
+          <div class="step-text">
+            <strong>Android killt die App (RAM)</strong>
+            <span>Process Death! ViewModel weg, aber SavedStateHandle + Room DB überleben</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">6</span>
+          <div class="step-text">
+            <strong>App wieder öffnen</strong>
+            <span>Neuer Process → Room liefert gecachte Daten → API synct im Hintergrund</span>
+          </div>
+        </div>
+        <div class="lifecycle-step">
+          <span class="step-number mobile">7</span>
+          <div class="step-text">
+            <strong>Push empfangen (App zu)</strong>
+            <span>FCM → FirebaseMessagingService → System Notification</span>
+          </div>
+        </div>
+        <div style="margin-top: 20px; padding: 16px; background: rgba(16,185,129,0.08); border-radius: 10px; font-size: 13px; color: var(--text-secondary);">
+          <strong style="color: var(--accent-mobile);">Komplex.</strong> Die Activity kann jederzeit zerstört werden. State muss in verschiedenen "Überlebensstufen" gehalten werden: ViewModel (Rotation), SavedStateHandle (Process Death), Room DB (alles).
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- Section 8: Summary Diagram -->
+  <section>
+    <div class="section-header">
+      <h2>8. Zusammenfassung</h2>
+      <p>Das Gesamtbild auf einen Blick</p>
+    </div>
+
+    <div class="arch-grid">
+      <div class="diagram-box">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span class="badge badge-web" style="font-size: 14px; padding: 6px 16px;">Web App = Fenster zum Server</span>
+        </div>
+        <div class="layer-block web-layer">
+          <div class="layer-title" style="color: var(--accent-web);">React (Thin Client)</div>
+          <div class="layer-content">
+            Zeigt an, was der Server liefert.<br>
+            State: <code>useState</code> — flüchtig.<br>
+            Cache: keiner. Offline: unmöglich.
+          </div>
+        </div>
+        <div style="text-align: center; padding: 8px; color: var(--text-muted); font-size: 20px;">&#8595;</div>
+        <div class="layer-block shared-layer">
+          <div class="layer-title" style="color: var(--accent-shared);">FastAPI (Fat Server)</div>
+          <div class="layer-content">
+            Auth, Business-Logik, Datenbank —<br>
+            alles passiert hier. Der Server ist die<br>
+            <strong>Single Source of Truth</strong>.
+          </div>
+        </div>
+      </div>
+
+      <div class="diagram-box">
+        <div style="text-align: center; margin-bottom: 20px;">
+          <span class="badge badge-mobile" style="font-size: 14px; padding: 6px 16px;">Mobile App = eigenständige Anwendung</span>
+        </div>
+        <div class="layer-block mobile-layer">
+          <div class="layer-title" style="color: var(--accent-mobile);">Kotlin (Fat Client)</div>
+          <div class="layer-content">
+            Eigene Datenbank (Room), Offline-Queue,<br>
+            Background Worker, Push Notifications.<br>
+            <strong>Funktioniert auch ohne Server.</strong>
+          </div>
+        </div>
+        <div style="text-align: center; padding: 8px; color: var(--text-muted); font-size: 16px;">&#8597; Sync wenn online</div>
+        <div class="layer-block shared-layer">
+          <div class="layer-title" style="color: var(--accent-shared);">FastAPI (gleicher Server)</div>
+          <div class="layer-content">
+            Gleiche API-Endpoints, gleiche Auth.<br>
+            Aber die App ist nicht <em>abhängig</em> —<br>
+            sie <strong>synchronisiert</strong> sich.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-top: 32px; text-align: center;">
+      <p style="font-size: 16px; color: var(--text-secondary); max-width: 700px; margin: 0 auto;">
+        <strong style="color: var(--text-primary);">Der Kernunterschied:</strong>
+        Die Web-App ist ein <span style="color: var(--accent-web); font-weight: 600;">Fenster</span> — ohne Server ist sie nutzlos.
+        Die Mobile-App ist eine <span style="color: var(--accent-mobile); font-weight: 600;">eigenständige Anwendung</span> mit lokaler Datenbank,
+        die sich mit dem Server synchronisiert. Deshalb braucht sie ~4x so viele Dateien pro Feature,
+        dafür funktioniert sie auch im Tunnel, im Flugzeug, oder wenn der Server down ist.
+      </p>
+    </div>
+  </section>
+
+</div>
+
+<footer>
+  <p>BaluHost v1.15.0 — Architecture Comparison — Erstellt am 12. März 2026</p>
+</footer>
+
+<script>
+  // Tab switching
+  document.querySelectorAll('.tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      const tabGroup = tab.closest('.tabs') || tab.parentElement;
+      const section = tab.closest('section');
+
+      // Deactivate all tabs in this group
+      tabGroup.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+
+      // Show corresponding content
+      const target = tab.dataset.tab;
+      section.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === 'tab-' + target);
+      });
+    });
+  });
+
+  // Animate bars on scroll
+  const observer = new IntersectionObserver((entries) => {
+    entries.forEach(entry => {
+      if (entry.isIntersecting) {
+        entry.target.querySelectorAll('.file-bar-fill').forEach(bar => {
+          bar.style.width = bar.style.width; // Trigger reflow
+        });
+      }
+    });
+  }, { threshold: 0.3 });
+
+  document.querySelectorAll('.file-bar').forEach(bar => observer.observe(bar));
+</script>
+</body>
+</html>
