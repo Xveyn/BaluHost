@@ -3,7 +3,7 @@
 import logging
 from datetime import datetime, timezone
 from typing import List
-from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
+from fastapi import APIRouter, Depends, HTTPException, Query, status, Request, Response
 from sqlalchemy.orm import Session
 
 from app.core.database import get_db
@@ -245,7 +245,7 @@ async def register_push_token(
     request: Request,
     response: Response,
     device_id: str,
-    push_token: str,
+    push_token: str = Query(..., description="FCM registration token"),
     db: Session = Depends(get_db),
     current_user: UserPublic = Depends(get_current_user)
 ):
