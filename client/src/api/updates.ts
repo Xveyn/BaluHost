@@ -18,7 +18,7 @@ export type UpdateStatus =
   | 'rolled_back'
   | 'cancelled';
 
-export type UpdateChannel = 'stable' | 'unstable';
+export type UpdateChannel = 'stable' | 'unstable' | 'development';
 
 // Version information
 export interface VersionInfo {
@@ -58,6 +58,11 @@ export interface UpdateCheckResponse {
 // Start request/response
 export interface UpdateStartRequest {
   target_version?: string | null;
+  skip_backup?: boolean;
+  force?: boolean;
+}
+
+export interface DevUpdateStartRequest {
   skip_backup?: boolean;
   force?: boolean;
 }
@@ -271,6 +276,14 @@ export async function checkForUpdates(): Promise<UpdateCheckResponse> {
  */
 export async function startUpdate(request?: UpdateStartRequest): Promise<UpdateStartResponse> {
   const response = await apiClient.post<UpdateStartResponse>('/api/updates/start', request ?? {});
+  return response.data;
+}
+
+/**
+ * Start a development branch update
+ */
+export async function startDevUpdate(request?: DevUpdateStartRequest): Promise<UpdateStartResponse> {
+  const response = await apiClient.post<UpdateStartResponse>('/api/updates/start-dev', request ?? {});
   return response.data;
 }
 
@@ -515,6 +528,12 @@ export function getChannelInfo(channel: UpdateChannel): {
         label: 'Unstable',
         color: 'text-amber-400',
         description: 'Pre-release versions with new features',
+      };
+    case 'development':
+      return {
+        label: 'Development',
+        color: 'text-orange-400',
+        description: 'Development branch builds (potentially unstable)',
       };
     default:
       return {

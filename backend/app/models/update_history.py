@@ -30,6 +30,7 @@ class UpdateChannel(str, enum.Enum):
     """Update channel for version selection."""
     STABLE = "stable"
     BETA = "beta"
+    DEVELOPMENT = "development"
 
 
 class UpdateHistory(Base):

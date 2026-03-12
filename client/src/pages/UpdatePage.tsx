@@ -40,6 +40,7 @@ import {
 import {
   checkForUpdates,
   startUpdate,
+  startDevUpdate,
   getUpdateProgress,
   getCurrentUpdate,
   rollbackUpdate,
@@ -122,6 +123,8 @@ export default function UpdatePage() {
 
   // Confirmation states
   const [showUpdateConfirm, setShowUpdateConfirm] = useState(false);
+  const [showDevUpdateConfirm, setShowDevUpdateConfirm] = useState(false);
+  const [devUpdateLoading, setDevUpdateLoading] = useState(false);
   const [showRollbackConfirm, setShowRollbackConfirm] = useState(false);
   const [rollbackTarget, setRollbackTarget] = useState<number | null>(null);
 
@@ -261,6 +264,32 @@ export default function UpdatePage() {
       }
     } finally {
       setUpdateLoading(false);
+    }
+  };
+
+  // Start dev update
+  const handleStartDevUpdate = async () => {
+    setDevUpdateLoading(true);
+    setShowDevUpdateConfirm(false);
+    try {
+      const result = await startDevUpdate();
+      if (result.success && result.update_id) {
+        toast.success(t('toast.devUpdateStarted'));
+        const progress = await getUpdateProgress(result.update_id);
+        setCurrentUpdate(progress);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: unknown } } })?.response?.data?.detail;
+      if (typeof detail === 'object' && detail !== null && 'blockers' in detail) {
+        const blockers = (detail as { blockers: string[] }).blockers;
+        toast.error(t('blockers.updateBlocked', { blockers: blockers.join(', ') }));
+      } else {
+        handleApiError(err, t('toast.updateFailed'));
+      }
+    } finally {
+      setDevUpdateLoading(false);
     }
   };
 
@@ -485,6 +514,46 @@ export default function UpdatePage() {
                           ))}
                         </div>
                       )}
+                      {/* Dev Install Button */}
+                      <div className="pt-2">
+                        {!showDevUpdateConfirm ? (
+                          <button
+                            onClick={() => setShowDevUpdateConfirm(true)}
+                            disabled={devUpdateLoading || !!currentUpdate}
+                            className="flex items-center gap-2 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 disabled:bg-slate-700 disabled:text-slate-500 text-white rounded-lg transition-all touch-manipulation active:scale-95 text-xs font-medium"
+                          >
+                            <Download className="h-3.5 w-3.5" />
+                            {t('buttons.installDevVersion')}
+                          </button>
+                        ) : (
+                          <div className="space-y-2">
+                            <p className="text-xs text-amber-400/80">
+                              <AlertTriangle className="h-3 w-3 inline mr-1" />
+                              {t('version.devWarning')}
+                            </p>
+                            <div className="flex items-center gap-2">
+                              <button
+                                onClick={handleStartDevUpdate}
+                                disabled={devUpdateLoading}
+                                className="flex items-center gap-1.5 px-3 py-1.5 bg-amber-600 hover:bg-amber-700 text-white rounded text-xs transition-all touch-manipulation active:scale-95"
+                              >
+                                {devUpdateLoading ? (
+                                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                                ) : (
+                                  <Download className="h-3.5 w-3.5" />
+                                )}
+                                {t('buttons.confirmDevInstall')}
+                              </button>
+                              <button
+                                onClick={() => setShowDevUpdateConfirm(false)}
+                                className="px-3 py-1.5 bg-slate-600 hover:bg-slate-500 text-white rounded text-xs transition-all touch-manipulation active:scale-95"
+                              >
+                                {t('common:cancel')}
+                              </button>
+                            </div>
+                          </div>
+                        )}
+                      </div>
                     </div>
                   )}
                 </div>

@@ -14,6 +14,8 @@
     "confirmUpdate": "Confirm update?",
     "yesUpdate": "Yes, Update",
     "rollback": "Rollback",
+    "installDevVersion": "Install Dev Version",
+    "confirmDevInstall": "Yes, Install Dev",
     "previous": "Previous",
     "next": "Next"
   },
@@ -27,7 +29,8 @@
     "devVersionAvailable": "Dev version available",
     "devCommitsAhead": "{{count}} commit(s) ahead",
     "devBuild": "Dev Build",
-    "devUpToDate": "Dev branch is up to date"
+    "devUpToDate": "Dev branch is up to date",
+    "devWarning": "Development versions may be unstable. A backup will be created before updating."
   },
   "blockers": {
     "title": "Update Blocked",
@@ -105,6 +108,7 @@
   },
   "toast": {
     "updateStarted": "Update started",
+    "devUpdateStarted": "Dev update started",
     "updateCompleted": "Updated to {{version}}",
     "rollbackSuccess": "Rolled back to {{version}}",
     "settingsSaved": "Settings saved",
