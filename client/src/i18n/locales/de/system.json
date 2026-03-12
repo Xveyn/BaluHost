@@ -1284,5 +1284,38 @@
       "discard": "Verwerfen",
       "refresh": "Aktualisieren"
     }
+  },
+  "firebase": {
+    "title": "Firebase Cloud Messaging",
+    "subtitle": "Push-Benachrichtigungen für die BaluApp (Android)",
+    "status": "Status",
+    "configured": "Konfiguriert",
+    "notConfigured": "Nicht konfiguriert",
+    "initialized": "Initialisiert",
+    "notInitialized": "Nicht initialisiert",
+    "projectId": "Projekt-ID",
+    "serviceAccount": "Service-Account",
+    "source": "Quelle",
+    "sourceFile": "Datei",
+    "sourceEnvVar": "Umgebungsvariable",
+    "uploadedAt": "Hochgeladen am",
+    "sdkInstalled": "SDK installiert",
+    "sdkNotInstalled": "SDK nicht installiert",
+    "sdkWarning": "Das Python-Paket firebase-admin ist nicht installiert. Push-Benachrichtigungen sind deaktiviert.",
+    "uploadTitle": "Credentials hochladen",
+    "uploadDescription": "Lade deine Firebase Service-Account JSON-Datei hoch (firebase-credentials.json aus der Firebase Console).",
+    "selectFile": "JSON-Datei auswählen",
+    "uploadButton": "Hochladen",
+    "uploading": "Wird hochgeladen...",
+    "uploadSuccess": "Firebase-Credentials erfolgreich hochgeladen",
+    "uploadError": "Hochladen fehlgeschlagen",
+    "invalidJson": "Ungültige JSON-Datei",
+    "deleteTitle": "Credentials löschen",
+    "deleteDescription": "Entfernt die gespeicherten Firebase-Credentials. Push-Benachrichtigungen werden deaktiviert.",
+    "deleteButton": "Credentials löschen",
+    "deleteConfirm": "Firebase-Credentials wirklich löschen? Push-Benachrichtigungen werden deaktiviert.",
+    "deleteSuccess": "Firebase-Credentials gelöscht",
+    "deleteError": "Löschen fehlgeschlagen",
+    "envVarHint": "Credentials werden aus der Umgebungsvariable FIREBASE_CREDENTIALS_JSON geladen. Um sie über die UI zu verwalten, entferne die Variable und lade eine JSON-Datei hoch."
   }
 }

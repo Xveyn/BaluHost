@@ -1284,5 +1284,38 @@
       "discard": "Discard",
       "refresh": "Refresh"
     }
+  },
+  "firebase": {
+    "title": "Firebase Cloud Messaging",
+    "subtitle": "Push notifications for the BaluApp (Android)",
+    "status": "Status",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "initialized": "Initialized",
+    "notInitialized": "Not initialized",
+    "projectId": "Project ID",
+    "serviceAccount": "Service Account",
+    "source": "Source",
+    "sourceFile": "File",
+    "sourceEnvVar": "Environment variable",
+    "uploadedAt": "Uploaded at",
+    "sdkInstalled": "SDK installed",
+    "sdkNotInstalled": "SDK not installed",
+    "sdkWarning": "The firebase-admin Python package is not installed. Push notifications are disabled.",
+    "uploadTitle": "Upload Credentials",
+    "uploadDescription": "Upload your Firebase service account JSON file (firebase-credentials.json from the Firebase Console).",
+    "selectFile": "Select JSON file",
+    "uploadButton": "Upload",
+    "uploading": "Uploading...",
+    "uploadSuccess": "Firebase credentials uploaded successfully",
+    "uploadError": "Upload failed",
+    "invalidJson": "Invalid JSON file",
+    "deleteTitle": "Delete Credentials",
+    "deleteDescription": "Removes the stored Firebase credentials. Push notifications will be disabled.",
+    "deleteButton": "Delete Credentials",
+    "deleteConfirm": "Really delete Firebase credentials? Push notifications will be disabled.",
+    "deleteSuccess": "Firebase credentials deleted",
+    "deleteError": "Deletion failed",
+    "envVarHint": "Credentials are loaded from the FIREBASE_CREDENTIALS_JSON environment variable. To manage via UI, remove the variable and upload a JSON file."
   }
 }

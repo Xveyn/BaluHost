@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable, Bell } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -23,8 +23,9 @@ import SambaManagementCard from '../components/samba/SambaManagementCard';
 import SleepMode from './SleepMode';
 import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
 import { SystemVariablesTab } from '../components/env-config';
+import FirebaseManagementCard from '../components/firebase/FirebaseManagementCard';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'webdav' | 'samba' | 'envconfig';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -69,6 +70,7 @@ const CATEGORIES: CategoryConfig[] = [
       { id: 'vpn', labelKey: 'systemControl.tabs.vpn', icon: <Shield className="h-5 w-5" /> },
       { id: 'webdav', labelKey: 'systemControl.tabs.webdav', icon: <FolderOpen className="h-5 w-5" /> },
       { id: 'samba', labelKey: 'systemControl.tabs.samba', icon: <Share2 className="h-5 w-5" /> },
+      { id: 'firebase', labelKey: 'systemControl.tabs.firebase', icon: <Bell className="h-5 w-5" /> },
     ],
   },
   {
@@ -192,6 +194,7 @@ export default function SystemControlPage() {
         {activeTab === 'ratelimits' && <RateLimitsTab />}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
         {activeTab === 'samba' && <SambaManagementCard />}
+        {activeTab === 'firebase' && <FirebaseManagementCard />}
         {activeTab === 'envconfig' && <SystemVariablesTab />}
       </div>
     </div>
