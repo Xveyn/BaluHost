@@ -257,6 +257,83 @@ class UpdateService:
             message=f"Update to {target.version} started",
         )
 
+    async def start_dev_update(
+        self,
+        user_id: int,
+        skip_backup: bool = False,
+        force: bool = False,
+    ) -> UpdateStartResponse:
+        """Start an update to the development branch tip."""
+        # Check for blockers
+        blockers = await self._check_blockers()
+        if blockers and not force:
+            return UpdateStartResponse(
+                success=False,
+                message="Update blocked",
+                blockers=blockers,
+            )
+
+        # Get current version and dev branch info
+        current = await self.backend.get_current_version()
+        dev_available, dev_version, dev_commits_ahead, dev_commits = (
+            await self.backend.check_dev_branch()
+        )
+
+        if not dev_available or not dev_version:
+            return UpdateStartResponse(
+                success=False,
+                message="No development version available",
+            )
+
+        # Create update record
+        update = UpdateHistory(
+            from_version=current.version,
+            to_version=dev_version.version,
+            channel="development",
+            from_commit=current.commit,
+            to_commit=dev_version.commit,
+            user_id=user_id,
+            status=UpdateStatus.PENDING.value,
+            changelog="\n".join(
+                f"- {c.message}" for c in dev_commits
+            ) if dev_commits else "",
+        )
+        self.db.add(update)
+        self.db.commit()
+        self.db.refresh(update)
+
+        self._current_update = update
+
+        # Production: launch detached shell script via systemd-run
+        # Dev mode: run in-process simulation via asyncio task
+        if isinstance(self.backend, ProdUpdateBackend):
+            update.status = UpdateStatus.DOWNLOADING.value
+            update.set_progress(5, "Launching dev update runner...")
+            self.db.commit()
+
+            success, error = self.backend.launch_update_script(
+                update_id=update.id,
+                from_commit=current.commit,
+                to_commit=dev_version.commit,
+                from_version=current.version,
+                to_version=dev_version.version,
+            )
+            if not success:
+                update.fail(f"Failed to launch update: {error}")
+                self.db.commit()
+                return UpdateStartResponse(
+                    success=False,
+                    message=f"Failed to launch update: {error}",
+                )
+        else:
+            asyncio.create_task(self._run_dev_update(update.id, skip_backup))
+
+        return UpdateStartResponse(
+            success=True,
+            update_id=update.id,
+            message=f"Dev update to {dev_version.version} started",
+        )
+
     async def _run_dev_update(self, update_id: int, skip_backup: bool) -> None:
         """Run the update process in-process (dev mode only).
 

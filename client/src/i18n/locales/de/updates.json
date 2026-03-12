@@ -14,6 +14,8 @@
     "confirmUpdate": "Update bestätigen?",
     "yesUpdate": "Ja, aktualisieren",
     "rollback": "Zurücksetzen",
+    "installDevVersion": "Dev-Version installieren",
+    "confirmDevInstall": "Ja, Dev installieren",
     "previous": "Zurück",
     "next": "Weiter"
   },
@@ -27,7 +29,8 @@
     "devVersionAvailable": "Dev-Version verfügbar",
     "devCommitsAhead": "{{count}} Commit(s) voraus",
     "devBuild": "Dev Build",
-    "devUpToDate": "Dev-Branch ist aktuell"
+    "devUpToDate": "Dev-Branch ist aktuell",
+    "devWarning": "Development-Versionen können instabil sein. Vor dem Update wird ein Backup erstellt."
   },
   "blockers": {
     "title": "Update blockiert",
@@ -105,6 +108,7 @@
   },
   "toast": {
     "updateStarted": "Update gestartet",
+    "devUpdateStarted": "Dev-Update gestartet",
     "updateCompleted": "Auf {{version}} aktualisiert",
     "rollbackSuccess": "Auf {{version}} zurückgesetzt",
     "settingsSaved": "Einstellungen gespeichert",

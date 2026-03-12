@@ -208,9 +208,9 @@ class NotificationService:
 
         # Get user's active mobile devices
         devices = db.query(MobileDevice).filter(
-            MobileDevice.user_id == str(notification.user_id),
+            MobileDevice.user_id == notification.user_id,
             MobileDevice.is_active == True,
-            MobileDevice.fcm_token.isnot(None)
+            MobileDevice.push_token.isnot(None)
         ).all()
 
         for device in devices:
@@ -244,7 +244,7 @@ class NotificationService:
                             channel_id=channel_id,
                         )
                     ),
-                    token=device.fcm_token,
+                    token=device.push_token,
                 )
                 messaging.send(message)
                 logger.debug(f"Push notification sent to device {device.id}")

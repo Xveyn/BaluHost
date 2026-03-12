@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.1] - 2026-03-12
+
+### Firebase Configuration & Update Improvements
+
+Admin-UI für Firebase-Credential-Verwaltung unter System Control > Network,
+Development-Branch-Update-Support und Fix für FCM Push-Delivery.
+
+### Added
+
+- **Firebase config UI** — Neuer Firebase-Tab unter System Control > Network zum Hochladen, Anzeigen und Löschen von Firebase-Credentials mit Hot-Reload
+- **Development branch updates** — Update-Support für den Development-Branch
+
+### Fixed
+
+- **FCM push delivery** — Push-Benachrichtigungen an mobile Geräte korrigiert
+
+---
+
 ## [1.15.0] - 2026-03-11
 
 ### File Activity, Sync Auto-VPN & VPN Config Improvements

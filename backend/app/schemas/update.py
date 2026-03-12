@@ -13,7 +13,7 @@ UpdateStatusEnum = Literal[
     "migrating", "restarting", "health_check", "completed", "failed",
     "rolled_back", "cancelled"
 ]
-UpdateChannelEnum = Literal["stable", "unstable"]
+UpdateChannelEnum = Literal["stable", "unstable", "development"]
 
 
 class VersionInfo(BaseModel):
@@ -90,6 +90,19 @@ class UpdateStartRequest(BaseModel):
         default=None,
         description="Specific version to update to (default: latest)"
     )
+    skip_backup: bool = Field(
+        default=False,
+        description="Skip database backup (not recommended)"
+    )
+    force: bool = Field(
+        default=False,
+        description="Force update even with non-critical blockers"
+    )
+
+
+class DevUpdateStartRequest(BaseModel):
+    """Request to start a development branch update."""
+
     skip_backup: bool = Field(
         default=False,
         description="Skip database backup (not recommended)"

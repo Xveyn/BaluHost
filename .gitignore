@@ -78,6 +78,7 @@ client/e2e-*.png
 
 # Production environment with secrets
 .env.production
+firebase-*.json
 
 # Codebase Analyzer
 tools/codebase-analyzer/node_modules/

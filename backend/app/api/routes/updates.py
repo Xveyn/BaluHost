@@ -12,6 +12,7 @@ from app.schemas.user import UserPublic
 from app.schemas.update import (
     UpdateCheckResponse,
     UpdateStartRequest,
+    DevUpdateStartRequest,
     UpdateStartResponse,
     UpdateProgressResponse,
     UpdateHistoryResponse,
@@ -143,6 +144,62 @@ async def start_update(
 
     if not result.success and result.blockers:
         # Return 409 Conflict if blocked
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={
+                "message": result.message,
+                "blockers": result.blockers,
+            }
+        )
+
+    return result
+
+
+@router.post("/start-dev", response_model=UpdateStartResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def start_dev_update(
+    request: Request, response: Response,
+    body: Optional[DevUpdateStartRequest] = None,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UpdateStartResponse:
+    """Start a development branch update.
+
+    Deploys the latest commit from the development branch.
+    The update runs in the background and progress can be monitored via
+    the /progress/{id} endpoint.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    req = body or DevUpdateStartRequest()
+
+    result = await service.start_dev_update(
+        user_id=current_user.id,
+        skip_backup=req.skip_backup,
+        force=req.force,
+    )
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="start_dev_update",
+        user=current_user.username,
+        resource="system",
+        success=result.success,
+        details={
+            "update_id": result.update_id,
+            "channel": "development",
+            "skip_backup": req.skip_backup,
+            "force": req.force,
+            "message": result.message,
+            "blockers": result.blockers,
+        },
+        db=db,
+    )
+
+    if not result.success and result.blockers:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail={

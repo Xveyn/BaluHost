@@ -2,8 +2,9 @@
 
 import json
 import os
+import tempfile
 from typing import Optional, Dict, Any
-from datetime import datetime
+from datetime import datetime, timezone
 
 try:
     import firebase_admin
@@ -14,6 +15,9 @@ except ImportError:
     print("[Firebase] Warning: firebase-admin not installed. Push notifications disabled.")
 
 from app.core.config import get_settings
+
+# Path to credentials file (relative to backend working directory)
+CREDENTIALS_FILE = os.path.join(os.getcwd(), "firebase-credentials.json")
 
 
 class FirebaseService:
@@ -256,28 +260,155 @@ class FirebaseService:
     def verify_token(cls, device_token: str) -> bool:
         """
         Verify if an FCM token is valid.
-        
+
         Args:
             device_token: FCM registration token to verify
-            
+
         Returns:
             bool: True if token is valid, False otherwise
         """
         if not cls.is_available():
             return False
-        
+
         try:
             # Try to send a dry-run message
             message = messaging.Message(
                 data={"type": "token_verification"},
                 token=device_token
             )
-            
+
             messaging.send(message, dry_run=True)
             return True
-            
+
         except messaging.UnregisteredError:
             return False
         except Exception as e:
             print(f"[Firebase] Token verification failed: {e}")
             return False
+
+    @classmethod
+    def reset(cls) -> None:
+        """Reset Firebase SDK — delete app instance and clear state."""
+        if FIREBASE_AVAILABLE and cls._app is not None:
+            try:
+                firebase_admin.delete_app(cls._app)
+                print("[Firebase] App deleted for re-initialization")
+            except Exception as e:
+                print(f"[Firebase] Warning during app deletion: {e}")
+        cls._app = None
+        cls._initialized = False
+
+    @classmethod
+    def get_status(cls) -> Dict[str, Any]:
+        """
+        Get Firebase configuration status (no secrets exposed).
+
+        Returns:
+            dict with configuration metadata
+        """
+        file_exists = os.path.exists(CREDENTIALS_FILE)
+        env_var_set = bool(os.getenv("FIREBASE_CREDENTIALS_JSON"))
+
+        # Determine credentials source
+        credentials_source: Optional[str] = None
+        if env_var_set:
+            credentials_source = "env_var"
+        elif file_exists:
+            credentials_source = "file"
+
+        # Extract project_id and client_email from available source
+        project_id: Optional[str] = None
+        client_email: Optional[str] = None
+
+        try:
+            cred_data = None
+            if env_var_set:
+                cred_data = json.loads(os.getenv("FIREBASE_CREDENTIALS_JSON", "{}"))
+            elif file_exists:
+                with open(CREDENTIALS_FILE, "r", encoding="utf-8") as f:
+                    cred_data = json.load(f)
+
+            if cred_data:
+                project_id = cred_data.get("project_id")
+                client_email = cred_data.get("client_email")
+        except (json.JSONDecodeError, OSError):
+            pass
+
+        # Get file upload timestamp
+        uploaded_at: Optional[str] = None
+        if file_exists:
+            try:
+                mtime = os.path.getmtime(CREDENTIALS_FILE)
+                uploaded_at = datetime.fromtimestamp(mtime, tz=timezone.utc).isoformat()
+            except OSError:
+                pass
+
+        return {
+            "configured": credentials_source is not None,
+            "initialized": cls._initialized,
+            "project_id": project_id,
+            "client_email": client_email,
+            "credentials_source": credentials_source,
+            "file_exists": file_exists,
+            "uploaded_at": uploaded_at,
+            "sdk_installed": FIREBASE_AVAILABLE,
+        }
+
+    @classmethod
+    def save_credentials(cls, json_str: str) -> Dict[str, Any]:
+        """
+        Save Firebase credentials JSON to file and re-initialize.
+
+        Args:
+            json_str: Valid Firebase service account JSON string
+
+        Returns:
+            dict with success status and project_id
+        """
+        cred_data = json.loads(json_str)
+        project_id = cred_data.get("project_id", "unknown")
+
+        # Atomic write: tempfile + os.replace
+        parent_dir = os.path.dirname(CREDENTIALS_FILE)
+        fd, tmp_path = tempfile.mkstemp(
+            dir=parent_dir, prefix=".firebase-cred.tmp.", suffix=".json"
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                json.dump(cred_data, f, indent=2)
+            os.replace(tmp_path, CREDENTIALS_FILE)
+        except Exception:
+            try:
+                os.unlink(tmp_path)
+            except OSError:
+                pass
+            raise
+
+        print(f"[Firebase] Credentials saved for project: {project_id}")
+
+        # Re-initialize with new credentials
+        cls.reset()
+        initialized = cls.initialize()
+
+        return {
+            "success": True,
+            "project_id": project_id,
+            "message": f"Credentials saved and {'initialized' if initialized else 'saved (SDK not available)'}",
+        }
+
+    @classmethod
+    def delete_credentials(cls) -> bool:
+        """
+        Delete Firebase credentials file and reset SDK.
+
+        Returns:
+            True if file was deleted, False if it didn't exist
+        """
+        cls.reset()
+
+        if os.path.exists(CREDENTIALS_FILE):
+            os.unlink(CREDENTIALS_FILE)
+            print("[Firebase] Credentials file deleted")
+            return True
+
+        return False

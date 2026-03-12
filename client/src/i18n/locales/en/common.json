@@ -180,7 +180,8 @@
       "samba": "SMB/CIFS",
       "sleep": "Sleep",
       "ssdCache": "SSD Cache",
-      "envConfig": "System Variables"
+      "envConfig": "System Variables",
+      "firebase": "Firebase"
     }
   },
   "devices": {
