@@ -105,6 +105,36 @@ async def delete_firebase_credentials(
     return FirebaseDeleteResponse(success=True, message="No credentials file to delete")
 
 
+def _dry_run_validate(messaging, title: str, body: str, device_names: str | None) -> FirebaseTestResponse:
+    """Validate Firebase config with a dry-run send (no real push delivered)."""
+    try:
+        dry_msg = messaging.Message(
+            notification=messaging.Notification(title=title, body=body),
+            topic="dry_run_validation",
+        )
+        messaging.send(dry_msg, dry_run=True)
+    except Exception as e:
+        logger.warning("Firebase dry-run validation failed: %s", e)
+        return FirebaseTestResponse(
+            success=False,
+            message=f"Firebase configuration error: {e}",
+            sent_to=0,
+        )
+
+    if device_names:
+        msg = (
+            f"Firebase configuration verified (dry-run). "
+            f"Devices [{device_names}] have no push token — "
+            f"open BaluApp once so it registers its FCM token."
+        )
+    else:
+        msg = (
+            "Firebase configuration verified (dry-run). "
+            "No devices registered — pair a device in BaluApp first."
+        )
+    return FirebaseTestResponse(success=True, message=msg, sent_to=0)
+
+
 @router.post("/test", response_model=FirebaseTestResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def send_test_notification(
@@ -123,37 +153,42 @@ async def send_test_notification(
             detail="Firebase is not initialized. Upload credentials first.",
         )
 
+    title = payload.title or "BaluHost Test"
+    body = payload.body or "Push notifications are working!"
+
+    from firebase_admin import messaging
+
     # Find target devices
     if payload.device_id:
         device = db.query(MobileDevice).filter(
             MobileDevice.id == payload.device_id,
             MobileDevice.is_active == True,
-            MobileDevice.push_token.isnot(None),
         ).first()
         if not device:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail="Device not found or has no push token",
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="Device not found",
             )
+        if not device.push_token:
+            # Device exists but has no push token — dry-run validate instead
+            return _dry_run_validate(messaging, title, body, device.device_name)
         devices = [device]
     else:
         # Send to all active devices of the current admin
-        devices = db.query(MobileDevice).filter(
+        all_devices = db.query(MobileDevice).filter(
             MobileDevice.user_id == current_user.id,
             MobileDevice.is_active == True,
-            MobileDevice.push_token.isnot(None),
         ).all()
+        devices = [d for d in all_devices if d.push_token]
 
-    if not devices:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="No devices with push tokens found. Register a device in the BaluApp first.",
-        )
+        if not devices and all_devices:
+            # Devices registered but none have push tokens
+            names = ", ".join(d.device_name for d in all_devices)
+            return _dry_run_validate(messaging, title, body, names)
 
-    title = payload.title or "BaluHost Test"
-    body = payload.body or "Push notifications are working!"
-
-    from firebase_admin import messaging
+        if not devices:
+            # No devices at all
+            return _dry_run_validate(messaging, title, body, None)
 
     sent = 0
     last_message_id = None

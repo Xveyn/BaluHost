@@ -288,8 +288,10 @@ export default function FirebaseManagementCard() {
                   title: testTitle || undefined,
                   body: testBody || undefined,
                 });
-                if (res.success) {
+                if (res.success && res.sent_to > 0) {
                   toast.success(`${t('firebase.testSuccess')} (${res.sent_to})`);
+                } else if (res.success) {
+                  toast.success(res.message);
                 } else {
                   toast.error(res.message);
                 }
