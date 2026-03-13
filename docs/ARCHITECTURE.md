@@ -1,6 +1,6 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.15.1
+**Version:** 1.15.2
 **Last Updated:** 13. März 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
