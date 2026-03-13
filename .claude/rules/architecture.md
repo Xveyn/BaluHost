@@ -2,26 +2,38 @@
 
 ## Backend Key Services (`backend/app/services/`)
 
+### Top-level services
 - `auth.py` - JWT authentication, role-based access control (admin/user)
-- `files.py` - File operations, multi-mountpoint support, quota management
-- `raid.py` - RAID management (mdadm integration + dev-mode simulation)
-- `smart.py` - Disk health monitoring via smartctl
+- `mobile.py` - Mobile device registration with QR code pairing
 - `telemetry.py` - System metrics collection (CPU, RAM, Network)
 - `disk_monitor.py` - Real-time disk I/O monitoring
-- `audit_logger.py` - JSON-based activity logging
-- `vpn.py` - WireGuard VPN configuration & client management
-- `shares.py` - File sharing (public links + user permissions)
-- `backup.py` - Backup/restore functionality
-- `sync.py` - Desktop sync client coordination
-- `mobile.py` - Mobile device registration with QR code pairing
-- `power_manager.py` - CPU frequency scaling (AMD Ryzen & Intel support)
-- `power_monitor.py` - CPU power-state monitoring
-- `fan_control.py` - PWM fan control with temperature curves
 - `service_status.py` - Service health monitoring for admin dashboard
 - `network_discovery.py` - mDNS/Bonjour for local network discovery
-- `scheduler_service.py` - Unified scheduler management with execution history
-- `admin_db.py` - Secure read-only database inspection
-- `monitoring/orchestrator.py` - Unified monitoring system with collectors
+- `permissions.py` - Ownership checks, privilege helpers
+- `api_key_service.py` - API key management
+- `totp_service.py` - Two-factor authentication
+- `file_activity.py` - File activity tracking
+- `desktop_pairing.py` - Desktop client pairing
+- `websocket_manager.py` - WebSocket connection management
+
+### Service submodules
+- `files/` - File operations, multi-mountpoint support, quota management
+- `hardware/raid/` - RAID management (mdadm integration + dev-mode simulation)
+- `hardware/smart/` - Disk health monitoring via smartctl
+- `power/` - CPU frequency scaling, fan control, energy monitoring, sleep mode
+- `vpn/` - WireGuard VPN configuration, encryption, client management
+- `audit/` - Audit logging, admin DB inspection
+- `backup/` - Backup/restore functionality
+- `sync/` - Desktop sync client coordination
+- `scheduler/` - Unified scheduler management with execution history
+- `monitoring/` - Unified monitoring system with collectors
+- `notifications/` - Firebase push notifications, scheduling
+- `cloud/` - Cloud import (rclone integration)
+- `versioning/` - File versioning (VCL)
+- `pihole/` - Pi-hole DNS integration
+- `cache/` - SSD file caching
+- `benchmark/` - System benchmarking
+- `update/` - Self-hosted update mechanism
 
 ## Frontend UI Stack
 
@@ -88,6 +100,16 @@ All API routes are prefixed with `/api`:
 - `/api/energy/*` - Energy consumption statistics
 - `/api/tapo/*` - TP-Link Tapo smart plug integration
 - `/api/schedulers/*` - Scheduler management (status, history, run-now)
+- `/api/notifications/*` - Firebase push notifications
+- `/api/plugins/*` - Plugin system
+- `/api/pihole/*` - Pi-hole DNS management
+- `/api/updates/*` - Self-hosted update mechanism
+- `/api/sleep/*` - Sleep mode management
+- `/api/webdav/*` - WebDAV server management
+- `/api/samba/*` - Samba/SMB sharing
+- `/api/cloud/*` - Cloud import (rclone)
+- `/api/benchmark/*` - System benchmarking
+- `/api/api-keys/*` - API key management
 
 API documentation available at: `http://localhost:3001/docs` (Swagger UI with custom BaluHost styling)
 

@@ -4,7 +4,7 @@
 
 **✅ DEPLOYED IN PRODUCTION** (seit 25. Januar 2026)
 
-BaluHost Version 1.4.0 ist **vollständig produktionsreif** und läuft stabil in Production. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring, Power Management, Fan Control) ist vollständig implementiert, Sicherheit ist gehärtet (8/8 kritische Issues behoben), umfangreiche Tests (40 Dateien, 364 Tests) sowie CI/CD-Workflows existieren.
+BaluHost Version 1.15.1 ist **vollständig produktionsreif** und läuft stabil in Production. Die Kernfunktionalität (Web-UI, File Management, RAID, Monitoring, Power Management, Fan Control) ist vollständig implementiert, Sicherheit ist gehärtet (8/8 kritische Issues behoben), umfangreiche Tests (81 Dateien, 1438 Tests) sowie CI/CD-Workflows existieren.
 
 ### Production Infrastructure (ACTIVE)
 - ✅ Native Systemd-Deployment (Backend + Frontend Services)
