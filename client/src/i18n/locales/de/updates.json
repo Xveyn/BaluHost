@@ -106,9 +106,22 @@
     "title": "Rollback bestätigen",
     "description": "Sind Sie sicher, dass Sie zurücksetzen möchten? Die vorherige Version wird wiederhergestellt und ein Dienst-Neustart kann erforderlich sein."
   },
+  "progress": {
+    "systemUpdate": "Systemaktualisierung",
+    "initializing": "Initialisierung…",
+    "from": "Von",
+    "to": "Nach",
+    "progress": "Fortschritt",
+    "status": "Status",
+    "elapsed": "{{duration}}",
+    "rollback": "Zurücksetzen",
+    "cancel": "Abbrechen"
+  },
   "toast": {
     "updateStarted": "Update gestartet",
     "devUpdateStarted": "Dev-Update gestartet",
+    "updateCancelled": "Update abgebrochen",
+    "cancelFailed": "Update konnte nicht abgebrochen werden",
     "updateCompleted": "Auf {{version}} aktualisiert",
     "rollbackSuccess": "Auf {{version}} zurückgesetzt",
     "settingsSaved": "Einstellungen gespeichert",

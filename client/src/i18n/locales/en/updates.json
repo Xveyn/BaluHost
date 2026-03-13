@@ -106,9 +106,22 @@
     "title": "Confirm Rollback",
     "description": "Are you sure you want to rollback? This will restore the previous version and may require a service restart."
   },
+  "progress": {
+    "systemUpdate": "System Update",
+    "initializing": "Initializing…",
+    "from": "From",
+    "to": "To",
+    "progress": "Progress",
+    "status": "Status",
+    "elapsed": "{{duration}}",
+    "rollback": "Rollback",
+    "cancel": "Cancel"
+  },
   "toast": {
     "updateStarted": "Update started",
     "devUpdateStarted": "Dev update started",
+    "updateCancelled": "Update cancelled",
+    "cancelFailed": "Failed to cancel update",
     "updateCompleted": "Updated to {{version}}",
     "rollbackSuccess": "Rolled back to {{version}}",
     "settingsSaved": "Settings saved",
