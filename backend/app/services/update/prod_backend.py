@@ -353,6 +353,21 @@ class ProdUpdateBackend(UpdateBackend):
         except Exception as e:
             return False, str(e)
 
+    def stop_update_service(self) -> tuple[bool, Optional[str]]:
+        """Stop the running update systemd unit."""
+        try:
+            result = subprocess.run(
+                ["sudo", "systemctl", "stop", "baluhost-update.service"],
+                capture_output=True, text=True, timeout=30,
+            )
+            if result.returncode != 0:
+                return False, result.stderr.strip()
+            return True, None
+        except subprocess.TimeoutExpired:
+            return False, "Timed out stopping update service"
+        except Exception as e:
+            return False, str(e)
+
     def read_update_status(self, update_id: int) -> Optional[dict]:
         """Read the JSON status file written by the update runner script.
 
