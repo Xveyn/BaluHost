@@ -51,3 +51,18 @@ class FirebaseDeleteResponse(BaseModel):
     """Response after deleting Firebase credentials."""
     success: bool
     message: str
+
+
+class FirebaseTestRequest(BaseModel):
+    """Request to send a test push notification."""
+    device_id: Optional[str] = None  # If None, send to all admin's devices
+    title: Optional[str] = None
+    body: Optional[str] = None
+
+
+class FirebaseTestResponse(BaseModel):
+    """Response after sending a test notification."""
+    success: bool
+    message: str
+    sent_to: int = 0
+    message_id: Optional[str] = None

@@ -1,11 +1,12 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, Upload, Trash2, Loader2, AlertCircle, CheckCircle2, XCircle, Info, RefreshCw } from 'lucide-react';
+import { Bell, Upload, Trash2, Loader2, AlertCircle, CheckCircle2, XCircle, Info, RefreshCw, Send } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getFirebaseStatus,
   uploadFirebaseCredentials,
   deleteFirebaseCredentials,
+  sendTestNotification,
   type FirebaseStatus,
 } from '../../api/firebase';
 
@@ -16,6 +17,9 @@ export default function FirebaseManagementCard() {
   const [loading, setLoading] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [deleting, setDeleting] = useState(false);
+  const [sendingTest, setSendingTest] = useState(false);
+  const [testTitle, setTestTitle] = useState('');
+  const [testBody, setTestBody] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStatus = async () => {
@@ -243,6 +247,70 @@ export default function FirebaseManagementCard() {
           </label>
         </div>
       </div>
+
+      {/* Test Notification Section (only when initialized) */}
+      {status.initialized && (
+        <div className="rounded-xl bg-slate-800/50 border border-slate-700/50 p-5 space-y-3">
+          <h3 className="text-base font-medium text-white flex items-center gap-2">
+            <Send className="h-5 w-5 text-emerald-400" />
+            {t('firebase.testTitle')}
+          </h3>
+          <p className="text-sm text-slate-400">{t('firebase.testDescription')}</p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">{t('firebase.testTitleLabel')}</label>
+              <input
+                type="text"
+                value={testTitle}
+                onChange={(e) => setTestTitle(e.target.value)}
+                placeholder="BaluHost Test"
+                className="w-full rounded-lg bg-slate-900/50 border border-slate-700/50 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none"
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">{t('firebase.testBodyLabel')}</label>
+              <input
+                type="text"
+                value={testBody}
+                onChange={(e) => setTestBody(e.target.value)}
+                placeholder={t('firebase.testBodyPlaceholder')}
+                className="w-full rounded-lg bg-slate-900/50 border border-slate-700/50 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none"
+              />
+            </div>
+          </div>
+
+          <button
+            onClick={async () => {
+              setSendingTest(true);
+              try {
+                const res = await sendTestNotification({
+                  title: testTitle || undefined,
+                  body: testBody || undefined,
+                });
+                if (res.success) {
+                  toast.success(`${t('firebase.testSuccess')} (${res.sent_to})`);
+                } else {
+                  toast.error(res.message);
+                }
+              } catch (err: any) {
+                toast.error(err?.response?.data?.detail || t('firebase.testError'));
+              } finally {
+                setSendingTest(false);
+              }
+            }}
+            disabled={sendingTest}
+            className="flex items-center gap-2 rounded-lg bg-emerald-500/20 px-4 py-2.5 text-sm font-medium text-emerald-400 hover:bg-emerald-500/30 border border-emerald-500/40 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {sendingTest ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <Send className="h-4 w-4" />
+            )}
+            {t('firebase.testSendButton')}
+          </button>
+        </div>
+      )}
 
       {/* Delete Section (only when configured via file) */}
       {status.configured && status.credentials_source === 'file' && (

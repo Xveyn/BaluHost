@@ -1316,6 +1316,14 @@
     "deleteConfirm": "Really delete Firebase credentials? Push notifications will be disabled.",
     "deleteSuccess": "Firebase credentials deleted",
     "deleteError": "Deletion failed",
-    "envVarHint": "Credentials are loaded from the FIREBASE_CREDENTIALS_JSON environment variable. To manage via UI, remove the variable and upload a JSON file."
+    "envVarHint": "Credentials are loaded from the FIREBASE_CREDENTIALS_JSON environment variable. To manage via UI, remove the variable and upload a JSON file.",
+    "testTitle": "Test Notification",
+    "testDescription": "Send a test push notification to your registered devices to verify Firebase is working correctly.",
+    "testTitleLabel": "Title",
+    "testBodyLabel": "Message",
+    "testBodyPlaceholder": "Push notifications are working!",
+    "testSendButton": "Send Test",
+    "testSuccess": "Test notification sent",
+    "testError": "Test notification failed"
   }
 }

@@ -13,6 +13,8 @@ from app.schemas.firebase_config import (
     FirebaseUploadRequest,
     FirebaseUploadResponse,
     FirebaseDeleteResponse,
+    FirebaseTestRequest,
+    FirebaseTestResponse,
 )
 from app.services.notifications.firebase import FirebaseService
 from app.services.audit_logger_db import get_audit_logger_db
@@ -101,3 +103,104 @@ async def delete_firebase_credentials(
     if deleted:
         return FirebaseDeleteResponse(success=True, message="Credentials deleted")
     return FirebaseDeleteResponse(success=True, message="No credentials file to delete")
+
+
+@router.post("/test", response_model=FirebaseTestResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def send_test_notification(
+    request: Request,
+    response: Response,
+    payload: FirebaseTestRequest,
+    current_user: UserPublic = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """Send a test push notification to verify Firebase is working (admin only)."""
+    from app.models.mobile import MobileDevice
+
+    if not FirebaseService.is_available():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Firebase is not initialized. Upload credentials first.",
+        )
+
+    # Find target devices
+    if payload.device_id:
+        device = db.query(MobileDevice).filter(
+            MobileDevice.id == payload.device_id,
+            MobileDevice.is_active == True,
+            MobileDevice.push_token.isnot(None),
+        ).first()
+        if not device:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Device not found or has no push token",
+            )
+        devices = [device]
+    else:
+        # Send to all active devices of the current admin
+        devices = db.query(MobileDevice).filter(
+            MobileDevice.user_id == current_user.id,
+            MobileDevice.is_active == True,
+            MobileDevice.push_token.isnot(None),
+        ).all()
+
+    if not devices:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No devices with push tokens found. Register a device in the BaluApp first.",
+        )
+
+    title = payload.title or "BaluHost Test"
+    body = payload.body or "Push notifications are working!"
+
+    from firebase_admin import messaging
+
+    sent = 0
+    last_message_id = None
+    errors = []
+
+    for device in devices:
+        try:
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={
+                    "type": "notification",
+                    "category": "system",
+                    "priority": "1",
+                    "action_url": "",
+                },
+                android=messaging.AndroidConfig(
+                    priority="high",
+                    notification=messaging.AndroidNotification(
+                        icon="ic_notification",
+                        color="#38bdf8",
+                        sound="default",
+                        channel_id="alerts_info",
+                    ),
+                ),
+                token=device.push_token,
+            )
+            last_message_id = messaging.send(message)
+            sent += 1
+            logger.info("Test notification sent to %s: %s", device.device_name, last_message_id)
+        except Exception as e:
+            errors.append(f"{device.device_name}: {e}")
+            logger.warning("Test notification failed for %s: %s", device.device_name, e)
+
+    if sent == 0:
+        return FirebaseTestResponse(
+            success=False,
+            message=f"Failed to send: {'; '.join(errors)}",
+            sent_to=0,
+        )
+
+    msg = f"Sent to {sent} device(s)"
+    if errors:
+        msg += f", {len(errors)} failed"
+
+    return FirebaseTestResponse(
+        success=True,
+        message=msg,
+        sent_to=sent,
+        message_id=last_message_id,
+    )

@@ -22,6 +22,19 @@ export interface FirebaseDeleteResponse {
   message: string;
 }
 
+export interface FirebaseTestRequest {
+  device_id?: string;
+  title?: string;
+  body?: string;
+}
+
+export interface FirebaseTestResponse {
+  success: boolean;
+  message: string;
+  sent_to: number;
+  message_id: string | null;
+}
+
 export async function getFirebaseStatus(): Promise<FirebaseStatus> {
   const { data } = await apiClient.get<FirebaseStatus>('/api/firebase/status');
   return data;
@@ -36,5 +49,10 @@ export async function uploadFirebaseCredentials(json: string): Promise<FirebaseU
 
 export async function deleteFirebaseCredentials(): Promise<FirebaseDeleteResponse> {
   const { data } = await apiClient.delete<FirebaseDeleteResponse>('/api/firebase/credentials');
+  return data;
+}
+
+export async function sendTestNotification(req: FirebaseTestRequest = {}): Promise<FirebaseTestResponse> {
+  const { data } = await apiClient.post<FirebaseTestResponse>('/api/firebase/test', req);
   return data;
 }
