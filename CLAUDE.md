@@ -27,7 +27,7 @@ backend/
 │   ├── models/            # SQLAlchemy ORM models
 │   └── core/config.py     # Configuration
 ├── baluhost_tui/          # Terminal UI application
-├── tests/                 # Pytest tests (68 files, 1121 test functions)
+├── tests/                 # Pytest tests (81 files, 1438 test functions)
 └── pyproject.toml         # Dependencies
 
 client/
@@ -44,18 +44,18 @@ client/
 
 **Authentication logic**: `backend/app/services/auth.py` + `backend/app/api/deps.py`
 **File upload handling**: `backend/app/services/files.py:upload_file()`
-**RAID status**: `backend/app/services/raid.py`
+**RAID status**: `backend/app/services/hardware/raid/`
 **Frontend API client**: `client/src/lib/api.ts`
 **Dashboard page**: `client/src/pages/Dashboard.tsx`
 **Database models**: `backend/app/models/`
 **API schemas**: `backend/app/schemas/`
 **Tests**: `backend/tests/`
-**Fan control**: `backend/app/services/fan_control.py`
-**Power management**: `backend/app/services/power_manager.py`
+**Fan control**: `backend/app/services/power/fan_control.py`
+**Power management**: `backend/app/services/power/manager.py`
 **Monitoring orchestrator**: `backend/app/services/monitoring/orchestrator.py`
 **Service status**: `backend/app/services/service_status.py`
 **Network discovery**: `backend/app/services/network_discovery.py`
-**Scheduler service**: `backend/app/services/scheduler_service.py`
+**Scheduler service**: `backend/app/services/scheduler/service.py`
 **Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
 
 ## Contact & Support
@@ -63,4 +63,4 @@ client/
 - **Issues**: GitHub Issues (repository URL needed)
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.15.1 (as of Mar 2026)
+- **Version**: 1.15.2 (as of Mar 2026)

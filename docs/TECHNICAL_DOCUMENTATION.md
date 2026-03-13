@@ -6,8 +6,8 @@ BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Pyth
 
 Version & Datum
 -
-- **Version:** 1.4.2
-- **Last Updated:** 29. Januar 2026
+- **Version:** 1.15.2
+- **Last Updated:** 13. März 2026
 - **Maintainer:** Xveyn
 - **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 

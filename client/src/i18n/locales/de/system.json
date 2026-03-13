@@ -1316,6 +1316,17 @@
     "deleteConfirm": "Firebase-Credentials wirklich löschen? Push-Benachrichtigungen werden deaktiviert.",
     "deleteSuccess": "Firebase-Credentials gelöscht",
     "deleteError": "Löschen fehlgeschlagen",
-    "envVarHint": "Credentials werden aus der Umgebungsvariable FIREBASE_CREDENTIALS_JSON geladen. Um sie über die UI zu verwalten, entferne die Variable und lade eine JSON-Datei hoch."
+    "envVarHint": "Credentials werden aus der Umgebungsvariable FIREBASE_CREDENTIALS_JSON geladen. Um sie über die UI zu verwalten, entferne die Variable und lade eine JSON-Datei hoch.",
+    "testTitle": "Test-Benachrichtigung",
+    "testDescription": "Sende eine Test-Push-Benachrichtigung an deine registrierten Geräte, um zu prüfen ob Firebase korrekt funktioniert.",
+    "testTitleLabel": "Titel",
+    "testBodyLabel": "Nachricht",
+    "testBodyPlaceholder": "Push-Benachrichtigungen funktionieren!",
+    "manualToken": "FCM-Token manuell eingeben",
+    "hideToken": "Token-Feld ausblenden",
+    "tokenPlaceholder": "FCM-Token einfügen (aus Logcat oder Firebase Console)",
+    "testSendButton": "Test senden",
+    "testSuccess": "Test-Benachrichtigung gesendet",
+    "testError": "Test-Benachrichtigung fehlgeschlagen"
   }
 }

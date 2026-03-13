@@ -140,22 +140,37 @@ class NotificationScheduler:
         Returns:
             Tuple[bool, str]: (should_send, reason_if_not)
         """
-        # Check if it's time to send this warning (within ±30 minutes of warning time)
+        # Check if it's time to send this warning (within ±35 minutes of warning time)
+        # Slightly larger than half the 1-hour scheduler interval to avoid missed windows
         time_difference = abs((warning_time - now).total_seconds())
-        grace_period = 30 * 60  # 30 minutes
+        grace_period = 35 * 60  # 35 minutes
         
         if time_difference > grace_period:
             # Not yet time, or too late for this warning
             return False, "Not within warning window"
         
-        # Check if this warning was already sent
+        # Check if this warning was already sent successfully
         existing_notification = db.query(ExpirationNotification).filter(
             ExpirationNotification.device_id == device.id,
             ExpirationNotification.notification_type == warning_type,
             ExpirationNotification.device_expires_at == device.expires_at
         ).first()
-        
+
         if existing_notification:
+            # Retry previously failed notifications (up to 3 attempts)
+            if not existing_notification.success:
+                fail_count = db.query(ExpirationNotification).filter(
+                    ExpirationNotification.device_id == device.id,
+                    ExpirationNotification.notification_type == warning_type,
+                    ExpirationNotification.device_expires_at == device.expires_at,
+                    ExpirationNotification.success == False
+                ).count()
+                if fail_count < 3:
+                    # Delete failed record so _send_warning creates a fresh one
+                    db.delete(existing_notification)
+                    db.flush()
+                    return True, ""
+                return False, f"Max retries reached ({fail_count} failures)"
             return False, "Warning already sent"
         
         return True, ""
