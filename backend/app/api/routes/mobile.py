@@ -233,7 +233,20 @@ async def delete_device(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You don't have permission to delete this device"
         )
-    
+
+    # Send push notification before deletion (so the app can logout)
+    if device.push_token:
+        try:
+            from app.services.notifications.firebase import FirebaseService
+            if FirebaseService.is_available():
+                FirebaseService.send_device_removed_notification(
+                    device_token=device.push_token,
+                    device_name=device.device_name
+                )
+        except Exception as e:
+            # Don't block deletion if notification fails
+            print(f"[Mobile] Failed to send removal notification: {e}")
+
     db.delete(device)
     db.commit()
     return None
@@ -264,7 +277,7 @@ async def register_push_token(
     Returns:
         dict: Confirmation with token verification status
     """
-    from app.services.firebase_service import FirebaseService
+    from app.services.notifications.firebase import FirebaseService
     
     # Verify device belongs to user
     device = MobileService.get_device(
