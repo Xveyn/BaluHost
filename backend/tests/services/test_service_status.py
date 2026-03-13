@@ -7,6 +7,7 @@ Tests:
 - Service control (start/stop/restart)
 """
 import asyncio
+import time
 from datetime import datetime
 from unittest.mock import MagicMock, patch
 
@@ -46,16 +47,16 @@ def collector():
 class TestServerUptime:
     """Tests for server uptime functions."""
 
-    def test_set_server_start_time(self):
+    @patch("app.services.service_status._get_shared_start_time")
+    def test_set_server_start_time(self, mock_start_time):
         """Test setting server start time."""
+        # Mock the shared start time so the test doesn't depend on the parent
+        # process age (which can exceed 600s in CI or long test runs).
+        mock_start_time.return_value = time.time()
         set_server_start_time()
         uptime = get_server_uptime()
 
-        # In multi-worker mode, start time is derived from the parent process
-        # creation time (shared across workers).  In tests this is the pytest
-        # process, so the uptime may already be several seconds.  We just
-        # verify it returns a non-negative, reasonable value.
-        assert 0 <= uptime < 600.0  # CI pytest process may run for several minutes
+        assert 0 <= uptime < 5.0
 
     def test_get_server_uptime_increases(self):
         """Test that uptime increases over time."""
