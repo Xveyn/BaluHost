@@ -36,7 +36,7 @@ class ProdUpdateBackend(UpdateBackend):
 
     def __init__(self, repo_path: Optional[Path] = None):
         # Default to the project root
-        self.repo_path = repo_path or Path(__file__).parent.parent.parent.parent
+        self.repo_path = repo_path or Path(__file__).parent.parent.parent.parent.parent
         self.backend_path = self.repo_path / "backend"
         self.client_path = self.repo_path / "client"
 
