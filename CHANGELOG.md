@@ -7,21 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-## [1.15.1] - 2026-03-12
+## [1.15.1] - 2026-03-13
 
-### Firebase Configuration & Update Improvements
+### Firebase Configuration, Test Notifications & Stability
 
-Admin-UI für Firebase-Credential-Verwaltung unter System Control > Network,
-Development-Branch-Update-Support und Fix für FCM Push-Delivery.
+Admin-UI für Firebase-Credential-Verwaltung, Test-Notifications aus dem Admin-Panel,
+verbesserte Notification-Zuverlässigkeit und Backend-Refactoring.
 
 ### Added
 
 - **Firebase config UI** — Neuer Firebase-Tab unter System Control > Network zum Hochladen, Anzeigen und Löschen von Firebase-Credentials mit Hot-Reload
+- **Firebase test notifications** — Test-Benachrichtigungen aus der Admin-UI senden, inkl. manuellem FCM Token
 - **Development branch updates** — Update-Support für den Development-Branch
+
+### Changed
+
+- **Backend modularisierung** — Lifespan und Service Registry in eigene Module extrahiert
+- **Pillow dependency** — Upper-Version-Constraint entfernt
 
 ### Fixed
 
 - **FCM push delivery** — Push-Benachrichtigungen an mobile Geräte korrigiert
+- **Test notifications** — Verbesserte Behandlung für Geräte ohne Push-Token
+- **Update service** — repo_path Traversal in ProdUpdateBackend korrigiert
+- **Notification retry** — Retry-Logik und Scheduler Grace Period erweitert
+- **Device removal push** — Push-Benachrichtigung bei Geräte-Entfernung + Import-Pfad Fix
+- **Idle detection** — Mobile Browser Timer-Freeze im Background behandelt
 
 ---
 
