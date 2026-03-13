@@ -1322,6 +1322,9 @@
     "testTitleLabel": "Titel",
     "testBodyLabel": "Nachricht",
     "testBodyPlaceholder": "Push-Benachrichtigungen funktionieren!",
+    "manualToken": "FCM-Token manuell eingeben",
+    "hideToken": "Token-Feld ausblenden",
+    "tokenPlaceholder": "FCM-Token einfügen (aus Logcat oder Firebase Console)",
     "testSendButton": "Test senden",
     "testSuccess": "Test-Benachrichtigung gesendet",
     "testError": "Test-Benachrichtigung fehlgeschlagen"

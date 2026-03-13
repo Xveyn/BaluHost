@@ -20,6 +20,8 @@ export default function FirebaseManagementCard() {
   const [sendingTest, setSendingTest] = useState(false);
   const [testTitle, setTestTitle] = useState('');
   const [testBody, setTestBody] = useState('');
+  const [testToken, setTestToken] = useState('');
+  const [showTokenField, setShowTokenField] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStatus = async () => {
@@ -278,6 +280,24 @@ export default function FirebaseManagementCard() {
                 className="w-full rounded-lg bg-slate-900/50 border border-slate-700/50 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none"
               />
             </div>
+            <div>
+              <button
+                type="button"
+                onClick={() => setShowTokenField(!showTokenField)}
+                className="text-xs text-slate-500 hover:text-slate-300 transition-colors"
+              >
+                {showTokenField ? t('firebase.hideToken') : t('firebase.manualToken')}
+              </button>
+              {showTokenField && (
+                <input
+                  type="text"
+                  value={testToken}
+                  onChange={(e) => setTestToken(e.target.value)}
+                  placeholder={t('firebase.tokenPlaceholder')}
+                  className="mt-1 w-full rounded-lg bg-slate-900/50 border border-slate-700/50 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-blue-500/50 focus:outline-none font-mono text-xs"
+                />
+              )}
+            </div>
           </div>
 
           <button
@@ -287,6 +307,7 @@ export default function FirebaseManagementCard() {
                 const res = await sendTestNotification({
                   title: testTitle || undefined,
                   body: testBody || undefined,
+                  token: testToken || undefined,
                 });
                 if (res.success && res.sent_to > 0) {
                   toast.success(`${t('firebase.testSuccess')} (${res.sent_to})`);

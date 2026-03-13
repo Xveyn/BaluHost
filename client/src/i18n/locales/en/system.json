@@ -1322,6 +1322,9 @@
     "testTitleLabel": "Title",
     "testBodyLabel": "Message",
     "testBodyPlaceholder": "Push notifications are working!",
+    "manualToken": "Enter FCM token manually",
+    "hideToken": "Hide token field",
+    "tokenPlaceholder": "Paste FCM token (from Logcat or Firebase Console)",
     "testSendButton": "Send Test",
     "testSuccess": "Test notification sent",
     "testError": "Test notification failed"

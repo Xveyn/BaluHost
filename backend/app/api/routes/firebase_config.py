@@ -158,6 +158,44 @@ async def send_test_notification(
 
     from firebase_admin import messaging
 
+    # Direct FCM token provided — send directly without device lookup
+    if payload.token:
+        try:
+            message = messaging.Message(
+                notification=messaging.Notification(title=title, body=body),
+                data={
+                    "type": "notification",
+                    "category": "system",
+                    "priority": "1",
+                    "action_url": "",
+                },
+                android=messaging.AndroidConfig(
+                    priority="high",
+                    notification=messaging.AndroidNotification(
+                        icon="ic_notification",
+                        color="#38bdf8",
+                        sound="default",
+                        channel_id="alerts_info",
+                    ),
+                ),
+                token=payload.token,
+            )
+            message_id = messaging.send(message)
+            logger.info("Test notification sent to manual token: %s", message_id)
+            return FirebaseTestResponse(
+                success=True,
+                message="Sent to manual FCM token",
+                sent_to=1,
+                message_id=message_id,
+            )
+        except Exception as e:
+            logger.warning("Test notification to manual token failed: %s", e)
+            return FirebaseTestResponse(
+                success=False,
+                message=f"Failed: {e}",
+                sent_to=0,
+            )
+
     # Find target devices
     if payload.device_id:
         device = db.query(MobileDevice).filter(

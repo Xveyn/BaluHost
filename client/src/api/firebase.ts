@@ -24,6 +24,7 @@ export interface FirebaseDeleteResponse {
 
 export interface FirebaseTestRequest {
   device_id?: string;
+  token?: string;
   title?: string;
   body?: string;
 }

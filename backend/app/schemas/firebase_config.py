@@ -56,6 +56,7 @@ class FirebaseDeleteResponse(BaseModel):
 class FirebaseTestRequest(BaseModel):
     """Request to send a test push notification."""
     device_id: Optional[str] = None  # If None, send to all admin's devices
+    token: Optional[str] = None  # Direct FCM token (bypasses device lookup)
     title: Optional[str] = None
     body: Optional[str] = None
 
