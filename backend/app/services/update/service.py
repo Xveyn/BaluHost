@@ -21,12 +21,16 @@ from app.schemas.update import (
     UpdateConfigResponse,
     UpdateConfigUpdate,
     ReleaseNotesResponse,
+    CancelResponse,
 )
 from app.services.update.backend import UpdateBackend
 from app.services.update.prod_backend import ProdUpdateBackend
 from app.services.update.utils import ProgressCallback
 
 logger = logging.getLogger(__name__)
+
+# Track running asyncio tasks for dev-mode updates (keyed by update ID)
+_running_tasks: dict[int, "asyncio.Task[None]"] = {}
 
 
 class UpdateService:
@@ -249,7 +253,8 @@ class UpdateService:
                     message=f"Failed to launch update: {error}",
                 )
         else:
-            asyncio.create_task(self._run_dev_update(update.id, skip_backup))
+            task = asyncio.create_task(self._run_dev_update(update.id, skip_backup))
+            _running_tasks[update.id] = task
 
         return UpdateStartResponse(
             success=True,
@@ -326,7 +331,8 @@ class UpdateService:
                     message=f"Failed to launch update: {error}",
                 )
         else:
-            asyncio.create_task(self._run_dev_update(update.id, skip_backup))
+            task = asyncio.create_task(self._run_dev_update(update.id, skip_backup))
+            _running_tasks[update.id] = task
 
         return UpdateStartResponse(
             success=True,
@@ -339,6 +345,9 @@ class UpdateService:
 
         In production, the detached run-update.sh script handles everything.
         This method simulates the update for development/testing.
+
+        Uses its own DB session (the request session is closed by the time
+        this task runs).
         """
         db = SessionLocal()
         try:
@@ -351,7 +360,6 @@ class UpdateService:
             def progress(percent: int, step: str):
                 update.set_progress(percent, step)
                 db.commit()
-                self._notify_progress(percent, step)
 
             try:
                 # Step 1: Backup (if enabled)
@@ -447,7 +455,11 @@ class UpdateService:
                 # Complete
                 update.complete()
                 db.commit()
-                progress(100, "Update completed successfully")
+
+            except asyncio.CancelledError:
+                logger.info(f"Update {update_id} was cancelled")
+                update.cancel()
+                db.commit()
 
             except Exception as e:
                 logger.exception(f"Update failed: {e}")
@@ -464,8 +476,55 @@ class UpdateService:
                         logger.error(f"Rollback also failed: {rollback_error}")
 
         finally:
+            _running_tasks.pop(update_id, None)
             db.close()
             self._current_update = None
+
+    async def cancel_update(self, update_id: int) -> CancelResponse:
+        """Cancel a running update."""
+        update = self.db.query(UpdateHistory).filter(UpdateHistory.id == update_id).first()
+        if not update:
+            return CancelResponse(success=False, message="Update not found")
+
+        active_statuses = [
+            UpdateStatus.PENDING.value,
+            UpdateStatus.CHECKING.value,
+            UpdateStatus.DOWNLOADING.value,
+            UpdateStatus.BACKING_UP.value,
+            UpdateStatus.INSTALLING.value,
+            UpdateStatus.MIGRATING.value,
+            UpdateStatus.RESTARTING.value,
+            UpdateStatus.HEALTH_CHECK.value,
+        ]
+
+        if update.status not in active_statuses:
+            return CancelResponse(
+                success=False,
+                message=f"Update is not in progress (status: {update.status})",
+            )
+
+        # Dev mode: cancel the asyncio task
+        task = _running_tasks.get(update_id)
+        if task and not task.done():
+            task.cancel()
+            # Give the task a moment to handle the CancelledError
+            await asyncio.sleep(0.5)
+
+        # Prod mode: stop the systemd unit
+        if isinstance(self.backend, ProdUpdateBackend):
+            success, error = self.backend.stop_update_service()
+            if not success:
+                logger.warning(f"Failed to stop update service: {error}")
+
+        # Mark as cancelled in DB (task handler may have already done this)
+        self.db.refresh(update)
+        if update.status in active_statuses:
+            update.cancel()
+            self.db.commit()
+
+        _running_tasks.pop(update_id, None)
+
+        return CancelResponse(success=True, message="Update cancelled")
 
     def get_update_progress(self, update_id: int) -> Optional[UpdateProgressResponse]:
         """Get progress of an update.
@@ -484,20 +543,50 @@ class UpdateService:
         step = update.current_step
         error = update.error_message
 
-        if isinstance(self.backend, ProdUpdateBackend) and status in (
+        active_statuses = (
             UpdateStatus.PENDING.value,
             UpdateStatus.DOWNLOADING.value,
+            UpdateStatus.BACKING_UP.value,
             UpdateStatus.INSTALLING.value,
             UpdateStatus.MIGRATING.value,
             UpdateStatus.RESTARTING.value,
             UpdateStatus.HEALTH_CHECK.value,
-        ):
+        )
+
+        if isinstance(self.backend, ProdUpdateBackend) and status in active_statuses:
             file_status = self.backend.read_update_status(update_id)
             if file_status:
                 status = file_status.get("status", status)
                 progress = file_status.get("progress_percent", progress)
                 step = file_status.get("current_step", step)
                 error = file_status.get("error_message", error)
+
+                # Sync file status back to DB for persistence
+                update.status = status
+                update.set_progress(progress, step)
+                if error:
+                    update.error_message = error
+                if status in (UpdateStatus.COMPLETED.value, UpdateStatus.FAILED.value):
+                    update.completed_at = datetime.now(timezone.utc)
+                    if update.started_at and update.completed_at:
+                        delta = update.completed_at - update.started_at
+                        update.duration_seconds = int(delta.total_seconds())
+                self.db.commit()
+            else:
+                # No status file — check if the systemd unit is still running
+                try:
+                    result = subprocess.run(
+                        ["sudo", "systemctl", "is-active", "baluhost-update.service"],
+                        capture_output=True, text=True, timeout=5,
+                    )
+                    if result.stdout.strip() not in ("active", "activating"):
+                        # Script exited without writing status
+                        status = UpdateStatus.FAILED.value
+                        error = "Update script exited without reporting status"
+                        update.fail(error)
+                        self.db.commit()
+                except Exception:
+                    pass  # Can't check systemd — keep using DB values
 
         return UpdateProgressResponse(
             update_id=update.id,

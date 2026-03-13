@@ -44,6 +44,7 @@ import {
   getUpdateProgress,
   getCurrentUpdate,
   rollbackUpdate,
+  cancelUpdate,
   getUpdateConfig,
   updateConfig,
   getReleaseNotes,
@@ -110,6 +111,7 @@ export default function UpdatePage() {
   const [updateLoading, setUpdateLoading] = useState(false);
   const [rollbackLoading, setRollbackLoading] = useState(false);
   const [configLoading, setConfigLoading] = useState(false);
+  const [cancelLoading, setCancelLoading] = useState(false);
 
   // Data state
   const [checkResult, setCheckResult] = useState<UpdateCheckResponse | null>(null);
@@ -316,6 +318,26 @@ export default function UpdatePage() {
     }
   };
 
+  // Cancel update
+  const handleCancel = async () => {
+    if (!currentUpdate) return;
+    setCancelLoading(true);
+    try {
+      const result = await cancelUpdate(currentUpdate.update_id);
+      if (result.success) {
+        toast.success(t('toast.updateCancelled'));
+        setCurrentUpdate(null);
+        await fetchCheck();
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err: unknown) {
+      handleApiError(err, t('toast.cancelFailed'));
+    } finally {
+      setCancelLoading(false);
+    }
+  };
+
   // Update config
   const handleConfigChange = async (key: keyof UpdateConfig, value: UpdateConfig[keyof UpdateConfig]) => {
     if (!config) return;
@@ -389,6 +411,8 @@ export default function UpdatePage() {
               progress={currentUpdate}
               onRollback={() => setShowRollbackConfirm(true)}
               rollbackLoading={rollbackLoading}
+              onCancel={handleCancel}
+              cancelLoading={cancelLoading}
             />
           )}
 

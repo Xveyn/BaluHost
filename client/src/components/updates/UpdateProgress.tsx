@@ -9,7 +9,7 @@
  * - Rollback option (when failed)
  */
 import { useTranslation } from 'react-i18next';
-import { Loader2, Clock, AlertTriangle, CheckCircle, XCircle, RotateCcw } from 'lucide-react';
+import { Loader2, Clock, AlertTriangle, CheckCircle, XCircle, RotateCcw, XOctagon } from 'lucide-react';
 import {
   getStatusInfo,
   formatDuration,
@@ -21,12 +21,16 @@ interface UpdateProgressProps {
   progress: UpdateProgressResponse;
   onRollback?: () => void;
   rollbackLoading?: boolean;
+  onCancel?: () => void;
+  cancelLoading?: boolean;
 }
 
 export default function UpdateProgress({
   progress,
   onRollback,
   rollbackLoading = false,
+  onCancel,
+  cancelLoading = false,
 }: UpdateProgressProps) {
   const { t } = useTranslation('updates');
   const percent = progress.progress_percent;
@@ -59,6 +63,22 @@ export default function UpdateProgress({
             </span>
           </div>
         </div>
+
+        {/* Cancel button (during in-progress) */}
+        {inProgress && onCancel && (
+          <button
+            onClick={onCancel}
+            disabled={cancelLoading}
+            className="flex items-center gap-1.5 px-3 py-1.5 text-sm bg-rose-600 hover:bg-rose-700 disabled:bg-rose-800 disabled:opacity-50 text-white rounded-lg transition-colors"
+          >
+            {cancelLoading ? (
+              <Loader2 className="w-4 h-4 animate-spin" />
+            ) : (
+              <XOctagon className="w-4 h-4" />
+            )}
+            {t('progress.cancel')}
+          </button>
+        )}
 
         {/* Rollback button (only when failed or completed) */}
         {progress.can_rollback && onRollback && !inProgress && (

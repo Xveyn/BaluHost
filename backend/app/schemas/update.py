@@ -220,6 +220,13 @@ class RollbackResponse(BaseModel):
     )
 
 
+class CancelResponse(BaseModel):
+    """Response from cancelling an update."""
+
+    success: bool = Field(description="Whether the update was cancelled")
+    message: str = Field(description="Status message")
+
+
 class UpdateConfigBase(BaseModel):
     """Base update configuration schema."""
 

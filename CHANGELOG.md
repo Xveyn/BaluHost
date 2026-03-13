@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.3] - 2026-03-14
+
+### Update System Fix & Cancel Support
+
+Fix für hängendes Update-Progress und neuer Cancel-Mechanismus für laufende Updates.
+
+### Added
+
+- **Update cancel** — Laufende Updates können jetzt über die UI abgebrochen werden (dev: asyncio cancel, prod: systemd stop)
+- **Update progress i18n** — Fehlende Übersetzungen für die Update-Progress-Anzeige (DE+EN)
+- **Unified test runner** — Neues Test-Runner-Script für kombinierte Backend/Frontend-Tests
+
+### Fixed
+
+- **Update progress stuck at 5%** — Dev-Mode-Updates crashten durch geschlossene DB-Session in _notify_progress()
+- **Prod update staleness** — Status-File wird jetzt in die DB synchronisiert, gestoppte systemd-Units werden erkannt
+- **Update cancel timezone** — UpdateHistory.cancel() nutzt jetzt konsistent UTC statt lokale Zeitzone
+
+### Changed
+
+- **CI workflows** — Redundante Workflows entfernt
+
+---
+
 ## [1.15.2] - 2026-03-13
 
 ### Firebase Configuration, Test Notifications & Stability

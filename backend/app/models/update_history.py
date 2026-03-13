@@ -1,5 +1,5 @@
 """Update history and configuration database models."""
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional
 import enum
 
@@ -168,7 +168,7 @@ class UpdateHistory(Base):
     def cancel(self) -> None:
         """Mark update as cancelled."""
         self.status = UpdateStatus.CANCELLED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = datetime.now(timezone.utc)
         self.current_step = "Update cancelled"
         if self.started_at:
             delta = self.completed_at - self.started_at

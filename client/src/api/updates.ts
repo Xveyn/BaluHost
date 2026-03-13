@@ -113,6 +113,12 @@ export interface UpdateHistoryResponse {
   page_size: number;
 }
 
+// Cancel response
+export interface CancelResponse {
+  success: boolean;
+  message: string;
+}
+
 // Rollback request/response
 export interface RollbackRequest {
   target_update_id?: number | null;
@@ -300,6 +306,14 @@ export async function getUpdateProgress(updateId: number): Promise<UpdateProgres
  */
 export async function getCurrentUpdate(): Promise<UpdateProgressResponse | null> {
   const response = await apiClient.get<UpdateProgressResponse | null>('/api/updates/current');
+  return response.data;
+}
+
+/**
+ * Cancel a running update
+ */
+export async function cancelUpdate(updateId: number): Promise<CancelResponse> {
+  const response = await apiClient.post<CancelResponse>(`/api/updates/cancel/${updateId}`);
   return response.data;
 }
 

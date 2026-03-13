@@ -18,6 +18,7 @@ from app.schemas.update import (
     UpdateHistoryResponse,
     RollbackRequest,
     RollbackResponse,
+    CancelResponse,
     UpdateConfigResponse,
     UpdateConfigUpdate,
     VersionInfo,
@@ -234,6 +235,49 @@ async def get_update_progress(
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Update {update_id} not found",
+        )
+
+    return result
+
+
+@router.post("/cancel/{update_id}", response_model=CancelResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def cancel_update(
+    request: Request, response: Response,
+    update_id: int,
+    current_user: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> CancelResponse:
+    """Cancel a running update.
+
+    Stops the update process and marks it as cancelled.
+    In dev mode, cancels the asyncio task.
+    In production, stops the systemd update unit.
+
+    Requires admin privileges.
+    """
+    service = get_update_service(db)
+    audit_logger = get_audit_logger_db()
+
+    result = await service.cancel_update(update_id)
+
+    audit_logger.log_event(
+        event_type="UPDATE",
+        action="cancel_update",
+        user=current_user.username,
+        resource="system",
+        success=result.success,
+        details={
+            "update_id": update_id,
+            "message": result.message,
+        },
+        db=db,
+    )
+
+    if not result.success:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=result.message,
         )
 
     return result
