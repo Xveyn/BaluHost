@@ -154,7 +154,6 @@ class MarkReadResponse(BaseModel):
 class CategoryPreference(BaseModel):
     """Preferences for a single notification category."""
 
-    email: bool = True
     push: bool = True
     in_app: bool = True
 
@@ -162,10 +161,6 @@ class CategoryPreference(BaseModel):
 class NotificationPreferencesBase(BaseModel):
     """Base notification preferences schema."""
 
-    email_enabled: bool = Field(
-        default=True,
-        description="Global email notifications enabled"
-    )
     push_enabled: bool = Field(
         default=True,
         description="Global push notifications enabled"
@@ -202,7 +197,6 @@ class NotificationPreferencesUpdate(NotificationPreferencesBase):
     """Schema for updating notification preferences."""
 
     # All fields are optional for partial updates
-    email_enabled: Optional[bool] = None
     push_enabled: Optional[bool] = None
     in_app_enabled: Optional[bool] = None
     quiet_hours_enabled: Optional[bool] = None
@@ -223,7 +217,6 @@ class NotificationPreferencesResponse(NotificationPreferencesBase):
         return cls(
             id=prefs.id,
             user_id=prefs.user_id,
-            email_enabled=prefs.email_enabled,
             push_enabled=prefs.push_enabled,
             in_app_enabled=prefs.in_app_enabled,
             quiet_hours_enabled=prefs.quiet_hours_enabled,

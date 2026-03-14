@@ -3,8 +3,6 @@
   "description": "Configure how and when you get notified",
   "channels": {
     "title": "Notification Channels",
-    "email": "Email",
-    "emailDesc": "Notifications via email",
     "push": "Push",
     "pushDesc": "Mobile app notifications",
     "inApp": "In-App",

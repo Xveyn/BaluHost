@@ -1,7 +1,7 @@
 """Notification service for BaluHost.
 
 Handles creation, dispatch, and management of user notifications across
-multiple channels (in-app, push, email).
+multiple channels (in-app, push).
 """
 
 import logging
@@ -28,7 +28,6 @@ class NotificationService:
     def __init__(self):
         """Initialize notification service."""
         self._websocket_manager = None
-        self._email_service = None
 
     @staticmethod
     def _user_filter(user_id: int, is_admin: bool = False):
@@ -58,14 +57,6 @@ class NotificationService:
             manager: WebSocketManager instance
         """
         self._websocket_manager = manager
-
-    def set_email_service(self, service: Any) -> None:
-        """Set the email service for email notifications.
-
-        Args:
-            service: EmailService instance
-        """
-        self._email_service = service
 
     async def create(
         self,
@@ -126,7 +117,6 @@ class NotificationService:
         Checks user preferences and sends to enabled channels:
         - In-app (WebSocket)
         - Push (Firebase FCM)
-        - Email (SMTP)
 
         Args:
             db: Database session
@@ -161,9 +151,6 @@ class NotificationService:
 
         if self._should_send_to_channel(prefs, notification.category, "push"):
             await self._send_push(db, notification)
-
-        if self._should_send_to_channel(prefs, notification.category, "email"):
-            await self._send_email(db, notification)
 
     async def _broadcast_to_admins(self, notification: Notification) -> None:
         """Broadcast notification to all admin users via WebSocket.
@@ -298,23 +285,6 @@ class NotificationService:
             except Exception as e:
                 logger.error(f"Failed to send push to device {device.id}: {e}")
 
-    async def _send_email(self, db: Session, notification: Notification) -> None:
-        """Send notification via email.
-
-        Args:
-            db: Database session
-            notification: Notification to send
-        """
-        if not self._email_service:
-            return
-
-        try:
-            user = db.query(User).filter(User.id == notification.user_id).first()
-            if user and user.email:
-                await self._email_service.send_notification_email(user, notification)
-        except Exception as e:
-            logger.error(f"Failed to send email notification: {e}")
-
     def _should_send_to_channel(
         self,
         prefs: Optional[NotificationPreferences],
@@ -326,7 +296,7 @@ class NotificationService:
         Args:
             prefs: User preferences (None = use defaults)
             category: Notification category
-            channel: Channel name (in_app, push, email)
+            channel: Channel name (in_app, push)
 
         Returns:
             True if notification should be sent to channel
@@ -724,7 +694,6 @@ class NotificationService:
         self,
         db: Session,
         user_id: int,
-        email_enabled: Optional[bool] = None,
         push_enabled: Optional[bool] = None,
         in_app_enabled: Optional[bool] = None,
         category_preferences: Optional[dict[str, Any]] = None,
@@ -738,7 +707,6 @@ class NotificationService:
         Args:
             db: Database session
             user_id: User ID
-            email_enabled: Enable email notifications
             push_enabled: Enable push notifications
             in_app_enabled: Enable in-app notifications
             category_preferences: Category-specific settings
@@ -756,8 +724,6 @@ class NotificationService:
             prefs = NotificationPreferences(user_id=user_id)
             db.add(prefs)
 
-        if email_enabled is not None:
-            prefs.email_enabled = email_enabled
         if push_enabled is not None:
             prefs.push_enabled = push_enabled
         if in_app_enabled is not None:

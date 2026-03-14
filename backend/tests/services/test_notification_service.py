@@ -31,14 +31,6 @@ def mock_websocket_manager():
     return manager
 
 
-@pytest.fixture
-def mock_email_service():
-    """Create a mock email service."""
-    service = AsyncMock()
-    service.send_notification_email = AsyncMock()
-    return service
-
-
 class TestNotificationService:
     """Tests for NotificationService."""
 
@@ -264,7 +256,6 @@ class TestNotificationPreferences:
 
         assert prefs is not None
         assert prefs.user_id == test_user.id
-        assert prefs.email_enabled is True
         assert prefs.push_enabled is True
         assert prefs.in_app_enabled is True
         assert prefs.quiet_hours_enabled is False
@@ -279,7 +270,6 @@ class TestNotificationPreferences:
         prefs = notification_service.update_user_preferences(
             db_session,
             test_user.id,
-            email_enabled=False,
             push_enabled=True,
             quiet_hours_enabled=True,
             quiet_hours_start=time(22, 0),
@@ -287,7 +277,6 @@ class TestNotificationPreferences:
             min_priority=1,
         )
 
-        assert prefs.email_enabled is False
         assert prefs.push_enabled is True
         assert prefs.quiet_hours_enabled is True
         assert prefs.quiet_hours_start == time(22, 0)
@@ -302,8 +291,8 @@ class TestNotificationPreferences:
     ):
         """Test category-specific channel checking."""
         category_prefs = {
-            "raid": {"email": True, "push": True, "in_app": False},
-            "backup": {"email": False, "push": False, "in_app": True},
+            "raid": {"push": True, "in_app": False},
+            "backup": {"push": False, "in_app": True},
         }
 
         prefs = notification_service.update_user_preferences(
@@ -312,16 +301,16 @@ class TestNotificationPreferences:
             category_preferences=category_prefs,
         )
 
-        # RAID should have email enabled but not in_app
-        assert prefs.is_channel_enabled_for_category("raid", "email") is True
+        # RAID should have push enabled but not in_app
+        assert prefs.is_channel_enabled_for_category("raid", "push") is True
         assert prefs.is_channel_enabled_for_category("raid", "in_app") is False
 
         # Backup should have only in_app enabled
-        assert prefs.is_channel_enabled_for_category("backup", "email") is False
+        assert prefs.is_channel_enabled_for_category("backup", "push") is False
         assert prefs.is_channel_enabled_for_category("backup", "in_app") is True
 
         # System (not in category_prefs) should use defaults (all enabled)
-        assert prefs.is_channel_enabled_for_category("system", "email") is True
+        assert prefs.is_channel_enabled_for_category("system", "push") is True
 
 
 class TestNotificationDispatch:

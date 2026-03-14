@@ -43,7 +43,6 @@ export interface MarkReadResponse {
 }
 
 export interface CategoryPreference {
-  email: boolean;
   push: boolean;
   in_app: boolean;
 }
@@ -51,7 +50,6 @@ export interface CategoryPreference {
 export interface NotificationPreferences {
   id: number;
   user_id: number;
-  email_enabled: boolean;
   push_enabled: boolean;
   in_app_enabled: boolean;
   quiet_hours_enabled: boolean;
@@ -62,7 +60,6 @@ export interface NotificationPreferences {
 }
 
 export interface NotificationPreferencesUpdate {
-  email_enabled?: boolean;
   push_enabled?: boolean;
   in_app_enabled?: boolean;
   quiet_hours_enabled?: boolean;

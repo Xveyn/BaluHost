@@ -226,7 +226,6 @@ async def _startup(app: FastAPI) -> None:
     from app.services.network_discovery import NetworkDiscoveryService
     from app.services.notifications.firebase import FirebaseService
     from app.services.websocket_manager import init_websocket_manager
-    from app.services.email_service import init_email_service
     from app.services.notifications.events import init_event_emitter
     from app.services.update.api import register_update_service, finalize_pending_updates
     from app.plugins.manager import PluginManager
@@ -317,7 +316,6 @@ async def _startup(app: FastAPI) -> None:
     # Initialize notification system services
     try:
         _websocket_manager = init_websocket_manager()
-        init_email_service()
         init_event_emitter(SessionLocal)
         logger.info("Notification system initialized")
     except Exception as e:

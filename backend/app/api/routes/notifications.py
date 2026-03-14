@@ -269,7 +269,6 @@ async def update_notification_preferences(
     prefs = service.update_user_preferences(
         db=db,
         user_id=current_user.id,
-        email_enabled=body.email_enabled,
         push_enabled=body.push_enabled,
         in_app_enabled=body.in_app_enabled,
         category_preferences=cat_prefs,
