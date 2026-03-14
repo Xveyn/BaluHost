@@ -135,9 +135,11 @@ class FirebaseService:
                     "action_url": action_url or "",
                 },
                 android=messaging.AndroidConfig(
-                    priority="high" if priority >= 2 else "normal",
+                    priority="high",
                     notification=messaging.AndroidNotification(
                         icon="ic_notification",
+                        color="#38bdf8",
+                        sound="default",
                         channel_id=channel_id,
                     ),
                 ),
