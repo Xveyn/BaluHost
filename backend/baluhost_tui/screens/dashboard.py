@@ -15,7 +15,7 @@ from rich.text import Text
 from app.services.telemetry import get_history, get_latest_cpu_usage, get_latest_memory_sample
 from app.services.raid import get_status as get_raid_status
 from app.services.users import list_users
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.core.config import settings
 from baluhost_tui.screens.users import UserManagementScreen
 from baluhost_tui.screens.files import FileBrowserScreen

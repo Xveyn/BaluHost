@@ -22,7 +22,7 @@ from app.schemas.tapo import (
 )
 from app.services import power_monitor
 from app.services.vpn_encryption import VPNEncryption
-from app.services.audit_logger_db import AuditLoggerDB
+from app.services.audit.logger_db import AuditLoggerDB
 
 router = APIRouter()
 

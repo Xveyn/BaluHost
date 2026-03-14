@@ -41,7 +41,7 @@ from app.services.vcl import VCLService
 from app.services.vcl_priority import VCLPriorityMode
 from app.services.versioning.reconciliation import VCLReconciliation
 from app.services.versioning.tracking import VCLTrackingService
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.models.vcl import VCLSettings, VCLStats, FileVersion, VersionBlob, VCLFileTracking
 from app.models.user import User
 from app.models.file_metadata import FileMetadata

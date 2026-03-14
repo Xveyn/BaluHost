@@ -24,7 +24,7 @@ from app.schemas.vpn import (
     FetchConfigByTypeRequest,
 )
 from app.services.vpn import VPNService
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 

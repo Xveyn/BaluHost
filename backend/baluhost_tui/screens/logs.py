@@ -13,7 +13,7 @@ from textual.binding import Binding
 from rich.text import Text
 from rich.json import JSON
 
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.models.audit_log import AuditLog
 from app.core.database import SessionLocal
 

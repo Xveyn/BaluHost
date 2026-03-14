@@ -14,7 +14,7 @@ from app.schemas.env_config import (
     EnvVarRevealResponse,
 )
 from app.services import env_config as env_config_service
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.core.rate_limiter import user_limiter, get_limit
 
 logger = logging.getLogger(__name__)

@@ -101,7 +101,7 @@ async def restart_service(
     Admin only. Performs a graceful stop and start of the service.
     Not all services support restart.
     """
-    from app.services.audit_logger_db import get_audit_logger_db
+    from app.services.audit.logger_db import get_audit_logger_db
 
     collector = get_service_status_collector()
 
@@ -157,7 +157,7 @@ async def stop_service(
     Admin only. Performs a graceful shutdown of the service.
     Not all services support stop.
     """
-    from app.services.audit_logger_db import get_audit_logger_db
+    from app.services.audit.logger_db import get_audit_logger_db
 
     collector = get_service_status_collector()
 
@@ -213,7 +213,7 @@ async def start_service(
     Admin only. Starts the service if it is currently stopped.
     Not all services support start.
     """
-    from app.services.audit_logger_db import get_audit_logger_db
+    from app.services.audit.logger_db import get_audit_logger_db
 
     collector = get_service_status_collector()
 

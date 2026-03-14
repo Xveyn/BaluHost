@@ -12,7 +12,7 @@ from app.schemas.auth import TokenPayload
 from app.schemas.user import UserPublic
 from app.services import auth as auth_service
 from app.services import users as user_service
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 

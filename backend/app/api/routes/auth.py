@@ -19,7 +19,7 @@ from app.services import users as user_service
 from app.services import totp_service
 from app.models.user import User as UserModel
 from app.core.config import settings
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.plugins.emit import emit_hook
 
 import time as _time
