@@ -6,7 +6,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.services.audit_logger import AuditLogger, get_audit_logger
+from app.services.audit.logger import AuditLogger, get_audit_logger
 
 
 class TestAuditLogger:

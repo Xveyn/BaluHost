@@ -16,7 +16,7 @@ from app.schemas.admin_db import (
     DatabaseHealthResponse,
     DatabaseInfoResponse,
 )
-from app.services.admin_db import AdminDBService
+from app.services.audit.admin_db import AdminDBService
 from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter()
