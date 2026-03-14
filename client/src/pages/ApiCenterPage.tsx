@@ -10,12 +10,15 @@ import {
   Check,
   Zap,
   Search,
+  RefreshCw,
+  AlertTriangle,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { apiSections, apiCategories, methodColors } from '../data/api-endpoints';
+import { methodColors } from '../data/api-endpoints';
 import type { ApiEndpoint } from '../data/api-endpoints';
+import { useOpenApiSchema } from '../hooks/useOpenApiSchema';
 
 // ==================== Types ====================
 
@@ -184,6 +187,8 @@ export default function ApiCenterPage() {
   const [rateLimits, setRateLimits] = useState<Record<string, RateLimitConfig>>({});
   const [loading, setLoading] = useState(true);
 
+  const { sections: apiSections, categories: apiCategories, loading: schemaLoading, error: schemaError, refetch: refetchSchema } = useOpenApiSchema();
+
   const isAdmin = user?.role === 'admin';
 
   // Dynamically determine API base URL based on current location
@@ -280,7 +285,7 @@ export default function ApiCenterPage() {
     return selectedSection
       ? categorySections.filter(s => s.title === selectedSection)
       : categorySections;
-  }, [searchQuery, selectedCategory, selectedSection]);
+  }, [searchQuery, selectedCategory, selectedSection, apiSections, apiCategories]);
 
   const currentCategorySections = selectedCategory
     ? apiCategories.find(c => c.id === selectedCategory)?.sections ?? []
@@ -299,7 +304,32 @@ export default function ApiCenterPage() {
             {t('system:apiCenter.subtitleFull')}
           </p>
         </div>
+        <button
+          onClick={refetchSchema}
+          className="p-2 bg-slate-800/40 hover:bg-slate-700/60 border border-slate-700/50 rounded-lg transition-colors touch-manipulation active:scale-95 self-start"
+          title="Refresh API schema"
+        >
+          <RefreshCw className={`w-4 h-4 text-slate-400 ${schemaLoading ? 'animate-spin' : ''}`} />
+        </button>
       </div>
+
+      {/* Schema Error */}
+      {schemaError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-red-300">API schema could not be loaded: {schemaError}</p>
+            </div>
+            <button
+              onClick={refetchSchema}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors text-sm font-medium"
+            >
+              Retry
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* Admin Rate Limits Link Card */}
       {isAdmin && (
@@ -450,12 +480,22 @@ export default function ApiCenterPage() {
       )}
 
       {/* Loading State */}
-      {loading && (
-        <div className="text-slate-400 text-sm">{t('common:loading')}</div>
+      {(loading || schemaLoading) && (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="animate-pulse">
+              <div className="h-6 bg-slate-800/60 rounded w-48 mb-3" />
+              <div className="space-y-2">
+                <div className="h-14 bg-slate-800/40 rounded-xl" />
+                <div className="h-14 bg-slate-800/40 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* API Sections */}
-      {!loading && visibleSections.map((section) => (
+      {!loading && !schemaLoading && visibleSections.map((section) => (
         <div key={section.title}>
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="p-1.5 sm:p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
