@@ -42,7 +42,7 @@ async def _run_cmd(cmd: list[str], stdin_data: Optional[str] = None) -> tuple[in
     stdout_bytes, stderr_bytes = await proc.communicate(
         input=stdin_data.encode() if stdin_data else None
     )
-    return proc.returncode, stdout_bytes.decode(errors="replace"), stderr_bytes.decode(errors="replace")
+    return proc.returncode or 0, stdout_bytes.decode(errors="replace"), stderr_bytes.decode(errors="replace")
 
 
 # ──────────────────────────────────────────────────────────────

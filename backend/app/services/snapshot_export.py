@@ -117,7 +117,7 @@ def _collect_smart_health() -> dict:
             result[dev.name] = {
                 "status": dev.status,
                 "temperature_c": dev.temperature,
-                "power_on_hours": dev.power_on_hours,
+                "power_on_hours": dev.last_self_test.power_on_hours if dev.last_self_test else None,
             }
         return result
     except Exception as exc:

@@ -14,7 +14,7 @@ from sqlalchemy.orm import Session
 
 from app.models import ServerProfile
 from app.schemas.server_profile import ServerProfileCreate, ServerProfileUpdate
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn.encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)
 

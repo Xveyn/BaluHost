@@ -199,10 +199,14 @@ class ServiceStatusCollector:
                     name=name,
                     display_name=registry.get("display_name", name),
                     state=ServiceStateEnum.ERROR,
+                    started_at=None,
+                    uptime_seconds=None,
+                    sample_count=None,
                     error_count=1,
                     last_error=str(e),
                     last_error_at=datetime.now(timezone.utc),
                     config_enabled=True,
+                    interval_seconds=None,
                     restartable=False,
                 ))
 
@@ -601,38 +605,7 @@ class ServiceStatusCollector:
                 pass
 
         # Collect cache stats from services that have them
-        cache_stats = []
-        # SMART cache
-        try:
-            from app.services import smart
-            if hasattr(smart, 'get_cache_stats'):
-                stats = smart.get_cache_stats()
-                if stats:
-                    cache_stats.append(CacheStatsResponse(
-                        name="smart_cache",
-                        hits=stats.get("hits", 0),
-                        misses=stats.get("misses", 0),
-                        size=stats.get("size", 0),
-                        max_size=stats.get("max_size"),
-                    ))
-        except Exception:
-            pass
-
-        # RAID cache
-        try:
-            from app.services import raid
-            if hasattr(raid, 'get_cache_stats'):
-                stats = raid.get_cache_stats()
-                if stats:
-                    cache_stats.append(CacheStatsResponse(
-                        name="raid_cache",
-                        hits=stats.get("hits", 0),
-                        misses=stats.get("misses", 0),
-                        size=stats.get("size", 0),
-                        max_size=stats.get("max_size"),
-                    ))
-        except Exception:
-            pass
+        cache_stats: list[CacheStatsResponse] = []
 
         return ApplicationMetricsResponse(
             server_uptime_seconds=get_server_uptime(),

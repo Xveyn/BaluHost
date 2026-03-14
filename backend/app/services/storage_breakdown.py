@@ -10,7 +10,7 @@ user files.
 import logging
 import os
 from pathlib import Path
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy.orm import Session
 
@@ -55,12 +55,13 @@ def compute_storage_breakdown(
 
         configs = db.query(SSDCacheConfig).all()
         for cfg in configs:
-            if not cfg.cache_path:
+            cache_path = cast(str, cfg.cache_path) or ""
+            if not cache_path:
                 continue
-            cache_dev = _get_device_id(cfg.cache_path)
+            cache_dev = _get_device_id(cache_path)
             if cache_dev == mp_dev:
-                cache_bytes += cfg.current_size_bytes or 0
-                if cfg.is_enabled:
+                cache_bytes += cast(int, cfg.current_size_bytes) or 0
+                if cast(bool, cfg.is_enabled):
                     cache_enabled = True
     except Exception:
         logger.debug("Failed to query SSD cache configs", exc_info=True)
@@ -79,7 +80,7 @@ def compute_storage_breakdown(
         if vcl_dev == mp_dev:
             stats = db.query(VCLStats).first()
             if stats:
-                vcl_bytes = stats.total_compressed_bytes or 0
+                vcl_bytes = cast(int, stats.total_compressed_bytes) or 0
     except Exception:
         logger.debug("Failed to query VCL stats", exc_info=True)
 
