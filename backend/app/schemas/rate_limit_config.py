@@ -4,40 +4,43 @@ from pydantic import BaseModel, Field, field_validator
 from datetime import datetime
 from typing import Optional
 
+_ALLOWED_TIME_UNITS = ('second', 'minute', 'hour', 'day')
+
+
+def _validate_limit_string(v: str) -> str:
+    """Validate that a rate-limit string is in 'number/unit' format."""
+    if '/' not in v:
+        raise ValueError("limit_string must be in format 'number/unit' (e.g., '5/minute')")
+
+    parts = v.split('/')
+    if len(parts) != 2:
+        raise ValueError("limit_string must have exactly one '/' separator")
+
+    count, unit = parts
+
+    try:
+        count_int = int(count)
+        if count_int <= 0:
+            raise ValueError("Rate limit count must be positive")
+    except ValueError:
+        raise ValueError("Rate limit count must be a valid positive integer")
+
+    if unit not in _ALLOWED_TIME_UNITS:
+        raise ValueError(f"Time unit must be one of: {', '.join(_ALLOWED_TIME_UNITS)}")
+
+    return v
+
 
 class RateLimitConfigBase(BaseModel):
     endpoint_type: str = Field(..., description="Type of endpoint (e.g., auth_login, file_upload)")
     limit_string: str = Field(..., description="Rate limit string (e.g., '5/minute', '100/hour')")
     description: Optional[str] = Field(None, description="Human-readable description")
     enabled: bool = Field(True, description="Whether this rate limit is active")
-    
+
     @field_validator('limit_string')
     @classmethod
     def validate_limit_string(cls, v: str) -> str:
-        """Validate that limit_string is in correct format."""
-        if '/' not in v:
-            raise ValueError("limit_string must be in format 'number/unit' (e.g., '5/minute')")
-        
-        parts = v.split('/')
-        if len(parts) != 2:
-            raise ValueError("limit_string must have exactly one '/' separator")
-        
-        count, unit = parts
-        
-        # Validate count is a positive integer
-        try:
-            count_int = int(count)
-            if count_int <= 0:
-                raise ValueError("Rate limit count must be positive")
-        except ValueError:
-            raise ValueError("Rate limit count must be a valid positive integer")
-        
-        # Validate unit is one of the allowed time units
-        allowed_units = ['second', 'minute', 'hour', 'day']
-        if unit not in allowed_units:
-            raise ValueError(f"Time unit must be one of: {', '.join(allowed_units)}")
-        
-        return v
+        return _validate_limit_string(v)
 
 
 class RateLimitConfigCreate(RateLimitConfigBase):
@@ -50,35 +53,13 @@ class RateLimitConfigUpdate(BaseModel):
     limit_string: Optional[str] = None
     description: Optional[str] = None
     enabled: Optional[bool] = None
-    
+
     @field_validator('limit_string')
     @classmethod
     def validate_limit_string(cls, v: Optional[str]) -> Optional[str]:
-        """Validate that limit_string is in correct format if provided."""
         if v is None:
             return v
-        
-        if '/' not in v:
-            raise ValueError("limit_string must be in format 'number/unit' (e.g., '5/minute')")
-        
-        parts = v.split('/')
-        if len(parts) != 2:
-            raise ValueError("limit_string must have exactly one '/' separator")
-        
-        count, unit = parts
-        
-        try:
-            count_int = int(count)
-            if count_int <= 0:
-                raise ValueError("Rate limit count must be positive")
-        except ValueError:
-            raise ValueError("Rate limit count must be a valid positive integer")
-        
-        allowed_units = ['second', 'minute', 'hour', 'day']
-        if unit not in allowed_units:
-            raise ValueError(f"Time unit must be one of: {', '.join(allowed_units)}")
-        
-        return v
+        return _validate_limit_string(v)
 
 
 class RateLimitConfigResponse(RateLimitConfigBase):

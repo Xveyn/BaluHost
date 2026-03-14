@@ -14,6 +14,7 @@ from pathlib import Path
 _folder_size_cache: dict[str, tuple[int, float]] = {}
 _folder_size_cache_lock = threading.Lock()
 _FOLDER_SIZE_CACHE_TTL = 300.0  # 5 minutes
+_FOLDER_SIZE_CACHE_MAX_ENTRIES = 2048  # prevent unbounded growth
 
 
 def get_folder_size(path: Path) -> int:
@@ -35,6 +36,17 @@ def get_folder_size(path: Path) -> int:
     total = _scan_size(path)
 
     with _folder_size_cache_lock:
+        # Evict expired entries when cache exceeds max size
+        if len(_folder_size_cache) >= _FOLDER_SIZE_CACHE_MAX_ENTRIES:
+            expired = [k for k, (_, ts) in _folder_size_cache.items()
+                       if now - ts >= _FOLDER_SIZE_CACHE_TTL]
+            for k in expired:
+                del _folder_size_cache[k]
+            # If still over limit, drop oldest half
+            if len(_folder_size_cache) >= _FOLDER_SIZE_CACHE_MAX_ENTRIES:
+                sorted_keys = sorted(_folder_size_cache, key=lambda k: _folder_size_cache[k][1])
+                for k in sorted_keys[:len(sorted_keys) // 2]:
+                    del _folder_size_cache[k]
         _folder_size_cache[key] = (total, now)
 
     return total
