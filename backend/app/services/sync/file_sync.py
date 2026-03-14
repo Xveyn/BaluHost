@@ -213,3 +213,169 @@ class FileSyncService:
         """Generate a unique change token for delta sync."""
         import uuid
         return str(uuid.uuid4())
+
+    # ===== Helpers used by sync routes =====
+
+    def validate_registration_token(self, token: str, user_id: int):
+        """Validate a one-time registration token.
+
+        Returns the token record on success.
+        Raises ValueError with a descriptive message on failure.
+        """
+        from app.models.mobile import MobileRegistrationToken
+
+        record = (
+            self.db.query(MobileRegistrationToken)
+            .filter(MobileRegistrationToken.token == token)
+            .first()
+        )
+        if not record:
+            raise ValueError("Invalid registration token")
+        if record.used:
+            raise ValueError("Registration token already used")
+        if record.expires_at < datetime.now(timezone.utc):
+            raise ValueError("Registration token expired")
+        if str(record.user_id) != str(user_id):
+            raise ValueError("Registration token does not belong to the current user")
+        return record
+
+    def consume_registration_token(self, record) -> None:
+        """Mark a registration token as used."""
+        record.used = True
+        self.db.commit()
+
+    def get_existing_device(self, device_id: str, user_id: int) -> Optional[SyncState]:
+        """Check if a device is already registered for a user."""
+        return (
+            self.db.query(SyncState)
+            .filter(SyncState.device_id == device_id, SyncState.user_id == user_id)
+            .first()
+        )
+
+    def get_file_version_history(self, file_path: str, owner_id: int) -> Optional[dict]:
+        """Get version history for a file. Returns None if file not found."""
+        file_metadata = (
+            self.db.query(FileMetadata)
+            .filter(FileMetadata.path == file_path, FileMetadata.owner_id == owner_id)
+            .first()
+        )
+        if not file_metadata:
+            return None
+
+        versions = (
+            self.db.query(SyncFileVersion)
+            .filter(SyncFileVersion.file_metadata_id == file_metadata.id)
+            .order_by(SyncFileVersion.version_number.desc())
+            .all()
+        )
+        return {
+            "file_path": file_path,
+            "versions": [
+                {
+                    "version_number": v.version_number,
+                    "size": v.file_size,
+                    "hash": v.content_hash,
+                    "created_at": v.created_at.isoformat(),
+                    "reason": v.change_reason,
+                }
+                for v in versions
+            ],
+        }
+
+    def get_user_files(self, user_id: int) -> list[FileMetadata]:
+        """Get all file metadata records for a user."""
+        return self.db.query(FileMetadata).filter(FileMetadata.owner_id == user_id).all()
+
+    def report_sync_folders(
+        self, user_id: int, device_id: str, device_name: str, platform: str, folders: list
+    ) -> tuple[int, int]:
+        """Report active sync folders from a client. Returns (accepted, deactivated)."""
+        from app.models.desktop_sync_folder import DesktopSyncFolder
+        from sqlalchemy.sql import func
+
+        now = func.now()
+        reported_paths: set[str] = set()
+        accepted = 0
+
+        for folder in folders:
+            reported_paths.add(folder.remote_path)
+            existing = (
+                self.db.query(DesktopSyncFolder)
+                .filter(
+                    DesktopSyncFolder.device_id == device_id,
+                    DesktopSyncFolder.remote_path == folder.remote_path,
+                )
+                .first()
+            )
+            if existing:
+                existing.device_name = device_name
+                existing.platform = platform
+                existing.sync_direction = folder.sync_direction
+                existing.is_active = True
+                existing.last_reported_at = now
+                existing.user_id = user_id
+            else:
+                self.db.add(
+                    DesktopSyncFolder(
+                        user_id=user_id,
+                        device_id=device_id,
+                        device_name=device_name,
+                        platform=platform,
+                        remote_path=folder.remote_path,
+                        sync_direction=folder.sync_direction,
+                        is_active=True,
+                        last_reported_at=now,
+                    )
+                )
+            accepted += 1
+
+        # Deactivate folders no longer reported by this device
+        deactivate_query = self.db.query(DesktopSyncFolder).filter(
+            DesktopSyncFolder.device_id == device_id,
+            DesktopSyncFolder.user_id == user_id,
+            DesktopSyncFolder.is_active.is_(True),
+        )
+        if reported_paths:
+            deactivate_query = deactivate_query.filter(
+                DesktopSyncFolder.remote_path.notin_(reported_paths),
+            )
+        deactivated = 0
+        for row in deactivate_query.all():
+            row.is_active = False
+            deactivated += 1
+
+        self.db.commit()
+        return accepted, deactivated
+
+    def get_synced_folders(self, user_id: int, is_admin: bool, active_only: bool = True) -> list[dict]:
+        """Get synced desktop folders. Admins see all, users see their own."""
+        from app.models.desktop_sync_folder import DesktopSyncFolder
+        from app.models.user import User
+
+        query = self.db.query(DesktopSyncFolder)
+        if active_only:
+            query = query.filter(DesktopSyncFolder.is_active.is_(True))
+        if not is_admin:
+            query = query.filter(DesktopSyncFolder.user_id == user_id)
+        folders = query.all()
+
+        user_names: dict[int, str] = {}
+        if is_admin:
+            user_ids = {f.user_id for f in folders}
+            if user_ids:
+                users = self.db.query(User).filter(User.id.in_(user_ids)).all()
+                user_names = {u.id: u.username for u in users}
+
+        return [
+            {
+                "remote_path": f.remote_path,
+                "device_id": f.device_id,
+                "device_name": f.device_name,
+                "platform": f.platform,
+                "sync_direction": f.sync_direction,
+                "is_active": f.is_active,
+                "last_reported_at": f.last_reported_at.isoformat(),
+                "username": user_names.get(f.user_id) if is_admin else None,
+            }
+            for f in folders
+        ]

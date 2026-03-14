@@ -175,6 +175,83 @@ class ShareService:
         return db.execute(stmt).scalar_one_or_none()
 
     @staticmethod
+    def list_shareable_users(db: Session, exclude_user_id: int) -> list[dict]:
+        """Get a minimal user list for share target selection."""
+        stmt = select(User).where(User.is_active == True).order_by(User.username)  # noqa: E712
+        users = db.execute(stmt).scalars().all()
+        return [
+            {"id": u.id, "username": u.username}
+            for u in users
+            if u.id != exclude_user_id
+        ]
+
+    @staticmethod
+    def build_share_response(share: "FileShare", db: Session) -> FileShareResponse:
+        """Build a FileShareResponse with related entity lookups."""
+        file_metadata = db.get(FileMetadata, share.file_id)
+        target_user = db.get(User, share.shared_with_user_id)
+        owner = db.get(User, share.owner_id)
+
+        return FileShareResponse(
+            id=share.id,
+            file_id=share.file_id,
+            owner_id=share.owner_id,
+            shared_with_user_id=share.shared_with_user_id,
+            can_read=share.can_read,
+            can_write=share.can_write,
+            can_delete=share.can_delete,
+            can_share=share.can_share,
+            expires_at=share.expires_at,
+            created_at=share.created_at,
+            last_accessed_at=share.last_accessed_at,
+            is_expired=share.is_expired(),
+            is_accessible=share.is_accessible(),
+            owner_username=owner.username if owner else None,
+            shared_with_username=target_user.username if target_user else None,
+            file_name=file_metadata.name if file_metadata else None,
+            file_path=file_metadata.path if file_metadata else None,
+            file_size=file_metadata.size_bytes if file_metadata else None,
+            is_directory=file_metadata.is_directory if file_metadata else False,
+        )
+
+    @staticmethod
+    def build_shared_with_me_response(share: "FileShare", db: Session) -> Optional[SharedWithMeResponse]:
+        """Build a SharedWithMeResponse with related entity lookups."""
+        file_metadata = db.get(FileMetadata, share.file_id)
+        owner = db.get(User, share.owner_id)
+        if not file_metadata or not owner:
+            return None
+        return SharedWithMeResponse(
+            share_id=share.id,
+            file_id=share.file_id,
+            file_name=file_metadata.name,
+            file_path=file_metadata.path,
+            file_size=file_metadata.size_bytes,
+            is_directory=file_metadata.is_directory,
+            owner_username=owner.username,
+            owner_id=owner.id,
+            can_read=share.can_read,
+            can_write=share.can_write,
+            can_delete=share.can_delete,
+            can_share=share.can_share,
+            shared_at=share.created_at,
+            expires_at=share.expires_at,
+            is_expired=share.is_expired(),
+        )
+
+    @staticmethod
+    def get_file_path_for_share(share: "FileShare", db: Session) -> Optional[str]:
+        """Get the file path for audit logging."""
+        file_metadata = db.get(FileMetadata, share.file_id)
+        return file_metadata.path if file_metadata else None
+
+    @staticmethod
+    def get_username(db: Session, user_id: int) -> Optional[str]:
+        """Get a username by user ID."""
+        user = db.get(User, user_id)
+        return user.username if user else None
+
+    @staticmethod
     def get_share_statistics(db: Session, user_id: int) -> ShareStatistics:
         """Get sharing statistics for a user."""
         now = datetime.now(timezone.utc)
