@@ -102,8 +102,8 @@ def _try_become_primary() -> bool:
 # Service heartbeat: primary → DB, secondary reads from DB
 # ---------------------------------------------------------------------------
 
-async def _do_heartbeat_write() -> None:
-    """Write current service states to the service_heartbeats table once."""
+def _do_heartbeat_write_sync() -> None:
+    """Write current service states to the service_heartbeats table (sync, thread-safe)."""
     from app.models.service_heartbeat import ServiceHeartbeat
     from app.core.database import SessionLocal
 
@@ -132,6 +132,11 @@ async def _do_heartbeat_write() -> None:
         db.rollback()
     finally:
         db.close()
+
+
+async def _do_heartbeat_write() -> None:
+    """Write current service states to the service_heartbeats table once."""
+    await asyncio.to_thread(_do_heartbeat_write_sync)
 
 
 async def _write_service_heartbeats() -> None:
