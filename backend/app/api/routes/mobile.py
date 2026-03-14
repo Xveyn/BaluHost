@@ -24,7 +24,6 @@ from app.schemas.mobile import (
     SyncFolderCreate,
     UploadQueueListResponse,
 )
-from app.models.mobile import MobileDevice, UploadQueue
 from app.services.mobile import MobileService
 
 logger = logging.getLogger(__name__)
@@ -219,14 +218,14 @@ async def delete_device(
     Delete a mobile device registration.
     Admins can delete any device, regular users can only delete their own.
     """
-    # Get the device
-    device = db.query(MobileDevice).filter(MobileDevice.id == device_id).first()
+    # Get the device (any user — admin may delete others' devices)
+    device = MobileService.get_device_any_user(db, device_id)
     if not device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found"
         )
-    
+
     # Check permissions: admin can delete any device, users can only delete their own
     if current_user.role != "admin" and device.user_id != current_user.id:
         raise HTTPException(
@@ -247,8 +246,7 @@ async def delete_device(
             # Don't block deletion if notification fails
             print(f"[Mobile] Failed to send removal notification: {e}")
 
-    db.delete(device)
-    db.commit()
+    MobileService.remove_device(db, device)
     return None
 
 
@@ -292,8 +290,7 @@ async def register_push_token(
         )
     
     # Update push token
-    device.push_token = push_token
-    db.commit()
+    MobileService.update_push_token(db, device, push_token)
     
     # Optionally verify token with Firebase (if initialized)
     token_valid = False
@@ -333,8 +330,6 @@ async def get_device_notifications(
     Returns:
         List of notifications with sent_at, type, success status
     """
-    from app.models.mobile import ExpirationNotification as ExpirationNotificationModel
-    
     # Verify device belongs to user
     device = MobileService.get_device(
         db=db,
@@ -346,16 +341,9 @@ async def get_device_notifications(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Device not found"
         )
-    
-    # Query notification history
-    notifications = (
-        db.query(ExpirationNotificationModel)
-        .filter(ExpirationNotificationModel.device_id == device_id)
-        .order_by(ExpirationNotificationModel.sent_at.desc())
-        .limit(limit)
-        .all()
-    )
-    
+
+    notifications = MobileService.get_notification_history(db, device_id, limit)
+
     return [
         {
             "id": notif.id,
@@ -481,15 +469,7 @@ async def get_upload_queue(
     """
     Get pending/in-progress uploads for a device.
     """
-    items = (
-        db.query(UploadQueue)
-        .filter(
-            UploadQueue.device_id == device_id,
-            UploadQueue.status.in_(["pending", "uploading", "failed"]),
-        )
-        .order_by(UploadQueue.created_at.desc())
-        .all()
-    )
+    items = MobileService.get_pending_uploads(db, device_id)
     return UploadQueueListResponse(items=items)
 
 
@@ -513,7 +493,7 @@ async def get_power_summary(
     from app.services.power.manager import get_power_manager
     from app.services.power import energy as energy_stats
     from app.services.power import monitor as power_monitor
-    from app.models.tapo_device import TapoDevice
+    from app.services import tapo_service
 
     now = datetime.now(timezone.utc)
 
@@ -543,7 +523,7 @@ async def get_power_summary(
     has_today_stats = False
 
     try:
-        tapo_devices = db.query(TapoDevice).filter(TapoDevice.is_active == True).all()
+        tapo_devices = tapo_service.list_active_devices(db)
     except Exception as e:
         logger.warning(f"Failed to query Tapo devices: {e}")
         tapo_devices = []

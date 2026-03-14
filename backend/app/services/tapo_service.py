@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 
 from app.models.tapo_device import TapoDevice
 from app.schemas.tapo import TapoDeviceCreate, TapoDeviceUpdate
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn.encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +31,11 @@ def get_device_by_ip(db: Session, ip_address: str) -> Optional[TapoDevice]:
 def list_devices(db: Session) -> list[TapoDevice]:
     """List all Tapo devices, newest first."""
     return db.query(TapoDevice).order_by(TapoDevice.created_at.desc()).all()
+
+
+def list_active_devices(db: Session) -> list[TapoDevice]:
+    """List all active Tapo devices."""
+    return db.query(TapoDevice).filter(TapoDevice.is_active == True).all()  # noqa: E712
 
 
 def create_device(

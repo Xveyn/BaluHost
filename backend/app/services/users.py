@@ -334,6 +334,96 @@ def update_user_password(user_id: int | str, new_password: str, db: Optional[Ses
             db.close()
 
 
+def list_users_filtered(
+    db: Session,
+    *,
+    search: Optional[str] = None,
+    role: Optional[str] = None,
+    is_active: Optional[bool] = None,
+    sort_by: str = "created_at",
+    sort_order: str = "desc",
+) -> tuple[list[User], dict]:
+    """List users with filters/sorting and compute aggregate stats.
+
+    Returns (filtered_users, stats_dict) where stats_dict has keys:
+    total, active, inactive, admins.
+    """
+    from sqlalchemy import or_, func
+
+    query = db.query(User)
+
+    if search:
+        query = query.filter(
+            or_(
+                User.username.ilike(f"%{search}%"),
+                User.email.ilike(f"%{search}%"),
+            )
+        )
+    if role:
+        query = query.filter(User.role == role)
+    if is_active is not None:
+        query = query.filter(User.is_active == is_active)
+
+    _SORTABLE_FIELDS = {"username", "created_at", "email", "role", "is_active"}
+    if sort_by not in _SORTABLE_FIELDS:
+        sort_by = "created_at"
+    sort_column = getattr(User, sort_by, User.created_at)
+    if sort_order == "desc":
+        query = query.order_by(sort_column.desc())
+    else:
+        query = query.order_by(sort_column.asc())
+
+    filtered_users = query.all()
+
+    total_count = db.query(func.count(User.id)).scalar()
+    active_count = db.query(func.count(User.id)).filter(User.is_active == True).scalar()  # noqa: E712
+    admin_count = db.query(func.count(User.id)).filter(User.role == "admin").scalar()
+
+    stats = {
+        "total": total_count,
+        "active": active_count,
+        "inactive": total_count - active_count,
+        "admins": admin_count,
+    }
+    return filtered_users, stats
+
+
+def toggle_active(user_id: int | str, db: Session) -> Optional[User]:
+    """Toggle a user's is_active flag. Returns the updated user or None."""
+    user = get_user(user_id, db=db)
+    if user is None:
+        return None
+    user.is_active = not user.is_active
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def update_avatar_url(user_id: int | str, avatar_url: str, db: Session) -> Optional[User]:
+    """Set the avatar_url for a user. Returns the updated user or None."""
+    user = get_user(user_id, db=db)
+    if user is None:
+        return None
+    user.avatar_url = avatar_url
+    db.commit()
+    db.refresh(user)
+    return user
+
+
+def set_smb_enabled(user_id: int, enabled: bool, db: Session) -> Optional[User]:
+    """Toggle the smb_enabled flag for a user.
+
+    Returns the updated user, or None if not found.
+    """
+    user = get_user(user_id, db=db)
+    if user is None:
+        return None
+    user.smb_enabled = enabled
+    db.commit()
+    db.refresh(user)
+    return user
+
+
 def serialize_user(user: User) -> UserPublic:
     """Convert database User model to UserPublic schema."""
     return UserPublic(

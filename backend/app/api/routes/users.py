@@ -1,7 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, status, Query, UploadFile, File, Request, Response
 from sqlalchemy.orm import Session
-from sqlalchemy import or_, func
-import os
 from pathlib import Path
 import uuid
 import shutil
@@ -12,7 +10,6 @@ from app.core.config import settings
 from app.core.database import get_db
 from app.schemas.user import UserCreate, UserPublic, UserUpdate, UsersResponse
 from app.services import users as user_service
-from app.models.user import User
 from app.services.audit.logger_db import get_audit_logger_db
 
 router = APIRouter()
@@ -31,51 +28,23 @@ async def list_users(
     _: UserPublic = Depends(deps.get_current_admin),
     db: Session = Depends(get_db)
 ) -> UsersResponse:
-    # Build query
-    query = db.query(User)
+    filtered_users, stats = user_service.list_users_filtered(
+        db,
+        search=search,
+        role=role,
+        is_active=is_active,
+        sort_by=sort_by,
+        sort_order=sort_order,
+    )
 
-    # Apply filters
-    if search:
-        query = query.filter(
-            or_(
-                User.username.ilike(f"%{search}%"),
-                User.email.ilike(f"%{search}%")
-            )
-        )
-
-    if role:
-        query = query.filter(User.role == role)
-
-    if is_active is not None:
-        query = query.filter(User.is_active == is_active)
-
-    # Apply sorting — whitelist prevents access to sensitive attributes
-    _SORTABLE_FIELDS = {"username", "created_at", "email", "role", "is_active"}
-    if sort_by not in _SORTABLE_FIELDS:
-        sort_by = "created_at"
-    sort_column = getattr(User, sort_by, User.created_at)
-    if sort_order == "desc":
-        query = query.order_by(sort_column.desc())
-    else:
-        query = query.order_by(sort_column.asc())
-    
-    # Get filtered users
-    filtered_users = query.all()
-    
-    # Calculate statistics (from all users, not filtered)
-    total_count = db.query(func.count(User.id)).scalar()
-    active_count = db.query(func.count(User.id)).filter(User.is_active == True).scalar()
-    inactive_count = total_count - active_count
-    admin_count = db.query(func.count(User.id)).filter(User.role == "admin").scalar()
-    
     users = [user_service.serialize_user(record) for record in filtered_users]
-    
+
     return UsersResponse(
         users=users,
-        total=total_count,
-        active=active_count,
-        inactive=inactive_count,
-        admins=admin_count
+        total=stats["total"],
+        active=stats["active"],
+        inactive=stats["inactive"],
+        admins=stats["admins"],
     )
 
 
@@ -275,14 +244,12 @@ async def toggle_user_active(
     """Toggle user active status."""
     audit_logger = get_audit_logger_db()
 
-    user = user_service.get_user(user_id, db=db)
-    if not user:
+    old_user = user_service.get_user(user_id, db=db)
+    if not old_user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
-    old_status = user.is_active
-    user.is_active = not user.is_active
-    db.commit()
-    db.refresh(user)
+    old_status = old_user.is_active
+    user = user_service.toggle_active(user_id, db=db)
 
     audit_logger.log_user_management(
         action="user_status_toggled",
@@ -352,8 +319,6 @@ async def upload_avatar(
         shutil.copyfileobj(avatar.file, buffer)
     
     # Update user avatar_url
-    user.avatar_url = f"/avatars/{unique_filename}"
-    db.commit()
-    db.refresh(user)
-    
+    user = user_service.update_avatar_url(user_id, f"/avatars/{unique_filename}", db=db)
+
     return user_service.serialize_user(user)

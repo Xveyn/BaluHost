@@ -10,7 +10,6 @@ from app.api import deps
 from app.core.rate_limiter import user_limiter, get_limit
 from app.core.config import settings
 from app.core.database import get_db
-from app.models.user import User
 from app.schemas.samba import (
     SambaStatusResponse,
     SambaConnection,
@@ -20,7 +19,7 @@ from app.schemas.samba import (
     SambaConnectionInfo,
 )
 from app.schemas.webdav import OsConnectionInfo
-from app.services import samba_service
+from app.services import samba_service, users as user_service
 
 logger = logging.getLogger(__name__)
 
@@ -61,7 +60,7 @@ async def get_samba_users(
     db: Session = Depends(get_db),
 ):
     """List all users with their SMB status (admin only)."""
-    users = db.query(User).order_by(User.username).all()
+    users = list(user_service.list_users(db=db))
     return SambaUsersResponse(
         users=[
             SambaUserStatus(
@@ -90,13 +89,9 @@ async def toggle_smb_user(
     When enabling, an optional password can be provided for immediate sync.
     Without a password the user must change their password for SMB to work.
     """
-    user = db.query(User).filter(User.id == user_id).first()
+    user = user_service.set_smb_enabled(user_id, payload.enabled, db=db)
     if not user:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
-
-    user.smb_enabled = payload.enabled
-    db.commit()
-    db.refresh(user)
 
     if payload.enabled:
         # Sync password if provided
@@ -125,7 +120,7 @@ async def get_samba_connection_info(
     db: Session = Depends(get_db),
 ):
     """Get SMB mount instructions for the current user."""
-    user = db.query(User).filter(User.id == current_user.id).first()
+    user = user_service.get_user(current_user.id, db=db)
     is_admin = current_user.role == "admin"
 
     share_name = "BaluHost" if is_admin else f"BaluHost-{current_user.username}"

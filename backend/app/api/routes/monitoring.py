@@ -17,7 +17,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_user, get_db, get_current_admin
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
-from app.models.monitoring import MetricType, CpuSample, MemorySample, NetworkSample, DiskIoSample
+from app.models.monitoring import MetricType
 from app.schemas.monitoring import (
     DataSource,
     TimeRangeEnum,
@@ -66,13 +66,7 @@ async def get_cpu_current(
 ):
     """Get current CPU metrics."""
     orchestrator = get_monitoring_orchestrator()
-    sample = orchestrator.get_cpu_current()
-
-    if sample is None:
-        # Secondary worker has no in-memory data — fall back to DB
-        db_record = db.query(CpuSample).order_by(CpuSample.timestamp.desc()).first()
-        if db_record:
-            sample = orchestrator.cpu_collector.db_to_sample(db_record)
+    sample = orchestrator.get_cpu_current_with_db_fallback(db)
 
     if sample is None:
         raise HTTPException(status_code=503, detail="No CPU data available yet")
@@ -141,13 +135,7 @@ async def get_memory_current(
 ):
     """Get current memory metrics."""
     orchestrator = get_monitoring_orchestrator()
-    sample = orchestrator.get_memory_current()
-
-    if sample is None:
-        # Secondary worker has no in-memory data — fall back to DB
-        db_record = db.query(MemorySample).order_by(MemorySample.timestamp.desc()).first()
-        if db_record:
-            sample = orchestrator.memory_collector.db_to_sample(db_record)
+    sample = orchestrator.get_memory_current_with_db_fallback(db)
 
     if sample is None:
         raise HTTPException(status_code=503, detail="No memory data available yet")
@@ -213,13 +201,7 @@ async def get_network_current(
 ):
     """Get current network metrics."""
     orchestrator = get_monitoring_orchestrator()
-    sample = orchestrator.get_network_current()
-
-    if sample is None:
-        # Secondary worker has no in-memory data — fall back to DB
-        db_record = db.query(NetworkSample).order_by(NetworkSample.timestamp.desc()).first()
-        if db_record:
-            sample = orchestrator.network_collector.db_to_sample(db_record)
+    sample = orchestrator.get_network_current_with_db_fallback(db)
 
     if sample is None:
         raise HTTPException(status_code=503, detail="No network data available yet")
@@ -286,20 +268,7 @@ async def get_disk_io_current(
 ):
     """Get current disk I/O metrics for all disks."""
     orchestrator = get_monitoring_orchestrator()
-    disks = orchestrator.get_disk_io_current()
-
-    # Secondary worker fallback — query latest samples from DB
-    if not disks:
-        from sqlalchemy import func
-        latest_ts = db.query(func.max(DiskIoSample.timestamp)).scalar()
-        if latest_ts:
-            records = db.query(DiskIoSample).filter(
-                DiskIoSample.timestamp == latest_ts
-            ).all()
-            disks = {
-                r.disk_name: orchestrator.disk_io_collector.db_to_sample(r)
-                for r in records
-            }
+    disks = orchestrator.get_disk_io_current_with_db_fallback(db)
 
     return CurrentDiskIoResponse(disks=disks)
 
