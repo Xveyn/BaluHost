@@ -25,6 +25,7 @@ class MetricType(str, enum.Enum):
     NETWORK = "network"
     DISK_IO = "disk_io"
     PROCESS = "process"
+    POWER = "power"
 
 
 class CpuSample(Base):
