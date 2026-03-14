@@ -442,19 +442,15 @@ export default function UpdatePage() {
                   </div>
                   <div className="flex items-center gap-2 text-sm">
                     {(() => {
-                      const isPrerelease = checkResult.current_version.version.includes('-');
-                      const isDevBuild = checkResult.current_version.is_dev_build;
-                      return (
-                        <>
-                          <span className={isPrerelease ? 'text-amber-400' : 'text-emerald-400'}>
-                            {isPrerelease ? 'Unstable' : 'Stable'}
+                      if (checkResult.current_version.is_dev_build) {
+                        return (
+                          <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
+                            {t('version.devBuild')}
                           </span>
-                          {isDevBuild && (
-                            <span className="px-2 py-0.5 bg-amber-500/20 text-amber-400 rounded text-xs font-medium">
-                              {t('version.devBuild')}
-                            </span>
-                          )}
-                        </>
+                        );
+                      }
+                      return (
+                        <span className="text-emerald-400">Stable</span>
                       );
                     })()}
                   </div>
