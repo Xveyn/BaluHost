@@ -21,6 +21,7 @@ import {
   ArrowRight,
   AlertTriangle,
 } from 'lucide-react';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import {
   getAdminOverview,
   getAdminUsers,
@@ -77,10 +78,7 @@ export default function VCLSettings() {
       setUsers(usersData?.users || []);
       setStorageInfo(storageData);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('vcl.errors.loadFailed'));
+      setError(getApiErrorMessage(err, t('vcl.errors.loadFailed')));
       // Set empty arrays on error
       setUsers([]);
       setOverview(null);
@@ -102,10 +100,7 @@ export default function VCLSettings() {
       setTimeout(() => setSuccessMessage(null), 5000);
       if (!dryRun) loadData(); // Reload stats
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('vcl.errors.cleanupFailed'));
+      setError(getApiErrorMessage(err, t('vcl.errors.cleanupFailed')));
     } finally {
       setActionLoading(false);
     }
@@ -122,10 +117,7 @@ export default function VCLSettings() {
         setTimeout(() => setSuccessMessage(null), 3000);
       }
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || 'Failed to scan for mismatches');
+      setError(getApiErrorMessage(err, 'Failed to scan for mismatches'));
     } finally {
       setReconLoading(false);
     }
@@ -142,10 +134,7 @@ export default function VCLSettings() {
       setReconPreview(null);
       loadData();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || 'Failed to apply reconciliation');
+      setError(getApiErrorMessage(err, 'Failed to apply reconciliation'));
     } finally {
       setReconLoading(false);
     }
@@ -171,10 +160,7 @@ export default function VCLSettings() {
       setEditingUser(null);
       loadData(); // Reload
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('vcl.errors.updateFailed'));
+      setError(getApiErrorMessage(err, t('vcl.errors.updateFailed')));
     } finally {
       setActionLoading(false);
     }

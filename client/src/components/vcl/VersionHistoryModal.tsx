@@ -18,6 +18,7 @@ import {
   Check,
   Loader2,
 } from 'lucide-react';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import {
   getFileVersions,
   restoreVersion,
@@ -69,10 +70,7 @@ export function VersionHistoryModal({
       const data = await getFileVersions(fileId);
       setVersions(data.versions);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.loadFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.loadFailed')));
     } finally {
       setLoading(false);
     }
@@ -89,10 +87,7 @@ export function VersionHistoryModal({
       setTimeout(() => setSuccessMessage(null), 3000);
       onVersionRestored?.();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.restoreFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.restoreFailed')));
     } finally {
       setActionLoading(null);
     }
@@ -109,10 +104,7 @@ export function VersionHistoryModal({
       setTimeout(() => setSuccessMessage(null), 3000);
       loadVersions(); // Reload list
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.deleteFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.deleteFailed')));
     } finally {
       setActionLoading(null);
     }
@@ -125,10 +117,7 @@ export function VersionHistoryModal({
       await toggleVersionPriority(versionId, !currentPriority);
       loadVersions(); // Reload to update UI
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.priorityFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.priorityFailed')));
     } finally {
       setActionLoading(null);
     }
@@ -153,10 +142,7 @@ export function VersionHistoryModal({
       setSuccessMessage(t('versionHistory.actions.downloadStarted'));
       setTimeout(() => setSuccessMessage(null), 2000);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.downloadFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.downloadFailed')));
     } finally {
       setActionLoading(null);
     }
@@ -186,10 +172,7 @@ export function VersionHistoryModal({
       setDiffData(data);
       setShowDiff(true);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || t('versionHistory.errors.diffFailed'));
+      setError(getApiErrorMessage(err, t('versionHistory.errors.diffFailed')));
     } finally {
       setDiffLoading(false);
     }

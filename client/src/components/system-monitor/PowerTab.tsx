@@ -17,7 +17,7 @@ import {
   Legend,
 } from 'recharts';
 import toast from 'react-hot-toast';
-import { extractErrorMessage } from '../../lib/api';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import { MetricChart } from '../monitoring';
 import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils';
 import type { ChartTimeRange } from '../../lib/dateUtils';
@@ -63,8 +63,7 @@ export function PowerTab() {
       const isAxiosLike = err != null && typeof err === 'object' && 'response' in err;
       const status = isAxiosLike ? (err as { response?: { status?: number } }).response?.status : undefined;
       if (status !== 404) {
-        const msg = err instanceof Error ? err.message : 'Failed to load power data';
-        setError(msg);
+        setError(getApiErrorMessage(err, 'Failed to load power data'));
       }
     } finally {
       setLoading(false);
@@ -138,10 +137,7 @@ export function PowerTab() {
         setCumulativeData(data);
       }
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, t('monitor.power.saveError')));
+      toast.error(getApiErrorMessage(err, t('monitor.power.saveError')));
     } finally {
       setSavingPrice(false);
     }
