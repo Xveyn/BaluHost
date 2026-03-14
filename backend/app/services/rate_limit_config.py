@@ -1,6 +1,6 @@
 """Service for managing rate limit configurations."""
 
-from typing import Optional
+from typing import Optional, Sequence
 from sqlalchemy.orm import Session
 from sqlalchemy import select
 
@@ -12,7 +12,7 @@ class RateLimitConfigService:
     """Service for managing rate limit configurations."""
     
     @staticmethod
-    def get_all(db: Session) -> list[RateLimitConfig]:
+    def get_all(db: Session) -> Sequence[RateLimitConfig]:
         """Get all rate limit configurations."""
         return db.execute(select(RateLimitConfig)).scalars().all()
     
