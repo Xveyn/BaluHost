@@ -145,7 +145,10 @@ async def send_test_notification(
     db: Session = Depends(get_db),
 ):
     """Send a test push notification to verify Firebase is working (admin only)."""
-    from app.models.mobile import MobileDevice
+    from app.services.notifications.firebase_devices import (
+        get_active_device_by_id,
+        get_active_devices_for_user,
+    )
 
     if not FirebaseService.is_available():
         raise HTTPException(
@@ -198,10 +201,7 @@ async def send_test_notification(
 
     # Find target devices
     if payload.device_id:
-        device = db.query(MobileDevice).filter(
-            MobileDevice.id == payload.device_id,
-            MobileDevice.is_active == True,
-        ).first()
+        device = get_active_device_by_id(db, payload.device_id)
         if not device:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
@@ -213,10 +213,7 @@ async def send_test_notification(
         devices = [device]
     else:
         # Send to all active devices of the current admin
-        all_devices = db.query(MobileDevice).filter(
-            MobileDevice.user_id == current_user.id,
-            MobileDevice.is_active == True,
-        ).all()
+        all_devices = get_active_devices_for_user(db, current_user.id)
         devices = [d for d in all_devices if d.push_token]
 
         if not devices and all_devices:

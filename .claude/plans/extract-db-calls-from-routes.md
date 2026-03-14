@@ -1,6 +1,6 @@
 # Plan: DB-Calls aus Route-Dateien in Service-Klassen extrahieren
 
-**Status**: In Arbeit (Phase 1.1-1.4 erledigt)
+**Status**: In Arbeit (Phase 1 komplett)
 **Branch**: `development`
 **Umfang**: ~234 direkte DB-Calls in 29 Route-Dateien
 
@@ -164,8 +164,8 @@ async def list_profiles(db: Session = Depends(get_db), ...):
 - [x] Phase 1.2: vpn_profiles.py (15 DB-Calls) — `vpn/profile_crud.py`
 - [x] Phase 1.3: plugins.py (14 DB-Calls) — `plugin_service.py`
 - [x] Phase 1.4: tapo.py (12 DB-Calls) — `tapo_service.py`
-- [ ] Phase 1.5: pihole.py (12 DB-Calls)
-- [ ] Phase 1.6: firebase_config.py (2 DB-Calls)
+- [x] Phase 1.5: pihole.py (12 DB-Calls) — `pihole/query_analytics.py`
+- [x] Phase 1.6: firebase_config.py (2 DB-Calls) — `notifications/firebase_devices.py`
 - [ ] Phase 2.1: vcl.py (49 DB-Calls)
 - [ ] Phase 2.2: files.py (18 DB-Calls)
 - [ ] Phase 2.3: sync.py (12 DB-Calls)
