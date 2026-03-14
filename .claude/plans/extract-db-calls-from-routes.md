@@ -168,12 +168,12 @@ async def list_profiles(db: Session = Depends(get_db), ...):
 - [x] Phase 1.6: firebase_config.py (2 DB-Calls) — `notifications/firebase_devices.py`
 - [ ] Phase 2.1: vcl.py (49 DB-Calls)
 - [ ] Phase 2.2: files.py (18 DB-Calls)
-- [ ] Phase 2.3: sync.py (12 DB-Calls)
-- [ ] Phase 2.4: shares.py (10 DB-Calls)
-- [ ] Phase 2.5: ssd_file_cache.py (10 DB-Calls)
-- [ ] Phase 2.6: users.py (8 DB-Calls)
-- [ ] Phase 2.7: devices.py (8 DB-Calls)
-- [ ] Phase 2.8: mobile.py (7 DB-Calls)
-- [ ] Phase 2.9: samba.py (5 DB-Calls)
-- [ ] Phase 2.10: monitoring.py (5 DB-Calls)
+- [x] Phase 2.3: sync.py (12 DB-Calls) — `FileSyncService` erweitert (validate_registration_token, report_sync_folders, get_synced_folders, etc.)
+- [x] Phase 2.4: shares.py (10 DB-Calls) — `ShareService` erweitert (build_share_response, list_shareable_users, etc.)
+- [x] Phase 2.5: ssd_file_cache.py (10 DB-Calls) — `SSDFileCacheService` erweitert (count_entries, list_entries, update_config, etc.)
+- [x] Phase 2.6: users.py (8 DB-Calls) — `users.py` service erweitert (list_users_filtered, toggle_active, update_avatar_url)
+- [x] Phase 2.7: devices.py (8 DB-Calls) — `mobile.py` service erweitert (list_all_devices, update_*_device_name)
+- [x] Phase 2.8: mobile.py (7 DB-Calls) — `MobileService` erweitert (get_device_any_user, remove_device, update_push_token, etc.)
+- [x] Phase 2.9: samba.py (5 DB-Calls) — `users.set_smb_enabled()`
+- [x] Phase 2.10: monitoring.py (5 DB-Calls) — Orchestrator `get_*_current_with_db_fallback(db)` Methoden
 - [ ] Phase 3: Restliche 13 Dateien (1-4 DB-Calls je)

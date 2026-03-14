@@ -5,6 +5,18 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 Detailed rules are in `.claude/rules/` (automatically loaded by Claude Code).
 
+## Codebase Search
+
+Für Codebase-Suchen **immer** den `vectordb-search` MCP verwenden statt Grep/Glob/Agent-Explore:
+
+- **Code suchen**: `mcp__vectordb-search__search_code` — semantische Suche nach Code-Snippets mit natürlicher Sprache
+- **Dateien finden**: `mcp__vectordb-search__search_files` — Dateien nach Konzept/Feature finden
+- **Symbole suchen**: `mcp__vectordb-search__search_symbols` — Funktionen, Klassen, Methoden nach Name oder Beschreibung
+- **Index aktualisieren**: `mcp__vectordb-search__index_update` — nach größeren Änderungen inkrementell updaten
+- **projectPath**: immer `D:/Programme (x86)/Baluhost`
+
+Grep/Glob nur als Fallback verwenden, wenn vectordb-search keine passenden Ergebnisse liefert.
+
 ## Project Overview
 
 BaluHost is a full-stack NAS management platform with multiple components:
