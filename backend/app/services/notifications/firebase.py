@@ -81,6 +81,89 @@ class FirebaseService:
         return FIREBASE_AVAILABLE and cls._initialized
     
     @classmethod
+    def send_notification(
+        cls,
+        device_token: str,
+        title: str,
+        body: str,
+        category: str = "system",
+        priority: int = 0,
+        notification_id: Optional[int] = None,
+        action_url: Optional[str] = None,
+        notification_type: str = "info",
+    ) -> Dict[str, Any]:
+        """Send a general push notification via FCM.
+
+        Args:
+            device_token: FCM registration token
+            title: Notification title
+            body: Notification body text
+            category: Notification category (raid, smart, backup, etc.)
+            priority: Priority level (0-3)
+            notification_id: Optional notification DB id
+            action_url: Optional deep link URL
+            notification_type: Type (info, warning, critical)
+
+        Returns:
+            dict with success, message_id, error keys
+        """
+        if not cls.is_available():
+            return {
+                "success": False,
+                "message_id": None,
+                "error": "Firebase not initialized",
+            }
+
+        try:
+            channel_map = {
+                "critical": "alerts_critical",
+                "warning": "alerts_warning",
+                "info": "alerts_info",
+            }
+            channel_id = channel_map.get(notification_type, "alerts_info")
+
+            message = messaging.Message(
+                notification=messaging.Notification(
+                    title=title,
+                    body=body,
+                ),
+                data={
+                    "type": "notification",
+                    "notification_id": str(notification_id or 0),
+                    "category": category,
+                    "priority": str(priority),
+                    "action_url": action_url or "",
+                },
+                android=messaging.AndroidConfig(
+                    priority="high" if priority >= 2 else "normal",
+                    notification=messaging.AndroidNotification(
+                        icon="ic_notification",
+                        channel_id=channel_id,
+                    ),
+                ),
+                token=device_token,
+            )
+            response = messaging.send(message)
+            return {
+                "success": True,
+                "message_id": response,
+                "error": None,
+            }
+
+        except messaging.UnregisteredError:
+            return {
+                "success": False,
+                "message_id": None,
+                "error": "unregistered",
+            }
+        except Exception as e:
+            return {
+                "success": False,
+                "message_id": None,
+                "error": str(e),
+            }
+
+    @classmethod
     def send_expiration_warning(
         cls,
         device_token: str,

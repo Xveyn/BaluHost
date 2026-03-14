@@ -133,8 +133,9 @@ class NotificationService:
             notification: Notification to dispatch
         """
         if notification.user_id is None:
-            # System notification - broadcast to all admins
+            # System notification - broadcast to all admins via WebSocket + Push
             await self._broadcast_to_admins(notification)
+            await self._send_push_to_admins(db, notification)
             return
 
         # Get user preferences
@@ -176,6 +177,63 @@ class NotificationService:
             except Exception as e:
                 logger.error(f"Failed to broadcast to admins: {e}")
 
+    async def _send_push_to_admins(
+        self, db: Session, notification: Notification
+    ) -> None:
+        """Send push notification to all admin users' mobile devices.
+
+        Args:
+            db: Database session
+            notification: Notification to send
+        """
+        from app.services.notifications.firebase import FirebaseService
+        from app.models.mobile import MobileDevice
+
+        if not FirebaseService.is_available():
+            return
+
+        try:
+            admin_ids = [
+                uid for (uid,) in db.query(User.id).filter(
+                    User.role == "admin",
+                    User.is_active == True,
+                ).all()
+            ]
+            if not admin_ids:
+                return
+
+            devices = db.query(MobileDevice).filter(
+                MobileDevice.user_id.in_(admin_ids),
+                MobileDevice.is_active == True,
+                MobileDevice.push_token.isnot(None),
+            ).all()
+
+            for device in devices:
+                result = FirebaseService.send_notification(
+                    device_token=device.push_token,
+                    title=notification.title,
+                    body=notification.message,
+                    category=notification.category,
+                    priority=notification.priority,
+                    notification_id=notification.id,
+                    action_url=notification.action_url,
+                    notification_type=notification.notification_type,
+                )
+                if result["success"]:
+                    logger.debug(f"Admin push sent to device {device.id}")
+                elif result["error"] == "unregistered":
+                    logger.warning(
+                        f"Device {device.id} token unregistered, clearing"
+                    )
+                    device.push_token = None
+                    db.commit()
+                else:
+                    logger.error(
+                        f"Admin push to device {device.id} failed: {result['error']}"
+                    )
+        except Exception as e:
+            logger.error(f"Failed to send admin push notifications: {e}")
+
     async def _send_in_app(self, notification: Notification) -> None:
         """Send notification via WebSocket for in-app display.
 
@@ -215,39 +273,28 @@ class NotificationService:
 
         for device in devices:
             try:
-                # Map notification type to FCM channel
-                channel_map = {
-                    "critical": "alerts_critical",
-                    "warning": "alerts_warning",
-                    "info": "alerts_info",
-                }
-                channel_id = channel_map.get(notification.notification_type, "alerts_info")
-
-                from firebase_admin import messaging
-
-                message = messaging.Message(
-                    notification=messaging.Notification(
-                        title=notification.title,
-                        body=notification.message,
-                    ),
-                    data={
-                        "type": "notification",
-                        "notification_id": str(notification.id),
-                        "category": notification.category,
-                        "priority": str(notification.priority),
-                        "action_url": notification.action_url or "",
-                    },
-                    android=messaging.AndroidConfig(
-                        priority="high" if notification.priority >= 2 else "normal",
-                        notification=messaging.AndroidNotification(
-                            icon="ic_notification",
-                            channel_id=channel_id,
-                        )
-                    ),
-                    token=device.push_token,
+                result = FirebaseService.send_notification(
+                    device_token=device.push_token,
+                    title=notification.title,
+                    body=notification.message,
+                    category=notification.category,
+                    priority=notification.priority,
+                    notification_id=notification.id,
+                    action_url=notification.action_url,
+                    notification_type=notification.notification_type,
                 )
-                messaging.send(message)
-                logger.debug(f"Push notification sent to device {device.id}")
+                if result["success"]:
+                    logger.debug(f"Push notification sent to device {device.id}")
+                elif result["error"] == "unregistered":
+                    logger.warning(
+                        f"Device {device.id} token unregistered, clearing"
+                    )
+                    device.push_token = None
+                    db.commit()
+                else:
+                    logger.error(
+                        f"Failed to send push to device {device.id}: {result['error']}"
+                    )
             except Exception as e:
                 logger.error(f"Failed to send push to device {device.id}: {e}")
 

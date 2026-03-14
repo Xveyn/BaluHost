@@ -485,6 +485,19 @@ class EventEmitter:
                 db.commit()
                 _set_cooldown(event_type, cooldown_entity)
                 logger.info(f"Created notification (sync): id={notification.id}, type={event_type}")
+
+                # Send push notifications to mobile devices
+                self._send_push_sync(
+                    db,
+                    notification_id=notification.id,
+                    user_id=user_id,
+                    title=title,
+                    message=message,
+                    category=config.category,
+                    notification_type=config.notification_type,
+                    priority=config.priority,
+                    action_url=config.action_url,
+                )
             except Exception as e:
                 db.rollback()
                 logger.error(f"Failed to create notification for {event_type}: {e}")
@@ -505,6 +518,88 @@ class EventEmitter:
             **kwargs: Event-specific data
         """
         self.emit_sync(event_type, user_id=None, cooldown_entity=cooldown_entity, **kwargs)
+
+    def _send_push_sync(
+        self,
+        db,
+        notification_id: int,
+        user_id: Optional[int],
+        title: str,
+        message: str,
+        category: str,
+        notification_type: str,
+        priority: int,
+        action_url: Optional[str],
+    ) -> None:
+        """Send push notifications synchronously to mobile devices.
+
+        For admin/system notifications (user_id=None), sends to all admin
+        users' devices. For user-specific notifications, sends to that
+        user's devices.
+
+        Args:
+            db: Database session
+            notification_id: ID of the created notification
+            user_id: Target user ID (None for admin broadcast)
+            title: Notification title
+            message: Notification body
+            category: Notification category
+            notification_type: info/warning/critical
+            priority: Priority level 0-3
+            action_url: Optional action URL
+        """
+        from app.services.notifications.firebase import FirebaseService
+
+        if not FirebaseService.is_available():
+            return
+
+        from app.models.mobile import MobileDevice
+        from app.models.user import User
+
+        try:
+            if user_id is None:
+                # System/admin notification: send to all admin users' devices
+                admin_ids = [
+                    uid for (uid,) in db.query(User.id).filter(
+                        User.role == "admin",
+                        User.is_active == True,
+                    ).all()
+                ]
+                if not admin_ids:
+                    return
+                devices = db.query(MobileDevice).filter(
+                    MobileDevice.user_id.in_(admin_ids),
+                    MobileDevice.is_active == True,
+                    MobileDevice.push_token.isnot(None),
+                ).all()
+            else:
+                devices = db.query(MobileDevice).filter(
+                    MobileDevice.user_id == user_id,
+                    MobileDevice.is_active == True,
+                    MobileDevice.push_token.isnot(None),
+                ).all()
+
+            for device in devices:
+                result = FirebaseService.send_notification(
+                    device_token=device.push_token,
+                    title=title,
+                    body=message,
+                    category=category,
+                    priority=priority,
+                    notification_id=notification_id,
+                    action_url=action_url,
+                    notification_type=notification_type,
+                )
+                if result["success"]:
+                    logger.debug(f"Push sent to device {device.id}")
+                elif result["error"] == "unregistered":
+                    logger.warning(f"Device {device.id} token unregistered, clearing")
+                    device.push_token = None
+                    db.commit()
+                else:
+                    logger.error(f"Push to device {device.id} failed: {result['error']}")
+        except Exception as e:
+            logger.error(f"Failed to send push notifications: {e}")
 
     async def emit_for_admins(
         self,
