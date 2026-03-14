@@ -9,13 +9,18 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.database import get_db
 from app.core.rate_limiter import user_limiter, get_limit
-from app.models import VPNProfile, User, VPNType, ServerProfile
+from app.models import User, VPNType
 from app.schemas.vpn_profile import (
-    VPNProfileCreate,
     VPNProfileResponse,
     VPNProfileList,
-    VPNProfileUpdate,
     VPNConnectionTest,
+)
+from app.services.vpn.profile_crud import (
+    list_user_profiles,
+    get_user_profile,
+    create_profile,
+    update_profile_fields,
+    delete_profile,
 )
 from app.services.vpn_service import VPNService
 from app.services.vpn_encryption import VPNEncryption
@@ -50,10 +55,10 @@ async def create_vpn_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid VPN type. Must be one of: {', '.join([t.value for t in VPNType])}",
             )
-        
+
         # Read config file
         config_content = (await config_file.read()).decode('utf-8')
-        
+
         # Validate config
         valid, error = VPNService.validate_config(vpn_type_enum.value, config_content)
         if not valid:
@@ -61,45 +66,33 @@ async def create_vpn_profile(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail=f"Invalid VPN configuration: {error}",
             )
-        
+
         # Read optional certificate and key files
         certificate_content = None
         if certificate_file:
             certificate_content = (await certificate_file.read()).decode('utf-8')
-        
+
         private_key_content = None
         if private_key_file:
             private_key_content = (await private_key_file.read()).decode('utf-8')
-        
-        # Encrypt sensitive data
-        encrypted_config = VPNEncryption.encrypt_vpn_config(config_content)
-        encrypted_cert = VPNEncryption.encrypt_vpn_config(certificate_content) if certificate_content else None
-        encrypted_key = VPNEncryption.encrypt_vpn_config(private_key_content) if private_key_content else None
-        
-        # Create profile
-        db_profile = VPNProfile(
+
+        profile = create_profile(
+            db,
             user_id=current_user.id,
             name=name,
             vpn_type=vpn_type_enum,
-            config_file_encrypted=encrypted_config,
-            certificate_encrypted=encrypted_cert,
-            private_key_encrypted=encrypted_key,
+            config_content=config_content,
+            certificate_content=certificate_content,
+            private_key_content=private_key_content,
             auto_connect=auto_connect,
             description=description,
         )
-        
-        db.add(db_profile)
-        db.commit()
-        db.refresh(db_profile)
-        
-        logger.info(f"VPN profile '{name}' created by user {current_user.id}")
-        return VPNProfileResponse.from_orm(db_profile)
-        
+        return VPNProfileResponse.from_orm(profile)
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error creating VPN profile: {str(e)}")
-        db.rollback()
+        logger.error("Error creating VPN profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create VPN profile"
@@ -115,10 +108,7 @@ async def list_vpn_profiles(
     current_user: User = Depends(deps.get_current_user),
 ) -> List[VPNProfileList]:
     """List all VPN profiles for current user."""
-    profiles = db.query(VPNProfile).filter(
-        VPNProfile.user_id == current_user.id
-    ).order_by(VPNProfile.created_at.desc()).all()
-    
+    profiles = list_user_profiles(db, current_user.id)
     return [VPNProfileList.from_orm(p) for p in profiles]
 
 
@@ -132,17 +122,12 @@ async def get_vpn_profile(
     current_user: User = Depends(deps.get_current_user),
 ) -> VPNProfileResponse:
     """Get specific VPN profile."""
-    profile = db.query(VPNProfile).filter(
-        VPNProfile.id == profile_id,
-        VPNProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN profile not found"
         )
-    
     return VPNProfileResponse.from_orm(profile)
 
 
@@ -162,27 +147,16 @@ async def update_vpn_profile(
     current_user: User = Depends(deps.get_current_user),
 ) -> VPNProfileResponse:
     """Update VPN profile."""
-    profile = db.query(VPNProfile).filter(
-        VPNProfile.id == profile_id,
-        VPNProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN profile not found"
         )
-    
+
     try:
-        # Update basic fields
-        if name is not None:
-            profile.name = name  # type: ignore
-        if description is not None:
-            profile.description = description  # type: ignore
-        if auto_connect is not None:
-            profile.auto_connect = auto_connect  # type: ignore
-        
-        # Update config if provided
+        # Read and validate config if provided
+        config_content = None
         if config_file:
             config_content = (await config_file.read()).decode('utf-8')
             valid, error = VPNService.validate_config(profile.vpn_type, config_content)
@@ -191,29 +165,32 @@ async def update_vpn_profile(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     detail=f"Invalid VPN configuration: {error}",
                 )
-            profile.config_file_encrypted = VPNEncryption.encrypt_vpn_config(config_content)
-        
-        # Update certificate if provided
+
+        certificate_content = None
         if certificate_file:
-            cert_content = (await certificate_file.read()).decode('utf-8')
-            profile.certificate_encrypted = VPNEncryption.encrypt_vpn_config(cert_content)
-        
-        # Update private key if provided
+            certificate_content = (await certificate_file.read()).decode('utf-8')
+
+        private_key_content = None
         if private_key_file:
-            key_content = (await private_key_file.read()).decode('utf-8')
-            profile.private_key_encrypted = VPNEncryption.encrypt_vpn_config(key_content)
-        
-        db.commit()
-        db.refresh(profile)
-        
-        logger.info(f"VPN profile {profile_id} updated by user {current_user.id}")
-        return VPNProfileResponse.from_orm(profile)
-        
+            private_key_content = (await private_key_file.read()).decode('utf-8')
+
+        updated = update_profile_fields(
+            db,
+            profile,
+            name=name,
+            description=description,
+            auto_connect=auto_connect,
+            config_content=config_content,
+            certificate_content=certificate_content,
+            private_key_content=private_key_content,
+            user_id=current_user.id,
+        )
+        return VPNProfileResponse.from_orm(updated)
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error updating VPN profile: {str(e)}")
-        db.rollback()
+        logger.error("Error updating VPN profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update VPN profile"
@@ -230,24 +207,17 @@ async def delete_vpn_profile(
     current_user: User = Depends(deps.get_current_user),
 ):
     """Delete VPN profile."""
-    profile = db.query(VPNProfile).filter(
-        VPNProfile.id == profile_id,
-        VPNProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN profile not found"
         )
-    
+
     try:
-        db.delete(profile)
-        db.commit()
-        logger.info(f"VPN profile {profile_id} deleted by user {current_user.id}")
+        delete_profile(db, profile, current_user.id)
     except Exception as e:
-        logger.error(f"Error deleting VPN profile: {str(e)}")
-        db.rollback()
+        logger.error("Error deleting VPN profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete VPN profile"
@@ -264,32 +234,28 @@ async def test_vpn_connection(
     current_user: User = Depends(deps.get_current_user),
 ) -> VPNConnectionTest:
     """Test VPN configuration validity."""
-    profile = db.query(VPNProfile).filter(
-        VPNProfile.id == profile_id,
-        VPNProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="VPN profile not found"
         )
-    
+
     try:
         # Decrypt config
         config_content = VPNEncryption.decrypt_vpn_config(profile.config_file_encrypted)
-        
+
         # Validate
         valid, error = VPNService.validate_config(profile.vpn_type, config_content)
-        
+
         return VPNConnectionTest(
             profile_id=profile_id,
             connected=valid,
             error_message=error or None,
         )
-        
+
     except Exception as e:
-        logger.error(f"Error testing VPN connection: {str(e)}")
+        logger.error("Error testing VPN connection: %s", e)
         return VPNConnectionTest(
             profile_id=profile_id,
             connected=False,
