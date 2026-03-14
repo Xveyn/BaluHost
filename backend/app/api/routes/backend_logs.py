@@ -133,7 +133,7 @@ async def clear_backend_logs(
 
     Admin only. This only clears the ring buffer, not the actual application logs.
     """
-    from app.services.audit_logger_db import get_audit_logger_db
+    from app.services.audit.logger_db import get_audit_logger_db
 
     handler = get_log_buffer_handler()
     count = handler.get_total_buffered()

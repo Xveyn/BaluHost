@@ -178,16 +178,6 @@ class Settings(BaseSettings):
     pihole_force_dev_backend: bool = False  # Force dev backend even with Docker available
     pihole_web_port: int = 8053  # Pi-hole web UI port on host
 
-    # Email notification configuration (SMTP)
-    email_enabled: bool = False  # Enable email notifications
-    smtp_host: str = ""  # SMTP server hostname
-    smtp_port: int = 587  # SMTP port (587 for TLS, 465 for SSL)
-    smtp_use_tls: bool = True  # Use STARTTLS
-    smtp_username: str = ""  # SMTP authentication username
-    smtp_password: str = ""  # SMTP authentication password
-    email_from_address: str = "baluhost@example.com"  # Sender email address
-    email_from_name: str = "BaluHost"  # Sender display name
-
     # BaluPi integration (Raspberry Pi companion device)
     balupi_enabled: bool = False  # Enable BaluPi handshake/notification integration
     balupi_url: str = ""  # BaluPi backend URL, e.g. "http://192.168.178.20:8000"

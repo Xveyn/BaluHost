@@ -11,7 +11,7 @@ from app.models.file_metadata import FileMetadata
 from app.models.user import User
 from app.schemas.user import UserPublic
 from app.services.shares import ShareService
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.schemas.shares import (
     FileShareCreate, FileShareUpdate, FileShareResponse,
     SharedWithMeResponse, ShareStatistics

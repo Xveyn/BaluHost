@@ -5,7 +5,7 @@ from unittest.mock import Mock
 
 import pytest
 
-from app.services.audit_logger import AuditLogger
+from app.services.audit.logger import AuditLogger
 
 
 @pytest.fixture

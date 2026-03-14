@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.4] - 2026-03-14
+
+### Settings Redesign, API Center & Notification Cleanup
+
+Redesign der Settings-Seite, dynamische API-Dokumentation und Entfernung
+des nie genutzten Email-Notification-Features.
+
+### Added
+
+- **Settings storage tab** — Neuer Storage-Tab mit System Storage Ring, VCL Quota und SSD Cache Sektionen
+- **API Center docs** — Endpoint-Dokumentation wird dynamisch aus dem OpenAPI-Schema generiert
+- **FCM push notifications** — Event-driven und Admin-Notifications via Firebase Cloud Messaging
+- **Power sample retention** — Power Samples werden jetzt vom Retention Management erfasst
+
+### Changed
+
+- **Settings profile tab** — Vereinfacht, Avatar-Upload und Email-Sektion entfernt
+- **Audit logger paths** — Import-Pfade nach Modul-Restrukturierung korrigiert
+
+### Fixed
+
+- **API Center rate limits** — Rate Limits Management mit dynamischem Endpoint-Matching wiederhergestellt
+
+### Removed
+
+- **Email notifications** — Komplettes SMTP-Email-Feature entfernt (war nie in Produktion aktiv)
+
+---
+
 ## [1.15.3] - 2026-03-14
 
 ### Update System Fix & Cancel Support

@@ -1,7 +1,7 @@
 """Notification service for BaluHost.
 
 Handles creation, dispatch, and management of user notifications across
-multiple channels (in-app, push, email).
+multiple channels (in-app, push).
 """
 
 import logging
@@ -28,7 +28,6 @@ class NotificationService:
     def __init__(self):
         """Initialize notification service."""
         self._websocket_manager = None
-        self._email_service = None
 
     @staticmethod
     def _user_filter(user_id: int, is_admin: bool = False):
@@ -58,14 +57,6 @@ class NotificationService:
             manager: WebSocketManager instance
         """
         self._websocket_manager = manager
-
-    def set_email_service(self, service: Any) -> None:
-        """Set the email service for email notifications.
-
-        Args:
-            service: EmailService instance
-        """
-        self._email_service = service
 
     async def create(
         self,
@@ -126,15 +117,15 @@ class NotificationService:
         Checks user preferences and sends to enabled channels:
         - In-app (WebSocket)
         - Push (Firebase FCM)
-        - Email (SMTP)
 
         Args:
             db: Database session
             notification: Notification to dispatch
         """
         if notification.user_id is None:
-            # System notification - broadcast to all admins
+            # System notification - broadcast to all admins via WebSocket + Push
             await self._broadcast_to_admins(notification)
+            await self._send_push_to_admins(db, notification)
             return
 
         # Get user preferences
@@ -161,9 +152,6 @@ class NotificationService:
         if self._should_send_to_channel(prefs, notification.category, "push"):
             await self._send_push(db, notification)
 
-        if self._should_send_to_channel(prefs, notification.category, "email"):
-            await self._send_email(db, notification)
-
     async def _broadcast_to_admins(self, notification: Notification) -> None:
         """Broadcast notification to all admin users via WebSocket.
 
@@ -175,6 +163,63 @@ class NotificationService:
                 await self._websocket_manager.broadcast_to_admins(notification.to_dict())
             except Exception as e:
                 logger.error(f"Failed to broadcast to admins: {e}")
+
+    async def _send_push_to_admins(
+        self, db: Session, notification: Notification
+    ) -> None:
+        """Send push notification to all admin users' mobile devices.
+
+        Args:
+            db: Database session
+            notification: Notification to send
+        """
+        from app.services.notifications.firebase import FirebaseService
+        from app.models.mobile import MobileDevice
+
+        if not FirebaseService.is_available():
+            return
+
+        try:
+            admin_ids = [
+                uid for (uid,) in db.query(User.id).filter(
+                    User.role == "admin",
+                    User.is_active == True,
+                ).all()
+            ]
+            if not admin_ids:
+                return
+
+            devices = db.query(MobileDevice).filter(
+                MobileDevice.user_id.in_(admin_ids),
+                MobileDevice.is_active == True,
+                MobileDevice.push_token.isnot(None),
+            ).all()
+
+            for device in devices:
+                result = FirebaseService.send_notification(
+                    device_token=device.push_token,
+                    title=notification.title,
+                    body=notification.message,
+                    category=notification.category,
+                    priority=notification.priority,
+                    notification_id=notification.id,
+                    action_url=notification.action_url,
+                    notification_type=notification.notification_type,
+                )
+                if result["success"]:
+                    logger.debug(f"Admin push sent to device {device.id}")
+                elif result["error"] == "unregistered":
+                    logger.warning(
+                        f"Device {device.id} token unregistered, clearing"
+                    )
+                    device.push_token = None
+                    db.commit()
+                else:
+                    logger.error(
+                        f"Admin push to device {device.id} failed: {result['error']}"
+                    )
+        except Exception as e:
+            logger.error(f"Failed to send admin push notifications: {e}")
 
     async def _send_in_app(self, notification: Notification) -> None:
         """Send notification via WebSocket for in-app display.
@@ -215,58 +260,30 @@ class NotificationService:
 
         for device in devices:
             try:
-                # Map notification type to FCM channel
-                channel_map = {
-                    "critical": "alerts_critical",
-                    "warning": "alerts_warning",
-                    "info": "alerts_info",
-                }
-                channel_id = channel_map.get(notification.notification_type, "alerts_info")
-
-                from firebase_admin import messaging
-
-                message = messaging.Message(
-                    notification=messaging.Notification(
-                        title=notification.title,
-                        body=notification.message,
-                    ),
-                    data={
-                        "type": "notification",
-                        "notification_id": str(notification.id),
-                        "category": notification.category,
-                        "priority": str(notification.priority),
-                        "action_url": notification.action_url or "",
-                    },
-                    android=messaging.AndroidConfig(
-                        priority="high" if notification.priority >= 2 else "normal",
-                        notification=messaging.AndroidNotification(
-                            icon="ic_notification",
-                            channel_id=channel_id,
-                        )
-                    ),
-                    token=device.push_token,
+                result = FirebaseService.send_notification(
+                    device_token=device.push_token,
+                    title=notification.title,
+                    body=notification.message,
+                    category=notification.category,
+                    priority=notification.priority,
+                    notification_id=notification.id,
+                    action_url=notification.action_url,
+                    notification_type=notification.notification_type,
                 )
-                messaging.send(message)
-                logger.debug(f"Push notification sent to device {device.id}")
+                if result["success"]:
+                    logger.debug(f"Push notification sent to device {device.id}")
+                elif result["error"] == "unregistered":
+                    logger.warning(
+                        f"Device {device.id} token unregistered, clearing"
+                    )
+                    device.push_token = None
+                    db.commit()
+                else:
+                    logger.error(
+                        f"Failed to send push to device {device.id}: {result['error']}"
+                    )
             except Exception as e:
                 logger.error(f"Failed to send push to device {device.id}: {e}")
-
-    async def _send_email(self, db: Session, notification: Notification) -> None:
-        """Send notification via email.
-
-        Args:
-            db: Database session
-            notification: Notification to send
-        """
-        if not self._email_service:
-            return
-
-        try:
-            user = db.query(User).filter(User.id == notification.user_id).first()
-            if user and user.email:
-                await self._email_service.send_notification_email(user, notification)
-        except Exception as e:
-            logger.error(f"Failed to send email notification: {e}")
 
     def _should_send_to_channel(
         self,
@@ -279,7 +296,7 @@ class NotificationService:
         Args:
             prefs: User preferences (None = use defaults)
             category: Notification category
-            channel: Channel name (in_app, push, email)
+            channel: Channel name (in_app, push)
 
         Returns:
             True if notification should be sent to channel
@@ -677,7 +694,6 @@ class NotificationService:
         self,
         db: Session,
         user_id: int,
-        email_enabled: Optional[bool] = None,
         push_enabled: Optional[bool] = None,
         in_app_enabled: Optional[bool] = None,
         category_preferences: Optional[dict[str, Any]] = None,
@@ -691,7 +707,6 @@ class NotificationService:
         Args:
             db: Database session
             user_id: User ID
-            email_enabled: Enable email notifications
             push_enabled: Enable push notifications
             in_app_enabled: Enable in-app notifications
             category_preferences: Category-specific settings
@@ -709,8 +724,6 @@ class NotificationService:
             prefs = NotificationPreferences(user_id=user_id)
             db.add(prefs)
 
-        if email_enabled is not None:
-            prefs.email_enabled = email_enabled
         if push_enabled is not None:
             prefs.push_enabled = push_enabled
         if in_app_enabled is not None:

@@ -1,6 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router-dom';
 import {
   Code,
   Shield,
@@ -10,12 +9,17 @@ import {
   Check,
   Zap,
   Search,
+  RefreshCw,
+  AlertTriangle,
+  Gauge,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { buildApiUrl } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
-import { apiSections, apiCategories, methodColors } from '../data/api-endpoints';
+import { methodColors } from '../data/api-endpoints';
 import type { ApiEndpoint } from '../data/api-endpoints';
+import { useOpenApiSchema } from '../hooks/useOpenApiSchema';
+import { RateLimitsTab } from '../components/rate-limits';
 
 // ==================== Types ====================
 
@@ -36,21 +40,86 @@ interface RateLimitConfig {
   updated_by: number | null;
 }
 
-// ==================== Rate Limit Mapping ====================
+// ==================== Dynamic Rate Limit Matching ====================
 
-const rateLimitMap: Record<string, string> = {
-  'POST /api/auth/login': 'auth_login',
-  'POST /api/auth/register': 'auth_register',
-  'GET /api/files/list': 'file_list',
-  'POST /api/files/upload': 'file_upload',
-  'GET /api/files/download/{path}': 'file_download',
-  'DELETE /api/files/{path}': 'file_delete',
-  'GET /api/shares': 'share_list',
-  'POST /api/shares': 'share_create',
-  'GET /api/system/info': 'system_monitor',
-  'GET /api/system/telemetry': 'system_monitor',
-  'POST /api/users': 'user_create',
-};
+/**
+ * Dynamically match an API endpoint to its rate limit endpoint_type
+ * based on HTTP method and path patterns (mirrors backend decorator usage).
+ */
+function matchEndpointToRateLimitType(method: string, path: string): string | null {
+  const p = path.toLowerCase();
+  const m = method.toUpperCase();
+
+  // Auth endpoints (most specific first)
+  if (m === 'POST' && p === '/api/auth/login') return 'auth_login';
+  if (m === 'POST' && p === '/api/auth/register') return 'auth_register';
+  if (m === 'POST' && p === '/api/auth/change-password') return 'auth_password_change';
+  if (m === 'POST' && p === '/api/auth/refresh') return 'auth_refresh';
+  if (m === 'POST' && p === '/api/auth/verify-2fa') return 'auth_2fa_verify';
+  if (m === 'POST' && p.startsWith('/api/auth/2fa/')) return 'auth_2fa_setup';
+  if (p.startsWith('/api/auth/')) return 'user_operations';
+
+  // Files (specific before generic)
+  if (p.startsWith('/api/files/upload/chunked')) return 'file_chunked';
+  if (m === 'POST' && p.startsWith('/api/files/upload')) return 'file_upload';
+  if (m === 'GET' && p.startsWith('/api/files/download')) return 'file_download';
+  if (m === 'GET' && p.startsWith('/api/files/list')) return 'file_list';
+  if (m === 'DELETE' && p.startsWith('/api/files/')) return 'file_delete';
+  if (p.startsWith('/api/files/')) return 'file_write';
+
+  // Activity
+  if (p.startsWith('/api/activity/')) return 'file_list';
+
+  // Shares
+  if (['POST', 'PATCH', 'DELETE'].includes(m) && p.startsWith('/api/shares')) return 'share_create';
+  if (p.startsWith('/api/shares')) return 'share_list';
+
+  // Mobile
+  if (m === 'POST' && (p === '/api/mobile/register' || p === '/api/mobile/token/generate')) return 'mobile_register';
+  if (p.includes('/mobile/sync') || p.includes('/mobile/upload-queue')) return 'mobile_sync';
+
+  // Desktop pairing
+  if (p.includes('/desktop-pairing/device-code')) return 'desktop_pairing_request';
+  if (p.includes('/desktop-pairing/token')) return 'desktop_pairing_poll';
+  if (p.includes('/desktop-pairing/verify')) return 'desktop_pairing_verify';
+  if (p.includes('/desktop-pairing/approve')) return 'desktop_pairing_approve';
+
+  // VPN, Backup, Sync
+  if (p.startsWith('/api/vpn/') || p === '/api/vpn') return 'vpn_operations';
+  if (p.startsWith('/api/backup/') || p === '/api/backup') return 'backup_operations';
+  if (p.startsWith('/api/sync/')) return 'sync_operations';
+
+  // Benchmark (POST run before admin catch-all)
+  if (m === 'POST' && p.includes('/benchmark/run')) return 'admin_benchmark';
+
+  // API Keys
+  if (p.startsWith('/api/api-keys')) return 'api_key_operations';
+
+  // Users
+  if (p.startsWith('/api/users')) return 'user_operations';
+
+  // System / Monitoring / Energy (GET = monitor, else admin)
+  if (p.startsWith('/api/system/') || p.startsWith('/api/monitoring/') || p.startsWith('/api/energy/')) {
+    return m === 'GET' ? 'system_monitor' : 'admin_operations';
+  }
+
+  // VCL
+  if (p.startsWith('/api/vcl/')) return m === 'GET' ? 'file_list' : 'file_write';
+
+  // SSD Cache
+  if (p.startsWith('/api/ssd-cache/')) return m === 'GET' ? 'file_list' : 'admin_operations';
+
+  // Admin catch-all
+  const adminPrefixes = [
+    '/api/admin/', '/api/admin-db/', '/api/schedulers/', '/api/fans/',
+    '/api/power/', '/api/pihole/', '/api/sleep/', '/api/cloud/',
+    '/api/updates/', '/api/samba/', '/api/webdav/', '/api/plugins/',
+    '/api/notifications/', '/api/benchmark/', '/api/tapo/',
+  ];
+  if (adminPrefixes.some(prefix => p.startsWith(prefix))) return 'admin_operations';
+
+  return null;
+}
 
 // ==================== Endpoint Card Component ====================
 
@@ -64,7 +133,7 @@ function EndpointCard({ endpoint, rateLimits, t }: EndpointCardProps) {
   const [isOpen, setIsOpen] = useState(false);
   const [copied, setCopied] = useState(false);
 
-  const rateLimitKey = rateLimitMap[`${endpoint.method} ${endpoint.path}`];
+  const rateLimitKey = matchEndpointToRateLimitType(endpoint.method, endpoint.path);
   const rateLimit = rateLimitKey ? rateLimits[rateLimitKey] : null;
 
   const copyToClipboard = (text: string) => {
@@ -178,11 +247,14 @@ export default function ApiCenterPage() {
   const { t } = useTranslation(['system', 'common']);
   const { token } = useAuth();
   const [user, setUser] = useState<User | null>(null);
+  const [activeView, setActiveView] = useState<'docs' | 'limits'>('docs');
   const [selectedCategory, setSelectedCategory] = useState<string | null>(null);
   const [selectedSection, setSelectedSection] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [rateLimits, setRateLimits] = useState<Record<string, RateLimitConfig>>({});
   const [loading, setLoading] = useState(true);
+
+  const { sections: apiSections, categories: apiCategories, loading: schemaLoading, error: schemaError, refetch: refetchSchema } = useOpenApiSchema();
 
   const isAdmin = user?.role === 'admin';
 
@@ -280,7 +352,7 @@ export default function ApiCenterPage() {
     return selectedSection
       ? categorySections.filter(s => s.title === selectedSection)
       : categorySections;
-  }, [searchQuery, selectedCategory, selectedSection]);
+  }, [searchQuery, selectedCategory, selectedSection, apiSections, apiCategories]);
 
   const currentCategorySections = selectedCategory
     ? apiCategories.find(c => c.id === selectedCategory)?.sections ?? []
@@ -296,28 +368,68 @@ export default function ApiCenterPage() {
             {t('system:apiCenter.title')}
           </h1>
           <p className="text-slate-400 text-xs sm:text-sm mt-1">
-            {t('system:apiCenter.subtitleFull')}
+            {isAdmin ? t('system:apiCenter.subtitleAdmin') : t('system:apiCenter.subtitleFull')}
           </p>
         </div>
+        {activeView === 'docs' && (
+          <button
+            onClick={refetchSchema}
+            className="p-2 bg-slate-800/40 hover:bg-slate-700/60 border border-slate-700/50 rounded-lg transition-colors touch-manipulation active:scale-95 self-start"
+            title="Refresh API schema"
+          >
+            <RefreshCw className={`w-4 h-4 text-slate-400 ${schemaLoading ? 'animate-spin' : ''}`} />
+          </button>
+        )}
       </div>
 
-      {/* Admin Rate Limits Link Card */}
+      {/* View Toggle (admin: API Docs | Rate Limits) */}
       {isAdmin && (
-        <div className="bg-amber-500/10 border border-amber-500/30 rounded-xl p-4 sm:p-6">
-          <div className="flex items-center justify-between flex-wrap gap-3">
-            <div className="flex items-center gap-3">
-              <Zap className="w-6 h-6 text-amber-400 flex-shrink-0" />
-              <div>
-                <h3 className="font-semibold text-white">{t('system:apiCenter.rateLimits.title')}</h3>
-                <p className="text-sm text-slate-400">{t('system:apiCenter.rateLimits.movedDescription')}</p>
-              </div>
+        <div className="flex gap-2">
+          <button
+            onClick={() => setActiveView('docs')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+              activeView === 'docs'
+                ? 'bg-cyan-500/20 text-cyan-400 border border-cyan-500/40 shadow-lg shadow-cyan-500/10'
+                : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+            }`}
+          >
+            <Code className="w-4 h-4" />
+            <span>{t('system:apiCenter.tabs.apiDocs')}</span>
+          </button>
+          <button
+            onClick={() => setActiveView('limits')}
+            className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+              activeView === 'limits'
+                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40 shadow-lg shadow-amber-500/10'
+                : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+            }`}
+          >
+            <Gauge className="w-4 h-4" />
+            <span>{t('system:apiCenter.tabs.rateLimits')}</span>
+          </button>
+        </div>
+      )}
+
+      {/* ==================== Rate Limits View ==================== */}
+      {activeView === 'limits' && isAdmin && <RateLimitsTab />}
+
+      {/* ==================== API Docs View ==================== */}
+      {activeView === 'docs' && <>
+
+      {/* Schema Error */}
+      {schemaError && (
+        <div className="bg-red-500/10 border border-red-500/30 rounded-xl p-4">
+          <div className="flex items-center gap-3">
+            <AlertTriangle className="w-5 h-5 text-red-400 flex-shrink-0" />
+            <div className="flex-1">
+              <p className="text-sm text-red-300">API schema could not be loaded: {schemaError}</p>
             </div>
-            <Link
-              to="/admin/system-control?tab=ratelimits"
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-lg transition-colors text-sm font-medium touch-manipulation active:scale-95 whitespace-nowrap"
+            <button
+              onClick={refetchSchema}
+              className="px-3 py-1.5 bg-red-600 hover:bg-red-500 text-white rounded-lg transition-colors text-sm font-medium"
             >
-              {t('system:apiCenter.rateLimits.goToSystemControl')} →
-            </Link>
+              Retry
+            </button>
           </div>
         </div>
       )}
@@ -450,12 +562,22 @@ export default function ApiCenterPage() {
       )}
 
       {/* Loading State */}
-      {loading && (
-        <div className="text-slate-400 text-sm">{t('common:loading')}</div>
+      {(loading || schemaLoading) && (
+        <div className="space-y-4">
+          {[1, 2, 3].map(i => (
+            <div key={i} className="animate-pulse">
+              <div className="h-6 bg-slate-800/60 rounded w-48 mb-3" />
+              <div className="space-y-2">
+                <div className="h-14 bg-slate-800/40 rounded-xl" />
+                <div className="h-14 bg-slate-800/40 rounded-xl" />
+              </div>
+            </div>
+          ))}
+        </div>
       )}
 
       {/* API Sections */}
-      {!loading && visibleSections.map((section) => (
+      {!loading && !schemaLoading && visibleSections.map((section) => (
         <div key={section.title}>
           <div className="flex items-center gap-2 sm:gap-3 mb-3 sm:mb-4">
             <div className="p-1.5 sm:p-2 bg-cyan-500/20 rounded-lg text-cyan-400">
@@ -475,6 +597,8 @@ export default function ApiCenterPage() {
           </div>
         </div>
       ))}
+
+      </>}
     </div>
   );
 }

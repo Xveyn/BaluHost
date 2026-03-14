@@ -8,7 +8,6 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
-  Mail,
   Smartphone,
   Monitor,
   Moon,
@@ -54,7 +53,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const [_preferences, setPreferences] = useState<NotificationPreferences | null>(null);
 
   // Local state for form
-  const [emailEnabled, setEmailEnabled] = useState(true);
   const [pushEnabled, setPushEnabled] = useState(true);
   const [inAppEnabled, setInAppEnabled] = useState(true);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
@@ -74,7 +72,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       setPreferences(prefs);
 
       // Populate form
-      setEmailEnabled(prefs.email_enabled);
       setPushEnabled(prefs.push_enabled);
       setInAppEnabled(prefs.in_app_enabled);
       setQuietHoursEnabled(prefs.quiet_hours_enabled);
@@ -93,7 +90,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     try {
       setSaving(true);
       await updatePreferences({
-        email_enabled: emailEnabled,
         push_enabled: pushEnabled,
         in_app_enabled: inAppEnabled,
         quiet_hours_enabled: quietHoursEnabled,
@@ -116,7 +112,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     value: boolean
   ) => {
     setCategoryPrefs((prev) => {
-      const existing = prev[category] || { email: true, push: true, in_app: true };
+      const existing = prev[category] || { push: true, in_app: true };
       return {
         ...prev,
         [category]: {
@@ -128,7 +124,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   };
 
   const getCategoryPref = (category: NotificationCategory): CategoryPreference => {
-    return categoryPrefs[category] || { email: true, push: true, in_app: true };
+    return categoryPrefs[category] || { push: true, in_app: true };
   };
 
   if (loading) {
@@ -196,24 +192,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       {/* Global Channel Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
         <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('channels.title')}</h2>
-        <div className="grid gap-4 sm:grid-cols-3">
-          {/* Email */}
-          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-800 p-4 transition hover:border-slate-700">
-            <input
-              type="checkbox"
-              checked={emailEnabled}
-              onChange={(e) => setEmailEnabled(e.target.checked)}
-              className="h-5 w-5 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-            />
-            <div className="flex items-center gap-3">
-              <Mail className="h-5 w-5 text-slate-400" />
-              <div>
-                <p className="font-medium text-slate-100">{t('channels.email')}</p>
-                <p className="text-xs text-slate-400">{t('channels.emailDesc')}</p>
-              </div>
-            </div>
-          </label>
-
+        <div className="grid gap-4 sm:grid-cols-2">
           {/* Push */}
           <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-800 p-4 transition hover:border-slate-700">
             <input
@@ -341,12 +320,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                 <th className="pb-3 pr-4">{t('categories.category')}</th>
                 <th className="pb-3 px-4 text-center">
                   <div className="flex items-center justify-center gap-1">
-                    <Mail className="h-4 w-4" />
-                    <span>{t('channels.email')}</span>
-                  </div>
-                </th>
-                <th className="pb-3 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1">
                     <Smartphone className="h-4 w-4" />
                     <span>{t('channels.push')}</span>
                   </div>
@@ -371,17 +344,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                           {getCategoryName(category)}
                         </span>
                       </div>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={pref.email && emailEnabled}
-                        disabled={!emailEnabled}
-                        onChange={(e) =>
-                          handleCategoryChange(category, 'email', e.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50 disabled:opacity-50"
-                      />
                     </td>
                     <td className="py-3 px-4 text-center">
                       <input

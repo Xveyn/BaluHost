@@ -2,7 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
 import { getDatabaseStats } from '../../api/monitoring'
 import type { DatabaseStatsResponse, MetricDatabaseStats } from '../../api/monitoring'
-import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw } from 'lucide-react'
+import { Database, Cpu, MemoryStick, Network, HardDrive, Activity, RefreshCw, Zap } from 'lucide-react'
 import { formatBytes } from '../../lib/formatters'
 import { StatCard } from '../ui/StatCard'
 import { ProgressBar } from '../ui/ProgressBar'
@@ -13,6 +13,7 @@ export const METRIC_CONFIG: Record<string, { labelKey: string; icon: React.Eleme
   network: { labelKey: 'admin:databaseStats.metrics.network', icon: Network, color: 'purple' },
   disk_io: { labelKey: 'admin:databaseStats.metrics.diskIo', icon: HardDrive, color: 'amber' },
   process: { labelKey: 'admin:databaseStats.metrics.process', icon: Activity, color: 'rose' },
+  power: { labelKey: 'admin:databaseStats.metrics.power', icon: Zap, color: 'amber' },
 }
 
 interface MetricCardProps {

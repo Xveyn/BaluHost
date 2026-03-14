@@ -263,7 +263,8 @@
       "memory": "Memory",
       "network": "Network",
       "diskIo": "Disk I/O",
-      "process": "Process"
+      "process": "Process",
+      "power": "Power"
     },
     "fields": {
       "samples": "Samples",

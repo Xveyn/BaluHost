@@ -16,7 +16,7 @@ from app.schemas.api_key import (
     EligibleUser,
 )
 from app.services.api_key_service import ApiKeyService
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.core.rate_limiter import limiter, get_limit
 from app.models.user import User
 

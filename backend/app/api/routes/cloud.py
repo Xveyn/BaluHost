@@ -23,7 +23,7 @@ from app.schemas.cloud import (
     OAuthCallbackRequest,
 )
 from app.schemas.user import UserPublic
-from app.services.audit_logger_db import AuditLoggerDB
+from app.services.audit.logger_db import AuditLoggerDB
 from app.services.cloud.import_job import CloudImportJobService
 from app.services.cloud.oauth_config import CloudOAuthConfigService
 from app.services.cloud.service import CloudService

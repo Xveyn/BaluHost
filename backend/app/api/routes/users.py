@@ -13,7 +13,7 @@ from app.core.database import get_db
 from app.schemas.user import UserCreate, UserPublic, UserUpdate, UsersResponse
 from app.services import users as user_service
 from app.models.user import User
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 
 router = APIRouter()
 

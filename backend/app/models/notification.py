@@ -106,11 +106,10 @@ class NotificationPreferences(Base):
         nullable=False,
         index=True
     )
-    email_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     push_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     in_app_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    # Category preferences as JSON: {"raid": {"email": true, "push": true, "in_app": true}, ...}
+    # Category preferences as JSON: {"raid": {"push": true, "in_app": true}, ...}
     category_preferences: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
 
     # Quiet hours
@@ -132,7 +131,6 @@ class NotificationPreferences(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "email_enabled": self.email_enabled,
             "push_enabled": self.push_enabled,
             "in_app_enabled": self.in_app_enabled,
             "category_preferences": self.category_preferences,
@@ -151,7 +149,7 @@ class NotificationPreferences(Base):
 
         Args:
             category: Notification category (raid, smart, etc.)
-            channel: Channel type (email, push, in_app)
+            channel: Channel type (push, in_app)
 
         Returns:
             True if channel is enabled for category

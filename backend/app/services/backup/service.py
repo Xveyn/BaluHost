@@ -17,7 +17,7 @@ from app.core.config import settings
 from app.core.database import engine, DATABASE_URL
 from app.models.backup import Backup
 from app.schemas.backup import BackupCreate, BackupInDB
-from app.services.audit_logger_db import AuditLoggerDB
+from app.services.audit.logger_db import AuditLoggerDB
 import logging
 
 logger = logging.getLogger(__name__)

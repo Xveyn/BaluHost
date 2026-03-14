@@ -3,8 +3,6 @@
   "description": "Konfiguriere wie und wann du benachrichtigt wirst",
   "channels": {
     "title": "Benachrichtigungskanäle",
-    "email": "E-Mail",
-    "emailDesc": "Benachrichtigungen per E-Mail",
     "push": "Push",
     "pushDesc": "Mobile App Benachrichtigungen",
     "inApp": "In-App",

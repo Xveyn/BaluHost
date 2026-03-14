@@ -21,6 +21,7 @@ from app.models.monitoring import (
     DiskIoSample,
     ProcessSample,
 )
+from app.models.power_sample import PowerSample
 
 logger = logging.getLogger(__name__)
 
@@ -31,6 +32,7 @@ DEFAULT_RETENTION = {
     MetricType.NETWORK: 168,   # 7 days
     MetricType.DISK_IO: 168,   # 7 days
     MetricType.PROCESS: 72,    # 3 days
+    MetricType.POWER: 720,     # 30 days
 }
 
 # Mapping of metric types to their database models
@@ -40,6 +42,7 @@ METRIC_MODELS = {
     MetricType.NETWORK: NetworkSample,
     MetricType.DISK_IO: DiskIoSample,
     MetricType.PROCESS: ProcessSample,
+    MetricType.POWER: PowerSample,
 }
 
 
@@ -234,6 +237,7 @@ class RetentionManager:
             MetricType.NETWORK: 60,
             MetricType.DISK_IO: 100,
             MetricType.PROCESS: 120,
+            MetricType.POWER: 60,
         }
 
         sizes = {}

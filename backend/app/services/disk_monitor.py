@@ -11,7 +11,7 @@ from typing import Dict, List, Optional
 import psutil
 
 from app.core.config import settings
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 
 
 def get_audit_logger():

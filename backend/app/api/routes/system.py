@@ -36,10 +36,10 @@ from app.schemas.user import UserPublic
 from app.services import disk_monitor
 from app.services import raid as raid_service
 from app.services import smart as smart_service
-from app.services.audit_logger_db import get_audit_logger_db
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
-from app.services.audit_logger import get_audit_logger
+from app.services.audit.logger import get_audit_logger
 
 router = APIRouter()
 
