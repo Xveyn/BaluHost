@@ -2,7 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { User, Lock, Mail, Image, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch, Bell } from 'lucide-react';
+import { User, Lock, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch, Bell } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
 import { apiClient } from '../lib/api';
@@ -16,9 +16,7 @@ const NotificationPreferencesPage = lazy(() => import('./NotificationPreferences
 interface UserProfile {
   id: number;
   username: string;
-  email: string | null;
   role: string;
-  avatar_url: string | null;
   created_at: string;
 }
 
@@ -424,18 +422,11 @@ export default function SettingsPage() {
     setSearchParams(tab === 'profile' ? {} : { tab });
   };
   
-  // Profile update
-  const [email, setEmail] = useState('');
-  
   // Password change
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   
-  // Avatar upload
-  const [avatarFile, setAvatarFile] = useState<File | null>(null);
-  const [avatarPreview, setAvatarPreview] = useState<string | null>(null);
-
   // Storage quota
   const [storageQuota, setStorageQuota] = useState<StorageQuota | null>(null);
 
@@ -467,7 +458,6 @@ export default function SettingsPage() {
       }
 
       setProfile(userData);
-      setEmail(userData.email || '');
     } catch {
       // Failed to load profile
     } finally {
@@ -481,24 +471,6 @@ export default function SettingsPage() {
       setStorageQuota(response.data);
     } catch {
       // Failed to load storage quota
-    }
-  };
-
-  const handleUpdateEmail = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    
-    try {
-      await apiClient.patch(`/api/users/${profile?.id}`, { email });
-      toast.success('Email updated successfully');
-      await loadProfile();
-    } catch (err: unknown) {
-      const detail = err instanceof Object && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Failed to update email');
-    } finally {
-      setSaving(false);
     }
   };
 
@@ -532,44 +504,6 @@ export default function SettingsPage() {
         ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
         : undefined;
       toast.error(detail || 'Failed to change password');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const handleAvatarChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setAvatarFile(file);
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleAvatarUpload = async () => {
-    if (!avatarFile) return;
-    
-    setSaving(true);
-    const formData = new FormData();
-    formData.append('avatar', avatarFile);
-    
-    try {
-      await apiClient.post(`/api/users/${profile?.id}/avatar`, formData, {
-        headers: { 'Content-Type': 'multipart/form-data' }
-      });
-      
-      toast.success('Avatar updated successfully');
-      setAvatarFile(null);
-      setAvatarPreview(null);
-      await loadProfile();
-    } catch (err: unknown) {
-      const detail = err instanceof Object && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Failed to upload avatar');
     } finally {
       setSaving(false);
     }
@@ -636,111 +570,56 @@ export default function SettingsPage() {
           <>
             {/* Profile Card */}
             <div className="card border-slate-800/60 bg-slate-900/55">
-              <div className="flex flex-col sm:flex-row items-center sm:space-x-4 mb-4 sm:mb-6">
-                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex items-center justify-center text-white text-xl sm:text-2xl font-bold bg-gradient-to-br from-sky-500 to-violet-500 mb-3 sm:mb-0">
-                  {profile.avatar_url ? (
-                    <img
-                      src={profile.avatar_url}
-                      alt={profile.username}
-                      className="w-full h-full rounded-full object-cover"
-                    />
-                  ) : (
-                    profile.username.charAt(0).toUpperCase()
-                  )}
+              <div className="flex flex-col sm:flex-row items-center sm:items-start gap-4 sm:gap-6">
+                <div className="w-16 h-16 sm:w-20 sm:h-20 rounded-full flex-shrink-0 flex items-center justify-center text-white text-xl sm:text-2xl font-bold bg-gradient-to-br from-sky-500 to-violet-500">
+                  {profile.username.charAt(0).toUpperCase()}
                 </div>
-                <div>
-                  <h2 className="text-2xl font-bold">{profile.username}</h2>
-                  <p className="text-slate-100-secondary">{profile.role}</p>
-                  <p className="text-sm text-slate-100-tertiary">
+                <div className="flex-1 min-w-0 text-center sm:text-left">
+                  <h2 className="text-xl sm:text-2xl font-bold truncate">{profile.username}</h2>
+                  <p className="text-sm text-slate-100-secondary capitalize">{profile.role}</p>
+                  <p className="text-sm text-slate-100-tertiary mt-1">
                     {t('profile.memberSince')} {new Date(profile.created_at).toLocaleDateString()}
                   </p>
                 </div>
               </div>
-            </div>
 
-            {/* Avatar Upload */}
-            <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-lg font-semibold mb-4 flex items-center">
-                <Image className="w-5 h-5 mr-2 text-sky-400" />
-                {t('profile.avatar')}
-              </h3>
-              <div className="space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-2">{t('profile.uploadAvatar')}</label>
-                  <input
-                    type="file"
-                    accept="image/*"
-                    onChange={handleAvatarChange}
-                    className="block w-full text-sm rounded-lg border border-slate-800 bg-slate-950-secondary text-slate-100-secondary px-3 py-2"
-                  />
-                </div>
-                {avatarPreview && (
-                  <div>
-                    <p className="text-sm mb-2 text-slate-100-secondary">{t('profile.preview')}:</p>
-                    <img
-                      src={avatarPreview}
-                      alt="Avatar preview"
-                      className="w-24 h-24 sm:w-32 sm:h-32 rounded-full object-cover"
-                    />
-                    <button
-                      onClick={handleAvatarUpload}
-                      disabled={saving}
-                      className="mt-4 px-4 py-2 text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50"
-                    >
-                      {saving ? t('profile.uploading') : t('profile.uploadAvatarBtn')}
-                    </button>
+              <div className="mt-6 pt-5 border-t border-slate-700/40">
+                <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
+                  <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
+                  {t('profile.accountInfo')}
+                </h3>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <label className="block text-xs font-medium text-slate-100-tertiary mb-1">{t('profile.username')}</label>
+                    <p className="text-sm sm:text-base font-medium truncate">{profile.username}</p>
                   </div>
-                )}
+                  <div className="px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <label className="block text-xs font-medium text-slate-100-tertiary mb-1">{t('profile.role')}</label>
+                    <p className="text-sm sm:text-base font-medium capitalize">{profile.role}</p>
+                  </div>
+                  <div className="px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                    <label className="block text-xs font-medium text-slate-100-tertiary mb-1">{t('profile.accountId')}</label>
+                    <p className="text-sm sm:text-base font-medium font-mono">{profile.id}</p>
+                  </div>
+                </div>
               </div>
             </div>
 
-            {/* Email Update */}
+            {/* Data Export */}
             <div className="card border-slate-800/60 bg-slate-900/55">
               <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
-                <Mail className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                {t('profile.email')}
+                <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
+                {t('security.dataExport.title')}
               </h3>
-              <form onSubmit={handleUpdateEmail} className="space-y-3 sm:space-y-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">{t('profile.emailLabel')}</label>
-                  <input
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    className="input"
-                    placeholder="your.email@example.com"
-                  />
-                </div>
-                <button
-                  type="submit"
-                  disabled={saving}
-                  className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg bg-sky-500 hover:bg-sky-500-secondary transition-colors disabled:opacity-50 touch-manipulation active:scale-95"
-                >
-                  {saving ? t('profile.saving') : t('profile.updateEmail')}
-                </button>
-              </form>
-            </div>
-
-            {/* Account Info */}
-            <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
-                <User className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                {t('profile.accountInfo')}
-              </h3>
-              <div className="space-y-3">
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.username')}</label>
-                  <p className="text-base sm:text-lg truncate">{profile.username}</p>
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.role')}</label>
-                  <p className="text-base sm:text-lg capitalize">{profile.role}</p>
-                </div>
-                <div>
-                  <label className="block text-xs sm:text-sm font-medium text-slate-100-secondary">{t('profile.accountId')}</label>
-                  <p className="text-base sm:text-lg font-mono">{profile.id}</p>
-                </div>
-              </div>
+              <p className="mb-3 sm:mb-4 text-sm sm:text-base text-slate-100-secondary">
+                {t('security.dataExport.description')}
+              </p>
+              <button
+                onClick={handleExportData}
+                className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
+              >
+                {t('security.dataExport.button')}
+              </button>
             </div>
           </>
         )}
@@ -837,22 +716,6 @@ export default function SettingsPage() {
               </div>
             </div>
 
-            {/* Data Export */}
-            <div className="card border-slate-800/60 bg-slate-900/55">
-              <h3 className="text-base sm:text-lg font-semibold mb-3 sm:mb-4 flex items-center">
-                <Download className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
-                {t('security.dataExport.title')}
-              </h3>
-              <p className="mb-3 sm:mb-4 text-sm sm:text-base text-slate-100-secondary">
-                {t('security.dataExport.description')}
-              </p>
-              <button
-                onClick={handleExportData}
-                className="w-full sm:w-auto px-4 py-2 text-sm sm:text-base text-white rounded-lg transition-colors bg-sky-500 hover:bg-sky-500-secondary touch-manipulation active:scale-95"
-              >
-                {t('security.dataExport.button')}
-              </button>
-            </div>
           </>
         )}
 
