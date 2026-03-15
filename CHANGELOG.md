@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.6] - 2026-03-15
+
+### Added
+
+- **Uptime tracking** — New UptimeSample model with server + system uptime, historical DB persistence, 30-day retention
+- **Uptime API endpoints** — `GET /api/monitoring/uptime/current` and `/history` with live fallback computation
+- **Uptime tab** — System Monitor > System > Uptime with live counters, restart detection, and area chart
+- **Dashboard dual uptime** — Server uptime as main value, system uptime as subtitle, clickable to uptime tab
+- **BaluPi setup** — Admin route, setup component, and API client for Pi device management
+- **Pi mode guards** — Disable notifications and plugins in Pi mode to avoid unnecessary requests
+
+### Changed
+
+- **SystemInfo schema** — Added `system_uptime` field to `/api/system/info` response
+
+---
+
 ## [1.15.5] - 2026-03-15
 
 ### Refactoring, Performance & Code Quality
