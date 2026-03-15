@@ -137,7 +137,7 @@ export default function PiDashboard() {
         apiClient.get<HandshakeStatus>('/api/handshake/status'),
         apiClient.get<EnergyCurrent>('/api/energy/current'),
         apiClient.get<PiSystem>('/api/system/status'),
-        apiClient.get<SnapshotData>('/api/snapshot'),
+        apiClient.get<SnapshotData>('/api/handshake/snapshot'),
       ]);
       if (hs.status === 'fulfilled') setHandshake(hs.value.data);
       if (en.status === 'fulfilled') setEnergy(en.value.data);
