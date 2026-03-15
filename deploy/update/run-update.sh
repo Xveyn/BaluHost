@@ -11,6 +11,9 @@
 
 set -euo pipefail
 
+# Ensure status files are readable by the baluhost group/backend process
+umask 022
+
 # ─── Parse arguments ────────────────────────────────────────────────
 
 UPDATE_ID=""
@@ -80,6 +83,7 @@ write_status() {
 }
 STATUSEOF
     mv "$tmp" "$STATUS_FILE"
+    chmod 644 "$STATUS_FILE"
 }
 
 # ─── Error handler (rollback on failure) ────────────────────────────
