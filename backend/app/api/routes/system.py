@@ -24,6 +24,7 @@ from app.schemas.system import (
     RaidOptionsRequest,
     RaidSimulationRequest,
     RaidStatusResponse,
+    StorageBreakdownResponse,
     SystemHealthResponse,
     SmartStatusResponse,
     StorageInfo,
@@ -90,6 +91,13 @@ def get_aggregated_storage_info(request: Request, response: Response, _: UserPub
     Bei RAID wird die effektive Kapazität berechnet.
     """
     return system_service.get_aggregated_storage_info()
+
+
+@router.get("/storage/breakdown", response_model=StorageBreakdownResponse)
+@user_limiter.limit(get_limit("system_monitor"))
+def get_storage_breakdown(request: Request, response: Response, _: UserPublic = Depends(deps.get_current_user)) -> StorageBreakdownResponse:
+    """Per-array/device storage breakdown with usage data."""
+    return system_service.get_storage_breakdown()
 
 
 @router.get("/quota", response_model=QuotaStatus)
