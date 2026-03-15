@@ -89,7 +89,9 @@
     "title": "Speichernutzung",
     "systemStorage": "Gesamtspeicher",
     "totalEffective": "Effektiver Gesamtspeicher",
+    "totalCapacity": "Gesamtkapazität",
     "yourQuota": "Dein Kontingent",
+    "myArrays": "Meine Arrays",
     "vclTitle": "VCL-Versionierung",
     "cacheTitle": "SSD-Cache",
     "used": "Verwendet",
@@ -111,6 +113,8 @@
     "entries": "Einträge",
     "served": "Ausgeliefert",
     "noCacheConfigured": "Kein SSD-Cache konfiguriert",
+    "cacheFor": "SSD-Cache für {{array}}",
+    "vclClickHint": "VCL-Einstellungen anzeigen",
     "vclDisabled": "VCL ist nicht aktiviert",
     "tipsTitle": "Speicher-Tipps",
     "tips": {

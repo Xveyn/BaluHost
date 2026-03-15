@@ -89,7 +89,9 @@
     "title": "Storage Usage",
     "systemStorage": "System Storage",
     "totalEffective": "Total Effective Storage",
+    "totalCapacity": "Total Capacity",
     "yourQuota": "Your Quota",
+    "myArrays": "My Arrays",
     "vclTitle": "VCL Versioning",
     "cacheTitle": "SSD Cache",
     "used": "Used",
@@ -111,6 +113,8 @@
     "entries": "Entries",
     "served": "Served",
     "noCacheConfigured": "No SSD cache configured",
+    "cacheFor": "SSD Cache for {{array}}",
+    "vclClickHint": "View VCL settings",
     "vclDisabled": "VCL is not enabled",
     "tipsTitle": "Storage Tips",
     "tips": {

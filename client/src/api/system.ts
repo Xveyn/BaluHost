@@ -66,3 +66,33 @@ export async function getStorageInfo(): Promise<StorageInfoResponse> {
   const { data } = await apiClient.get<StorageInfoResponse>('/api/system/storage');
   return data;
 }
+
+export interface StorageDeviceEntry {
+  name: string;
+  label: string;
+  level: string | null;
+  disk_type: string;
+  capacity_bytes: number;
+  used_bytes: number;
+  available_bytes: number;
+  use_percent: number;
+  device_count: number;
+}
+
+export interface StorageBreakdownResponse {
+  entries: StorageDeviceEntry[];
+  total_capacity: number;
+  total_used: number;
+  total_available: number;
+  total_use_percent: number;
+}
+
+/**
+ * Get per-array/device storage breakdown.
+ */
+export async function getStorageBreakdown(): Promise<StorageBreakdownResponse> {
+  const { data } = await apiClient.get<StorageBreakdownResponse>(
+    '/api/system/storage/breakdown'
+  );
+  return data;
+}

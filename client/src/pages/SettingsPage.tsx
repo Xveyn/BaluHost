@@ -1,6 +1,6 @@
 import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams, useNavigate } from 'react-router-dom';
 import toast from 'react-hot-toast';
 import { User, Lock, HardDrive, Clock, Download, Globe, Shield, ShieldCheck, ShieldOff, Copy, RefreshCw, KeyRound, GitBranch, Bell, Database, Layers } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
@@ -9,8 +9,11 @@ import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
 import ByteUnitSettings from '../components/ByteUnitSettings';
 import { formatBytes } from '../lib/formatters';
+import { getStorageBreakdown } from '../api/system';
+import type { StorageBreakdownResponse } from '../api/system';
 import { getUserQuota } from '../api/vcl';
 import { getCacheOverview } from '../api/ssd-file-cache';
+import StorageBreakdownRing from '../components/settings/StorageBreakdownRing';
 import type { QuotaInfo } from '../types/vcl';
 import type { SSDCacheStats } from '../api/ssd-file-cache';
 import { get2FAStatus, setup2FA, verifySetup2FA, disable2FA, regenerateBackupCodes, type TwoFactorStatus, type TwoFactorSetupData } from '../api/two-factor';
@@ -29,15 +32,6 @@ interface StorageQuota {
   limit_bytes: number | null;
   available_bytes: number | null;
   percent_used: number | null;
-}
-
-interface AggregatedStorage {
-  filesystem: string;
-  total: number;
-  used: number;
-  available: number;
-  use_percent: string;
-  mount_point: string;
 }
 
 interface Session {
@@ -421,43 +415,9 @@ function getUsageColor(percent: number): string {
   return '#22c55e';
 }
 
-function StorageRing({ percent, size = 120, strokeWidth = 10, color }: {
-  percent: number;
-  size?: number;
-  strokeWidth?: number;
-  color?: string;
-}) {
-  const radius = (size - strokeWidth) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const clamped = Math.min(Math.max(percent, 0), 100);
-  const offset = circumference - (clamped / 100) * circumference;
-  const fill = color ?? getUsageColor(clamped);
-
-  return (
-    <div className="relative flex-shrink-0" style={{ width: size, height: size }}>
-      <svg width={size} height={size} className="transform -rotate-90">
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke="currentColor" strokeWidth={strokeWidth}
-          className="text-slate-800/60"
-        />
-        <circle
-          cx={size / 2} cy={size / 2} r={radius}
-          fill="none" stroke={fill} strokeWidth={strokeWidth}
-          strokeLinecap="round"
-          strokeDasharray={circumference} strokeDashoffset={offset}
-          className="transition-all duration-1000 ease-out"
-        />
-      </svg>
-      <div className="absolute inset-0 flex items-center justify-center">
-        <span className="text-xl font-bold">{clamped.toFixed(0)}%</span>
-      </div>
-    </div>
-  );
-}
-
 export default function SettingsPage() {
   const { t } = useTranslation('settings');
+  const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
   const [profile, setProfile] = useState<UserProfile | null>(null);
   const [loading, setLoading] = useState(true);
@@ -482,7 +442,7 @@ export default function SettingsPage() {
   
   // Storage quota
   const [storageQuota, setStorageQuota] = useState<StorageQuota | null>(null);
-  const [aggregatedStorage, setAggregatedStorage] = useState<AggregatedStorage | null>(null);
+  const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownResponse | null>(null);
   const [vclQuota, setVclQuota] = useState<QuotaInfo | null>(null);
   const [cacheOverview, setCacheOverview] = useState<SSDCacheStats[] | null>(null);
 
@@ -500,7 +460,7 @@ export default function SettingsPage() {
   useEffect(() => {
     loadProfile();
     loadStorageQuota();
-    loadAggregatedStorage();
+    loadStorageBreakdown();
     loadVclQuota();
     loadCacheOverview();
   }, []);
@@ -533,12 +493,12 @@ export default function SettingsPage() {
     }
   };
 
-  const loadAggregatedStorage = async () => {
+  const loadStorageBreakdown = async () => {
     try {
-      const response = await apiClient.get('/api/system/storage/aggregated');
-      setAggregatedStorage(response.data);
+      const data = await getStorageBreakdown();
+      setStorageBreakdown(data);
     } catch {
-      // Failed to load aggregated storage
+      // Failed to load storage breakdown
     }
   };
 
@@ -822,35 +782,38 @@ export default function SettingsPage() {
         {activeTab === 'storage' && (
           <>
             {/* System Storage Overview */}
-            <div className="card border-slate-800/60 bg-slate-900/55">
+            <div className="card border-slate-800/60 bg-slate-900/55 shadow-[0_4px_24px_rgba(56,189,248,0.06)] hover:shadow-[0_8px_32px_rgba(56,189,248,0.12)] transition-shadow">
               <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center">
                 <Database className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-sky-400" />
                 {t('storage.systemStorage')}
               </h3>
-              {aggregatedStorage ? (() => {
-                const usePct = parseFloat(aggregatedStorage.use_percent) || 0;
-                return (
-                  <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
-                    <StorageRing percent={usePct} size={140} strokeWidth={12} />
-                    <div className="flex-1 space-y-3 w-full">
-                      <div className="text-center sm:text-left">
-                        <p className="text-xs text-slate-400 mb-0.5">{t('storage.totalEffective')}</p>
-                        <p className="text-2xl font-bold">{formatBytes(aggregatedStorage.total)}</p>
+              {storageBreakdown ? (
+                <div className="flex flex-col sm:flex-row items-center gap-6 sm:gap-8">
+                  <StorageBreakdownRing
+                    entries={storageBreakdown.entries}
+                    totalCapacity={storageBreakdown.total_capacity}
+                    totalUsePercent={storageBreakdown.total_use_percent}
+                    size={140}
+                    strokeWidth={12}
+                  />
+                  <div className="flex-1 space-y-3 w-full">
+                    <div className="text-center sm:text-left">
+                      <p className="text-xs text-slate-400 mb-0.5">{t('storage.totalCapacity')}</p>
+                      <p className="text-2xl font-bold">{formatBytes(storageBreakdown.total_capacity)}</p>
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="px-3 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                        <p className="text-xs text-slate-400 mb-0.5">{t('storage.used')}</p>
+                        <p className="text-sm font-semibold">{formatBytes(storageBreakdown.total_used)}</p>
                       </div>
-                      <div className="grid grid-cols-2 gap-3">
-                        <div className="px-3 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
-                          <p className="text-xs text-slate-400 mb-0.5">{t('storage.used')}</p>
-                          <p className="text-sm font-semibold">{formatBytes(aggregatedStorage.used)}</p>
-                        </div>
-                        <div className="px-3 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
-                          <p className="text-xs text-slate-400 mb-0.5">{t('storage.available')}</p>
-                          <p className="text-sm font-semibold">{formatBytes(aggregatedStorage.available)}</p>
-                        </div>
+                      <div className="px-3 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
+                        <p className="text-xs text-slate-400 mb-0.5">{t('storage.available')}</p>
+                        <p className="text-sm font-semibold">{formatBytes(storageBreakdown.total_available)}</p>
                       </div>
                     </div>
                   </div>
-                );
-              })() : (
+                </div>
+              ) : (
                 <div className="flex flex-col sm:flex-row items-center gap-6 animate-pulse">
                   <div className="w-[140px] h-[140px] rounded-full bg-slate-800/50" />
                   <div className="flex-1 space-y-3 w-full">
@@ -865,13 +828,16 @@ export default function SettingsPage() {
               )}
             </div>
 
-            {/* User Quota + VCL side by side */}
+            {/* My Arrays + VCL side by side */}
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
-              {/* User Storage Quota */}
-              <div className="card border-slate-800/60 bg-slate-900/55">
+              {/* My Arrays (renamed from Your Quota) — admin can click to RAID settings */}
+              <div
+                className={`card border-slate-800/60 bg-slate-900/55 shadow-[0_4px_24px_rgba(52,211,153,0.06)] hover:shadow-[0_8px_32px_rgba(52,211,153,0.12)] transition-all ${profile?.role === 'admin' ? 'cursor-pointer hover:border-emerald-500/30' : ''}`}
+                {...(profile?.role === 'admin' ? { onClick: () => navigate('/admin/system-control?tab=raid') } : {})}
+              >
                 <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center">
                   <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-emerald-400" />
-                  {t('storage.yourQuota')}
+                  {t('storage.myArrays')}
                 </h3>
                 {storageQuota ? (
                   <div className="space-y-3">
@@ -913,8 +879,12 @@ export default function SettingsPage() {
                 )}
               </div>
 
-              {/* VCL Storage Quota */}
-              <div className="card border-slate-800/60 bg-slate-900/55">
+              {/* VCL Storage Quota — clickable to switch to VCL tab */}
+              <div
+                className="card border-slate-800/60 bg-slate-900/55 shadow-[0_4px_24px_rgba(139,92,246,0.06)] hover:shadow-[0_8px_32px_rgba(139,92,246,0.12)] hover:border-violet-500/30 transition-all cursor-pointer"
+                onClick={() => handleTabChange('vcl')}
+                title={t('storage.vclClickHint')}
+              >
                 <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center">
                   <GitBranch className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-violet-400" />
                   {t('storage.vclTitle')}
@@ -979,7 +949,7 @@ export default function SettingsPage() {
             </div>
 
             {/* SSD Cache */}
-            <div className="card border-slate-800/60 bg-slate-900/55">
+            <div className="card border-slate-800/60 bg-slate-900/55 shadow-[0_4px_24px_rgba(245,158,11,0.06)] hover:shadow-[0_8px_32px_rgba(245,158,11,0.12)] transition-shadow">
               <h3 className="text-base sm:text-lg font-semibold mb-4 flex items-center">
                 <Layers className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-amber-400" />
                 {t('storage.cacheTitle')}
@@ -998,7 +968,7 @@ export default function SettingsPage() {
                   {cacheOverview.map(cache => (
                     <div key={cache.array_name} className="p-4 rounded-xl bg-slate-800/40 border border-slate-700/30">
                       <div className="flex justify-between items-center mb-3">
-                        <span className="font-medium text-sm">{cache.array_name}</span>
+                        <span className="font-medium text-sm">{t('storage.cacheFor', { array: cache.array_name })}</span>
                         <span className={`text-xs px-2 py-0.5 rounded-full ${
                           cache.is_enabled
                             ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
@@ -1007,6 +977,11 @@ export default function SettingsPage() {
                           {cache.is_enabled ? t('storage.enabled') : t('storage.disabled')}
                         </span>
                       </div>
+                      {cache.ssd_total_bytes > 0 && (
+                        <p className="text-xs text-slate-500 mb-2">
+                          SSD {formatBytes(cache.ssd_total_bytes)} — {formatBytes(cache.ssd_available_bytes)} {t('storage.available').toLowerCase()}
+                        </p>
+                      )}
                       <div className="flex justify-between text-sm mb-2">
                         <span className="text-slate-400">{t('storage.used')}</span>
                         <span className="font-semibold">
