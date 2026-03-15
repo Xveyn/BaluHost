@@ -37,14 +37,7 @@ export default function PluginPage() {
   const pluginInfo = enabledPlugins.find((p) => p.name === pluginName);
 
   useEffect(() => {
-    if (!pluginName) return;
-
-    // Check if plugin is enabled
-    if (!pluginInfo) {
-      setError(`Plugin "${pluginName}" is not enabled or does not exist.`);
-      setLoading(false);
-      return;
-    }
+    if (!pluginName || !pluginInfo) return;
 
     // Load the plugin bundle
     let mounted = true;
@@ -82,12 +75,33 @@ export default function PluginPage() {
 
     return () => {
       mounted = false;
-      // Optionally unload styles when leaving
-      // unloadPluginStyles(pluginName);
     };
   }, [pluginName, pluginInfo]);
 
   if (!user) return null;
+
+  // Derive "not found" error — no effect needed
+  if (pluginName && !pluginInfo) {
+    return (
+      <div className="flex flex-col items-center justify-center h-64 gap-4">
+        <div className="p-4 rounded-full bg-red-500/10">
+          <AlertTriangle className="h-8 w-8 text-red-400" />
+        </div>
+        <div className="text-center">
+          <h3 className="text-lg font-medium text-white mb-1">{t('error')}</h3>
+          <p className="text-sm text-slate-400 max-w-md">
+            {`Plugin "${pluginName}" is not enabled or does not exist.`}
+          </p>
+        </div>
+        <button
+          onClick={() => navigate('/')}
+          className="px-4 py-2 text-sm font-medium rounded-lg border border-slate-700 text-slate-300 hover:border-sky-500/50"
+        >
+          {t('goToDashboard')}
+        </button>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

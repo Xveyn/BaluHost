@@ -7,24 +7,26 @@ export function UploadProgressBar() {
   const { t } = useTranslation(['shares']);
   const { uploads, isUploading, activeCount, pendingCount, overallPercentage, abortUpload, clearCompleted } = useUpload();
   const [expanded, setExpanded] = useState(false);
-  const [visible, setVisible] = useState(false);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevIsUploadingRef = useRef(false);
+  const [wasUploading, setWasUploading] = useState(false);
 
-  // Show bar when uploads exist, auto-hide 5s after all complete
+  // Auto-expand when a new upload starts
+  if (isUploading && !wasUploading) {
+    setExpanded(true);
+    setWasUploading(true);
+  } else if (!isUploading && wasUploading) {
+    setWasUploading(false);
+  }
+
+  // Auto-hide 5s after all uploads complete
   useEffect(() => {
-    if (uploads.size > 0) {
-      setVisible(true);
-      if (hideTimerRef.current) {
-        clearTimeout(hideTimerRef.current);
-        hideTimerRef.current = null;
-      }
+    if (hideTimerRef.current) {
+      clearTimeout(hideTimerRef.current);
+      hideTimerRef.current = null;
     }
 
     if (!isUploading && uploads.size > 0) {
-      // All done — start auto-hide timer
       hideTimerRef.current = setTimeout(() => {
-        setVisible(false);
         setExpanded(false);
         clearCompleted();
       }, 5000);
@@ -35,15 +37,7 @@ export function UploadProgressBar() {
     };
   }, [uploads.size, isUploading, clearCompleted]);
 
-  // Auto-expand when a new upload starts
-  useEffect(() => {
-    if (isUploading && !prevIsUploadingRef.current) {
-      setExpanded(true);
-    }
-    prevIsUploadingRef.current = isUploading;
-  }, [isUploading]);
-
-  if (!visible || uploads.size === 0) return null;
+  if (uploads.size === 0) return null;
 
   const allCompleted = !isUploading;
   const hasErrors = Array.from(uploads.values()).some(p => p.status === 'failed');
@@ -129,7 +123,6 @@ export function UploadProgressBar() {
                 <button
                   onClick={() => {
                     clearCompleted();
-                    setVisible(false);
                     setExpanded(false);
                   }}
                   className="text-xs text-slate-400 hover:text-white transition-colors"
