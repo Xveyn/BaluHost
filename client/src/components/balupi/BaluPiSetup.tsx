@@ -3,7 +3,6 @@ import { useTranslation } from 'react-i18next';
 import {
   Cpu,
   Wifi,
-  WifiOff,
   RefreshCw,
   Copy,
   Check,
@@ -11,7 +10,6 @@ import {
   Loader2,
   AlertCircle,
   CheckCircle2,
-  ExternalLink,
   Power,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
