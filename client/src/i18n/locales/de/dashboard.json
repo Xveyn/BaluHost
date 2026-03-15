@@ -17,6 +17,8 @@
     "memory": "Speicher",
     "totalStorage": "Effektive Gesamtkapazität",
     "uptime": "Betriebszeit",
+    "serverUptime": "Server-Betriebszeit",
+    "systemUptimeLabel": "System: {{uptime}}",
     "totalFiles": "Dateien gesamt",
     "totalUsers": "Benutzer gesamt",
     "activeConnections": "Aktive Verbindungen",

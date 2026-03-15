@@ -20,7 +20,21 @@
       "health": "Health",
       "logs": "Logs",
       "activity": "Activity",
-      "backendLogs": "Backend Logs"
+      "backendLogs": "Backend Logs",
+      "uptime": "Uptime"
+    },
+    "uptime": {
+      "serverUptime": "Server Uptime",
+      "systemUptime": "System Uptime",
+      "restartHistory": "Restart History",
+      "noRestarts": "No restarts detected in this time range",
+      "uptimeChart": "Uptime Over Time",
+      "serverLabel": "Server",
+      "systemLabel": "System",
+      "hours": "Hours",
+      "noData": "No uptime data available yet",
+      "restart": "Restart",
+      "sessionDuration": "Previous session"
     },
     "backendLogs": {
       "title": "Backend Logs",

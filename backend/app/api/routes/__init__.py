@@ -10,6 +10,7 @@ from app.api.routes import (
     backend_logs,
     activity,
     firebase_config,
+    balupi,
 )
 
 api_router = APIRouter()
@@ -60,5 +61,6 @@ api_router.include_router(env_config.router, prefix="/admin", tags=["admin"])
 api_router.include_router(backend_logs.router, tags=["admin"])
 api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 api_router.include_router(firebase_config.router, tags=["admin", "firebase"])
+api_router.include_router(balupi.router, prefix="/admin", tags=["admin", "balupi"])
 
 __all__ = ["api_router"]

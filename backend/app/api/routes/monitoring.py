@@ -26,11 +26,13 @@ from app.schemas.monitoring import (
     CurrentNetworkResponse,
     CurrentDiskIoResponse,
     CurrentProcessResponse,
+    CurrentUptimeResponse,
     CpuHistoryResponse,
     MemoryHistoryResponse,
     NetworkHistoryResponse,
     DiskIoHistoryResponse,
     ProcessHistoryResponse,
+    UptimeHistoryResponse,
     RetentionConfigResponse,
     RetentionConfigUpdate,
     RetentionConfigListResponse,
@@ -431,6 +433,97 @@ async def get_processes_history(
         sample_count=total_samples,
         source=source_str,
         crashes_detected=crashes,
+    )
+
+
+# ===== Uptime Endpoints =====
+
+@router.get("/uptime/current", response_model=CurrentUptimeResponse)
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_uptime_current(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get current server and system uptime."""
+    orchestrator = get_monitoring_orchestrator()
+    sample = orchestrator.get_uptime_current_with_db_fallback(db)
+
+    if sample is not None:
+        return CurrentUptimeResponse(
+            timestamp=sample.timestamp,
+            server_uptime_seconds=sample.server_uptime_seconds,
+            system_uptime_seconds=sample.system_uptime_seconds,
+            server_start_time=sample.server_start_time,
+            system_boot_time=sample.system_boot_time,
+        )
+
+    # Fallback: compute live (uptime is always available)
+    import time
+    import psutil
+    from app.services.telemetry import _SERVER_START_TIME
+    from app.core.config import settings
+
+    now = time.time()
+    server_uptime = int(now - _SERVER_START_TIME)
+    server_start = datetime.fromtimestamp(_SERVER_START_TIME, tz=timezone.utc)
+
+    if getattr(settings, "is_dev_mode", False):
+        system_boot = server_start
+        system_uptime = server_uptime
+    else:
+        try:
+            boot_time = psutil.boot_time()
+            system_boot = datetime.fromtimestamp(boot_time, tz=timezone.utc)
+            system_uptime = int(now - boot_time)
+        except Exception:
+            system_boot = server_start
+            system_uptime = server_uptime
+
+    return CurrentUptimeResponse(
+        timestamp=datetime.now(timezone.utc),
+        server_uptime_seconds=server_uptime,
+        system_uptime_seconds=system_uptime,
+        server_start_time=server_start,
+        system_boot_time=system_boot,
+    )
+
+
+@router.get("/uptime/history", response_model=UptimeHistoryResponse)
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_uptime_history(
+    request: Request,
+    response: Response,
+    time_range: TimeRangeEnum = Query(default=TimeRangeEnum.ONE_HOUR),
+    source: DataSource = Query(default=DataSource.AUTO),
+    limit: int = Query(default=1000, ge=1, le=10000),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Get uptime metrics history."""
+    orchestrator = get_monitoring_orchestrator()
+    duration = _parse_time_range(time_range)
+
+    if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
+        samples = orchestrator.get_uptime_history(limit)
+        source_str = "memory"
+        if not samples:
+            start = datetime.now(timezone.utc) - duration
+            samples = orchestrator.uptime_collector.get_history_db(db, start=start, limit=limit)
+            source_str = "database (fallback)"
+    else:
+        start = datetime.now(timezone.utc) - duration
+        samples = orchestrator.uptime_collector.get_history_db(db, start=start, limit=limit)
+        source_str = "database"
+        if not samples:
+            samples = orchestrator.get_uptime_history(limit)
+            source_str = "memory (fallback)"
+
+    return UptimeHistoryResponse(
+        samples=samples,
+        sample_count=len(samples),
+        source=source_str,
     )
 
 

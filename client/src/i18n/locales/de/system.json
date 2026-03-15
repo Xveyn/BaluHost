@@ -20,7 +20,21 @@
       "health": "Gesundheit",
       "logs": "Protokolle",
       "activity": "Aktivität",
-      "backendLogs": "Backend-Logs"
+      "backendLogs": "Backend-Logs",
+      "uptime": "Betriebszeit"
+    },
+    "uptime": {
+      "serverUptime": "Server-Betriebszeit",
+      "systemUptime": "System-Betriebszeit",
+      "restartHistory": "Neustart-Historie",
+      "noRestarts": "Keine Neustarts in diesem Zeitraum erkannt",
+      "uptimeChart": "Betriebszeit im Verlauf",
+      "serverLabel": "Server",
+      "systemLabel": "System",
+      "hours": "Stunden",
+      "noData": "Noch keine Betriebszeit-Daten verfügbar",
+      "restart": "Neustart",
+      "sessionDuration": "Vorherige Sitzung"
     },
     "backendLogs": {
       "title": "Backend-Logs",

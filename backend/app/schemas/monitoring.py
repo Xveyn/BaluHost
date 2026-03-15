@@ -23,6 +23,7 @@ class MetricTypeEnum(str, Enum):
     NETWORK = "network"
     DISK_IO = "disk_io"
     PROCESS = "process"
+    UPTIME = "uptime"
 
 
 class DataSource(str, Enum):
@@ -99,6 +100,18 @@ class ProcessSampleSchema(BaseModel):
     memory_mb: float
     status: str
     is_alive: bool = True
+
+    class Config:
+        from_attributes = True
+
+
+class UptimeSampleSchema(BaseModel):
+    """Uptime metrics sample."""
+    timestamp: datetime
+    server_uptime_seconds: int
+    system_uptime_seconds: int
+    server_start_time: datetime
+    system_boot_time: datetime
 
     class Config:
         from_attributes = True
@@ -210,6 +223,22 @@ class ProcessHistoryResponse(BaseModel):
     sample_count: int
     source: str
     crashes_detected: int = 0
+
+
+class CurrentUptimeResponse(BaseModel):
+    """Current uptime metrics response."""
+    timestamp: datetime
+    server_uptime_seconds: int
+    system_uptime_seconds: int
+    server_start_time: datetime
+    system_boot_time: datetime
+
+
+class UptimeHistoryResponse(BaseModel):
+    """Uptime history response."""
+    samples: List[UptimeSampleSchema]
+    sample_count: int
+    source: str
 
 
 # ===== Retention Configuration =====

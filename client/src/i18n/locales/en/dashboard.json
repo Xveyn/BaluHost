@@ -17,6 +17,8 @@
     "memory": "Memory",
     "totalStorage": "Total Effective Storage",
     "uptime": "Uptime",
+    "serverUptime": "Server Uptime",
+    "systemUptimeLabel": "System: {{uptime}}",
     "totalFiles": "Total Files",
     "totalUsers": "Total Users",
     "activeConnections": "Active Connections",

@@ -12,6 +12,7 @@ import { Plug, CloudDownload, Shield } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
+import { isPi } from '../lib/features';
 
 interface LayoutProps {
   children: ReactNode;
@@ -260,8 +261,11 @@ export default function Layout({ children }: LayoutProps) {
     }
   ];
 
+  // Pi mode: only show Dashboard + System
+  const piNavPaths = new Set(['/', '/system']);
+
   // Add plugin navigation items
-  const pluginItems = pluginNavItems
+  const pluginItems = isPi ? [] : pluginNavItems
     .filter((item) => !item.admin_only || isAdmin)
     .map((item) => ({
       path: `/plugins/${item.path}`,
@@ -271,12 +275,12 @@ export default function Layout({ children }: LayoutProps) {
       adminOnly: item.admin_only
     }));
 
-  // Filter nav items based on user role
+  // Filter nav items based on user role (and device mode)
   const filteredNavItems = navItems
-    .filter(item => !item.adminOnly || isAdmin);
+    .filter(item => isPi ? piNavPaths.has(item.path) : (!item.adminOnly || isAdmin));
 
   // Find where admin items start (for showing separator)
-  const adminStartIndex = filteredNavItems.findIndex(item => item.adminOnly);
+  const adminStartIndex = isPi ? -1 : filteredNavItems.findIndex(item => item.adminOnly);
 
   // Combine nav items with plugin items for final list
   const allNavItems = [...filteredNavItems, ...pluginItems];
@@ -291,10 +295,14 @@ export default function Layout({ children }: LayoutProps) {
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
-                <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                {isPi ? (
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-sm font-bold text-white">BP</div>
+                ) : (
+                  <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                )}
               </div>
               <div>
-                <p className="text-lg font-semibold tracking-wide">BalùHost</p>
+                <p className="text-lg font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BalùHost'}</p>
                 <p className="text-xs uppercase tracking-[0.35em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
@@ -365,10 +373,14 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
             <div className="flex items-center gap-3">
               <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
-                <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                {isPi ? (
+                  <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-xs font-bold text-white">BP</div>
+                ) : (
+                  <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
+                )}
               </div>
               <div>
-                <p className="text-base font-semibold tracking-wide">BalùHost</p>
+                <p className="text-base font-semibold tracking-wide">{isPi ? 'BaluPi' : 'BalùHost'}</p>
                 <p className="text-[10px] uppercase tracking-[0.3em] text-slate-100-tertiary">{formattedVersion}{__BUILD_TYPE__ === 'dev' && <span className="font-mono"> · {__GIT_COMMIT__}</span>}</p>
                 <DeveloperBadge />
               </div>
@@ -476,9 +488,13 @@ export default function Layout({ children }: LayoutProps) {
                 </button>
                 <div className="flex items-center gap-2">
                   <div className="relative flex h-8 w-8 items-center justify-center rounded-full bg-slate-950-tertiary p-[2px]">
-                    <img src={logoMark} alt="BalùHost" className="h-full w-full rounded-full" />
+                    {isPi ? (
+                      <div className="flex h-full w-full items-center justify-center rounded-full bg-gradient-to-br from-sky-500 to-indigo-600 text-[10px] font-bold text-white">BP</div>
+                    ) : (
+                      <img src={logoMark} alt="BalùHost" className="h-full w-full rounded-full" />
+                    )}
                   </div>
-                  <span className="text-sm font-semibold">BalùHost</span>
+                  <span className="text-sm font-semibold">{isPi ? 'BaluPi' : 'BalùHost'}</span>
                 </div>
               </div>
 
@@ -487,14 +503,24 @@ export default function Layout({ children }: LayoutProps) {
 
               {/* Header Right */}
               <div className="flex items-center gap-3">
-                <NotificationCenter />
+                {!isPi && <NotificationCenter />}
                 <div className="hidden md:flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-1.5 transition hover:border-sky-500/50 hover:shadow-[0_0_12px_rgba(56,189,248,0.15)]">
                   <div className="flex flex-col">
                     <span className="text-sm font-medium text-slate-100">{user?.username}</span>
                     <span className="text-[11px] text-slate-100-tertiary">{isAdmin ? 'Admin' : 'User'}</span>
                   </div>
                 </div>
-                <PowerMenu
+                {isPi ? (
+                  <button
+                    onClick={logout}
+                    className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 text-slate-400 hover:border-sky-500/50 hover:text-sky-400 transition"
+                    title="Logout"
+                  >
+                    <svg viewBox="0 0 24 24" fill="none" strokeWidth={1.6} className="h-5 w-5">
+                      <path stroke="currentColor" strokeLinecap="round" strokeLinejoin="round" d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+                    </svg>
+                  </button>
+                ) : <PowerMenu
                   isAdmin={isAdmin}
                   onShutdown={async () => {
                     setPendingAction('shutdown');
@@ -552,7 +578,7 @@ export default function Layout({ children }: LayoutProps) {
                     }
                   }}
                   onLogout={logout}
-                />
+                />}
               </div>
             </div>
           </header>
@@ -562,7 +588,7 @@ export default function Layout({ children }: LayoutProps) {
               {children}
             </div>
           </main>
-          <UploadProgressBar />
+          {!isPi && <UploadProgressBar />}
         </div>
       </div>
     </div>

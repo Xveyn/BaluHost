@@ -66,6 +66,14 @@ export interface ProcessSample {
   is_alive: boolean;
 }
 
+export interface UptimeSample {
+  timestamp: string;
+  server_uptime_seconds: number;
+  system_uptime_seconds: number;
+  server_start_time: string;
+  system_boot_time: string;
+}
+
 // ===== Current Response Types =====
 
 export interface CurrentCpuResponse {
@@ -106,6 +114,14 @@ export interface CurrentProcessResponse {
   processes: Record<string, ProcessSample | null>;
 }
 
+export interface CurrentUptimeResponse {
+  timestamp: string;
+  server_uptime_seconds: number;
+  system_uptime_seconds: number;
+  server_start_time: string;
+  system_boot_time: string;
+}
+
 // ===== History Response Types =====
 
 export interface CpuHistoryResponse {
@@ -138,6 +154,12 @@ export interface ProcessHistoryResponse {
   sample_count: number;
   source: string;
   crashes_detected: number;
+}
+
+export interface UptimeHistoryResponse {
+  samples: UptimeSample[];
+  sample_count: number;
+  source: string;
 }
 
 // ===== Retention Config Types =====
@@ -274,6 +296,23 @@ export async function getProcessesHistory(
   if (processName) params.process_name = processName;
   const response = await apiClient.get<ProcessHistoryResponse>('/api/monitoring/processes/history', {
     params,
+  });
+  return response.data;
+}
+
+// Uptime
+export async function getUptimeCurrent(): Promise<CurrentUptimeResponse> {
+  const response = await apiClient.get<CurrentUptimeResponse>('/api/monitoring/uptime/current');
+  return response.data;
+}
+
+export async function getUptimeHistory(
+  timeRange: TimeRange = '1h',
+  source: DataSource = 'auto',
+  limit: number = 1000
+): Promise<UptimeHistoryResponse> {
+  const response = await apiClient.get<UptimeHistoryResponse>('/api/monitoring/uptime/history', {
+    params: { time_range: timeRange, source, limit },
   });
   return response.data;
 }

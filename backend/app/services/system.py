@@ -202,6 +202,7 @@ def get_system_info() -> SystemInfo:
             memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
             disk=DiskStats(total=total_storage, used=used_storage, free=free_storage),
             uptime=uptime_seconds,
+            system_uptime=uptime_seconds,  # Dev mode: same as server uptime
             dev_mode=True,
         )
 
@@ -265,6 +266,7 @@ def get_system_info() -> SystemInfo:
         memory=MemoryStats(total=memory_total, used=memory_used, free=memory_free, speed_mts=ram_speed, type=ram_type),
         disk=DiskStats(total=disk_usage.total, used=disk_usage.used, free=disk_usage.free),
         uptime=server_uptime,
+        system_uptime=uptime_seconds,
         dev_mode=False,
     )
 

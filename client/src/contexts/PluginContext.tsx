@@ -12,6 +12,7 @@ import {
   getUIManifest,
 } from '../api/plugins';
 import { useAuth } from './AuthContext';
+import { isPi } from '../lib/features';
 
 interface PluginContextType {
   plugins: PluginInfo[];
@@ -36,8 +37,8 @@ export function PluginProvider({ children }: PluginProviderProps) {
   const [error, setError] = useState<string | null>(null);
 
   const loadPlugins = useCallback(async () => {
-    // Only load plugins if user is authenticated
-    if (!token) {
+    // Only load plugins if user is authenticated (skip on Pi — no plugin support)
+    if (!token || isPi) {
       setIsLoading(false);
       return;
     }

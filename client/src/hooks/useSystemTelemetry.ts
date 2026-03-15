@@ -29,6 +29,7 @@ interface SystemInfoResponse {
   memory: MemoryInfo;
   disk: DiskInfo;
   uptime: number;
+  system_uptime?: number;
 }
 
 interface StorageInfoResponse {

@@ -29,6 +29,7 @@ interface SystemStats {
   memoryUsed: number;
   memoryTotal: number;
   uptime: number;
+  systemUptime: number;
 }
 
 interface StorageStats {
@@ -146,8 +147,9 @@ export default function Dashboard() {
     const memoryUsed = systemInfo?.memory.used ?? 0;
     const memoryTotal = systemInfo?.memory.total ?? 0;
     const uptime = systemInfo?.uptime ?? 0;
+    const systemUptime = systemInfo?.system_uptime ?? systemInfo?.uptime ?? 0;
 
-    return { cpuUsage, cpuCores, memoryUsed, memoryTotal, uptime };
+    return { cpuUsage, cpuCores, memoryUsed, memoryTotal, uptime, systemUptime };
   }, [systemInfo]);
 
   const storageStats = useMemo<StorageStats>(() => {
@@ -376,9 +378,9 @@ export default function Dashboard() {
     },
     {
       id: 'uptime',
-      title: t('stats.uptime'),
+      title: t('stats.serverUptime'),
       value: formatUptime(systemStats.uptime),
-      meta: t('stats.systemAvailability'),
+      meta: t('stats.systemUptimeLabel', { uptime: formatUptime(systemStats.systemUptime) }),
       delta: { label: 'Live', tone: 'live' },
       accent: 'from-emerald-500 to-teal-500',
       progress: 100,
@@ -432,6 +434,7 @@ export default function Dashboard() {
               const handleClick = stat.id === 'cpu' ? handleCpuClick
                 : stat.id === 'memory' ? handleMemoryClick
                 : stat.id === 'storage' ? handleStorageClick
+                : stat.id === 'uptime' ? () => navigate('/system?tab=uptime')
                 : undefined;
 
               const isClickable = !!handleClick;
