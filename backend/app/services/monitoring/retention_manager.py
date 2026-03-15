@@ -20,6 +20,7 @@ from app.models.monitoring import (
     NetworkSample,
     DiskIoSample,
     ProcessSample,
+    UptimeSample,
 )
 from app.models.power_sample import PowerSample
 
@@ -33,6 +34,7 @@ DEFAULT_RETENTION = {
     MetricType.DISK_IO: 168,   # 7 days
     MetricType.PROCESS: 72,    # 3 days
     MetricType.POWER: 720,     # 30 days
+    MetricType.UPTIME: 720,    # 30 days
 }
 
 # Mapping of metric types to their database models
@@ -43,6 +45,7 @@ METRIC_MODELS = {
     MetricType.DISK_IO: DiskIoSample,
     MetricType.PROCESS: ProcessSample,
     MetricType.POWER: PowerSample,
+    MetricType.UPTIME: UptimeSample,
 }
 
 
@@ -238,6 +241,7 @@ class RetentionManager:
             MetricType.DISK_IO: 100,
             MetricType.PROCESS: 120,
             MetricType.POWER: 60,
+            MetricType.UPTIME: 40,
         }
 
         sizes = {}

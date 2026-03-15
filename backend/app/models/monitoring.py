@@ -26,6 +26,7 @@ class MetricType(str, enum.Enum):
     DISK_IO = "disk_io"
     PROCESS = "process"
     POWER = "power"
+    UPTIME = "uptime"
 
 
 class CpuSample(Base):
@@ -158,6 +159,29 @@ class ProcessSample(Base):
 
     def __repr__(self) -> str:
         return f"<ProcessSample(name={self.process_name}, pid={self.pid}, cpu={self.cpu_percent}%)>"
+
+
+class UptimeSample(Base):
+    """
+    Uptime metrics sample.
+
+    Stores server and system uptime measurements for historical analysis
+    and restart detection.
+    """
+
+    __tablename__ = "uptime_samples"
+
+    id = Column(Integer, primary_key=True, index=True)
+    timestamp = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
+
+    # Uptime metrics
+    server_uptime_seconds = Column(BigInteger, nullable=False)  # BaluHost backend uptime
+    system_uptime_seconds = Column(BigInteger, nullable=False)  # OS/Hardware uptime
+    server_start_time = Column(DateTime, nullable=False)  # When backend was started
+    system_boot_time = Column(DateTime, nullable=False)  # When OS was last booted
+
+    def __repr__(self) -> str:
+        return f"<UptimeSample(server={self.server_uptime_seconds}s, system={self.system_uptime_seconds}s, timestamp={self.timestamp})>"
 
 
 class MonitoringConfig(Base):

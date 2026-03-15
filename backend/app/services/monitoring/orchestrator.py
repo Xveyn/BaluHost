@@ -19,12 +19,14 @@ from app.schemas.monitoring import (
     MemorySampleSchema,
     NetworkSampleSchema,
     DiskIoSampleSchema,
+    UptimeSampleSchema,
 )
 from app.services.monitoring.cpu_collector import CpuMetricCollector
 from app.services.monitoring.memory_collector import MemoryMetricCollector
 from app.services.monitoring.network_collector import NetworkMetricCollector
 from app.services.monitoring.disk_io_collector import DiskIoMetricCollector
 from app.services.monitoring.process_tracker import ProcessTracker
+from app.services.monitoring.uptime_collector import UptimeCollector
 from app.services.monitoring.retention_manager import RetentionManager
 
 logger = logging.getLogger(__name__)
@@ -85,6 +87,10 @@ class MonitoringOrchestrator:
             persist_interval=persist_interval,
         )
         self.process_tracker = ProcessTracker(buffer_size=60)
+        self.uptime_collector = UptimeCollector(
+            buffer_size=buffer_size,
+            persist_interval=persist_interval,
+        )
         self.retention_manager = RetentionManager()
 
         # State
@@ -199,6 +205,7 @@ class MonitoringOrchestrator:
             self.cpu_collector.process_sample(db)
             self.memory_collector.process_sample(db)
             self.network_collector.process_sample(db)
+            self.uptime_collector.process_sample(db)
 
             # Disk I/O collects multiple samples (one per disk)
             disk_samples = self.disk_io_collector.collect_all_samples()
@@ -380,6 +387,25 @@ class MonitoringOrchestrator:
             }
         return {}
 
+    def get_uptime_current(self) -> Optional[UptimeSampleSchema]:
+        """Get current uptime sample from memory."""
+        return self.uptime_collector.get_current()
+
+    def get_uptime_current_with_db_fallback(self, db: Session) -> Optional[UptimeSampleSchema]:
+        """Get current uptime sample (in-memory -> DB fallback)."""
+        sample = self.uptime_collector.get_current()
+        if sample is not None:
+            return sample
+        from app.models.monitoring import UptimeSample
+        db_record = db.query(UptimeSample).order_by(UptimeSample.timestamp.desc()).first()
+        if db_record:
+            return self.uptime_collector.db_to_sample(db_record)
+        return None
+
+    def get_uptime_history(self, limit: Optional[int] = None) -> List:
+        """Get uptime history from memory."""
+        return self.uptime_collector.get_history_memory(limit)
+
     def get_process_current(self):
         """Get current process status."""
         return self.process_tracker.get_current_status()
@@ -497,6 +523,7 @@ class MonitoringOrchestrator:
                 "network": self.network_collector.is_enabled(),
                 "disk_io": self.disk_io_collector.is_enabled(),
                 "process": True,
+                "uptime": self.uptime_collector.is_enabled(),
             },
         }
 

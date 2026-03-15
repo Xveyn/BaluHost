@@ -40,6 +40,7 @@ class SystemInfo(BaseModel):
     memory: MemoryStats
     disk: DiskStats
     uptime: float
+    system_uptime: float | None = None
     dev_mode: bool = False
 
 

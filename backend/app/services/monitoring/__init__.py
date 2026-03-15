@@ -14,6 +14,7 @@ from app.services.monitoring.memory_collector import MemoryMetricCollector
 from app.services.monitoring.network_collector import NetworkMetricCollector
 from app.services.monitoring.disk_io_collector import DiskIoMetricCollector
 from app.services.monitoring.process_tracker import ProcessTracker
+from app.services.monitoring.uptime_collector import UptimeCollector
 from app.services.monitoring.retention_manager import RetentionManager
 from app.services.monitoring.orchestrator import MonitoringOrchestrator
 
@@ -24,6 +25,7 @@ __all__ = [
     "NetworkMetricCollector",
     "DiskIoMetricCollector",
     "ProcessTracker",
+    "UptimeCollector",
     "RetentionManager",
     "MonitoringOrchestrator",
 ]
