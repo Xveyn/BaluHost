@@ -14,7 +14,7 @@ from app.models.notification import Notification
 from app.models.mobile import MobileDevice
 from app.models.user import User
 from app.services.notifications.firebase import FirebaseService
-from app.services.notifications.events import EventEmitter, EventType
+from app.services.notifications.events import EventEmitter, EventType, _cooldown_cache
 
 
 # ============================================================================
@@ -484,6 +484,7 @@ class TestEmitSyncFullFlow:
         self, db_session, admin_user, admin_device, mock_firebase
     ):
         """Second emit within cooldown window is suppressed."""
+        _cooldown_cache.clear()  # Reset cross-test contamination
         emitter = EventEmitter()
         emitter.set_db_session_factory(lambda: db_session)
 
