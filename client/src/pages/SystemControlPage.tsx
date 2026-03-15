@@ -8,7 +8,7 @@
 
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable, Bell } from 'lucide-react';
+import { Zap, Fan, HardDrive, Archive, Shield, Server, History, Plug, Gauge, FolderOpen, Share2, Cpu, Globe, Settings, Moon, Variable, Bell, CircuitBoard } from 'lucide-react';
 import PowerManagement from './PowerManagement';
 import FanControl from './FanControl';
 import RaidManagement from './RaidManagement';
@@ -24,8 +24,9 @@ import SleepMode from './SleepMode';
 import SsdFileCacheTab from '../components/ssd-cache/SsdFileCacheTab';
 import { SystemVariablesTab } from '../components/env-config';
 import FirebaseManagementCard from '../components/firebase/FirebaseManagementCard';
+import BaluPiSetup from '../components/balupi/BaluPiSetup';
 
-type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig';
+type TabType = 'energy' | 'fan' | 'sleep' | 'raid' | 'backup' | 'ssdcache' | 'vpn' | 'webdav' | 'samba' | 'firebase' | 'services' | 'vcl' | 'smart' | 'ratelimits' | 'envconfig' | 'balupi';
 type CategoryType = 'hardware' | 'storage' | 'network' | 'system';
 
 interface TabConfig {
@@ -83,6 +84,7 @@ const CATEGORIES: CategoryConfig[] = [
       { id: 'smart', labelKey: 'systemControl.tabs.smart', icon: <Plug className="h-5 w-5" /> },
       { id: 'ratelimits', labelKey: 'systemControl.tabs.rateLimits', icon: <Gauge className="h-5 w-5" /> },
       { id: 'envconfig', labelKey: 'systemControl.tabs.envConfig', icon: <Variable className="h-5 w-5" /> },
+      { id: 'balupi', labelKey: 'systemControl.tabs.balupi', icon: <CircuitBoard className="h-5 w-5" /> },
     ],
   },
 ];
@@ -196,6 +198,7 @@ export default function SystemControlPage() {
         {activeTab === 'samba' && <SambaManagementCard />}
         {activeTab === 'firebase' && <FirebaseManagementCard />}
         {activeTab === 'envconfig' && <SystemVariablesTab />}
+        {activeTab === 'balupi' && <BaluPiSetup />}
       </div>
     </div>
   );

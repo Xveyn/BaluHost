@@ -14,6 +14,7 @@ import {
 } from '../api/notifications';
 import { useNotificationSocket } from '../hooks/useNotificationSocket';
 import { useAuth } from './AuthContext';
+import { isPi } from '../lib/features';
 
 interface NotificationContextValue {
   notifications: Notification[];
@@ -35,7 +36,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [loading, setLoading] = useState(false);
 
   const { isConnected } = useNotificationSocket({
-    enabled: !!token,
+    enabled: !!token && !isPi,
     onNotification: (notification) => {
       setNotifications((prev) => [notification, ...prev.slice(0, 49)]);
       if (notification.notification_type === 'critical') {
@@ -50,7 +51,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   });
 
   const fetchNotifications = useCallback(async () => {
-    if (!token) return;
+    if (!token || isPi) return;
     setLoading(true);
     try {
       const [notifResponse, countResponse] = await Promise.all([

@@ -181,7 +181,8 @@
       "sleep": "Sleep",
       "ssdCache": "SSD Cache",
       "envConfig": "System Variables",
-      "firebase": "Firebase"
+      "firebase": "Firebase",
+      "balupi": "BaluPi"
     }
   },
   "devices": {
