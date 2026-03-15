@@ -112,6 +112,7 @@
     "hitRate": "Trefferquote",
     "entries": "Einträge",
     "served": "Ausgeliefert",
+    "noArrays": "Keine RAID-Arrays konfiguriert",
     "noCacheConfigured": "Kein SSD-Cache konfiguriert",
     "cacheFor": "SSD-Cache für {{array}}",
     "vclClickHint": "VCL-Einstellungen anzeigen",

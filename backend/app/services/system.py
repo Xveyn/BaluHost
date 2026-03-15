@@ -581,9 +581,19 @@ def get_storage_breakdown() -> StorageBreakdownResponse:
     total_avail = max(total_cap - total_used, 0)
     total_pct = round((total_used / total_cap * 100), 1) if total_cap > 0 else 0.0
 
+    # Raw capacity = sum of all physical disk capacities (before RAID redundancy)
+    total_raw = 0
+    if smart_data:
+        for device in smart_data.devices:
+            if device.capacity_bytes and device.capacity_bytes > 0:
+                total_raw += device.capacity_bytes
+    if total_raw == 0:
+        total_raw = total_cap  # Fallback if no SMART data
+
     return StorageBreakdownResponse(
         entries=entries,
         total_capacity=total_cap,
+        total_raw_capacity=total_raw,
         total_used=total_used,
         total_available=total_avail,
         total_use_percent=total_pct,

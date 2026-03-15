@@ -10,14 +10,6 @@ import { getCacheOverview } from '../../api/ssd-file-cache';
 import StorageBreakdownRing from './StorageBreakdownRing';
 import type { QuotaInfo } from '../../types/vcl';
 import type { SSDCacheStats } from '../../api/ssd-file-cache';
-import { apiClient } from '../../lib/api';
-
-interface StorageQuota {
-  used_bytes: number;
-  limit_bytes: number | null;
-  available_bytes: number | null;
-  percent_used: number | null;
-}
 
 interface StorageTabProps {
   isAdmin: boolean;
@@ -34,26 +26,15 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
   const { t } = useTranslation('settings');
   const navigate = useNavigate();
 
-  const [storageQuota, setStorageQuota] = useState<StorageQuota | null>(null);
   const [storageBreakdown, setStorageBreakdown] = useState<StorageBreakdownResponse | null>(null);
   const [vclQuota, setVclQuota] = useState<QuotaInfo | null>(null);
   const [cacheOverview, setCacheOverview] = useState<SSDCacheStats[] | null>(null);
 
   useEffect(() => {
-    loadStorageQuota();
     loadStorageBreakdown();
     loadVclQuota();
     loadCacheOverview();
   }, []);
-
-  const loadStorageQuota = async () => {
-    try {
-      const response = await apiClient.get('/api/system/quota');
-      setStorageQuota(response.data);
-    } catch {
-      // Failed to load storage quota
-    }
-  };
 
   const loadStorageBreakdown = async () => {
     try {
@@ -102,7 +83,7 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
             <div className="flex-1 space-y-3 w-full">
               <div className="text-center sm:text-left">
                 <p className="text-xs text-slate-400 mb-0.5">{t('storage.totalCapacity')}</p>
-                <p className="text-2xl font-bold">{formatBytes(storageBreakdown.total_capacity)}</p>
+                <p className="text-2xl font-bold">{formatBytes(storageBreakdown.total_raw_capacity)}</p>
               </div>
               <div className="grid grid-cols-2 gap-3">
                 <div className="px-3 py-2.5 rounded-lg bg-slate-800/40 border border-slate-700/30">
@@ -142,35 +123,40 @@ export default function StorageTab({ isAdmin, onNavigateToVcl }: StorageTabProps
             <HardDrive className="w-4 h-4 sm:w-5 sm:h-5 mr-2 text-emerald-400" />
             {t('storage.myArrays')}
           </h3>
-          {storageQuota ? (
-            <div className="space-y-3">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">{t('storage.used')}</span>
-                <span className="font-semibold">
-                  {formatBytes(storageQuota.used_bytes)}
-                  {storageQuota.limit_bytes && ` / ${formatBytes(storageQuota.limit_bytes)}`}
-                </span>
+          {storageBreakdown ? (() => {
+            const raidEntries = storageBreakdown.entries.filter(e => e.level);
+            const arrayTotal = raidEntries.reduce((s, e) => s + e.capacity_bytes, 0);
+            const arrayUsed = raidEntries.reduce((s, e) => s + e.used_bytes, 0);
+            const arrayAvail = raidEntries.reduce((s, e) => s + e.available_bytes, 0);
+            const arrayPct = arrayTotal > 0 ? (arrayUsed / arrayTotal) * 100 : 0;
+            return raidEntries.length > 0 ? (
+              <div className="space-y-3">
+                <div className="flex justify-between text-sm">
+                  <span className="text-slate-400">{t('storage.used')}</span>
+                  <span className="font-semibold">
+                    {formatBytes(arrayUsed)} / {formatBytes(arrayTotal)}
+                  </span>
+                </div>
+                <div className="w-full h-3 rounded-full overflow-hidden bg-slate-800/60">
+                  <div
+                    className="h-full rounded-full transition-all duration-700"
+                    style={{
+                      width: `${Math.min(arrayPct, 100)}%`,
+                      backgroundColor: getUsageColor(arrayPct)
+                    }}
+                  />
+                </div>
+                <p className="text-sm text-slate-400">
+                  {formatBytes(arrayAvail)} {t('storage.remaining')}
+                </p>
               </div>
-              {storageQuota.limit_bytes && storageQuota.percent_used != null ? (
-                <>
-                  <div className="w-full h-3 rounded-full overflow-hidden bg-slate-800/60">
-                    <div
-                      className="h-full rounded-full transition-all duration-700"
-                      style={{
-                        width: `${Math.min(storageQuota.percent_used, 100)}%`,
-                        backgroundColor: getUsageColor(storageQuota.percent_used)
-                      }}
-                    />
-                  </div>
-                  <p className="text-sm text-slate-400">
-                    {formatBytes(storageQuota.available_bytes ?? 0)} {t('storage.remaining')}
-                  </p>
-                </>
-              ) : (
-                <p className="text-sm text-slate-400">{t('storage.noLimit')}</p>
-              )}
-            </div>
-          ) : (
+            ) : (
+              <div className="flex items-center gap-3 p-3 rounded-lg bg-slate-800/60 border border-slate-700/40">
+                <HardDrive className="w-5 h-5 text-slate-500" />
+                <p className="text-sm text-slate-400">{t('storage.noArrays')}</p>
+              </div>
+            );
+          })() : (
             <div className="space-y-3 animate-pulse">
               <div className="flex justify-between">
                 <div className="h-4 w-16 rounded bg-slate-700/50" />

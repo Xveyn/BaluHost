@@ -112,6 +112,7 @@
     "hitRate": "Hit Rate",
     "entries": "Entries",
     "served": "Served",
+    "noArrays": "No RAID arrays configured",
     "noCacheConfigured": "No SSD cache configured",
     "cacheFor": "SSD Cache for {{array}}",
     "vclClickHint": "View VCL settings",

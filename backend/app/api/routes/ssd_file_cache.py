@@ -121,27 +121,14 @@ async def get_cache_overview(
     """
     configs = SSDFileCacheService.get_all_configs(db)
 
-    # Filter to arrays that actually have a cache device
+    # Filter to arrays that actually exist in RAID status
     try:
         from app.services.hardware import raid as raid_service
         raid_data = raid_service.get_status()
-        available = raid_service.get_available_disks()
-
-        # Find partition names of disks marked as cache devices
-        cache_partitions: set[str] = set()
-        for disk in available.disks:
-            if disk.is_cache_device:
-                cache_partitions.update(disk.partitions)
-
-        # Arrays that have a cache device as a member
-        arrays_with_cache: set[str] = set()
-        for array in raid_data.arrays:
-            if any(d.name in cache_partitions for d in array.devices):
-                arrays_with_cache.add(array.name)
-
-        configs = [c for c in configs if c.array_name in arrays_with_cache]
+        existing_arrays = {a.name for a in raid_data.arrays}
+        configs = [c for c in configs if c.array_name in existing_arrays]
     except Exception:
-        pass  # If RAID check fails, show all
+        pass  # If RAID check fails, show all configs
 
     results = []
     for cfg in configs:

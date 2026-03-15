@@ -2,7 +2,7 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from importlib.metadata import version as pkg_version
+from pathlib import Path
 from typing import Optional
 
 from app.schemas.update import (
@@ -29,12 +29,22 @@ logger = logging.getLogger(__name__)
 
 
 def _get_installed_version() -> tuple[int, int, int, str]:
-    """Read the installed package version dynamically."""
+    """Read the version from pyproject.toml (always current, even without reinstall)."""
     try:
+        pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        for line in pyproject.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("version") and "=" in line:
+                ver = line.split("=", 1)[1].strip().strip('"').strip("'")
+                return parse_version(ver)
+    except Exception:
+        pass
+    # Fallback to importlib.metadata
+    try:
+        from importlib.metadata import version as pkg_version
         ver = pkg_version("baluhost-backend")
         return parse_version(ver)
     except Exception:
-        logger.warning("Could not read installed version, falling back to 0.0.0")
+        logger.warning("Could not read version, falling back to 0.0.0")
         return (0, 0, 0, "")
 
 
