@@ -5,7 +5,7 @@
 import { useState } from 'react';
 import { X, UserCheck, AlertTriangle, Loader2 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import { transferOwnership, type OwnershipTransferResponse } from '../../lib/api';
+import { transferOwnership, type OwnershipTransferResponse } from '../../api/files';
 import type { FileItem } from './types';
 
 interface OwnershipTransferModalProps {

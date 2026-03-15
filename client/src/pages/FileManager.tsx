@@ -9,7 +9,8 @@ import {
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-import { apiClient, getFilePermissions, setFilePermissions } from '../lib/api';
+import { apiClient } from '../lib/api';
+import { getFilePermissions, setFilePermissions } from '../api/files';
 import { getUsers } from '../api/users';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi, addTrackingRule, removeTrackingRule, getTrackingRules, checkFileTracking } from '../api/vcl';

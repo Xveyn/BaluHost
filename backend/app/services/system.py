@@ -17,6 +17,8 @@ from app.schemas.system import (
     ProcessInfo,
     ProcessListResponse,
     QuotaStatus,
+    StorageBreakdownResponse,
+    StorageDeviceEntry,
     StorageInfo,
     SystemInfo,
 )
@@ -456,6 +458,136 @@ def get_aggregated_storage_info() -> StorageInfo:
     except Exception as e:
         logger.warning("Failed to get aggregated storage info, falling back: %s", e)
         return get_storage_info()
+
+
+def get_storage_breakdown() -> StorageBreakdownResponse:
+    """Return per-array/device storage breakdown with usage data.
+
+    Each RAID array becomes one entry.  Standalone SMART devices that are
+    not part of any array are listed individually.
+    """
+    from app.services.hardware import smart as smart_service
+    from app.services.hardware import raid as raid_service
+    from app.services.hardware.raid import find_raid_mountpoint
+
+    entries: list[StorageDeviceEntry] = []
+
+    try:
+        smart_data = smart_service.get_smart_status()
+    except Exception:
+        smart_data = None
+
+    try:
+        raid_data = raid_service.get_status()
+    except Exception:
+        raid_data = None
+
+    raid_member_devices: set[str] = set()
+
+    if raid_data and raid_data.arrays:
+        for array in raid_data.arrays:
+            # Collect member base names so we can exclude them later
+            for dev in array.devices:
+                raid_member_devices.add(re.sub(r'\d+$', '', dev.name))
+
+            # Determine disk_type from majority of non-cache devices
+            non_cache_types = [d.disk_type for d in array.devices if d.state not in ("spare",)]
+            if non_cache_types:
+                disk_type = max(set(non_cache_types), key=non_cache_types.count)
+            else:
+                disk_type = "hdd"
+
+            level_short = array.level.replace("raid", "").upper()
+            label = f"RAID {level_short} ({disk_type.upper()})"
+
+            # Get usage via mountpoint
+            mountpoint = find_raid_mountpoint(array.name)
+            if mountpoint:
+                try:
+                    usage = psutil.disk_usage(mountpoint)
+                    entries.append(StorageDeviceEntry(
+                        name=array.name,
+                        label=label,
+                        level=array.level,
+                        disk_type=disk_type,
+                        capacity_bytes=usage.total,
+                        used_bytes=usage.used,
+                        available_bytes=usage.free,
+                        use_percent=round(usage.percent, 1),
+                        device_count=len(array.devices),
+                    ))
+                    continue
+                except Exception:
+                    pass
+
+            # Fallback: use array size_bytes from RAID status
+            used = 0
+            if smart_data:
+                member_bases = {re.sub(r'\d+$', '', d.name) for d in array.devices}
+                for sd in smart_data.devices:
+                    dev_base = sd.name.replace('/dev/', '').lower()
+                    if dev_base in member_bases and sd.used_bytes is not None:
+                        used = sd.used_bytes
+                        break
+
+            cap = array.size_bytes
+            avail = max(cap - used, 0)
+            pct = round((used / cap * 100), 1) if cap > 0 else 0.0
+
+            entries.append(StorageDeviceEntry(
+                name=array.name,
+                label=label,
+                level=array.level,
+                disk_type=disk_type,
+                capacity_bytes=cap,
+                used_bytes=used,
+                available_bytes=avail,
+                use_percent=pct,
+                device_count=len(array.devices),
+            ))
+
+    # Add standalone devices not in any RAID
+    if smart_data:
+        for device in smart_data.devices:
+            dev_base = device.name.replace('/dev/', '').lower()
+            if dev_base in raid_member_devices:
+                continue
+            if device.capacity_bytes is None or device.capacity_bytes == 0:
+                continue
+
+            is_ssd = "nvme" in dev_base or "ssd" in (device.model or "").lower()
+            dtype = "nvme" if "nvme" in dev_base else ("ssd" if is_ssd else "hdd")
+            label = f"{dtype.upper()} Disk"
+
+            used = device.used_bytes or 0
+            cap = device.capacity_bytes
+            avail = max(cap - used, 0)
+            pct = round((used / cap * 100), 1) if cap > 0 else 0.0
+
+            entries.append(StorageDeviceEntry(
+                name=dev_base,
+                label=label,
+                level=None,
+                disk_type=dtype,
+                capacity_bytes=cap,
+                used_bytes=used,
+                available_bytes=avail,
+                use_percent=pct,
+                device_count=1,
+            ))
+
+    total_cap = sum(e.capacity_bytes for e in entries)
+    total_used = sum(e.used_bytes for e in entries)
+    total_avail = max(total_cap - total_used, 0)
+    total_pct = round((total_used / total_cap * 100), 1) if total_cap > 0 else 0.0
+
+    return StorageBreakdownResponse(
+        entries=entries,
+        total_capacity=total_cap,
+        total_used=total_used,
+        total_available=total_avail,
+        total_use_percent=total_pct,
+    )
 
 
 def get_process_list(limit: int = 20) -> ProcessListResponse:

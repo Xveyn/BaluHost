@@ -31,7 +31,7 @@ export default function EditFileShareModal({ fileShare, onClose, onSuccess }: Ed
         expires_at: formData.expires_at ? `${formData.expires_at}T23:59:59Z` : null
       });
       onSuccess();
-    } catch (error: unknown) {
+    } catch {
       toast.error(t('shares:toast.updateFailed'));
     } finally {
       setLoading(false);

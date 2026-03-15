@@ -62,7 +62,7 @@ export default function PowerStatusWidget({ className = '' }: PowerStatusWidgetP
         const data = await getPowerStatus();
         setStatus(data);
         setError(null);
-      } catch (err) {
+      } catch {
         setError(t('powerStatus.loadFailed'));
       } finally {
         setLoading(false);

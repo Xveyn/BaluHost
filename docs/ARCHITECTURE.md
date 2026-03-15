@@ -1,7 +1,7 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.15.2
-**Last Updated:** 13. März 2026
+**Version:** 1.16.0
+**Last Updated:** 15. März 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
 ## 📐 System Overview
@@ -75,7 +75,7 @@ BaluHost is a modern, full-stack NAS management application designed for self-ho
 | Styling | Tailwind CSS | Utility-first CSS framework |
 | Routing | React Router | Client-side navigation |
 | Charts | Recharts | Data visualization |
-| HTTP Client | fetch API | API communication |
+| HTTP Client | Axios | API communication |
 
 ### Backend
 | Component | Technology | Purpose |
@@ -102,99 +102,48 @@ BaluHost is a modern, full-stack NAS management application designed for self-ho
 baluhost/
 ├── backend/                    # FastAPI Backend
 │   ├── app/
-│   │   ├── __init__.py        # Version info
 │   │   ├── main.py            # FastAPI app entry point
 │   │   ├── api/               # API Layer
-│   │   │   ├── deps.py        # Dependencies (auth, user context)
-│   │   │   └── routes/        # API endpoints
-│   │   │       ├── auth.py    # Authentication endpoints
-│   │   │       ├── files.py   # File operations
-│   │   │       ├── users.py   # User management
-│   │   │       ├── system.py  # System info & monitoring
-│   │   │       └── logging.py # Audit logs
-│   │   ├── services/          # Business Logic Layer
-│   │   │   ├── auth.py        # JWT authentication
-│   │   │   ├── files.py       # File management
-│   │   │   ├── users.py       # User management
-│   │   │   ├── permissions.py # Access control
-│   │   │   ├── file_metadata.py # File ownership
-│   │   │   ├── raid.py        # RAID management
-│   │   │   ├── smart.py       # Disk health monitoring
-│   │   │   ├── telemetry.py   # System metrics collection
-│   │   │   ├── disk_monitor.py # Disk I/O monitoring
-│   │   │   ├── audit_logger.py # Activity logging
-│   │   │   ├── system.py      # System info
-│   │   │   ├── jobs.py        # Background jobs
-│   │   │   └── seed.py        # Dev mode seed data
-│   │   ├── schemas/           # Pydantic Models (API contracts)
-│   │   │   ├── auth.py        # Auth models
-│   │   │   ├── files.py       # File models
-│   │   │   ├── user.py        # User models
-│   │   │   └── system.py      # System models
-│   │   ├── core/              # Core utilities
-│   │   │   └── config.py      # Configuration management
-│   │   └── compat/            # Python version compatibility
-│   ├── tests/                 # Test suite
-│   │   ├── test_permissions.py
-│   │   ├── test_audit_logging.py
-│   │   ├── test_dev_mode.py
-│   │   └── ...
-│   ├── scripts/               # Utility scripts
-│   │   ├── dev_check.py
-│   │   ├── reset_dev_storage.py
-│   │   └── ...
-│   ├── dev-storage/           # Dev mode sandbox (2x5GB RAID1)
-│   ├── dev-tmp/               # Temporary files (dev mode)
-│   ├── pyproject.toml         # Python dependencies
-│   └── README.md
+│   │   │   ├── deps.py        # Dependencies (auth, DB session)
+│   │   │   └── routes/        # 51 API route modules
+│   │   ├── services/          # 143 service modules (business logic)
+│   │   │   ├── files/         # File operations, quota, multi-mountpoint
+│   │   │   ├── hardware/      # RAID (mdadm), SMART monitoring
+│   │   │   ├── power/         # CPU frequency, fan control, energy
+│   │   │   ├── vpn/           # WireGuard VPN, encryption
+│   │   │   ├── monitoring/    # Unified monitoring with collectors
+│   │   │   ├── scheduler/     # Scheduler management
+│   │   │   ├── notifications/ # Firebase push notifications
+│   │   │   ├── backup/        # Backup/restore
+│   │   │   ├── sync/          # Desktop sync coordination
+│   │   │   ├── audit/         # Audit logging, admin DB
+│   │   │   └── ...            # Cloud, versioning, pihole, cache, etc.
+│   │   ├── models/            # 42 SQLAlchemy ORM models
+│   │   ├── schemas/           # 41 Pydantic schemas
+│   │   ├── core/              # Config, security, database, rate limiter
+│   │   └── middleware/        # Security headers, rate limiting, device tracking
+│   ├── baluhost_tui/          # Terminal UI (Textual)
+│   ├── tests/                 # 82 test files, 1465 test functions
+│   ├── alembic/               # 74 database migrations
+│   └── pyproject.toml         # Python dependencies
 │
-├── client/                    # React Frontend
-│   ├── src/
-│   │   ├── main.tsx           # App entry point
-│   │   ├── App.tsx            # Root component
-│   │   ├── pages/             # Page components
-│   │   │   ├── Dashboard.tsx  # System overview
-│   │   │   ├── FileManager.tsx # File browser with preview
-│   │   │   ├── UserManagement.tsx
-│   │   │   ├── RaidManagement.tsx
-│   │   │   ├── SystemMonitor.tsx
-│   │   │   ├── Logging.tsx    # Audit logs
-│   │   │   └── Login.tsx
-│   │   ├── components/        # Reusable components
-│   │   │   ├── Layout.tsx
-│   │   │   └── ...
-│   │   ├── api/               # API client functions
-│   │   │   ├── logging.ts
-│   │   │   ├── raid.ts
-│   │   │   └── smart.ts
-│   │   ├── lib/               # Utilities
-│   │   │   └── api.ts         # Base API client
-│   │   └── hooks/             # Custom React hooks
-│   ├── public/                # Static assets
-│   ├── index.html
-│   ├── vite.config.ts         # Vite configuration
-│   ├── tailwind.config.js     # Tailwind configuration
-│   ├── package.json
-│   └── README.md
+├── client/                    # React + TypeScript + Vite
+│   └── src/
+│       ├── pages/             # 31 page components
+│       ├── components/        # 29 component directories
+│       ├── api/               # 38 typed API client modules
+│       ├── hooks/             # 25 custom React hooks
+│       ├── contexts/          # Auth & theme contexts
+│       └── lib/api.ts         # Base API client (Axios)
+│
+├── deploy/                    # Deployment configs
+│   ├── nginx/                 # Reverse proxy configs
+│   ├── systemd/               # Service files
+│   └── ...                    # Samba, Prometheus, Grafana
 │
 ├── docs/                      # Documentation
-│   ├── AUDIT_LOGGING.md
-│   ├── DISK_IO_MONITOR.md
-│   ├── NETWORK_DRIVE_SETUP.md
-│   ├── TELEMETRY_CONFIG_RECOMMENDATIONS.md
-│   ├── RAID_SETUP_WIZARD.md
-│   └── ...
-│
-├── scripts/                   # Project scripts
-│   ├── mount-dev-storage.ps1  # Mount dev storage as network drive
-│   └── unmount-dev-storage.ps1
-│
-├── start_dev.py               # Dev environment orchestrator
-├── README.md                  # Main documentation
-├── TECHNICAL_DOCUMENTATION.md # Complete feature docs
-├── TODO.md                    # Roadmap
-├── CONTRIBUTING.md            # Contribution guidelines
-└── ARCHITECTURE.md            # This file
+├── .github/workflows/         # 7 CI/CD pipelines
+└── start_dev.py               # Dev environment orchestrator
 ```
 
 ## 🔐 Authentication & Authorization
@@ -349,20 +298,14 @@ class TelemetrySnapshot:
 
 **Verdict:** FastAPI is better suited for system-level operations and provides better developer experience for a NAS backend.
 
-### Why No Database (Yet)?
+### Database
 
-**Current State:** File-based metadata storage (`.metadata.json`)
+**Current State:** SQLAlchemy 2.0 ORM with Alembic migrations
 
-**Reasoning:**
-- Simpler dev setup (no DB required)
-- Sufficient for prototype phase
-- Easy to migrate later
-
-**Planned:** PostgreSQL/SQLite for production
-- User management
-- File metadata
-- Audit logs
-- Session management
+- **Dev:** SQLite (`backend/baluhost.db`)
+- **Production:** PostgreSQL 17.7 (deployed since January 2026)
+- 42 ORM models, 74 migrations
+- Full persistence for users, file metadata, audit logs, monitoring, VPN, power, fans, scheduler, and more
 
 ### Dev Mode Architecture
 
@@ -403,43 +346,48 @@ class TelemetrySnapshot:
 **Current Design:**
 - ✅ 1-10 users (typical home NAS)
 - ✅ 10,000-100,000 files
-- ⚠️ Concurrent uploads limited (no queue)
-- ⚠️ File metadata in memory (no DB)
+- ✅ PostgreSQL database for all metadata
+- ✅ WebSocket for real-time notifications
+- ✅ Chunked upload with progress tracking (32MB chunks)
 
 **Future Improvements:**
-- Database for metadata
 - Redis for caching
-- WebSocket for real-time updates
-- Upload queue with progress tracking
+- Upload queue for concurrent uploads
+- Cluster support for multi-node setups
 
 ## 🔒 Security Architecture
 
 ### Authentication
-- JWT tokens with HS256 signing
-- Configurable expiry (default: 12 hours)
-- Token stored in localStorage (client-side)
+- JWT tokens with HS256 signing (access: 15min, refresh: 7 days)
+- Two-Factor Authentication (TOTP) support
+- Token stored in localStorage (client-side, mitigated by CSP)
 
 ### Authorization
-- Role-based access control (RBAC)
-- File ownership tracking
-- Permission checks at service layer
+- Role-based access control (admin/user)
+- File ownership tracking with `_jail_path()` sandbox
+- Permission checks via `ensure_owner_or_privileged()`
 
 ### Input Validation
-- Pydantic schemas validate all inputs
-- Path traversal prevention (sandbox checks)
-- File type restrictions (optional)
+- Pydantic schemas validate all request bodies
+- Path traversal prevention (`..` rejection, PurePosixPath normalization)
+- subprocess with list arguments only (no `shell=True`)
+- SQLAlchemy ORM-only queries (no raw SQL with user input)
 
-### CORS Policy
-- Configured for local development
-- Production: Restrict to known origins
+### Network Security
+- Security headers middleware (CSP, HSTS, X-Frame-Options)
+- CORS scoped to configured origins
+- Rate limiting via slowapi (per-endpoint limits)
+- WireGuard VPN for encrypted remote access
 
-### Security TODO
-- [ ] HTTPS in production
-- [ ] Token refresh mechanism
-- [ ] Rate limiting
-- [ ] CSRF protection
-- [ ] Security headers (helmet)
-- [ ] Password hashing with bcrypt/argon2
+### Implemented Security Features
+- [x] Token refresh mechanism (7-day refresh tokens with JTI)
+- [x] Rate limiting (slowapi with per-endpoint limits)
+- [x] Security headers middleware (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- [x] Password hashing with bcrypt (passlib)
+- [x] Two-Factor Authentication (TOTP)
+- [x] Audit logging for all security-relevant actions
+- [x] Encrypted VPN/SSH keys (Fernet AES)
+- [ ] HTTPS (external access via WireGuard VPN, HTTP on trusted LAN)
 
 ## 🧪 Testing Strategy
 
@@ -461,9 +409,10 @@ class TelemetrySnapshot:
 ```
 
 ### Test Coverage
-- Services: 80%+ coverage
+- 82 test files, 1465 test functions
+- Services: Comprehensive coverage
 - API routes: Integration tests
-- Frontend: TODO (Vitest)
+- Frontend: Vitest unit tests configured
 
 ### Test Fixtures
 - Dev mode provides reproducible state
@@ -472,46 +421,12 @@ class TelemetrySnapshot:
 
 ## 🔮 Future Architecture
 
-### Database Layer
-```
-┌──────────────────────────────────┐
-│  PostgreSQL / MySQL              │
-│  ┌────────────┐  ┌────────────┐ │
-│  │   Users    │  │   Files    │ │
-│  │   Roles    │  │   Metadata │ │
-│  └────────────┘  └────────────┘ │
-│  ┌────────────┐  ┌────────────┐ │
-│  │   Shares   │  │   Audit    │ │
-│  │   Links    │  │   Logs     │ │
-│  └────────────┘  └────────────┘ │
-└──────────────────────────────────┘
-```
-
-### Caching Layer
-```
-┌──────────────────────────────────┐
-│  Redis                           │
-│  - Session storage               │
-│  - API response cache            │
-│  - Real-time metrics             │
-│  - Job queue (uploads)           │
-└──────────────────────────────────┘
-```
-
-### Real-Time Updates
-```
-WebSocket Connection
-  ├─> Upload progress
-  ├─> System notifications
-  ├─> File changes (live sync)
-  └─> RAID status updates
-```
-
-### Microservices (Optional)
-- File service (CRUD, storage)
-- Media service (transcoding, thumbnails)
-- Backup service (snapshots, restore)
-- Notification service (email, webhooks)
+### Potential Improvements
+- **Redis caching** — Session storage, API response cache, job queues
+- **Cluster support** — Multi-node setups for high availability
+- **LDAP/AD integration** — Enterprise user management
+- **S3-compatible API** — External tool compatibility
+- **Media service** — Transcoding, thumbnails, DLNA
 
 ## 📊 Monitoring & Observability
 
@@ -687,7 +602,7 @@ If you have questions about the architecture:
 
 ---
 
-**Last Updated:** 29. Januar 2026
-**Version:** 1.4.2
+**Last Updated:** 15. März 2026
+**Version:** 1.16.0
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION

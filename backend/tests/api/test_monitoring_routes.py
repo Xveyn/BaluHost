@@ -241,6 +241,89 @@ class TestDatabaseStatsEndpoint:
         assert "total_size_bytes" in data
 
 
+class TestUptimeEndpoints:
+    """Tests for uptime monitoring endpoints."""
+
+    def test_uptime_current_requires_auth(self, client: TestClient):
+        """Test that uptime current requires authentication."""
+        response = client.get("/api/monitoring/uptime/current")
+        assert response.status_code == 401
+
+    def test_uptime_current_returns_data(self, client: TestClient, user_headers: dict):
+        """Test uptime current always returns data (live computation fallback)."""
+        response = client.get("/api/monitoring/uptime/current", headers=user_headers)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "timestamp" in data
+        assert "server_uptime_seconds" in data
+        assert "system_uptime_seconds" in data
+        assert "server_start_time" in data
+        assert "system_boot_time" in data
+        assert data["server_uptime_seconds"] >= 0
+        assert data["system_uptime_seconds"] >= 0
+
+    def test_uptime_history_requires_auth(self, client: TestClient):
+        """Test that uptime history requires authentication."""
+        response = client.get("/api/monitoring/uptime/history")
+        assert response.status_code == 401
+
+    def test_uptime_history_returns_data(self, client: TestClient, user_headers: dict):
+        """Test uptime history returns data (with live fallback)."""
+        response = client.get("/api/monitoring/uptime/history", headers=user_headers)
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "samples" in data
+        assert "sample_count" in data
+        assert "source" in data
+
+    def test_uptime_history_never_empty(self, client: TestClient, user_headers: dict):
+        """Test uptime history is never empty thanks to live fallback."""
+        for tr in ["10m", "1h", "24h", "7d"]:
+            response = client.get(
+                "/api/monitoring/uptime/history",
+                params={"time_range": tr},
+                headers=user_headers,
+            )
+            assert response.status_code == 200
+            data = response.json()
+            assert data["sample_count"] > 0, f"Expected samples for time_range={tr}"
+            # Source should indicate where data came from
+            assert data["source"] in [
+                "memory", "database", "database (fallback)",
+                "memory (fallback)", "live (computed)",
+            ]
+
+    def test_uptime_history_samples_have_correct_fields(self, client: TestClient, user_headers: dict):
+        """Test that uptime history samples contain all required fields."""
+        response = client.get(
+            "/api/monitoring/uptime/history",
+            params={"time_range": "10m"},
+            headers=user_headers,
+        )
+        assert response.status_code == 200
+
+        data = response.json()
+        if data["samples"]:
+            sample = data["samples"][0]
+            assert "timestamp" in sample
+            assert "server_uptime_seconds" in sample
+            assert "system_uptime_seconds" in sample
+            assert "server_start_time" in sample
+            assert "system_boot_time" in sample
+
+    def test_uptime_history_with_all_time_ranges(self, client: TestClient, user_headers: dict):
+        """Test uptime history accepts all valid time ranges."""
+        for tr in ["10m", "1h", "24h", "7d"]:
+            response = client.get(
+                "/api/monitoring/uptime/history",
+                params={"time_range": tr},
+                headers=user_headers,
+            )
+            assert response.status_code == 200
+
+
 class TestCleanupEndpoint:
     """Tests for cleanup trigger endpoint (admin only)."""
 

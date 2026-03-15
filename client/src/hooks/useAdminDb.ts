@@ -5,7 +5,7 @@ import {
   getAdminTableCategories,
   type AdminTableCategoriesResponse,
   type ColumnFilters,
-} from '../lib/api'
+} from '../api/admin-db'
 
 export default function useAdminDb() {
   async function fetchTables(): Promise<string[]> {

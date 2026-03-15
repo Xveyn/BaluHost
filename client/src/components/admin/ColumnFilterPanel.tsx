@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { X, Filter } from 'lucide-react'
-import type { AdminTableSchemaField, ColumnFilter, ColumnFilters } from '../../lib/api'
+import type { AdminTableSchemaField, ColumnFilter, ColumnFilters } from '../../api/admin-db'
 
 interface Props {
   columns: AdminTableSchemaField[]

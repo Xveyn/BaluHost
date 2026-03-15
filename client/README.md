@@ -17,16 +17,26 @@ Modern React TypeScript frontend for BaluHost NAS Management Platform.
 
 ```
 src/
-├── api/                    # API client modules
+├── api/                    # API client modules (38 modules)
+│   ├── admin-db.ts        # Admin database API
+│   ├── api-keys.ts        # API key management
+│   ├── backend-logs.ts    # Backend logs API
 │   ├── backup.ts          # Backup API
+│   ├── balupi.ts          # BaluPi device API
 │   ├── benchmark.ts       # Benchmark API
 │   ├── cloud-import.ts    # Cloud import API
 │   ├── devices.ts         # Device management API
 │   ├── energy.ts          # Energy monitoring API
+│   ├── env-config.ts      # Environment config API
 │   ├── fan-control.ts     # Fan control API
+│   ├── files.ts           # File operations API
+│   ├── firebase.ts        # Firebase push notifications API
 │   ├── logging.ts         # Audit logging API
+│   ├── migration.ts       # Migration API
+│   ├── mobile.ts          # Mobile devices API
 │   ├── monitoring.ts      # System monitoring API
 │   ├── notifications.ts   # Notifications API
+│   ├── pihole.ts          # Pi-hole DNS API
 │   ├── plugins.ts         # Plugins API
 │   ├── power-management.ts # Power management API
 │   ├── power.ts           # Power API
@@ -36,9 +46,10 @@ src/
 │   ├── schedulers.ts      # Scheduler API
 │   ├── service-status.ts  # Service status API
 │   ├── shares.ts          # File sharing API
+│   ├── sleep.ts           # Sleep mode API
 │   ├── smart.ts           # SMART monitoring API
-│   ├── ssd-cache.ts       # SSD cache API
-│   ├── sync-schedules.ts  # Sync schedules API
+│   ├── ssd-file-cache.ts  # SSD file cache API
+│   ├── sync.ts            # Sync API
 │   ├── system.ts          # System API
 │   ├── two-factor.ts      # 2FA API
 │   ├── updates.ts         # Updates API
@@ -68,32 +79,36 @@ src/
 │   └── webdav/            # WebDAV components
 ├── contexts/              # React contexts
 │   └── ThemeContext.tsx   # Theme management
-├── hooks/                 # Custom React hooks
+├── hooks/                 # Custom React hooks (25 hooks)
 │   ├── useActivityFeed.ts     # Activity feed hook
 │   ├── useAdminDb.ts          # Admin DB hook
 │   ├── useAsyncData.ts        # Generic async data hook
 │   ├── useBenchmark.ts        # Benchmark hook
+│   ├── useByteUnitMode.ts     # Byte unit mode hook
 │   ├── useConfirmDialog.ts    # Confirm dialog hook
+│   ├── useDeviceManagement.ts # Device management hook
 │   ├── useFanControl.ts       # Fan control hook
 │   ├── useIdleTimeout.ts      # Idle timeout hook
 │   ├── useLiveActivities.ts   # Live activities hook
-│   ├── useMemoizedApi.ts      # Memoized API hook
 │   ├── useMobile.ts           # Mobile devices hook
 │   ├── useMonitoring.ts       # Monitoring hook
 │   ├── useNetworkStatus.ts    # Network status hook
 │   ├── useNextMaintenance.ts  # Next maintenance hook
 │   ├── useNotificationSocket.ts # Notification WebSocket
+│   ├── useOpenApiSchema.ts    # OpenAPI schema hook
 │   ├── usePluginsSummary.ts   # Plugins summary hook
 │   ├── usePowerMonitoring.ts  # Power monitoring hook
 │   ├── useRemoteServers.ts    # Remote servers hook
 │   ├── useSchedulers.ts       # Schedulers hook
 │   ├── useServicesSummary.ts  # Services summary hook
 │   ├── useSmartData.ts        # SMART data hook
-│   └── useSystemTelemetry.ts  # System metrics hook
+│   ├── useSyncSettings.ts     # Sync settings hook
+│   ├── useSystemTelemetry.ts  # System metrics hook
+│   └── useUserManagement.ts   # User management hook
 ├── i18n/                  # Internationalization
 ├── lib/                   # Utility libraries
 │   └── api.ts             # Base API client
-├── pages/                 # Page components
+├── pages/                 # Page components (31 pages)
 │   ├── AdminDatabase.tsx      # Database admin tools
 │   ├── AdminHealth.tsx        # System health dashboard
 │   ├── ApiCenterPage.tsx      # API documentation center
@@ -108,14 +123,17 @@ src/
 │   ├── Login.tsx              # Login page
 │   ├── MobileDevicesPage.tsx  # Mobile devices
 │   ├── NotificationPreferencesPage.tsx # Notification settings
+│   ├── NotificationsArchivePage.tsx # Notification archive
+│   ├── PiDashboard.tsx        # BaluPi dashboard
+│   ├── PiholePage.tsx         # Pi-hole DNS management
 │   ├── PluginsPage.tsx        # Plugin management
 │   ├── PowerManagement.tsx    # Power management
-│   ├── PublicSharePage.tsx    # Public share access
 │   ├── RaidManagement.tsx     # RAID configuration
 │   ├── RemoteServersPage.tsx  # Remote servers
 │   ├── SchedulerDashboard.tsx # Scheduled tasks
 │   ├── SettingsPage.tsx       # User settings
 │   ├── SharesPage.tsx         # File shares
+│   ├── SleepMode.tsx          # Sleep mode management
 │   ├── SyncPrototype.tsx      # Sync management
 │   ├── SystemControlPage.tsx  # System control
 │   ├── SystemMonitor.tsx      # System monitoring
@@ -292,7 +310,7 @@ npm run preview
 - **Colors**: Purple primary, dark backgrounds
 - **Typography**: System fonts for optimal rendering
 - **Components**: Consistent button, card, and form styles
-- **Icons**: Heroicons for UI elements
+- **Icons**: Lucide React for UI elements
 
 ## 📡 API Integration
 
@@ -388,21 +406,25 @@ const { data, loading, error, refetch } = useAsyncData(fetchFn);
 - **useActivityFeed** - Real-time activity feed
 - **useAdminDb** - Admin database operations
 - **useBenchmark** - Storage benchmark results
+- **useDeviceManagement** - Device management
 - **useFanControl** - Fan speed and mode control
 - **useLiveActivities** - Live activity updates
 - **useMobile** - Mobile device management
 - **useMonitoring** - System monitoring data
+- **useOpenApiSchema** - OpenAPI schema loading
 - **usePluginsSummary** - Plugin status overview
 - **usePowerMonitoring** - Power consumption data
 - **useRemoteServers** - Remote server management
 - **useSchedulers** - Scheduled task management
 - **useServicesSummary** - Service status overview
+- **useSyncSettings** - Sync settings management
+- **useUserManagement** - User management operations
 
 ### Utility Hooks
 
+- **useByteUnitMode** - Byte unit formatting mode
 - **useConfirmDialog** - Confirmation dialog management
 - **useIdleTimeout** - User idle detection
-- **useMemoizedApi** - Memoized API calls
 - **useNetworkStatus** - Network connectivity status
 - **useNextMaintenance** - Next scheduled maintenance
 - **useNotificationSocket** - WebSocket notifications

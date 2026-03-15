@@ -4,7 +4,7 @@
 
 **Self-Hosted NAS Management Platform**
 
-[![Version](https://img.shields.io/badge/version-1.15.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/github/v/release/Xveyn/BaluHost?color=blue&label=version)](https://github.com/Xveyn/BaluHost/releases/latest)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg)](https://www.python.org/downloads/)
 [![Node](https://img.shields.io/badge/node-18+-339933.svg)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
@@ -29,7 +29,7 @@ Deployed since January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM).
 | **Database** | PostgreSQL 17.7 | With Alembic migrations |
 | **Proxy** | Nginx | Port 80, rate limiting, security headers |
 | **Backend** | Systemd | 4 Uvicorn workers, auto-restart |
-| **Testing** | 1438 tests | 81 test files, CI/CD via GitHub Actions |
+| **Testing** | 1465 tests | 82 test files, CI/CD via GitHub Actions |
 | **Monitoring** | Prometheus/Grafana | Ready |
 
 ---
@@ -167,15 +167,15 @@ See [Infrastructure](docs/deployment/infrastructure.md) and [Emergency Runbook](
 BaluHost/
 ├── backend/                 # Python FastAPI
 │   ├── app/
-│   │   ├── api/routes/      # 47 API route modules
-│   │   ├── services/        # 132 service modules
+│   │   ├── api/routes/      # 51 API route modules
+│   │   ├── services/        # 143 service modules
 │   │   ├── models/          # 42 SQLAlchemy ORM models
 │   │   ├── schemas/         # 41 Pydantic schemas
 │   │   ├── core/            # Config, security, database
 │   │   └── middleware/      # Security headers, rate limiting
 │   ├── baluhost_tui/        # Terminal UI (Textual)
-│   ├── tests/               # 81 test files
-│   └── alembic/             # 72 database migrations
+│   ├── tests/               # 82 test files
+│   └── alembic/             # 74 database migrations
 ├── client/                  # React + TypeScript + Vite
 │   └── src/
 │       ├── pages/           # 31 page components
@@ -310,16 +310,16 @@ docs/
 
 | Metric | Count |
 |--------|-------|
-| **Version** | 1.15.2 |
-| **Backend code** | ~81,000 lines |
+| **Version** | ![Latest Release](https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |
+| **Backend code** | ~120,000 lines |
 | **Frontend code** | ~67,000 lines |
-| **Test functions** | 1438 |
-| **API route modules** | 47 |
-| **Service modules** | 132 |
+| **Test functions** | 1465 |
+| **API route modules** | 51 |
+| **Service modules** | 143 |
 | **Database models** | 42 |
-| **Database migrations** | 72 |
+| **Database migrations** | 74 |
 | **Frontend pages** | 31 |
-| **CI/CD workflows** | 10 |
+| **CI/CD workflows** | 7 |
 
 ---
 

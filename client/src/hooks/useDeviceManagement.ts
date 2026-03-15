@@ -18,7 +18,7 @@ import {
   enableSyncSchedule,
   type CreateScheduleRequest,
 } from '../api/sync';
-import { generateMobileToken, type MobileRegistrationToken } from '../lib/api';
+import { generateMobileToken, type MobileRegistrationToken } from '../api/mobile';
 
 export function useDeviceManagement() {
   const { t } = useTranslation(['devices', 'common']);

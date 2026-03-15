@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Smartphone, Plus, Trash2, RefreshCw, QrCode as QrCodeIcon, Wifi, WifiOff, Calendar, Clock, Bell, User, Eye, EyeOff, Copy } from 'lucide-react';
-import { generateMobileToken, getAvailableVpnTypes, getMobileDevices, deleteMobileDevice, getDeviceNotifications, buildApiUrl, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../lib/api';
+import { buildApiUrl } from '../lib/api';
+import { generateMobileToken, getAvailableVpnTypes, getMobileDevices, deleteMobileDevice, getDeviceNotifications, type MobileRegistrationToken, type MobileDevice, type ExpirationNotification } from '../api/mobile';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 import { useAuth } from '../contexts/AuthContext';
 

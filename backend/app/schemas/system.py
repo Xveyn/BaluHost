@@ -53,6 +53,26 @@ class StorageInfo(BaseModel):
     mount_point: str
 
 
+class StorageDeviceEntry(BaseModel):
+    name: str              # "md0", "md1", "sda"
+    label: str             # "RAID 1 (HDD)", "SSD Cache"
+    level: str | None = None
+    disk_type: str = "hdd"  # "hdd" | "ssd" | "nvme"
+    capacity_bytes: int    # Array effective capacity (RAID-aware)
+    used_bytes: int
+    available_bytes: int
+    use_percent: float
+    device_count: int
+
+
+class StorageBreakdownResponse(BaseModel):
+    entries: list[StorageDeviceEntry]
+    total_capacity: int
+    total_used: int
+    total_available: int
+    total_use_percent: float
+
+
 class DiskIOSample(BaseModel):
     """Single disk I/O measurement sample."""
     timestamp: int  # Unix timestamp in milliseconds

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '../ui/Modal';
-import type { MobileRegistrationToken } from '../../lib/api';
+import type { MobileRegistrationToken } from '../../api/mobile';
 
 interface QrCodeDialogProps {
   data: MobileRegistrationToken | null;
