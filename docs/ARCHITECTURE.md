@@ -1,6 +1,6 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.15.6
+**Version:** 1.16.0
 **Last Updated:** 15. März 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
@@ -603,6 +603,6 @@ If you have questions about the architecture:
 ---
 
 **Last Updated:** 15. März 2026
-**Version:** 1.15.6
+**Version:** 1.16.0
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION
