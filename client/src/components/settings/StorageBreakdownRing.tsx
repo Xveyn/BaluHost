@@ -2,9 +2,9 @@ import { formatBytes } from '../../lib/formatters';
 import type { StorageDeviceEntry } from '../../api/system';
 
 const COLORS: Record<string, string[]> = {
-  hdd: ['#38bdf8', '#2dd4bf', '#22d3ee', '#06b6d4'],
-  ssd: ['#a78bfa', '#c084fc', '#818cf8', '#7c3aed'],
-  nvme: ['#f59e0b', '#fbbf24', '#f97316', '#d97706'],
+  hdd: ['#3b82f6', '#10b981', '#f59e0b', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316'],
+  ssd: ['#a78bfa', '#c084fc', '#818cf8', '#7c3aed', '#6366f1', '#a855f7'],
+  nvme: ['#f59e0b', '#fbbf24', '#f97316', '#d97706', '#ea580c', '#eab308'],
 };
 
 function getSegmentColor(diskType: string, index: number): string {
