@@ -9,7 +9,7 @@ Provides endpoints for:
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -33,6 +33,7 @@ from app.schemas.monitoring import (
     DiskIoHistoryResponse,
     ProcessHistoryResponse,
     UptimeHistoryResponse,
+    UptimeSampleSchema,
     RetentionConfigResponse,
     RetentionConfigUpdate,
     RetentionConfigListResponse,
@@ -43,6 +44,71 @@ from app.schemas.monitoring import (
 from app.services.monitoring.orchestrator import get_monitoring_orchestrator
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
+
+import logging
+
+_logger = logging.getLogger(__name__)
+
+
+def _generate_synthetic_uptime_history(
+    duration: timedelta,
+    limit: int = 1000,
+) -> List[UptimeSampleSchema]:
+    """Generate synthetic uptime samples from known server/system start times.
+
+    Used as last-resort fallback when neither memory buffer nor database
+    has history data (e.g. monitoring_worker not running).
+    """
+    import time as _time
+    import psutil
+    from app.services.telemetry import _SERVER_START_TIME
+    from app.core.config import settings
+
+    now = datetime.now(timezone.utc)
+    range_start = now - duration
+
+    # Server info
+    server_start = datetime.fromtimestamp(_SERVER_START_TIME, tz=timezone.utc)
+
+    # System info
+    if getattr(settings, "is_dev_mode", False):
+        system_boot = server_start
+    else:
+        try:
+            boot_time = psutil.boot_time()
+            system_boot = datetime.fromtimestamp(boot_time, tz=timezone.utc)
+        except Exception:
+            system_boot = server_start
+
+    # Don't generate samples before server started
+    effective_start = max(range_start, server_start)
+    if effective_start >= now:
+        return []
+
+    total_seconds = (now - effective_start).total_seconds()
+    if total_seconds <= 0:
+        return []
+
+    # Aim for ~60-120 samples for good bucket coverage in the frontend
+    target_samples = min(limit, 120)
+    step_s = max(5.0, total_seconds / target_samples)
+
+    samples: List[UptimeSampleSchema] = []
+    t = effective_start
+    while t <= now and len(samples) < limit:
+        server_uptime = int((t - server_start).total_seconds())
+        system_uptime = int((t - system_boot).total_seconds())
+
+        samples.append(UptimeSampleSchema(
+            timestamp=t,
+            server_uptime_seconds=server_uptime,
+            system_uptime_seconds=system_uptime,
+            server_start_time=server_start,
+            system_boot_time=system_boot,
+        ))
+        t += timedelta(seconds=step_s)
+
+    return samples
 
 
 def _parse_time_range(time_range: TimeRangeEnum) -> timedelta:
@@ -519,6 +585,13 @@ async def get_uptime_history(
         if not samples:
             samples = orchestrator.get_uptime_history(limit)
             source_str = "memory (fallback)"
+
+    # Last-resort fallback: generate synthetic history from known start times.
+    # Ensures the frontend always shows uptime status even when the
+    # monitoring_worker process is not running or hasn't persisted yet.
+    if not samples:
+        samples = _generate_synthetic_uptime_history(duration, limit)
+        source_str = "live (computed)"
 
     return UptimeHistoryResponse(
         samples=samples,
