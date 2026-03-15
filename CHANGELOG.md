@@ -11,35 +11,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
-- **Uptime monitoring** — UptimeSample model with server + system uptime, historical DB persistence, 30-day retention, live fallback computation
-- **Uptime UI** — System Monitor uptime tab with live counters, restart detection, area chart; dual uptime dashboard widget
 - **Per-device storage API** — `GET /api/system/storage/devices` endpoint for individual disk breakdown
 - **Storage tab redesign** — Multi-segment donut chart with clickable panels per device
-- **FCM push notifications** — Event-driven and admin notifications via Firebase Cloud Messaging with high priority + sound
-- **API Center dynamic docs** — Endpoint documentation generated dynamically from OpenAPI schema
-- **BaluPi setup** — Admin route, setup component, API client, nav entry, and Pi mode context guards
+- **Uptime tab redesign** — Status-page-style visualization with improved layout
 - **Client unit tests** — Tests for API modules, hooks, and lib utilities (Vitest)
-- **Firebase push tests** — 30 new tests for push delivery
 
 ### Changed
 
 - **Backend refactoring** — Extracted FritzBox VPN, VCL admin/tracking, RAID routes, optical drive, sleep/fan backends into dedicated modules
 - **Client refactoring** — Extracted UpdatePage tabs, TwoFactorCard, StorageTab, mobile/admin-db/files APIs into standalone modules
-- **Service layer extraction** — DB calls moved from 10+ route files into service layers (pihole, firebase, sync, shares, cache, user, device, mobile, samba, monitoring)
-- **SQLAlchemy 2.0** — Migrated mobile and rate_limit_config models to Mapped style
-- **Shared error handling** — `getApiErrorMessage` used in 18 components
-- **Settings profile** — Simplified tab, removed avatar upload and email section
-- **Sync heartbeat** — Offloaded DB writes to thread pool for better async performance
 
 ### Fixed
 
 - ESLint errors in PluginPage, UploadProgressBar, and catch blocks
 - Pre-existing TypeScript errors and test mock data alignment
 - SSD cache filter to only show arrays with actual cache devices
-- Rate limits management with dynamic endpoint matching
-- Import paths after audit module restructure
+- Distinct colors for storage donut chart segments
 - Live fallback for uptime history endpoint
-- BaluPi unused imports breaking TS build
 
 ### Documentation
 
