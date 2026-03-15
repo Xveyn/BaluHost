@@ -21,9 +21,9 @@ vi.mock('../../lib/errorHandling', () => ({
 }));
 
 const mockDevices: Device[] = [
-  { id: 1, name: 'iPhone', type: 'mobile', is_active: true, last_seen: '2026-01-01', created_at: '2026-01-01' } as Device,
-  { id: 2, name: 'MacBook', type: 'desktop', is_active: true, last_seen: '2026-01-01', created_at: '2026-01-01' } as Device,
-  { id: 3, name: 'Android', type: 'mobile', is_active: false, last_seen: '2025-12-01', created_at: '2025-12-01' } as Device,
+  { id: '1', name: 'iPhone', type: 'mobile', platform: 'ios', user_id: 1, is_active: true, last_seen: '2026-01-01', created_at: '2026-01-01' },
+  { id: '2', name: 'MacBook', type: 'desktop', platform: 'macos', user_id: 1, is_active: true, last_seen: '2026-01-01', created_at: '2026-01-01' },
+  { id: '3', name: 'Android', type: 'mobile', platform: 'android', user_id: 1, is_active: false, last_seen: '2025-12-01', created_at: '2025-12-01' },
 ];
 
 vi.mock('../../api/devices', () => ({
@@ -85,7 +85,7 @@ describe('useDeviceManagement', () => {
       success = await result.current.handleSaveDeviceName(mockDevices[0], 'New Name');
     });
 
-    expect(updateMobileDeviceName).toHaveBeenCalledWith(1, 'New Name');
+    expect(updateMobileDeviceName).toHaveBeenCalledWith('1', 'New Name');
     expect(success).toBe(true);
   });
 
@@ -99,7 +99,7 @@ describe('useDeviceManagement', () => {
       await result.current.handleSaveDeviceName(mockDevices[1], 'Work MacBook');
     });
 
-    expect(updateDesktopDeviceName).toHaveBeenCalledWith(2, 'Work MacBook');
+    expect(updateDesktopDeviceName).toHaveBeenCalledWith('2', 'Work MacBook');
   });
 
   it('handleSaveDeviceName rejects empty name', async () => {

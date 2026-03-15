@@ -3,12 +3,13 @@ import { renderHook, waitFor } from '@testing-library/react';
 import { useCpuMonitoring, useMemoryMonitoring } from '../../hooks/useMonitoring';
 
 const mockCpuCurrent = {
+  timestamp: '2026-01-01T12:00:00Z',
   usage_percent: 35.2,
   frequency_mhz: 3600,
   temperature_celsius: 55,
   core_count: 6,
   thread_count: 12,
-  per_thread_usage: [30, 40, 35, 25, 42, 38, 30, 40, 35, 25, 42, 38],
+  thread_usages: [30, 40, 35, 25, 42, 38, 30, 40, 35, 25, 42, 38],
 };
 
 const mockCpuHistory = {
@@ -16,19 +17,24 @@ const mockCpuHistory = {
     { timestamp: '2026-01-01T12:00:00Z', usage_percent: 30, frequency_mhz: 3600, temperature_celsius: 54 },
     { timestamp: '2026-01-01T12:01:00Z', usage_percent: 35, frequency_mhz: 3600, temperature_celsius: 55 },
   ],
+  sample_count: 2,
+  source: 'memory',
 };
 
 const mockMemCurrent = {
+  timestamp: '2026-01-01T12:00:00Z',
   total_bytes: 16 * 1024 * 1024 * 1024,
   used_bytes: 8 * 1024 * 1024 * 1024,
+  percent: 50.0,
   available_bytes: 8 * 1024 * 1024 * 1024,
-  usage_percent: 50.0,
 };
 
 const mockMemHistory = {
   samples: [
-    { timestamp: '2026-01-01T12:00:00Z', usage_percent: 48, used_bytes: 7.5e9 },
+    { timestamp: '2026-01-01T12:00:00Z', percent: 48, used_bytes: 7.5e9, total_bytes: 16e9 },
   ],
+  sample_count: 1,
+  source: 'memory',
 };
 
 vi.mock('../../api/monitoring', () => ({
