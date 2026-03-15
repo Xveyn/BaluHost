@@ -4,7 +4,7 @@
 
 import { useState } from 'react';
 import { AlertTriangle, CheckCircle, Loader2, Search, Wrench, FileWarning } from 'lucide-react';
-import { enforceResidency, type ResidencyViolation } from '../../lib/api';
+import { enforceResidency, type ResidencyViolation } from '../../api/files';
 
 interface ResidencyPanelProps {
   onClose?: () => void;

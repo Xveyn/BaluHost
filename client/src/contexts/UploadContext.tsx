@@ -1,7 +1,8 @@
 import { createContext, useContext, useState, useRef, useCallback, lazy, Suspense, type ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { buildApiUrl, checkFilesExist } from '../lib/api';
+import { buildApiUrl } from '../lib/api';
+import { checkFilesExist } from '../api/files';
 import { useAuth } from './AuthContext';
 import { formatBytes } from '../lib/formatters';
 import { ChunkedUploader, CHUNKED_THRESHOLD } from '../lib/chunkedUpload';

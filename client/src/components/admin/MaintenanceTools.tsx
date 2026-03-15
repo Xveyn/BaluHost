@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getDatabaseHealth } from '../../lib/api'
-import type { DatabaseHealthResponse } from '../../lib/api'
+import { getDatabaseHealth, type DatabaseHealthResponse } from '../../api/admin-db'
 import { triggerCleanup } from '../../api/monitoring'
 import { useConfirmDialog } from '../../hooks/useConfirmDialog'
 import { ProgressBar } from '../ui/ProgressBar'

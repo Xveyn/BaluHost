@@ -1,7 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import { useTranslation } from 'react-i18next'
-import { getDatabaseInfo } from '../../lib/api'
-import type { DatabaseInfoResponse } from '../../lib/api'
+import { getDatabaseInfo, type DatabaseInfoResponse } from '../../api/admin-db'
 import { RefreshCw, Database, HardDrive, Table, ArrowUp, ArrowDown, ArrowUpDown, BarChart3 } from 'lucide-react'
 import { formatBytes, formatNumber } from '../../lib/formatters'
 import { StatCard } from '../ui/StatCard'

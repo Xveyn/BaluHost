@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { QrCode as QrCodeIcon, Plus, RefreshCw } from 'lucide-react';
-import { getAvailableVpnTypes, type MobileRegistrationToken } from '../../lib/api';
+import { getAvailableVpnTypes, type MobileRegistrationToken } from '../../api/mobile';
 
 interface RegisterTabProps {
   onGenerate: (name: string, includeVpn: boolean, validityDays: number, vpnType: string) => Promise<MobileRegistrationToken | null>;

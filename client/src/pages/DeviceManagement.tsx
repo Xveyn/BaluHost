@@ -6,7 +6,7 @@ import { useDeviceManagement } from '../hooks/useDeviceManagement';
 import { DevicesTab, RegisterTab, SchedulesTab, EditDeviceModal, QrCodeDialog } from '../components/device-management';
 import DesktopPairingDialog from '../components/DesktopPairingDialog';
 import type { Device } from '../api/devices';
-import type { MobileRegistrationToken } from '../lib/api';
+import type { MobileRegistrationToken } from '../api/mobile';
 
 type Tab = 'devices' | 'register' | 'schedules';
 
