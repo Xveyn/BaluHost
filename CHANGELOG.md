@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.1] - 2026-03-15
+
+### Fixed
+
+- Update service reads version from pyproject.toml instead of installed package metadata
+- Readable permissions on update status files for deploy script
+- Storage tab capacity values and SSD cache filtering corrected
+- v1.16.0 changelog corrected to only include changes since v1.15.6
+
+---
+
 ## [1.16.0] - 2026-03-15
 
 ### Added
