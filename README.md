@@ -4,7 +4,7 @@
 
 **Self-Hosted NAS Management Platform**
 
-[![Version](https://img.shields.io/badge/version-1.15.2-blue.svg)](CHANGELOG.md)
+[![Version](https://img.shields.io/github/v/release/Xveyn/BaluHost?color=blue&label=version)](https://github.com/Xveyn/BaluHost/releases/latest)
 [![Python](https://img.shields.io/badge/python-3.11+-3776AB.svg)](https://www.python.org/downloads/)
 [![Node](https://img.shields.io/badge/node-18+-339933.svg)](https://nodejs.org/)
 [![FastAPI](https://img.shields.io/badge/FastAPI-0.115+-009688.svg)](https://fastapi.tiangolo.com/)
@@ -310,7 +310,7 @@ docs/
 
 | Metric | Count |
 |--------|-------|
-| **Version** | 1.15.2 |
+| **Version** | ![Latest Release](https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |
 | **Backend code** | ~81,000 lines |
 | **Frontend code** | ~67,000 lines |
 | **Test functions** | 1438 |
