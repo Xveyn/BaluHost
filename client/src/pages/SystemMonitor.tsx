@@ -9,7 +9,7 @@
 import { useState, useMemo } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { Cpu, ArrowLeftRight, Settings, FileText, Terminal } from 'lucide-react';
+import { Cpu, ArrowLeftRight, Settings, FileText, Terminal, Clock } from 'lucide-react';
 import { TimeRangeSelector } from '../components/monitoring';
 import type { TimeRange } from '../api/monitoring';
 import { ServicesStatusTab } from '../components/services';
@@ -23,9 +23,10 @@ import { MemoryTab } from '../components/system-monitor/MemoryTab';
 import { NetworkTab } from '../components/system-monitor/NetworkTab';
 import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
+import { UptimeTab } from '../components/system-monitor/UptimeTab';
 import { useAuth } from '../contexts/AuthContext';
 
-type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
+type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'uptime' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
 
 interface TabConfig {
@@ -132,6 +133,11 @@ const CATEGORIES: CategoryConfig[] = [
         ),
       },
       {
+        id: 'uptime',
+        labelKey: 'monitor.tabs.uptime',
+        icon: <Clock className="h-5 w-5" />,
+      },
+      {
         id: 'backend-logs',
         labelKey: 'monitor.tabs.backendLogs',
         icon: <Terminal className="h-5 w-5" />,
@@ -178,7 +184,7 @@ const TAB_TO_CATEGORY: Record<TabType, CategoryType> = Object.fromEntries(
 const VALID_TABS = new Set(CATEGORIES.flatMap((cat) => cat.tabs.map((tab) => tab.id)));
 
 // Tabs that show the TimeRangeSelector
-const METRIC_TABS = new Set<TabType>(['cpu', 'memory', 'network', 'disk-io']);
+const METRIC_TABS = new Set<TabType>(['cpu', 'memory', 'network', 'disk-io', 'uptime']);
 
 // Main Component
 export default function SystemMonitor() {
@@ -292,6 +298,7 @@ export default function SystemMonitor() {
         {activeTab === 'network' && <NetworkTab timeRange={timeRange} />}
         {activeTab === 'disk-io' && <DiskIoTab timeRange={timeRange} />}
         {activeTab === 'power' && <PowerTab />}
+        {activeTab === 'uptime' && <UptimeTab timeRange={timeRange} />}
         {activeTab === 'services' && <ServicesStatusTab isAdmin={isAdmin} />}
         {activeTab === 'health' && <HealthTab />}
         {activeTab === 'backend-logs' && <BackendLogsTab />}
