@@ -113,8 +113,36 @@ async def get_cache_overview(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> List[SSDCacheStats]:
-    """Get SSD cache stats for all configured arrays."""
+    """Get SSD cache stats for all configured arrays.
+
+    Only returns configs for arrays that actually have a cache-type device
+    (SSD/NVMe) attached, cross-referenced with the current RAID status and
+    available disks.
+    """
     configs = SSDFileCacheService.get_all_configs(db)
+
+    # Filter to arrays that actually have a cache device
+    try:
+        from app.services.hardware import raid as raid_service
+        raid_data = raid_service.get_status()
+        available = raid_service.get_available_disks()
+
+        # Find partition names of disks marked as cache devices
+        cache_partitions: set[str] = set()
+        for disk in available.disks:
+            if disk.is_cache_device:
+                cache_partitions.update(disk.partitions)
+
+        # Arrays that have a cache device as a member
+        arrays_with_cache: set[str] = set()
+        for array in raid_data.arrays:
+            if any(d.name in cache_partitions for d in array.devices):
+                arrays_with_cache.add(array.name)
+
+        configs = [c for c in configs if c.array_name in arrays_with_cache]
+    except Exception:
+        pass  # If RAID check fails, show all
+
     results = []
     for cfg in configs:
         svc = SSDFileCacheService(db, str(cfg.array_name))
