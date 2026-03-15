@@ -1,8 +1,6 @@
 """API routes for plugin management."""
 import logging
-from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.responses import FileResponse
@@ -11,9 +9,9 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin, get_current_user, get_db
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
-from app.models.plugin import InstalledPlugin
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
+from app.services import plugin_service
 from app.schemas.plugin import (
     InstalledPluginSchema,
     PermissionInfo,
@@ -131,9 +129,7 @@ async def get_plugin_details(
     ui_manifest = plugin.get_ui_manifest()
 
     # Get database record if exists
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name
-    ).first()
+    db_record = plugin_service.get_installed_plugin(db, name)
 
     # Get config schema if available
     config_schema = None
@@ -203,11 +199,6 @@ async def toggle_plugin(
 
     meta = plugin.metadata
 
-    # Get or create database record
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name
-    ).first()
-
     if body.enabled:
         # Enabling plugin
         permissions_to_grant = body.grant_permissions
@@ -222,26 +213,15 @@ async def toggle_plugin(
                 detail=f"Missing required permissions: {list(missing)}",
             )
 
-        # Create or update database record
-        if db_record is None:
-            db_record = InstalledPlugin(
-                name=name,
-                version=meta.version,
-                display_name=meta.display_name,
-                is_enabled=True,
-                granted_permissions=permissions_to_grant,
-                config=plugin.get_default_config(),
-                installed_by=current_user.username,
-                enabled_at=datetime.now(timezone.utc),
-            )
-            db.add(db_record)
-        else:
-            db_record.is_enabled = True
-            db_record.granted_permissions = permissions_to_grant
-            db_record.enabled_at = datetime.now(timezone.utc)
-            db_record.disabled_at = None
-
-        db.commit()
+        plugin_service.enable_plugin(
+            db,
+            name=name,
+            version=meta.version,
+            display_name=meta.display_name,
+            permissions=permissions_to_grant,
+            default_config=plugin.get_default_config(),
+            installed_by=current_user.username,
+        )
 
         # Enable in plugin manager
         success = await plugin_manager.enable_plugin(
@@ -249,15 +229,13 @@ async def toggle_plugin(
         )
 
         if not success:
-            # Rollback database change
-            db_record.is_enabled = False
-            db.commit()
+            plugin_service.rollback_enable(db, name)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail="Failed to enable plugin",
             )
 
-        logger.info(f"Plugin {name} enabled by {current_user.username}")
+        logger.info("Plugin %s enabled by %s", name, current_user.username)
         return PluginToggleResponse(
             name=name,
             is_enabled=True,
@@ -268,10 +246,7 @@ async def toggle_plugin(
         # Disabling plugin
         success = await plugin_manager.disable_plugin(name)
 
-        if db_record:
-            db_record.is_enabled = False
-            db_record.disabled_at = datetime.now(timezone.utc)
-            db.commit()
+        plugin_service.disable_plugin_record(db, name)
 
         if not success:
             raise HTTPException(
@@ -279,7 +254,7 @@ async def toggle_plugin(
                 detail="Failed to disable plugin",
             )
 
-        logger.info(f"Plugin {name} disabled by {current_user.username}")
+        logger.info("Plugin %s disabled by %s", name, current_user.username)
         return PluginToggleResponse(
             name=name,
             is_enabled=False,
@@ -307,10 +282,7 @@ async def get_plugin_config(
             detail="Plugin not found",
         )
 
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name
-    ).first()
-
+    db_record = plugin_service.get_installed_plugin(db, name)
     config = db_record.config if db_record else plugin.get_default_config()
 
     # Get schema if available
@@ -359,30 +331,17 @@ async def update_plugin_config(
             detail=f"Invalid configuration: {e}",
         )
 
-    # Update database record
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name
-    ).first()
+    meta = plugin.metadata
+    plugin_service.update_config(
+        db,
+        name=name,
+        validated_config=validated_config,
+        version=meta.version,
+        display_name=meta.display_name,
+        installed_by=current_user.username,
+    )
 
-    if db_record is None:
-        # Create record if it doesn't exist
-        meta = plugin.metadata
-        db_record = InstalledPlugin(
-            name=name,
-            version=meta.version,
-            display_name=meta.display_name,
-            is_enabled=False,
-            granted_permissions=[],
-            config=validated_config,
-            installed_by=current_user.username,
-        )
-        db.add(db_record)
-    else:
-        db_record.config = validated_config
-
-    db.commit()
-
-    logger.info(f"Plugin {name} config updated by {current_user.username}")
+    logger.info("Plugin %s config updated by %s", name, current_user.username)
 
     return PluginConfigResponse(
         name=name,
@@ -407,10 +366,7 @@ async def serve_plugin_asset(
     Dynamic imports (ES modules) don't send auth headers.
     """
     # Check database for enabled status (works across workers)
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name,
-        InstalledPlugin.is_enabled == True
-    ).first()
+    db_record = plugin_service.get_enabled_plugin(db, name)
 
     if not db_record and not plugin_manager.is_enabled(name):
         raise HTTPException(
@@ -478,15 +434,9 @@ async def uninstall_plugin(
     if plugin_manager.is_enabled(name):
         await plugin_manager.disable_plugin(name)
 
-    # Remove database record
-    db_record = db.query(InstalledPlugin).filter(
-        InstalledPlugin.name == name
-    ).first()
-
-    if db_record:
-        db.delete(db_record)
-        db.commit()
-        logger.info(f"Plugin {name} uninstalled by {current_user.username}")
+    deleted = plugin_service.uninstall_plugin(db, name)
+    if deleted:
+        logger.info("Plugin %s uninstalled by %s", name, current_user.username)
         return {"message": f"Plugin '{name}' uninstalled"}
 
     raise HTTPException(

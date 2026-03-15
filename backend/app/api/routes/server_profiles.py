@@ -2,7 +2,7 @@
 
 import datetime
 import logging
-from typing import List, Optional, cast
+from typing import List, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
@@ -10,7 +10,7 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.database import get_db
 from app.core.config import settings
-from app.models import ServerProfile, User
+from app.models import User
 from app.schemas.server_profile import (
     ServerProfileCreate,
     ServerProfileResponse,
@@ -19,6 +19,7 @@ from app.schemas.server_profile import (
     ServerStartResponse,
     SSHConnectionTest,
 )
+from app.services import server_profile_service
 from app.services.ssh_service import SSHService
 from app.services.vpn_encryption import VPNEncryption
 from app.core.rate_limiter import limiter, user_limiter, get_limit
@@ -37,11 +38,11 @@ async def list_server_profiles_public(
 ) -> List[ServerProfileList]:
     """
     List ALL server profiles without authentication (for login screen).
-    
+
     Only enabled when ALLOW_PUBLIC_PROFILE_LIST=true in config.
     Returns profile names and owners to help users select their server.
     SSH keys and sensitive data are excluded.
-    
+
     Security note: This is safe for local-only deployments where
     profile discovery is needed before login. For production, disable
     or ensure enforce_local_only is enabled.
@@ -51,8 +52,8 @@ async def list_server_profiles_public(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Public profile listing is disabled"
         )
-    
-    profiles = db.query(ServerProfile).all()
+
+    profiles = server_profile_service.list_all_profiles(db)
     return [
         ServerProfileList(
             id=cast(int, p.id),
@@ -80,37 +81,16 @@ async def create_server_profile(
 ) -> ServerProfileResponse:
     """Create a new server profile."""
     try:
-        # Encrypt SSH private key
-        encrypted_key = VPNEncryption.encrypt_ssh_private_key(profile_data.ssh_private_key)
-        
-        # Create profile
-        db_profile = ServerProfile(
-            user_id=current_user.id,
-            name=profile_data.name,
-            ssh_host=profile_data.ssh_host,
-            ssh_port=profile_data.ssh_port,
-            ssh_username=profile_data.ssh_username,
-            ssh_key_encrypted=encrypted_key,
-            vpn_profile_id=profile_data.vpn_profile_id,
-            power_on_command=profile_data.power_on_command,
-        )
-        
-        db.add(db_profile)
-        db.commit()
-        db.refresh(db_profile)
-        
-        logger.info(f"Server profile '{profile_data.name}' created by user {current_user.id}")
-        return ServerProfileResponse.from_orm(db_profile)
-        
+        profile = server_profile_service.create_profile(db, current_user.id, profile_data)
+        return ServerProfileResponse.from_orm(profile)
     except ValueError as e:
-        logger.error(f"Validation error creating profile: {str(e)}")
+        logger.error("Validation error creating profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=str(e)
         )
     except Exception as e:
-        logger.error(f"Error creating profile: {str(e)}")
-        db.rollback()
+        logger.error("Error creating profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to create profile"
@@ -126,10 +106,7 @@ async def list_server_profiles(
     current_user: User = Depends(deps.get_current_user),
 ) -> List[ServerProfileList]:
     """List all server profiles for current user."""
-    profiles = db.query(ServerProfile).filter(
-        ServerProfile.user_id == current_user.id
-    ).order_by(ServerProfile.created_at.desc()).all()
-    
+    profiles = server_profile_service.list_user_profiles(db, current_user.id)
     return [ServerProfileList.from_orm(p) for p in profiles]
 
 
@@ -143,17 +120,12 @@ async def get_server_profile(
     current_user: User = Depends(deps.get_current_user),
 ) -> ServerProfileResponse:
     """Get specific server profile."""
-    profile = db.query(ServerProfile).filter(
-        ServerProfile.id == profile_id,
-        ServerProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server profile not found"
         )
-    
     return ServerProfileResponse.from_orm(profile)
 
 
@@ -168,45 +140,20 @@ async def update_server_profile(
     current_user: User = Depends(deps.get_current_user),
 ) -> ServerProfileResponse:
     """Update server profile."""
-    profile = db.query(ServerProfile).filter(
-        ServerProfile.id == profile_id,
-        ServerProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server profile not found"
         )
-    
+
     try:
-        # Update fields
-        if profile_data.name is not None:
-            profile.name = profile_data.name  # type: ignore
-        if profile_data.ssh_host is not None:
-            profile.ssh_host = profile_data.ssh_host  # type: ignore
-        if profile_data.ssh_port is not None:
-            profile.ssh_port = profile_data.ssh_port  # type: ignore
-        if profile_data.ssh_username is not None:
-            profile.ssh_username = profile_data.ssh_username  # type: ignore
-        if profile_data.ssh_private_key is not None:
-            profile.ssh_key_encrypted.__str__ = VPNEncryption.encrypt_ssh_private_key(profile_data.ssh_private_key).__str__
-            
-            
-        if profile_data.vpn_profile_id is not None:
-            profile.vpn_profile_id = profile_data.vpn_profile_id  # type: ignore
-        if profile_data.power_on_command is not None:
-            profile.power_on_command = profile_data.power_on_command  # type: ignore
-        
-        db.commit()
-        db.refresh(profile)
-        
-        logger.info(f"Server profile {profile_id} updated by user {current_user.id}")
-        return ServerProfileResponse.from_orm(profile)
-        
+        updated = server_profile_service.update_profile(
+            db, profile, profile_data, current_user.id
+        )
+        return ServerProfileResponse.from_orm(updated)
     except Exception as e:
-        logger.error(f"Error updating profile: {str(e)}")
-        db.rollback()
+        logger.error("Error updating profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update profile"
@@ -223,24 +170,17 @@ async def delete_server_profile(
     current_user: User = Depends(deps.get_current_user),
 ):
     """Delete server profile."""
-    profile = db.query(ServerProfile).filter(
-        ServerProfile.id == profile_id,
-        ServerProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server profile not found"
         )
-    
+
     try:
-        db.delete(profile)
-        db.commit()
-        logger.info(f"Server profile {profile_id} deleted by user {current_user.id}")
+        server_profile_service.delete_profile(db, profile, current_user.id)
     except Exception as e:
-        logger.error(f"Error deleting profile: {str(e)}")
-        db.rollback()
+        logger.error("Error deleting profile: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete profile"
@@ -257,21 +197,17 @@ async def check_ssh_connection(
     current_user: User = Depends(deps.get_current_user),
 ) -> SSHConnectionTest:
     """Test SSH connectivity to server."""
-    profile = db.query(ServerProfile).filter(
-        ServerProfile.id == profile_id,
-        ServerProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server profile not found"
         )
-    
+
     try:
         # Decrypt SSH key
         private_key = VPNEncryption.decrypt_ssh_private_key(cast(str, profile.ssh_key_encrypted))
-        
+
         # Test connection
         success, error = SSHService.test_connection(
             cast(str, profile.ssh_host),
@@ -279,16 +215,16 @@ async def check_ssh_connection(
             cast(str, profile.ssh_username),
             private_key,
         )
-        
+
         return SSHConnectionTest(
             ssh_reachable=success,
             local_network=success,  # TODO: Implement network detection
             needs_vpn=profile.vpn_profile_id is not None,
             error_message=error,
         )
-        
+
     except Exception as e:
-        logger.error(f"Error testing SSH connection: {str(e)}")
+        logger.error("Error testing SSH connection: %s", e)
         return SSHConnectionTest(
             ssh_reachable=False,
             local_network=False,
@@ -307,59 +243,51 @@ async def start_remote_server(
     current_user: User = Depends(deps.get_current_user),
 ) -> ServerStartResponse:
     """Start remote BaluHost server."""
-    profile = db.query(ServerProfile).filter(
-        ServerProfile.id == profile_id,
-        ServerProfile.user_id == current_user.id,
-    ).first()
-    
+    profile = server_profile_service.get_user_profile(db, profile_id, current_user.id)
     if not profile:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Server profile not found"
         )
-    
+
     if not profile.power_on_command:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No power on command configured for this profile"
         )
-    
+
     try:
         # Decrypt SSH key
-        private_key = VPNEncryption.decrypt_ssh_private_key(cast(str,profile.ssh_key_encrypted))
-        
+        private_key = VPNEncryption.decrypt_ssh_private_key(cast(str, profile.ssh_key_encrypted))
+
         # Start server
         success, message = SSHService.start_server(
-            cast(str,profile.ssh_host),
+            cast(str, profile.ssh_host),
             cast(int, profile.ssh_port),
-            cast(str,profile.ssh_username),
+            cast(str, profile.ssh_username),
             private_key,
             profile.power_on_command,
         )
-        
+
         if success:
-            # Update last_used
-            from datetime import datetime, timezone
-            profile.last_used = datetime.now(timezone.utc)
-            db.commit()
-            
-            logger.info(f"Server {profile_id} started by user {current_user.id}")
+            server_profile_service.mark_last_used(db, profile)
+            logger.info("Server %d started by user %d", profile_id, current_user.id)
             return ServerStartResponse(
                 profile_id=profile_id,
                 status="starting",
                 message=message,
             )
         else:
-            logger.warning(f"Failed to start server {profile_id}: {message}")
+            logger.warning("Failed to start server %d: %s", profile_id, message)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=message,
             )
-            
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error starting server: {str(e)}")
+        logger.error("Error starting server: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to start server"

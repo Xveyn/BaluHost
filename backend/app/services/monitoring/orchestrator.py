@@ -329,6 +329,57 @@ class MonitoringOrchestrator:
                 pass
         return {}
 
+    def get_cpu_current_with_db_fallback(self, db: Session) -> Optional[CpuSampleSchema]:
+        """Get current CPU sample (in-memory → SHM → DB fallback)."""
+        sample = self.get_cpu_current()
+        if sample is not None:
+            return sample
+        from app.models.monitoring import CpuSample
+        db_record = db.query(CpuSample).order_by(CpuSample.timestamp.desc()).first()
+        if db_record:
+            return self.cpu_collector.db_to_sample(db_record)
+        return None
+
+    def get_memory_current_with_db_fallback(self, db: Session) -> Optional[MemorySampleSchema]:
+        """Get current memory sample (in-memory → SHM → DB fallback)."""
+        sample = self.get_memory_current()
+        if sample is not None:
+            return sample
+        from app.models.monitoring import MemorySample
+        db_record = db.query(MemorySample).order_by(MemorySample.timestamp.desc()).first()
+        if db_record:
+            return self.memory_collector.db_to_sample(db_record)
+        return None
+
+    def get_network_current_with_db_fallback(self, db: Session) -> Optional[NetworkSampleSchema]:
+        """Get current network sample (in-memory → SHM → DB fallback)."""
+        sample = self.get_network_current()
+        if sample is not None:
+            return sample
+        from app.models.monitoring import NetworkSample
+        db_record = db.query(NetworkSample).order_by(NetworkSample.timestamp.desc()).first()
+        if db_record:
+            return self.network_collector.db_to_sample(db_record)
+        return None
+
+    def get_disk_io_current_with_db_fallback(self, db: Session) -> Dict:
+        """Get current disk I/O samples (in-memory → SHM → DB fallback)."""
+        disks = self.get_disk_io_current()
+        if disks:
+            return disks
+        from sqlalchemy import func
+        from app.models.monitoring import DiskIoSample
+        latest_ts = db.query(func.max(DiskIoSample.timestamp)).scalar()
+        if latest_ts:
+            records = db.query(DiskIoSample).filter(
+                DiskIoSample.timestamp == latest_ts
+            ).all()
+            return {
+                r.disk_name: self.disk_io_collector.db_to_sample(r)
+                for r in records
+            }
+        return {}
+
     def get_process_current(self):
         """Get current process status."""
         return self.process_tracker.get_current_status()

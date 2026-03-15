@@ -2,6 +2,7 @@
  * Hook for getting plugin status summary (admin only)
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import { listPlugins, type PluginInfo } from '../api/plugins';
 
 export interface PluginsSummary {
@@ -38,16 +39,15 @@ export function usePluginsSummary(options: UsePluginsSummaryOptions = {}): UsePl
       setError(null);
     } catch (err: unknown) {
       // Don't show error if user is not admin (403)
-      const resp = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { status?: number; data?: { detail?: string } } }).response
+      const status = err != null && typeof err === 'object' && 'response' in err
+        ? (err as { response?: { status?: number } }).response?.status
         : undefined;
-      if (resp?.status === 403) {
+      if (status === 403) {
         setPlugins([]);
         setError(null);
         return;
       }
-      const message = resp?.data?.detail || (err instanceof Error ? err.message : 'Failed to load plugins');
-      setError(message);
+      setError(getApiErrorMessage(err, 'Failed to load plugins'));
     }
   }, []);
 

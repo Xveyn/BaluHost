@@ -166,6 +166,7 @@ class WebdavWorker:
 
     def _run_server(self) -> None:
         """Run the cheroot server (blocks until stopped)."""
+        assert self._server is not None
         try:
             self._server.start()
         except Exception as e:

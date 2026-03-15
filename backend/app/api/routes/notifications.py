@@ -20,7 +20,7 @@ from app.schemas.notification import (
     NotificationPreferencesResponse,
     NotificationCategoryEnum,
 )
-from app.services.notification_service import get_notification_service
+from app.services.notifications import get_notification_service
 from app.services import auth as auth_service
 from app.services.permissions import is_privileged
 

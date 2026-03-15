@@ -304,7 +304,7 @@ def init_websocket_manager() -> WebSocketManager:
     manager = get_websocket_manager()
 
     # Connect to notification service
-    from app.services.notification_service import get_notification_service
+    from app.services.notifications import get_notification_service
     notification_service = get_notification_service()
     notification_service.set_websocket_manager(manager)
 

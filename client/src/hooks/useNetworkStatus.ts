@@ -2,6 +2,7 @@
  * Hook for getting current network I/O status
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import { getNetworkCurrent, type CurrentNetworkResponse, type InterfaceType } from '../api/monitoring';
 import { formatNumber } from '../lib/formatters';
 
@@ -37,10 +38,7 @@ export function useNetworkStatus(options: UseNetworkStatusOptions = {}): UseNetw
       setData(response);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load network status'));
+      setError(getApiErrorMessage(err, 'Failed to load network status'));
     }
   }, []);
 

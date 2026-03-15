@@ -21,6 +21,7 @@ import {
   ArrowRightLeft,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { getApiErrorMessage, handleApiError } from '../../lib/errorHandling';
 import { useTranslation } from 'react-i18next';
 import { formatBytes } from '../../lib/formatters';
 import { ByteSizeInput } from '../ui/ByteSizeInput';
@@ -130,10 +131,7 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
       setHealth(healthData);
       resetConfigForm(configData);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || 'Failed to load SSD cache data');
+      setError(getApiErrorMessage(err, 'Failed to load SSD cache data'));
     } finally {
       setLoading(false);
     }
@@ -178,10 +176,7 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
       const newStats = await getCacheStats(selectedArray);
       setStats(newStats);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Failed to save configuration');
+      handleApiError(err, 'Failed to save configuration');
     } finally {
       setActionLoading(false);
     }
@@ -197,10 +192,7 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
       const newStats = await getCacheStats(selectedArray);
       setStats(newStats);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Failed to evict entry');
+      handleApiError(err, 'Failed to evict entry');
     } finally {
       setActionLoading(false);
     }
@@ -215,10 +207,7 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
       loadData();
       loadEntries();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Eviction failed');
+      handleApiError(err, 'Eviction failed');
     } finally {
       setActionLoading(false);
     }
@@ -244,10 +233,7 @@ export default function SsdFileCacheTab({ initialArray }: SsdFileCacheTabProps) 
       setPage(0);
       loadEntries();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || 'Failed to clear cache');
+      handleApiError(err, 'Failed to clear cache');
     } finally {
       setActionLoading(false);
     }

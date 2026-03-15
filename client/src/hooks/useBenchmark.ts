@@ -2,6 +2,7 @@
  * React hooks for disk benchmarking
  */
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import {
   getAvailableDisks,
   getBenchmarkProfiles,
@@ -98,10 +99,7 @@ export function useBenchmarkDisks(): UseBenchmarkDisksReturn {
       setDisks(response.disks);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load disks'));
+      setError(getApiErrorMessage(err, 'Failed to load disks'));
     } finally {
       setLoading(false);
     }
@@ -129,10 +127,7 @@ export function useBenchmarkProfiles(): UseBenchmarkProfilesReturn {
       setProfiles(response.profiles);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load profiles'));
+      setError(getApiErrorMessage(err, 'Failed to load profiles'));
     } finally {
       setLoading(false);
     }
@@ -162,10 +157,7 @@ export function useBenchmark(benchmarkId: number | null): UseBenchmarkReturn {
       setBenchmark(response);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load benchmark'));
+      setError(getApiErrorMessage(err, 'Failed to load benchmark'));
     } finally {
       setLoading(false);
     }
@@ -214,10 +206,7 @@ export function useBenchmarkProgress(
         }
       }
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load progress'));
+      setError(getApiErrorMessage(err, 'Failed to load progress'));
     }
   }, [benchmarkId, autoStopOnComplete]);
 
@@ -284,10 +273,7 @@ export function useBenchmarkHistory(
       setTotalPages(response.total_pages);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load history'));
+      setError(getApiErrorMessage(err, 'Failed to load history'));
     } finally {
       setLoading(false);
     }
@@ -325,10 +311,7 @@ export function useStartBenchmark(): UseStartBenchmarkReturn {
       setBenchmark(response);
       return response;
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to start benchmark'));
+      setError(getApiErrorMessage(err, 'Failed to start benchmark'));
       throw err;
     } finally {
       setLoading(false);
@@ -351,10 +334,7 @@ export function useCancelBenchmark(): UseCancelBenchmarkReturn {
       setError(null);
       await cancelBenchmark(benchmarkId);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to cancel benchmark'));
+      setError(getApiErrorMessage(err, 'Failed to cancel benchmark'));
       throw err;
     } finally {
       setLoading(false);
@@ -377,10 +357,7 @@ export function useMarkBenchmarkFailed(): UseMarkBenchmarkFailedReturn {
       setError(null);
       await markBenchmarkFailed(benchmarkId);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to mark benchmark as failed'));
+      setError(getApiErrorMessage(err, 'Failed to mark benchmark as failed'));
       throw err;
     } finally {
       setLoading(false);

@@ -20,7 +20,7 @@ import {
   type CommitHistoryResponse,
   type CommitDiffResponse,
 } from '../../api/updates';
-import { extractErrorMessage } from '../../lib/api';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 
 const TYPE_COLORS: Record<string, string> = {
   feat: 'bg-emerald-500/20 text-emerald-400',
@@ -73,10 +73,7 @@ export default function VersionsTab() {
         setExpandedGroups(new Set([result.groups[0].version]));
       }
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, 'Failed to load commit history'));
+      toast.error(getApiErrorMessage(err, 'Failed to load commit history'));
     } finally {
       setLoading(false);
     }
@@ -112,10 +109,7 @@ export default function VersionsTab() {
       const diff = await getCommitDiff(hash);
       setDiffCache((prev) => ({ ...prev, [hash]: diff }));
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, 'Failed to load diff'));
+      toast.error(getApiErrorMessage(err, 'Failed to load diff'));
       setSelectedCommit(null);
     } finally {
       setDiffLoading(null);

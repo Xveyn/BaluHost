@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { useTranslation } from 'react-i18next';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import { formatBytes } from '../../lib/formatters';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import { getStorageInfo } from '../../api/vcl';
@@ -150,10 +151,7 @@ export default function MigrationPanel() {
         : t('ssdCache.migration.migrationStarted', 'Migration started')
       );
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || t('ssdCache.migration.startFailed', 'Failed to start migration'));
+      toast.error(getApiErrorMessage(err, t('ssdCache.migration.startFailed', 'Failed to start migration')));
     } finally {
       setActionLoading(false);
     }
@@ -168,10 +166,7 @@ export default function MigrationPanel() {
       startPolling(job.id);
       toast.success(t('ssdCache.migration.verifyStarted', 'Verification started'));
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || t('ssdCache.migration.verifyFailed', 'Failed to start verification'));
+      toast.error(getApiErrorMessage(err, t('ssdCache.migration.verifyFailed', 'Failed to start verification')));
     } finally {
       setActionLoading(false);
     }
@@ -201,10 +196,7 @@ export default function MigrationPanel() {
         : t('ssdCache.migration.cleanupStarted', 'Cleanup started')
       );
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      toast.error(detail || t('ssdCache.migration.cleanupFailed', 'Failed to start cleanup'));
+      toast.error(getApiErrorMessage(err, t('ssdCache.migration.cleanupFailed', 'Failed to start cleanup')));
     } finally {
       setActionLoading(false);
     }

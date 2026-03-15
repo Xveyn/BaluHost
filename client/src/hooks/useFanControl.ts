@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import { getFanStatus, getPermissionStatus } from '../api/fan-control';
 import type { FanStatusResponse, PermissionStatusResponse } from '../api/fan-control';
 
@@ -50,10 +51,7 @@ export function useFanControl(options: UseFanControlOptions = {}): UseFanControl
       setPermissionStatus(permData);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load fan control'));
+      setError(getApiErrorMessage(err, 'Failed to load fan control'));
     }
   }, []);
 

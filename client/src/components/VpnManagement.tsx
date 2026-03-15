@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { Upload, Wifi, Trash2, Check, AlertCircle, Download } from 'lucide-react';
 import { Trans, useTranslation } from 'react-i18next';
 import { apiClient } from '../lib/api';
+import { getApiErrorMessage } from '../lib/errorHandling';
 
 interface FritzBoxConfig {
   id: number;
@@ -87,10 +88,7 @@ export default function VpnManagement() {
       // Reload config
       await loadConfig();
     } catch (err: unknown) {
-      const msg = err != null && typeof err === 'object' && 'response' in err
-        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-        : (err instanceof Error ? err.message : undefined);
-      setError(msg || t('vpn.uploadFailed'));
+      setError(getApiErrorMessage(err, t('vpn.uploadFailed')));
     } finally {
       setUploading(false);
     }
@@ -105,10 +103,7 @@ export default function VpnManagement() {
       setConfig(null);
       setQrData(null);
     } catch (err: unknown) {
-      const msg = err != null && typeof err === 'object' && 'response' in err
-        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-        : (err instanceof Error ? err.message : undefined);
-      setError(msg || t('vpn.deleteFailed'));
+      setError(getApiErrorMessage(err, t('vpn.deleteFailed')));
     }
   };
 

@@ -4,11 +4,14 @@ Implements debouncing and batching to prevent excessive version creation
 from rapid file changes (e.g., auto-save, save-on-type).
 """
 import asyncio
+import logging
 import time
 from typing import Dict, Optional, TYPE_CHECKING
 from dataclasses import dataclass
 from datetime import datetime
 from sqlalchemy.orm import Session
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from app.services.versioning.vcl import VCLService
@@ -212,12 +215,12 @@ class VCLCache:
             )
             db.commit()
             
-            print(f"✅ VCL: Flushed cached version for file {file_id} "
-                  f"(cached for {cache_duration}s)")
+            logger.info("VCL: Flushed cached version for file %d (cached for %ds)",
+                        file_id, cache_duration)
         
         except Exception as e:
             db.rollback()
-            print(f"❌ VCL Cache: Failed to flush version for file {file_id}: {e}")
+            logger.error("VCL Cache: Failed to flush version for file %d: %s", file_id, e)
             raise
     
     @classmethod
@@ -252,9 +255,9 @@ class VCLCache:
                 try:
                     await cls._flush_version_internal(db, file_id)
                 except Exception as e:
-                    print(f"⚠️ VCL Cache: Error flushing file {file_id}: {e}")
-            
-            print(f"✅ VCL Cache: Flushed {len(file_ids)} pending versions")
+                    logger.warning("VCL Cache: Error flushing file %d: %s", file_id, e)
+
+            logger.info("VCL Cache: Flushed %d pending versions", len(file_ids))
     
     @classmethod
     async def flush_user_versions(cls, db: Session, user_id: int):
@@ -278,11 +281,11 @@ class VCLCache:
                 try:
                     await cls._flush_version_internal(db, file_id)
                 except Exception as e:
-                    print(f"⚠️ VCL Cache: Error flushing file {file_id}: {e}")
-            
+                    logger.warning("VCL Cache: Error flushing file %d: %s", file_id, e)
+
             if file_ids_to_flush:
-                print(f"✅ VCL Cache: Flushed {len(file_ids_to_flush)} "
-                      f"pending versions for user {user_id}")
+                logger.info("VCL Cache: Flushed %d pending versions for user %d",
+                            len(file_ids_to_flush), user_id)
     
     @classmethod
     def get_pending_count(cls) -> int:
@@ -349,7 +352,7 @@ class VCLCache:
             cls._pending_changes.clear()
             cls._flush_tasks.clear()
             
-            print("⚠️ VCL Cache: Cleared all pending versions (data lost)")
+            logger.warning("VCL Cache: Cleared all pending versions (data lost)")
 
 
 # ========== Synchronous Wrapper for Non-Async Contexts ==========

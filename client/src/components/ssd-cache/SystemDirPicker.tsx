@@ -15,6 +15,7 @@ import {
   HardDrive,
 } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import { browseDirectory } from '../../api/migration';
 import type { DirectoryEntry } from '../../api/migration';
 
@@ -47,11 +48,7 @@ export default function SystemDirPicker({
       setCurrentPath(path);
       setSelectedPath(path);
     } catch (err: unknown) {
-      const detail =
-        err != null && typeof err === 'object' && 'response' in err
-          ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-          : undefined;
-      setError(detail || 'Failed to load directories');
+      setError(getApiErrorMessage(err, 'Failed to load directories'));
     } finally {
       setLoading(false);
     }

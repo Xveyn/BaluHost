@@ -17,7 +17,7 @@ from app.schemas.system import (
     NetworkTelemetrySample,
     TelemetryHistoryResponse,
 )
-from app.services.sensors import get_cpu_sensor_data
+from app.services.hardware.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 

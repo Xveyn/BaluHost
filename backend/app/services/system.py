@@ -22,7 +22,7 @@ from app.schemas.system import (
 )
 from app.services import files as file_service
 from app.services import telemetry as telemetry_service
-from app.services.sensors import get_cpu_sensor_data
+from app.services.hardware.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 
@@ -317,8 +317,8 @@ def get_aggregated_storage_info() -> StorageInfo:
     Diese Funktion verwendet IMMER die echten Festplatten-Daten aus SMART,
     auch im Dev-Mode, um die tatsächliche Hardware-Kapazität anzuzeigen.
     """
-    from app.services import smart as smart_service
-    from app.services import raid as raid_service
+    from app.services.hardware import smart as smart_service
+    from app.services.hardware import raid as raid_service
     
     try:
         # Hole SMART-Daten für alle Festplatten (auch im Dev-Mode)

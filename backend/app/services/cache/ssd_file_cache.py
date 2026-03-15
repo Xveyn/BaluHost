@@ -366,6 +366,70 @@ class SSDFileCacheService:
             .values(total_misses=SSDCacheConfig.total_misses + 1)
         )
 
+    def count_entries(self) -> tuple[int, int]:
+        """Return (total_entries, valid_entries) for this array."""
+        from sqlalchemy import func as sqla_func
+        total = (
+            self.db.query(sqla_func.count(SSDCacheEntry.id))
+            .filter(SSDCacheEntry.array_name == self.array_name)
+            .scalar() or 0
+        )
+        valid = (
+            self.db.query(sqla_func.count(SSDCacheEntry.id))
+            .filter(
+                SSDCacheEntry.array_name == self.array_name,
+                SSDCacheEntry.is_valid.is_(True),
+            )
+            .scalar() or 0
+        )
+        return total, valid
+
+    def list_entries(
+        self, *, limit: int = 50, offset: int = 0, valid_only: bool = False
+    ) -> tuple[list[SSDCacheEntry], int]:
+        """List cache entries for this array. Returns (entries, total_count)."""
+        query = self.db.query(SSDCacheEntry).filter(
+            SSDCacheEntry.array_name == self.array_name
+        )
+        if valid_only:
+            query = query.filter(SSDCacheEntry.is_valid.is_(True))
+        total = query.count()
+        entries = (
+            query.order_by(SSDCacheEntry.last_accessed.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        return entries, total
+
+    def get_entry(self, entry_id: int) -> SSDCacheEntry | None:
+        """Get a specific cache entry by ID for this array."""
+        return (
+            self.db.query(SSDCacheEntry)
+            .filter(
+                SSDCacheEntry.id == entry_id,
+                SSDCacheEntry.array_name == self.array_name,
+            )
+            .first()
+        )
+
+    def get_all_entries(self) -> list[SSDCacheEntry]:
+        """Get all cache entries for this array."""
+        return (
+            self.db.query(SSDCacheEntry)
+            .filter(SSDCacheEntry.array_name == self.array_name)
+            .all()
+        )
+
+    def update_config(self, update_values: dict) -> None:
+        """Apply key-value updates to this array's config."""
+        self.db.execute(
+            sql_update(SSDCacheConfig)
+            .where(SSDCacheConfig.array_name == self.array_name)
+            .values(**update_values)
+        )
+        self.db.commit()
+
     def clear_in_memory_cache(self) -> None:
         """Clear the in-memory TTL cache (for testing)."""
         _path_cache.clear()

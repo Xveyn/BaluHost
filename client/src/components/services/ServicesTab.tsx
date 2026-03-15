@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import ServiceCard from './ServiceCard';
 import DependencyList from './DependencyList';
 import AppMetrics from './AppMetrics';
-import { extractErrorMessage } from '../../lib/api';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import {
   getDebugSnapshot,
   restartService,
@@ -39,10 +39,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       setSnapshot(data);
       setLastRefresh(new Date());
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-        : (err instanceof Error ? err.message : undefined);
-      setError(detail || 'Failed to load service status');
+      setError(getApiErrorMessage(err, 'Failed to load service status'));
     } finally {
       setIsLoading(false);
     }
@@ -72,10 +69,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       // Refresh data after restart
       await fetchData();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, t('system:services.toast.restartFailed', { name: serviceName })));
+      toast.error(getApiErrorMessage(err, t('system:services.toast.restartFailed', { name: serviceName })));
     }
   };
 
@@ -90,10 +84,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       // Refresh data after stop
       await fetchData();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, t('system:services.toast.stopFailed', { name: serviceName })));
+      toast.error(getApiErrorMessage(err, t('system:services.toast.stopFailed', { name: serviceName })));
     }
   };
 
@@ -108,10 +99,7 @@ export default function ServicesTab({ isAdmin }: ServicesTabProps) {
       // Refresh data after start
       await fetchData();
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: unknown } } }).response?.data?.detail
-        : undefined;
-      toast.error(extractErrorMessage(detail, t('system:services.toast.startFailed', { name: serviceName })));
+      toast.error(getApiErrorMessage(err, t('system:services.toast.startFailed', { name: serviceName })));
     }
   };
 

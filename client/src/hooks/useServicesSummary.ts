@@ -2,6 +2,7 @@
  * Hook for getting service status summary (all authenticated users)
  */
 import { useState, useEffect, useCallback, useMemo } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import { getDebugSnapshot, type ServiceStatus, ServiceState } from '../api/service-status';
 
 export interface ServicesSummary {
@@ -38,10 +39,7 @@ export function useServicesSummary(options: UseServicesSummaryOptions = {}): Use
       setServices(response.services);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load services'));
+      setError(getApiErrorMessage(err, 'Failed to load services'));
     }
   }, []);
 

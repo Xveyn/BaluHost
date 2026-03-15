@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import {
   getSchedulers,
   getSchedulerHistory,
@@ -58,10 +59,7 @@ export function useSchedulers(options: UseSchedulersOptions = {}): UseSchedulers
       setData(response);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load schedulers'));
+      setError(getApiErrorMessage(err, 'Failed to load schedulers'));
     }
   }, []);
 
@@ -193,10 +191,7 @@ export function useSchedulerHistory(options: UseSchedulerHistoryOptions = {}): U
       setHistory(response);
       setError(null);
     } catch (err: unknown) {
-      const detail = err != null && typeof err === 'object' && 'response' in err
-        ? (err as { response?: { data?: { detail?: string } } }).response?.data?.detail
-        : undefined;
-      setError(detail || (err instanceof Error ? err.message : 'Failed to load history'));
+      setError(getApiErrorMessage(err, 'Failed to load history'));
     }
   }, [schedulerName, page, pageSize, statusFilter]);
 

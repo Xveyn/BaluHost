@@ -12,7 +12,7 @@ from app.models.notification import (
     NotificationCategory,
 )
 from app.models.user import User
-from app.services.notification_service import NotificationService, get_notification_service
+from app.services.notifications import NotificationService, get_notification_service
 
 
 @pytest.fixture

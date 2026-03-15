@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.15.5] - 2026-03-15
+
+### Refactoring, Performance & Code Quality
+
+Großflächiges Refactoring: DB-Calls aus Routes in Service-Layer extrahiert,
+SQLAlchemy 2.0 Mapped-Style Migration und Frontend Error-Handling vereinheitlicht.
+
+### Changed
+
+- **Routes → Services** — DB-Calls aus 10+ Route-Modulen (user, device, mobile, samba, monitoring, sync, shares, cache, pihole, firebase) in Service-Layer extrahiert
+- **SQLAlchemy models** — Mobile und rate_limit_config auf SQLAlchemy 2.0 Mapped-Style migriert
+- **Frontend error handling** — Shared `getApiErrorMessage` in 18 Components eingesetzt
+- **Logging** — print-Statements durch Logger ersetzt, Validator dedupliziert, Cache gebunden
+
+### Fixed
+
+- **Import paths** — Import-Pfade und kleinere Issues über mehrere Services korrigiert
+- **Notifications** — FCM High Priority und Sound für zuverlässige Push-Delivery
+- **Update version label** — Version-Label auf stable vs dev build vereinfacht
+
+### Performance
+
+- **Sync heartbeat** — DB-Writes in Thread-Pool ausgelagert
+
+### Tests
+
+- **Firebase push delivery** — 30 neue Tests für Push-Notification-Delivery
+
+---
+
 ## [1.15.4] - 2026-03-14
 
 ### Settings Redesign, API Center & Notification Cleanup

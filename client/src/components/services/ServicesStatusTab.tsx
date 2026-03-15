@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { getApiErrorMessage } from '../../lib/errorHandling';
 import { RefreshCw, Server, AlertTriangle, CheckCircle, StopCircle, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
@@ -34,10 +35,7 @@ export default function ServicesStatusTab({ isAdmin = false }: ServicesStatusTab
       setSnapshot(data);
       setLastRefresh(new Date());
     } catch (err: unknown) {
-      const msg = err != null && typeof err === 'object' && 'response' in err
-        ? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-        : (err instanceof Error ? err.message : undefined);
-      setError(msg || 'Failed to load service status');
+      setError(getApiErrorMessage(err, 'Failed to load service status'));
     } finally {
       setIsLoading(false);
     }

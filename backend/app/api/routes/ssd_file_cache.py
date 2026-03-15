@@ -5,7 +5,6 @@ from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.api import deps
 from app.core.database import get_db
@@ -20,7 +19,6 @@ from app.schemas.ssd_file_cache import (
     EvictionResult,
     CacheHealthResponse,
 )
-from app.models.ssd_file_cache import SSDCacheEntry, SSDCacheConfig
 from app.services.cache.ssd_file_cache import SSDFileCacheService
 from app.services.cache.eviction import EvictionManager
 from app.services.audit.logger_db import get_audit_logger_db
@@ -50,22 +48,9 @@ def _resolve_disk_usage(cache_path: str) -> tuple:
         return False, 0, 0, 0
 
 
-def _build_stats(config: SSDCacheConfig, db: Session) -> SSDCacheStats:
+def _build_stats(config, service: SSDFileCacheService) -> SSDCacheStats:
     """Build SSDCacheStats from a config row."""
-    array_name = str(config.array_name)
-    total_entries = (
-        db.query(func.count(SSDCacheEntry.id))
-        .filter(SSDCacheEntry.array_name == array_name)
-        .scalar() or 0
-    )
-    valid_entries = (
-        db.query(func.count(SSDCacheEntry.id))
-        .filter(
-            SSDCacheEntry.array_name == array_name,
-            SSDCacheEntry.is_valid.is_(True),
-        )
-        .scalar() or 0
-    )
+    total_entries, valid_entries = service.count_entries()
 
     current = int(config.current_size_bytes)
     max_size = int(config.max_size_bytes)
@@ -80,7 +65,7 @@ def _build_stats(config: SSDCacheConfig, db: Session) -> SSDCacheStats:
     _is_mounted, ssd_total, ssd_available, _used_pct = _resolve_disk_usage(cache_path)
 
     return SSDCacheStats(
-        array_name=array_name,
+        array_name=str(config.array_name),
         is_enabled=bool(config.is_enabled),
         cache_path=cache_path,
         max_size_bytes=max_size,
@@ -97,7 +82,7 @@ def _build_stats(config: SSDCacheConfig, db: Session) -> SSDCacheStats:
     )
 
 
-def _config_to_response(config: SSDCacheConfig) -> SSDCacheConfigResponse:
+def _config_to_response(config) -> SSDCacheConfigResponse:
     """Convert ORM config to response schema."""
     return SSDCacheConfigResponse(
         array_name=str(config.array_name),
@@ -130,7 +115,11 @@ async def get_cache_overview(
 ) -> List[SSDCacheStats]:
     """Get SSD cache stats for all configured arrays."""
     configs = SSDFileCacheService.get_all_configs(db)
-    return [_build_stats(cfg, db) for cfg in configs]
+    results = []
+    for cfg in configs:
+        svc = SSDFileCacheService(db, str(cfg.array_name))
+        results.append(_build_stats(cfg, svc))
+    return results
 
 
 # ============================================================================
@@ -149,7 +138,7 @@ async def get_cache_stats(
     """Get SSD cache statistics for a specific array."""
     service = SSDFileCacheService(db, array_name)
     config = service.get_config()
-    return _build_stats(config, db)
+    return _build_stats(config, service)
 
 
 @router.get("/cache/{array_name}/config", response_model=SSDCacheConfigResponse)
@@ -178,8 +167,6 @@ async def update_cache_config(
     db: Session = Depends(get_db),
 ) -> SSDCacheConfigResponse:
     """Update SSD cache configuration for an array (Admin only)."""
-    from sqlalchemy import update as sql_update
-
     update_values = config_update.model_dump(exclude_unset=True)
     if not update_values:
         raise HTTPException(
@@ -201,12 +188,7 @@ async def update_cache_config(
                 detail=f"Cache path not writable: {e}",
             )
 
-    db.execute(
-        sql_update(SSDCacheConfig)
-        .where(SSDCacheConfig.array_name == array_name)
-        .values(**update_values)
-    )
-    db.commit()
+    service.update_config(update_values)
 
     audit = get_audit_logger_db()
     audit.log_system_config_change(
@@ -235,17 +217,8 @@ async def list_cache_entries(
     db: Session = Depends(get_db),
 ) -> SSDCacheEntriesResponse:
     """List cached file entries for an array (Admin only)."""
-    query = db.query(SSDCacheEntry).filter(SSDCacheEntry.array_name == array_name)
-    if valid_only:
-        query = query.filter(SSDCacheEntry.is_valid.is_(True))
-
-    total = query.count()
-    entries = (
-        query.order_by(SSDCacheEntry.last_accessed.desc())
-        .offset(offset)
-        .limit(limit)
-        .all()
-    )
+    service = SSDFileCacheService(db, array_name)
+    entries, total = service.list_entries(limit=limit, offset=offset, valid_only=valid_only)
 
     return SSDCacheEntriesResponse(
         entries=[
@@ -276,18 +249,11 @@ async def evict_cache_entry(
     db: Session = Depends(get_db),
 ) -> dict:
     """Manually evict a specific cache entry (Admin only)."""
-    entry = (
-        db.query(SSDCacheEntry)
-        .filter(
-            SSDCacheEntry.id == entry_id,
-            SSDCacheEntry.array_name == array_name,
-        )
-        .first()
-    )
+    service = SSDFileCacheService(db, array_name)
+    entry = service.get_entry(entry_id)
     if not entry:
         raise HTTPException(status_code=404, detail="Cache entry not found")
 
-    service = SSDFileCacheService(db, array_name)
     freed = service.delete_cache_file(entry)
     db.commit()
 
@@ -331,11 +297,7 @@ async def clear_cache(
 ) -> dict:
     """Clear entire SSD cache for an array (Admin only)."""
     service = SSDFileCacheService(db, array_name)
-    entries = (
-        db.query(SSDCacheEntry)
-        .filter(SSDCacheEntry.array_name == array_name)
-        .all()
-    )
+    entries = service.get_all_entries()
 
     freed = 0
     count = 0

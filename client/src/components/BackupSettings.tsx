@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 	import { listBackups, createBackup, deleteBackup, restoreBackup, downloadBackup } from '../api/backup';
 	import type { Backup, BackupListResponse, CreateBackupRequest, RestoreBackupRequest } from '../api/backup';
 import { apiCache } from '../lib/api';
+import { getApiErrorMessage } from '../lib/errorHandling';
 import { formatBytes } from '../lib/formatters';
 
 export default function BackupSettings() {
@@ -40,10 +41,7 @@ export default function BackupSettings() {
 			const totalBytes = response.backups.reduce((acc, b) => acc + b.size_bytes, 0);
 			setTotalSizeBytes(totalBytes);
 		} catch (err: unknown) {
-			const msg = err != null && typeof err === 'object' && 'response' in err
-				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-				: (err instanceof Error ? err.message : undefined);
-			setError(msg || t('backup.loadFailed'));
+			setError(getApiErrorMessage(err, t('backup.loadFailed')));
 			setBackups([]);
 		} finally {
 			setLoading(false);
@@ -67,10 +65,7 @@ export default function BackupSettings() {
 			apiCache.clear();
 			await loadBackups();
 		} catch (err: unknown) {
-			const msg = err != null && typeof err === 'object' && 'response' in err
-				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-				: (err instanceof Error ? err.message : undefined);
-			setError(msg || t('backup.createFailed'));
+			setError(getApiErrorMessage(err, t('backup.createFailed')));
 		} finally {
 			setCreating(false);
 		}
@@ -89,10 +84,7 @@ export default function BackupSettings() {
 			setDeleteDialogOpen(false);
 			setBackupToDelete(null);
 		} catch (err: unknown) {
-			const msg = err != null && typeof err === 'object' && 'response' in err
-				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-				: (err instanceof Error ? err.message : undefined);
-			setError(msg || t('backup.deleteFailed'));
+			setError(getApiErrorMessage(err, t('backup.deleteFailed')));
 		} finally {
 			setDeleting(false);
 		}
@@ -121,10 +113,7 @@ export default function BackupSettings() {
 				}
 			}, 2000);
 		} catch (err: unknown) {
-			const msg = err != null && typeof err === 'object' && 'response' in err
-				? ((err as { response?: { data?: { detail?: string } } }).response?.data?.detail)
-				: (err instanceof Error ? err.message : undefined);
-			setError(msg || t('backup.restoreFailed'));
+			setError(getApiErrorMessage(err, t('backup.restoreFailed')));
 		} finally {
 			setRestoring(false);
 		}
