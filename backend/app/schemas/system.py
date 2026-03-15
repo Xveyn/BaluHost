@@ -68,6 +68,7 @@ class StorageDeviceEntry(BaseModel):
 class StorageBreakdownResponse(BaseModel):
     entries: list[StorageDeviceEntry]
     total_capacity: int
+    total_raw_capacity: int  # Sum of all physical disk capacities (before RAID redundancy)
     total_used: int
     total_available: int
     total_use_percent: float

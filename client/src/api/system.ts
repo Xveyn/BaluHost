@@ -82,6 +82,7 @@ export interface StorageDeviceEntry {
 export interface StorageBreakdownResponse {
   entries: StorageDeviceEntry[];
   total_capacity: number;
+  total_raw_capacity: number;
   total_used: number;
   total_available: number;
   total_use_percent: number;
