@@ -183,7 +183,7 @@ def test_list_files_permission_denied():
         list_files("/demo", owner_id=999)
 ```
 
-**Frontend (Vitest - TODO):**
+**Frontend (Vitest):**
 ```bash
 cd client
 npm run test

@@ -584,8 +584,8 @@ pytest tests/test_files_api_integration.py::test_create_folder_creates_metadata 
 ```
 
 ### Test Coverage
-- 25+ Unit Tests
-- 8 Integration Tests
+- 82 test files, 1465 test functions
+- Unit, integration, and security tests
 - Database-backed Fixtures
 - Automatic Rollback für Test Isolation
 

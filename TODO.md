@@ -7,7 +7,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 - ✅ PostgreSQL 17.7 Datenbank
 - ✅ Nginx Reverse Proxy (Port 80, HTTP)
 - ✅ Systemd Services (4 Uvicorn Workers)
-- ✅ 81 Test Files, 1438 Test Functions
+- ✅ 82 Test Files, 1465 Test Functions
 - ✅ Prometheus/Grafana Ready Monitoring
 - ✅ Structured JSON Logging
 
@@ -78,7 +78,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🟢 Low | Backend | Datei-Versionierung mit Diff-Ansicht | ⏳ Pending | Advanced Versioning |
 | 🔴 High | Backend | Containerization (Docker / Docker Compose) | ✅ Done | Systemd deployment active, Docker configs available |
 | 🟢 Low | Backend | Kubernetes Deployment-Manifest | ⏳ Pending | Orchestration |
-| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | 🟡 Mostly Complete | 3 workflows active: raid-tests.yml, playwright-e2e.yml, raid-mdadm-selfhosted.yml |
+| 🟢 Low | Backend | CI/CD Pipeline (GitHub Actions) | ✅ Done | 7 workflows active |
 | 🟢 Low | Backend | API-Versionierung (v1, v2) | ⏳ Pending | API Evolution |
 | 🟢 Low | Backend | GraphQL-Alternative zu REST | ⏳ Pending | API Alternative |
 | 🟢 Low | Backend | Webhooks für externe Integrationen | ⏳ Pending | Integration |
@@ -105,7 +105,7 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 📝 Docs | Documentation | Code-Kommentare standardisieren | ⏳ Pending | Docstrings, JSDoc |
 | 📝 Docs | Documentation | Changelog.md für Versionshistorie | ✅ Done | CHANGELOG.md complete through v1.4.x |
 | 📝 Docs | Documentation | Badges aktualisieren | ⏳ Pending | Test-Coverage, Build |
-| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 81 test files, 1438 test functions including integration, security, RAID, upload progress, sync tests |
+| 🧪 Test | Backend Testing | Integration Tests für alle API-Endpunkte | ✅ Done | 82 test files, 1465 test functions including integration, security, RAID, upload progress, sync tests |
 | 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
 | 🧪 Test | Backend Testing | Load Testing (Performance unter Last) | ⏳ Pending | Performance |
 | 🧪 Test | Backend Testing | Security Testing (Penetration Tests) | ⏳ Pending | Security |

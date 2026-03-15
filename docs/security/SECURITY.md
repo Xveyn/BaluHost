@@ -4,7 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 0.1.x   | :white_check_mark: |
+| 1.15.x  | :white_check_mark: |
+| < 1.15  | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -29,6 +30,37 @@ Please include the following information:
 - We'll notify you when the issue is fixed
 - We'll credit you in the release notes (if you wish)
 
+## Implemented Security Features
+
+### Authentication & Authorization
+- [x] JWT authentication with HS256 signing (access + refresh tokens)
+- [x] Access tokens: 15 min TTL, Refresh tokens: 7 days with JTI for revocation
+- [x] Two-Factor Authentication (TOTP) with authenticator apps
+- [x] Password policy: 8-128 chars, uppercase + lowercase + digit, blacklist
+- [x] Role-based access control (admin/user) with `is_privileged()` checks
+- [x] Rate limiting on all endpoints via slowapi (per-endpoint limits)
+- [x] Mobile device authentication with device-specific JWT + X-Device-ID
+
+### Input Validation & Path Safety
+- [x] Pydantic schemas for all request validation
+- [x] Path jailing via `_jail_path()` — users restricted to own home, Shared/, or validated share paths
+- [x] Path traversal prevention (`..` rejection, PurePosixPath normalization)
+- [x] SQLAlchemy ORM-only queries (no raw SQL with user input)
+- [x] `subprocess.run()` with list arguments only (no `shell=True` in app code)
+
+### Network & Headers
+- [x] Security headers middleware (CSP, X-Frame-Options, HSTS, X-Content-Type-Options)
+- [x] CORS scoped to configured origins list
+- [x] Rate limiting via Nginx reverse proxy (100 req/s API, 10 req/s auth)
+- [x] WireGuard VPN for encrypted remote access
+
+### Data Protection
+- [x] Encrypted VPN/SSH keys at rest (Fernet AES-128-CBC)
+- [x] Production secret validation (32+ chars, rejects defaults)
+- [x] Sensitive column redaction in admin-db API (`REDACT_PATTERN`)
+- [x] Audit logging for all security-relevant actions (login, password change, admin ops)
+- [x] Structured JSON logging (no secrets logged)
+
 ## Security Best Practices
 
 ### For Developers
@@ -36,122 +68,72 @@ Please include the following information:
 **Authentication:**
 - Never commit tokens, passwords, or secrets to Git
 - Use environment variables for sensitive configuration
-- Implement proper password hashing (bcrypt/argon2)
-- Use secure random token generation
-- Implement token refresh mechanisms
+- All new endpoints must use `Depends(get_current_user)` or `Depends(get_current_admin)`
+- Apply rate limiting via `@limiter.limit(get_limit("..."))` on new endpoints
 
 **Authorization:**
-- Always check user permissions before operations
-- Validate file ownership
-- Implement proper RBAC
+- Use `ensure_owner_or_privileged()` for ownership checks
+- Validate file paths through `_jail_path()`
 - Never trust client-side checks alone
 
 **Input Validation:**
-- Validate all inputs with Pydantic schemas
-- Prevent path traversal attacks
-- Sanitize file names
-- Check file sizes and types
-- Prevent SQL injection (when DB is added)
+- Use Pydantic schemas for all request bodies (never raw `dict`)
+- Reject `..` in all user-supplied file paths
+- Use `subprocess.run()` with explicit argument lists (never string commands)
 
 **File Operations:**
-- Implement sandbox restrictions
+- All file operations go through `_jail_path()` sandbox
 - Check quota before uploads
-- Validate file permissions
-- Prevent directory traversal
-- Use safe file handling libraries
+- Ownership tracked via database
 
 ### For Users
 
 **Passwords:**
-- Use strong, unique passwords
-- Change default passwords immediately
-- Enable 2FA when available (future feature)
+- Use strong, unique passwords (min 8 chars, uppercase + lowercase + digit)
+- Change default passwords immediately after setup
+- Enable 2FA in Settings for additional security
 - Never share passwords
 
 **Access Control:**
 - Review user permissions regularly
 - Remove unused accounts
 - Use least privilege principle
-- Monitor audit logs
+- Monitor audit logs (Logging page)
 
 **Network Security:**
-- Use HTTPS in production
-- Don't expose directly to internet without proper security
-- Consider VPN access for remote access
+- Use WireGuard VPN for remote access
+- Don't expose directly to internet without VPN or reverse proxy
 - Keep firewall configured properly
 
-**System Maintenance:**
-- Keep software updated
-- Apply security patches promptly
-- Regular backups
-- Monitor system logs
+## Known Limitations & Accepted Trade-offs
 
-## Known Security Limitations
+These are documented trade-offs — do not attempt to fix without discussion:
 
-### Current Version (0.1.x)
-
-**Authentication:**
-- ⚠️ Tokens stored in localStorage (XSS risk)
-- ⚠️ No token refresh mechanism
-- ⚠️ No 2FA support
-- ⚠️ Simple password requirements
-
-**Data Storage:**
-- ⚠️ No database encryption at rest
-- ⚠️ File metadata in JSON (not encrypted)
-- ⚠️ No backup encryption
-
-**Network:**
-- ⚠️ HTTP in dev mode (use HTTPS in production!)
-- ⚠️ No rate limiting
-- ⚠️ No CSRF protection
-- ⚠️ Basic CORS configuration
-
-**Audit:**
-- ℹ️ Audit logs not encrypted
-- ℹ️ No log rotation yet
-- ℹ️ Limited retention policy
-
-### Planned Security Improvements
-
-**High Priority:**
-- [ ] Implement rate limiting
-- [ ] Add CSRF protection
-- [ ] Secure token storage (httpOnly cookies)
-- [ ] Token refresh mechanism
-- [ ] Password complexity requirements
-- [ ] HTTPS enforcement
-
-**Medium Priority:**
-- [ ] 2FA/MFA support
-- [ ] Session management
-- [ ] IP whitelisting
-- [ ] Security headers (helmet)
-- [ ] Input sanitization improvements
-
-**Low Priority:**
-- [ ] Encryption at rest
-- [ ] Key rotation
-- [ ] Security audit logging
-- [ ] Intrusion detection
+1. **Tokens in localStorage** — XSS risk mitigated by CSP headers; HttpOnly cookies would require significant auth refactor
+2. **CSP `unsafe-inline`/`unsafe-eval`** — Required by Vite dev server; production could tighten
+3. **CORS `allow_methods=["*"]`/`allow_headers=["*"]`** — Scoped to configured `cors_origins` list
+4. **In-memory rate limiter** — Resets on restart; acceptable for single-instance deployment
+5. **No CSRF protection** — Mitigated by JWT Bearer auth (not cookie-based)
+6. **HTTPS not enforced** — External access via WireGuard VPN (encrypted tunnel); HTTP on trusted LAN
+7. **JTI without server-side revocation store** — Token rotation is the primary defense
 
 ## Security Checklist for Production
 
 Before deploying to production:
 
-- [ ] Change all default passwords
-- [ ] Use HTTPS with valid SSL certificate
-- [ ] Set strong `TOKEN_SECRET` (min 32 characters)
-- [ ] Configure firewall rules
-- [ ] Disable debug mode
-- [ ] Review CORS settings
-- [ ] Enable audit logging
-- [ ] Set up backups
-- [ ] Configure log rotation
-- [ ] Review user permissions
-- [ ] Update all dependencies
+- [x] Change all default passwords
+- [x] Set strong `SECRET_KEY` (min 32 characters, validated at startup)
+- [x] Set strong `TOKEN_SECRET` (min 32 characters, validated at startup)
+- [x] Configure firewall rules
+- [x] Disable debug mode
+- [x] Review CORS settings (restrict to known origins)
+- [x] Enable audit logging
+- [x] Set up backups (pg_dump)
+- [x] Configure structured JSON logging
+- [x] Review user permissions
+- [ ] Use HTTPS with valid SSL certificate (optional, VPN provides encryption)
+- [ ] Set up log rotation
 - [ ] Run security audit tools
-- [ ] Test disaster recovery
 
 ## Dependency Security
 
@@ -173,7 +155,6 @@ npm audit fix
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [FastAPI Security](https://fastapi.tiangolo.com/tutorial/security/)
-- [React Security Best Practices](https://reactjs.org/docs/dom-elements.html#dangerouslysetinnerhtml)
 
 ## Disclosure Policy
 
@@ -186,38 +167,8 @@ npm audit fix
 
 For security-related questions or concerns:
 - **Email:** security@baluhost.example
-- **PGP Key:** [KEY_ID_HERE] (TODO)
-
-### Secure Reporting (PGP / Encrypted email)
-
-If you prefer to send vulnerability reports encrypted, you can use OpenPGP to encrypt messages to the project's public key. At the moment we haven't published a dedicated security email address — please open a private GitHub issue and request an encrypted channel, or use the placeholder `security@baluhost.example` for general contact.
-
-When a PGP key is available we will publish the full fingerprint here. Use the full fingerprint (or long key ID) to verify the key before encrypting.
-
-Example workflow (using GnuPG):
-
-```bash
-# Import the project's public key (example):
-gpg --import baluhost_pubkey.asc
-
-# Verify the key fingerprint (replace KEY_ID with actual key id):
-gpg --fingerprint KEY_ID
-
-# Encrypt a file for the project's public key (replace KEY_ID):
-gpg --encrypt --recipient KEY_ID --armor -o report.asc report.txt
-
-# Send `report.asc` to the security contact (or attach to a private issue)
-```
-
-What to include in an encrypted report:
-- Vulnerability description and steps to reproduce (as detailed as possible)
-- A minimal proof-of-concept (if available)
-- Affected versions/commit/shas
-- Contact information so we can follow up
-
-If you don't have PGP available, create a private GitHub issue and request an encrypted channel — we'll respond with a preferred method.
 
 ---
 
-**Last Updated:** November 2025  
-**Version:** 0.1.0
+**Last Updated:** March 2026
+**Version:** 1.15.6
