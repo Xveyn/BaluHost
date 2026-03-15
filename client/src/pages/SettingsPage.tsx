@@ -45,7 +45,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState('');
   
   // Sessions (mock data for now)
-  const [sessions] = useState<Session[]>([
+  interface SessionInfo { id: string; ip_address: string; user_agent: string; last_active: string; is_current: boolean; }
+  const [sessions] = useState<SessionInfo[]>([
     {
       id: 'current',
       ip_address: '192.168.1.100',

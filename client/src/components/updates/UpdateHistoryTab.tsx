@@ -1,6 +1,5 @@
 import {
   GitBranch,
-  GitCommit,
   Loader2,
   Tag,
 } from 'lucide-react';

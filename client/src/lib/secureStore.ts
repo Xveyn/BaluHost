@@ -1,9 +1,24 @@
 /**
  * Secure Token Storage using OS Keyring
- * 
+ *
  * Uses electron's safeStorage for secure credential storage.
  * Falls back to sessionStorage in development/web mode.
  */
+
+interface ElectronSafeStorage {
+  setItem(key: string, value: string): Promise<void>;
+  getItem(key: string): Promise<string | null>;
+  deleteItem(key: string): Promise<void>;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+type ElectronAPI = { safeStorage: ElectronSafeStorage; sendIPCMessage?: (msg: any) => Promise<any>; [key: string]: any };
+
+declare global {
+  interface Window {
+    electronAPI?: ElectronAPI;
+  }
+}
 
 const TOKEN_KEY = 'baludesk-api-token';
 const USERNAME_KEY = 'baludesk-username';

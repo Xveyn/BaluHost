@@ -3,7 +3,6 @@ import {
   CheckCircle,
   AlertTriangle,
   GitBranch,
-  GitCommit,
   Clock,
   Loader2,
   Zap,
