@@ -22,6 +22,9 @@ from app.services.hardware.smart.utils import (
 
 logger = logging.getLogger(__name__)
 
+# Cache: remember which -d flag worked for each device to avoid noisy retries
+_device_type_overrides: dict[str, str] = {}
+
 
 def _read_real_smart_data() -> SmartStatusResponse:
     """Optimierte SMART-Erfassung mit paralleler Verarbeitung und reduzierten Flags."""
@@ -49,9 +52,13 @@ def _read_real_smart_data() -> SmartStatusResponse:
         if not device_name:
             return None
 
-        # SATA drives behind Linux SCSI layer: use SAT for correct health status
+        # Use cached device type override from a previous successful SAT fallback
         original_type = dev_type
-        if dev_type == 'scsi' and protocol.upper() == 'ATA':
+        if device_name in _device_type_overrides:
+            dev_type = _device_type_overrides[device_name]
+            logger.debug("SMART: using cached type %s for %s", dev_type, device_name)
+        elif dev_type == 'scsi' and protocol.upper() == 'ATA':
+            # SATA drives behind Linux SCSI layer: use SAT for correct health status
             dev_type = 'sat'
             logger.debug("SMART: overriding type scsi→sat for ATA device %s", device_name)
 
@@ -66,6 +73,9 @@ def _read_real_smart_data() -> SmartStatusResponse:
             _result_sat, data_sat = _run_smartctl(smartctl_path, 'sat', device_name)
             if data_sat is not None:
                 data = data_sat
+                # Remember this override so we don't retry next cycle
+                _device_type_overrides[device_name] = 'sat'
+                logger.info("SMART: cached device type override %s → sat", device_name)
 
         logger.debug("SMART raw JSON keys for %s: %s", device_name, list(data.keys()))
         logger.debug("SMART smart_status for %s: %s", device_name, data.get('smart_status'))
