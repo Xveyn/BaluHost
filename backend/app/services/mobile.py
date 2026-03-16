@@ -25,6 +25,7 @@ from app.schemas.mobile import (
     SyncFolderCreate,
 )
 from app.services import auth as auth_service
+from app.core import security
 import logging
 
 logger = logging.getLogger(__name__)
@@ -265,7 +266,20 @@ class MobileService:
         
         # Generate auth tokens
         access_token = auth_service.create_access_token(user=user)
-        refresh_token = auth_service.create_access_token(user=user, expires_minutes=60*24*30)  # 30 days
+        refresh_token_str, jti = security.create_refresh_token(
+            user=user, expires_delta=timedelta(days=30)
+        )
+
+        # Store refresh token in database for revocation support
+        from app.services.token_service import token_service
+        token_service.store_refresh_token(
+            db=db,
+            jti=jti,
+            user_id=user.id,
+            token=refresh_token_str,
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+            device_id=str(device.id),
+        )
         
         # Format timestamps with timezone for Android parsing (ISO 8601 with Z suffix)
         created_at_iso = user.created_at.strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z' if user.created_at else datetime.now(timezone.utc).strftime('%Y-%m-%dT%H:%M:%S.%f')[:-3] + 'Z'
@@ -273,7 +287,7 @@ class MobileService:
         
         return {
             "access_token": access_token,
-            "refresh_token": refresh_token,
+            "refresh_token": refresh_token_str,
             "token_type": "bearer",
             "user": {
                 "id": int(user.id),

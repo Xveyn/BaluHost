@@ -46,21 +46,25 @@ def create_access_token(user: User, expires_minutes: Optional[int] = None) -> st
     which uses settings.SECRET_KEY instead of settings.token_secret.
     Both auth systems now use the same secret key.
     """
-    expires_delta = timedelta(minutes=expires_minutes or settings.token_expire_minutes)
+    expires_delta = timedelta(minutes=expires_minutes or settings.ACCESS_TOKEN_EXPIRE_MINUTES)
     # Delegate to security module (which uses settings.SECRET_KEY)
     return security.create_access_token(user, expires_delta=expires_delta)
 
 
-def decode_token(token: str) -> TokenPayload:
+def decode_token(token: str, token_type: str = "access") -> TokenPayload:
     """
     Decode JWT token and return TokenPayload.
+
+    Args:
+        token: JWT token string
+        token_type: Expected token type ("access" or "refresh")
 
     ✅ Security Fix #3: This now delegates to app.core.security.decode_token()
     which uses settings.SECRET_KEY instead of settings.token_secret.
     """
     try:
         # Delegate to security module (which uses settings.SECRET_KEY)
-        decoded = security.decode_token(token, token_type="access")
+        decoded = security.decode_token(token, token_type=token_type)
 
         # Log successful decode at debug level (non-sensitive fields only)
         logger.debug("Token decoded: sub=%s, role=%s", decoded.get("sub"), decoded.get("role"))
@@ -81,7 +85,8 @@ def decode_token(token: str) -> TokenPayload:
 
     return TokenPayload(
         sub=str(decoded.get("sub")),
-        username=str(decoded.get("username")),
-        role=str(decoded.get("role")),
+        username=str(decoded.get("username", "")),
+        role=str(decoded.get("role", "")),
         exp=exp_dt,
+        jti=decoded.get("jti"),
     )
