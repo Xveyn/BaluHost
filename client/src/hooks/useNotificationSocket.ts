@@ -222,32 +222,30 @@ export function useNotificationSocket(options: UseNotificationSocketOptions = {}
     }
   }, []);
 
-  // 1) Mount: connect if ready. Unmount: disconnect.
-  //    Delayed to avoid ECONNRESET from React StrictMode double-mount.
+  // Single effect: manages connect/disconnect based on token + enabled.
+  // Handles React StrictMode double-mount via cleanup flag.
   useEffect(() => {
-    const timer = setTimeout(() => {
-      if (enabledRef.current && tokenRef.current) {
-        void connect();
-      }
-    }, 50);
-    return () => {
-      clearTimeout(timer);
-      disconnect();
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []); // Runs ONCE on mount, cleanup on unmount
+    let cleaned = false;
 
-  // 2) Token became available after mount (e.g. slow AuthContext init)
-  //    OR token removed (logout) → disconnect only.
-  //    NO cleanup function → effect re-runs can't trigger disconnect.
-  useEffect(() => {
     if (token && enabled) {
-      void connect(); // no-op if already OPEN/CONNECTING
-    } else if (!token) {
-      disconnect();
+      // Small delay avoids ECONNRESET when StrictMode tears down the first mount
+      const timer = setTimeout(() => {
+        if (!cleaned) {
+          void connect();
+        }
+      }, 50);
+      return () => {
+        cleaned = true;
+        clearTimeout(timer);
+        disconnect();
+      };
     }
+
+    // No token or disabled → ensure disconnected
+    disconnect();
+    return () => { cleaned = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [token]);
+  }, [token, enabled]);
 
   return {
     ...state,
