@@ -123,7 +123,7 @@ function setCachedTelemetry(system: SystemInfoResponse, storage: StorageInfoResp
   }
 }
 
-export const useSystemTelemetry = (pollInterval = 5000): TelemetryState => {
+export const useSystemTelemetry = (pollInterval = 15000): TelemetryState => {
   const { token } = useAuth();
   const cachedData = getCachedTelemetry();
   const [system, setSystem] = useState<SystemInfoResponse | null>(cachedData?.system || null);

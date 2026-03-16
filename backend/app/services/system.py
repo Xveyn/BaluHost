@@ -8,6 +8,7 @@ import time
 from typing import List, Tuple
 
 import psutil
+from cachetools import TTLCache
 
 from app.core.config import settings
 from app.schemas.system import (
@@ -27,6 +28,9 @@ from app.services import telemetry as telemetry_service
 from app.services.hardware.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
+
+# Server-side cache for aggregated storage info (capacity changes slowly)
+_aggregated_storage_cache: TTLCache[str, StorageInfo] = TTLCache(maxsize=1, ttl=30)
 
 
 def _get_cpu_model() -> str | None:
@@ -314,16 +318,20 @@ def get_storage_info() -> StorageInfo:
 
 def get_aggregated_storage_info() -> StorageInfo:
     """Gibt aggregierte Speicherinformationen über alle Festplatten zurück.
-    
+
     Berücksichtigt SMART-Daten aller Festplatten und RAID-Arrays.
     Bei RAID wird die effektive Kapazität berechnet.
-    
+
     Diese Funktion verwendet IMMER die echten Festplatten-Daten aus SMART,
     auch im Dev-Mode, um die tatsächliche Hardware-Kapazität anzuzeigen.
     """
+    cached = _aggregated_storage_cache.get("storage")
+    if cached is not None:
+        return cached
+
     from app.services.hardware import smart as smart_service
     from app.services.hardware import raid as raid_service
-    
+
     try:
         # Hole SMART-Daten für alle Festplatten (auch im Dev-Mode)
         smart_data = smart_service.get_smart_status()
@@ -432,7 +440,7 @@ def get_aggregated_storage_info() -> StorageInfo:
                 use_percent = (total_used / total_capacity * 100) if total_capacity > 0 else 0.0
                 
                 if total_capacity > 0:
-                    return StorageInfo(
+                    result = StorageInfo(
                         filesystem="psutil-aggregated",
                         total=total_capacity,
                         used=total_used,
@@ -440,13 +448,15 @@ def get_aggregated_storage_info() -> StorageInfo:
                         use_percent=f"{use_percent:.1f}%",
                         mount_point=f"{device_count} partitions",
                     )
+                    _aggregated_storage_cache["storage"] = result
+                    return result
             except Exception as e:
                 logger.error("Failed to get storage via psutil: %s", e)
-            
+
             # Letzter Fallback
             return get_storage_info()
-        
-        return StorageInfo(
+
+        result = StorageInfo(
             filesystem="aggregated" if not raid_effective else "raid-aggregated",
             total=total_capacity,
             used=total_used,
@@ -454,7 +464,9 @@ def get_aggregated_storage_info() -> StorageInfo:
             use_percent=f"{use_percent:.1f}%",
             mount_point=f"{device_count} devices" + (" (RAID)" if raid_effective else ""),
         )
-        
+        _aggregated_storage_cache["storage"] = result
+        return result
+
     except Exception as e:
         logger.warning("Failed to get aggregated storage info, falling back: %s", e)
         return get_storage_info()
