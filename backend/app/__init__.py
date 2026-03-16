@@ -1,3 +1,8 @@
 __all__ = ["__version__"]
 
-__version__ = "1.16.0"
+from importlib.metadata import version, PackageNotFoundError
+
+try:
+    __version__: str = version("baluhost-backend")
+except PackageNotFoundError:
+    __version__ = "0.0.0-dev"
