@@ -28,7 +28,6 @@ from typing import Optional
 
 from app.api import deps
 from app.core.config import settings
-from app.models.user import User
 from app.services.sensors import get_cpu_sensor_data
 from app.core.rate_limiter import limiter, get_limit
 
@@ -485,15 +484,15 @@ def collect_app_metrics():
 async def metrics(
     request: Request,
     db: Session = Depends(deps.get_db),
-    current_user: Optional[User] = Depends(deps.get_current_user_optional)
+    current_user = Depends(deps.get_current_admin),
 ):
     """
     Prometheus metrics endpoint.
 
     Returns metrics in Prometheus format for scraping.
 
-    **Authentication**: Optional - metrics can be scraped without auth,
-    but can be restricted in Nginx config to internal IPs only.
+    **Authentication**: Admin required. For Prometheus scraping,
+    use an API key with admin privileges.
 
     **Performance**: This endpoint is designed to be fast (<100ms).
     Heavy metrics collection is done in background jobs.
