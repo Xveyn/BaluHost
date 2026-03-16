@@ -146,11 +146,11 @@ class ProdUpdateBackend(UpdateBackend):
         )
 
         # Build changelog from commit messages between versions
-        changelog = await self._build_changelog(current.commit, commit)
+        changelog = await self._build_changelog(current.commit, commit, version_to_string(latest_version))
 
         return True, latest, changelog
 
-    async def _build_changelog(self, from_commit: str, to_commit: str) -> list[ChangelogEntry]:
+    async def _build_changelog(self, from_commit: str, to_commit: str, version: str = "unknown") -> list[ChangelogEntry]:
         """Build changelog from git log between commits."""
         success, log_output, _ = self._run_git(
             "log", f"{from_commit}..{to_commit}",
@@ -168,7 +168,7 @@ class ProdUpdateBackend(UpdateBackend):
 
         return [
             ChangelogEntry(
-                version="latest",
+                version=version,
                 date=datetime.now(timezone.utc),
                 changes=regular[:20],  # Limit to 20 changes
                 breaking_changes=breaking,

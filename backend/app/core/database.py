@@ -104,6 +104,15 @@ elif DATABASE_URL.startswith("postgresql"):
         **pool_config
     )
 
+    # Ensure all connections use UTC timezone to prevent implicit timestamp
+    # conversion when storing timezone-aware datetimes in TIMESTAMP WITHOUT
+    # TIME ZONE columns.
+    @event.listens_for(engine, "connect")
+    def _set_pg_timezone(dbapi_conn, _connection_record):
+        cursor = dbapi_conn.cursor()
+        cursor.execute("SET timezone = 'UTC'")
+        cursor.close()
+
 else:
     # Unknown database type, use basic configuration
     logger.warning(f"Unknown database type in URL: {DATABASE_URL}")

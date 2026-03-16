@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.2] - 2026-03-16
+
+### Fixed
+
+- Monitoring uptime bars showing no data for short time ranges
+- Update service using actual version in changelog instead of literal "latest"
+
+### Tests
+
+- Test coverage for pure-logic and DB-CRUD services (Batch 1)
+- Test coverage for async services and dev-mode stubs (Batch 2)
+- Test coverage for plugin manager and cloud scheduler (Batch 3)
+
+---
+
 ## [1.16.1] - 2026-03-15
 
 ### Fixed

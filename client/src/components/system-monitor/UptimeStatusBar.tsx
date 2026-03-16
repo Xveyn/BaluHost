@@ -64,15 +64,23 @@ export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: Upti
   const config = SEGMENT_CONFIG[timeRange];
 
   const timeslots = useMemo<UptimeTimeslot[]>(() => {
-    const now = Date.now();
-    const rangeStart = now - config.durationMs;
+    const clientNow = Date.now();
     const bucketDuration = config.durationMs / config.segments;
 
-    // Parse and sort samples by time
-    const parsed = samples
+    // Parse all samples
+    const allParsed = samples
       .map(s => ({ ...s, _time: parseUtcTimestamp(s.timestamp).getTime() }))
-      .filter(s => s._time >= rangeStart && s._time <= now)
       .sort((a, b) => a._time - b._time);
+
+    // Use the latest sample timestamp as reference for "now" if available.
+    // This prevents clock/timezone differences between server and client
+    // from causing all samples to be filtered out.
+    const now = allParsed.length > 0
+      ? Math.max(clientNow, allParsed[allParsed.length - 1]._time)
+      : clientNow;
+    const rangeStart = now - config.durationMs;
+
+    const parsed = allParsed.filter(s => s._time >= rangeStart && s._time <= now);
 
     const slots: UptimeTimeslot[] = [];
 
