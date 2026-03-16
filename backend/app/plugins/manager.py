@@ -60,6 +60,7 @@ class PluginManager:
         self._event_manager: Optional[EventManager] = None
         self._background_tasks: Dict[str, List[asyncio.Task]] = {}
         self._routers_mounted = False
+        self._discovered_names: Optional[List[str]] = None
 
     @classmethod
     def get_instance(cls, plugins_dir: Optional[Path] = None) -> "PluginManager":
@@ -85,14 +86,18 @@ class PluginManager:
         """Get the plugins directory."""
         return self._plugins_dir
 
-    def discover_plugins(self) -> List[str]:
+    def discover_plugins(self, force: bool = False) -> List[str]:
         """Discover available plugins in the plugins directory.
 
-        Scans for directories containing __init__.py files.
+        Results are cached after the first scan.  Pass ``force=True``
+        to rescan (e.g. after installing a new plugin).
 
         Returns:
             List of discovered plugin names
         """
+        if self._discovered_names is not None and not force:
+            return list(self._discovered_names)
+
         discovered = []
 
         if not self._plugins_dir.exists():
@@ -104,8 +109,9 @@ class PluginManager:
                 discovered.append(path.name)
                 logger.debug(f"Discovered plugin: {path.name}")
 
+        self._discovered_names = discovered
         logger.info(f"Discovered {len(discovered)} plugins")
-        return discovered
+        return list(discovered)
 
     def load_plugin(self, name: str) -> PluginBase:
         """Load a plugin by name.
@@ -494,6 +500,20 @@ class PluginManager:
             True if plugin is enabled
         """
         return name in self._enabled
+
+    def get_required_permissions(self, name: str) -> List[str]:
+        """Get required permissions for a loaded plugin.
+
+        Args:
+            name: Plugin name
+
+        Returns:
+            List of required permission strings, or empty list if unknown
+        """
+        plugin = self._plugins.get(name)
+        if plugin:
+            return plugin.metadata.required_permissions
+        return []
 
     def get_all_plugins(self) -> Dict[str, Dict[str, Any]]:
         """Get information about all discovered plugins.

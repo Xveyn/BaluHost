@@ -24,6 +24,7 @@ from app.middleware.device_tracking import DeviceTrackingMiddleware
 from app.middleware.local_only import LocalOnlyMiddleware
 from app.middleware.security_headers import SecurityHeadersMiddleware
 from app.middleware.error_counter import ErrorCounterMiddleware
+from app.middleware.plugin_gate import PluginGateMiddleware
 from app.middleware.sleep_auto_wake import SleepAutoWakeMiddleware
 from app.middleware.api_version import ApiVersionMiddleware
 
@@ -105,6 +106,9 @@ def create_app() -> FastAPI:
 
     # Add error counter middleware for admin metrics
     app.add_middleware(ErrorCounterMiddleware)
+
+    # Gate plugin routes: block requests to disabled plugins (checks DB with TTL cache)
+    app.add_middleware(PluginGateMiddleware)
 
     # Add sleep auto-wake middleware (counts requests + auto-wakes from soft sleep)
     app.add_middleware(SleepAutoWakeMiddleware)

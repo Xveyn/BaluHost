@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.3] - 2026-03-16
+
+### Added
+
+- **Plugin permission enforcement** — runtime middleware validates plugin permissions before execution
+
+### Fixed
+
+- **Security: inactive user rejection** — JWT authentication now rejects users with inactive accounts
+- **Security: metrics endpoint auth** — Prometheus `/metrics` endpoint requires admin authentication
+- **Security: token lifecycle** — enforce 15min access token TTL, type-safe refresh tokens, revoke on logout
+- SMART device type override cached to reduce noisy retries
+- Frontend notification socket consolidated into single effect to prevent duplicate connections
+- Version now read from installed package metadata at runtime
+
+### Changed
+
+- TTL cache added for aggregated storage info, telemetry poll interval reduced
+
+### Removed
+
+- Obsolete plan files and PGP key
+
+---
+
 ## [1.16.2] - 2026-03-16
 
 ### Fixed

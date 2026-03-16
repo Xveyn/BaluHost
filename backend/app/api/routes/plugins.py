@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin, get_current_user, get_db
 from app.core.rate_limiter import user_limiter, get_limit
 from app.models.user import User
+from app.middleware.plugin_gate import invalidate_plugin_cache
 from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
@@ -235,6 +236,7 @@ async def toggle_plugin(
                 detail="Failed to enable plugin",
             )
 
+        invalidate_plugin_cache(name)
         logger.info("Plugin %s enabled by %s", name, current_user.username)
         return PluginToggleResponse(
             name=name,
@@ -254,6 +256,7 @@ async def toggle_plugin(
                 detail="Failed to disable plugin",
             )
 
+        invalidate_plugin_cache(name)
         logger.info("Plugin %s disabled by %s", name, current_user.username)
         return PluginToggleResponse(
             name=name,

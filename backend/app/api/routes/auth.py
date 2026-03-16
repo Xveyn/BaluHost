@@ -483,7 +483,28 @@ async def change_password(
 
 @router.post("/logout")
 @limiter.limit(get_limit("user_operations"))
-async def logout(request: Request, response: Response) -> dict[str, str]:
+async def logout(
+    request: Request,
+    response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> dict[str, str]:
+    """Logout user and revoke all refresh tokens."""
+    from app.services.token_service import token_service
+
+    audit_logger = get_audit_logger_db()
+    ip_address = request.client.host if request.client else None
+
+    revoked_count = token_service.revoke_all_user_tokens(db, current_user.id, reason="logout")
+
+    audit_logger.log_security_event(
+        action="logout",
+        user=current_user.username,
+        details={"revoked_tokens": revoked_count, "ip_address": ip_address},
+        success=True,
+        db=db,
+    )
+
     return {"message": "Logged out"}
 
 
@@ -508,13 +529,13 @@ async def refresh_token(
     audit_logger = get_audit_logger_db()
     ip_address = request.client.host if request.client else None
 
-    # Verify refresh token
+    # Verify refresh token (must be type="refresh", not access)
     try:
-        token_data = auth_service.decode_token(payload.refresh_token)
+        token_data = auth_service.decode_token(payload.refresh_token, token_type="refresh")
         user_id = token_data.sub  # TokenPayload is a Pydantic model, use attribute access
 
         # ✅ Security Fix #6: Check if token has been revoked
-        jti = getattr(token_data, 'jti', None)
+        jti = token_data.jti
         if jti and token_service.is_token_revoked(db, jti):
             audit_logger.log_security_event(
                 action="refresh_token_revoked",

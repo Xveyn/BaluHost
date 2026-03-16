@@ -75,4 +75,4 @@ client/
 - **Issues**: GitHub Issues (repository URL needed)
 - **Documentation**: See `docs/` directory
 - **Maintainer**: Xveyn
-- **Version**: 1.16.2 (as of Mar 2026)
+- **Version**: 1.16.3 (as of Mar 2026)

@@ -151,8 +151,8 @@ class TestCreateAccessToken:
         now = datetime.now(timezone.utc)
         diff = exp_time - now
 
-        # Default expiry should be settings.token_expire_minutes
-        expected_seconds = settings.token_expire_minutes * 60
+        # Default expiry should be ACCESS_TOKEN_EXPIRE_MINUTES (15 min)
+        expected_seconds = settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60
         # Allow 30 seconds tolerance
         assert expected_seconds - 30 < diff.total_seconds() < expected_seconds + 30
 

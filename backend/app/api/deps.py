@@ -102,6 +102,19 @@ async def get_current_user(
             detail="User no longer exists",
         )
 
+    if not user.is_active:
+        audit_logger.log_security_event(
+            action="inactive_user_access",
+            user=user.username,
+            success=False,
+            error_message="User account is inactive",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="User account is inactive",
+        )
+
     return user_service.serialize_user(user)
 
 
