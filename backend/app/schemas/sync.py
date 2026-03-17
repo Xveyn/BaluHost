@@ -149,6 +149,7 @@ class CreateSyncScheduleRequest(BaseModel):
 
 class UpdateSyncScheduleRequest(BaseModel):
     """Update an existing sync schedule."""
+    device_id: Optional[str] = None
     schedule_type: Optional[str] = Field(None, description="daily, weekly, monthly, on_change")
     time_of_day: Optional[str] = Field(None, description="HH:MM format")
     day_of_week: Optional[int] = None

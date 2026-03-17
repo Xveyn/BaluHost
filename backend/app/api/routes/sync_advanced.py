@@ -298,6 +298,7 @@ async def update_sync_schedule(
     result = scheduler.update_schedule(
         schedule_id=schedule_id,
         user_id=current_user.id,
+        device_id=payload.device_id,
         schedule_type=payload.schedule_type,
         time_of_day=payload.time_of_day,
         day_of_week=payload.day_of_week,

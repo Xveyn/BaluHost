@@ -22,8 +22,7 @@ function resolveDeviceName(devices: Device[], deviceId: string, backendName?: st
   const device = devices.find((d) => d.id === deviceId);
   if (device) return device.name;
   if (backendName) return backendName;
-  // Show truncated UUID for deleted/unknown devices
-  if (deviceId.length > 12) return `${deviceId.slice(0, 8)}…`;
+  if (deviceId.length > 12) return `${deviceId.slice(0, 8)}… (unknown)`;
   return deviceId;
 }
 
@@ -67,6 +66,7 @@ export function SchedulesTab({
 
   // Edit modal state
   const [editingSchedule, setEditingSchedule] = useState<SyncSchedule | null>(null);
+  const [editDeviceId, setEditDeviceId] = useState('');
   const [editType, setEditType] = useState<'daily' | 'weekly' | 'monthly'>('daily');
   const [editTime, setEditTime] = useState('02:00');
   const [editDayOfWeek, setEditDayOfWeek] = useState<number | null>(null);
@@ -97,6 +97,7 @@ export function SchedulesTab({
 
   const openEdit = (schedule: SyncSchedule) => {
     setEditingSchedule(schedule);
+    setEditDeviceId(schedule.device_id);
     setEditType(schedule.schedule_type as 'daily' | 'weekly' | 'monthly');
     setEditTime(schedule.time_of_day);
     setEditDayOfWeek(schedule.day_of_week ?? null);
@@ -107,13 +108,17 @@ export function SchedulesTab({
   const handleEditSave = async () => {
     if (!editingSchedule) return;
     setEditSaving(true);
-    const ok = await onUpdateSchedule(editingSchedule.schedule_id, {
+    const updates: Record<string, unknown> = {
       schedule_type: editType,
       time_of_day: editTime,
       day_of_week: editType === 'weekly' ? editDayOfWeek : null,
       day_of_month: editType === 'monthly' ? editDayOfMonth : null,
       auto_vpn: editAutoVpn,
-    });
+    };
+    if (editDeviceId !== editingSchedule.device_id) {
+      updates.device_id = editDeviceId;
+    }
+    const ok = await onUpdateSchedule(editingSchedule.schedule_id, updates);
     setEditSaving(false);
     if (ok) setEditingSchedule(null);
   };
@@ -330,7 +335,18 @@ export function SchedulesTab({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">{t('schedules.device')}</label>
-                <p className="text-sm text-slate-200">{resolveDeviceName(devices, editingSchedule.device_id, editingSchedule.device_name)}</p>
+                <select value={editDeviceId} onChange={(e) => setEditDeviceId(e.target.value)} className={selectClass}>
+                  {!devices.some((d) => d.id === editingSchedule.device_id) && (
+                    <option value={editingSchedule.device_id}>
+                      {resolveDeviceName(devices, editingSchedule.device_id, editingSchedule.device_name)}
+                    </option>
+                  )}
+                  {devices.map((device) => (
+                    <option key={device.id} value={device.id}>
+                      {device.name} ({device.type})
+                    </option>
+                  ))}
+                </select>
               </div>
 
               <div>
