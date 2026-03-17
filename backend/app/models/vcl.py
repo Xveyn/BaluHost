@@ -1,11 +1,11 @@
 """Version Control Light (VCL) Models."""
 from datetime import datetime
-from typing import TYPE_CHECKING
+from typing import Optional, TYPE_CHECKING
 from sqlalchemy import (
     Column, Integer, String, Text, DateTime, Boolean, Float, BigInteger,
     ForeignKey, UniqueConstraint, Index, CheckConstraint
 )
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 from app.models.base import Base
 
 if TYPE_CHECKING:
@@ -15,20 +15,20 @@ if TYPE_CHECKING:
 
 class VersionBlob(Base):
     """Deduplicated storage blobs for file versions.
-    
+
     Multiple file versions can reference the same blob via checksum.
     """
     __tablename__ = "version_blobs"
-    
-    id = Column(Integer, primary_key=True, index=True)
-    checksum = Column(String(64), unique=True, nullable=False, index=True)  # SHA256
-    storage_path = Column(Text, nullable=False)
-    original_size = Column(BigInteger, nullable=False)
-    compressed_size = Column(BigInteger, nullable=False)
-    reference_count = Column(Integer, default=0, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    last_accessed = Column(DateTime, nullable=True)
-    can_delete = Column(Boolean, default=False, nullable=False)
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    checksum: Mapped[str] = mapped_column(String(64), unique=True, index=True)  # SHA256
+    storage_path: Mapped[str] = mapped_column(Text)
+    original_size: Mapped[int] = mapped_column(BigInteger)
+    compressed_size: Mapped[int] = mapped_column(BigInteger)
+    reference_count: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+    last_accessed: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    can_delete: Mapped[bool] = mapped_column(Boolean, default=False)
     
     # Relationships
     file_versions = relationship("FileVersion", back_populates="blob")

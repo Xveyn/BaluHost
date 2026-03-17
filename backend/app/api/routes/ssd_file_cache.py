@@ -237,16 +237,7 @@ async def list_cache_entries(
 
     return SSDCacheEntriesResponse(
         entries=[
-            SSDCacheEntryResponse(
-                id=int(e.id),
-                array_name=str(e.array_name),
-                source_path=str(e.source_path),
-                file_size_bytes=int(e.file_size_bytes),
-                access_count=int(e.access_count),
-                last_accessed=e.last_accessed,
-                first_cached=e.first_cached,
-                is_valid=bool(e.is_valid),
-            )
+            SSDCacheEntryResponse.model_validate(e, from_attributes=True)
             for e in entries
         ],
         total=total,

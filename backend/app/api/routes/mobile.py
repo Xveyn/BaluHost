@@ -565,7 +565,7 @@ async def get_power_summary(
 
         # Current power from in-memory buffer
         try:
-            current_power = power_monitor.get_current_power(device.id, db)
+            current_power = power_monitor.get_current_power(int(device.id), db)
             current_watts = current_power.current_watts
             is_online = current_power.is_online
         except Exception as e:
@@ -589,8 +589,8 @@ async def get_power_summary(
             total_current_watts += current_watts
 
         devices_info.append(TapoDevicePowerInfo(
-            device_id=device.id,
-            device_name=device.name,
+            device_id=int(device.id),
+            device_name=str(device.name),
             current_watts=current_watts,
             is_online=is_online,
             energy_today_kwh=device_energy_today,

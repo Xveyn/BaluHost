@@ -1,7 +1,8 @@
 """API routes for VPN configuration and management."""
 
 import logging
-from typing import List
+from datetime import datetime
+from typing import List, Literal, cast
 from fastapi import APIRouter, Depends, HTTPException, status, Request, Response
 from sqlalchemy.orm import Session
 
@@ -52,7 +53,7 @@ async def get_available_vpn_types(
         FritzBoxVPNConfig.is_active == True
     ).first() is not None
 
-    available: list[str] = []
+    available: list[Literal["fritzbox", "wireguard"]] = []
     if has_fritzbox:
         available.append("fritzbox")
     available.append("wireguard")
@@ -276,7 +277,7 @@ async def update_vpn_client(
         client.device_name = update_data.device_name
         changes["device_name"] = f"{old_device_name} -> {update_data.device_name}"
     if update_data.is_active is not None:
-        client.is_active = update_data.is_active
+        client.is_active = update_data.is_active  # type: ignore[assignment]
         changes["is_active"] = f"{old_is_active} -> {update_data.is_active}"
 
     db.commit()
@@ -285,7 +286,7 @@ async def update_vpn_client(
     audit_logger.log_vpn_operation(
         action="vpn_client_updated",
         user=current_user.username,
-        vpn_client=client.device_name,
+        vpn_client=cast(str, client.device_name),
         details=changes,
         success=True,
         db=db
@@ -498,7 +499,7 @@ async def regenerate_client_config(
         audit_logger.log_vpn_operation(
             action="vpn_client_config_regenerated",
             user=current_user.username,
-            vpn_client=client.device_name,
+            vpn_client=cast(str, client.device_name),
             details={
                 "client_id": client_id,
                 "server_endpoint": config_data.server_public_endpoint,
@@ -512,7 +513,7 @@ async def regenerate_client_config(
         audit_logger.log_vpn_operation(
             action="vpn_client_config_regenerate_failed",
             user=current_user.username,
-            vpn_client=client.device_name,
+            vpn_client=cast(str, client.device_name),
             details={"error": str(e)},
             success=False,
             error_message=str(e),
@@ -552,10 +553,10 @@ async def get_server_config(
     active_clients = db.query(VPNClient).filter_by(is_active=True).count()
     
     return VPNServerConfig(
-        server_ip=config.server_ip,
-        server_port=config.server_port,
-        server_public_key=config.server_public_key,
-        network_cidr=config.network_cidr,
+        server_ip=cast(str, config.server_ip),
+        server_port=cast(int, config.server_port),
+        server_public_key=cast(str, config.server_public_key),
+        network_cidr=cast(str, config.network_cidr),
         active_clients=active_clients,
     )
 
@@ -648,11 +649,11 @@ async def get_fritzbox_config(
         )
     
     return FritzBoxConfigSummary(
-        id=config.id,
-        endpoint=config.endpoint,
-        dns_servers=config.dns_servers,
-        is_active=config.is_active,
-        created_at=config.created_at
+        id=cast(int, config.id),
+        endpoint=cast(str, config.endpoint),
+        dns_servers=cast(str, config.dns_servers),
+        is_active=cast(bool, config.is_active),
+        created_at=cast(datetime, config.created_at),
     )
 
 

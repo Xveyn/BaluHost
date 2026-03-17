@@ -9,7 +9,7 @@ Provides endpoints for:
 """
 
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional
+from typing import Dict, List, Optional, cast
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
@@ -357,6 +357,8 @@ async def get_disk_io_history(
     orchestrator = get_monitoring_orchestrator()
     duration = _parse_time_range(time_range)
 
+    disks: Dict[str, list] = {}
+
     if source == DataSource.MEMORY or (source == DataSource.AUTO and duration <= timedelta(minutes=10)):
         hist = orchestrator.get_disk_io_history(disk_name)
         if disk_name:
@@ -618,11 +620,11 @@ async def get_retention_config(
         config = orchestrator.retention_manager.get_config(db, metric_type)
         configs.append(RetentionConfigResponse(
             metric_type=metric_type.value,
-            retention_hours=config.retention_hours,
-            db_persist_interval=config.db_persist_interval,
-            is_enabled=config.is_enabled,
-            last_cleanup=config.last_cleanup,
-            samples_cleaned=config.samples_cleaned,
+            retention_hours=cast(int, config.retention_hours),
+            db_persist_interval=cast(int, config.db_persist_interval),
+            is_enabled=cast(bool, config.is_enabled),
+            last_cleanup=cast(Optional[datetime], config.last_cleanup),
+            samples_cleaned=cast(int, config.samples_cleaned),
         ))
 
     return RetentionConfigListResponse(configs=configs)
@@ -650,11 +652,11 @@ async def update_retention_config(
 
     return RetentionConfigResponse(
         metric_type=config.metric_type.value,
-        retention_hours=config.retention_hours,
-        db_persist_interval=config.db_persist_interval,
-        is_enabled=config.is_enabled,
-        last_cleanup=config.last_cleanup,
-        samples_cleaned=config.samples_cleaned,
+        retention_hours=cast(int, config.retention_hours),
+        db_persist_interval=cast(int, config.db_persist_interval),
+        is_enabled=cast(bool, config.is_enabled),
+        last_cleanup=cast(Optional[datetime], config.last_cleanup),
+        samples_cleaned=cast(int, config.samples_cleaned),
     )
 
 

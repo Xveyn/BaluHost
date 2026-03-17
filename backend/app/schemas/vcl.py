@@ -236,7 +236,7 @@ class AdminVCLOverview(BaseModel):
     total_users: int
     last_cleanup_at: Optional[datetime] = None
     last_priority_mode_at: Optional[datetime] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 class AdminUserQuota(BaseModel):
@@ -284,7 +284,7 @@ class AdminStatsResponse(BaseModel):
     last_cleanup_at: Optional[datetime] = None
     last_priority_mode_at: Optional[datetime] = None
     last_deduplication_scan: Optional[datetime] = None
-    updated_at: datetime
+    updated_at: Optional[datetime] = None
 
 
 # ========== File Version List Schemas ==========

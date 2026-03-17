@@ -305,10 +305,6 @@ class AuditLoggerDB:
             db=db
         )
     
-    def is_enabled(self) -> bool:
-        """Check if audit logging is enabled."""
-        return self._enabled
-    
     def get_logs(
         self,
         limit: int = 100,

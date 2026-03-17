@@ -5,7 +5,7 @@ Provides endpoints for monitoring background services, checking system
 dependencies, and accessing application metrics for debugging.
 """
 
-from typing import List
+from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response
 from starlette import status
@@ -92,7 +92,7 @@ async def restart_service(
     request: Request,
     response: Response,
     service_name: str,
-    restart_request: ServiceRestartRequest = None,
+    restart_request: Optional[ServiceRestartRequest] = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceRestartResponse:
     """
@@ -148,7 +148,7 @@ async def stop_service(
     request: Request,
     response: Response,
     service_name: str,
-    stop_request: ServiceStopRequest = None,
+    stop_request: Optional[ServiceStopRequest] = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceStopResponse:
     """
@@ -204,7 +204,7 @@ async def start_service(
     request: Request,
     response: Response,
     service_name: str,
-    start_request: ServiceStartRequest = None,
+    start_request: Optional[ServiceStartRequest] = None,
     current_user=Depends(deps.get_current_admin)
 ) -> ServiceStartResponse:
     """

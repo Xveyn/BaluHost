@@ -379,6 +379,10 @@ async def notification_websocket(
                 raise auth_service.InvalidTokenError("Invalid WebSocket token")
 
         user_sub = payload.get("sub")
+        if not user_sub:
+            logger.warning("WebSocket: Token missing 'sub' claim")
+            await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+            return
         from app.services import users as user_service
         user = user_service.get_user(user_sub, db=db)
         if not user:

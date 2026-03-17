@@ -150,10 +150,11 @@ class DevBenchmarkBackend:
             benchmark.status = BenchmarkStatus.COMPLETED
             benchmark.progress_percent = 100.0
             benchmark.current_test = None
-            benchmark.completed_at = datetime.now(timezone.utc)
+            now = datetime.now(timezone.utc)
+            benchmark.completed_at = now
             if benchmark.started_at:
                 benchmark.duration_seconds = (
-                    benchmark.completed_at - benchmark.started_at
+                    now - benchmark.started_at
                 ).total_seconds()
             db.commit()
 

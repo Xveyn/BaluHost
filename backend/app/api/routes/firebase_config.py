@@ -201,7 +201,14 @@ async def send_test_notification(
 
     # Find target devices
     if payload.device_id:
-        device = get_active_device_by_id(db, payload.device_id)
+        try:
+            numeric_device_id = int(payload.device_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail="device_id must be a valid integer",
+            )
+        device = get_active_device_by_id(db, numeric_device_id)
         if not device:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,

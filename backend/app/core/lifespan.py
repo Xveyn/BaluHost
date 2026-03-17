@@ -85,7 +85,7 @@ def _try_become_primary() -> bool:
         return False
 
     try:
-        _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)
+        _fcntl.flock(fd, _fcntl.LOCK_EX | _fcntl.LOCK_NB)  # type: ignore[attr-defined]
     except (IOError, OSError):
         fd.close()
         return False
@@ -177,7 +177,7 @@ async def _pihole_health_loop() -> None:
                 svc = PiholeService(db)
                 if svc.has_remote_pi():
                     await svc.check_health_and_failover()
-                    interval = int(svc.get_config().health_check_interval or 30)
+                    interval = int(svc.get_config().health_check_interval or 30)  # type: ignore[arg-type]
             finally:
                 db.close()
         except Exception as e:

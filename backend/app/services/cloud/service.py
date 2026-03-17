@@ -191,7 +191,7 @@ class CloudService:
             try:
                 adapter = self._get_adapter(conn)
                 if hasattr(adapter, "requires_2fa"):
-                    requires_2fa = adapter.requires_2fa
+                    requires_2fa = getattr(adapter, "requires_2fa")
             except Exception as e:
                 logger.warning("Could not check 2FA status: %s", e)
                 requires_2fa = True  # Assume 2FA needed
@@ -209,8 +209,9 @@ class CloudService:
             raise ValueError("Connection is not iCloud")
 
         adapter = self._get_adapter(conn)
-        if hasattr(adapter, "validate_2fa"):
-            return adapter.validate_2fa(code)
+        validate_fn = getattr(adapter, "validate_2fa", None)
+        if validate_fn is not None:
+            return validate_fn(code)
         return False
 
     # ─── File Browsing ────────────────────────────────────────────
