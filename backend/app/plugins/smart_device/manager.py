@@ -114,10 +114,10 @@ class SmartDeviceManager:
                 capabilities = [c.value for c in dt.capabilities]
                 break
 
-        config_encrypted: Optional[str] = None
+        config_secret: Optional[str] = None
         if data.config:
             try:
-                config_encrypted = VPNEncryption.encrypt_key(json.dumps(data.config))
+                config_secret = VPNEncryption.encrypt_key(json.dumps(data.config))
             except Exception as exc:
                 raise ValueError(f"Failed to encrypt device config: {exc}") from exc
 
@@ -128,7 +128,7 @@ class SmartDeviceManager:
             address=data.address,
             mac_address=data.mac_address,
             capabilities=capabilities,
-            config_encrypted=config_encrypted,
+            config_secret=config_secret,
             is_active=True,
             is_online=False,
             created_by_user_id=created_by_user_id,
@@ -194,7 +194,7 @@ class SmartDeviceManager:
 
         if "config" in update_fields and update_fields["config"] is not None:
             try:
-                device.config_encrypted = VPNEncryption.encrypt_key(
+                device.config_secret = VPNEncryption.encrypt_key(
                     json.dumps(update_fields.pop("config"))
                 )
             except Exception as exc:
@@ -202,8 +202,10 @@ class SmartDeviceManager:
         else:
             update_fields.pop("config", None)
 
+        _ALLOWED_UPDATE_FIELDS = {"name", "address", "is_active"}
         for field, value in update_fields.items():
-            setattr(device, field, value)
+            if field in _ALLOWED_UPDATE_FIELDS:
+                setattr(device, field, value)
 
         device.updated_at = datetime.now(timezone.utc)
         db.commit()
@@ -236,10 +238,10 @@ class SmartDeviceManager:
 
     def _decrypt_config(self, device: SmartDevice) -> Dict[str, Any]:
         """Decrypt and return the device config dict (or empty dict)."""
-        if not device.config_encrypted:
+        if not device.config_secret:
             return {}
         try:
-            return json.loads(VPNEncryption.decrypt_key(device.config_encrypted))
+            return json.loads(VPNEncryption.decrypt_key(device.config_secret))
         except Exception as exc:
             logger.warning(
                 "Could not decrypt config for device %d: %s", device.id, exc

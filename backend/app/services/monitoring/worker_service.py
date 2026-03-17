@@ -359,18 +359,21 @@ class MonitoringWorker:
     def _write_heartbeat(self) -> None:
         """Write heartbeat to SHM and service status to DB."""
         try:
+            services = [
+                "telemetry_monitor",
+                "disk_io_monitor",
+                "monitoring_orchestrator",
+                "power_monitor",
+            ]
+            if self._smart_device_poller is not None:
+                services.append("smart_device_poller")
+
             data = {
                 "alive": True,
                 "pid": os.getpid(),
                 "paused": self._paused,
                 "started_at": self._started_at,
-                "services": [
-                    "telemetry_monitor",
-                    "disk_io_monitor",
-                    "monitoring_orchestrator",
-                    "power_monitor",
-                    "smart_device_poller",
-                ],
+                "services": services,
                 "timestamp": time.time(),
             }
             write_shm(HEARTBEAT_FILE, data)

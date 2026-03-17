@@ -29,7 +29,7 @@ def upgrade() -> None:
         sa.Column('address', sa.String(length=255), nullable=False),
         sa.Column('mac_address', sa.String(length=17), nullable=True),
         sa.Column('capabilities', sa.JSON(), nullable=False),
-        sa.Column('config_encrypted', sa.Text(), nullable=True),
+        sa.Column('config_secret', sa.Text(), nullable=True),
         sa.Column('is_active', sa.Boolean(), nullable=False, server_default='1'),
         sa.Column('is_online', sa.Boolean(), nullable=False, server_default='0'),
         sa.Column('last_seen', sa.DateTime(), nullable=True),

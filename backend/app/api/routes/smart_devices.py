@@ -8,6 +8,7 @@ Write endpoints: admin only.
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone, timedelta
 from typing import List, Optional
@@ -120,6 +121,49 @@ def get_power_summary(
     manager = get_smart_device_manager()
     summary = manager.get_power_summary(db)
     return PowerSummaryResponse(**summary)
+
+
+# ---------------------------------------------------------------------------
+# GET /smart-devices/discover/{plugin}  — Trigger discovery
+# ---------------------------------------------------------------------------
+
+@router.get(
+    "/discover/{plugin_name}",
+    summary="Trigger device discovery for a plugin",
+)
+@user_limiter.limit(get_limit("admin_operations"))
+async def discover_devices(
+    request: Request,
+    response: Response,
+    plugin_name: str,
+    current_user: User = Depends(deps.get_current_admin),
+):
+    """Ask a smart device plugin to scan the local network for compatible devices.
+
+    Returns a list of discovered devices that can be added via POST /.
+    **Admin only.**
+    """
+    manager = get_smart_device_manager()
+    plugin = manager.get_plugin(plugin_name)
+    if plugin is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Plugin '{plugin_name}' is not loaded",
+        )
+
+    try:
+        discovered = await plugin.discover_devices()
+    except Exception as exc:
+        logger.error("Discovery failed for plugin '%s': %s", plugin_name, exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Discovery failed: {exc}",
+        )
+
+    return {
+        "plugin_name": plugin_name,
+        "discovered": [d.model_dump() for d in discovered],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -339,11 +383,11 @@ async def execute_command(
     device_id: int,
     cmd: DeviceCommandRequest,
     db: Session = Depends(deps.get_db),
-    current_user: User = Depends(deps.get_current_user),
+    current_user: User = Depends(deps.get_current_admin),
 ) -> DeviceCommandResponse:
     """Send a control command to a smart device (switch on/off, dim, colour).
 
-    **Requires authentication.**
+    **Admin only.**
     """
     manager = get_smart_device_manager()
     try:
@@ -359,6 +403,20 @@ async def execute_command(
     except Exception as exc:
         logger.error("Command execution failed for device %d: %s", device_id, exc)
         return DeviceCommandResponse(success=False, error=str(exc))
+
+    AuditLoggerDB().log_event(
+        event_type="SMART_DEVICE",
+        action="execute_command",
+        user=current_user.username,
+        resource=f"device:{device_id}",
+        success=result["success"],
+        details={
+            "device_id": device_id,
+            "capability": cmd.capability,
+            "command": cmd.command,
+            "params": cmd.params,
+        },
+    )
 
     return DeviceCommandResponse(
         success=result["success"],
@@ -417,11 +475,10 @@ def get_device_history(
         logger.error("History query failed for device %d: %s", device_id, exc)
         rows = []
 
-    import json as _json
     samples = []
     for row in rows:
         try:
-            data = _json.loads(row.data_json)
+            data = json.loads(row.data_json)
         except Exception:
             data = {"raw": row.data_json}
         samples.append({"timestamp": row.timestamp.isoformat(), **data})
@@ -433,46 +490,3 @@ def get_device_history(
         period_start=period_start,
         period_end=period_end,
     )
-
-
-# ---------------------------------------------------------------------------
-# GET /smart-devices/discover/{plugin}  — Trigger discovery
-# ---------------------------------------------------------------------------
-
-@router.get(
-    "/discover/{plugin_name}",
-    summary="Trigger device discovery for a plugin",
-)
-@user_limiter.limit(get_limit("admin_operations"))
-async def discover_devices(
-    request: Request,
-    response: Response,
-    plugin_name: str,
-    current_user: User = Depends(deps.get_current_admin),
-):
-    """Ask a smart device plugin to scan the local network for compatible devices.
-
-    Returns a list of discovered devices that can be added via POST /.
-    **Admin only.**
-    """
-    manager = get_smart_device_manager()
-    plugin = manager.get_plugin(plugin_name)
-    if plugin is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Plugin '{plugin_name}' is not loaded",
-        )
-
-    try:
-        discovered = await plugin.discover_devices()
-    except Exception as exc:
-        logger.error("Discovery failed for plugin '%s': %s", plugin_name, exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Discovery failed: {exc}",
-        )
-
-    return {
-        "plugin_name": plugin_name,
-        "discovered": [d.model_dump() for d in discovered],
-    }

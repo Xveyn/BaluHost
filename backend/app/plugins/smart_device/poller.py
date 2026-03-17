@@ -15,6 +15,7 @@ import json
 import logging
 import sys
 import time
+from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional
@@ -26,6 +27,19 @@ _DB_PERSIST_INTERVAL = 60.0
 
 # Path to the installed plugins directory (same as PluginManager.PLUGINS_DIR)
 _PLUGINS_DIR = Path(__file__).parent.parent / "installed"
+
+
+@dataclass
+class PollerDevice:
+    """Detached representation of a SmartDevice for use outside a DB session."""
+
+    id: int
+    name: str
+    plugin_name: str
+    device_type_id: str
+    address: str
+    capabilities: list = field(default_factory=list)
+    config_secret: str | None = None
 
 
 class SmartDevicePoller:
@@ -218,15 +232,19 @@ class SmartDevicePoller:
     # Polling
     # ------------------------------------------------------------------
 
-    def _get_active_devices(self, plugin_name: str) -> List[Any]:
-        """Fetch active devices for a plugin from DB."""
+    def _get_active_devices(self, plugin_name: str) -> List[PollerDevice]:
+        """Fetch active devices for a plugin from DB.
+
+        Returns lightweight :class:`PollerDevice` dataclass instances so
+        that no ORM objects are used after the session is closed.
+        """
         if self._db_session_factory is None:
             return []
         try:
             from app.models.smart_device import SmartDevice
             db = self._db_session_factory()
             try:
-                return (
+                rows = (
                     db.query(SmartDevice)
                     .filter(
                         SmartDevice.plugin_name == plugin_name,
@@ -234,6 +252,18 @@ class SmartDevicePoller:
                     )
                     .all()
                 )
+                return [
+                    PollerDevice(
+                        id=row.id,
+                        name=row.name,
+                        plugin_name=row.plugin_name,
+                        device_type_id=row.device_type_id,
+                        address=row.address,
+                        capabilities=row.capabilities or [],
+                        config_secret=row.config_secret,
+                    )
+                    for row in rows
+                ]
             finally:
                 db.close()
         except Exception as exc:
@@ -277,12 +307,12 @@ class SmartDevicePoller:
             except asyncio.CancelledError:
                 break
 
-    async def _poll_one_device(self, plugin: Any, device: Any, dev_mode: bool) -> None:
+    async def _poll_one_device(self, plugin: Any, device: PollerDevice, dev_mode: bool) -> None:
         """Poll a single device, handling timeouts and errors.
 
         Args:
             plugin: SmartDevicePlugin.
-            device: SmartDevice ORM instance.
+            device: PollerDevice dataclass instance.
             dev_mode: True if NAS_MODE=dev (use mock data).
         """
         device_id: int = device.id
@@ -326,11 +356,11 @@ class SmartDevicePoller:
             )
             self._mark_device_error(device, str(exc)[:500])
 
-    def _process_state(self, device: Any, new_state: Dict[str, Any]) -> None:
+    def _process_state(self, device: PollerDevice, new_state: Dict[str, Any]) -> None:
         """Compare new_state with previous, update snapshot, flag changes.
 
         Args:
-            device: SmartDevice ORM instance.
+            device: PollerDevice dataclass instance.
             new_state: Freshly polled state dict.
         """
         device_id: int = device.id
@@ -366,7 +396,7 @@ class SmartDevicePoller:
             # Write changes SHM immediately
             self._write_shm_changes()
 
-    def _mark_device_error(self, device: Any, error_msg: str) -> None:
+    def _mark_device_error(self, device: PollerDevice, error_msg: str) -> None:
         """Mark a device as offline and update its error in DB."""
         device_id: int = device.id
         snapshot_entry = self._snapshot.get(str(device_id))
@@ -380,7 +410,7 @@ class SmartDevicePoller:
     # ------------------------------------------------------------------
 
     def _update_device_online(
-        self, device: Any, online: bool, error: Optional[str]
+        self, device: PollerDevice, online: bool, error: Optional[str]
     ) -> None:
         """Update is_online / last_seen / last_error in the DB (best-effort)."""
         if self._db_session_factory is None:
@@ -459,3 +489,6 @@ class SmartDevicePoller:
             self._pending_changes.clear()
         except Exception as exc:
             logger.debug("SmartDevicePoller: SHM changes write failed: %s", exc)
+        finally:
+            if len(self._pending_changes) > 1000:
+                self._pending_changes.clear()

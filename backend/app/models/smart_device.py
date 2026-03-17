@@ -21,7 +21,7 @@ class SmartDevice(Base):
     mac_address = Column(String(17), nullable=True)
 
     capabilities = Column(JSON, nullable=False, default=list)
-    config_encrypted = Column(Text, nullable=True)  # Fernet-encrypted JSON
+    config_secret = Column(Text, nullable=True)  # Fernet-encrypted JSON
 
     is_active = Column(Boolean, default=True, nullable=False)
     is_online = Column(Boolean, default=False, nullable=False)
