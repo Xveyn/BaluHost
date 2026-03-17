@@ -8,7 +8,7 @@ import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Plug, CloudDownload, Shield } from 'lucide-react';
+import { Plug, CloudDownload, Shield, Zap } from 'lucide-react';
 import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
@@ -190,6 +190,12 @@ export default function Layout({ children }: LayoutProps) {
       label: t('navigation.devices'),
       description: t('navigation.devicesDesc'),
       icon: devicesIcon
+    },
+    {
+      path: '/smart-devices',
+      label: t('navigation.smartDevices', 'Smart Devices'),
+      description: t('navigation.smartDevicesDesc', 'IoT device control'),
+      icon: <Zap className="h-5 w-5" />,
     },
     {
       path: '/settings',
