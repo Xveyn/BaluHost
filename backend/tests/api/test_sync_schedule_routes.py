@@ -254,6 +254,47 @@ class TestEnableSchedule:
         assert response.status_code == 401
 
 
+class TestDeleteSchedule:
+    """Tests for DELETE /api/sync/schedule/{id}."""
+
+    def test_delete_schedule(self, client: TestClient, user_headers: dict):
+        create_resp = client.post(
+            f"{settings.api_prefix}/sync/schedule/create",
+            json={"device_id": "d1", "schedule_type": "daily"},
+            headers=user_headers,
+        )
+        schedule_id = create_resp.json()["schedule_id"]
+
+        response = client.delete(
+            f"{settings.api_prefix}/sync/schedule/{schedule_id}",
+            headers=user_headers,
+        )
+
+        assert response.status_code == 200
+        assert response.json()["deleted"] is True
+
+        # Verify removed from list
+        list_resp = client.get(
+            f"{settings.api_prefix}/sync/schedule/list",
+            headers=user_headers,
+        )
+        ids = [s["schedule_id"] for s in list_resp.json()["schedules"]]
+        assert schedule_id not in ids
+
+    def test_delete_nonexistent(self, client: TestClient, user_headers: dict):
+        response = client.delete(
+            f"{settings.api_prefix}/sync/schedule/9999",
+            headers=user_headers,
+        )
+        assert response.status_code == 404
+
+    def test_delete_requires_auth(self, client: TestClient):
+        response = client.delete(
+            f"{settings.api_prefix}/sync/schedule/1",
+        )
+        assert response.status_code == 401
+
+
 class TestUpdateSchedule:
     """Tests for PUT /api/sync/schedule/{id}."""
 

@@ -7,6 +7,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.16.4] - 2026-03-17
+
+### Added
+
+- **Mobile QR dialog** — auto-close on successful device registration
+
+### Fixed
+
+- **Import paths** — correct all broken module references after service reorganization into subpackages (power/, hardware/, sync/, versioning/, scheduler/)
+- **Runtime crashes** — fix wrong attribute access in RAID status and audit log routes
+- **Sync schedule management** — fix weekday mapping, add edit/delete support, resolve device name display
+- **Type safety** — add null checks, input validation, SQLAlchemy `Mapped[]` annotations, and proper type casts across 46 backend files
+- **Token validation** — reject tokens missing `sub` claim in JWT and WebSocket auth
+- **Sleep/service endpoints** — make request bodies optional to prevent 422 errors on empty requests
+- **Relative time formatter** — display future dates correctly in device list
+- Deprecated patterns and name collisions removed
+
+### Documentation
+
+- Security audit report (2026-03-16)
+- Static analysis report (ruff + mypy)
+
+---
+
 ## [1.16.3] - 2026-03-16
 
 ### Added

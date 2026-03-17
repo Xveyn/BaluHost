@@ -20,7 +20,7 @@ from app.schemas.system import (
     TelemetryHistoryResponse,
 )
 from app.schemas.user import UserPublic
-from app.services import smart as smart_service
+from app.services.hardware import smart as smart_service
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services import system as system_service
 from app.services import telemetry as telemetry_service
@@ -111,24 +111,25 @@ def _telemetry_history_from_db(db: Session) -> TelemetryHistoryResponse:
     from app.models.monitoring import CpuSample, MemorySample, NetworkSample
     from app.schemas.system import CpuTelemetrySample, MemoryTelemetrySample, NetworkTelemetrySample
     import time
+    from typing import Any
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=3)
 
-    cpu_rows = (
+    cpu_rows: list[Any] = (
         db.query(CpuSample)
         .filter(CpuSample.timestamp >= cutoff)
         .order_by(CpuSample.timestamp.asc())
         .limit(60)
         .all()
     )
-    mem_rows = (
+    mem_rows: list[Any] = (
         db.query(MemorySample)
         .filter(MemorySample.timestamp >= cutoff)
         .order_by(MemorySample.timestamp.asc())
         .limit(60)
         .all()
     )
-    net_rows = (
+    net_rows: list[Any] = (
         db.query(NetworkSample)
         .filter(NetworkSample.timestamp >= cutoff)
         .order_by(NetworkSample.timestamp.asc())

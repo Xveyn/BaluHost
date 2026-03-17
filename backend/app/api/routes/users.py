@@ -118,6 +118,8 @@ async def update_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     record = user_service.update_user(user_id, payload, db=db)
+    if not record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     # Sync Samba password if changed and SMB is enabled
     if payload.password and record.smb_enabled:
@@ -250,6 +252,8 @@ async def toggle_user_active(
 
     old_status = old_user.is_active
     user = user_service.toggle_active(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     audit_logger.log_user_management(
         action="user_status_toggled",
@@ -298,7 +302,7 @@ async def upload_avatar(
         )
     
     # Create avatars directory if it doesn't exist
-    avatars_dir = Path(settings.nas_storage_path) / ".system" / "avatars"
+    avatars_dir = Path(str(settings.nas_storage_path)) / ".system" / "avatars"
     avatars_dir.mkdir(parents=True, exist_ok=True)
 
     # Delete old avatar if exists
@@ -310,7 +314,7 @@ async def upload_avatar(
             pass
     
     # Generate unique filename
-    file_ext = Path(avatar.filename).suffix
+    file_ext = Path(avatar.filename or "avatar").suffix
     unique_filename = f"{uuid.uuid4()}{file_ext}"
     file_path = avatars_dir / unique_filename
     
@@ -320,5 +324,7 @@ async def upload_avatar(
     
     # Update user avatar_url
     user = user_service.update_avatar_url(user_id, f"/avatars/{unique_filename}", db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return user_service.serialize_user(user)

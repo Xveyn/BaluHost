@@ -25,6 +25,7 @@ export interface SyncDevice {
 export interface SyncSchedule {
   schedule_id: number;
   device_id: string;
+  device_name?: string | null;
   schedule_type: string;
   time_of_day: string;
   day_of_week?: number | null;
@@ -92,6 +93,10 @@ export async function disableSyncSchedule(id: number): Promise<void> {
 
 export async function enableSyncSchedule(id: number): Promise<void> {
   await apiClient.post(`/api/sync/schedule/${id}/enable`);
+}
+
+export async function deleteSyncSchedule(id: number): Promise<void> {
+  await apiClient.delete(`/api/sync/schedule/${id}`);
 }
 
 // ---------------------------------------------------------------------------

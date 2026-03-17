@@ -20,7 +20,7 @@ from app.schemas.power import (
     ActivatePresetResponse,
 )
 from app.schemas.user import UserPublic
-from app.services.power_preset_service import get_preset_service
+from app.services.power.presets import get_preset_service
 
 router = APIRouter(prefix="/power/presets", tags=["power-presets"])
 
@@ -188,6 +188,11 @@ async def activate_preset(
 
     # Get the newly activated preset
     new_preset = await service.get_preset_by_id(preset_id)
+    if new_preset is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Preset not found after activation: {preset_id}"
+        )
     new_summary = PowerPresetSummary(
         id=new_preset.id,
         name=new_preset.name,

@@ -253,8 +253,8 @@ class SleepManagerService:
             pass
 
         try:
-            from app.services.disk_monitor import get_latest_io_stats
-            io_stats = get_latest_io_stats()
+            from app.services.disk_monitor import get_latest_disk_io
+            io_stats = get_latest_disk_io()
             if io_stats:
                 # Sum read + write MB/s across all devices
                 for stats in io_stats.values():
@@ -265,7 +265,7 @@ class SleepManagerService:
         try:
             from app.services.upload_progress import get_upload_progress_manager
             mgr = get_upload_progress_manager()
-            active_uploads = len(mgr.get_all_progress())
+            active_uploads = len(mgr._progress)
         except Exception:
             pass
 
@@ -516,9 +516,10 @@ class SleepManagerService:
                 from app.services.power.fan_control import get_fan_control_service
                 fan_service = get_fan_control_service()
                 if fan_service and fan_service._is_running:
-                    for fan_id, fan_data in fan_service._fans.items():
-                        self._original_fan_modes[fan_id] = fan_data.mode
-                        await fan_service.apply_preset(fan_id, "silent")
+                    fans = await fan_service._backend.get_fans()
+                    for fan_data in fans:
+                        self._original_fan_modes[fan_data.fan_id] = fan_data.mode
+                        await fan_service.apply_preset(fan_data.fan_id, "silent")
                     logger.info("Fans set to silent for sleep mode")
             except Exception as e:
                 logger.warning("Could not set fans to silent: %s", e)

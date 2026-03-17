@@ -201,7 +201,9 @@ async def setup_2fa(
 
     # Check if already enabled
     user_record = db.query(UserModel).filter(UserModel.id == current_user.id).first()
-    if user_record and user_record.totp_enabled:
+    if not user_record:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+    if user_record.totp_enabled:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="2FA is already enabled. Disable it first to reconfigure.",

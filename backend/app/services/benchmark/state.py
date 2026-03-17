@@ -11,11 +11,14 @@ import logging
 import os
 import platform
 import shutil
-from typing import Any, Callable, Dict, List, Optional, Protocol
+from typing import TYPE_CHECKING, Any, Callable, Dict, List, Optional, Protocol
 
 from sqlalchemy.orm import Session
 
 from app.schemas.benchmark import DiskInfo
+
+if TYPE_CHECKING:
+    from app.models.benchmark import DiskBenchmark
 
 logger = logging.getLogger(__name__)
 
@@ -55,11 +58,12 @@ class FioNotFoundError(RuntimeError):
 
 def _format_size(size_bytes: int) -> str:
     """Format bytes to human-readable string."""
+    value = float(size_bytes)
     for unit in ["B", "KB", "MB", "GB", "TB"]:
-        if abs(size_bytes) < 1024.0:
-            return f"{size_bytes:.1f} {unit}"
-        size_bytes /= 1024.0
-    return f"{size_bytes:.1f} PB"
+        if abs(value) < 1024.0:
+            return f"{value:.1f} {unit}"
+        value /= 1024.0
+    return f"{value:.1f} PB"
 
 
 def _get_fio_path() -> Optional[str]:

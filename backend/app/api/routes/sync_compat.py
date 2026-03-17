@@ -12,7 +12,7 @@ import uuid
 from app.core.config import get_settings
 from app.api.deps import get_current_user
 from app.core.database import get_db
-from app.services.file_sync import FileSyncService
+from app.services.sync.file_sync import FileSyncService
 from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter(prefix="/sync", tags=["sync"])

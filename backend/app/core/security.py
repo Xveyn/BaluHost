@@ -251,7 +251,10 @@ def get_user_id_from_token(token: str, token_type: str = "access") -> str:
                 f"Invalid token type. Expected '{token_type}', got '{payload.get('type')}'"
             )
         
-        return payload.get("sub")
+        sub = payload.get("sub")
+        if sub is None:
+            raise jwt.InvalidTokenError("Token missing 'sub' claim")
+        return str(sub)
     except jwt.InvalidSignatureError:
         raise
     except jwt.InvalidTokenError:

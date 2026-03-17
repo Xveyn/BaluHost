@@ -7,8 +7,8 @@ from app import api
 from app.api import deps
 from app.core.database import get_db
 from app.models.user import User
-from app.services.progressive_sync import ProgressiveSyncService
-from app.services.sync_scheduler import SyncSchedulerService
+from app.services.sync.progressive import ProgressiveSyncService
+from app.services.sync.scheduler import SyncSchedulerService
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
     RegisterDeviceRequest,
@@ -266,6 +266,24 @@ async def enable_sync_schedule(
     return {"enabled": True, "schedule_id": schedule_id}
 
 
+@router.delete("/schedule/{schedule_id}")
+@user_limiter.limit(get_limit("sync_operations"))
+async def delete_sync_schedule(
+    request: Request,
+    response: Response,
+    schedule_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
+):
+    """Permanently delete a sync schedule."""
+    success = scheduler.delete_schedule(schedule_id, current_user.id)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
+
+    return {"deleted": True, "schedule_id": schedule_id}
+
+
 @router.put("/schedule/{schedule_id}")
 @user_limiter.limit(get_limit("sync_operations"))
 async def update_sync_schedule(
@@ -280,6 +298,7 @@ async def update_sync_schedule(
     result = scheduler.update_schedule(
         schedule_id=schedule_id,
         user_id=current_user.id,
+        device_id=payload.device_id,
         schedule_type=payload.schedule_type,
         time_of_day=payload.time_of_day,
         day_of_week=payload.day_of_week,

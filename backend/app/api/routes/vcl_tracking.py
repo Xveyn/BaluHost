@@ -35,14 +35,14 @@ async def get_tracking_rules(
     """Get current user's VCL tracking rules and mode."""
     tracking = VCLTrackingService(db)
     settings = db.query(VCLSettings).filter(VCLSettings.user_id == user.id).first()
-    mode = str(settings.vcl_mode) if settings and settings.vcl_mode else "automatic"
+    mode = str(settings.vcl_mode) if settings is not None and settings.vcl_mode is not None else "automatic"
 
     rules = tracking.get_user_tracking_rules(user.id)
     entries = []
     for rule in rules:
         file_path = None
         file_name = None
-        if rule.file_id:
+        if rule.file_id is not None:
             f = db.query(FileMetadata.path, FileMetadata.name).filter(
                 FileMetadata.id == rule.file_id
             ).first()
@@ -50,14 +50,14 @@ async def get_tracking_rules(
                 file_path = str(f[0])
                 file_name = str(f[1])
         entries.append(FileTrackingEntry(
-            id=int(rule.id),
-            file_id=int(rule.file_id) if rule.file_id else None,
+            id=int(rule.id),  # type: ignore[arg-type]
+            file_id=int(rule.file_id) if rule.file_id is not None else None,  # type: ignore[arg-type]
             file_path=file_path,
             file_name=file_name,
-            path_pattern=str(rule.path_pattern) if rule.path_pattern else None,
-            action=str(rule.action),
-            is_directory=bool(rule.is_directory),
-            created_at=rule.created_at,
+            path_pattern=str(rule.path_pattern) if rule.path_pattern is not None else None,  # type: ignore[arg-type]
+            action=str(rule.action),  # type: ignore[arg-type]
+            is_directory=bool(rule.is_directory),  # type: ignore[arg-type]
+            created_at=rule.created_at,  # type: ignore[arg-type]
         ))
 
     return FileTrackingListResponse(
@@ -104,7 +104,7 @@ async def add_tracking_rule(
 
     file_path = None
     file_name = None
-    if rule.file_id:
+    if rule.file_id is not None:
         f = db.query(FileMetadata.path, FileMetadata.name).filter(
             FileMetadata.id == rule.file_id
         ).first()
@@ -113,14 +113,14 @@ async def add_tracking_rule(
             file_name = str(f[1])
 
     return FileTrackingEntry(
-        id=int(rule.id),
-        file_id=int(rule.file_id) if rule.file_id else None,
+        id=int(rule.id),  # type: ignore[arg-type]
+        file_id=int(rule.file_id) if rule.file_id is not None else None,  # type: ignore[arg-type]
         file_path=file_path,
         file_name=file_name,
-        path_pattern=str(rule.path_pattern) if rule.path_pattern else None,
-        action=str(rule.action),
-        is_directory=bool(rule.is_directory),
-        created_at=rule.created_at,
+        path_pattern=str(rule.path_pattern) if rule.path_pattern is not None else None,  # type: ignore[arg-type]
+        action=str(rule.action),  # type: ignore[arg-type]
+        is_directory=bool(rule.is_directory),  # type: ignore[arg-type]
+        created_at=rule.created_at,  # type: ignore[arg-type]
     )
 
 

@@ -76,7 +76,7 @@ async def create_api_key(
         action="api_key_created",
         user=current_user.username,
         success=True,
-        details=f"key_id={api_key.id} name='{api_key.name}' target_user_id={api_key.target_user_id}",
+        details={"key_id": api_key.id, "name": api_key.name, "target_user_id": api_key.target_user_id},
         db=db,
     )
 
@@ -170,7 +170,7 @@ async def revoke_api_key(
         action="api_key_revoked",
         user=current_user.username,
         success=True,
-        details=f"key_id={key_id} reason='{reason or 'none'}'",
+        details={"key_id": key_id, "reason": reason or "none"},
         db=db,
     )
 

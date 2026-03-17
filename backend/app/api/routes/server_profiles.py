@@ -21,7 +21,7 @@ from app.schemas.server_profile import (
 )
 from app.services import server_profile_service
 from app.services.ssh_service import SSHService
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn.encryption import VPNEncryption
 from app.core.rate_limiter import limiter, user_limiter, get_limit
 
 logger = logging.getLogger(__name__)
@@ -250,7 +250,7 @@ async def start_remote_server(
             detail="Server profile not found"
         )
 
-    if not profile.power_on_command:
+    if not cast(str | None, profile.power_on_command):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No power on command configured for this profile"
@@ -266,7 +266,7 @@ async def start_remote_server(
             cast(int, profile.ssh_port),
             cast(str, profile.ssh_username),
             private_key,
-            profile.power_on_command,
+            cast(str, profile.power_on_command),
         )
 
         if success:

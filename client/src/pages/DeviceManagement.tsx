@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import { Activity, QrCode as QrCodeIcon, Calendar } from 'lucide-react';
@@ -19,6 +19,11 @@ export default function DeviceManagement() {
   const [showPairingDialog, setShowPairingDialog] = useState(false);
 
   const dm = useDeviceManagement();
+
+  const handleQrClose = useCallback(() => {
+    setQrData(null);
+    dm.refetchDevices();
+  }, [dm.refetchDevices]);
 
   // Auto-open pairing dialog if ?pair=1 is in URL
   useEffect(() => {
@@ -104,16 +109,15 @@ export default function DeviceManagement() {
           onCreateSchedule={dm.handleCreateSchedule}
           onDisableSchedule={dm.handleDisableSchedule}
           onEnableSchedule={dm.handleEnableSchedule}
+          onDeleteSchedule={dm.handleDeleteSchedule}
+          onUpdateSchedule={dm.handleUpdateSchedule}
         />
       )}
 
       {/* Modals */}
       <QrCodeDialog
         data={qrData}
-        onClose={() => {
-          setQrData(null);
-          dm.refetchDevices();
-        }}
+        onClose={handleQrClose}
       />
 
       <EditDeviceModal

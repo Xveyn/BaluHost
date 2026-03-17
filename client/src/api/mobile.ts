@@ -61,6 +61,11 @@ export async function getAvailableVpnTypes(): Promise<string[]> {
   return res.data.available_types;
 }
 
+export async function getTokenStatus(token: string): Promise<{ used: boolean }> {
+  const res = await apiClient.get(`/api/mobile/token/${encodeURIComponent(token)}/status`);
+  return res.data;
+}
+
 export async function getMobileDevices(): Promise<MobileDevice[]> {
   // Add cache-busting timestamp to prevent stale data
   const res = await apiClient.get('/api/mobile/devices', {

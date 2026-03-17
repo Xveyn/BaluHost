@@ -65,7 +65,8 @@
     "vpnIncluded": "VPN configuration included",
     "reminders": "Automatic Reminders",
     "remindersDesc": "You will be notified 7 days, 3 days, and 1 hour before expiration via push notification.",
-    "expiresAt": "Token expires at:"
+    "expiresAt": "Token expires at:",
+    "deviceRegistered": "Device registered successfully!"
   },
   "schedules": {
     "title": "Sync Schedules",
@@ -85,7 +86,8 @@
     "noSchedules": "No sync schedules configured",
     "loadingSchedules": "Loading schedules...",
     "autoVpn": "Auto-VPN",
-    "autoVpnHint": "When Auto-VPN is enabled, the device will automatically connect via VPN before syncing and disconnect afterwards."
+    "autoVpnHint": "When Auto-VPN is enabled, the device will automatically connect via VPN before syncing and disconnect afterwards.",
+    "editSchedule": "Edit Schedule"
   },
   "days": {
     "sunday": "Sunday",
@@ -111,11 +113,13 @@
   "buttons": {
     "refresh": "Refresh",
     "save": "Save",
+    "saving": "Saving...",
     "cancel": "Cancel",
     "delete": "Delete",
     "create": "Create",
     "disable": "Disable",
-    "enable": "Enable"
+    "enable": "Enable",
+    "edit": "Edit"
   },
   "platforms": {
     "ios": "iOS",
@@ -138,6 +142,10 @@
     "disableFailed": "Failed to disable schedule",
     "scheduleEnabled": "Schedule enabled successfully",
     "enableFailed": "Failed to enable schedule",
+    "scheduleDeleted": "Schedule deleted successfully",
+    "deleteScheduleConfirm": "Are you sure you want to permanently delete this sync schedule?",
+    "deleteScheduleTitle": "Delete Schedule",
+    "scheduleUpdated": "Schedule updated successfully",
     "enterDeviceName": "Please enter a device name",
     "selectDevice": "Please select a device",
     "desktopDeleteNotImplemented": "Desktop device deletion not yet implemented",

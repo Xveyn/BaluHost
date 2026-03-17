@@ -152,7 +152,7 @@ async def get_plugin_details(
         min_baluhost_version=meta.min_baluhost_version,
         dependencies=meta.dependencies,
         required_permissions=meta.required_permissions,
-        granted_permissions=db_record.granted_permissions if db_record else [],
+        granted_permissions=(db_record.granted_permissions or []) if db_record else [],
         dangerous_permissions=PermissionManager.get_dangerous_permissions(
             meta.required_permissions
         ),
@@ -168,7 +168,7 @@ async def get_plugin_details(
         dashboard_widgets=ui_manifest.dashboard_widgets if ui_manifest else [],
         installed_at=db_record.installed_at if db_record else None,
         enabled_at=db_record.enabled_at if db_record else None,
-        config=db_record.config if db_record else plugin.get_default_config(),
+        config=(db_record.config or {}) if db_record else (plugin.get_default_config() or {}),
         config_schema=config_schema,
     )
 
@@ -286,7 +286,7 @@ async def get_plugin_config(
         )
 
     db_record = plugin_service.get_installed_plugin(db, name)
-    config = db_record.config if db_record else plugin.get_default_config()
+    config = (db_record.config or {}) if db_record else (plugin.get_default_config() or {})
 
     # Get schema if available
     schema = None
@@ -300,7 +300,7 @@ async def get_plugin_config(
     return PluginConfigResponse(
         name=name,
         config=config,
-        schema_=schema,
+        schema=schema,
     )
 
 
@@ -349,7 +349,7 @@ async def update_plugin_config(
     return PluginConfigResponse(
         name=name,
         config=validated_config,
-        schema_=None,
+        schema=None,
     )
 
 

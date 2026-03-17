@@ -227,7 +227,7 @@ class TestGetSchedules:
         s = result[0]
 
         expected_keys = {
-            "schedule_id", "device_id", "schedule_type", "time_of_day",
+            "schedule_id", "device_id", "device_name", "schedule_type", "time_of_day",
             "day_of_week", "day_of_month", "next_run_at", "last_run_at",
             "enabled", "sync_deletions", "resolve_conflicts", "auto_vpn",
         }

@@ -98,6 +98,20 @@ class SyncSchedulerService:
         self.db.commit()
         return True
 
+    def delete_schedule(self, schedule_id: int, user_id: int) -> bool:
+        """Permanently delete a schedule."""
+        schedule = self.db.query(SyncSchedule).filter(
+            SyncSchedule.id == schedule_id,
+            SyncSchedule.user_id == user_id
+        ).first()
+
+        if not schedule:
+            return False
+
+        self.db.delete(schedule)
+        self.db.commit()
+        return True
+
     def enable_schedule(self, schedule_id: int, user_id: int) -> bool:
         """Enable a previously disabled schedule."""
         schedule = self.db.query(SyncSchedule).filter(
@@ -113,11 +127,31 @@ class SyncSchedulerService:
         self.db.commit()
         return True
 
+    def _resolve_device_name(self, device_id: str) -> str | None:
+        """Look up device name from mobile_devices or sync_states."""
+        from app.models.mobile import MobileDevice
+        from app.models.sync_state import SyncState
+
+        mobile = self.db.query(MobileDevice.device_name).filter(
+            MobileDevice.id == device_id
+        ).first()
+        if mobile:
+            return mobile[0]
+
+        desktop = self.db.query(SyncState.device_name).filter(
+            SyncState.device_id == device_id
+        ).first()
+        if desktop:
+            return desktop[0]
+
+        return None
+
     def _schedule_to_dict(self, schedule: SyncSchedule) -> dict:
         """Convert a SyncSchedule model to a response dict."""
         return {
             "schedule_id": schedule.id,
             "device_id": schedule.device_id,
+            "device_name": self._resolve_device_name(schedule.device_id),
             "schedule_type": schedule.schedule_type,
             "time_of_day": schedule.time_of_day,
             "day_of_week": schedule.day_of_week,

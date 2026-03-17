@@ -28,7 +28,7 @@ from typing import Optional
 
 from app.api import deps
 from app.core.config import settings
-from app.services.sensors import get_cpu_sensor_data
+from app.services.hardware.sensors import get_cpu_sensor_data
 from app.core.rate_limiter import limiter, get_limit
 
 # Create router
@@ -335,7 +335,7 @@ def collect_system_metrics():
         # CPU
         cpu_percent = psutil.cpu_percent(interval=0.1)
         cpu_usage_percent.set(cpu_percent)
-        cpu_count.set(psutil.cpu_count())
+        cpu_count.set(psutil.cpu_count() or 0)
 
         # CPU Sensors (frequency and temperature)
         cpu_sensor_data = get_cpu_sensor_data()
@@ -381,27 +381,27 @@ def collect_system_metrics():
 def collect_raid_metrics():
     """Collect RAID status metrics."""
     try:
-        from app.services.raid import get_raid_status
+        from app.services.hardware.raid.api import get_status
 
-        raid_status = get_raid_status()
+        raid_status = get_status()
 
-        for array in raid_status.get('arrays', []):
-            device = array.get('device', 'unknown')
-            level = array.get('level', 'unknown')
-            status = array.get('status', 'unknown')
+        for array in raid_status.arrays:
+            device = array.name
+            level = array.level
+            status = array.status
 
             # Set array status (1 for active, 0 for degraded/inactive)
             is_healthy = 1 if status.lower() == 'active' else 0
             raid_array_status.labels(device=device, level=level, status=status).set(is_healthy)
 
             # Disk counts
-            total_disks = array.get('total_disks', 0)
-            active_disks = array.get('active_disks', 0)
+            total_disks = len(array.devices)
+            active_disks = sum(1 for d in array.devices if d.state == 'active')
             raid_disk_count.labels(device=device, type='total').set(total_disks)
             raid_disk_count.labels(device=device, type='active').set(active_disks)
 
             # Sync progress
-            sync_progress = array.get('sync_progress', 0)
+            sync_progress = array.resync_progress or 0
             raid_sync_progress_percent.labels(device=device).set(sync_progress)
 
     except Exception as e:
@@ -411,28 +411,35 @@ def collect_raid_metrics():
 def collect_smart_metrics():
     """Collect SMART disk health metrics."""
     try:
-        from app.services.smart import get_all_disks
+        from app.services.hardware.smart.api import get_smart_status
 
-        disks = get_all_disks()
+        smart_status = get_smart_status()
 
-        for disk in disks:
-            device = disk.get('device', 'unknown')
-            serial = disk.get('serial', 'unknown')
+        for device_info in smart_status.devices:
+            device = device_info.name
+            serial = device_info.serial
 
             # Health status (1 for healthy/passed, 0 for failing)
-            health = disk.get('health', 'unknown').lower()
+            health = device_info.status.lower()
             is_healthy = 1 if health in ['passed', 'healthy', 'ok'] else 0
             disk_smart_health.labels(device=device, serial=serial).set(is_healthy)
 
             # Temperature
-            temp = disk.get('temperature', 0)
+            temp = device_info.temperature
             if temp:
                 disk_temperature_celsius.labels(device=device).set(temp)
 
             # Power-on hours
-            power_on_hours = disk.get('power_on_hours', 0)
-            if power_on_hours:
-                disk_power_on_hours.labels(device=device).set(power_on_hours)
+            power_on_attr = next(
+                (a for a in device_info.attributes if a.name and 'power_on' in a.name.lower()),
+                None,
+            )
+            if power_on_attr and power_on_attr.raw:
+                try:
+                    hours = int(power_on_attr.raw.split()[0])
+                    disk_power_on_hours.labels(device=device).set(hours)
+                except (ValueError, IndexError):
+                    pass
 
     except Exception as e:
         print(f"Error collecting SMART metrics: {e}")

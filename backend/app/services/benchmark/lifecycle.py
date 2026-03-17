@@ -69,7 +69,7 @@ def kill_orphan_fio_processes() -> None:
         pids = [int(pid.strip()) for pid in result.stdout.strip().split("\n") if pid.strip()]
         for pid in pids:
             try:
-                os.kill(pid, signal.SIGKILL)
+                os.kill(pid, getattr(signal, "SIGKILL", 9))
                 logger.info("Killed orphan fio process (PID %d)", pid)
             except (ProcessLookupError, PermissionError) as e:
                 logger.debug("Could not kill fio PID %d: %s", pid, e)

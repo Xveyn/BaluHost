@@ -19,7 +19,8 @@ from __future__ import annotations
 import functools
 import logging
 import uuid
-from typing import Callable, Optional, TypeVar, ParamSpec
+from collections.abc import Awaitable, Callable
+from typing import Optional, ParamSpec, TypeVar
 
 from app.schemas.power import PowerProfile, ServicePowerProperty
 
@@ -44,7 +45,7 @@ def requires_power(
     power_property: ServicePowerProperty,
     timeout_seconds: Optional[int] = None,
     description: Optional[str] = None
-) -> Callable[[Callable[P, T]], Callable[P, T]]:
+) -> Callable[[Callable[P, Awaitable[T]]], Callable[P, Awaitable[T]]]:
     """
     Decorator to register power demand when an endpoint is called.
 
@@ -67,11 +68,11 @@ def requires_power(
     if timeout_seconds is None:
         timeout_seconds = 300  # 5 minutes default
 
-    def decorator(func: Callable[P, T]) -> Callable[P, T]:
+    def decorator(func: Callable[P, Awaitable[T]]) -> Callable[P, Awaitable[T]]:
         @functools.wraps(func)
         async def wrapper(*args: P.args, **kwargs: P.kwargs) -> T:
             # Import here to avoid circular imports
-            from app.services.power_manager import get_power_manager
+            from app.services.power.manager import get_power_manager
 
             manager = get_power_manager()
             profile = _property_to_profile(power_property)
@@ -128,7 +129,7 @@ class PowerPropertyContext:
         self._demand_id: Optional[str] = None
 
     async def __aenter__(self) -> "PowerPropertyContext":
-        from app.services.power_manager import get_power_manager
+        from app.services.power.manager import get_power_manager
 
         manager = get_power_manager()
         profile = _property_to_profile(self.power_property)
@@ -144,7 +145,7 @@ class PowerPropertyContext:
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
-        from app.services.power_manager import get_power_manager
+        from app.services.power.manager import get_power_manager
 
         if self._demand_id:
             manager = get_power_manager()
@@ -176,7 +177,7 @@ async def register_power_demand(
     Returns:
         The demand ID (same as source)
     """
-    from app.services.power_manager import get_power_manager
+    from app.services.power.manager import get_power_manager
 
     manager = get_power_manager()
     profile = _property_to_profile(power_property)
@@ -200,7 +201,7 @@ async def unregister_power_demand(source: str) -> bool:
     Returns:
         True if demand was found and removed
     """
-    from app.services.power_manager import get_power_manager
+    from app.services.power.manager import get_power_manager
 
     manager = get_power_manager()
     return await manager.unregister_demand(source)

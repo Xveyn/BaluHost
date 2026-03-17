@@ -17,7 +17,7 @@ from app.schemas.scheduler import (
     SchedulerToggleRequest,
     SchedulerToggleResponse,
 )
-from app.services.scheduler_service import get_scheduler_service
+from app.services.scheduler import get_scheduler_service
 
 
 router = APIRouter()

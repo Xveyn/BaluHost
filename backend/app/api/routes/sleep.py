@@ -2,6 +2,7 @@
 Sleep mode API endpoints.
 """
 import logging
+from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
 from app.api.deps import get_current_user, get_current_admin
@@ -47,12 +48,12 @@ async def get_sleep_status(
 @user_limiter.limit(get_limit("admin_operations"))
 async def enter_soft_sleep(
     request: Request, response: Response,
-    body: EnterSoftSleepRequest = EnterSoftSleepRequest(),
+    body: Optional[EnterSoftSleepRequest] = None,
     current_user: User = Depends(get_current_admin),
 ) -> dict:
     """Enter soft sleep mode (admin only)."""
     manager = _get_manager()
-    reason = body.reason or f"manual by {current_user.username}"
+    reason = (body.reason if body else None) or f"manual by {current_user.username}"
     ok = await manager.enter_soft_sleep(reason, SleepTrigger.MANUAL)
     if not ok:
         raise HTTPException(status_code=409, detail="Cannot enter soft sleep from current state")
@@ -79,14 +80,14 @@ async def wake_from_sleep(
 @user_limiter.limit(get_limit("admin_operations"))
 async def enter_suspend(
     request: Request, response: Response,
-    body: EnterSuspendRequest = EnterSuspendRequest(),
+    body: Optional[EnterSuspendRequest] = None,
     current_user: User = Depends(get_current_admin),
 ) -> dict:
     """Enter true system suspend (admin only)."""
     manager = _get_manager()
-    reason = body.reason or f"manual suspend by {current_user.username}"
+    reason = (body.reason if body else None) or f"manual suspend by {current_user.username}"
     ok = await manager.enter_true_suspend(
-        reason, SleepTrigger.MANUAL, wake_at=body.wake_at,
+        reason, SleepTrigger.MANUAL, wake_at=body.wake_at if body else None,
     )
     if not ok:
         raise HTTPException(status_code=409, detail="Cannot suspend from current state")
@@ -98,12 +99,15 @@ async def enter_suspend(
 @user_limiter.limit(get_limit("admin_operations"))
 async def send_wol(
     request: Request, response: Response,
-    body: WolRequest = WolRequest(),
+    body: Optional[WolRequest] = None,
     current_user: User = Depends(get_current_admin),
 ) -> dict:
     """Send a Wake-on-LAN magic packet (admin only)."""
     manager = _get_manager()
-    ok = await manager.send_wol(body.mac_address, body.broadcast_address)
+    ok = await manager.send_wol(
+        body.mac_address if body else None,
+        body.broadcast_address if body else None,
+    )
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to send WoL packet (no MAC address configured?)")
     logger.info("WoL packet sent by %s", current_user.username)

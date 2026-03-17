@@ -1,11 +1,17 @@
 """WebDAV server provider for network drive access with user isolation."""
 
+from __future__ import annotations
+
 import os
 import shutil
 from pathlib import Path
+from typing import TYPE_CHECKING, cast
 
 from wsgidav import util
 from wsgidav.fs_dav_provider import FileResource, FilesystemProvider, FolderResource
+
+if TYPE_CHECKING:
+    from wsgidav.dav_provider import _DAVResource
 
 
 class BaluHostFolderResource(FolderResource):
@@ -18,13 +24,15 @@ class BaluHostFolderResource(FolderResource):
     shows the correct RAID array capacity.
     """
 
-    def get_used_bytes(self):
-        return shutil.disk_usage(self.provider._storage_root).used
+    def get_used_bytes(self) -> int:
+        provider = cast("BaluHostDAVProvider", self.provider)
+        return shutil.disk_usage(provider._storage_root).used
 
-    def get_available_bytes(self):
-        return shutil.disk_usage(self.provider._storage_root).free
+    def get_available_bytes(self) -> int:
+        provider = cast("BaluHostDAVProvider", self.provider)
+        return shutil.disk_usage(provider._storage_root).free
 
-    def get_member(self, name):
+    def get_member(self, name: str) -> _DAVResource | None:  # type: ignore[override]
         fp = os.path.join(self._file_path, name)
         path = util.join_uri(self.path, name)
         if os.path.isdir(fp):
@@ -66,7 +74,7 @@ class BaluHostDAVProvider(FilesystemProvider):
                 return file_path
         return super()._loc_to_file_path(path, environ)
 
-    def get_resource_inst(self, path, environ):
+    def get_resource_inst(self, path: str, environ: dict) -> _DAVResource | None:  # type: ignore[override]
         """Return BaluHostFolderResource for directories so quota is correct."""
         self._count_get_resource_inst += 1
         fp = self._loc_to_file_path(path, environ)

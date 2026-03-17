@@ -20,7 +20,8 @@ from app.schemas.tapo import (
     PowerMonitoringResponse,
     CurrentPowerResponse,
 )
-from app.services import power_monitor, tapo_service
+from app.services.power import monitor as power_monitor
+from app.services import tapo_service
 from app.services.audit.logger_db import AuditLoggerDB
 
 router = APIRouter()

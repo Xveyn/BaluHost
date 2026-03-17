@@ -200,7 +200,7 @@ class MobilePowerSummary(BaseModel):
 
     # CPU power profile
     power_profile: Optional[str] = None
-    power_profile_frequency_mhz: Optional[int] = None
+    power_profile_frequency_mhz: Optional[float] = None
     auto_scaling_enabled: bool = False
     active_demands_count: int = 0
 
