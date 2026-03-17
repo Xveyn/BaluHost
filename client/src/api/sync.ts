@@ -25,6 +25,7 @@ export interface SyncDevice {
 export interface SyncSchedule {
   schedule_id: number;
   device_id: string;
+  device_name?: string | null;
   schedule_type: string;
   time_of_day: string;
   day_of_week?: number | null;

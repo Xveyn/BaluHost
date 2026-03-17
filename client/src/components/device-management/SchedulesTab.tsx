@@ -18,9 +18,10 @@ interface SchedulesTabProps {
   onUpdateSchedule: (scheduleId: number, data: Record<string, unknown>) => Promise<boolean>;
 }
 
-function resolveDeviceName(devices: Device[], deviceId: string): string {
+function resolveDeviceName(devices: Device[], deviceId: string, backendName?: string | null): string {
   const device = devices.find((d) => d.id === deviceId);
   if (device) return device.name;
+  if (backendName) return backendName;
   // Show truncated UUID for deleted/unknown devices
   if (deviceId.length > 12) return `${deviceId.slice(0, 8)}…`;
   return deviceId;
@@ -226,7 +227,7 @@ export function SchedulesTab({
       ) : (
         <div className="space-y-3">
           {schedules.map((schedule) => {
-            const deviceName = resolveDeviceName(devices, schedule.device_id);
+            const deviceName = resolveDeviceName(devices, schedule.device_id, schedule.device_name);
             const isEnabled = schedule.is_enabled !== false;
 
             return (
@@ -329,7 +330,7 @@ export function SchedulesTab({
             <div className="space-y-4">
               <div>
                 <label className="block text-xs text-slate-400 mb-1">{t('schedules.device')}</label>
-                <p className="text-sm text-slate-200">{resolveDeviceName(devices, editingSchedule.device_id)}</p>
+                <p className="text-sm text-slate-200">{resolveDeviceName(devices, editingSchedule.device_id, editingSchedule.device_name)}</p>
               </div>
 
               <div>
