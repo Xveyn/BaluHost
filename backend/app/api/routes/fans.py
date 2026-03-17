@@ -48,7 +48,7 @@ from app.schemas.fans import (
     TempSensorInfo,
     TempSensorListResponse,
 )
-from app.services.fan_control import get_fan_control_service, FanControlService
+from app.services.power.fan_control import get_fan_control_service, FanControlService
 
 logger = logging.getLogger(__name__)
 router = APIRouter()

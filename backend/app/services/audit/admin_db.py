@@ -8,6 +8,7 @@ from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 
 from app.core import database
+from app.schemas.admin_db import AdminTableSchemaField, AdminTableRowsResponse
 
 
 REDACT_PATTERN = re.compile(r"password|secret|token|private_key|api_key", re.IGNORECASE)
@@ -79,7 +80,7 @@ class AdminDBService:
         return result
 
     @classmethod
-    def get_table_schema(cls, table_name: str) -> List[Dict[str, Any]]:
+    def get_table_schema(cls, table_name: str) -> List[AdminTableSchemaField]:
         if table_name not in _WHITELIST:
             raise ValueError(f"Table not allowed: {table_name}")
 
@@ -91,12 +92,12 @@ class AdminDBService:
 
         schema = []
         for c in cols:
-            schema.append({
-                "name": c.get("name"),
-                "type": str(c.get("type")),
-                "nullable": bool(c.get("nullable")),
-                "default": c.get("default"),
-            })
+            schema.append(AdminTableSchemaField(
+                name=c.get("name"),
+                type=str(c.get("type")),
+                nullable=bool(c.get("nullable")),
+                default=c.get("default"),
+            ))
         return schema
 
     @classmethod
@@ -162,7 +163,7 @@ class AdminDBService:
         sort_by: Optional[str] = None,
         sort_order: Optional[str] = "asc",
         filters: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
+    ) -> AdminTableRowsResponse:
         """Return paginated rows. `fields` restricts returned columns.
 
         `q` is a simple text match applied across string columns.
@@ -248,18 +249,15 @@ class AdminDBService:
             row = cls._redact_row(row)
             rows.append(row)
 
-        result = {
-            "table": table_name,
-            "page": page,
-            "page_size": page_size,
-            "rows": rows,
-            "total": total,
-        }
-        if sort_by:
-            result["sort_by"] = sort_by
-            result["sort_order"] = sort_order or "asc"
-
-        return result
+        return AdminTableRowsResponse(
+            table=table_name,
+            page=page,
+            page_size=page_size,
+            rows=rows,
+            total=total,
+            sort_by=sort_by if sort_by else None,
+            sort_order=(sort_order or "asc") if sort_by else None,
+        )
 
     @classmethod
     def get_database_health(cls, db: Session) -> Dict[str, Any]:

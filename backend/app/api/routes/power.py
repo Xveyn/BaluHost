@@ -85,7 +85,7 @@ from app.schemas.power import (
     UnregisterDemandResponse,
 )
 from app.schemas.user import UserPublic
-from app.services.power_manager import get_power_manager
+from app.services.power.manager import get_power_manager
 
 router = APIRouter(prefix="/power", tags=["power-management"])
 

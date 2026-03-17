@@ -20,8 +20,8 @@ from app.schemas.system import (
 )
 from app.schemas.user import UserPublic
 from app.services import disk_monitor
-from app.services import raid as raid_service
-from app.services import smart as smart_service
+from app.services.hardware import raid as raid_service
+from app.services.hardware import smart as smart_service
 from app.services import system as system_service
 from app.services.audit.logger_db import get_audit_logger_db
 
@@ -84,7 +84,7 @@ async def get_disk_io_history(request: Request, response: Response, _: UserPubli
     """Get real-time disk I/O history for all physical disks."""
     history = disk_monitor.get_disk_io_history()
     from app.schemas.system import DiskIOHistory, DiskIOSample
-    from app.services.smart import get_smart_device_models, get_smart_device_order
+    from app.services.hardware.smart import get_smart_device_models, get_smart_device_order
     import re
     import platform
 

@@ -7,8 +7,8 @@ from app import api
 from app.api import deps
 from app.core.database import get_db
 from app.models.user import User
-from app.services.progressive_sync import ProgressiveSyncService
-from app.services.sync_scheduler import SyncSchedulerService
+from app.services.sync.progressive import ProgressiveSyncService
+from app.services.sync.scheduler import SyncSchedulerService
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (
     RegisterDeviceRequest,

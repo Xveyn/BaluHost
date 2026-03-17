@@ -5,7 +5,7 @@ Provides detailed energy consumption statistics, downtime tracking,
 and historical analysis based on Tapo device power measurements.
 """
 
-from typing import List, Optional
+from typing import Any, List, Optional
 from fastapi import APIRouter, Depends, HTTPException, status, Query, Request, Response
 from sqlalchemy.orm import Session
 
@@ -22,7 +22,7 @@ from app.schemas.energy import (
     CumulativeDataPoint,
     CumulativeEnergyResponse
 )
-from app.services import energy_stats, power_monitor
+from app.services.power import energy as energy_stats, monitor as power_monitor
 from app.core.config import settings
 from app.core.rate_limiter import user_limiter, get_limit
 
@@ -44,12 +44,13 @@ async def get_energy_dashboard(
     plus hourly chart data for the last 24 hours.
     """
     # Verify device exists
-    device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
-    if not device:
+    _device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    if not _device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Device {device_id} not found"
         )
+    device: Any = _device
 
     # Get statistics for different periods
     today_stats = energy_stats.get_today_stats(db, device_id)
@@ -241,12 +242,13 @@ async def get_energy_cost_estimate(
         currency: Currency code (default: EUR)
     """
     # Get device
-    device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
-    if not device:
+    _device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    if not _device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Device {device_id} not found"
         )
+    device: Any = _device
 
     # Get stats for requested period
     if period == "today":

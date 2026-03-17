@@ -1,9 +1,11 @@
 """Backup scheduler for automated periodic backups."""
 
+from __future__ import annotations
+
 import json
 from datetime import datetime, timezone
 import logging
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy.orm import Session
 
@@ -11,6 +13,9 @@ from app.core.database import SessionLocal
 from app.services.backup.service import BackupService
 from app.schemas.backup import BackupCreate
 from app.core.config import get_settings
+
+if TYPE_CHECKING:
+    from apscheduler.schedulers.background import BackgroundScheduler
 
 logger = logging.getLogger(__name__)
 
@@ -110,7 +115,7 @@ class BackupScheduler:
         Run periodic backup (called by APScheduler).
         Creates its own database session.
         """
-        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+        from app.services.scheduler.execution import log_scheduler_execution, complete_scheduler_execution
 
         settings = get_settings()
         execution_id = log_scheduler_execution("backup", job_id="backup_periodic")
@@ -170,8 +175,8 @@ def start_backup_scheduler() -> None:
     except ImportError:
         logger.warning("APScheduler not installed, backup scheduler disabled")
         return
-    _backup_scheduler = BackgroundScheduler()
-    _backup_scheduler.add_job(
+    scheduler = BackgroundScheduler()
+    scheduler.add_job(
         func=BackupScheduler.run_periodic_backup,
         trigger="interval",
         hours=settings.backup_auto_interval_hours,
@@ -179,7 +184,8 @@ def start_backup_scheduler() -> None:
         name=f"Automated {settings.backup_auto_type} backup",
         replace_existing=True,
     )
-    _backup_scheduler.start()
+    scheduler.start()
+    _backup_scheduler = scheduler
     logger.info(
         f"Backup scheduler started (every {settings.backup_auto_interval_hours}h, "
         f"type: {settings.backup_auto_type})"

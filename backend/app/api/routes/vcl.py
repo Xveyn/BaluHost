@@ -17,7 +17,7 @@ from app.schemas.vcl import (
     VCLSettingsUpdate,
 )
 from app.schemas.vcl_diff import VersionDiffResponse, DiffLine
-from app.services.vcl import VCLService
+from app.services.versioning.vcl import VCLService
 from app.services.audit.logger_db import get_audit_logger_db
 from app.models.vcl import VCLSettings, FileVersion
 from app.models.file_metadata import FileMetadata
@@ -455,7 +455,7 @@ async def get_user_quota(
 
     if not settings:
         # Create default settings
-        from app.services.vcl import VCLService
+        from app.services.versioning.vcl import VCLService
         vcl_service = VCLService(db)
         settings = vcl_service.get_or_create_user_settings(user.id)
 
@@ -508,7 +508,7 @@ async def get_vcl_settings(
 
     if not settings:
         # Create default settings
-        from app.services.vcl import VCLService
+        from app.services.versioning.vcl import VCLService
         vcl_service = VCLService(db)
         settings = vcl_service.get_or_create_user_settings(user.id)
 
@@ -548,7 +548,7 @@ async def update_vcl_settings(
     Returns:
         Updated VCL settings
     """
-    from app.services.vcl import VCLService
+    from app.services.versioning.vcl import VCLService
 
     vcl_service = VCLService(db)
     settings = vcl_service.get_or_create_user_settings(user.id)

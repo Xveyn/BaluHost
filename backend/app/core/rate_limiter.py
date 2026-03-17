@@ -245,7 +245,7 @@ def get_user_identifier(request: Request) -> str:
         auth_header = request.headers.get("Authorization", "")
         if auth_header.startswith("Bearer "):
             # Import here to avoid circular dependency
-            from app.core.auth import decode_token
+            from app.core.security import decode_token
             token = auth_header.replace("Bearer ", "")
             payload = decode_token(token)
             if payload and "sub" in payload:

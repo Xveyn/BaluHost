@@ -4,7 +4,7 @@ API routes for disk benchmarking.
 Provides CrystalDiskMark-style disk performance benchmarks using fio.
 """
 
-from typing import Optional
+from typing import Any, Optional
 import math
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -30,13 +30,13 @@ from app.schemas.benchmark import (
     TestResultSchema,
 )
 from app.schemas.user import UserPublic
-from app.services import benchmark_service
+from app.services import benchmark as benchmark_service
 from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter(prefix="/benchmark", tags=["benchmark"])
 
 
-def _benchmark_to_response(benchmark) -> BenchmarkResponse:
+def _benchmark_to_response(benchmark: Any) -> BenchmarkResponse:
     """Convert DiskBenchmark model to BenchmarkResponse schema."""
     return BenchmarkResponse(
         id=benchmark.id,
@@ -254,13 +254,13 @@ async def get_benchmark(
 
     Returns full benchmark details including all test results.
     """
-    benchmark = benchmark_service.get_benchmark(benchmark_id, db)
-    if benchmark is None:
+    result = benchmark_service.get_benchmark(benchmark_id, db)
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Benchmark {benchmark_id} not found",
         )
-    return _benchmark_to_response(benchmark)
+    return _benchmark_to_response(result)
 
 
 @router.get("/{benchmark_id}/progress", response_model=BenchmarkProgressResponse)
@@ -277,12 +277,13 @@ async def get_benchmark_progress(
 
     Returns lightweight progress information for polling during benchmark runs.
     """
-    benchmark = benchmark_service.get_benchmark(benchmark_id, db)
-    if benchmark is None:
+    result = benchmark_service.get_benchmark(benchmark_id, db)
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Benchmark {benchmark_id} not found",
         )
+    benchmark: Any = result
 
     # Calculate estimated remaining time
     estimated_remaining = None
@@ -322,12 +323,13 @@ async def cancel_benchmark(
 
     The benchmark will be stopped and marked as cancelled.
     """
-    benchmark = benchmark_service.get_benchmark(benchmark_id, db)
-    if benchmark is None:
+    result = benchmark_service.get_benchmark(benchmark_id, db)
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Benchmark {benchmark_id} not found",
         )
+    benchmark: Any = result
 
     # Check ownership (only owner or admin can cancel)
     if benchmark.user_id != current_user.id and current_user.role != "admin":
@@ -367,12 +369,13 @@ async def mark_benchmark_failed(
     Use this when a benchmark is stuck in running/pending status after a server
     restart or other failure where automatic recovery didn't trigger.
     """
-    benchmark = benchmark_service.get_benchmark(benchmark_id, db)
-    if benchmark is None:
+    result = benchmark_service.get_benchmark(benchmark_id, db)
+    if result is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Benchmark {benchmark_id} not found",
         )
+    benchmark: Any = result
 
     if benchmark.status not in (BenchmarkStatus.RUNNING, BenchmarkStatus.PENDING):
         raise HTTPException(
