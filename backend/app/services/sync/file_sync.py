@@ -142,7 +142,8 @@ class FileSyncService:
                 ).first()
                 
                 if sync_meta and sync_meta.content_hash != client_file.get("hash"):
-                    if sync_meta.server_modified_at.isoformat() > client_file.get("modified_at"):
+                    client_modified = client_file.get("modified_at")
+                    if client_modified and sync_meta.server_modified_at.isoformat() > client_modified:
                         changes["conflicts"].append({
                             "path": path,
                             "client_hash": client_file.get("hash"),
