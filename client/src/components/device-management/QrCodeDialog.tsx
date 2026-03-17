@@ -1,9 +1,12 @@
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Eye, EyeOff, Copy } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { Modal } from '../ui/Modal';
+import { getTokenStatus } from '../../api/mobile';
 import type { MobileRegistrationToken } from '../../api/mobile';
+
+const POLL_INTERVAL_MS = 3000;
 
 interface QrCodeDialogProps {
   data: MobileRegistrationToken | null;
@@ -13,6 +16,35 @@ interface QrCodeDialogProps {
 export function QrCodeDialog({ data, onClose }: QrCodeDialogProps) {
   const { t } = useTranslation(['devices']);
   const [showToken, setShowToken] = useState(false);
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
+  // Poll token status while dialog is open
+  useEffect(() => {
+    if (!data) return;
+
+    const poll = async () => {
+      try {
+        const { used } = await getTokenStatus(data.token);
+        if (used) {
+          // Device registered — close dialog and notify
+          if (intervalRef.current) clearInterval(intervalRef.current);
+          toast.success(t('qrDialog.deviceRegistered', 'Gerät erfolgreich verbunden!'));
+          setShowToken(false);
+          onCloseRef.current();
+        }
+      } catch {
+        // Silently ignore polling errors (e.g. token expired, network issues)
+      }
+    };
+
+    intervalRef.current = setInterval(poll, POLL_INTERVAL_MS);
+
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current);
+    };
+  }, [data, t]);
 
   const handleClose = () => {
     setShowToken(false);

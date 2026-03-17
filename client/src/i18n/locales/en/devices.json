@@ -65,7 +65,8 @@
     "vpnIncluded": "VPN configuration included",
     "reminders": "Automatic Reminders",
     "remindersDesc": "You will be notified 7 days, 3 days, and 1 hour before expiration via push notification.",
-    "expiresAt": "Token expires at:"
+    "expiresAt": "Token expires at:",
+    "deviceRegistered": "Device registered successfully!"
   },
   "schedules": {
     "title": "Sync Schedules",

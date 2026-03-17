@@ -65,7 +65,8 @@
     "vpnIncluded": "VPN-Konfiguration enthalten",
     "reminders": "Automatische Erinnerungen",
     "remindersDesc": "Sie werden 7 Tage, 3 Tage und 1 Stunde vor Ablauf per Push-Benachrichtigung erinnert.",
-    "expiresAt": "Token läuft ab:"
+    "expiresAt": "Token läuft ab:",
+    "deviceRegistered": "Gerät erfolgreich verbunden!"
   },
   "schedules": {
     "title": "Sync-Zeitpläne",

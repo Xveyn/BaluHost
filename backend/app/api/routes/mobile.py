@@ -24,6 +24,7 @@ from app.schemas.mobile import (
     SyncFolderCreate,
     UploadQueueListResponse,
 )
+from app.models.mobile import MobileRegistrationToken as MobileRegistrationTokenModel
 from app.services.mobile import MobileService
 
 logger = logging.getLogger(__name__)
@@ -129,6 +130,35 @@ async def register_device(
     Returns access token and user info for the registered device.
     """
     return MobileService.register_device(db=db, device_data=device_data)
+
+
+@router.get("/token/{token}/status")
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_token_status(
+    request: Request,
+    response: Response,
+    token: str,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user),
+):
+    """
+    Check if a registration token has been used (device registered).
+
+    Used by the frontend to poll for successful QR code registration
+    so the dialog can auto-close.
+    """
+    token_record = db.query(MobileRegistrationTokenModel).filter(
+        MobileRegistrationTokenModel.token == token,
+        MobileRegistrationTokenModel.user_id == current_user.id,
+    ).first()
+
+    if not token_record:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Token not found",
+        )
+
+    return {"used": token_record.used}
 
 
 @router.get("/devices", response_model=List[MobileDeviceSchema])
