@@ -30,6 +30,7 @@ from app.services.monitoring.shm import (
     read_command,
     cleanup_shm,
 )
+from app.plugins.smart_device.poller import SmartDevicePoller
 
 logger = logging.getLogger(__name__)
 
@@ -43,6 +44,7 @@ _POWER_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL = 5.0
 _COMMAND_POLL_INTERVAL = 2.0
+_SMART_DEVICES_SNAPSHOT_INTERVAL = 5.0
 
 
 class MonitoringWorker:
@@ -59,6 +61,7 @@ class MonitoringWorker:
         self._db_session_factory: Optional[Callable] = None
         self._services_started = False
         self._started_at: Optional[float] = None
+        self._smart_device_poller: Optional[SmartDevicePoller] = None
 
     @property
     def running(self) -> bool:
@@ -97,6 +100,15 @@ class MonitoringWorker:
         await power_monitor.start_power_monitor(db_session_factory)
         logger.info("Power monitor started")
 
+        # Start smart device poller
+        try:
+            self._smart_device_poller = SmartDevicePoller()
+            await self._smart_device_poller.start(db_session_factory)
+            logger.info("Smart device poller started")
+        except Exception as exc:
+            logger.warning("Smart device poller could not start: %s", exc)
+            self._smart_device_poller = None
+
         self._services_started = True
         logger.info("All monitoring services started")
 
@@ -113,6 +125,7 @@ class MonitoringWorker:
         last_orchestrator = 0.0
         last_orchestrator_data = 0.0
         last_command_poll = 0.0
+        last_smart_devices = 0.0
 
         while self._running:
             now = time.time()
@@ -144,6 +157,11 @@ class MonitoringWorker:
                         self._write_orchestrator_data_snapshot()
                         last_orchestrator_data = now
 
+                    # Write smart devices snapshot
+                    if now - last_smart_devices >= _SMART_DEVICES_SNAPSHOT_INTERVAL:
+                        self._write_smart_devices_snapshot()
+                        last_smart_devices = now
+
                 # Write heartbeat (always, even when paused)
                 if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
                     self._write_heartbeat()
@@ -166,6 +184,12 @@ class MonitoringWorker:
 
         if self._services_started:
             # Stop services in reverse order
+            try:
+                if self._smart_device_poller is not None:
+                    await self._smart_device_poller.stop()
+            except Exception as exc:
+                logger.debug("Error stopping smart device poller: %s", exc)
+
             try:
                 from app.services import power_monitor
                 await power_monitor.stop_power_monitor()
@@ -320,6 +344,18 @@ class MonitoringWorker:
         except Exception as exc:
             logger.debug("Orchestrator data snapshot failed: %s", exc)
 
+    def _write_smart_devices_snapshot(self) -> None:
+        """Write current smart devices snapshot to SHM (if poller is running)."""
+        if self._smart_device_poller is None:
+            return
+        try:
+            # The poller writes its own SHM files during each poll loop; this
+            # method provides an additional periodic flush in case the poller's
+            # own write was skipped (e.g. no active devices).
+            self._smart_device_poller._write_shm_snapshot()
+        except Exception as exc:
+            logger.debug("Smart devices snapshot failed: %s", exc)
+
     def _write_heartbeat(self) -> None:
         """Write heartbeat to SHM and service status to DB."""
         try:
@@ -333,6 +369,7 @@ class MonitoringWorker:
                     "disk_io_monitor",
                     "monitoring_orchestrator",
                     "power_monitor",
+                    "smart_device_poller",
                 ],
                 "timestamp": time.time(),
             }
@@ -375,6 +412,14 @@ class MonitoringWorker:
             service_status["power_monitor"] = power_monitor.get_status()
         except Exception:
             service_status["power_monitor"] = {"is_running": False}
+
+        try:
+            if self._smart_device_poller is not None:
+                service_status["smart_device_poller"] = self._smart_device_poller.get_status()
+            else:
+                service_status["smart_device_poller"] = {"is_running": False}
+        except Exception:
+            service_status["smart_device_poller"] = {"is_running": False}
 
         now = datetime.now(timezone.utc)
         db = SessionLocal()

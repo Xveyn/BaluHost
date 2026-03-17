@@ -54,6 +54,7 @@ IS_PRIMARY_WORKER = False  # Determined in _lifespan() after fork
 _discovery_service = None
 _plugin_manager = None
 _websocket_manager = None
+_smart_device_manager = None
 
 
 def _try_become_primary() -> bool:
@@ -150,6 +151,43 @@ async def _write_service_heartbeats() -> None:
         await _do_heartbeat_write()
 
 
+async def _smart_device_ws_bridge() -> None:
+    """Poll smart_devices_changes.json SHM and broadcast via WebSocket (primary only).
+
+    Runs every 1 second.  When the monitoring worker writes new device-state
+    changes the bridge picks them up and pushes them to all connected clients.
+    """
+    from app.services.monitoring.shm import read_shm, SMART_DEVICES_CHANGES_FILE
+    from app.services.websocket_manager import get_websocket_manager
+
+    _last_broadcast_ts: float = 0.0
+
+    while True:
+        await asyncio.sleep(1.0)
+        try:
+            data = read_shm(SMART_DEVICES_CHANGES_FILE, max_age_seconds=10.0)
+            if data is None:
+                continue
+
+            ts = data.get("timestamp", 0.0)
+            if ts <= _last_broadcast_ts:
+                continue  # Already broadcast these changes
+
+            changes = data.get("changes", [])
+            if not changes:
+                continue
+
+            ws = get_websocket_manager()
+            if ws:
+                await ws.broadcast({
+                    "type": "smart_device_update",
+                    "payload": changes,
+                })
+            _last_broadcast_ts = ts
+        except Exception as exc:
+            logger.debug("SmartDevice WS bridge error: %s", exc)
+
+
 async def _pihole_health_loop() -> None:
     """Periodically check remote Pi-hole health and trigger failover/failback."""
     from app.core.database import SessionLocal
@@ -219,7 +257,7 @@ def _log_dev_mode_summary() -> None:
 
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
-    global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER
+    global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
 
     from app.core.database import init_db, SessionLocal, engine
     from app.services.users import ensure_admin_user, ensure_user_home_directories
@@ -383,6 +421,25 @@ async def _startup(app: FastAPI) -> None:
         logger.info("Plugin system initialized")
     except Exception as e:
         logger.warning(f"Plugin system could not initialize: {e}")
+
+    # Initialize SmartDeviceManager and register any loaded smart_device plugins
+    try:
+        from app.plugins.smart_device.manager import SmartDeviceManager
+        from app.plugins.smart_device.base import SmartDevicePlugin
+
+        _smart_device_manager = SmartDeviceManager.get_instance()
+        if _plugin_manager is not None:
+            for plugin_name in list(_plugin_manager._enabled):
+                plugin_obj = _plugin_manager.get_plugin(plugin_name)
+                if isinstance(plugin_obj, SmartDevicePlugin):
+                    _smart_device_manager.register_plugin(plugin_obj)
+        logger.info("SmartDeviceManager initialized")
+    except Exception as e:
+        logger.warning(f"SmartDeviceManager could not initialize: {e}")
+
+    # Start SmartDevice WebSocket bridge (primary worker only)
+    if IS_PRIMARY_WORKER:
+        asyncio.create_task(_smart_device_ws_bridge())
 
     # Notify BaluPi companion device that NAS is online
     if IS_PRIMARY_WORKER and settings.balupi_enabled:

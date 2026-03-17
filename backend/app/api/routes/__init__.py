@@ -11,6 +11,7 @@ from app.api.routes import (
     activity,
     firebase_config,
     balupi,
+    smart_devices,
 )
 
 api_router = APIRouter()
@@ -62,5 +63,6 @@ api_router.include_router(backend_logs.router, tags=["admin"])
 api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 api_router.include_router(firebase_config.router, tags=["admin", "firebase"])
 api_router.include_router(balupi.router, prefix="/admin", tags=["admin", "balupi"])
+api_router.include_router(smart_devices.router, prefix="/smart-devices", tags=["smart-devices"])
 
 __all__ = ["api_router"]
