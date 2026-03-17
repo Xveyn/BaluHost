@@ -371,7 +371,10 @@ async def _startup(app: FastAPI) -> None:
     try:
         _plugin_manager = PluginManager.get_instance()
         with SessionLocal() as plugin_db:
-            await _plugin_manager.load_enabled_plugins(plugin_db)
+            await _plugin_manager.load_enabled_plugins(
+                plugin_db,
+                start_background_tasks=IS_PRIMARY_WORKER,
+            )
         plugin_router = _plugin_manager.get_router()
         if plugin_router.routes:
             app.include_router(plugin_router, prefix=settings.api_prefix)
