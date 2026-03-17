@@ -109,6 +109,8 @@ export default function DeviceManagement() {
           onCreateSchedule={dm.handleCreateSchedule}
           onDisableSchedule={dm.handleDisableSchedule}
           onEnableSchedule={dm.handleEnableSchedule}
+          onDeleteSchedule={dm.handleDeleteSchedule}
+          onUpdateSchedule={dm.handleUpdateSchedule}
         />
       )}
 

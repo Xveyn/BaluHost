@@ -94,6 +94,10 @@ export async function enableSyncSchedule(id: number): Promise<void> {
   await apiClient.post(`/api/sync/schedule/${id}/enable`);
 }
 
+export async function deleteSyncSchedule(id: number): Promise<void> {
+  await apiClient.delete(`/api/sync/schedule/${id}`);
+}
+
 // ---------------------------------------------------------------------------
 // Bandwidth
 // ---------------------------------------------------------------------------

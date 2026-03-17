@@ -98,6 +98,20 @@ class SyncSchedulerService:
         self.db.commit()
         return True
 
+    def delete_schedule(self, schedule_id: int, user_id: int) -> bool:
+        """Permanently delete a schedule."""
+        schedule = self.db.query(SyncSchedule).filter(
+            SyncSchedule.id == schedule_id,
+            SyncSchedule.user_id == user_id
+        ).first()
+
+        if not schedule:
+            return False
+
+        self.db.delete(schedule)
+        self.db.commit()
+        return True
+
     def enable_schedule(self, schedule_id: int, user_id: int) -> bool:
         """Enable a previously disabled schedule."""
         schedule = self.db.query(SyncSchedule).filter(

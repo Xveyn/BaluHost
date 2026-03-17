@@ -266,6 +266,24 @@ async def enable_sync_schedule(
     return {"enabled": True, "schedule_id": schedule_id}
 
 
+@router.delete("/schedule/{schedule_id}")
+@user_limiter.limit(get_limit("sync_operations"))
+async def delete_sync_schedule(
+    request: Request,
+    response: Response,
+    schedule_id: int,
+    current_user: User = Depends(deps.get_current_user),
+    scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
+):
+    """Permanently delete a sync schedule."""
+    success = scheduler.delete_schedule(schedule_id, current_user.id)
+
+    if not success:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
+
+    return {"deleted": True, "schedule_id": schedule_id}
+
+
 @router.put("/schedule/{schedule_id}")
 @user_limiter.limit(get_limit("sync_operations"))
 async def update_sync_schedule(

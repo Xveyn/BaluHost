@@ -16,6 +16,8 @@ import {
   listSyncSchedules,
   disableSyncSchedule,
   enableSyncSchedule,
+  deleteSyncSchedule,
+  updateSyncSchedule,
   type CreateScheduleRequest,
 } from '../api/sync';
 import { generateMobileToken, type MobileRegistrationToken } from '../api/mobile';
@@ -117,6 +119,40 @@ export function useDeviceManagement() {
     [t, refetchSchedules],
   );
 
+  const handleDeleteSchedule = useCallback(
+    async (scheduleId: number) => {
+      const confirmed = await confirm(
+        t('toast.deleteScheduleConfirm'),
+        { title: t('toast.deleteScheduleTitle'), variant: 'danger', confirmLabel: t('buttons.delete'), cancelLabel: t('buttons.cancel') },
+      );
+      if (!confirmed) return;
+
+      try {
+        await deleteSyncSchedule(scheduleId);
+        toast.success(t('toast.scheduleDeleted'));
+        refetchSchedules();
+      } catch {
+        toast.error(t('toast.deleteFailed'));
+      }
+    },
+    [t, confirm, refetchSchedules],
+  );
+
+  const handleUpdateSchedule = useCallback(
+    async (scheduleId: number, data: Record<string, unknown>) => {
+      try {
+        await updateSyncSchedule(scheduleId, data);
+        toast.success(t('toast.scheduleUpdated'));
+        refetchSchedules();
+        return true;
+      } catch {
+        toast.error(t('toast.updateFailed'));
+        return false;
+      }
+    },
+    [t, refetchSchedules],
+  );
+
   const handleSaveDeviceName = useCallback(
     async (device: Device, newName: string) => {
       if (!newName.trim()) {
@@ -180,6 +216,8 @@ export function useDeviceManagement() {
     handleCreateSchedule,
     handleDisableSchedule,
     handleEnableSchedule,
+    handleDeleteSchedule,
+    handleUpdateSchedule,
     handleSaveDeviceName,
     handleDeleteDevice,
   };

@@ -86,7 +86,8 @@
     "noSchedules": "Keine Sync-Zeitpläne konfiguriert",
     "loadingSchedules": "Zeitpläne werden geladen...",
     "autoVpn": "Auto-VPN",
-    "autoVpnHint": "Bei aktiviertem Auto-VPN verbindet sich das Gerät vor dem Sync automatisch per VPN und trennt die Verbindung danach."
+    "autoVpnHint": "Bei aktiviertem Auto-VPN verbindet sich das Gerät vor dem Sync automatisch per VPN und trennt die Verbindung danach.",
+    "editSchedule": "Zeitplan bearbeiten"
   },
   "days": {
     "sunday": "Sonntag",
@@ -112,11 +113,13 @@
   "buttons": {
     "refresh": "Aktualisieren",
     "save": "Speichern",
+    "saving": "Speichern...",
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "create": "Erstellen",
     "disable": "Deaktivieren",
-    "enable": "Aktivieren"
+    "enable": "Aktivieren",
+    "edit": "Bearbeiten"
   },
   "platforms": {
     "ios": "iOS",
@@ -139,6 +142,10 @@
     "disableFailed": "Zeitplan konnte nicht deaktiviert werden",
     "scheduleEnabled": "Zeitplan erfolgreich aktiviert",
     "enableFailed": "Zeitplan konnte nicht aktiviert werden",
+    "scheduleDeleted": "Zeitplan gelöscht",
+    "deleteScheduleConfirm": "Soll dieser Sync-Zeitplan endgültig gelöscht werden?",
+    "deleteScheduleTitle": "Zeitplan löschen",
+    "scheduleUpdated": "Zeitplan aktualisiert",
     "enterDeviceName": "Bitte geben Sie einen Gerätenamen ein",
     "selectDevice": "Bitte wählen Sie ein Gerät",
     "desktopDeleteNotImplemented": "Desktop-Geräte löschen noch nicht implementiert",
