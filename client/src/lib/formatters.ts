@@ -63,15 +63,28 @@ export function formatEta(seconds: number): string {
 
 /**
  * Format a date string as a relative time (e.g. "Just now", "5m ago", "2h ago", "3d ago").
- * Falls back to locale date string for dates older than 7 days.
+ * Handles future dates too (e.g. "in 5m", "in 3d", "in 89d").
+ * Falls back to locale date string for dates more than 7 days in the past.
  * Returns "Never" for null/undefined input.
  */
 export function formatRelativeTime(dateStr: string | null | undefined): string {
   if (!dateStr) return 'Never';
   const date = new Date(dateStr);
   const diffMs = Date.now() - date.getTime();
-  const diffMins = Math.floor(diffMs / 60000);
 
+  // Future dates
+  if (diffMs < 0) {
+    const futureMins = Math.floor(-diffMs / 60000);
+    if (futureMins < 1) return 'Just now';
+    if (futureMins < 60) return `in ${futureMins}m`;
+    const futureHours = Math.floor(futureMins / 60);
+    if (futureHours < 24) return `in ${futureHours}h`;
+    const futureDays = Math.floor(futureHours / 24);
+    return `in ${futureDays}d`;
+  }
+
+  // Past dates
+  const diffMins = Math.floor(diffMs / 60000);
   if (diffMins < 1) return 'Just now';
   if (diffMins < 60) return `${diffMins}m ago`;
   const diffHours = Math.floor(diffMins / 60);
