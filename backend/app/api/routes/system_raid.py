@@ -239,7 +239,7 @@ async def delete_array(
         audit_logger.log_raid_operation(
             action="raid_array_deleted",
             user=current_admin.username,
-            raid_array=payload.name,
+            raid_array=payload.array,
             details={"force": payload.force if hasattr(payload, 'force') else False},
             success=True
         )
@@ -249,7 +249,7 @@ async def delete_array(
         audit_logger.log_raid_operation(
             action="raid_array_delete_failed",
             user=current_admin.username,
-            raid_array=payload.name,
+            raid_array=payload.array,
             details={"error": str(exc)},
             success=False,
             error_message=str(exc)
@@ -259,7 +259,7 @@ async def delete_array(
         audit_logger.log_raid_operation(
             action="raid_array_delete_failed",
             user=current_admin.username,
-            raid_array=payload.name,
+            raid_array=payload.array,
             details={"error": str(exc)},
             success=False,
             error_message=str(exc)

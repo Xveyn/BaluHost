@@ -24,7 +24,19 @@ class AuditLoggerDB:
     
     def __init__(self):
         self._enabled = True  # Always enabled, even in dev mode
-    
+
+    def enable(self) -> None:
+        """Enable audit logging."""
+        self._enabled = True
+
+    def disable(self) -> None:
+        """Disable audit logging."""
+        self._enabled = False
+
+    def is_enabled(self) -> bool:
+        """Check if audit logging is enabled."""
+        return self._enabled
+
     def log_event(
         self,
         event_type: str,
