@@ -28,9 +28,9 @@ _cache_initialized = False
 # In test or dev mode we relax/disable strict limits to avoid flakiness in automated tests.
 try:
     from app.core.config import settings
-    _is_test_mode = str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
+    _init_test_mode = str(settings.nas_mode).lower() == "dev" or bool(os.environ.get("SKIP_APP_INIT"))
 except Exception:
-    _is_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
+    _init_test_mode = bool(os.environ.get("PYTEST_CURRENT_TEST")) or bool(os.environ.get("SKIP_APP_INIT"))
 
 def _test_client_key_func(request: Request) -> str:
     """
@@ -47,7 +47,7 @@ def _test_client_key_func(request: Request) -> str:
     return get_remote_address(request)
 
 
-if _is_test_mode:
+if _init_test_mode:
     # Use effectively unlimited/default empty limits to avoid 429s during tests
     limiter = Limiter(
         key_func=_test_client_key_func,

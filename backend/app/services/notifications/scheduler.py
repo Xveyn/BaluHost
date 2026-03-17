@@ -65,6 +65,8 @@ class NotificationScheduler:
             
             for device in devices:
                 try:
+                    if device.expires_at is None:
+                        continue
                     # Check each warning threshold
                     for warning_type, threshold in cls.WARNING_THRESHOLDS.items():
                         warning_time = device.expires_at - threshold

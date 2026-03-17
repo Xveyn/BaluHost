@@ -534,10 +534,10 @@ async def get_config(
 ):
     """Get current Pi-hole configuration."""
     config = service.get_config()
-    response = PiholeConfigResponse.model_validate(config)
-    response.has_password = config.password_encrypted is not None
-    response.has_remote_password = config.remote_password_encrypted is not None
-    return response
+    result = PiholeConfigResponse.model_validate(config)
+    result.has_password = config.password_encrypted is not None
+    result.has_remote_password = config.remote_password_encrypted is not None
+    return result
 
 
 @router.put("/config", response_model=PiholeConfigResponse)

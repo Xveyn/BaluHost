@@ -19,29 +19,15 @@ class ErrorCounterMiddleware(BaseHTTPMiddleware):
     - 4xx client errors
     - 5xx server errors
 
-    Access counts via class attributes:
-        ErrorCounterMiddleware.error_count_4xx
-        ErrorCounterMiddleware.error_count_5xx
+    Access counts via:
+        ErrorCounterMiddleware.get_counts()  -> (4xx, 5xx)
+        get_error_counts()                   -> (4xx, 5xx)
     """
 
     # Thread-safe counters (class-level for global access)
     _lock = threading.Lock()
     _error_count_4xx: int = 0
     _error_count_5xx: int = 0
-
-    @classmethod
-    @property
-    def error_count_4xx(cls) -> int:
-        """Get current 4xx error count."""
-        with cls._lock:
-            return cls._error_count_4xx
-
-    @classmethod
-    @property
-    def error_count_5xx(cls) -> int:
-        """Get current 5xx error count."""
-        with cls._lock:
-            return cls._error_count_5xx
 
     @classmethod
     def get_counts(cls) -> tuple[int, int]:
