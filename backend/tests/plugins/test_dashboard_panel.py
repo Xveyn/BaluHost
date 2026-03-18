@@ -162,3 +162,44 @@ class TestPluginBaseDashboardDefaults:
         data = await plugin.get_dashboard_data(db=None)
         assert data is not None
         assert data["value"] == "100 W"
+
+
+import asyncio
+from unittest.mock import MagicMock, AsyncMock
+
+from app.services.websocket_manager import WebSocketManager
+
+
+class TestBroadcastTyped:
+    @pytest.mark.asyncio
+    async def test_broadcast_typed_sends_correct_format(self):
+        manager = WebSocketManager()
+
+        mock_ws = AsyncMock()
+        mock_ws.send_json = AsyncMock()
+        await manager.connect(mock_ws, user_id=1, is_admin=False)
+
+        count = await manager.broadcast_typed(
+            "dashboard_panel_update",
+            {"panel_type": "gauge", "data": {"value": "120 W"}},
+        )
+
+        assert count == 1
+        mock_ws.send_json.assert_called_once_with({
+            "type": "dashboard_panel_update",
+            "payload": {"panel_type": "gauge", "data": {"value": "120 W"}},
+        })
+
+    @pytest.mark.asyncio
+    async def test_broadcast_typed_cleans_up_dead_connections(self):
+        manager = WebSocketManager()
+
+        mock_ws = AsyncMock()
+        mock_ws.send_json = AsyncMock(side_effect=Exception("disconnected"))
+        await manager.connect(mock_ws, user_id=1, is_admin=False)
+
+        count = await manager.broadcast_typed("test", {"key": "val"})
+
+        assert count == 0
+        # Connection should be cleaned up
+        assert manager.get_connection_count() == 0

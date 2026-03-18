@@ -211,6 +211,46 @@ class WebSocketManager:
 
         return sent_count
 
+    async def broadcast_typed(self, msg_type: str, payload: dict[str, Any]) -> int:
+        """Broadcast a typed message to all connected users.
+
+        Unlike broadcast_to_all() which wraps in {"type": "notification"},
+        this method sends {"type": msg_type, "payload": payload} directly.
+
+        Args:
+            msg_type: Message type string (e.g. "dashboard_panel_update").
+            payload: Message payload dict.
+
+        Returns:
+            Number of connections the message was sent to.
+        """
+        sent_count = 0
+        async with self._lock:
+            for user_id, connections in list(self._user_connections.items()):
+                disconnected = []
+
+                for conn in connections:
+                    try:
+                        await conn.websocket.send_json({
+                            "type": msg_type,
+                            "payload": payload,
+                        })
+                        sent_count += 1
+                    except Exception as e:
+                        logger.warning(f"Failed to broadcast to user {user_id}: {e}")
+                        disconnected.append(conn)
+
+                # Clean up disconnected connections
+                for conn in disconnected:
+                    if conn in connections:
+                        connections.remove(conn)
+
+                if not connections and user_id in self._user_connections:
+                    del self._user_connections[user_id]
+                    self._admin_users.discard(user_id)
+
+        return sent_count
+
     async def send_unread_count(self, user_id: int, count: int) -> int:
         """Send updated unread count to a user's connections.
 
