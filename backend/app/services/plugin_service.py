@@ -130,3 +130,37 @@ def uninstall_plugin(db: Session, name: str) -> bool:
     db.delete(record)
     db.commit()
     return True
+
+
+def set_dashboard_panel_enabled(
+    db: Session, plugin_name: str, enabled: bool
+) -> None:
+    """Enable/disable a plugin's Dashboard panel.
+
+    When enabling, deactivates any other plugin's panel (single-slot).
+    """
+    if enabled:
+        # Deactivate all other panels
+        db.query(InstalledPlugin).filter(
+            InstalledPlugin.name != plugin_name,
+            InstalledPlugin.dashboard_panel_enabled == True,  # noqa: E712
+        ).update({"dashboard_panel_enabled": False})
+
+    # Set the target plugin
+    db.query(InstalledPlugin).filter(
+        InstalledPlugin.name == plugin_name,
+    ).update({"dashboard_panel_enabled": enabled})
+
+    db.commit()
+
+
+def get_dashboard_panel_plugin(db: Session) -> Optional[InstalledPlugin]:
+    """Get the plugin with dashboard panel enabled (if any)."""
+    return (
+        db.query(InstalledPlugin)
+        .filter(
+            InstalledPlugin.is_enabled == True,  # noqa: E712
+            InstalledPlugin.dashboard_panel_enabled == True,  # noqa: E712
+        )
+        .first()
+    )

@@ -100,6 +100,8 @@ class PluginDetailResponse(BaseModel):
     has_ui: bool = False
     has_routes: bool = False
     has_background_tasks: bool = False
+    has_dashboard_panel: bool = False
+    dashboard_panel_enabled: bool = False
 
     # UI info
     nav_items: List[PluginNavItemSchema] = []
@@ -159,3 +161,20 @@ class PermissionListResponse(BaseModel):
     """Response listing all available permissions."""
 
     permissions: List[PermissionInfo]
+
+
+class DashboardPanelToggleRequest(BaseModel):
+    """Request to enable/disable a plugin's Dashboard panel."""
+
+    enabled: bool
+
+
+class DashboardPanelResponse(BaseModel):
+    """Response for the active Dashboard plugin panel."""
+
+    plugin_name: str
+    panel_type: str
+    title: str
+    icon: str
+    accent: str
+    data: Optional[Dict[str, Any]] = None

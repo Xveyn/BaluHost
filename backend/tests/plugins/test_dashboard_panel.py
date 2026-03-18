@@ -203,3 +203,62 @@ class TestBroadcastTyped:
         assert count == 0
         # Connection should be cleaned up
         assert manager.get_connection_count() == 0
+
+
+from app.services.plugin_service import (
+    set_dashboard_panel_enabled,
+    get_dashboard_panel_plugin,
+)
+from app.models.plugin import InstalledPlugin
+
+
+class TestDashboardPanelToggle:
+    def test_enable_deactivates_others(self, db_session):
+        """When enabling plugin B's panel, plugin A's panel is auto-disabled."""
+        # Create two plugins
+        plugin_a = InstalledPlugin(
+            name="plugin_a", version="1.0.0", display_name="A",
+            is_enabled=True, dashboard_panel_enabled=True,
+        )
+        plugin_b = InstalledPlugin(
+            name="plugin_b", version="1.0.0", display_name="B",
+            is_enabled=True, dashboard_panel_enabled=False,
+        )
+        db_session.add_all([plugin_a, plugin_b])
+        db_session.commit()
+
+        set_dashboard_panel_enabled(db_session, "plugin_b", True)
+
+        db_session.refresh(plugin_a)
+        db_session.refresh(plugin_b)
+        assert plugin_b.dashboard_panel_enabled is True
+        assert plugin_a.dashboard_panel_enabled is False
+
+    def test_disable_panel(self, db_session):
+        plugin = InstalledPlugin(
+            name="plugin_a", version="1.0.0", display_name="A",
+            is_enabled=True, dashboard_panel_enabled=True,
+        )
+        db_session.add(plugin)
+        db_session.commit()
+
+        set_dashboard_panel_enabled(db_session, "plugin_a", False)
+
+        db_session.refresh(plugin)
+        assert plugin.dashboard_panel_enabled is False
+
+    def test_get_active_panel_plugin(self, db_session):
+        plugin = InstalledPlugin(
+            name="plugin_a", version="1.0.0", display_name="A",
+            is_enabled=True, dashboard_panel_enabled=True,
+        )
+        db_session.add(plugin)
+        db_session.commit()
+
+        result = get_dashboard_panel_plugin(db_session)
+        assert result is not None
+        assert result.name == "plugin_a"
+
+    def test_get_active_panel_none(self, db_session):
+        result = get_dashboard_panel_plugin(db_session)
+        assert result is None
