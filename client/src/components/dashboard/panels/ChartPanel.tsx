@@ -1,4 +1,5 @@
 // client/src/components/dashboard/panels/ChartPanel.tsx
+import { useId } from 'react';
 import { AreaChart, Area, ResponsiveContainer } from 'recharts';
 
 interface ChartPanelProps {
@@ -14,6 +15,7 @@ interface ChartPanelProps {
 }
 
 export const ChartPanel: React.FC<ChartPanelProps> = ({ title, icon, accent, data, onClick }) => {
+  const gradientId = `panelChartGrad-${useId()}`;
   const chartData = data.points.map((v, i) => ({ idx: i, value: v }));
 
   return (
@@ -35,7 +37,7 @@ export const ChartPanel: React.FC<ChartPanelProps> = ({ title, icon, accent, dat
         <ResponsiveContainer width="100%" height="100%">
           <AreaChart data={chartData}>
             <defs>
-              <linearGradient id="panelChartGrad" x1="0" y1="0" x2="0" y2="1">
+              <linearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.3} />
                 <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
               </linearGradient>
@@ -45,7 +47,7 @@ export const ChartPanel: React.FC<ChartPanelProps> = ({ title, icon, accent, dat
               dataKey="value"
               stroke="#38bdf8"
               strokeWidth={1.5}
-              fill="url(#panelChartGrad)"
+              fill={`url(#${gradientId})`}
               dot={false}
               isAnimationActive={false}
             />

@@ -128,8 +128,11 @@ export const PluginDashboardPanel: React.FC = () => {
     return <PanelPlaceholder />;
   }
 
-  // Resolve Lucide icon by name
-  const iconKey = panel.icon.charAt(0).toUpperCase() + panel.icon.slice(1);
+  // Resolve Lucide icon by name (kebab-case to PascalCase, e.g. "hard-drive" -> "HardDrive")
+  const iconKey = panel.icon
+    .split('-')
+    .map(s => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('');
   const IconComponent = (LucideIcons as unknown as Record<string, React.FC<{ className?: string }>>)[iconKey]
     || (LucideIcons.Plug as unknown as React.FC<{ className?: string }>);
   const iconElement = <IconComponent className="h-6 w-6" />;
