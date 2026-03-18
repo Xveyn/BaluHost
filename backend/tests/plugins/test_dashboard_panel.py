@@ -452,3 +452,61 @@ class TestDashboardPanelBridge:
         assert result["panel_type"] == "gauge"
         assert result["plugin_name"] == "tapo_smart_plug"
         assert result["data"]["value"] == "100 W"
+
+
+class TestTapoPluginDashboardPanel:
+    def test_get_dashboard_panel_returns_gauge_spec(self):
+        from app.plugins.installed.tapo_smart_plug import TapoSmartPlugPlugin
+
+        plugin = TapoSmartPlugPlugin()
+        spec = plugin.get_dashboard_panel()
+
+        assert spec is not None
+        assert spec.panel_type == "gauge"
+        assert spec.title == "Power Monitoring"
+        assert spec.icon == "zap"
+
+    @pytest.mark.asyncio
+    async def test_get_dashboard_data_aggregates_power(self):
+        from app.plugins.installed.tapo_smart_plug import TapoSmartPlugPlugin
+
+        plugin = TapoSmartPlugPlugin()
+
+        # Mock SHM data
+        shm_data = {
+            "devices": {
+                "1": {
+                    "state": {
+                        "power_monitor": {"watts": 60.0, "energy_today_kwh": 1.2},
+                    },
+                    "is_online": True,
+                    "plugin_name": "tapo_smart_plug",
+                },
+                "2": {
+                    "state": {
+                        "power_monitor": {"watts": 40.0, "energy_today_kwh": 0.8},
+                    },
+                    "is_online": True,
+                    "plugin_name": "tapo_smart_plug",
+                },
+            },
+        }
+
+        mock_db = MagicMock()
+        # Mock list of active devices
+        mock_device_1 = MagicMock(id=1, name="Plug 1", is_active=True, is_online=True, plugin_name="tapo_smart_plug")
+        mock_device_2 = MagicMock(id=2, name="Plug 2", is_active=True, is_online=True, plugin_name="tapo_smart_plug")
+        mock_db.query.return_value.filter.return_value.all.return_value = [
+            mock_device_1, mock_device_2,
+        ]
+
+        with patch(
+            "app.plugins.installed.tapo_smart_plug.read_shm",
+            return_value=shm_data,
+        ):
+            data = await plugin.get_dashboard_data(mock_db)
+
+        assert data is not None
+        assert data["value"] == "100.0 W"
+        assert "2" in data["meta"]  # "2 devices monitored"
+        assert data["progress"] == pytest.approx(66.7, abs=0.1)

@@ -17,8 +17,9 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
-from app.plugins.base import PluginMetadata
+from app.plugins.base import DashboardPanelSpec, PluginMetadata
 from app.plugins.smart_device.base import DeviceTypeInfo, SmartDevicePlugin
+from app.services.monitoring.shm import SMART_DEVICES_FILE, read_shm
 from app.plugins.smart_device.capabilities import (
     DeviceCapability,
     PowerReading,
@@ -114,6 +115,78 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 icon="plug",
             ),
         ]
+
+    # ------------------------------------------------------------------
+    # Dashboard Panel
+    # ------------------------------------------------------------------
+
+    def get_dashboard_panel(self) -> Optional[DashboardPanelSpec]:
+        return DashboardPanelSpec(
+            panel_type="gauge",
+            title="Power Monitoring",
+            icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+
+    async def get_dashboard_data(self, db: Any) -> Optional[dict]:
+        """Aggregate power data from the Smart Device system (SHM/DB).
+
+        Returns GaugePanelData-compatible dict:
+        - value: total watts across all online power-monitoring devices
+        - meta: "X devices monitored"
+        - submeta: "Energy today: X.XX kWh"
+        - progress: percentage of assumed max power (default 150W)
+        - delta + delta_tone: "live" (trend from SHM)
+        """
+        from app.models.smart_device import SmartDevice
+
+        shm_data = read_shm(SMART_DEVICES_FILE, max_age_seconds=30.0)
+        devices_shm: Dict[str, Any] = {}
+        if shm_data:
+            devices_shm = shm_data.get("devices", {})
+
+        # Get all active devices for this plugin
+        all_devices = (
+            db.query(SmartDevice)
+            .filter(
+                SmartDevice.plugin_name == "tapo_smart_plug",
+                SmartDevice.is_active == True,  # noqa: E712
+                SmartDevice.is_online == True,  # noqa: E712
+            )
+            .all()
+        )
+
+        total_watts = 0.0
+        total_energy_kwh = 0.0
+        device_count = 0
+
+        for device in all_devices:
+            entry = devices_shm.get(str(device.id))
+            if not entry:
+                continue
+            state = entry.get("state", {})
+            pm = state.get("power_monitor")
+            if pm and isinstance(pm, dict):
+                watts = float(pm.get("watts", 0.0))
+                energy = float(pm.get("energy_today_kwh", 0.0))
+                if watts > 0.0 or energy > 0.0:
+                    total_watts += watts
+                    total_energy_kwh += energy
+                    device_count += 1
+
+        if device_count == 0:
+            return None
+
+        max_power = 150.0
+        progress = min((total_watts / max_power) * 100, 100.0)
+
+        return {
+            "value": f"{total_watts:.1f} W",
+            "meta": f"{device_count} {'device' if device_count == 1 else 'devices'} monitored",
+            "submeta": f"Energy today: {total_energy_kwh:.2f} kWh",
+            "progress": round(progress, 1),
+            "delta_tone": "live",
+        }
 
     # ------------------------------------------------------------------
     # SmartDevicePlugin: lifecycle
