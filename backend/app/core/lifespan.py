@@ -441,6 +441,10 @@ async def _startup(app: FastAPI) -> None:
     if IS_PRIMARY_WORKER:
         asyncio.create_task(_smart_device_ws_bridge())
 
+        # Start Dashboard panel WS bridge (primary worker only)
+        from app.services.dashboard_panel_bridge import dashboard_panel_ws_bridge
+        asyncio.create_task(dashboard_panel_ws_bridge())
+
     # Notify BaluPi companion device that NAS is online
     if IS_PRIMARY_WORKER and settings.balupi_enabled:
         try:

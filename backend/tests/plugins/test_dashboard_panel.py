@@ -405,3 +405,50 @@ class TestDashboardPanelToggleRoute:
                 mock_db, "tapo_smart_plug", True
             )
             assert result["dashboard_panel_enabled"] is True
+
+
+from app.services.dashboard_panel_bridge import _build_panel_update
+
+
+class TestDashboardPanelBridge:
+    @pytest.mark.asyncio
+    async def test_build_panel_update_returns_none_when_no_active_plugin(self):
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
+        result = await _build_panel_update(mock_db)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_build_panel_update_returns_payload(self):
+        from app.plugins.base import DashboardPanelSpec
+
+        mock_record = MagicMock()
+        mock_record.name = "tapo_smart_plug"
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_spec = DashboardPanelSpec(
+            panel_type="gauge", title="Power", icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = mock_spec
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={
+            "value": "100 W", "meta": "2 devices", "progress": 66.7,
+        })
+
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch(
+            "app.services.dashboard_panel_bridge.PluginManager.get_instance",
+            return_value=mock_pm,
+        ):
+            result = await _build_panel_update(mock_db)
+
+        assert result is not None
+        assert result["panel_type"] == "gauge"
+        assert result["plugin_name"] == "tapo_smart_plug"
+        assert result["data"]["value"] == "100 W"
