@@ -81,3 +81,84 @@ class TestChartPanelData:
     def test_chart_missing_points(self):
         with pytest.raises(ValidationError):
             ChartPanelData(value="45", meta="Speed")
+
+
+from typing import Any, Dict, List, Optional
+from unittest.mock import AsyncMock
+
+from app.plugins.base import DashboardPanelSpec, PluginBase, PluginMetadata
+
+
+class ConcretePlugin(PluginBase):
+    """Minimal concrete plugin for testing default methods."""
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="test_plugin",
+            version="1.0.0",
+            display_name="Test",
+            description="Test plugin",
+            author="Test",
+        )
+
+
+class PanelPlugin(ConcretePlugin):
+    """Plugin that provides a dashboard panel."""
+
+    def get_dashboard_panel(self) -> Optional[DashboardPanelSpec]:
+        return DashboardPanelSpec(
+            panel_type="gauge",
+            title="Power Monitoring",
+            icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+
+    async def get_dashboard_data(self, db) -> Optional[dict]:
+        return {"value": "100 W", "meta": "2 devices", "progress": 66.7}
+
+
+class TestDashboardPanelSpec:
+    def test_spec_defaults(self):
+        spec = DashboardPanelSpec(panel_type="stat", title="My Panel")
+        assert spec.icon == "plug"
+        assert spec.accent == "from-sky-500 to-indigo-500"
+
+    def test_spec_custom(self):
+        spec = DashboardPanelSpec(
+            panel_type="gauge",
+            title="Power",
+            icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+        assert spec.panel_type == "gauge"
+        assert spec.icon == "zap"
+
+    def test_spec_invalid_panel_type(self):
+        with pytest.raises(ValidationError):
+            DashboardPanelSpec(panel_type="sparkle", title="Bad")
+
+
+class TestPluginBaseDashboardDefaults:
+    def test_default_get_dashboard_panel_returns_none(self):
+        plugin = ConcretePlugin()
+        assert plugin.get_dashboard_panel() is None
+
+    @pytest.mark.asyncio
+    async def test_default_get_dashboard_data_returns_none(self):
+        plugin = ConcretePlugin()
+        result = await plugin.get_dashboard_data(db=None)
+        assert result is None
+
+    def test_panel_plugin_returns_spec(self):
+        plugin = PanelPlugin()
+        spec = plugin.get_dashboard_panel()
+        assert spec is not None
+        assert spec.panel_type == "gauge"
+
+    @pytest.mark.asyncio
+    async def test_panel_plugin_returns_data(self):
+        plugin = PanelPlugin()
+        data = await plugin.get_dashboard_data(db=None)
+        assert data is not None
+        assert data["value"] == "100 W"
