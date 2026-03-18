@@ -14,6 +14,7 @@ from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
 from app.schemas.plugin import (
+    DashboardPanelToggleRequest,
     InstalledPluginSchema,
     PermissionInfo,
     PermissionListResponse,
@@ -263,6 +264,63 @@ async def toggle_plugin(
             is_enabled=False,
             message=f"Plugin '{meta.display_name}' disabled successfully",
         )
+
+
+@router.post("/{name}/dashboard-panel")
+@user_limiter.limit(get_limit("admin_operations"))
+async def toggle_dashboard_panel(
+    request: Request,
+    response: Response,
+    name: str,
+    body: DashboardPanelToggleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+    plugin_manager: PluginManager = Depends(get_plugin_manager),
+):
+    """Enable or disable a plugin's Dashboard panel.
+
+    Admin only. When enabling, any other plugin's panel is deactivated
+    (single-slot constraint).
+    """
+    plugin = plugin_manager.get_plugin(name)
+    if plugin is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plugin not found or not enabled",
+        )
+
+    # Verify plugin supports dashboard panel
+    if plugin.get_dashboard_panel() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plugin does not provide a Dashboard panel",
+        )
+
+    plugin_service.set_dashboard_panel_enabled(db, name, body.enabled)
+
+    # Audit log
+    from app.services.audit.logger_db import get_audit_logger_db
+    audit = get_audit_logger_db()
+    audit.log_event(
+        event_type="PLUGIN",
+        user=current_user.username,
+        action="toggle_dashboard_panel",
+        resource=name,
+        details={"enabled": body.enabled},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    logger.info(
+        "Dashboard panel %s for plugin %s by %s",
+        "enabled" if body.enabled else "disabled",
+        name,
+        current_user.username,
+    )
+    return {
+        "name": name,
+        "dashboard_panel_enabled": body.enabled,
+        "message": f"Dashboard panel {'enabled' if body.enabled else 'disabled'}",
+    }
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)

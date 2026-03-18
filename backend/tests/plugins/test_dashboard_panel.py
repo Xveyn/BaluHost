@@ -325,3 +325,83 @@ class TestGetPluginPanelEndpoint:
         assert result.plugin_name == "tapo_smart_plug"
         assert result.panel_type == "gauge"
         assert result.data["value"] == "120 W"
+
+
+from fastapi import HTTPException
+from app.schemas.plugin import DashboardPanelToggleRequest
+
+
+class TestDashboardPanelToggleRoute:
+    @pytest.mark.asyncio
+    async def test_toggle_route_exists(self):
+        """Verify the dashboard-panel toggle route is registered."""
+        from app.api.routes.plugins import router
+        route = None
+        for r in router.routes:
+            if hasattr(r, "path") and "dashboard-panel" in r.path:
+                route = r
+                break
+        assert route is not None, "Route /{name}/dashboard-panel not found"
+
+    @pytest.mark.asyncio
+    async def test_toggle_rejects_plugin_without_panel(self):
+        """Plugins that don't implement get_dashboard_panel() get 400."""
+        from app.api.routes.plugins import toggle_dashboard_panel
+
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = None  # No panel support
+
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch("app.api.routes.plugins.user_limiter.enabled", False), \
+             pytest.raises(HTTPException) as exc_info:
+            await toggle_dashboard_panel(
+                request=MagicMock(),
+                response=MagicMock(),
+                name="no_panel_plugin",
+                body=DashboardPanelToggleRequest(enabled=True),
+                db=MagicMock(),
+                current_user=MagicMock(username="admin"),
+                plugin_manager=mock_pm,
+            )
+        assert exc_info.value.status_code == 400
+
+    @pytest.mark.asyncio
+    async def test_toggle_enables_panel_with_audit(self):
+        """Enabling a panel calls set_dashboard_panel_enabled and logs audit."""
+        from app.api.routes.plugins import toggle_dashboard_panel
+
+        mock_spec = DashboardPanelSpec(
+            panel_type="gauge", title="Power", icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = mock_spec
+
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        mock_db = MagicMock()
+        mock_audit = MagicMock()
+
+        with patch("app.api.routes.plugins.user_limiter.enabled", False), patch(
+            "app.api.routes.plugins.plugin_service"
+        ) as mock_svc, patch(
+            "app.services.audit.logger_db.get_audit_logger_db",
+            return_value=mock_audit,
+        ):
+            result = await toggle_dashboard_panel(
+                request=MagicMock(client=MagicMock(host="127.0.0.1")),
+                response=MagicMock(),
+                name="tapo_smart_plug",
+                body=DashboardPanelToggleRequest(enabled=True),
+                db=mock_db,
+                current_user=MagicMock(username="admin"),
+                plugin_manager=mock_pm,
+            )
+
+            mock_svc.set_dashboard_panel_enabled.assert_called_once_with(
+                mock_db, "tapo_smart_plug", True
+            )
+            assert result["dashboard_panel_enabled"] is True
