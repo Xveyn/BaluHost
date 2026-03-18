@@ -262,3 +262,66 @@ class TestDashboardPanelToggle:
     def test_get_active_panel_none(self, db_session):
         result = get_dashboard_panel_plugin(db_session)
         assert result is None
+
+
+from unittest.mock import patch, MagicMock
+
+from app.api.routes.dashboard import get_plugin_panel
+
+
+class TestGetPluginPanelEndpoint:
+    @pytest.mark.asyncio
+    async def test_returns_null_when_no_plugin_active(self):
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = None
+
+        with patch("app.api.routes.dashboard.user_limiter.enabled", False):
+            result = await get_plugin_panel(
+                request=MagicMock(),
+                response=MagicMock(),
+                db=mock_db,
+                current_user=MagicMock(),
+            )
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_returns_panel_data_when_plugin_active(self):
+        """Integration-style test: mock DB record + plugin manager."""
+        from app.plugins.base import DashboardPanelSpec
+
+        mock_record = MagicMock()
+        mock_record.name = "tapo_smart_plug"
+
+        mock_db = MagicMock()
+        mock_db.query.return_value.filter.return_value.first.return_value = mock_record
+
+        mock_spec = DashboardPanelSpec(
+            panel_type="gauge",
+            title="Power Monitoring",
+            icon="zap",
+            accent="from-amber-500 to-orange-500",
+        )
+        mock_plugin = MagicMock()
+        mock_plugin.get_dashboard_panel.return_value = mock_spec
+        mock_plugin.get_dashboard_data = AsyncMock(return_value={
+            "value": "120 W", "meta": "3 devices", "progress": 80.0,
+        })
+
+        mock_pm = MagicMock()
+        mock_pm.get_plugin.return_value = mock_plugin
+
+        with patch("app.api.routes.dashboard.user_limiter.enabled", False), patch(
+            "app.api.routes.dashboard.PluginManager.get_instance",
+            return_value=mock_pm,
+        ):
+            result = await get_plugin_panel(
+                request=MagicMock(),
+                response=MagicMock(),
+                db=mock_db,
+                current_user=MagicMock(),
+            )
+
+        assert result is not None
+        assert result.plugin_name == "tapo_smart_plug"
+        assert result.panel_type == "gauge"
+        assert result.data["value"] == "120 W"

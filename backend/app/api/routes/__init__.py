@@ -12,6 +12,7 @@ from app.api.routes import (
     firebase_config,
     balupi,
     smart_devices,
+    dashboard,
 )
 
 api_router = APIRouter()
@@ -64,5 +65,6 @@ api_router.include_router(activity.router, prefix="/activity", tags=["activity"]
 api_router.include_router(firebase_config.router, tags=["admin", "firebase"])
 api_router.include_router(balupi.router, prefix="/admin", tags=["admin", "balupi"])
 api_router.include_router(smart_devices.router, prefix="/smart-devices", tags=["smart-devices"])
+api_router.include_router(dashboard.router, tags=["dashboard"])
 
 __all__ = ["api_router"]
