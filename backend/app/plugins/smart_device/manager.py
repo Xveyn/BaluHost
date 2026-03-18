@@ -8,7 +8,7 @@ from __future__ import annotations
 import json
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional
 
 from sqlalchemy.orm import Session
 
@@ -152,7 +152,10 @@ class SmartDeviceManager:
                     device.id, exc,
                 )
 
-        logger.info("Created smart device %d ('%s', plugin=%s)", device.id, device.name, device.plugin_name)
+        logger.info(
+            "Created smart device %d ('%s', plugin=%s)",
+            device.id, device.name, device.plugin_name,
+        )
         return device
 
     def get_device(self, db: Session, device_id: int) -> Optional[SmartDevice]:

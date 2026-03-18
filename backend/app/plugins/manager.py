@@ -166,7 +166,7 @@ class PluginManager:
             sys.modules[module_name] = module  # Register before exec for relative imports
             spec.loader.exec_module(module)
 
-            # Find the plugin class
+            # Find the plugin class (skip abstract base classes)
             plugin_class = None
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
@@ -174,6 +174,7 @@ class PluginManager:
                     isinstance(attr, type)
                     and issubclass(attr, PluginBase)
                     and attr is not PluginBase
+                    and not getattr(attr, "__abstractmethods__", None)
                 ):
                     plugin_class = attr
                     break

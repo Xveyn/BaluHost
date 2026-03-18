@@ -9,9 +9,12 @@ from __future__ import annotations
 import asyncio
 import logging
 from datetime import datetime, timezone
-from typing import Any, Dict, Optional
+from typing import TYPE_CHECKING, Any, Dict, Optional
 
 from app.plugins.smart_device.capabilities import PowerReading, SwitchState
+
+if TYPE_CHECKING:
+    from plugp100.new.tapodevice import TapoDevice
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +32,7 @@ class TapoService:
 
     def __init__(self) -> None:
         # cache_key (device_id:ip) -> connected plugp100 device object
-        self._client_cache: Dict[str, object] = {}
+        self._client_cache: Dict[str, TapoDevice] = {}
 
     # ------------------------------------------------------------------
     # Internal helpers
@@ -37,7 +40,7 @@ class TapoService:
 
     async def _get_device(
         self, device_id: str, ip: str, email: str, password: str
-    ) -> object:
+    ) -> TapoDevice:
         """Return a connected plugp100 device, using the cache if available.
 
         Args:
@@ -79,7 +82,7 @@ class TapoService:
         cache_key = f"{device_id}:{ip}"
         self._client_cache.pop(cache_key, None)
 
-    def _extract_power(self, device: object) -> PowerReading:
+    def _extract_power(self, device: TapoDevice) -> PowerReading:
         """Extract power reading from a connected plugp100 device.
 
         Uses the EnergyComponent to read power_info and energy_info,
@@ -135,7 +138,7 @@ class TapoService:
             timestamp=datetime.now(timezone.utc),
         )
 
-    def _extract_switch_state(self, device: object) -> SwitchState:
+    def _extract_switch_state(self, device: TapoDevice) -> SwitchState:
         """Extract switch state from a connected plugp100 device.
 
         Args:
@@ -285,7 +288,7 @@ class TapoService:
         """
         try:
             device = await self._get_device(device_id, ip, email, password)
-            await asyncio.wait_for(device.on(), timeout=_DEVICE_TIMEOUT)
+            await asyncio.wait_for(device.turn_on(), timeout=_DEVICE_TIMEOUT)
             await asyncio.wait_for(device.update(), timeout=_DEVICE_TIMEOUT)
             logger.info("Tapo device %s turned ON", device_id)
             return self._extract_switch_state(device)
@@ -311,7 +314,7 @@ class TapoService:
         """
         try:
             device = await self._get_device(device_id, ip, email, password)
-            await asyncio.wait_for(device.off(), timeout=_DEVICE_TIMEOUT)
+            await asyncio.wait_for(device.turn_off(), timeout=_DEVICE_TIMEOUT)
             await asyncio.wait_for(device.update(), timeout=_DEVICE_TIMEOUT)
             logger.info("Tapo device %s turned OFF", device_id)
             return self._extract_switch_state(device)

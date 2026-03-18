@@ -6,8 +6,6 @@ Mounted at /api/smart-devices/.
 Read endpoints:  any authenticated user.
 Write endpoints: admin only.
 """
-from __future__ import annotations
-
 import json
 import logging
 from datetime import datetime, timezone, timedelta
