@@ -510,3 +510,34 @@ class TestTapoPluginDashboardPanel:
         assert data["value"] == "100.0 W"
         assert "2" in data["meta"]  # "2 devices monitored"
         assert data["progress"] == pytest.approx(66.7, abs=0.1)
+
+
+from app.schemas.plugin import PluginDetailResponse
+
+
+class TestPluginDetailResponsePanelFields:
+    def test_detail_response_includes_panel_fields(self):
+        """PluginDetailResponse should include has_dashboard_panel and dashboard_panel_enabled."""
+        resp = PluginDetailResponse(
+            name="test",
+            version="1.0.0",
+            display_name="Test",
+            description="Test plugin",
+            author="Test",
+            has_dashboard_panel=True,
+            dashboard_panel_enabled=True,
+        )
+        assert resp.has_dashboard_panel is True
+        assert resp.dashboard_panel_enabled is True
+
+    def test_detail_response_panel_fields_default_false(self):
+        """Panel fields should default to False."""
+        resp = PluginDetailResponse(
+            name="test",
+            version="1.0.0",
+            display_name="Test",
+            description="Test plugin",
+            author="Test",
+        )
+        assert resp.has_dashboard_panel is False
+        assert resp.dashboard_panel_enabled is False

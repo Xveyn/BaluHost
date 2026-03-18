@@ -162,6 +162,8 @@ async def get_plugin_details(
         has_ui=ui_manifest is not None and ui_manifest.enabled,
         has_routes=plugin.get_router() is not None,
         has_background_tasks=len(plugin.get_background_tasks()) > 0,
+        has_dashboard_panel=plugin.get_dashboard_panel() is not None,
+        dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
         nav_items=[
             PluginNavItemSchema(**item.model_dump())
             for item in (ui_manifest.nav_items if ui_manifest else [])
