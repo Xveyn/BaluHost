@@ -129,9 +129,9 @@ export const PluginDashboardPanel: React.FC = () => {
   }
 
   // Resolve Lucide icon by name
-  const IconComponent = (LucideIcons as Record<string, React.FC<{ className?: string }>>)[
-    panel.icon.charAt(0).toUpperCase() + panel.icon.slice(1)
-  ] || LucideIcons.Plug;
+  const iconKey = panel.icon.charAt(0).toUpperCase() + panel.icon.slice(1);
+  const IconComponent = (LucideIcons as unknown as Record<string, React.FC<{ className?: string }>>)[iconKey]
+    || (LucideIcons.Plug as unknown as React.FC<{ className?: string }>);
   const iconElement = <IconComponent className="h-6 w-6" />;
 
   const rendererProps = {
