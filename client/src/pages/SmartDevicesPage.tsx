@@ -79,25 +79,25 @@ export default function SmartDevicesPage() {
           payload?: unknown;
         };
 
-        if (data.type === 'smart_device_update') {
-          const payload = data.payload as {
+        if (data.type === 'smart_device_update' && Array.isArray(data.payload)) {
+          const changes = data.payload as Array<{
             device_id: number;
+            name: string;
             state: Record<string, unknown>;
-            is_online: boolean;
-            last_seen: string | null;
-          };
+            timestamp: string;
+          }>;
 
           setDevices((prev) =>
-            prev.map((d) =>
-              d.id === payload.device_id
-                ? {
-                    ...d,
-                    state: payload.state,
-                    is_online: payload.is_online,
-                    last_seen: payload.last_seen,
-                  }
-                : d
-            )
+            prev.map((d) => {
+              const change = changes.find((c) => c.device_id === d.id);
+              if (!change) return d;
+              return {
+                ...d,
+                state: change.state,
+                is_online: true,
+                last_seen: change.timestamp,
+              };
+            })
           );
 
           // Refresh power summary silently on state change

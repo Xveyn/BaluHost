@@ -52,7 +52,12 @@ export function SmartDeviceCard({
     try {
       const res = await smartDevicesApi.command(device.id, { capability, command, params });
       if (res.data.success && res.data.state) {
-        onStateChange(device.id, res.data.state);
+        // Merge the command result into the correct capability key
+        const mergedState = {
+          ...(device.state ?? {}),
+          [capability]: res.data.state,
+        };
+        onStateChange(device.id, mergedState);
       } else if (!res.data.success) {
         toast.error(res.data.error ?? 'Command failed');
       }
@@ -65,12 +70,14 @@ export function SmartDeviceCard({
     }
   };
 
-  const state = device.state ?? {};
+  // State is nested by capability: { switch: {...}, power_monitor: {...}, ... }
+  const fullState = (device.state ?? {}) as Record<string, Record<string, unknown>>;
 
   // --- Capability renderers ---
 
   const renderSwitch = () => {
-    const isOn = Boolean(state.is_on ?? state.switch_on ?? false);
+    const switchState = fullState.switch ?? {};
+    const isOn = Boolean(switchState.is_on ?? false);
     return (
       <SwitchControl
         isOn={isOn}
@@ -80,24 +87,31 @@ export function SmartDeviceCard({
     );
   };
 
-  const renderPowerMonitor = () => (
-    <PowerMonitorDisplay
-      watts={(state.current_power as number | null) ?? null}
-      voltage={(state.voltage as number | null) ?? null}
-      current={(state.current as number | null) ?? null}
-    />
-  );
+  const renderPowerMonitor = () => {
+    const pm = fullState.power_monitor ?? {};
+    return (
+      <PowerMonitorDisplay
+        watts={(pm.watts as number | null) ?? null}
+        voltage={(pm.voltage as number | null) ?? null}
+        current={(pm.current as number | null) ?? null}
+      />
+    );
+  };
 
-  const renderSensor = () => (
-    <SensorDisplay
-      sensorName={(state.sensor_name as string) ?? 'Sensor'}
-      value={(state.value as number | string | null) ?? null}
-      unit={(state.unit as string | undefined)}
-    />
-  );
+  const renderSensor = () => {
+    const sensor = fullState.sensor ?? {};
+    return (
+      <SensorDisplay
+        sensorName={(sensor.sensor_name as string) ?? 'Sensor'}
+        value={(sensor.value as number | string | null) ?? null}
+        unit={(sensor.unit as string | undefined)}
+      />
+    );
+  };
 
   const renderDimmer = () => {
-    const brightness = (state.brightness as number) ?? 0;
+    const dimmer = fullState.dimmer ?? {};
+    const brightness = (dimmer.brightness as number) ?? 0;
     return (
       <DimmerControl
         brightness={brightness}
@@ -108,10 +122,11 @@ export function SmartDeviceCard({
   };
 
   const renderColor = () => {
+    const color = fullState.color ?? {};
     const colorState = {
-      hue: (state.hue as number) ?? 0,
-      saturation: (state.saturation as number) ?? 100,
-      brightness: (state.brightness as number) ?? 100,
+      hue: (color.hue as number) ?? 0,
+      saturation: (color.saturation as number) ?? 100,
+      brightness: (color.brightness as number) ?? 100,
     };
     return (
       <ColorControl
