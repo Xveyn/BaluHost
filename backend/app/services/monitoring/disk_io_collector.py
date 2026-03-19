@@ -10,11 +10,10 @@ import logging
 import re
 import time
 from datetime import datetime, timezone
-from typing import Dict, List, Optional, Type
+from typing import Any, Dict, List, Optional, Type
 
 import psutil
 
-from app.models.base import Base
 from app.models.monitoring import DiskIoSample
 from app.schemas.monitoring import DiskIoSampleSchema
 from app.services.monitoring.base import MetricCollector
@@ -201,7 +200,7 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
             return
 
         try:
-            from app.services import raid as raid_service
+            from app.services.hardware import raid as raid_service
 
             raid_data = raid_service.get_status()
             new_members: set[str] = set()
@@ -238,7 +237,7 @@ class DiskIoMetricCollector(MetricCollector[DiskIoSampleSchema]):
         """Get list of disks being monitored."""
         return list(self._disk_buffers.keys())
 
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """Get the DiskIoSample model class."""
         return DiskIoSample
 

@@ -11,12 +11,11 @@ import random
 import socket
 import time
 from datetime import datetime, timezone
-from typing import Optional, Tuple, Type
+from typing import Any, Optional, Tuple, Type
 
 import psutil
 
 from app.core.config import settings
-from app.models.base import Base
 from app.models.monitoring import NetworkSample
 from app.schemas.monitoring import NetworkSampleSchema
 from app.services.monitoring.base import MetricCollector
@@ -183,7 +182,7 @@ class NetworkMetricCollector(MetricCollector[NetworkSampleSchema]):
             self._interface_type_last_check = current_time
             return self._interface_type
 
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """Get the NetworkSample model class."""
         return NetworkSample
 

@@ -12,11 +12,9 @@ from abc import ABC, abstractmethod
 from collections import deque
 from datetime import datetime, timedelta, timezone
 from threading import Lock
-from typing import Generic, TypeVar, List, Optional, Type
+from typing import Any, Generic, TypeVar, List, Optional, Type
 
 from sqlalchemy.orm import Session
-
-from app.models.base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -71,7 +69,7 @@ class MetricCollector(ABC, Generic[T]):
         pass
 
     @abstractmethod
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """
         Get the SQLAlchemy model class for this metric.
 

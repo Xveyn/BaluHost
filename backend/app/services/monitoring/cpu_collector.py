@@ -13,15 +13,14 @@ import re
 import subprocess
 from datetime import datetime, timezone
 from functools import lru_cache
-from typing import Optional, Tuple, Type
+from typing import Any, Optional, Tuple, Type
 
 import psutil
 
-from app.models.base import Base
 from app.models.monitoring import CpuSample
 from app.schemas.monitoring import CpuSampleSchema
 from app.services.monitoring.base import MetricCollector
-from app.services.sensors import get_cpu_sensor_data
+from app.services.hardware.sensors import get_cpu_sensor_data
 
 logger = logging.getLogger(__name__)
 
@@ -194,7 +193,7 @@ class CpuMetricCollector(MetricCollector[CpuSampleSchema]):
             logger.error(f"Failed to collect CPU sample: {e}")
             return None
 
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """Get the CpuSample model class."""
         return CpuSample
 
