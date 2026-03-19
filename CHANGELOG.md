@@ -7,6 +7,42 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.17.0] - 2026-03-19
+
+### Added
+
+- **Smart Device Plugin Framework** — generic IoT device management with capabilities system (Switch, PowerMonitor, Dimmer, ColorLight, etc.)
+- **Tapo Smart Plug Plugin** — TP-Link Tapo integration rebuilt as plugin with Switch + PowerMonitor capabilities
+- **Dashboard Plugin Panels** — plugins can provide dashboard widgets with gauge/stat/status/chart renderers via WebSocket + REST
+- **Plugin i18n** — translation support for plugin UI (en/de)
+- **SHM-to-WebSocket bridge** — shared memory based real-time device state updates
+- **Smart Device test suite** — 159 tests for the new plugin framework
+
+### Changed
+
+- **Tapo → SmartDevice migration** — all Tapo-specific models, schemas, routes replaced by generic SmartDevice API (`/api/smart-devices/`)
+- **Energy service** — migrated from PowerSample/TapoDevice to SmartDeviceSample with JSON data storage
+- **Frontend PowerTab/EnergyMonitor** — rewritten to use SmartDevice API
+- **Alembic migrations** — data migration from legacy tables + drop of `tapo_devices`/`power_samples` tables
+
+### Fixed
+
+- Broken import paths after service refactoring into subpackages
+- Type safety issues found by pyright across backend
+- Notification service null safety checks
+- File service type annotations, closure capture, SQLAlchemy expressions
+- Monitoring collector import and type signature issues
+- Frontend icon lookup and chart gradient uniqueness
+- Mock session factory and dashboard panel translations in tests
+
+### Documentation
+
+- Plugin system README and architecture docs
+- Smart device plugin research and design specs
+- Dashboard Plugin Panel System design spec
+
+---
+
 ## [1.16.4] - 2026-03-17
 
 ### Added
