@@ -206,9 +206,12 @@ class TestPersistence:
         """Test that persist interval triggers database write."""
         orchestrator = MonitoringOrchestrator(persist_interval=3)
 
-        # Mock the DB factory
+        # Mock the DB factory (must return a context manager)
         mock_session = MagicMock()
-        mock_factory = MagicMock(return_value=iter([mock_session]))
+        mock_cm = MagicMock()
+        mock_cm.__enter__ = MagicMock(return_value=mock_session)
+        mock_cm.__exit__ = MagicMock(return_value=False)
+        mock_factory = MagicMock(return_value=mock_cm)
         orchestrator._db_session_factory = mock_factory
 
         # Collect samples

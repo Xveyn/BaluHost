@@ -306,6 +306,7 @@ class TestGetPluginPanelEndpoint:
         mock_plugin.get_dashboard_data = AsyncMock(return_value={
             "value": "120 W", "meta": "3 devices", "progress": 80.0,
         })
+        mock_plugin.get_translations.return_value = None
 
         mock_pm = MagicMock()
         mock_pm.get_plugin.return_value = mock_plugin
