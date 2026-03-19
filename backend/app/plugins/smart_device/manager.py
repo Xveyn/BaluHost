@@ -116,10 +116,20 @@ class SmartDeviceManager:
 
         config_secret: Optional[str] = None
         if data.config:
-            try:
-                config_secret = VPNEncryption.encrypt_key(json.dumps(data.config))
-            except Exception as exc:
-                raise ValueError(f"Failed to encrypt device config: {exc}") from exc
+            config_json = json.dumps(data.config)
+            from app.core.config import settings as app_settings
+            if app_settings.vpn_encryption_key:
+                try:
+                    config_secret = VPNEncryption.encrypt_key(config_json)
+                except Exception as exc:
+                    raise ValueError(f"Failed to encrypt device config: {exc}") from exc
+            else:
+                # Dev mode without encryption key — store as plaintext
+                logger.warning(
+                    "VPN_ENCRYPTION_KEY not set — storing device config in plaintext. "
+                    "Set VPN_ENCRYPTION_KEY in .env for production."
+                )
+                config_secret = config_json
 
         device = SmartDevice(
             name=data.name,
@@ -196,12 +206,15 @@ class SmartDeviceManager:
         update_fields = data.model_dump(exclude_unset=True)
 
         if "config" in update_fields and update_fields["config"] is not None:
-            try:
-                device.config_secret = VPNEncryption.encrypt_key(
-                    json.dumps(update_fields.pop("config"))
-                )
-            except Exception as exc:
-                raise ValueError(f"Failed to re-encrypt device config: {exc}") from exc
+            config_json = json.dumps(update_fields.pop("config"))
+            from app.core.config import settings as app_settings
+            if app_settings.vpn_encryption_key:
+                try:
+                    device.config_secret = VPNEncryption.encrypt_key(config_json)
+                except Exception as exc:
+                    raise ValueError(f"Failed to re-encrypt device config: {exc}") from exc
+            else:
+                device.config_secret = config_json
         else:
             update_fields.pop("config", None)
 
@@ -243,13 +256,24 @@ class SmartDeviceManager:
         """Decrypt and return the device config dict (or empty dict)."""
         if not device.config_secret:
             return {}
-        try:
-            return json.loads(VPNEncryption.decrypt_key(device.config_secret))
-        except Exception as exc:
-            logger.warning(
-                "Could not decrypt config for device %d: %s", device.id, exc
-            )
-            return {}
+        from app.core.config import settings as app_settings
+        if app_settings.vpn_encryption_key:
+            try:
+                return json.loads(VPNEncryption.decrypt_key(device.config_secret))
+            except Exception as exc:
+                logger.warning(
+                    "Could not decrypt config for device %d: %s", device.id, exc
+                )
+                return {}
+        else:
+            # No encryption key — config was stored as plaintext
+            try:
+                return json.loads(device.config_secret)
+            except Exception as exc:
+                logger.warning(
+                    "Could not parse config for device %d: %s", device.id, exc
+                )
+                return {}
 
     # ------------------------------------------------------------------
     # Command dispatch
