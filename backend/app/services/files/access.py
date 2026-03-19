@@ -7,10 +7,13 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from pathlib import PurePosixPath
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from sqlalchemy import select, or_
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from app.models.file_share import FileShare
 
 from app.schemas.user import UserPublic
 from app.services.files import path_utils
