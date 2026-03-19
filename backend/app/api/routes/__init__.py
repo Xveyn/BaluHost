@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth, files, logging, system, users, upload_progress, shares, backup, sync,
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
-    vcl, server_profiles, vpn_profiles, metrics, tapo, energy, devices, monitoring,
+    vcl, server_profiles, vpn_profiles, metrics, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, sleep,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
@@ -38,7 +38,6 @@ api_router.include_router(rate_limit_config.router, prefix="/admin", tags=["admi
 api_router.include_router(server_profiles.router)
 api_router.include_router(vpn_profiles.router)
 api_router.include_router(metrics.router, tags=["monitoring"])
-api_router.include_router(tapo.router, prefix="/tapo", tags=["power-monitoring"])
 api_router.include_router(energy.router, prefix="/energy", tags=["energy-monitoring"])
 api_router.include_router(monitoring.router, tags=["system-monitoring"])
 api_router.include_router(power.router, tags=["power-management"])

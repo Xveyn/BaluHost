@@ -7,21 +7,6 @@ from typing import List, Optional
 from pydantic import BaseModel, Field
 
 
-class PowerSampleSchema(BaseModel):
-    """Individual power sample record."""
-    id: int
-    device_id: int
-    timestamp: datetime
-    watts: float
-    voltage: Optional[float]
-    current: Optional[float]
-    energy_today: Optional[float]
-    is_online: bool
-
-    class Config:
-        from_attributes = True
-
-
 class EnergyPeriodStats(BaseModel):
     """Energy statistics for a time period."""
     device_id: int
