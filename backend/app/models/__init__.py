@@ -61,6 +61,7 @@ from app.models.update_history import (
     UpdateChannel,
 )
 from app.models.energy_price_config import EnergyPriceConfig
+from app.models.ssd_file_cache import SSDCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
@@ -132,7 +133,7 @@ __all__ = [
     "UpdateStatus",
     "UpdateChannel",
     "EnergyPriceConfig",
-    "SsdCacheConfig",
+    "SSDCacheConfig",
     "CloudOAuthConfig",
     "CloudConnection",
     "CloudImportJob",

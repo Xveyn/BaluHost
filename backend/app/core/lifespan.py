@@ -179,7 +179,7 @@ async def _smart_device_ws_bridge() -> None:
 
             ws = get_websocket_manager()
             if ws:
-                await ws.broadcast({
+                await ws.broadcast_to_all({
                     "type": "smart_device_update",
                     "payload": changes,
                 })

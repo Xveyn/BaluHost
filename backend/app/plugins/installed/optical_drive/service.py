@@ -79,7 +79,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
             )
             return proc.returncode or 0, stdout.decode('utf-8', errors='replace'), stderr.decode('utf-8', errors='replace')
         except asyncio.TimeoutError:
-            proc.kill()
+            proc.kill()  # type: ignore[possibly-undefined]
             raise TimeoutError(f"Command timed out after {timeout}s: {' '.join(cmd)}")
         except FileNotFoundError:
             return 127, "", f"Command not found: {cmd[0]}"
@@ -368,7 +368,7 @@ class OpticalDriveService(ReadingMixin, BurningMixin, BrowsingMixin):
                     total_tracks = audio_tracks
                     # Generate basic track list (udevadm doesn't give duration)
                     tracks = [
-                        AudioTrack(number=i, duration_seconds=0, title=f"Track {i}", start_sector=0, end_sector=0)
+                        AudioTrack(number=i, duration_seconds=0, start_sector=0, end_sector=0)
                         for i in range(1, audio_tracks + 1)
                     ]
                 elif udev_props.get("ID_CDROM_MEDIA_DVD") == "1":

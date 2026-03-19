@@ -176,6 +176,8 @@ class BrowsingMixin:
                     continue
 
                 is_dir = perms.startswith("d")
+                if current_dir is None:
+                    continue
                 file_path = current_dir.rstrip("/") + "/" + name
 
                 files.append(DiscFile(
@@ -292,6 +294,7 @@ class BrowsingMixin:
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE
             )
+            assert proc.stderr is not None
 
             while True:
                 line = await proc.stderr.readline()
@@ -341,6 +344,7 @@ class BrowsingMixin:
             stdout=asyncio.subprocess.PIPE,
             stderr=asyncio.subprocess.PIPE
         )
+        assert proc.stdout is not None
 
         while True:
             line = await proc.stdout.readline()
@@ -664,6 +668,7 @@ Created for development testing purposes.
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stdout is not None
 
                     while True:
                         line = await proc.stdout.readline()
