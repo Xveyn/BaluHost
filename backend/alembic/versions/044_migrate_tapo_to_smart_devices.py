@@ -107,7 +107,7 @@ def upgrade() -> None:
         device_type = row.device_type or "P115"
         device_type_id = f"tapo_{device_type.lower()}"
 
-        result = conn.execute(
+        new_id = conn.execute(
             smart_devices.insert().values(
                 name=row.name,
                 plugin_name='tapo_smart_plug',
@@ -123,9 +123,8 @@ def upgrade() -> None:
                 created_at=row.created_at,
                 updated_at=row.updated_at,
                 created_by_user_id=row.created_by_user_id,
-            )
-        )
-        new_id = result.inserted_primary_key[0]
+            ).returning(smart_devices.c.id)
+        ).scalar()
         id_map[row.id] = new_id
 
     if not id_map:
