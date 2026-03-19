@@ -11,6 +11,9 @@ try:
     from firebase_admin import credentials, messaging
     FIREBASE_AVAILABLE = True
 except ImportError:
+    firebase_admin = None  # type: ignore[assignment]
+    credentials = None  # type: ignore[assignment]
+    messaging = None  # type: ignore[assignment]
     FIREBASE_AVAILABLE = False
     print("[Firebase] Warning: firebase-admin not installed. Push notifications disabled.")
 
