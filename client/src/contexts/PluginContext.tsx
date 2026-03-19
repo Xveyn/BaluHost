@@ -6,7 +6,6 @@ import type {
   PluginInfo,
   PluginUIInfo,
   PluginNavItem,
-  PluginTranslations,
 } from '../api/plugins';
 import {
   listPlugins,

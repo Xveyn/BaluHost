@@ -131,15 +131,17 @@ const EnergyMonitor: React.FC = () => {
 
         switch (timeWindow) {
           case '10min': {
-            // Use live memory buffer (updates every 5 seconds)
-            const powerHistory = await getPowerHistory();
-            const deviceHistory = powerHistory.devices.find(d => d.device_id === selectedDeviceId);
-            if (deviceHistory && deviceHistory.samples.length > 0) {
-              data = deviceHistory.samples.map(sample => ({
-                time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
-                watts: sample.watts,
-                fullTimestamp: sample.timestamp
-              }));
+            // Use recent history from smart device API
+            const historyRes = await smartDevicesApi.getHistory(selectedDeviceId, 'power_monitor', 1);
+            if (historyRes.data && historyRes.data.length > 0) {
+              data = historyRes.data.map((entry: { timestamp: string; value: unknown }) => {
+                const val = entry.value as { current_power?: number } | null;
+                return {
+                  time: formatTimeForRange(entry.timestamp, chartRange, i18n.language),
+                  watts: val?.current_power ?? 0,
+                  fullTimestamp: entry.timestamp,
+                };
+              });
             }
             break;
           }
