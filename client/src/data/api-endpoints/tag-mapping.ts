@@ -53,7 +53,7 @@ export const tagMapping: Record<string, TagConfig> = {
   'notifications':     { category: 'features', title: 'Notifications',         icon: icon(Bell) },
   'benchmark':         { category: 'features', title: 'Benchmark',             icon: icon(Gauge) },
   'cloud-import':      { category: 'features', title: 'Cloud Import',          icon: icon(Cloud) },
-  'power-monitoring':  { category: 'features', title: 'Tapo Smart Plugs',      icon: icon(Plug) },
+  'power-monitoring':  { category: 'features', title: 'Smart Devices',          icon: icon(Plug) },
   'pihole':            { category: 'features', title: 'Pi-hole DNS',           icon: icon(ShieldBan) },
   'ssd-cache':         { category: 'features', title: 'SSD File Cache',        icon: icon(Layers) },
   'ssd-migration':     { category: 'features', title: 'Migration',             icon: icon(ArrowRightLeft) },

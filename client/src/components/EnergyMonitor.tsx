@@ -33,8 +33,8 @@ import {
   getHourlySamples,
 } from '../api/energy';
 import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
-import { listTapoDevices, getPowerHistory } from '../api/power';
-import type { TapoDevice } from '../api/power';
+import { smartDevicesApi } from '../api/smart-devices';
+import type { SmartDevice } from '../api/smart-devices';
 import { formatTimeForRange } from '../lib/dateUtils';
 import type { ChartTimeRange } from '../lib/dateUtils';
 import { formatNumber } from '../lib/formatters';
@@ -51,7 +51,7 @@ const EnergyMonitor: React.FC = () => {
     '24hours': '24h',
     '7days': '7d',
   };
-  const [devices, setDevices] = useState<TapoDevice[]>([]);
+  const [devices, setDevices] = useState<SmartDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null);
   const [costs, setCosts] = useState<{
@@ -68,7 +68,9 @@ const EnergyMonitor: React.FC = () => {
   useEffect(() => {
     const loadDevices = async () => {
       try {
-        const deviceList = await listTapoDevices();
+        const res = await smartDevicesApi.list();
+        // Filter to only devices with power_monitor capability
+        const deviceList = res.data.devices.filter(d => d.capabilities?.includes('power_monitor'));
         setDevices(deviceList);
 
         // Auto-select first device

@@ -1,8 +1,8 @@
 /**
- * PowerTab -- Power/energy monitoring tab with Tapo device integration.
+ * PowerTab -- Power/energy monitoring tab with smart device integration.
  */
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
 import {
@@ -18,11 +18,10 @@ import {
 } from 'recharts';
 import toast from 'react-hot-toast';
 import { getApiErrorMessage } from '../../lib/errorHandling';
-import { MetricChart } from '../monitoring';
 import { formatTimeForRange, parseUtcTimestamp } from '../../lib/dateUtils';
 import type { ChartTimeRange } from '../../lib/dateUtils';
-import { getPowerHistory } from '../../api/power';
-import type { PowerMonitoringResponse } from '../../api/power';
+import { smartDevicesApi } from '../../api/smart-devices';
+import type { SmartDevice, PowerSummary } from '../../api/smart-devices';
 import {
   getEnergyPriceConfig,
   updateEnergyPriceConfig,
@@ -37,7 +36,8 @@ type CumulativePeriod = 'today' | 'week' | 'month';
 
 export function PowerTab() {
   const { t, i18n } = useTranslation(['system', 'common']);
-  const [powerData, setPowerData] = useState<PowerMonitoringResponse | null>(null);
+  const [devices, setDevices] = useState<SmartDevice[]>([]);
+  const [powerSummary, setPowerSummary] = useState<PowerSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -55,11 +55,16 @@ export function PowerTab() {
 
   const fetchPower = useCallback(async () => {
     try {
-      const data = await getPowerHistory();
-      setPowerData(data);
+      const [listRes, summaryRes] = await Promise.all([
+        smartDevicesApi.list(),
+        smartDevicesApi.getPowerSummary(),
+      ]);
+      // Filter to devices with power_monitor capability
+      const powerDevices = listRes.data.devices.filter(d => d.capabilities?.includes('power_monitor'));
+      setDevices(powerDevices);
+      setPowerSummary(summaryRes.data);
       setError(null);
     } catch (err: unknown) {
-      // Don't show error for no devices configured
       const isAxiosLike = err != null && typeof err === 'object' && 'response' in err;
       const status = isAxiosLike ? (err as { response?: { status?: number } }).response?.status : undefined;
       if (status !== 404) {
@@ -84,12 +89,12 @@ export function PowerTab() {
     fetchPriceConfig();
   }, []);
 
-  // Set device ID when powerData becomes available
+  // Set device ID when devices become available
   useEffect(() => {
-    if (powerData && powerData.devices.length > 0 && !selectedDeviceId) {
-      setSelectedDeviceId(powerData.devices[0].device_id);
+    if (devices.length > 0 && !selectedDeviceId) {
+      setSelectedDeviceId(devices[0].id);
     }
-  }, [powerData, selectedDeviceId]);
+  }, [devices, selectedDeviceId]);
 
   // Fetch cumulative data with separate interval (60s - matches DB write interval)
   useEffect(() => {
@@ -149,28 +154,7 @@ export function PowerTab() {
     return () => clearInterval(interval);
   }, [fetchPower]);
 
-  // Calculate cumulative energy consumption from samples
-  const calculateCumulativeEnergy = useCallback((samples: { timestamp: string; watts: number }[]) => {
-    if (samples.length < 2) return 0;
-
-    let totalWh = 0;
-    for (let i = 1; i < samples.length; i++) {
-      const prevTime = new Date(samples[i - 1].timestamp).getTime();
-      const currTime = new Date(samples[i].timestamp).getTime();
-      const hours = (currTime - prevTime) / (1000 * 60 * 60);
-      const avgWatts = (samples[i - 1].watts + samples[i].watts) / 2;
-      totalWh += avgWatts * hours;
-    }
-    return totalWh / 1000; // Convert Wh to kWh
-  }, []);
-
-  // Calculate total cumulative energy across all devices
-  const totalCumulativeEnergy = useMemo(() => {
-    if (!powerData) return 0;
-    return powerData.devices.reduce((sum, device) => {
-      return sum + calculateCumulativeEnergy(device.samples);
-    }, 0);
-  }, [powerData, calculateCumulativeEnergy]);
+  const totalCurrentPower = powerSummary?.total_watts ?? 0;
 
   if (loading) {
     return (
@@ -184,7 +168,7 @@ export function PowerTab() {
     return <div className="text-red-400 text-center py-8">{error}</div>;
   }
 
-  if (!powerData || powerData.devices.length === 0) {
+  if (devices.length === 0) {
     return (
       <div className="text-center py-12">
         <svg
@@ -200,15 +184,12 @@ export function PowerTab() {
             d="M13 10V3L4 14h7v7l9-11h-9z"
           />
         </svg>
-        <p className="mt-4 text-slate-400">{t('monitor.power.noTapoDevices')}</p>
-        <p className="text-sm text-slate-500 mt-1">
-          {t('monitor.power.configureTapoDevice')}
-        </p>
+        <p className="mt-4 text-slate-400">{t('monitor.power.noSmartDevices', 'No smart devices with power monitoring configured')}</p>
         <Link
-          to="/admin/system-control?tab=smart"
+          to="/smart-devices"
           className="inline-block mt-4 px-4 py-2 text-sm bg-sky-500/20 text-sky-400 hover:bg-sky-500/30 border border-sky-500/40 rounded-lg transition-colors"
         >
-          {t('monitor.power.configureSmartDevices')} →
+          {t('monitor.power.configureSmartDevices', 'Configure Smart Devices')} →
         </Link>
       </div>
     );
@@ -220,88 +201,68 @@ export function PowerTab() {
       <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5 lg:grid-cols-4">
         <StatCard
           label={t('monitor.power.currentPower')}
-          value={formatNumber(powerData.total_current_power, 1)}
+          value={formatNumber(totalCurrentPower, 1)}
           unit="W"
           color="yellow"
           icon={<span className="text-yellow-400 text-base sm:text-xl">⚡</span>}
         />
         <StatCard
-          label={t('monitor.power.cumulativeSession')}
-          value={formatNumber(totalCumulativeEnergy, 4)}
-          unit="kWh"
-          color="orange"
-          icon={<span className="text-orange-400 text-base sm:text-xl">Σ</span>}
-        />
-        <StatCard
-          label={t('monitor.power.todayTotal')}
-          value={formatNumber(powerData.devices.reduce((sum, d) => sum + (d.latest_sample?.energy_today ?? 0), 0), 2)}
-          unit="kWh"
+          label={t('monitor.power.onlineDevices', 'Online')}
+          value={devices.filter(d => d.is_online).length}
+          unit={`/ ${devices.length}`}
           color="green"
           icon={<span className="text-green-400 text-base sm:text-xl">📊</span>}
         />
         <StatCard
           label={t('monitor.power.devices')}
-          value={powerData.devices.length}
+          value={devices.length}
           color="blue"
           icon={<span className="text-blue-400 text-base sm:text-xl">#</span>}
         />
       </div>
 
       {/* Per-device stats */}
-      {powerData.devices.map((device) => {
-        const deviceCumulativeEnergy = calculateCumulativeEnergy(device.samples);
+      {devices.map((device) => {
+        const pm = device.state?.power_monitor as { current_power?: number; voltage?: number; current_ma?: number; energy_today_wh?: number } | undefined;
+        const watts = pm?.current_power;
+        const voltage = pm?.voltage;
+        const currentA = pm?.current_ma != null ? pm.current_ma / 1000 : undefined;
+        const energyToday = pm?.energy_today_wh != null ? pm.energy_today_wh / 1000 : undefined;
 
         return (
-          <div key={device.device_id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
-            <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">{device.device_name}</h3>
-            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-5">
+          <div key={device.id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+            <div className="flex items-center justify-between mb-3 sm:mb-4">
+              <h3 className="text-base sm:text-lg font-semibold text-white">{device.name}</h3>
+              <span className={`text-xs px-2 py-0.5 rounded-full ${device.is_online ? 'bg-green-500/20 text-green-400' : 'bg-red-500/20 text-red-400'}`}>
+                {device.is_online ? t('monitor.power.online', 'Online') : t('monitor.power.offline', 'Offline')}
+              </span>
+            </div>
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.powerLabel')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.watts != null ? formatNumber(device.latest_sample.watts, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
+                  {watts != null ? formatNumber(watts, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">W</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.voltage')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.voltage != null ? formatNumber(device.latest_sample.voltage, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
+                  {voltage != null ? formatNumber(voltage, 1) : '-'} <span className="text-sm sm:text-base text-slate-400">V</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.current')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.current != null ? formatNumber(device.latest_sample.current, 3) : '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
+                  {currentA != null ? formatNumber(currentA, 3) : '-'} <span className="text-sm sm:text-base text-slate-400">A</span>
                 </p>
               </div>
               <div>
                 <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.today')}</p>
                 <p className="text-lg sm:text-xl font-semibold text-white">
-                  {device.latest_sample?.energy_today != null ? formatNumber(device.latest_sample.energy_today, 2) : '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
-                </p>
-              </div>
-              <div>
-                <p className="text-[10px] sm:text-xs text-slate-400">{t('monitor.power.cumulativeSession')}</p>
-                <p className="text-lg sm:text-xl font-semibold text-orange-400">
-                  {formatNumber(deviceCumulativeEnergy, 4)} <span className="text-sm sm:text-base text-slate-400">kWh</span>
+                  {energyToday != null ? formatNumber(energyToday, 2) : '-'} <span className="text-sm sm:text-base text-slate-400">kWh</span>
                 </p>
               </div>
             </div>
-
-            {/* Mini chart for this device */}
-            {device.samples.length > 0 && (
-              <div className="mt-3 sm:mt-4">
-                <MetricChart
-                  data={device.samples.map((s) => ({
-                    time: s.timestamp,
-                    watts: s.watts,
-                  }))}
-                  lines={[{ dataKey: 'watts', name: t('monitor.power.powerWatts'), color: '#eab308' }]}
-                  height={180}
-                  showArea
-                  timeRange="1h"
-                />
-              </div>
-            )}
           </div>
         );
       })}
