@@ -12,8 +12,6 @@ from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
 from app.models.server_profile import ServerProfile
 from app.models.vpn_profile import VPNProfile, VPNType
 from app.models.refresh_token import RefreshToken
-from app.models.tapo_device import TapoDevice
-from app.models.power_sample import PowerSample
 from app.models.monitoring import (
     MetricType,
     CpuSample,
@@ -41,6 +39,7 @@ from app.models.scheduler_state import SchedulerState
 from app.models.webdav_state import WebdavState
 from app.models.power_preset import PowerPreset
 from app.models.plugin import InstalledPlugin
+from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.benchmark import (
     DiskBenchmark,
     BenchmarkTestResult,
@@ -93,8 +92,6 @@ __all__ = [
     "VPNProfile",
     "VPNType",
     "RefreshToken",
-    "TapoDevice",
-    "PowerSample",
     "MetricType",
     "CpuSample",
     "MemorySample",
@@ -119,6 +116,8 @@ __all__ = [
     "WebdavState",
     "PowerPreset",
     "InstalledPlugin",
+    "SmartDevice",
+    "SmartDeviceSample",
     "DiskBenchmark",
     "BenchmarkTestResult",
     "BenchmarkStatus",
