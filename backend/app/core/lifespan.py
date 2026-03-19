@@ -262,7 +262,6 @@ async def _startup(app: FastAPI) -> None:
     from app.core.database import init_db, SessionLocal, engine
     from app.services.users import ensure_admin_user, ensure_user_home_directories
     from app.services import jobs, seed
-    from app.services.power import monitor as power_monitor
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode

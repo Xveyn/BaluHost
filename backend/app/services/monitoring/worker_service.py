@@ -40,7 +40,7 @@ _HEARTBEAT_INTERVAL = 10.0
 # SHM snapshot intervals (seconds)
 _TELEMETRY_SNAPSHOT_INTERVAL = 3.0
 _DISK_IO_SNAPSHOT_INTERVAL = 1.0
-_POWER_SNAPSHOT_INTERVAL = 5.0
+_POWER_SNAPSHOT_INTERVAL = 5.0  # unused, kept for reference
 _ORCHESTRATOR_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL = 5.0
 _COMMAND_POLL_INTERVAL = 2.0
@@ -95,12 +95,7 @@ class MonitoringWorker:
         await start_monitoring(db_session_factory)
         logger.info("Monitoring orchestrator started")
 
-        # Start power monitor
-        from app.services import power_monitor
-        await power_monitor.start_power_monitor(db_session_factory)
-        logger.info("Power monitor started")
-
-        # Start smart device poller
+        # Start smart device poller (handles all device polling including power monitoring)
         try:
             self._smart_device_poller = SmartDevicePoller()
             await self._smart_device_poller.start(db_session_factory)
@@ -141,11 +136,6 @@ class MonitoringWorker:
                     if now - last_disk_io >= _DISK_IO_SNAPSHOT_INTERVAL:
                         self._write_disk_io_snapshot()
                         last_disk_io = now
-
-                    # Write power monitor snapshot
-                    if now - last_power >= _POWER_SNAPSHOT_INTERVAL:
-                        self._write_power_snapshot()
-                        last_power = now
 
                     # Write orchestrator status snapshot
                     if now - last_orchestrator >= _ORCHESTRATOR_SNAPSHOT_INTERVAL:
@@ -189,12 +179,6 @@ class MonitoringWorker:
                     await self._smart_device_poller.stop()
             except Exception as exc:
                 logger.debug("Error stopping smart device poller: %s", exc)
-
-            try:
-                from app.services import power_monitor
-                await power_monitor.stop_power_monitor()
-            except Exception as exc:
-                logger.debug("Error stopping power monitor: %s", exc)
 
             try:
                 from app.services.monitoring.orchestrator import stop_monitoring
@@ -256,34 +240,6 @@ class MonitoringWorker:
             write_shm(DISK_IO_FILE, data)
         except Exception as exc:
             logger.debug("Disk I/O snapshot failed: %s", exc)
-
-    def _write_power_snapshot(self) -> None:
-        """Write current power monitor data to SHM."""
-        try:
-            from app.services import power_monitor
-
-            # Power monitor histories are per-device with PowerSample objects
-            with power_monitor._lock:
-                histories = {}
-                for device_id, samples in power_monitor._device_histories.items():
-                    histories[str(device_id)] = [
-                        {
-                            "timestamp": str(s.timestamp),
-                            "watts": s.watts,
-                            "voltage": s.voltage,
-                            "current": s.current,
-                            "energy_today": s.energy_today,
-                        }
-                        for s in samples
-                    ]
-
-            data = {
-                "device_histories": histories,
-                "timestamp": time.time(),
-            }
-            write_shm(POWER_MONITOR_FILE, data)
-        except Exception as exc:
-            logger.debug("Power monitor snapshot failed: %s", exc)
 
     def _write_orchestrator_snapshot(self) -> None:
         """Write orchestrator status to SHM."""
@@ -363,10 +319,8 @@ class MonitoringWorker:
                 "telemetry_monitor",
                 "disk_io_monitor",
                 "monitoring_orchestrator",
-                "power_monitor",
+                "smart_device_poller",
             ]
-            if self._smart_device_poller is not None:
-                services.append("smart_device_poller")
 
             data = {
                 "alive": True,
@@ -409,12 +363,6 @@ class MonitoringWorker:
             service_status["monitoring_orchestrator"] = orch_status()
         except Exception:
             service_status["monitoring_orchestrator"] = {"is_running": False}
-
-        try:
-            from app.services import power_monitor
-            service_status["power_monitor"] = power_monitor.get_status()
-        except Exception:
-            service_status["power_monitor"] = {"is_running": False}
 
         try:
             if self._smart_device_poller is not None:

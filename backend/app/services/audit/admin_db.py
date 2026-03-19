@@ -34,7 +34,7 @@ _TABLE_CATEGORIES: Dict[str, List[str]] = {
     ],
     "Power": [
         "power_profile_configs", "power_profile_logs", "power_demand_logs",
-        "power_auto_scaling_config", "power_samples", "power_presets",
+        "power_auto_scaling_config", "power_presets",
     ],
     "Fans": ["fan_configs", "fan_samples"],
     "Scheduler": ["scheduler_executions", "scheduler_configs"],
@@ -47,7 +47,7 @@ _TABLE_CATEGORIES: Dict[str, List[str]] = {
         "server_profiles", "rate_limit_configs", "installed_plugins",
         "update_history", "update_config",
     ],
-    "Energy/IoT": ["tapo_devices", "energy_price_configs"],
+    "Energy/IoT": ["smart_devices", "smart_device_samples", "energy_price_configs"],
 }
 
 # Flat set for quick membership checks

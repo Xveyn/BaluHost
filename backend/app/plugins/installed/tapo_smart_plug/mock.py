@@ -1,8 +1,7 @@
 """TapoMockService — mock Tapo communication for dev mode.
 
 Provides realistic simulated data for Tapo P110/P115 smart plugs when
-running on Windows or without real hardware.  Reuses the mock data
-generation pattern from ``app.services.power.monitor._generate_mock_power_sample()``.
+running on Windows or without real hardware.
 """
 from __future__ import annotations
 

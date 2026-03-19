@@ -20,7 +20,7 @@ logger = logging.getLogger(__name__)
 PRIMARY_ONLY_SERVICES = [
     "telemetry_monitor",
     "disk_io_monitor",
-    "power_monitor",
+    "smart_device_poller",
     "monitoring_orchestrator",
     "power_manager",
     "fan_control",
@@ -34,7 +34,7 @@ PRIMARY_ONLY_SERVICES = [
 MONITORING_WORKER_SERVICES = [
     "telemetry_monitor",
     "disk_io_monitor",
-    "power_monitor",
+    "smart_device_poller",
     "monitoring_orchestrator",
 ]
 
@@ -101,7 +101,6 @@ def register_all_services(
         discovery_service: The NetworkDiscoveryService instance (or None).
     """
     from app.services import disk_monitor, jobs, telemetry
-    from app.services.power import monitor as power_monitor
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
@@ -130,13 +129,24 @@ def register_all_services(
         start_fn=disk_monitor.start_monitoring,
     )
 
-    # Power Monitor
+    # Smart Device Poller (replaces old power monitor)
+    def _get_smart_device_poller_status():
+        try:
+            from app.services.monitoring.shm import read_shm, SMART_DEVICES_FILE
+            data = read_shm(SMART_DEVICES_FILE, max_age_seconds=30.0)
+            if data:
+                return {
+                    "is_running": True,
+                    "devices_count": len(data.get("devices", {})),
+                }
+            return {"is_running": False}
+        except Exception:
+            return {"is_running": False}
+
     register_service(
-        name="power_monitor",
-        display_name="Power Monitor",
-        get_status_fn=power_monitor.get_status,
-        stop_fn=power_monitor.stop_power_monitor,
-        start_fn=lambda: power_monitor.start_power_monitor(get_db),
+        name="smart_device_poller",
+        display_name="Smart Device Poller",
+        get_status_fn=_get_smart_device_poller_status,
     )
 
     # Monitoring Orchestrator
