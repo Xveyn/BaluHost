@@ -26,13 +26,6 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 - **[SSL_SETUP.md](deployment/SSL_SETUP.md)** - SSL/TLS-Konfiguration
 - **[REVERSE_PROXY_SETUP.md](deployment/REVERSE_PROXY_SETUP.md)** - Reverse-Proxy-Setup
 
-### [storage/](storage/) - Storage & RAID
-- **[RAID_SETUP_WIZARD.md](storage/RAID_SETUP_WIZARD.md)** - RAID-Konfigurationsassistent
-- **[RAID_SCRUB.md](storage/RAID_SCRUB.md)** - RAID-Scrubbing
-- **[RAID_CI_AND_SETTINGS.md](storage/RAID_CI_AND_SETTINGS.md)** - RAID Testing/CI
-- **[STORAGE_MOUNTPOINTS.md](storage/STORAGE_MOUNTPOINTS.md)** - Multi-Mountpoint Feature
-- **[BACKUP_RESTORE.md](storage/BACKUP_RESTORE.md)** - Backup-System
-
 ### [monitoring/](monitoring/) - Monitoring & Performance
 - **[MONITORING.md](monitoring/MONITORING.md)** - Monitoring-Setup (Prometheus/Grafana)
 - **[MONITORING_QUICKSTART.md](monitoring/MONITORING_QUICKSTART.md)** - Monitoring Quick-Start
@@ -60,6 +53,14 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 - **[SHARING_FEATURES_PHASE1.md](features/SHARING_FEATURES_PHASE1.md)** - File-Sharing
 - **[UPLOAD_PROGRESS.md](features/UPLOAD_PROGRESS.md)** - Upload-Progress (SSE)
 
+### Plugins & Smart Devices
+- **[../backend/app/plugins/README.md](../backend/app/plugins/README.md)** - Plugin-System (Architektur, Lifecycle, Hooks, Events, Permissions, Anleitung)
+- **[plans/Snart_Devices_Plugins.md](plans/Snart_Devices_Plugins.md)** - Smart-Device-Plugin-Konzept
+
+### Analysen & Pläne
+- **[CODE_ANALYSIS_2026-03-17.md](CODE_ANALYSIS_2026-03-17.md)** - Codebase-Analyse (März 2026)
+- **[plans/](plans/)** - Architektur- und Feature-Pläne
+
 ---
 
 ## Komponentendokumentation
@@ -76,3 +77,4 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 | Dev-Mode | [DEV_CHECKLIST.md](getting-started/DEV_CHECKLIST.md) |
 | Produktion | [PRODUCTION_QUICKSTART.md](deployment/PRODUCTION_QUICKSTART.md) |
 | Features | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
+| Plugin-System | [backend/app/plugins/README.md](../backend/app/plugins/README.md) |
