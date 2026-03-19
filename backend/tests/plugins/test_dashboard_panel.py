@@ -39,7 +39,7 @@ class TestGaugePanelData:
 
     def test_gauge_missing_required(self):
         with pytest.raises(ValidationError):
-            GaugePanelData(value="120 W")  # missing meta, progress
+            GaugePanelData(value="120 W")  # type: ignore[call-arg]  # missing meta, progress
 
 
 class TestStatPanelData:
@@ -50,7 +50,7 @@ class TestStatPanelData:
 
     def test_stat_missing_meta(self):
         with pytest.raises(ValidationError):
-            StatPanelData(value="42")
+            StatPanelData(value="42")  # type: ignore[call-arg]
 
 
 class TestStatusPanelData:
@@ -80,7 +80,7 @@ class TestChartPanelData:
 
     def test_chart_missing_points(self):
         with pytest.raises(ValidationError):
-            ChartPanelData(value="45", meta="Speed")
+            ChartPanelData(value="45", meta="Speed")  # type: ignore[call-arg]
 
 
 from typing import Any, Dict, List, Optional
@@ -136,7 +136,7 @@ class TestDashboardPanelSpec:
 
     def test_spec_invalid_panel_type(self):
         with pytest.raises(ValidationError):
-            DashboardPanelSpec(panel_type="sparkle", title="Bad")
+            DashboardPanelSpec(panel_type="sparkle", title="Bad")  # type: ignore[arg-type]
 
 
 class TestPluginBaseDashboardDefaults:
@@ -147,7 +147,7 @@ class TestPluginBaseDashboardDefaults:
     @pytest.mark.asyncio
     async def test_default_get_dashboard_data_returns_none(self):
         plugin = ConcretePlugin()
-        result = await plugin.get_dashboard_data(db=None)
+        result = await plugin.get_dashboard_data(db=None)  # type: ignore[arg-type]
         assert result is None
 
     def test_panel_plugin_returns_spec(self):
@@ -159,7 +159,7 @@ class TestPluginBaseDashboardDefaults:
     @pytest.mark.asyncio
     async def test_panel_plugin_returns_data(self):
         plugin = PanelPlugin()
-        data = await plugin.get_dashboard_data(db=None)
+        data = await plugin.get_dashboard_data(db=None)  # type: ignore[arg-type]
         assert data is not None
         assert data["value"] == "100 W"
 
@@ -324,6 +324,7 @@ class TestGetPluginPanelEndpoint:
         assert result is not None
         assert result.plugin_name == "tapo_smart_plug"
         assert result.panel_type == "gauge"
+        assert result.data is not None
         assert result.data["value"] == "120 W"
 
 
