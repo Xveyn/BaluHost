@@ -1,7 +1,7 @@
 # BaluHost - Architecture Documentation
 
-**Version:** 1.16.0
-**Last Updated:** 15. März 2026
+**Version:** 1.16.4
+**Last Updated:** 19. März 2026
 **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
 ## 📐 System Overview
@@ -49,8 +49,17 @@ BaluHost is a modern, full-stack NAS management application designed for self-ho
 │  │  ├─ Monitoring Orch.    (Unified Collectors)       │   │
 │  │  ├─ Service Status      (Health Monitoring)        │   │
 │  │  ├─ Admin DB            (Database Inspection)      │   │
-│  │  ├─ Energy Stats        (Tapo Integration)         │   │
-│  │  └─ Network Discovery   (mDNS/Bonjour)             │   │
+│  │  ├─ Network Discovery   (mDNS/Bonjour)             │   │
+│  │  └─ Plugin Manager      (Discovery, Lifecycle)      │   │
+│  └─────────────────────────────────────────────────────┘   │
+│                            ↕                                 │
+│  ┌─────────────────────────────────────────────────────┐   │
+│  │  Plugin Layer                                        │   │
+│  │  ├─ Pluggy Hooks       (File, User, RAID events)   │   │
+│  │  ├─ Async Events       (Queue-based, non-blocking)  │   │
+│  │  ├─ Smart Device Mgr   (CRUD, Commands, SHM State) │   │
+│  │  └─ Installed Plugins  (Optical Drive, Storage      │   │
+│  │                          Analytics, Tapo Smart Plug) │   │
 │  └─────────────────────────────────────────────────────┘   │
 └─────────────────────────────────────────────────────────────┘
                                ↕
@@ -120,6 +129,22 @@ baluhost/
 │   │   │   └── ...            # Cloud, versioning, pihole, cache, etc.
 │   │   ├── models/            # 42 SQLAlchemy ORM models
 │   │   ├── schemas/           # 41 Pydantic schemas
+│   │   ├── plugins/            # Plugin system (see plugins/README.md)
+│   │   │   ├── base.py         # PluginBase ABC, metadata, UI manifest
+│   │   │   ├── manager.py      # Discovery, lifecycle, route mounting
+│   │   │   ├── hooks.py        # Pluggy hook specs (30+ hooks)
+│   │   │   ├── events.py       # Async event manager
+│   │   │   ├── permissions.py  # 15 granular permissions
+│   │   │   ├── dashboard_panel.py # Dashboard panel schemas
+│   │   │   ├── smart_device/   # Smart device subsystem
+│   │   │   │   ├── base.py     # SmartDevicePlugin ABC
+│   │   │   │   ├── capabilities.py # Protocols (Switch, Dimmer, etc.)
+│   │   │   │   ├── manager.py  # CRUD, commands, SHM state
+│   │   │   │   └── poller.py   # Monitoring worker polling
+│   │   │   └── installed/      # Bundled plugins
+│   │   │       ├── optical_drive/
+│   │   │       ├── storage_analytics/
+│   │   │       └── tapo_smart_plug/
 │   │   ├── core/              # Config, security, database, rate limiter
 │   │   └── middleware/        # Security headers, rate limiting, device tracking
 │   ├── baluhost_tui/          # Terminal UI (Textual)
@@ -462,7 +487,7 @@ The unified monitoring system uses a collector pattern:
 ### Power & Hardware Monitoring
 - **Power Management**: CPU frequency scaling (AMD Ryzen & Intel)
 - **Fan Control**: PWM control with temperature curves
-- **Energy Monitoring**: Tapo smart plug integration (P115/P110)
+- **Smart Device Monitoring**: Plugin-based IoT integration (e.g., Tapo P110/P115 via plugin)
 - **Service Status**: Health dashboard for all services
 
 ### Scheduler Architecture
@@ -563,7 +588,65 @@ If you have questions about the architecture:
 
 ---
 
-## 🔌 Production Deployment Architecture
+## 🔌 Plugin System Architecture
+
+### Overview
+
+BaluHost uses a modular plugin architecture for extensibility. Plugins can provide API routes, background tasks, event handlers, dashboard panels, and frontend UI — all managed through a central `PluginManager`.
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                      Plugin Manager                          │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Discovery → Loading → Permission Check → Activation  │  │
+│  └──────────────────────────────────────────────────────┘  │
+│                            ↓                                 │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐   │
+│  │ Pluggy Hooks │ │ Async Events │ │ Background Tasks │   │
+│  │ (30+ specs)  │ │ (Queue-based)│ │ (Periodic)       │   │
+│  └──────────────┘ └──────────────┘ └──────────────────┘   │
+│                            ↓                                 │
+│  ┌──────────────────────────────────────────────────────┐  │
+│  │  Route Mounting: /api/plugins/{name}/...              │  │
+│  │  Dashboard Panels: gauge, stat, status, chart         │  │
+│  │  Frontend UI: nav items, bundles, widgets             │  │
+│  └──────────────────────────────────────────────────────┘  │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Two Event Systems
+
+| | Pluggy Hooks | Async Events |
+|---|---|---|
+| Execution | Synchronous | Async, queue-based |
+| Subscriber | `@hookimpl` method | Any async function |
+| Use case | System events with fixed contract | Loose coupling, plugin-to-plugin |
+
+### Smart Device Framework
+
+For IoT devices, a specialized `SmartDevicePlugin` base class extends `PluginBase` with:
+- **Capability protocols**: Switch, PowerMonitor, Sensor, Dimmer, ColorControl
+- **Unified API**: All devices share `/api/smart-devices/` endpoints
+- **SHM-based polling**: `SmartDevicePoller` runs in the monitoring worker process, writes state to shared memory files consumed by the web workers
+- **Encrypted config**: Device credentials stored with Fernet encryption
+
+### Permission System
+
+Plugins declare required permissions (15 available, 5 marked as dangerous). Dangerous permissions (`file:write`, `file:delete`, `system:execute`, `db:write`, `user:write`) require explicit admin approval when enabling a plugin.
+
+### Bundled Plugins
+
+| Plugin | Category | Capabilities |
+|--------|----------|-------------|
+| `optical_drive` | storage | Custom routes, UI, config schema, async jobs |
+| `storage_analytics` | storage | Background tasks, Pluggy hooks, periodic scans |
+| `tapo_smart_plug` | smart_device | Switch + PowerMonitor, dashboard panel, i18n |
+
+For detailed documentation see [`backend/app/plugins/README.md`](../backend/app/plugins/README.md).
+
+---
+
+## 🏭 Production Deployment Architecture
 
 ### Current Production Setup (ACTIVE)
 ```
@@ -602,7 +685,7 @@ If you have questions about the architecture:
 
 ---
 
-**Last Updated:** 15. März 2026
-**Version:** 1.16.0
+**Last Updated:** 19. März 2026
+**Version:** 1.16.4
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION

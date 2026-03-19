@@ -7,7 +7,7 @@ import logging
 from app.api import deps
 from app.core.database import get_db
 from app.models.user import User
-from app.services.file_sync import FileSyncService
+from app.services.sync import FileSyncService
 from app.services.permissions import is_privileged
 from app.core.rate_limiter import user_limiter, get_limit
 from app.schemas.sync import (

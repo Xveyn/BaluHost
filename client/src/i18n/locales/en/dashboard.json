@@ -208,5 +208,10 @@
     "totalCapacity": "Total capacity (HW)",
     "avgTemp": "Average temp",
     "storageUsed": "Storage used (FS)"
+  },
+  "pluginPanel": {
+    "title": "Plugin Panel",
+    "noPlugin": "No plugin configured",
+    "configureHint": "Enable a plugin's Dashboard panel in Settings → Plugins"
   }
 }

@@ -61,6 +61,7 @@ class BurningMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stdout is not None
 
                     while True:
                         line = await proc.stdout.readline()
@@ -143,6 +144,7 @@ class BurningMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stdout is not None
 
                     current_track = 0
                     while True:
@@ -218,6 +220,7 @@ class BurningMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stdout is not None
 
                     while True:
                         line = await proc.stdout.readline()

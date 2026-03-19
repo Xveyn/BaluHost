@@ -166,7 +166,7 @@ class PluginManager:
             sys.modules[module_name] = module  # Register before exec for relative imports
             spec.loader.exec_module(module)
 
-            # Find the plugin class
+            # Find the plugin class (skip abstract base classes)
             plugin_class = None
             for attr_name in dir(module):
                 attr = getattr(module, attr_name)
@@ -174,6 +174,7 @@ class PluginManager:
                     isinstance(attr, type)
                     and issubclass(attr, PluginBase)
                     and attr is not PluginBase
+                    and not getattr(attr, "__abstractmethods__", None)
                 ):
                     plugin_class = attr
                     break
@@ -206,6 +207,7 @@ class PluginManager:
         name: str,
         granted_permissions: List[str],
         db: Session,
+        start_background_tasks: bool = True,
     ) -> bool:
         """Enable a plugin.
 
@@ -213,6 +215,7 @@ class PluginManager:
             name: Plugin name
             granted_permissions: List of granted permission strings
             db: Database session
+            start_background_tasks: Whether to start background tasks (False on secondary workers)
 
         Returns:
             True if plugin was enabled successfully
@@ -252,7 +255,10 @@ class PluginManager:
                     event_manager.subscribe(event_name, handler, source=name)
 
             # Start background tasks
-            await self._start_background_tasks(name, plugin)
+            if start_background_tasks:
+                await self._start_background_tasks(name, plugin)
+            else:
+                logger.debug(f"Skipping background tasks for {name} (secondary worker)")
 
             self._enabled.add(name)
             logger.info(f"Enabled plugin: {name}")
@@ -358,11 +364,14 @@ class PluginManager:
         if tasks:
             logger.debug(f"Stopped {len(tasks)} background tasks for {name}")
 
-    async def load_enabled_plugins(self, db: Session) -> None:
+    async def load_enabled_plugins(
+        self, db: Session, start_background_tasks: bool = True,
+    ) -> None:
         """Load all enabled plugins from database.
 
         Args:
             db: Database session
+            start_background_tasks: Whether to start background tasks (False on secondary workers)
         """
         from app.models.plugin import InstalledPlugin
 
@@ -395,6 +404,7 @@ class PluginManager:
                 record.name,
                 record.granted_permissions or [],
                 db,
+                start_background_tasks=start_background_tasks,
             )
 
         logger.info(f"Loaded {len(self._enabled)} enabled plugins")
@@ -475,6 +485,7 @@ class PluginManager:
                         "bundle_path": ui_manifest.bundle_path,
                         "styles_path": ui_manifest.styles_path,
                         "dashboard_widgets": ui_manifest.dashboard_widgets,
+                        "translations": plugin.get_translations() or None,
                     })
 
         return manifest

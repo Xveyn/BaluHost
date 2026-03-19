@@ -8,11 +8,10 @@ from __future__ import annotations
 
 import logging
 from datetime import datetime, timezone
-from typing import List, Optional, Type
+from typing import Any, List, Optional, Type
 
 import psutil
 
-from app.models.base import Base
 from app.models.monitoring import MemorySample
 from app.schemas.monitoring import MemorySampleSchema
 from app.services.monitoring.base import MetricCollector
@@ -102,7 +101,7 @@ class MemoryMetricCollector(MetricCollector[MemorySampleSchema]):
             logger.error(f"Failed to collect memory sample: {e}")
             return None
 
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """Get the MemorySample model class."""
         return MemorySample
 

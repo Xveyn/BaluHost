@@ -33,8 +33,8 @@ import {
   getHourlySamples,
 } from '../api/energy';
 import type { EnergyDashboard, EnergyCostEstimate } from '../api/energy';
-import { listTapoDevices, getPowerHistory } from '../api/power';
-import type { TapoDevice } from '../api/power';
+import { smartDevicesApi } from '../api/smart-devices';
+import type { SmartDevice } from '../api/smart-devices';
 import { formatTimeForRange } from '../lib/dateUtils';
 import type { ChartTimeRange } from '../lib/dateUtils';
 import { formatNumber } from '../lib/formatters';
@@ -51,7 +51,7 @@ const EnergyMonitor: React.FC = () => {
     '24hours': '24h',
     '7days': '7d',
   };
-  const [devices, setDevices] = useState<TapoDevice[]>([]);
+  const [devices, setDevices] = useState<SmartDevice[]>([]);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
   const [dashboard, setDashboard] = useState<EnergyDashboard | null>(null);
   const [costs, setCosts] = useState<{
@@ -68,7 +68,9 @@ const EnergyMonitor: React.FC = () => {
   useEffect(() => {
     const loadDevices = async () => {
       try {
-        const deviceList = await listTapoDevices();
+        const res = await smartDevicesApi.list();
+        // Filter to only devices with power_monitor capability
+        const deviceList = res.data.devices.filter(d => d.capabilities?.includes('power_monitor'));
         setDevices(deviceList);
 
         // Auto-select first device
@@ -129,15 +131,17 @@ const EnergyMonitor: React.FC = () => {
 
         switch (timeWindow) {
           case '10min': {
-            // Use live memory buffer (updates every 5 seconds)
-            const powerHistory = await getPowerHistory();
-            const deviceHistory = powerHistory.devices.find(d => d.device_id === selectedDeviceId);
-            if (deviceHistory && deviceHistory.samples.length > 0) {
-              data = deviceHistory.samples.map(sample => ({
-                time: formatTimeForRange(sample.timestamp, chartRange, i18n.language),
-                watts: sample.watts,
-                fullTimestamp: sample.timestamp
-              }));
+            // Use recent history from smart device API
+            const historyRes = await smartDevicesApi.getHistory(selectedDeviceId, 'power_monitor', 1);
+            if (historyRes.data && historyRes.data.length > 0) {
+              data = historyRes.data.map((entry: { timestamp: string; value: unknown }) => {
+                const val = entry.value as { current_power?: number } | null;
+                return {
+                  time: formatTimeForRange(entry.timestamp, chartRange, i18n.language),
+                  watts: val?.current_power ?? 0,
+                  fullTimestamp: entry.timestamp,
+                };
+              });
             }
             break;
           }

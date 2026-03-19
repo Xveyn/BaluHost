@@ -79,6 +79,7 @@ export function PluginProvider({ children }: PluginProviderProps) {
         // Include plugin name for context
         _pluginName: plugin.name,
         _pluginDisplayName: plugin.display_name,
+        _translations: plugin.translations ?? undefined,
       }))
     )
     .sort((a, b) => a.order - b.order);

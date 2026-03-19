@@ -22,7 +22,7 @@ from app.models.monitoring import (
     ProcessSample,
     UptimeSample,
 )
-from app.models.power_sample import PowerSample
+from app.models.smart_device import SmartDeviceSample
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ METRIC_MODELS = {
     MetricType.NETWORK: NetworkSample,
     MetricType.DISK_IO: DiskIoSample,
     MetricType.PROCESS: ProcessSample,
-    MetricType.POWER: PowerSample,
+    MetricType.POWER: SmartDeviceSample,
     MetricType.UPTIME: UptimeSample,
 }
 

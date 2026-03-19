@@ -1,6 +1,6 @@
 """Pydantic schemas for plugin API."""
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,7 @@ class PluginUIInfo(BaseModel):
     bundle_path: str = "ui/bundle.js"
     styles_path: Optional[str] = None
     dashboard_widgets: List[str] = []
+    translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
 class PluginUIManifestResponse(BaseModel):
@@ -47,6 +48,7 @@ class PluginInfo(BaseModel):
     has_ui: bool = False
     has_routes: bool = False
     error: Optional[str] = None
+    translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
 class PluginListResponse(BaseModel):
@@ -100,6 +102,8 @@ class PluginDetailResponse(BaseModel):
     has_ui: bool = False
     has_routes: bool = False
     has_background_tasks: bool = False
+    has_dashboard_panel: bool = False
+    dashboard_panel_enabled: bool = False
 
     # UI info
     nav_items: List[PluginNavItemSchema] = []
@@ -112,6 +116,9 @@ class PluginDetailResponse(BaseModel):
 
     # Config schema (if available)
     config_schema: Optional[Dict[str, Any]] = None
+
+    # Plugin-provided translations keyed by language code
+    translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
 class PluginToggleRequest(BaseModel):
@@ -159,3 +166,21 @@ class PermissionListResponse(BaseModel):
     """Response listing all available permissions."""
 
     permissions: List[PermissionInfo]
+
+
+class DashboardPanelToggleRequest(BaseModel):
+    """Request to enable/disable a plugin's Dashboard panel."""
+
+    enabled: bool
+
+
+class DashboardPanelResponse(BaseModel):
+    """Response for the active Dashboard plugin panel."""
+
+    plugin_name: str
+    panel_type: str
+    title: str
+    icon: str
+    accent: str
+    data: Optional[Dict[str, Any]] = None
+    translations: Optional[Dict[str, Dict[str, str]]] = None

@@ -1,0 +1,23 @@
+{
+  "include": ["app"],
+  "exclude": ["**/node_modules", "**/__pycache__", "alembic"],
+  "pythonVersion": "3.13",
+  "typeCheckingMode": "basic",
+
+  "reportMissingImports": "error",
+  "reportPossiblyUnbound": "warning",
+  "reportCallIssue": "warning",
+  "reportOptionalMemberAccess": "warning",
+  "reportOptionalOperand": "warning",
+  "reportRedeclaration": "warning",
+
+  "reportArgumentType": false,
+  "reportAssignmentType": false,
+  "reportAttributeAccessIssue": false,
+  "reportReturnType": false,
+  "reportGeneralTypeIssues": false,
+  "reportUndefinedVariable": false,
+  "reportIncompatibleVariableOverride": false,
+  "reportPrivateImportUsage": false,
+  "reportMissingModuleSource": false
+}

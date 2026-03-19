@@ -59,6 +59,7 @@ class ReadingMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stderr is not None
 
                     # Parse progress from stderr
                     while True:
@@ -145,6 +146,7 @@ class ReadingMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stderr is not None
 
                     # Parse progress from cdparanoia stderr
                     current_track = 0
@@ -238,6 +240,7 @@ class ReadingMixin:
                         stdout=asyncio.subprocess.PIPE,
                         stderr=asyncio.subprocess.PIPE
                     )
+                    assert proc.stderr is not None
 
                     while True:
                         line = await proc.stderr.readline()

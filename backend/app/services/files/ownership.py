@@ -14,9 +14,9 @@ import logging
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Literal, Optional, cast
 
-from sqlalchemy import select, or_, text
+from sqlalchemy import select, or_, text, true
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -205,7 +205,7 @@ def _acquire_advisory_lock(db: Session, path: str) -> None:
         # and other dialects to allow tests to run with in-memory databases.
         return
     path_hash = _get_path_hash(path)
-    db.execute(select(1).where(True))  # Ensure transaction is started
+    db.execute(select(1).where(true()))  # Ensure transaction is started
     # pg_advisory_xact_lock is automatically released at end of transaction
     db.execute(text(f"SELECT pg_advisory_xact_lock({path_hash})"))
 
@@ -347,10 +347,10 @@ def transfer_ownership(
                 skipped_count = 1
                 if metadata.is_directory and recursive:
                     # Count children that would be skipped
-                    children = db.query(FileMetadata).filter(
-                        FileMetadata.path.startswith(f"{normalized_path}/")
+                    child_count = db.query(FileMetadata).filter(
+                        FileMetadata.path.like(f"{normalized_path}/%")
                     ).count()
-                    skipped_count += children
+                    skipped_count += child_count
                 
                 return OwnershipTransferResult(
                     success=True,
@@ -381,7 +381,8 @@ def transfer_ownership(
         metadata.name = Path(new_relative_path).name
         metadata.parent_path = str(Path(new_relative_path).parent) if "/" in new_relative_path else None
         transferred_count = 1
-        
+        children: list[FileMetadata] = []
+
         # 7. CASCADE TO CHILDREN (for directories)
         if metadata.is_directory and recursive:
             old_prefix = f"{old_path}/"
@@ -539,7 +540,7 @@ def _cascade_vcl_on_transfer(
             VCLSettings.user_id == old_owner_id
         ).first()
         if old_settings:
-            new_usage = max(0, int(old_settings.current_usage_bytes) - quota_delta)
+            new_usage = max(0, cast(int, old_settings.current_usage_bytes) - quota_delta)
             db.execute(
                 sql_update(VCLSettings).
                 where(VCLSettings.user_id == old_owner_id).
@@ -550,7 +551,7 @@ def _cascade_vcl_on_transfer(
             VCLSettings.user_id == new_owner_id
         ).first()
         if new_settings:
-            new_usage = int(new_settings.current_usage_bytes) + quota_delta
+            new_usage = cast(int, new_settings.current_usage_bytes) + quota_delta
             db.execute(
                 sql_update(VCLSettings).
                 where(VCLSettings.user_id == new_owner_id).

@@ -2,7 +2,7 @@
 API routes for energy monitoring and statistics.
 
 Provides detailed energy consumption statistics, downtime tracking,
-and historical analysis based on Tapo device power measurements.
+and historical analysis based on smart device power measurements.
 """
 
 from typing import Any, List, Optional
@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 
 from app.api import deps
 from app.models.user import User
-from app.models.tapo_device import TapoDevice
+from app.models.smart_device import SmartDevice
 from app.schemas.energy import (
     EnergyPeriodStats,
     HourlySample,
@@ -22,8 +22,7 @@ from app.schemas.energy import (
     CumulativeDataPoint,
     CumulativeEnergyResponse
 )
-from app.services.power import energy as energy_stats, monitor as power_monitor
-from app.core.config import settings
+from app.services.power import energy as energy_stats
 from app.core.rate_limiter import user_limiter, get_limit
 
 router = APIRouter()
@@ -44,7 +43,7 @@ async def get_energy_dashboard(
     plus hourly chart data for the last 24 hours.
     """
     # Verify device exists
-    _device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    _device = db.query(SmartDevice).filter(SmartDevice.id == device_id).first()
     if not _device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -63,17 +62,23 @@ async def get_energy_dashboard(
         HourlySample(**sample) for sample in hourly_samples_data
     ]
 
-    # Get current power from live monitoring
+    # Get current power from SmartDeviceManager (SHM state)
+    from datetime import datetime, timezone
+    current_watts = 0.0
+    is_online = False
+    last_updated = datetime.now(timezone.utc)
     try:
-        current_power_data = power_monitor.get_current_power(device_id, db)
-    except ValueError:
-        # Device exists in DB but power monitor has no data yet
-        from datetime import datetime, timezone
-        class _FallbackPower:
-            current_watts = 0.0
-            is_online = False
-            timestamp = datetime.now(timezone.utc)
-        current_power_data = _FallbackPower()
+        from app.plugins.smart_device.manager import get_smart_device_manager
+        manager = get_smart_device_manager()
+        state = manager.get_device_state(device_id, db)
+        if state and "power_monitor" in state:
+            pm = state["power_monitor"]
+            current_watts = pm.get("current_power", 0.0)
+            is_online = True
+        elif device.is_online:
+            is_online = True
+    except Exception:
+        pass
 
     # Convert EnergyPeriod objects to Pydantic models
     today_model = None
@@ -131,9 +136,9 @@ async def get_energy_dashboard(
         week=week_model,
         month=month_model,
         hourly_samples=hourly_samples,
-        current_watts=current_power_data.current_watts,
-        is_online=current_power_data.is_online,
-        last_updated=current_power_data.timestamp
+        current_watts=current_watts,
+        is_online=is_online,
+        last_updated=last_updated
     )
 
 
@@ -236,13 +241,13 @@ async def get_energy_cost_estimate(
     Calculate estimated energy cost for a period.
 
     Args:
-        device_id: Tapo device ID
+        device_id: Smart device ID
         period: 'today', 'week', or 'month'
         cost_per_kwh: Cost per kilowatt-hour (default: 0.40 EUR)
         currency: Currency code (default: EUR)
     """
     # Get device
-    _device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    _device = db.query(SmartDevice).filter(SmartDevice.id == device_id).first()
     if not _device:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -299,7 +304,7 @@ async def get_hourly_samples(
     Get hourly averaged power samples for charting.
 
     Args:
-        device_id: Tapo device ID
+        device_id: Smart device ID
         hours: Number of hours to look back (1-168)
     """
     samples_data = energy_stats.get_hourly_samples(db, device_id, hours)
@@ -362,7 +367,7 @@ async def get_cumulative_energy(
     Returns data points with cumulative kWh and cost over time.
 
     Args:
-        device_id: Tapo device ID
+        device_id: Smart device ID
         period: 'today', 'week', or 'month'
     """
     # Get current price config

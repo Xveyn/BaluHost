@@ -339,6 +339,47 @@ class BaluHostHookSpec:
         """
 
     # =========================================================================
+    # Smart Device Events
+    # =========================================================================
+
+    @hookspec
+    def on_smart_device_state_changed(
+        self,
+        device_id: int,
+        plugin_name: str,
+        capability: str,
+        old_state: Optional[dict],
+        new_state: dict,
+    ) -> None:
+        """Called when a smart device state changes.
+
+        Args:
+            device_id: Database ID of the device
+            plugin_name: Name of the plugin managing this device
+            capability: Capability that changed (e.g., 'switch', 'power_monitor')
+            old_state: Previous state dict (None on first reading)
+            new_state: New state dict
+        """
+
+    @hookspec
+    def on_smart_device_added(
+        self,
+        device_id: int,
+        plugin_name: str,
+        device_type_id: str,
+        name: str,
+    ) -> None:
+        """Called when a new smart device is registered."""
+
+    @hookspec
+    def on_smart_device_removed(
+        self,
+        device_id: int,
+        plugin_name: str,
+    ) -> None:
+        """Called when a smart device is removed."""
+
+    # =========================================================================
     # VPN Events
     # =========================================================================
 

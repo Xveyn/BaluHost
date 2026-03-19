@@ -6,8 +6,8 @@ BaluHost ist eine Full‑Stack NAS-Management-Anwendung. Das Backend ist in Pyth
 
 Version & Datum
 -
-- **Version:** 1.15.6
-- **Last Updated:** 15. März 2026
+- **Version:** 1.16.4
+- **Last Updated:** 19. März 2026
 - **Maintainer:** Xveyn
 - **Status:** ✅ DEPLOYED IN PRODUCTION (seit 25. Januar 2026)
 
@@ -164,7 +164,7 @@ Was ist neu / Highlights (Kurz)
 
 Änderungs- und Releasehinweis
 -
-- Version: 1.3.0 — Änderungen in Backend-Services (`files.py`, `raid.py`, `disk_monitor.py`, `telemetry.py`, `smart.py`, `audit_logger.py`, `vpn.py`, `mobile.py`) und Frontend-Seiten (`FileManager.tsx`, `RaidManagement.tsx`, `SystemMonitor.tsx`, `Logging.tsx`).
+- Version: 1.16.4 — Plugin-System mit Pluggy-Hooks, async Events, Permission-System, Dashboard-Panels. Smart-Device-Framework mit Capability-Protocols und SHM-basiertem Polling. Mitgelieferte Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug. Security: Rate Limiting, Security Headers, TOTP 2FA, Fernet-Verschlüsselung. PostgreSQL 17.7 in Produktion.
 
 Kontakt & Mitwirkung
 -
@@ -226,8 +226,8 @@ POST /api/auth/refresh     - Refresh access token (mobile)
 ```
 
 #### Seed Data (Dev-Mode):
-- Admin: `admin` / `admin123`
-- User: `user` / `user123`
+- Admin: `admin` / `DevMode2024`
+- User: `user` / `User123`
 
 #### Token Refresh (Mobile Support):
 - **Purpose:** Allow mobile clients to refresh expired access tokens without re-authentication
@@ -595,7 +595,7 @@ CREATE TABLE vpn_clients (
   - Role-based access control
 
 - **Password Hashing**
-  - Secure storage (Placeholder, in production: bcrypt/argon2)
+  - Secure storage with bcrypt (passlib)
 
 #### API Endpoints:
 ```
@@ -1388,34 +1388,33 @@ GET  /api/admin-db/storage        - Storage breakdown
 
 ---
 
-### 20. Energy Monitoring (Tapo Integration)
+### 20. Smart Device Integration (Plugin-based)
 
-**Service:** `app/services/energy_stats.py`
-**API Route:** `app/api/routes/monitoring.py`
+Smart device support (e.g., TP-Link Tapo) is now part of the **Plugin System**. See Section 23 for the full plugin architecture.
 
-#### Implemented Features:
-- **Tapo Smart Plug Integration**
-  - P115/P110 device support
-  - Real-time power consumption
-  - Energy usage history
+**Unified API:** `app/api/routes/smart_devices.py`
+**Plugin:** `app/plugins/installed/tapo_smart_plug/`
+**Framework:** `app/plugins/smart_device/`
 
-- **Energy Statistics**
-  - kWh calculations
-  - Cost estimates (configurable rates)
-  - Daily/weekly/monthly summaries
-
-- **Device Management**
-  - Multiple plug support
-  - Device naming
-  - On/off control
+#### Key Changes (since v1.15):
+- Tapo integration migrated from standalone service to `SmartDevicePlugin`
+- All smart devices share the unified `/api/smart-devices/` API
+- Capability-based architecture (Switch, PowerMonitor, Sensor, Dimmer, ColorControl)
+- SHM-based polling in monitoring worker, encrypted credential storage
+- Dashboard panel support for power monitoring visualization
 
 #### API Endpoints:
 ```
-GET  /api/energy/status           - Current power consumption
-GET  /api/energy/history          - Energy usage history
-GET  /api/energy/stats            - Usage statistics
-GET  /api/tapo/devices            - List Tapo devices
-POST /api/tapo/devices/{id}/power - Toggle device power
+GET    /api/smart-devices/              - List all smart devices
+POST   /api/smart-devices/              - Add device
+GET    /api/smart-devices/{id}          - Device details + state
+PUT    /api/smart-devices/{id}          - Update device
+DELETE /api/smart-devices/{id}          - Delete device
+POST   /api/smart-devices/{id}/command  - Execute command (turn_on, set_brightness, etc.)
+GET    /api/smart-devices/types         - Available device types
+GET    /api/smart-devices/power-summary - Aggregated power consumption
+GET    /api/energy/status               - Energy consumption data
+GET    /api/energy/history              - Energy usage history
 ```
 
 ---
@@ -1479,6 +1478,61 @@ POST /api/discovery/scan          - Trigger network scan
 - `start_dev.py` - Combined frontend + backend start
 - `scripts/dev_check.py` - API test script
 - `scripts/reset_dev_storage.py` - Reset sandbox
+
+---
+
+### 23. Plugin System
+
+**Core:** `app/plugins/` (base, manager, hooks, events, permissions, dashboard_panel)
+**Smart Devices:** `app/plugins/smart_device/` (base, capabilities, manager, poller, schemas)
+**Installed:** `app/plugins/installed/` (optical_drive, storage_analytics, tapo_smart_plug)
+**Full Documentation:** [`backend/app/plugins/README.md`](../backend/app/plugins/README.md)
+
+#### Architecture
+
+The plugin system provides modular extensibility with:
+
+- **PluginBase ABC** — All plugins extend this. Provides lifecycle hooks (`on_startup`, `on_shutdown`), route injection, background tasks, event handlers, UI manifests, config schemas, dashboard panels, and i18n translations.
+- **PluginManager** — Singleton that handles discovery (scanning `installed/` for `__init__.py`), loading, permission validation, activation, route mounting at `/api/plugins/{name}/`, and graceful shutdown.
+- **Pluggy Hooks** — 30+ typed hook specifications for system events (file ops, user events, backup, RAID, SMART, VPN, smart devices). Plugins implement hooks with `@hookimpl`.
+- **Async Event Manager** — Queue-based event system complementing Pluggy. Supports wildcard subscribers and non-blocking dispatch.
+- **Permission System** — 15 granular permissions. 5 marked as dangerous (`file:write`, `file:delete`, `system:execute`, `db:write`, `user:write`) requiring explicit admin approval.
+- **Dashboard Panels** — Plugins can claim a dashboard slot with panel types: gauge, stat, status, chart.
+
+#### Plugin Lifecycle
+1. **Discovery** — Scan `installed/` for directories with `__init__.py`
+2. **Loading** — Import module, find `PluginBase` subclass
+3. **Permission Check** — Validate required permissions against granted list
+4. **Activation** — `on_startup()`, register Pluggy hooks, subscribe events, start background tasks
+5. **Running** — Routes mounted, tasks running, hooks active
+6. **Deactivation** — Stop tasks, unsubscribe events, `on_shutdown()`
+
+#### Smart Device Subsystem
+
+Specialized `SmartDevicePlugin` base class for IoT devices:
+- **Capability Protocols**: `Switch`, `PowerMonitor`, `Sensor`, `Dimmer`, `ColorControl` — runtime-checkable Python protocols
+- **SmartDeviceManager**: Web-worker-side CRUD, command dispatch, SHM state reads
+- **SmartDevicePoller**: Runs in monitoring worker process, polls all active devices, writes state to SHM files (`smart_devices.json`, `smart_devices_changes.json`), periodically persists to DB
+- **Encrypted Config**: Device credentials stored with Fernet encryption via `VPNEncryption`
+
+#### Bundled Plugins
+
+| Plugin | Category | Features |
+|--------|----------|----------|
+| `optical_drive` | storage | CD/DVD/Blu-ray read, rip (ISO/WAV), burn, blank. Custom routes, UI, config, async jobs |
+| `storage_analytics` | storage | Per-user usage, file type distribution, top files. Background tasks, Pluggy hooks |
+| `tapo_smart_plug` | smart_device | TP-Link Tapo P110/P115. Switch + PowerMonitor, dashboard gauge panel, i18n (en/de) |
+
+#### API Endpoints:
+```
+GET  /api/plugins/                    - List all plugins (discovered + enabled)
+POST /api/plugins/{name}/enable       - Enable plugin (with permission grant)
+POST /api/plugins/{name}/disable      - Disable plugin
+GET  /api/plugins/{name}/config       - Plugin configuration
+PUT  /api/plugins/{name}/config       - Update plugin config
+GET  /api/plugins/ui-manifest         - Combined UI manifest for frontend
+     /api/plugins/{name}/...          - Plugin-specific routes
+```
 
 ---
 
@@ -1810,33 +1864,30 @@ Baluhost/
 │   │   │   ├── user.py
 │   │   │   └── system.py
 │   │   ├── services/             # Business logic
-│   │   │   ├── auth.py
-│   │   │   ├── files.py
-│   │   │   ├── users.py
-│   │   │   ├── system.py
-│   │   │   ├── telemetry.py
-│   │   │   ├── disk_monitor.py
-│   │   │   ├── raid.py
-│   │   │   ├── smart.py
-│   │   │   ├── audit_logger.py
-│   │   │   ├── permissions.py
-│   │   │   ├── file_metadata.py
-│   │   │   ├── shares.py           # File sharing
-│   │   │   ├── backup.py           # Backup/restore
-│   │   │   ├── sync.py             # Sync system
-│   │   │   ├── sync_background.py  # Background sync
-│   │   │   ├── mobile.py           # Mobile support
-│   │   │   ├── network_discovery.py # mDNS/Bonjour
-│   │   │   ├── power_manager.py      # CPU frequency scaling
-│   │   │   ├── power_monitor.py      # Power consumption tracking
-│   │   │   ├── fan_control.py        # PWM fan control
-│   │   │   ├── service_status.py     # Service health monitoring
-│   │   │   ├── admin_db.py           # Database inspection
-│   │   │   ├── energy_stats.py       # Energy monitoring
-│   │   │   ├── monitoring/
-│   │   │   │   └── orchestrator.py   # Unified monitoring
-│   │   │   ├── jobs.py
-│   │   │   └── seed.py
+│   │   │   ├── auth.py              # JWT, Login/Refresh
+│   │   │   ├── files/               # File operations, quota
+│   │   │   ├── hardware/            # RAID (mdadm), SMART
+│   │   │   ├── power/               # CPU frequency, fan control, energy
+│   │   │   ├── vpn/                 # WireGuard, encryption
+│   │   │   ├── monitoring/          # Unified monitoring with collectors
+│   │   │   ├── scheduler/           # Scheduler management
+│   │   │   ├── notifications/       # Firebase push
+│   │   │   ├── backup/              # Backup/restore
+│   │   │   ├── sync/                # Desktop sync
+│   │   │   ├── audit/               # Audit logging, admin DB
+│   │   │   └── ...                  # cloud, versioning, pihole, etc.
+│   │   ├── plugins/              # Plugin system (see plugins/README.md)
+│   │   │   ├── base.py             # PluginBase ABC, metadata
+│   │   │   ├── manager.py          # Discovery, lifecycle, routing
+│   │   │   ├── hooks.py            # Pluggy hook specs (30+)
+│   │   │   ├── events.py           # Async event manager
+│   │   │   ├── permissions.py      # 15 granular permissions
+│   │   │   ├── dashboard_panel.py  # Dashboard panel schemas
+│   │   │   ├── smart_device/       # Smart device subsystem
+│   │   │   └── installed/          # Bundled plugins
+│   │   │       ├── optical_drive/
+│   │   │       ├── storage_analytics/
+│   │   │       └── tapo_smart_plug/
 │   │   └── main.py               # FastAPI App
 │   ├── dev-storage/              # Dev-Mode Sandbox
 │   ├── dev-tmp/                  # Dev-Mode Temp (Audit Logs)
@@ -1971,19 +2022,22 @@ npm run test:e2e    # E2E tests (Placeholder)
 ## 🔒 Security
 
 ### Implemented:
-- JWT tokens with expiry
-- Password hashing (Placeholder)
-- File ownership & permissions
-- Role-based access control (RBAC)
-- Audit logging of all critical actions
+- JWT tokens with expiry (access: 15min, refresh: 7 days)
+- Password hashing (bcrypt via passlib)
+- Two-Factor Authentication (TOTP)
+- File ownership & permissions with `_jail_path()` sandbox
+- Role-based access control (RBAC) with `admin`/`user` roles
+- Audit logging of all critical actions (database-backed)
 - Quota system for resource limitation
+- Rate limiting (slowapi with per-endpoint limits)
+- Security headers middleware (CSP, HSTS, X-Frame-Options, X-Content-Type-Options)
+- Encrypted VPN/SSH/device keys (Fernet AES)
+- Subprocess safety (list-args only, no `shell=True`)
+- SQLAlchemy ORM-only queries (no raw SQL with user input)
 
-### TODO:
-- Rate limiting
-- CSRF protection
-- Extend input sanitization
-- Security headers
-- HTTPS in production
+### Optional/Future:
+- HTTPS (external access via WireGuard VPN, HTTP on trusted LAN)
+- CSRF protection (mitigated by JWT Bearer auth, no cookie-based auth)
 
 ---
 
@@ -2089,7 +2143,7 @@ Comprehensive user settings interface with multiple tabs:
 
 ---
 
-**Last Updated:** 29. Januar 2026
-**Version:** 1.4.2
+**Last Updated:** 19. März 2026
+**Version:** 1.16.4
 **Maintainer:** Xveyn
 **Status:** ✅ DEPLOYED IN PRODUCTION

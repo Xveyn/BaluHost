@@ -82,8 +82,9 @@ class VPNProfileList(BaseModel):
 
 class VPNConnectionTest(BaseModel):
     """Response from VPN connection test."""
-    
+
     profile_id: int
     connected: bool
     error_message: Optional[str] = None
+    server_info: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)

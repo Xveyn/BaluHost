@@ -13,10 +13,14 @@ import logging
 import mimetypes
 from datetime import datetime, timezone
 from pathlib import Path, PurePosixPath
-from typing import Iterable, Optional
+from typing import TYPE_CHECKING, Iterable, Optional
 
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
+
+if TYPE_CHECKING:
+    from app.models.file_metadata import FileMetadata
+    from app.models.file_share import FileShare
 
 from app.core.config import settings
 from app.schemas.files import FileItem
@@ -191,7 +195,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
         if rel in shared_entries:
             needs_permissions.append(rel)
 
-    share_perms_map: dict[str, object] = {}
+    share_perms_map: dict[str, FileShare] = {}
     if db and needs_permissions:
         share_perms_map = get_share_permissions_bulk(db, needs_permissions, user.id)
 
@@ -478,10 +482,11 @@ async def save_uploads(
                     file_metadata_db.get_metadata, relative_destination, db=None
                 )
                 if file_meta:
+                    _fm = file_meta  # capture narrowed type for closure
                     def _vcl_check():
                         with _VCLSessionLocal() as vcl_db:
                             return VCLService(vcl_db).should_create_version(
-                                file_meta, file_checksum, int(owner_id)
+                                _fm, file_checksum, int(owner_id)
                             )
                     should_create, _reason = await asyncio.to_thread(_vcl_check)
                     if should_create:

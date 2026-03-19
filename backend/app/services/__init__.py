@@ -114,14 +114,12 @@ sys.modules["app.services.firebase_service"] = _firebase_service
 # Power services (moved to power/)
 # ============================================================
 from app.services.power import manager as _power_manager
-from app.services.power import monitor as _power_monitor
 from app.services.power import presets as _power_preset_service
 from app.services.power import energy as _energy_stats
 from app.services.power import fan_control as _fan_control
 
 # Register backward-compatible module paths in sys.modules
 sys.modules["app.services.power_manager"] = _power_manager
-sys.modules["app.services.power_monitor"] = _power_monitor
 sys.modules["app.services.power_preset_service"] = _power_preset_service
 sys.modules["app.services.energy_stats"] = _energy_stats
 sys.modules["app.services.fan_control"] = _fan_control

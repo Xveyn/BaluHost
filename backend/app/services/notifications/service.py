@@ -196,6 +196,8 @@ class NotificationService:
             ).all()
 
             for device in devices:
+                if not device.push_token:
+                    continue
                 result = FirebaseService.send_notification(
                     device_token=device.push_token,
                     title=notification.title,
@@ -259,6 +261,8 @@ class NotificationService:
         ).all()
 
         for device in devices:
+            if not device.push_token:
+                continue
             try:
                 result = FirebaseService.send_notification(
                     device_token=device.push_token,

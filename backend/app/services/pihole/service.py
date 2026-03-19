@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.models.pihole import PiholeConfig
 from app.services.monitoring.shm import SHM_DIR, read_shm, write_shm
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn import VPNEncryption
 
 logger = logging.getLogger(__name__)
 

@@ -22,8 +22,8 @@ from app.services.vpn.profile_crud import (
     update_profile_fields,
     delete_profile,
 )
-from app.services.vpn_service import VPNService
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn.profiles import VPNService as VPNProfileValidator
+from app.services.vpn import VPNEncryption
 
 logger = logging.getLogger(__name__)
 
@@ -60,7 +60,7 @@ async def create_vpn_profile(
         config_content = (await config_file.read()).decode('utf-8')
 
         # Validate config
-        valid, error = VPNService.validate_config(vpn_type_enum.value, config_content)
+        valid, error = VPNProfileValidator.validate_config(vpn_type_enum.value, config_content)
         if not valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
@@ -159,7 +159,7 @@ async def update_vpn_profile(
         config_content = None
         if config_file:
             config_content = (await config_file.read()).decode('utf-8')
-            valid, error = VPNService.validate_config(profile.vpn_type, config_content)
+            valid, error = VPNProfileValidator.validate_config(profile.vpn_type, config_content)
             if not valid:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
@@ -246,7 +246,7 @@ async def test_vpn_connection(
         config_content = VPNEncryption.decrypt_vpn_config(profile.config_file_encrypted)
 
         # Validate
-        valid, error = VPNService.validate_config(profile.vpn_type, config_content)
+        valid, error = VPNProfileValidator.validate_config(profile.vpn_type, config_content)
 
         return VPNConnectionTest(
             profile_id=profile_id,

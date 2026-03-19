@@ -44,6 +44,9 @@ class PluginPermission(str, Enum):
     EVENT_SUBSCRIBE = "event:subscribe"  # Subscribe to system events
     EVENT_EMIT = "event:emit"            # Emit custom events
 
+    # Device Control
+    DEVICE_CONTROL = "device:control"    # Control smart devices (on/off, brightness, etc.)
+
 
 # Permissions that require explicit admin approval
 DANGEROUS_PERMISSIONS: Set[PluginPermission] = {
@@ -122,5 +125,6 @@ def _get_permission_description(perm: PluginPermission) -> str:
         PluginPermission.TASK_BACKGROUND: "Run background tasks",
         PluginPermission.EVENT_SUBSCRIBE: "Subscribe to system events",
         PluginPermission.EVENT_EMIT: "Emit custom events",
+        PluginPermission.DEVICE_CONTROL: "Control smart home devices (switch, dim, etc.)",
     }
     return descriptions.get(perm, "No description available")

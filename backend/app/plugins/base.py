@@ -5,10 +5,13 @@ along with supporting data structures.
 """
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from typing import Any, Callable, Coroutine, Dict, List, Optional
+from typing import TYPE_CHECKING, Any, Callable, Coroutine, Dict, List, Literal, Optional
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+
+if TYPE_CHECKING:
+    from sqlalchemy.orm import Session
 
 
 class PluginMetadata(BaseModel):
@@ -73,6 +76,24 @@ class PluginUIManifest(BaseModel):
     dashboard_widgets: List[str] = Field(
         default_factory=list,
         description="List of widget component names to add to dashboard",
+    )
+
+
+PanelType = Literal["gauge", "stat", "status", "chart"]
+
+
+class DashboardPanelSpec(BaseModel):
+    """Specification for a plugin's Dashboard panel."""
+
+    panel_type: PanelType = Field(
+        ...,
+        description="Panel renderer type",
+    )
+    title: str = Field(..., description="Panel title, e.g. 'Power Monitoring'")
+    icon: str = Field(default="plug", description="Lucide icon name")
+    accent: str = Field(
+        default="from-sky-500 to-indigo-500",
+        description="Tailwind gradient classes for icon background",
     )
 
 
@@ -178,6 +199,48 @@ class PluginBase(ABC):
 
         Returns:
             Pydantic BaseModel subclass or None
+        """
+        return None
+
+    def get_dashboard_panel(self) -> Optional["DashboardPanelSpec"]:
+        """Override to claim the Dashboard plugin slot.
+
+        Returns:
+            DashboardPanelSpec or None if this plugin has no Dashboard panel.
+        """
+        return None
+
+    async def get_dashboard_data(self, db: "Session") -> Optional[dict]:
+        """Return current data for the Dashboard panel.
+
+        Called by the dashboard endpoint and the SHM-to-WS bridge.
+        The returned dict must conform to the schema matching the
+        plugin's DashboardPanelSpec.panel_type.
+
+        Args:
+            db: SQLAlchemy session.
+
+        Returns:
+            Panel data dict or None if no data available.
+        """
+        return None
+
+    def get_translations(self) -> Optional[Dict[str, Dict[str, str]]]:
+        """Return translations keyed by language code.
+
+        Override to provide multi-language support for plugin strings.
+        The plugin decides which keys and languages to include.
+
+        Example::
+
+            {
+                "en": {"display_name": "Smart Plug", "description": "..."},
+                "de": {"display_name": "Smarte Steckdose", "description": "..."},
+            }
+
+        Returns:
+            Dict mapping language codes to key-value translation dicts,
+            or None if the plugin does not provide translations.
         """
         return None
 

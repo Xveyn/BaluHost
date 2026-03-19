@@ -14,6 +14,7 @@ from app.plugins.manager import PluginManager, PluginLoadError
 from app.plugins.permissions import PermissionManager
 from app.services import plugin_service
 from app.schemas.plugin import (
+    DashboardPanelToggleRequest,
     InstalledPluginSchema,
     PermissionInfo,
     PermissionListResponse,
@@ -54,6 +55,12 @@ async def list_plugins(
 
     plugins = []
     for name, info in all_plugins.items():
+        # Get translations if plugin instance is available
+        translations = None
+        plugin_instance = plugin_manager.get_plugin(name)
+        if plugin_instance:
+            translations = plugin_instance.get_translations() or None
+
         plugins.append(
             PluginInfo(
                 name=info.get("name", name),
@@ -68,6 +75,7 @@ async def list_plugins(
                 has_ui=info.get("has_ui", False),
                 has_routes=info.get("has_routes", False),
                 error=info.get("error"),
+                translations=translations,
             )
         )
 
@@ -161,6 +169,8 @@ async def get_plugin_details(
         has_ui=ui_manifest is not None and ui_manifest.enabled,
         has_routes=plugin.get_router() is not None,
         has_background_tasks=len(plugin.get_background_tasks()) > 0,
+        has_dashboard_panel=plugin.get_dashboard_panel() is not None,
+        dashboard_panel_enabled=db_record.dashboard_panel_enabled if db_record else False,
         nav_items=[
             PluginNavItemSchema(**item.model_dump())
             for item in (ui_manifest.nav_items if ui_manifest else [])
@@ -170,6 +180,7 @@ async def get_plugin_details(
         enabled_at=db_record.enabled_at if db_record else None,
         config=(db_record.config or {}) if db_record else (plugin.get_default_config() or {}),
         config_schema=config_schema,
+        translations=plugin.get_translations() or None,
     )
 
 
@@ -236,6 +247,12 @@ async def toggle_plugin(
                 detail="Failed to enable plugin",
             )
 
+        # If this is a SmartDevicePlugin, register with SmartDeviceManager
+        from app.plugins.smart_device.base import SmartDevicePlugin
+        if isinstance(plugin, SmartDevicePlugin):
+            from app.plugins.smart_device.manager import SmartDeviceManager
+            SmartDeviceManager.get_instance().register_plugin(plugin)
+
         invalidate_plugin_cache(name)
         logger.info("Plugin %s enabled by %s", name, current_user.username)
         return PluginToggleResponse(
@@ -246,6 +263,13 @@ async def toggle_plugin(
 
     else:
         # Disabling plugin
+        # If this is a SmartDevicePlugin, unregister from SmartDeviceManager
+        from app.plugins.smart_device.base import SmartDevicePlugin
+        if isinstance(plugin, SmartDevicePlugin):
+            from app.plugins.smart_device.manager import SmartDeviceManager
+            mgr = SmartDeviceManager.get_instance()
+            mgr._plugins.pop(name, None)
+
         success = await plugin_manager.disable_plugin(name)
 
         plugin_service.disable_plugin_record(db, name)
@@ -263,6 +287,63 @@ async def toggle_plugin(
             is_enabled=False,
             message=f"Plugin '{meta.display_name}' disabled successfully",
         )
+
+
+@router.post("/{name}/dashboard-panel")
+@user_limiter.limit(get_limit("admin_operations"))
+async def toggle_dashboard_panel(
+    request: Request,
+    response: Response,
+    name: str,
+    body: DashboardPanelToggleRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+    plugin_manager: PluginManager = Depends(get_plugin_manager),
+):
+    """Enable or disable a plugin's Dashboard panel.
+
+    Admin only. When enabling, any other plugin's panel is deactivated
+    (single-slot constraint).
+    """
+    plugin = plugin_manager.get_plugin(name)
+    if plugin is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Plugin not found or not enabled",
+        )
+
+    # Verify plugin supports dashboard panel
+    if plugin.get_dashboard_panel() is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Plugin does not provide a Dashboard panel",
+        )
+
+    plugin_service.set_dashboard_panel_enabled(db, name, body.enabled)
+
+    # Audit log
+    from app.services.audit.logger_db import get_audit_logger_db
+    audit = get_audit_logger_db()
+    audit.log_event(
+        event_type="PLUGIN",
+        user=current_user.username,
+        action="toggle_dashboard_panel",
+        resource=name,
+        details={"enabled": body.enabled},
+        ip_address=request.client.host if request.client else None,
+    )
+
+    logger.info(
+        "Dashboard panel %s for plugin %s by %s",
+        "enabled" if body.enabled else "disabled",
+        name,
+        current_user.username,
+    )
+    return {
+        "name": name,
+        "dashboard_panel_enabled": body.enabled,
+        "message": f"Dashboard panel {'enabled' if body.enabled else 'disabled'}",
+    }
 
 
 @router.get("/{name}/config", response_model=PluginConfigResponse)

@@ -3,7 +3,7 @@
 import json
 import os
 import tempfile
-from typing import Optional, Dict, Any
+from typing import Any, Optional, Dict
 from datetime import datetime, timezone
 
 try:
@@ -11,6 +11,9 @@ try:
     from firebase_admin import credentials, messaging
     FIREBASE_AVAILABLE = True
 except ImportError:
+    firebase_admin: Any = None
+    credentials: Any = None
+    messaging: Any = None
     FIREBASE_AVAILABLE = False
     print("[Firebase] Warning: firebase-admin not installed. Push notifications disabled.")
 

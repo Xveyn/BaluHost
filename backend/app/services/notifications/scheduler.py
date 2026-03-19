@@ -1,7 +1,7 @@
 """Notification scheduler for device expiration warnings."""
 
 from datetime import datetime, timedelta, timezone
-from typing import List, Optional, Tuple
+from typing import Any, List, Optional, Tuple
 import logging
 
 from sqlalchemy.orm import Session
@@ -14,7 +14,7 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 # Module-level APScheduler instance
-_notification_scheduler: Optional["BackgroundScheduler"] = None
+_notification_scheduler: Any = None
 
 
 class NotificationScheduler:
@@ -198,6 +198,9 @@ class NotificationScheduler:
         settings = get_settings()
         server_url = settings.mobile_server_url or "http://localhost:8000"
         
+        if not device.push_token or not device.expires_at:
+            return {"success": False, "message_id": None, "error": "Missing push_token or expires_at"}
+
         # Send FCM notification
         result = FirebaseService.send_expiration_warning(
             device_token=device.push_token,
@@ -228,7 +231,7 @@ class NotificationScheduler:
         Run periodic check (called by APScheduler).
         Creates its own database session.
         """
-        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+        from app.services.scheduler import log_scheduler_execution, complete_scheduler_execution
 
         execution_id = log_scheduler_execution("notification_check", job_id="notification_check")
 
