@@ -15,6 +15,8 @@ import { StatPanel } from './panels/StatPanel';
 import { StatusPanel } from './panels/StatusPanel';
 import { ChartPanel } from './panels/ChartPanel';
 import { PanelPlaceholder } from './panels/PanelPlaceholder';
+import { resolvePluginString } from '../../lib/pluginI18n';
+import type { PluginTranslations } from '../../api/plugins';
 
 interface PanelSpec {
   plugin_name: string;
@@ -23,6 +25,7 @@ interface PanelSpec {
   icon: string;
   accent: string;
   data: Record<string, unknown> | null;
+  translations?: PluginTranslations;
 }
 
 const REST_POLL_INTERVAL = 10_000; // 10s fallback when WS is down
@@ -138,7 +141,7 @@ export const PluginDashboardPanel: React.FC = () => {
   const iconElement = <IconComponent className="h-6 w-6" />;
 
   const rendererProps = {
-    title: panel.title,
+    title: resolvePluginString(panel.translations, 'panel_title', panel.title),
     icon: iconElement,
     accent: panel.accent,
   };

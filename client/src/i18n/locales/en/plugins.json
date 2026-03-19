@@ -12,7 +12,9 @@
     "configure": "Configure",
     "uninstall": "Uninstall",
     "enablePlugin": "Enable Plugin",
-    "cancel": "Cancel"
+    "cancel": "Cancel",
+    "enablePanel": "Enable Panel",
+    "disablePanel": "Disable Panel"
   },
   "status": {
     "active": "Active",
@@ -49,6 +51,13 @@
     "enableFailed": "Failed to enable plugin",
     "disableFailed": "Failed to disable plugin",
     "uninstallFailed": "Failed to uninstall plugin"
+  },
+  "dashboardPanel": {
+    "title": "Dashboard Panel",
+    "description": "Show this plugin's panel on the Dashboard. Only one plugin can use the panel at a time.",
+    "active": "Active",
+    "inactive": "Inactive",
+    "enableFailed": "Failed to toggle dashboard panel"
   },
   "confirm": {
     "uninstall": "Uninstall plugin \"{{name}}\"? This will remove its configuration.",

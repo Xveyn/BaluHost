@@ -62,4 +62,5 @@ async def get_plugin_panel(
         icon=spec.icon,
         accent=spec.accent,
         data=data,
+        translations=plugin.get_translations() or None,
     )

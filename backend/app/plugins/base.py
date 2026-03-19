@@ -225,6 +225,25 @@ class PluginBase(ABC):
         """
         return None
 
+    def get_translations(self) -> Optional[Dict[str, Dict[str, str]]]:
+        """Return translations keyed by language code.
+
+        Override to provide multi-language support for plugin strings.
+        The plugin decides which keys and languages to include.
+
+        Example::
+
+            {
+                "en": {"display_name": "Smart Plug", "description": "..."},
+                "de": {"display_name": "Smarte Steckdose", "description": "..."},
+            }
+
+        Returns:
+            Dict mapping language codes to key-value translation dicts,
+            or None if the plugin does not provide translations.
+        """
+        return None
+
     def get_default_config(self) -> Dict[str, Any]:
         """Get default configuration values.
 

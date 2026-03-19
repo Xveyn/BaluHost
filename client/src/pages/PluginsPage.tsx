@@ -15,9 +15,11 @@ import {
   getPluginDetails,
   listPermissions,
   togglePlugin,
+  toggleDashboardPanel,
   uninstallPlugin,
 } from '../api/plugins';
-import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen } from 'lucide-react';
+import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen, LayoutDashboard } from 'lucide-react';
+import { resolvePluginString } from '../lib/pluginI18n';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
@@ -230,7 +232,7 @@ export default function PluginsPage() {
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h3 className="font-medium text-white">{plugin.display_name}</h3>
+                        <h3 className="font-medium text-white">{resolvePluginString(plugin.translations, 'display_name', plugin.display_name)}</h3>
                         <span className="text-xs text-slate-500">v{plugin.version}</span>
                         {plugin.is_enabled && (
                           <span className="px-2 py-0.5 text-xs rounded-full bg-green-500/20 text-green-400 border border-green-500/30">
@@ -238,7 +240,7 @@ export default function PluginsPage() {
                           </span>
                         )}
                       </div>
-                      <p className="text-sm text-slate-400 mt-0.5">{plugin.description}</p>
+                      <p className="text-sm text-slate-400 mt-0.5">{resolvePluginString(plugin.translations, 'description', plugin.description)}</p>
                       <div className="flex items-center gap-2 mt-2">
                         <span className={`px-2 py-0.5 text-xs rounded-full border ${getCategoryColor(plugin.category)}`}>
                           {plugin.category}
@@ -297,7 +299,7 @@ export default function PluginsPage() {
               {/* Details Card */}
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
                 <h3 className="text-lg font-medium text-white mb-4">
-                  {selectedPlugin.display_name}
+                  {resolvePluginString(selectedPlugin.translations, 'display_name', selectedPlugin.display_name)}
                 </h3>
                 <dl className="space-y-3 text-sm">
                   <div className="flex justify-between">
@@ -380,6 +382,46 @@ export default function PluginsPage() {
                   </ul>
                 )}
               </div>
+
+              {/* Dashboard Panel Card */}
+              {selectedPlugin.has_dashboard_panel && selectedPlugin.is_enabled && (
+                <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+                  <h4 className="text-sm font-medium text-white mb-3 flex items-center gap-2">
+                    <LayoutDashboard className="h-4 w-4" />
+                    {t('dashboardPanel.title')}
+                  </h4>
+                  <p className="text-xs text-slate-500 mb-4">
+                    {t('dashboardPanel.description')}
+                  </p>
+                  <div className="flex items-center justify-between">
+                    <span className={`text-sm ${selectedPlugin.dashboard_panel_enabled ? 'text-green-400' : 'text-slate-500'}`}>
+                      {selectedPlugin.dashboard_panel_enabled ? t('dashboardPanel.active') : t('dashboardPanel.inactive')}
+                    </span>
+                    <button
+                      onClick={async () => {
+                        setActionLoading(true);
+                        setActionError(null);
+                        try {
+                          await toggleDashboardPanel(selectedPlugin.name, !selectedPlugin.dashboard_panel_enabled);
+                          await loadPluginDetails(selectedPlugin.name);
+                        } catch {
+                          setActionError(t('dashboardPanel.enableFailed'));
+                        } finally {
+                          setActionLoading(false);
+                        }
+                      }}
+                      disabled={actionLoading}
+                      className={`rounded-lg px-3 py-1.5 text-xs sm:text-sm font-medium transition-all touch-manipulation active:scale-95 border ${
+                        selectedPlugin.dashboard_panel_enabled
+                          ? 'border-slate-700 bg-slate-800 text-slate-300 hover:bg-red-500/20 hover:text-red-400 hover:border-red-500/30'
+                          : 'border-green-500/30 bg-green-500/20 text-green-400 hover:bg-green-500/30'
+                      } disabled:opacity-50 disabled:cursor-not-allowed`}
+                    >
+                      {selectedPlugin.dashboard_panel_enabled ? t('buttons.disablePanel') : t('buttons.enablePanel')}
+                    </button>
+                  </div>
+                </div>
+              )}
 
               {/* Actions Card */}
               <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6 space-y-3">

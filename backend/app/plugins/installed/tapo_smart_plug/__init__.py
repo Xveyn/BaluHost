@@ -117,6 +117,24 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
         ]
 
     # ------------------------------------------------------------------
+    # Translations (i18n)
+    # ------------------------------------------------------------------
+
+    def get_translations(self) -> dict[str, dict[str, str]] | None:
+        return {
+            "en": {
+                "display_name": "Tapo Smart Plug",
+                "description": "TP-Link Tapo P110/P115 smart plug integration with power monitoring",
+                "panel_title": "Power Monitoring",
+            },
+            "de": {
+                "display_name": "Tapo Steckdose",
+                "description": "TP-Link Tapo P110/P115 Steckdosen-Integration mit Leistungsüberwachung",
+                "panel_title": "Stromverbrauch",
+            },
+        }
+
+    # ------------------------------------------------------------------
     # Dashboard Panel
     # ------------------------------------------------------------------
 
@@ -491,16 +509,27 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 # Decrypt config
                 config: Dict[str, Any] = {}
                 if device.config_secret:
-                    try:
-                        config = json.loads(
-                            VPNEncryption.decrypt_key(device.config_secret)
-                        )
-                    except Exception as exc:
-                        logger.warning(
-                            "Could not decrypt config for device %s: %s",
-                            device_id, exc,
-                        )
-                        return None
+                    from app.core.config import settings as app_settings
+                    if app_settings.vpn_encryption_key:
+                        try:
+                            config = json.loads(
+                                VPNEncryption.decrypt_key(device.config_secret)
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not decrypt config for device %s: %s",
+                                device_id, exc,
+                            )
+                            return None
+                    else:
+                        try:
+                            config = json.loads(device.config_secret)
+                        except Exception as exc:
+                            logger.warning(
+                                "Could not parse config for device %s: %s",
+                                device_id, exc,
+                            )
+                            return None
 
                 email = config.get("email", "")
                 password = config.get("password", "")

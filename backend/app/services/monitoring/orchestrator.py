@@ -196,7 +196,7 @@ class MonitoringOrchestrator:
 
         if should_persist and self._db_session_factory:
             try:
-                db = next(self._db_session_factory())
+                db = self._db_session_factory()
             except Exception as e:
                 logger.error(f"Failed to get DB session: {e}")
 
@@ -237,7 +237,7 @@ class MonitoringOrchestrator:
             return
 
         try:
-            db = next(self._db_session_factory())
+            db = self._db_session_factory()
             try:
                 results = self.retention_manager.run_all_cleanup(db)
                 self._last_cleanup = datetime.now(timezone.utc)
@@ -457,7 +457,7 @@ class MonitoringOrchestrator:
                 pass
         return []
 
-    def get_disk_io_history(self, disk_name: Optional[str] = None) -> Dict:
+    def get_disk_io_history(self, disk_name: Optional[str] = None) -> "Dict[str, List[DiskIoSampleSchema]] | List[DiskIoSampleSchema]":
         """Get disk I/O history from memory (in-memory → SHM fallback)."""
         if disk_name:
             samples = self.disk_io_collector.get_disk_history(disk_name)

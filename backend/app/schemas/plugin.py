@@ -1,6 +1,6 @@
 """Pydantic schemas for plugin API."""
 from datetime import datetime
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel, Field
 
@@ -24,6 +24,7 @@ class PluginUIInfo(BaseModel):
     bundle_path: str = "ui/bundle.js"
     styles_path: Optional[str] = None
     dashboard_widgets: List[str] = []
+    translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
 class PluginUIManifestResponse(BaseModel):
@@ -47,6 +48,7 @@ class PluginInfo(BaseModel):
     has_ui: bool = False
     has_routes: bool = False
     error: Optional[str] = None
+    translations: Optional[Dict[str, Dict[str, str]]] = None
 
 
 class PluginListResponse(BaseModel):
@@ -115,6 +117,9 @@ class PluginDetailResponse(BaseModel):
     # Config schema (if available)
     config_schema: Optional[Dict[str, Any]] = None
 
+    # Plugin-provided translations keyed by language code
+    translations: Optional[Dict[str, Dict[str, str]]] = None
+
 
 class PluginToggleRequest(BaseModel):
     """Request to enable/disable a plugin."""
@@ -178,3 +183,4 @@ class DashboardPanelResponse(BaseModel):
     icon: str
     accent: str
     data: Optional[Dict[str, Any]] = None
+    translations: Optional[Dict[str, Dict[str, str]]] = None

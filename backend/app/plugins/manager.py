@@ -485,6 +485,7 @@ class PluginManager:
                         "bundle_path": ui_manifest.bundle_path,
                         "styles_path": ui_manifest.styles_path,
                         "dashboard_widgets": ui_manifest.dashboard_widgets,
+                        "translations": plugin.get_translations() or None,
                     })
 
         return manifest

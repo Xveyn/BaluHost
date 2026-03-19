@@ -55,6 +55,12 @@ async def list_plugins(
 
     plugins = []
     for name, info in all_plugins.items():
+        # Get translations if plugin instance is available
+        translations = None
+        plugin_instance = plugin_manager.get_plugin(name)
+        if plugin_instance:
+            translations = plugin_instance.get_translations() or None
+
         plugins.append(
             PluginInfo(
                 name=info.get("name", name),
@@ -69,6 +75,7 @@ async def list_plugins(
                 has_ui=info.get("has_ui", False),
                 has_routes=info.get("has_routes", False),
                 error=info.get("error"),
+                translations=translations,
             )
         )
 
@@ -173,6 +180,7 @@ async def get_plugin_details(
         enabled_at=db_record.enabled_at if db_record else None,
         config=(db_record.config or {}) if db_record else (plugin.get_default_config() or {}),
         config_schema=config_schema,
+        translations=plugin.get_translations() or None,
     )
 
 
@@ -239,6 +247,12 @@ async def toggle_plugin(
                 detail="Failed to enable plugin",
             )
 
+        # If this is a SmartDevicePlugin, register with SmartDeviceManager
+        from app.plugins.smart_device.base import SmartDevicePlugin
+        if isinstance(plugin, SmartDevicePlugin):
+            from app.plugins.smart_device.manager import SmartDeviceManager
+            SmartDeviceManager.get_instance().register_plugin(plugin)
+
         invalidate_plugin_cache(name)
         logger.info("Plugin %s enabled by %s", name, current_user.username)
         return PluginToggleResponse(
@@ -249,6 +263,13 @@ async def toggle_plugin(
 
     else:
         # Disabling plugin
+        # If this is a SmartDevicePlugin, unregister from SmartDeviceManager
+        from app.plugins.smart_device.base import SmartDevicePlugin
+        if isinstance(plugin, SmartDevicePlugin):
+            from app.plugins.smart_device.manager import SmartDeviceManager
+            mgr = SmartDeviceManager.get_instance()
+            mgr._plugins.pop(name, None)
+
         success = await plugin_manager.disable_plugin(name)
 
         plugin_service.disable_plugin_record(db, name)

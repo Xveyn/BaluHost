@@ -276,7 +276,7 @@ async def _sample_all_devices() -> None:
         return
 
     # Get fresh database session
-    db = next(_db_session_factory())
+    db = _db_session_factory()
 
     try:
         # Query all active devices with monitoring enabled

@@ -12,6 +12,8 @@ export interface PluginNavItem {
   order: number;
 }
 
+export type PluginTranslations = Record<string, Record<string, string>> | null;
+
 export interface PluginInfo {
   name: string;
   version: string;
@@ -25,6 +27,7 @@ export interface PluginInfo {
   has_ui: boolean;
   has_routes: boolean;
   error?: string;
+  translations?: PluginTranslations;
 }
 
 export interface PluginListResponse {
@@ -39,6 +42,7 @@ export interface PluginUIInfo {
   bundle_path: string;
   styles_path?: string;
   dashboard_widgets: string[];
+  translations?: PluginTranslations;
 }
 
 export interface PluginUIManifest {
@@ -63,12 +67,15 @@ export interface PluginDetail {
   has_ui: boolean;
   has_routes: boolean;
   has_background_tasks: boolean;
+  has_dashboard_panel: boolean;
+  dashboard_panel_enabled: boolean;
   nav_items: PluginNavItem[];
   dashboard_widgets: string[];
   installed_at?: string;
   enabled_at?: string;
   config: Record<string, unknown>;
   config_schema?: Record<string, unknown>;
+  translations?: PluginTranslations;
 }
 
 export interface PluginToggleRequest {
@@ -164,6 +171,21 @@ export async function getUIManifest(): Promise<PluginUIManifest> {
  */
 export async function listPermissions(): Promise<PermissionListResponse> {
   const response = await apiClient.get<PermissionListResponse>('/api/plugins/permissions');
+  return response.data;
+}
+
+/**
+ * Toggle a plugin's dashboard panel
+ */
+export async function toggleDashboardPanel(
+  name: string,
+  enabled: boolean
+): Promise<{ name: string; dashboard_panel_enabled: boolean; message: string }> {
+  const response = await apiClient.post<{
+    name: string;
+    dashboard_panel_enabled: boolean;
+    message: string;
+  }>(`/api/plugins/${name}/dashboard-panel`, { enabled });
   return response.data;
 }
 
