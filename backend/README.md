@@ -34,7 +34,7 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 ### Power & Hardware
 - **Power Management** - CPU-Governor-Steuerung und Energieprofile
 - **Fan Control** - Temperaturbasierte Lüftersteuerung
-- **Tapo Smart Plug Integration** - TP-Link Tapo Steckdosen für Power-Monitoring
+- **Smart Device Integration** - Pluginbasierte Smart-Home-Steuerung (z.B. TP-Link Tapo)
 - **Energy Monitoring** - Stromverbrauchsüberwachung und Preiskonfiguration
 
 ### System & Monitoring
@@ -45,7 +45,8 @@ FastAPI-basierter Backend für NAS-Management mit vollständiger Database-Integr
 
 ### Automation & Plugins
 - **Scheduler System** - Geplante Tasks (Backups, Cleanup, etc.)
-- **Plugin System** - Erweiterbare Plugin-Architektur
+- **Plugin System** - Erweiterbare Architektur mit Pluggy-Hooks, async Events, Permissions, Background-Tasks und Dashboard-Panels. Mitgelieferte Plugins: Optical Drive, Storage Analytics, Tapo Smart Plug
+- **Smart Device Framework** - Unified API für IoT-Geräte mit Capability-Protocols (Switch, Dimmer, Power Monitor, etc.), SHM-basiertem Polling und verschlüsselter Konfiguration
 - **Update Service** - System-Update-Verwaltung
 
 ### Cloud & Integration
@@ -222,7 +223,8 @@ app/
       vcl.py             # Virtual Command Line
       server_profiles.py # Remote Server Profiles
       metrics.py         # Prometheus Metrics
-      tapo.py            # Tapo Smart Plug Control
+      smart_devices.py   # Unified Smart Device API
+      tapo.py            # Tapo Smart Plug (Legacy-Compat)
       energy.py          # Energy Monitoring
       monitoring.py      # System Monitoring
       power.py           # Power Management
@@ -319,8 +321,24 @@ app/
     local_only.py        # Local Network Only
     security_headers.py  # Security Headers
     error_counter.py     # Error Counting
-  plugins/               # Plugin System
-    manager.py           # Plugin Manager
+  plugins/               # Plugin System (siehe plugins/README.md)
+    base.py              # PluginBase ABC, Metadata, UI-Manifest, Dashboard-Panel
+    manager.py           # PluginManager (Discovery, Lifecycle, Routing)
+    hooks.py             # Pluggy Hook-Specs (File, User, Backup, RAID, etc.)
+    events.py            # Async EventManager (Queue-basiert)
+    emit.py              # Helper: emit_hook() / emit_event()
+    permissions.py       # Granulares Permission-System
+    dashboard_panel.py   # Dashboard-Panel-Schemas (Gauge, Stat, Status, Chart)
+    smart_device/        # Smart-Device-Subsystem
+      base.py            # SmartDevicePlugin ABC
+      capabilities.py    # Capability-Protocols (Switch, Dimmer, Color, etc.)
+      manager.py         # SmartDeviceManager (CRUD, Commands, SHM-State)
+      poller.py          # SmartDevicePoller (Monitoring-Worker-Prozess)
+      schemas.py         # Request/Response-Schemas
+    installed/           # Mitgelieferte Plugins
+      optical_drive/     # CD/DVD/Blu-ray lesen, rippen, brennen
+      storage_analytics/ # Storage-Nutzungsanalysen
+      tapo_smart_plug/   # TP-Link Tapo P110/P115 Smart Plug
   schemas/               # Pydantic Models (Request/Response)
     auth.py              # Login, Register, Token
     user.py              # UserPublic, UserCreate, UserUpdate
@@ -457,10 +475,15 @@ CREATE TABLE file_metadata (
 - `GET /api/energy/` - Energy consumption data
 - `GET /api/energy/prices` - Energy price config
 
-### Tapo Smart Plugs
-- `GET /api/tapo/devices` - List Tapo devices
-- `POST /api/tapo/devices` - Add device
-- `GET /api/tapo/devices/{id}/status` - Device status
+### Smart Devices
+- `GET /api/smart-devices/` - List all smart devices
+- `POST /api/smart-devices/` - Add device
+- `GET /api/smart-devices/{id}` - Device details + state
+- `PUT /api/smart-devices/{id}` - Update device
+- `DELETE /api/smart-devices/{id}` - Delete device
+- `POST /api/smart-devices/{id}/command` - Execute command (turn_on, set_brightness, etc.)
+- `GET /api/smart-devices/types` - Available device types (from all plugins)
+- `GET /api/smart-devices/power-summary` - Aggregated power consumption
 
 ### VPN
 - `GET /api/vpn/status` - VPN status
@@ -475,9 +498,13 @@ CREATE TABLE file_metadata (
 - `DELETE /api/schedulers/{id}` - Delete task
 
 ### Plugins
-- `GET /api/plugins/` - List plugins
-- `POST /api/plugins/{name}/enable` - Enable plugin
+- `GET /api/plugins/` - List all plugins (discovered + enabled status)
+- `POST /api/plugins/{name}/enable` - Enable plugin (mit Permission-Grant)
 - `POST /api/plugins/{name}/disable` - Disable plugin
+- `GET /api/plugins/{name}/config` - Plugin configuration
+- `PUT /api/plugins/{name}/config` - Update plugin config
+- `GET /api/plugins/ui-manifest` - Combined UI manifest für Frontend
+- Plugin-eigene Routen unter `/api/plugins/{name}/...`
 
 ### Cloud Import
 - `GET /api/cloud/providers` - Available providers

@@ -114,7 +114,7 @@ function matchEndpointToRateLimitType(method: string, path: string): string | nu
     '/api/admin/', '/api/admin-db/', '/api/schedulers/', '/api/fans/',
     '/api/power/', '/api/pihole/', '/api/sleep/', '/api/cloud/',
     '/api/updates/', '/api/samba/', '/api/webdav/', '/api/plugins/',
-    '/api/notifications/', '/api/benchmark/', '/api/tapo/',
+    '/api/notifications/', '/api/benchmark/', '/api/smart-devices/',
   ];
   if (adminPrefixes.some(prefix => p.startsWith(prefix))) return 'admin_operations';
 

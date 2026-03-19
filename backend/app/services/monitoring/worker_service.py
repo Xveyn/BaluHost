@@ -30,6 +30,7 @@ from app.services.monitoring.shm import (
     read_command,
     cleanup_shm,
 )
+from app.plugins.smart_device.poller import SmartDevicePoller
 
 logger = logging.getLogger(__name__)
 
@@ -39,10 +40,11 @@ _HEARTBEAT_INTERVAL = 10.0
 # SHM snapshot intervals (seconds)
 _TELEMETRY_SNAPSHOT_INTERVAL = 3.0
 _DISK_IO_SNAPSHOT_INTERVAL = 1.0
-_POWER_SNAPSHOT_INTERVAL = 5.0
+_POWER_SNAPSHOT_INTERVAL = 5.0  # unused, kept for reference
 _ORCHESTRATOR_SNAPSHOT_INTERVAL = 5.0
 _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL = 5.0
 _COMMAND_POLL_INTERVAL = 2.0
+_SMART_DEVICES_SNAPSHOT_INTERVAL = 5.0
 
 
 class MonitoringWorker:
@@ -59,6 +61,7 @@ class MonitoringWorker:
         self._db_session_factory: Optional[Callable] = None
         self._services_started = False
         self._started_at: Optional[float] = None
+        self._smart_device_poller: Optional[SmartDevicePoller] = None
 
     @property
     def running(self) -> bool:
@@ -92,10 +95,14 @@ class MonitoringWorker:
         await start_monitoring(db_session_factory)
         logger.info("Monitoring orchestrator started")
 
-        # Start power monitor
-        from app.services import power_monitor
-        await power_monitor.start_power_monitor(db_session_factory)
-        logger.info("Power monitor started")
+        # Start smart device poller (handles all device polling including power monitoring)
+        try:
+            self._smart_device_poller = SmartDevicePoller()
+            await self._smart_device_poller.start(db_session_factory)
+            logger.info("Smart device poller started")
+        except Exception as exc:
+            logger.warning("Smart device poller could not start: %s", exc)
+            self._smart_device_poller = None
 
         self._services_started = True
         logger.info("All monitoring services started")
@@ -113,6 +120,7 @@ class MonitoringWorker:
         last_orchestrator = 0.0
         last_orchestrator_data = 0.0
         last_command_poll = 0.0
+        last_smart_devices = 0.0
 
         while self._running:
             now = time.time()
@@ -129,11 +137,6 @@ class MonitoringWorker:
                         self._write_disk_io_snapshot()
                         last_disk_io = now
 
-                    # Write power monitor snapshot
-                    if now - last_power >= _POWER_SNAPSHOT_INTERVAL:
-                        self._write_power_snapshot()
-                        last_power = now
-
                     # Write orchestrator status snapshot
                     if now - last_orchestrator >= _ORCHESTRATOR_SNAPSHOT_INTERVAL:
                         self._write_orchestrator_snapshot()
@@ -143,6 +146,11 @@ class MonitoringWorker:
                     if now - last_orchestrator_data >= _ORCHESTRATOR_DATA_SNAPSHOT_INTERVAL:
                         self._write_orchestrator_data_snapshot()
                         last_orchestrator_data = now
+
+                    # Write smart devices snapshot
+                    if now - last_smart_devices >= _SMART_DEVICES_SNAPSHOT_INTERVAL:
+                        self._write_smart_devices_snapshot()
+                        last_smart_devices = now
 
                 # Write heartbeat (always, even when paused)
                 if now - last_heartbeat >= _HEARTBEAT_INTERVAL:
@@ -167,10 +175,10 @@ class MonitoringWorker:
         if self._services_started:
             # Stop services in reverse order
             try:
-                from app.services import power_monitor
-                await power_monitor.stop_power_monitor()
+                if self._smart_device_poller is not None:
+                    await self._smart_device_poller.stop()
             except Exception as exc:
-                logger.debug("Error stopping power monitor: %s", exc)
+                logger.debug("Error stopping smart device poller: %s", exc)
 
             try:
                 from app.services.monitoring.orchestrator import stop_monitoring
@@ -233,34 +241,6 @@ class MonitoringWorker:
         except Exception as exc:
             logger.debug("Disk I/O snapshot failed: %s", exc)
 
-    def _write_power_snapshot(self) -> None:
-        """Write current power monitor data to SHM."""
-        try:
-            from app.services import power_monitor
-
-            # Power monitor histories are per-device with PowerSample objects
-            with power_monitor._lock:
-                histories = {}
-                for device_id, samples in power_monitor._device_histories.items():
-                    histories[str(device_id)] = [
-                        {
-                            "timestamp": str(s.timestamp),
-                            "watts": s.watts,
-                            "voltage": s.voltage,
-                            "current": s.current,
-                            "energy_today": s.energy_today,
-                        }
-                        for s in samples
-                    ]
-
-            data = {
-                "device_histories": histories,
-                "timestamp": time.time(),
-            }
-            write_shm(POWER_MONITOR_FILE, data)
-        except Exception as exc:
-            logger.debug("Power monitor snapshot failed: %s", exc)
-
     def _write_orchestrator_snapshot(self) -> None:
         """Write orchestrator status to SHM."""
         try:
@@ -320,20 +300,34 @@ class MonitoringWorker:
         except Exception as exc:
             logger.debug("Orchestrator data snapshot failed: %s", exc)
 
+    def _write_smart_devices_snapshot(self) -> None:
+        """Write current smart devices snapshot to SHM (if poller is running)."""
+        if self._smart_device_poller is None:
+            return
+        try:
+            # The poller writes its own SHM files during each poll loop; this
+            # method provides an additional periodic flush in case the poller's
+            # own write was skipped (e.g. no active devices).
+            self._smart_device_poller._write_shm_snapshot()
+        except Exception as exc:
+            logger.debug("Smart devices snapshot failed: %s", exc)
+
     def _write_heartbeat(self) -> None:
         """Write heartbeat to SHM and service status to DB."""
         try:
+            services = [
+                "telemetry_monitor",
+                "disk_io_monitor",
+                "monitoring_orchestrator",
+                "smart_device_poller",
+            ]
+
             data = {
                 "alive": True,
                 "pid": os.getpid(),
                 "paused": self._paused,
                 "started_at": self._started_at,
-                "services": [
-                    "telemetry_monitor",
-                    "disk_io_monitor",
-                    "monitoring_orchestrator",
-                    "power_monitor",
-                ],
+                "services": services,
                 "timestamp": time.time(),
             }
             write_shm(HEARTBEAT_FILE, data)
@@ -371,10 +365,12 @@ class MonitoringWorker:
             service_status["monitoring_orchestrator"] = {"is_running": False}
 
         try:
-            from app.services import power_monitor
-            service_status["power_monitor"] = power_monitor.get_status()
+            if self._smart_device_poller is not None:
+                service_status["smart_device_poller"] = self._smart_device_poller.get_status()
+            else:
+                service_status["smart_device_poller"] = {"is_running": False}
         except Exception:
-            service_status["power_monitor"] = {"is_running": False}
+            service_status["smart_device_poller"] = {"is_running": False}
 
         now = datetime.now(timezone.utc)
         db = SessionLocal()

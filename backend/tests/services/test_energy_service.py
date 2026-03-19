@@ -10,11 +10,11 @@ Covers:
 - Cumulative energy data calculation
 """
 
+import json
 import pytest
 from datetime import datetime, timedelta, timezone
 
-from app.models.power_sample import PowerSample
-from app.models.tapo_device import TapoDevice
+from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.energy_price_config import EnergyPriceConfig
 from app.services.power.energy import (
     save_power_sample,
@@ -28,15 +28,16 @@ from app.services.power.energy import (
 
 
 @pytest.fixture
-def tapo_device(db_session) -> TapoDevice:
-    """Create a mock TapoDevice for testing."""
-    device = TapoDevice(
+def smart_device(db_session) -> SmartDevice:
+    """Create a mock SmartDevice for testing."""
+    device = SmartDevice(
         name="Test NAS Monitor",
-        ip_address="192.168.1.100",
-        device_type="P110",
-        email_encrypted="",
-        password_encrypted="",
+        plugin_name="tapo_smart_plug",
+        device_type_id="tapo_p110",
+        address="192.168.1.100",
+        capabilities=["power_monitor", "switch"],
         is_active=True,
+        is_online=True,
         created_by_user_id=1,
     )
     db_session.add(device)
@@ -46,19 +47,24 @@ def tapo_device(db_session) -> TapoDevice:
 
 
 @pytest.fixture
-def sample_data(db_session, tapo_device) -> list[PowerSample]:
+def sample_data(db_session, smart_device) -> list[SmartDeviceSample]:
     """Create some power samples for testing."""
     now = datetime.now(timezone.utc)
     samples = []
     for i in range(10):
-        sample = PowerSample(
-            device_id=tapo_device.id,
+        watts = 50.0 + i * 2
+        data = {
+            "current_power": watts,
+            "voltage": 230.0,
+            "current_ma": int((0.22 + i * 0.01) * 1000),
+            "energy_today_wh": 1500,
+            "is_online": True,
+        }
+        sample = SmartDeviceSample(
+            device_id=smart_device.id,
+            capability="power_monitor",
+            data_json=json.dumps(data),
             timestamp=now - timedelta(minutes=i * 5),
-            watts=50.0 + i * 2,
-            voltage=230.0,
-            current=0.22 + i * 0.01,
-            energy_today=1.5,
-            is_online=True,
         )
         db_session.add(sample)
         samples.append(sample)
@@ -73,10 +79,10 @@ def sample_data(db_session, tapo_device) -> list[PowerSample]:
 class TestSavePowerSample:
     """Test saving power samples."""
 
-    def test_save_sample(self, db_session, tapo_device):
+    def test_save_sample(self, db_session, smart_device):
         sample = save_power_sample(
             db_session,
-            device_id=tapo_device.id,
+            device_id=smart_device.id,
             watts=65.0,
             voltage=230.5,
             current=0.28,
@@ -84,14 +90,15 @@ class TestSavePowerSample:
         )
 
         assert sample.id is not None
-        assert sample.watts == 65.0
-        assert sample.device_id == tapo_device.id
-        assert sample.is_online is True
+        data = json.loads(sample.data_json)
+        assert data["current_power"] == 65.0
+        assert sample.device_id == smart_device.id
+        assert data["is_online"] is True
 
-    def test_save_sample_offline(self, db_session, tapo_device):
+    def test_save_sample_offline(self, db_session, smart_device):
         sample = save_power_sample(
             db_session,
-            device_id=tapo_device.id,
+            device_id=smart_device.id,
             watts=0.0,
             voltage=None,
             current=None,
@@ -99,8 +106,9 @@ class TestSavePowerSample:
             is_online=False,
         )
 
-        assert sample.is_online is False
-        assert sample.voltage is None
+        data = json.loads(sample.data_json)
+        assert data["is_online"] is False
+        assert data["voltage"] is None
 
 
 # ============================================================================
@@ -110,14 +118,14 @@ class TestSavePowerSample:
 class TestPeriodStats:
     """Test energy period statistics aggregation."""
 
-    def test_get_period_stats(self, db_session, tapo_device, sample_data):
+    def test_get_period_stats(self, db_session, smart_device, sample_data):
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=2)
 
-        stats = get_period_stats(db_session, tapo_device.id, start, now)
+        stats = get_period_stats(db_session, smart_device.id, start, now)
 
         assert stats is not None
-        assert stats.device_id == tapo_device.id
+        assert stats.device_id == smart_device.id
         assert stats.device_name == "Test NAS Monitor"
         assert stats.samples_count == 10
         assert stats.avg_watts > 0
@@ -125,11 +133,11 @@ class TestPeriodStats:
         assert stats.max_watts >= stats.min_watts
         assert stats.uptime_percentage == 100.0
 
-    def test_get_period_stats_no_data(self, db_session, tapo_device):
+    def test_get_period_stats_no_data(self, db_session, smart_device):
         now = datetime.now(timezone.utc)
         start = now - timedelta(hours=1)
 
-        stats = get_period_stats(db_session, tapo_device.id, start, now)
+        stats = get_period_stats(db_session, smart_device.id, start, now)
         assert stats is None
 
     def test_get_period_stats_unknown_device(self, db_session):
@@ -137,20 +145,29 @@ class TestPeriodStats:
         stats = get_period_stats(db_session, 999999, now - timedelta(hours=1), now)
         assert stats is None
 
-    def test_get_period_stats_with_offline_samples(self, db_session, tapo_device):
+    def test_get_period_stats_with_offline_samples(self, db_session, smart_device):
         now = datetime.now(timezone.utc)
         # Add online and offline samples
         for i in range(5):
-            db_session.add(PowerSample(
-                device_id=tapo_device.id,
+            is_online = i < 3
+            watts = 50.0 if is_online else 0.0
+            data = {
+                "current_power": watts,
+                "voltage": 230.0 if is_online else None,
+                "current_ma": 220 if is_online else None,
+                "energy_today_wh": 1500 if is_online else None,
+                "is_online": is_online,
+            }
+            db_session.add(SmartDeviceSample(
+                device_id=smart_device.id,
+                capability="power_monitor",
+                data_json=json.dumps(data),
                 timestamp=now - timedelta(minutes=i * 5),
-                watts=50.0 if i < 3 else 0.0,
-                is_online=i < 3,
             ))
         db_session.commit()
 
         stats = get_period_stats(
-            db_session, tapo_device.id,
+            db_session, smart_device.id,
             now - timedelta(hours=1), now,
         )
 
@@ -201,30 +218,33 @@ class TestEnergyPriceConfig:
 class TestCleanup:
     """Test old sample cleanup."""
 
-    def test_cleanup_old_samples(self, db_session, tapo_device):
+    def test_cleanup_old_samples(self, db_session, smart_device):
         now = datetime.now(timezone.utc)
+        data = json.dumps({"current_power": 50.0, "is_online": True})
         # Add old and new samples
-        db_session.add(PowerSample(
-            device_id=tapo_device.id,
+        db_session.add(SmartDeviceSample(
+            device_id=smart_device.id,
+            capability="power_monitor",
+            data_json=data,
             timestamp=now - timedelta(days=60),
-            watts=50.0,
-            is_online=True,
         ))
-        db_session.add(PowerSample(
-            device_id=tapo_device.id,
+        db_session.add(SmartDeviceSample(
+            device_id=smart_device.id,
+            capability="power_monitor",
+            data_json=data,
             timestamp=now - timedelta(hours=1),
-            watts=50.0,
-            is_online=True,
         ))
         db_session.commit()
 
         deleted = cleanup_old_samples(db_session, days_to_keep=30)
         assert deleted == 1
 
-        remaining = db_session.query(PowerSample).count()
+        remaining = db_session.query(SmartDeviceSample).filter(
+            SmartDeviceSample.capability == "power_monitor"
+        ).count()
         assert remaining == 1
 
-    def test_cleanup_nothing_old(self, db_session, tapo_device, sample_data):
+    def test_cleanup_nothing_old(self, db_session, smart_device, sample_data):
         deleted = cleanup_old_samples(db_session, days_to_keep=30)
         assert deleted == 0
 
@@ -236,13 +256,13 @@ class TestCleanup:
 class TestCumulativeEnergyData:
     """Test cumulative energy data for charting."""
 
-    def test_cumulative_data_today(self, db_session, tapo_device, sample_data):
+    def test_cumulative_data_today(self, db_session, smart_device, sample_data):
         result = get_cumulative_energy_data(
-            db_session, tapo_device.id, "today", 0.40,
+            db_session, smart_device.id, "today", 0.40,
         )
 
         assert result is not None
-        assert result["device_id"] == tapo_device.id
+        assert result["device_id"] == smart_device.id
         assert result["period"] == "today"
         assert isinstance(result["data_points"], list)
 
@@ -250,9 +270,9 @@ class TestCumulativeEnergyData:
         result = get_cumulative_energy_data(db_session, 999999, "today", 0.40)
         assert result is None
 
-    def test_cumulative_data_no_samples(self, db_session, tapo_device):
+    def test_cumulative_data_no_samples(self, db_session, smart_device):
         result = get_cumulative_energy_data(
-            db_session, tapo_device.id, "today", 0.40,
+            db_session, smart_device.id, "today", 0.40,
         )
 
         assert result is not None

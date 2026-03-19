@@ -517,13 +517,13 @@ async def get_power_summary(
     """
     Get combined power consumption summary for mobile app.
 
-    Returns CPU power profile, Tapo device power readings,
+    Returns CPU power profile, smart device power readings,
     today's energy statistics, and cost estimates in a single call.
     """
     from app.services.power.manager import get_power_manager
     from app.services.power import energy as energy_stats
-    from app.services.power import monitor as power_monitor
-    from app.services import tapo_service
+    from app.models.smart_device import SmartDevice
+    from app.plugins.smart_device.manager import get_smart_device_manager
 
     now = datetime.now(timezone.utc)
 
@@ -543,7 +543,7 @@ async def get_power_summary(
     except Exception as e:
         logger.warning(f"Failed to get power status: {e}")
 
-    # 2. Tapo devices
+    # 2. Smart devices with power_monitor capability
     devices_info: List[TapoDevicePowerInfo] = []
     total_current_watts = 0.0
     devices_online = 0
@@ -553,21 +553,32 @@ async def get_power_summary(
     has_today_stats = False
 
     try:
-        tapo_devices = tapo_service.list_active_devices(db)
+        smart_devices = db.query(SmartDevice).filter(SmartDevice.is_active == True).all()  # noqa: E712
     except Exception as e:
-        logger.warning(f"Failed to query Tapo devices: {e}")
-        tapo_devices = []
+        logger.warning(f"Failed to query smart devices: {e}")
+        smart_devices = []
 
-    for device in tapo_devices:
+    sd_manager = get_smart_device_manager()
+
+    for device in smart_devices:
+        # Skip devices without power_monitor capability
+        caps = device.capabilities or []
+        if "power_monitor" not in caps:
+            continue
+
         current_watts = 0.0
         is_online = False
         device_energy_today = None
 
-        # Current power from in-memory buffer
+        # Current power from SHM state
         try:
-            current_power = power_monitor.get_current_power(int(device.id), db)
-            current_watts = current_power.current_watts
-            is_online = current_power.is_online
+            state = sd_manager.get_device_state(device.id, db)
+            if state and "power_monitor" in state:
+                pm = state["power_monitor"]
+                current_watts = pm.get("current_power", 0.0)
+                is_online = True
+            elif device.is_online:
+                is_online = True
         except Exception as e:
             logger.debug(f"No current power for device {device.id}: {e}")
 
@@ -610,7 +621,7 @@ async def get_power_summary(
     except Exception as e:
         logger.debug(f"Failed to get energy price config: {e}")
 
-    devices_total = len(tapo_devices)
+    devices_total = len(devices_info)
     today_avg = round(today_avg_watts_sum / devices_total, 1) if devices_total and has_today_stats else None
 
     return MobilePowerSummary(
@@ -628,6 +639,6 @@ async def get_power_summary(
         power_profile_frequency_mhz=power_profile_frequency_mhz,
         auto_scaling_enabled=auto_scaling_enabled,
         active_demands_count=active_demands_count,
-        has_tapo_devices=devices_total > 0,
+        has_smart_devices=devices_total > 0,
         timestamp=now,
     )

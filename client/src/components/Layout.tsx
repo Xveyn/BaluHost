@@ -8,7 +8,8 @@ import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
-import { Plug, CloudDownload, Shield } from 'lucide-react';
+import { Plug, CloudDownload, Shield, Zap } from 'lucide-react';
+import { resolvePluginString } from '../lib/pluginI18n';
 import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
@@ -192,6 +193,12 @@ export default function Layout({ children }: LayoutProps) {
       icon: devicesIcon
     },
     {
+      path: '/smart-devices',
+      label: t('navigation.smartDevices', 'Smart Devices'),
+      description: t('navigation.smartDevicesDesc', 'IoT device control'),
+      icon: <Zap className="h-5 w-5" />,
+    },
+    {
       path: '/settings',
       label: t('navigation.settings'),
       description: t('navigation.settingsDesc'),
@@ -269,7 +276,7 @@ export default function Layout({ children }: LayoutProps) {
     .filter((item) => !item.admin_only || isAdmin)
     .map((item) => ({
       path: `/plugins/${item.path}`,
-      label: item.label,
+      label: resolvePluginString((item as any)._translations, `nav.${item.label}`, item.label),
       description: 'Plugin',
       icon: <Plug className="h-5 w-5" />,
       adminOnly: item.admin_only

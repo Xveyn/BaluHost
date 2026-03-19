@@ -64,7 +64,7 @@ class SyncBackgroundScheduler:
     
     async def check_and_run_due_syncs(self):
         """Check for due syncs and execute them."""
-        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+        from app.services.scheduler import log_scheduler_execution, complete_scheduler_execution
 
         execution_id = log_scheduler_execution("sync_check", job_id="sync_check")
         db = SessionLocal()
@@ -164,7 +164,7 @@ class SyncBackgroundScheduler:
     async def cleanup_expired_uploads(self):
         """Clean up expired chunked uploads."""
         from app.services.sync.progressive import ProgressiveSyncService
-        from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+        from app.services.scheduler import log_scheduler_execution, complete_scheduler_execution
 
         execution_id = log_scheduler_execution("upload_cleanup", job_id="cleanup_uploads")
         db = SessionLocal()

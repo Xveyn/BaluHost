@@ -26,7 +26,7 @@ _scrub_scheduler: Optional["BackgroundScheduler"] = None
 
 
 def _perform_scrub_job() -> None:
-    from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+    from app.services.scheduler import log_scheduler_execution, complete_scheduler_execution
 
     execution_id = log_scheduler_execution("raid_scrub", job_id="raid_scrub")
     try:

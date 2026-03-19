@@ -9,11 +9,10 @@ from __future__ import annotations
 import logging
 import time
 from datetime import datetime, timezone
-from typing import Optional, Type
+from typing import Any, Optional, Type
 
 import psutil
 
-from app.models.base import Base
 from app.models.monitoring import UptimeSample
 from app.schemas.monitoring import UptimeSampleSchema
 from app.services.monitoring.base import MetricCollector
@@ -82,7 +81,7 @@ class UptimeCollector(MetricCollector[UptimeSampleSchema]):
             logger.error(f"Failed to collect uptime sample: {e}")
             return None
 
-    def get_db_model(self) -> Type[Base]:
+    def get_db_model(self) -> Type[Any]:
         """Get the UptimeSample model class."""
         return UptimeSample
 

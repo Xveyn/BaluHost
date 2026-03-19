@@ -28,7 +28,7 @@ async def async_main() -> int:
     logger.info("BaluHost Monitoring Worker starting...")
 
     # Initialize database (create tables if missing)
-    from app.core.database import init_db, get_db
+    from app.core.database import init_db, SessionLocal
     init_db()
 
     # Clean up any stale SHM files from a previous run
@@ -52,7 +52,7 @@ async def async_main() -> int:
     signal.signal(signal.SIGINT, _handle_signal)
 
     try:
-        await worker.start(get_db)
+        await worker.start(SessionLocal)
 
         # Run loop until shutdown signal
         loop_task = asyncio.create_task(worker.run_loop())

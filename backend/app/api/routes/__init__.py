@@ -3,7 +3,7 @@ from fastapi import APIRouter
 from app.api.routes import (
     auth, files, logging, system, users, upload_progress, shares, backup, sync,
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
-    vcl, server_profiles, vpn_profiles, metrics, tapo, energy, devices, monitoring,
+    vcl, server_profiles, vpn_profiles, metrics, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, sleep,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
@@ -11,6 +11,8 @@ from app.api.routes import (
     activity,
     firebase_config,
     balupi,
+    smart_devices,
+    dashboard,
 )
 
 api_router = APIRouter()
@@ -36,7 +38,6 @@ api_router.include_router(rate_limit_config.router, prefix="/admin", tags=["admi
 api_router.include_router(server_profiles.router)
 api_router.include_router(vpn_profiles.router)
 api_router.include_router(metrics.router, tags=["monitoring"])
-api_router.include_router(tapo.router, prefix="/tapo", tags=["power-monitoring"])
 api_router.include_router(energy.router, prefix="/energy", tags=["energy-monitoring"])
 api_router.include_router(monitoring.router, tags=["system-monitoring"])
 api_router.include_router(power.router, tags=["power-management"])
@@ -62,5 +63,7 @@ api_router.include_router(backend_logs.router, tags=["admin"])
 api_router.include_router(activity.router, prefix="/activity", tags=["activity"])
 api_router.include_router(firebase_config.router, tags=["admin", "firebase"])
 api_router.include_router(balupi.router, prefix="/admin", tags=["admin", "balupi"])
+api_router.include_router(smart_devices.router, prefix="/smart-devices", tags=["smart-devices"])
+api_router.include_router(dashboard.router, tags=["dashboard"])
 
 __all__ = ["api_router"]

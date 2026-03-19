@@ -19,13 +19,6 @@ from app.services.power.manager import (
     stop_power_manager,
     get_status as get_power_status,
 )
-from app.services.power.monitor import (
-    start_power_monitor,
-    stop_power_monitor,
-    get_power_history,
-    get_current_power,
-    get_status as get_monitor_status,
-)
 from app.services.power.presets import (
     PowerPresetService,
     get_preset_service,
@@ -76,12 +69,6 @@ __all__ = [
     "start_power_manager",
     "stop_power_manager",
     "get_power_status",
-    # Monitor
-    "start_power_monitor",
-    "stop_power_monitor",
-    "get_power_history",
-    "get_current_power",
-    "get_monitor_status",
     # Presets
     "PowerPresetService",
     "get_preset_service",

@@ -16,7 +16,7 @@ import BackupSettings from '../components/BackupSettings';
 import VpnManagement from '../components/VpnManagement';
 import { ServicesTab } from '../components/services';
 import VCLSettings from '../components/vcl/VCLSettings';
-import TapoDeviceSettings from '../components/TapoDeviceSettings';
+import { Link } from 'react-router-dom';
 import { RateLimitsTab } from '../components/rate-limits';
 import WebdavConnectionCard from '../components/webdav/WebdavConnectionCard';
 import SambaManagementCard from '../components/samba/SambaManagementCard';
@@ -192,7 +192,16 @@ export default function SystemControlPage() {
         {activeTab === 'vpn' && <VpnManagement />}
         {activeTab === 'services' && <ServicesTab isAdmin={true} />}
         {activeTab === 'vcl' && <VCLSettings />}
-        {activeTab === 'smart' && <TapoDeviceSettings />}
+        {activeTab === 'smart' && (
+          <div className="flex flex-col items-center justify-center py-16 text-center">
+            <Plug className="h-12 w-12 text-slate-500 mb-4" />
+            <h3 className="text-lg font-semibold text-white mb-2">{t('systemControl.smartDevicesMoved', 'Smart Devices moved')}</h3>
+            <p className="text-slate-400 mb-6">{t('systemControl.smartDevicesMovedDesc', 'Smart device management is now available on the dedicated Smart Devices page.')}</p>
+            <Link to="/smart-devices" className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg transition-colors">
+              {t('systemControl.goToSmartDevices', 'Go to Smart Devices')}
+            </Link>
+          </div>
+        )}
         {activeTab === 'ratelimits' && <RateLimitsTab />}
         {activeTab === 'webdav' && <WebdavConnectionCard />}
         {activeTab === 'samba' && <SambaManagementCard />}

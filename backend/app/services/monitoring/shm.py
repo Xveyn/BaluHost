@@ -31,6 +31,8 @@ ORCHESTRATOR_STATUS_FILE = "orchestrator_status.json"
 HEARTBEAT_FILE = "heartbeat.json"
 COMMANDS_FILE = "commands.json"
 ORCHESTRATOR_DATA_FILE = "orchestrator_data.json"
+SMART_DEVICES_FILE = "smart_devices.json"
+SMART_DEVICES_CHANGES_FILE = "smart_devices_changes.json"
 
 
 def _ensure_dir() -> None:

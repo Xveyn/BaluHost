@@ -9,7 +9,6 @@ import { getSystemMode } from '../api/system';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
-import PowerWidget from '../components/PowerWidget';
 import {
   ActivityFeed,
   NextMaintenanceWidget,
@@ -19,6 +18,7 @@ import {
   ConnectedDevicesWidget,
   AlertBanner,
   LiveActivities,
+  PluginDashboardPanel,
   type Alert,
 } from '../components/dashboard';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
@@ -475,8 +475,8 @@ export default function Dashboard() {
               );
             })}
 
-            {/* Power Monitoring Widget */}
-            <PowerWidget />
+            {/* Plugin Dashboard Panel */}
+            <PluginDashboardPanel />
 
             {/* Network Widget */}
             <NetworkWidget />

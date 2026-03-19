@@ -12,8 +12,6 @@ from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
 from app.models.server_profile import ServerProfile
 from app.models.vpn_profile import VPNProfile, VPNType
 from app.models.refresh_token import RefreshToken
-from app.models.tapo_device import TapoDevice
-from app.models.power_sample import PowerSample
 from app.models.monitoring import (
     MetricType,
     CpuSample,
@@ -41,6 +39,7 @@ from app.models.scheduler_state import SchedulerState
 from app.models.webdav_state import WebdavState
 from app.models.power_preset import PowerPreset
 from app.models.plugin import InstalledPlugin
+from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.benchmark import (
     DiskBenchmark,
     BenchmarkTestResult,
@@ -61,6 +60,7 @@ from app.models.update_history import (
     UpdateChannel,
 )
 from app.models.energy_price_config import EnergyPriceConfig
+from app.models.ssd_file_cache import SSDCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
@@ -92,8 +92,6 @@ __all__ = [
     "VPNProfile",
     "VPNType",
     "RefreshToken",
-    "TapoDevice",
-    "PowerSample",
     "MetricType",
     "CpuSample",
     "MemorySample",
@@ -118,6 +116,8 @@ __all__ = [
     "WebdavState",
     "PowerPreset",
     "InstalledPlugin",
+    "SmartDevice",
+    "SmartDeviceSample",
     "DiskBenchmark",
     "BenchmarkTestResult",
     "BenchmarkStatus",
@@ -132,7 +132,7 @@ __all__ = [
     "UpdateStatus",
     "UpdateChannel",
     "EnergyPriceConfig",
-    "SsdCacheConfig",
+    "SSDCacheConfig",
     "CloudOAuthConfig",
     "CloudConnection",
     "CloudImportJob",

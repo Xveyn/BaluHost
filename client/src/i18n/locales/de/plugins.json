@@ -12,7 +12,9 @@
     "configure": "Konfigurieren",
     "uninstall": "Deinstallieren",
     "enablePlugin": "Plugin aktivieren",
-    "cancel": "Abbrechen"
+    "cancel": "Abbrechen",
+    "enablePanel": "Panel aktivieren",
+    "disablePanel": "Panel deaktivieren"
   },
   "status": {
     "active": "Aktiv",
@@ -49,6 +51,13 @@
     "enableFailed": "Plugin konnte nicht aktiviert werden",
     "disableFailed": "Plugin konnte nicht deaktiviert werden",
     "uninstallFailed": "Plugin konnte nicht deinstalliert werden"
+  },
+  "dashboardPanel": {
+    "title": "Dashboard-Panel",
+    "description": "Panel dieses Plugins auf dem Dashboard anzeigen. Es kann immer nur ein Plugin das Panel gleichzeitig nutzen.",
+    "active": "Aktiv",
+    "inactive": "Inaktiv",
+    "enableFailed": "Dashboard-Panel konnte nicht umgeschaltet werden"
   },
   "confirm": {
     "uninstall": "Plugin \"{{name}}\" deinstallieren? Die Konfiguration wird entfernt.",

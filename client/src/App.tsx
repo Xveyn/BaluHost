@@ -48,6 +48,7 @@ const NotificationsArchivePage = isDesktop ? lazyWithRetry(() => import('./pages
 const UpdatePage = isDesktop ? lazyWithRetry(() => import('./pages/UpdatePage')) : null;
 const CloudImportPage = isDesktop ? lazyWithRetry(() => import('./pages/CloudImportPage')) : null;
 const PiholePage = isDesktop ? lazyWithRetry(() => import('./pages/PiholePage')) : null;
+const SmartDevicesPage = isDesktop ? lazyWithRetry(() => import('./pages/SmartDevicesPage')) : null;
 const SyncSettings = isDesktop ? lazyWithRetry(() => import('./components/SyncSettings')) : null;
 const PluginPage = isDesktop ? lazyWithRetry(() => import('./components/PluginPage')) : null;
 
@@ -215,6 +216,7 @@ function AppRoutes() {
         {UpdatePage && <Route path="/updates" element={isAdmin ? <Layout><UpdatePage /></Layout> : <Navigate to="/" />} />}
         {CloudImportPage && <Route path="/cloud-import" element={user ? <Layout><CloudImportPage /></Layout> : <Navigate to="/login" />} />}
         {PiholePage && <Route path="/pihole" element={isAdmin ? <Layout><PiholePage /></Layout> : <Navigate to="/" />} />}
+        {SmartDevicesPage && <Route path="/smart-devices" element={user ? <Layout><SmartDevicesPage /></Layout> : <Navigate to="/login" />} />}
 
         {/* Desktop-only redirects */}
         {isDesktop && <Route path="/raid" element={<Navigate to="/admin/system-control?tab=raid" replace />} />}

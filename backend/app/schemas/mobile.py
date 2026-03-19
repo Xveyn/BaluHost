@@ -171,13 +171,17 @@ class ExpirationNotification(BaseModel):
         from_attributes = True
 
 
-class TapoDevicePowerInfo(BaseModel):
-    """Power info for a single Tapo device."""
+class DevicePowerInfo(BaseModel):
+    """Power info for a single smart device."""
     device_id: int
     device_name: str
     current_watts: float = 0.0
     is_online: bool = False
     energy_today_kwh: Optional[float] = None
+
+
+# Keep alias for mobile app backward compatibility
+TapoDevicePowerInfo = DevicePowerInfo
 
 
 class MobilePowerSummary(BaseModel):
@@ -186,7 +190,7 @@ class MobilePowerSummary(BaseModel):
     total_current_watts: float = 0.0
     devices_online: int = 0
     devices_total: int = 0
-    devices: List[TapoDevicePowerInfo] = []
+    devices: List[DevicePowerInfo] = []
 
     # Today's energy
     today_energy_kwh: Optional[float] = None
@@ -205,5 +209,5 @@ class MobilePowerSummary(BaseModel):
     active_demands_count: int = 0
 
     # Meta
-    has_tapo_devices: bool = False
+    has_smart_devices: bool = False
     timestamp: datetime

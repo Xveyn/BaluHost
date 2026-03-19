@@ -138,40 +138,44 @@ class UpdateHistory(Base):
     def complete(self) -> None:
         """Mark update as completed successfully."""
         self.status = UpdateStatus.COMPLETED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        now = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = now
         self.progress_percent = 100
         self.current_step = "Update completed"
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            delta = now - self.started_at
             self.duration_seconds = int(delta.total_seconds())
 
     def fail(self, error: str) -> None:
         """Mark update as failed with error message."""
         self.status = UpdateStatus.FAILED.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        now = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = now
         self.error_message = error
         self.current_step = f"Failed: {error[:100]}"
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            delta = now - self.started_at
             self.duration_seconds = int(delta.total_seconds())
 
     def mark_rolled_back(self, commit: str) -> None:
         """Mark update as rolled back."""
         self.status = UpdateStatus.ROLLED_BACK.value
-        self.completed_at = datetime.now(datetime.now().astimezone().tzinfo)
+        now = datetime.now(datetime.now().astimezone().tzinfo)
+        self.completed_at = now
         self.rollback_commit = commit
         self.current_step = f"Rolled back to {commit[:8]}"
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            delta = now - self.started_at
             self.duration_seconds = int(delta.total_seconds())
 
     def cancel(self) -> None:
         """Mark update as cancelled."""
         self.status = UpdateStatus.CANCELLED.value
-        self.completed_at = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        self.completed_at = now
         self.current_step = "Update cancelled"
         if self.started_at:
-            delta = self.completed_at - self.started_at
+            delta = now - self.started_at
             self.duration_seconds = int(delta.total_seconds())
 
 

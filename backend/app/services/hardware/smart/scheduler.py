@@ -27,7 +27,7 @@ _smart_scheduler: Optional["BackgroundScheduler"] = None
 
 
 def _perform_smart_scan_job() -> None:
-    from app.services.scheduler_service import log_scheduler_execution, complete_scheduler_execution
+    from app.services.scheduler import log_scheduler_execution, complete_scheduler_execution
 
     execution_id = log_scheduler_execution("smart_scan", job_id="smart_scan")
     try:

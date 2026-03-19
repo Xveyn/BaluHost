@@ -2,24 +2,27 @@
 Energy statistics service.
 
 Provides aggregated energy consumption statistics, downtime tracking,
-and historical analysis of power usage from Tapo devices.
+and historical analysis of power usage from smart devices with power_monitor capability.
 """
 
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
-from sqlalchemy import func, and_
+from sqlalchemy import func, and_, cast, Float
 from sqlalchemy.orm import Session
 
-from app.models.power_sample import PowerSample
-from app.models.tapo_device import TapoDevice
+from app.models.smart_device import SmartDevice, SmartDeviceSample
 from app.models.energy_price_config import EnergyPriceConfig
 from app.core.config import settings
 from app.core.database import DATABASE_URL
 
 logger = logging.getLogger(__name__)
+
+# The capability name used by power-monitoring plugins
+_POWER_CAPABILITY = "power_monitor"
 
 
 class EnergyPeriod:
@@ -52,6 +55,37 @@ class EnergyPeriod:
         self.downtime_minutes = downtime_minutes
 
 
+def _parse_power_from_sample(data_json: str) -> Optional[Dict]:
+    """Parse a SmartDeviceSample data_json into power fields.
+
+    Returns dict with watts, voltage, current, energy_today, is_online
+    or None if parsing fails.
+    """
+    try:
+        data = json.loads(data_json)
+    except (json.JSONDecodeError, TypeError):
+        return None
+
+    watts = data.get("current_power", 0.0)
+    if watts is None:
+        watts = 0.0
+
+    voltage = data.get("voltage")
+    current_ma = data.get("current_ma")
+    current_a = current_ma / 1000.0 if current_ma is not None else None
+    energy_today_wh = data.get("energy_today_wh")
+    energy_today_kwh = energy_today_wh / 1000.0 if energy_today_wh is not None else None
+    is_online = data.get("is_online", True)
+
+    return {
+        "watts": float(watts),
+        "voltage": float(voltage) if voltage is not None else None,
+        "current": current_a,
+        "energy_today": energy_today_kwh,
+        "is_online": bool(is_online),
+    }
+
+
 def save_power_sample(
     db: Session,
     device_id: int,
@@ -60,13 +94,13 @@ def save_power_sample(
     current: Optional[float],
     energy_today: Optional[float],
     is_online: bool = True
-) -> PowerSample:
+) -> SmartDeviceSample:
     """
-    Save a power sample to the database.
+    Save a power sample to the database as a SmartDeviceSample.
 
     Args:
         db: Database session
-        device_id: Tapo device ID
+        device_id: Smart device ID
         watts: Current power consumption in watts
         voltage: Voltage in volts
         current: Current in amperes
@@ -74,16 +108,21 @@ def save_power_sample(
         is_online: Whether device is online
 
     Returns:
-        Created PowerSample instance
+        Created SmartDeviceSample instance
     """
-    sample = PowerSample(
+    data = {
+        "current_power": watts,
+        "voltage": voltage,
+        "current_ma": int(current * 1000) if current is not None else None,
+        "energy_today_wh": int(energy_today * 1000) if energy_today is not None else None,
+        "is_online": is_online,
+    }
+
+    sample = SmartDeviceSample(
         device_id=device_id,
+        capability=_POWER_CAPABILITY,
+        data_json=json.dumps(data),
         timestamp=datetime.now(timezone.utc),
-        watts=watts,
-        voltage=voltage,
-        current=current,
-        energy_today=energy_today,
-        is_online=is_online
     )
 
     db.add(sample)
@@ -104,56 +143,58 @@ def get_period_stats(
 
     Args:
         db: Database session
-        device_id: Tapo device ID
+        device_id: Smart device ID
         start_time: Period start time
         end_time: Period end time
 
     Returns:
         EnergyPeriod with statistics, or None if no data
     """
-    # Get device info
-    device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    device = db.query(SmartDevice).filter(SmartDevice.id == device_id).first()
     if not device:
         return None
 
-    # Query samples in period
-    samples = db.query(PowerSample).filter(
+    samples = db.query(SmartDeviceSample).filter(
         and_(
-            PowerSample.device_id == device_id,
-            PowerSample.timestamp >= start_time,
-            PowerSample.timestamp <= end_time
+            SmartDeviceSample.device_id == device_id,
+            SmartDeviceSample.capability == _POWER_CAPABILITY,
+            SmartDeviceSample.timestamp >= start_time,
+            SmartDeviceSample.timestamp <= end_time,
         )
     ).all()
 
     if not samples:
         return None
 
-    # Calculate statistics
-    samples_count = len(samples)
-    online_samples = [s for s in samples if s.is_online]
-    offline_samples = [s for s in samples if not s.is_online]
+    # Parse all samples
+    parsed = []
+    for s in samples:
+        p = _parse_power_from_sample(s.data_json)
+        if p is not None:
+            parsed.append(p)
 
-    # Power statistics (only from online samples)
+    if not parsed:
+        return None
+
+    samples_count = len(parsed)
+    online_samples = [p for p in parsed if p["is_online"]]
+    offline_samples = [p for p in parsed if not p["is_online"]]
+
     if online_samples:
-        avg_watts = sum(s.watts for s in online_samples) / len(online_samples)
-        min_watts = min(s.watts for s in online_samples)
-        max_watts = max(s.watts for s in online_samples)
+        avg_watts = sum(p["watts"] for p in online_samples) / len(online_samples)
+        min_watts = min(p["watts"] for p in online_samples)
+        max_watts = max(p["watts"] for p in online_samples)
     else:
         avg_watts = 0.0
         min_watts = 0.0
         max_watts = 0.0
 
-    # Calculate total energy (approximate integration)
-    # Assume samples are evenly distributed; use average power * time
     period_hours = (end_time - start_time).total_seconds() / 3600
     total_energy_kwh = (avg_watts / 1000) * period_hours if online_samples else 0.0
 
-    # Uptime calculation
     uptime_percentage = (len(online_samples) / samples_count * 100) if samples_count > 0 else 0.0
 
-    # Downtime in minutes (approximate)
-    # Assume each sample represents a fixed interval (e.g., 5 minutes)
-    sample_interval_minutes = 5  # Should match power_monitor sampling interval
+    sample_interval_minutes = 5
     downtime_minutes = len(offline_samples) * sample_interval_minutes
 
     return EnergyPeriod(
@@ -201,9 +242,12 @@ def get_hourly_samples(
     """
     Get hourly averaged power samples for charting.
 
+    Since SmartDeviceSample stores data as JSON, we fetch all samples
+    in the time range and aggregate in Python.
+
     Args:
         db: Database session
-        device_id: Tapo device ID
+        device_id: Smart device ID
         hours: Number of hours to look back
 
     Returns:
@@ -211,38 +255,36 @@ def get_hourly_samples(
     """
     start_time = datetime.now(timezone.utc) - timedelta(hours=hours)
 
-    # Cross-database compatible hour grouping
-    if DATABASE_URL.startswith("sqlite"):
-        hour_expr = func.strftime('%Y-%m-%d %H:00:00', PowerSample.timestamp)
-    else:
-        # PostgreSQL
-        hour_expr = func.date_trunc('hour', PowerSample.timestamp)
-
-    hourly_data = db.query(
-        hour_expr.label('hour'),
-        func.avg(PowerSample.watts).label('avg_watts'),
-        func.count(PowerSample.id).label('sample_count')
-    ).filter(
+    samples = db.query(SmartDeviceSample).filter(
         and_(
-            PowerSample.device_id == device_id,
-            PowerSample.timestamp >= start_time,
-            PowerSample.is_online == True
+            SmartDeviceSample.device_id == device_id,
+            SmartDeviceSample.capability == _POWER_CAPABILITY,
+            SmartDeviceSample.timestamp >= start_time,
         )
-    ).group_by('hour').order_by('hour').all()
+    ).order_by(SmartDeviceSample.timestamp).all()
+
+    # Group by hour and calculate averages
+    hourly: Dict[str, List[float]] = {}
+    for s in samples:
+        p = _parse_power_from_sample(s.data_json)
+        if p is None or not p["is_online"]:
+            continue
+        hour_key = s.timestamp.strftime('%Y-%m-%d %H:00:00')
+        hourly.setdefault(hour_key, []).append(p["watts"])
 
     return [
         {
-            'timestamp': str(row.hour) if not isinstance(row.hour, str) else row.hour,
-            'avg_watts': round(row.avg_watts, 1),
-            'sample_count': row.sample_count
+            'timestamp': hour_key,
+            'avg_watts': round(sum(watts_list) / len(watts_list), 1),
+            'sample_count': len(watts_list),
         }
-        for row in hourly_data
+        for hour_key, watts_list in sorted(hourly.items())
     ]
 
 
 def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
     """
-    Delete power samples older than specified days.
+    Delete power monitor samples older than specified days.
 
     Args:
         db: Database session
@@ -253,13 +295,14 @@ def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
-    deleted = db.query(PowerSample).filter(
-        PowerSample.timestamp < cutoff_date
+    deleted = db.query(SmartDeviceSample).filter(
+        SmartDeviceSample.capability == _POWER_CAPABILITY,
+        SmartDeviceSample.timestamp < cutoff_date,
     ).delete()
 
     db.commit()
 
-    logger.info(f"Cleaned up {deleted} power samples older than {days_to_keep} days")
+    logger.info(f"Cleaned up {deleted} power monitor samples older than {days_to_keep} days")
     return deleted
 
 
@@ -278,7 +321,6 @@ def get_energy_price_config(db: Session) -> EnergyPriceConfig:
     config = db.query(EnergyPriceConfig).filter(EnergyPriceConfig.id == 1).first()
 
     if not config:
-        # Create default config
         config = EnergyPriceConfig(
             id=1,
             cost_per_kwh=0.40,
@@ -329,45 +371,49 @@ def get_cumulative_energy_data(
     device_id: int,
     period: str,
     cost_per_kwh: float
-) -> Dict:
+) -> Optional[Dict]:
     """
     Calculate cumulative energy consumption data for charting.
 
     Args:
         db: Database session
-        device_id: Tapo device ID
+        device_id: Smart device ID
         period: 'today', 'week', or 'month'
         cost_per_kwh: Cost per kWh for cost calculation
 
     Returns:
-        Dict with device info, totals, and data_points array
+        Dict with device info, totals, and data_points array, or None if device not found
     """
-    # Get device
-    device = db.query(TapoDevice).filter(TapoDevice.id == device_id).first()
+    device = db.query(SmartDevice).filter(SmartDevice.id == device_id).first()
     if not device:
         return None
 
-    # Determine time range
     now = datetime.now(timezone.utc)
     if period == "today":
         start_time = now.replace(hour=0, minute=0, second=0, microsecond=0)
     elif period == "week":
         start_time = now - timedelta(days=now.weekday())
         start_time = start_time.replace(hour=0, minute=0, second=0, microsecond=0)
-    else:  # month
+    else:
         start_time = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
 
-    # Query samples ordered by timestamp
-    samples = db.query(PowerSample).filter(
+    samples = db.query(SmartDeviceSample).filter(
         and_(
-            PowerSample.device_id == device_id,
-            PowerSample.timestamp >= start_time,
-            PowerSample.timestamp <= now,
-            PowerSample.is_online == True
+            SmartDeviceSample.device_id == device_id,
+            SmartDeviceSample.capability == _POWER_CAPABILITY,
+            SmartDeviceSample.timestamp >= start_time,
+            SmartDeviceSample.timestamp <= now,
         )
-    ).order_by(PowerSample.timestamp).all()
+    ).order_by(SmartDeviceSample.timestamp).all()
 
-    if not samples:
+    # Parse and filter online samples
+    parsed_samples = []
+    for s in samples:
+        p = _parse_power_from_sample(s.data_json)
+        if p is not None and p["is_online"]:
+            parsed_samples.append({"timestamp": s.timestamp, **p})
+
+    if not parsed_samples:
         return {
             "device_id": device_id,
             "device_name": device.name,
@@ -383,29 +429,27 @@ def get_cumulative_energy_data(
     data_points = []
     cumulative_wh = 0.0
 
-    for i, sample in enumerate(samples):
+    for i, sample in enumerate(parsed_samples):
         if i > 0:
-            prev_sample = samples[i - 1]
-            time_diff_hours = (sample.timestamp - prev_sample.timestamp).total_seconds() / 3600
-            # Trapezoidal rule: average power * time
-            avg_power = (prev_sample.watts + sample.watts) / 2
+            prev = parsed_samples[i - 1]
+            time_diff_hours = (sample["timestamp"] - prev["timestamp"]).total_seconds() / 3600
+            avg_power = (prev["watts"] + sample["watts"]) / 2
             cumulative_wh += avg_power * time_diff_hours
 
         cumulative_kwh = cumulative_wh / 1000
         cumulative_cost = cumulative_kwh * cost_per_kwh
 
         data_points.append({
-            "timestamp": sample.timestamp.isoformat(),
+            "timestamp": sample["timestamp"].isoformat(),
             "cumulative_kwh": round(cumulative_kwh, 4),
             "cumulative_cost": round(cumulative_cost, 4),
-            "instant_watts": round(sample.watts, 1)
+            "instant_watts": round(sample["watts"], 1)
         })
 
-    # Downsample if too many points (target ~100-200 points for smooth chart)
+    # Downsample if too many points
     max_points = 200
     if len(data_points) > max_points:
         step = len(data_points) // max_points
-        # Always include first and last point
         downsampled = [data_points[0]]
         for i in range(step, len(data_points) - 1, step):
             downsampled.append(data_points[i])
