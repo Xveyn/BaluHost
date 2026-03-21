@@ -10,6 +10,7 @@ import { useAuth } from '../contexts/AuthContext';
 import { usePlugins } from '../contexts/PluginContext';
 import { loadPluginComponent, loadPluginStyles } from '../lib/pluginLoader';
 import { AlertTriangle, Plug } from 'lucide-react';
+import { PluginBadge } from './ui/PluginBadge';
 
 interface PluginUser {
   id: number;
@@ -146,9 +147,15 @@ export default function PluginPage() {
     );
   }
 
+  const displayName = pluginInfo?.display_name ?? pluginName ?? '';
+
   // Render the plugin component with user context
   return (
     <div className="plugin-container">
+      <div className="mb-6 flex items-center gap-3">
+        <h1 className="text-2xl font-semibold text-white">{displayName}</h1>
+        <PluginBadge pluginName={displayName} size="md" className="ml-2" />
+      </div>
       <Suspense
         fallback={
           <div className="flex items-center justify-center h-64">

@@ -4,6 +4,7 @@ import { useTranslation } from 'react-i18next';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
 import { AdminBadge } from './ui/AdminBadge';
+import { PluginBadge } from './ui/PluginBadge';
 import { DeveloperBadge } from './ui/DeveloperBadge';
 import { usePlugins } from '../contexts/PluginContext';
 import { useFormattedVersion } from '../contexts/VersionContext';
@@ -25,6 +26,7 @@ interface NavItem {
   description: string;
   icon: React.ReactNode;
   adminOnly?: boolean;
+  isPlugin?: boolean;
 }
 
 const navIcon = {
@@ -279,7 +281,8 @@ export default function Layout({ children }: LayoutProps) {
       label: resolvePluginString((item as any)._translations, `nav.${item.label}`, item.label),
       description: 'Plugin',
       icon: <Plug className="h-5 w-5" />,
-      adminOnly: item.admin_only
+      adminOnly: item.admin_only,
+      isPlugin: true
     }));
 
   // Filter nav items based on user role (and device mode)
@@ -352,6 +355,7 @@ export default function Layout({ children }: LayoutProps) {
                         <span className="flex items-center gap-2">
                           {item.label}
                           {item.adminOnly && <AdminBadge />}
+                          {item.isPlugin && <PluginBadge />}
                         </span>
                         <span className="text-xs text-slate-100-tertiary">{item.description}</span>
                       </div>
@@ -439,6 +443,7 @@ export default function Layout({ children }: LayoutProps) {
                         <span className="flex items-center gap-2">
                           {item.label}
                           {item.adminOnly && <AdminBadge />}
+                          {item.isPlugin && <PluginBadge />}
                         </span>
                         <span className="text-xs text-slate-100-tertiary">{item.description}</span>
                       </div>
