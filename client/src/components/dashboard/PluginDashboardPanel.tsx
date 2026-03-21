@@ -7,6 +7,7 @@
  */
 
 import { useState, useEffect, useRef, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../../contexts/AuthContext';
 import { buildApiUrl, apiClient } from '../../lib/api';
 import * as LucideIcons from 'lucide-react';
@@ -30,8 +31,14 @@ interface PanelSpec {
 
 const REST_POLL_INTERVAL = 10_000; // 10s fallback when WS is down
 
+// Plugin name → navigation target when panel is clicked
+const PANEL_CLICK_TARGETS: Record<string, string> = {
+  tapo_smart_plug: '/system-monitor?tab=power',
+};
+
 export const PluginDashboardPanel: React.FC = () => {
   const { token } = useAuth();
+  const navigate = useNavigate();
   const [panel, setPanel] = useState<PanelSpec | null>(null);
   const [loaded, setLoaded] = useState(false);
   const wsRef = useRef<WebSocket | null>(null);
@@ -140,10 +147,14 @@ export const PluginDashboardPanel: React.FC = () => {
     || (LucideIcons.Plug as unknown as React.FC<{ className?: string }>);
   const iconElement = <IconComponent className="h-6 w-6" />;
 
+  const clickTarget = PANEL_CLICK_TARGETS[panel.plugin_name];
+  const handleClick = clickTarget ? () => navigate(clickTarget) : undefined;
+
   const rendererProps = {
     title: resolvePluginString(panel.translations, 'panel_title', panel.title),
     icon: iconElement,
     accent: panel.accent,
+    onClick: handleClick,
   };
 
   switch (panel.panel_type) {
