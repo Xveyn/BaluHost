@@ -6,7 +6,7 @@
  * - Sub-tabs within each category
  */
 
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { Cpu, ArrowLeftRight, Settings, FileText, Terminal, Clock } from 'lucide-react';
@@ -25,6 +25,7 @@ import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
 import { UptimeTab } from '../components/system-monitor/UptimeTab';
 import { useAuth } from '../contexts/AuthContext';
+import { smartDevicesApi } from '../api/smart-devices';
 
 type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'uptime' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
@@ -43,7 +44,7 @@ interface CategoryConfig {
   tabs: TabConfig[];
 }
 
-const CATEGORIES: CategoryConfig[] = [
+const BASE_CATEGORIES: CategoryConfig[] = [
   {
     id: 'hardware',
     labelKey: 'monitor.categories.hardware',
@@ -175,14 +176,6 @@ const CATEGORIES: CategoryConfig[] = [
   },
 ];
 
-// Auto-generated lookup: tab → category
-const TAB_TO_CATEGORY: Record<TabType, CategoryType> = Object.fromEntries(
-  CATEGORIES.flatMap((cat) => cat.tabs.map((tab) => [tab.id, cat.id]))
-) as Record<TabType, CategoryType>;
-
-// All valid tab IDs for validation
-const VALID_TABS = new Set(CATEGORIES.flatMap((cat) => cat.tabs.map((tab) => tab.id)));
-
 // Tabs that show the TimeRangeSelector
 const METRIC_TABS = new Set<TabType>(['cpu', 'memory', 'network', 'disk-io', 'uptime']);
 
@@ -192,21 +185,70 @@ export default function SystemMonitor() {
   const { user, isAdmin } = useAuth();
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
+  const [hasPowerMonitoring, setHasPowerMonitoring] = useState(false);
+
+  // Check if any active smart device has power_monitor capability
+  useEffect(() => {
+    const check = () => {
+      smartDevicesApi.list().then(res => {
+        const has = (res.data.devices ?? []).some(
+          (d: any) => d.is_active && d.capabilities?.includes('power_monitor')
+        );
+        setHasPowerMonitoring(has);
+      }).catch(() => setHasPowerMonitoring(false));
+    };
+    check();
+    const interval = setInterval(check, 30000);
+    return () => clearInterval(interval);
+  }, []);
+
+  // Dynamic categories: hide 'power' tab when no power-monitoring plugin is active
+  const categories = useMemo(() => {
+    return BASE_CATEGORIES.map(cat => {
+      if (cat.id === 'hardware') {
+        return {
+          ...cat,
+          tabs: cat.tabs.filter(tab => {
+            if (tab.id === 'power') return hasPowerMonitoring;
+            return true;
+          }),
+        };
+      }
+      return cat;
+    });
+  }, [hasPowerMonitoring]);
+
+  // Dynamic valid tabs set
+  const validTabs = useMemo(
+    () => new Set(categories.flatMap(cat => cat.tabs.map(tab => tab.id))),
+    [categories]
+  );
+
+  // Dynamic tab-to-category mapping
+  const tabToCategory = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const cat of categories) {
+      for (const tab of cat.tabs) {
+        map[tab.id] = cat.id;
+      }
+    }
+    return map;
+  }, [categories]);
 
   // Get active tab from URL, default to 'cpu'
   const rawTab = searchParams.get('tab') || 'cpu';
-  const activeTab = (VALID_TABS.has(rawTab as TabType) ? rawTab : 'cpu') as TabType;
+  const activeTab = (validTabs.has(rawTab as TabType) ? rawTab : 'cpu') as TabType;
 
   // Derive active category from active tab
-  const activeCategory = TAB_TO_CATEGORY[activeTab];
+  const activeCategory = tabToCategory[activeTab];
 
   // Filter categories based on admin status (hide category if all its tabs are adminOnly)
   const visibleCategories = useMemo(() => {
-    return CATEGORIES.map((cat) => ({
+    return categories.map((cat) => ({
       ...cat,
       tabs: cat.tabs.filter((tab) => !tab.adminOnly || isAdmin),
     })).filter((cat) => cat.tabs.length > 0);
-  }, [isAdmin]);
+  }, [isAdmin, categories]);
 
   const activeCategoryConfig = visibleCategories.find((c) => c.id === activeCategory)
     ?? visibleCategories[0];
