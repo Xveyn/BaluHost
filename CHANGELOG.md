@@ -7,6 +7,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.18.0] - 2026-03-22
+
+### Added
+- **Plugin Badge System** — purple "Plugin" badge on plugin-contributed pages, nav items, and sections (like AdminBadge but for plugins)
+- **Plugin Settings UI** — dynamic settings form in plugin detail sidebar, rendered from plugin's JSON Schema config
+- **Tapo Plugin Config** — `panel_devices` setting to select which devices appear in dashboard panel, third-party compatibility hint
+- **Power Graph Device Tabs** — switch between "Total" (aggregated) and individual device views in System Monitor Power tab
+- **Aggregated Energy Endpoint** — `GET /api/energy/cumulative/total` sums energy data across all power-monitoring devices
+- **Conditional PowerTab** — Power tab in System Monitor only visible when a plugin with `power_monitor` capability is active
+- **Dashboard Panel Navigation** — clicking the Tapo power panel navigates to System Monitor Power tab
+- **plugp100 Monkey-Patch** — workaround for `InvalidAuthentication` super() bug in plugp100 v5.x
+
+### Changed
+- Plugin documentation rewritten for hobby developers (friendlier tone, clearer explanations, EN + DE)
+- Smart device auth errors now show "Authentication failed" instead of cryptic "Library error: super() argument 1 must be a type, not str"
+
+### Fixed
+- PowerTab field name alignment with SmartDevice state format (`watts`/`current`/`energy_today_kwh`)
+- PostgreSQL RETURNING clause compatibility in migration
+- Multi-worker plugin registration (lazy-sync across Uvicorn workers, catch duplicate Pluggy registration)
+- Capabilities JSON string deserialization from some DB drivers
+- plugp100 `InvalidAuthentication` auth error handling across poll, turn_on, turn_off, get_power
+
+---
+
 ## [1.17.0] - 2026-03-19
 
 ### Added
