@@ -42,6 +42,10 @@ logger = logging.getLogger(__name__)
 
 def _device_to_response(device, state=None) -> SmartDeviceResponse:
     """Convert a SmartDevice ORM instance to SmartDeviceResponse."""
+    # capabilities may come back as a JSON string from some DB drivers
+    caps = device.capabilities or []
+    if isinstance(caps, str):
+        caps = json.loads(caps)
     return SmartDeviceResponse(
         id=device.id,
         name=device.name,
@@ -49,7 +53,7 @@ def _device_to_response(device, state=None) -> SmartDeviceResponse:
         device_type_id=device.device_type_id,
         address=device.address,
         mac_address=device.mac_address,
-        capabilities=device.capabilities or [],
+        capabilities=caps,
         is_active=device.is_active,
         is_online=device.is_online,
         last_seen=device.last_seen,

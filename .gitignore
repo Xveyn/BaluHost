@@ -105,3 +105,4 @@ balupi-deploy*
 backend/baluhost.db.backup-*
 backend/benchmark_results/
 backend/dev-backups/
+backups/

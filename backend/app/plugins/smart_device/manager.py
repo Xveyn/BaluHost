@@ -496,5 +496,45 @@ class SmartDeviceManager:
 # ---------------------------------------------------------------------------
 
 def get_smart_device_manager() -> SmartDeviceManager:
-    """Return the process-level SmartDeviceManager singleton."""
-    return SmartDeviceManager.get_instance()
+    """Return the process-level SmartDeviceManager singleton.
+
+    Performs a lazy sync: if the DB has enabled smart_device plugins that this
+    worker doesn't know about (e.g. plugin toggled on via a different Uvicorn
+    worker), the plugin is loaded and registered here on demand.
+    """
+    mgr = SmartDeviceManager.get_instance()
+
+    # Lazy-sync: load + register missing smart_device plugins from DB
+    try:
+        from app.plugins.manager import PluginManager
+        from app.plugins.smart_device.base import SmartDevicePlugin as _SDP
+        from app.models.plugin import InstalledPlugin
+        from app.core.database import SessionLocal
+
+        pm = PluginManager.get_instance()
+
+        with SessionLocal() as db:
+            enabled_records = (
+                db.query(InstalledPlugin)
+                .filter(InstalledPlugin.is_enabled == True)
+                .all()
+            )
+
+        for record in enabled_records:
+            if record.name in mgr._plugins:
+                continue
+
+            # Load plugin instance (sync, no async needed)
+            plugin = pm.get_plugin(record.name)
+            if plugin is None:
+                try:
+                    plugin = pm.load_plugin(record.name)
+                except Exception:
+                    continue
+
+            if isinstance(plugin, _SDP):
+                mgr.register_plugin(plugin)
+    except Exception:
+        pass
+
+    return mgr

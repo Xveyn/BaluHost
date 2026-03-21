@@ -244,8 +244,11 @@ class PluginManager:
             # Call startup hook
             await plugin.on_startup()
 
-            # Register with Pluggy hook manager
-            self._hook_manager.register(plugin)
+            # Register with Pluggy hook manager (skip if already registered)
+            try:
+                self._hook_manager.register(plugin)
+            except ValueError:
+                pass  # Already registered from a previous enable cycle
 
             # Register event handlers
             event_handlers = plugin.get_event_handlers()
