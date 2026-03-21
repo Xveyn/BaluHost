@@ -223,11 +223,11 @@ export function PowerTab() {
 
       {/* Per-device stats */}
       {devices.map((device) => {
-        const pm = device.state?.power_monitor as { current_power?: number; voltage?: number; current_ma?: number; energy_today_wh?: number } | undefined;
-        const watts = pm?.current_power;
+        const pm = device.state?.power_monitor as { watts?: number; current_power?: number; voltage?: number; current?: number; current_ma?: number; energy_today_kwh?: number; energy_today_wh?: number } | undefined;
+        const watts = pm?.watts ?? pm?.current_power;
         const voltage = pm?.voltage;
-        const currentA = pm?.current_ma != null ? pm.current_ma / 1000 : undefined;
-        const energyToday = pm?.energy_today_wh != null ? pm.energy_today_wh / 1000 : undefined;
+        const currentA = pm?.current ?? (pm?.current_ma != null ? pm.current_ma / 1000 : undefined);
+        const energyToday = pm?.energy_today_kwh ?? (pm?.energy_today_wh != null ? pm.energy_today_wh / 1000 : undefined);
 
         return (
           <div key={device.id} className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
