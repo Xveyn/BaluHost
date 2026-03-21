@@ -21,6 +21,7 @@ import {
 import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen, LayoutDashboard } from 'lucide-react';
 import { resolvePluginString } from '../lib/pluginI18n';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
+import { PluginSettingsSection } from '../components/plugins/PluginSettingsSection';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
 type TabType = 'plugins' | 'documentation';
@@ -421,6 +422,16 @@ export default function PluginsPage() {
                     </button>
                   </div>
                 </div>
+              )}
+
+              {/* Plugin Settings Section */}
+              {selectedPlugin?.config_schema && selectedPlugin.is_enabled && (
+                <PluginSettingsSection
+                  pluginName={selectedPlugin.name}
+                  configSchema={selectedPlugin.config_schema}
+                  config={selectedPlugin.config ?? {}}
+                  translations={selectedPlugin.translations}
+                />
               )}
 
               {/* Actions Card */}
