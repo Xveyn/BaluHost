@@ -469,3 +469,90 @@ def get_cumulative_energy_data(
         "total_cost": round(total_cost, 2),
         "data_points": data_points
     }
+
+
+def get_cumulative_energy_total(
+    db: Session,
+    period: str,
+    cost_per_kwh: float,
+) -> Dict:
+    """
+    Aggregate cumulative energy across all active power-monitoring devices.
+
+    Args:
+        db: Database session
+        period: 'today', 'week', or 'month'
+        cost_per_kwh: Cost per kWh for cost calculation
+
+    Returns:
+        Dict with aggregated totals and data_points array
+    """
+    # Fetch all active devices, filter for power_monitor capability in Python
+    all_devices = db.query(SmartDevice).filter(
+        SmartDevice.is_active == True,  # noqa: E712
+    ).all()
+    power_devices = [
+        d for d in all_devices
+        if isinstance(d.capabilities, list) and _POWER_CAPABILITY in d.capabilities
+    ]
+
+    empty_result = {
+        "device_id": 0,
+        "device_name": "Total",
+        "period": period,
+        "cost_per_kwh": cost_per_kwh,
+        "currency": "EUR",
+        "total_kwh": 0.0,
+        "total_cost": 0.0,
+        "data_points": [],
+    }
+
+    if not power_devices:
+        return empty_result
+
+    # Collect instant_watts per timestamp from all devices
+    watts_by_ts: Dict[str, float] = {}
+    for device in power_devices:
+        device_data = get_cumulative_energy_data(db, device.id, period, cost_per_kwh)
+        if device_data is None:
+            continue
+        for point in device_data.get("data_points", []):
+            ts = point["timestamp"]
+            watts_by_ts[ts] = watts_by_ts.get(ts, 0.0) + point["instant_watts"]
+
+    if not watts_by_ts:
+        return empty_result
+
+    # Re-compute cumulative via trapezoidal integration on summed watts
+    sorted_ts = sorted(watts_by_ts.keys())
+    data_points = []
+    cumulative_wh = 0.0
+
+    for i, ts in enumerate(sorted_ts):
+        if i > 0:
+            prev_ts = sorted_ts[i - 1]
+            t0 = datetime.fromisoformat(prev_ts)
+            t1 = datetime.fromisoformat(ts)
+            hours = (t1 - t0).total_seconds() / 3600
+            avg_watts = (watts_by_ts[prev_ts] + watts_by_ts[ts]) / 2
+            cumulative_wh += avg_watts * hours
+
+        cumulative_kwh = cumulative_wh / 1000
+        data_points.append({
+            "timestamp": ts,
+            "cumulative_kwh": round(cumulative_kwh, 4),
+            "cumulative_cost": round(cumulative_kwh * cost_per_kwh, 4),
+            "instant_watts": round(watts_by_ts[ts], 1),
+        })
+
+    total_kwh = cumulative_wh / 1000
+    return {
+        "device_id": 0,
+        "device_name": "Total",
+        "period": period,
+        "cost_per_kwh": cost_per_kwh,
+        "currency": "EUR",
+        "total_kwh": round(total_kwh, 3),
+        "total_cost": round(total_kwh * cost_per_kwh, 2),
+        "data_points": data_points,
+    }

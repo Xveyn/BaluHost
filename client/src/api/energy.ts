@@ -145,3 +145,12 @@ export async function getCumulativeEnergy(
   );
   return response.data;
 }
+
+export async function getCumulativeEnergyTotal(
+  period: 'today' | 'week' | 'month' = 'today'
+): Promise<CumulativeEnergyResponse> {
+  const response = await apiClient.get<CumulativeEnergyResponse>(
+    `/api/energy/cumulative/total?period=${period}`
+  );
+  return response.data;
+}

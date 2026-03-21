@@ -352,6 +352,44 @@ async def update_energy_price(
     return EnergyPriceConfigRead.model_validate(config)
 
 
+@router.get("/cumulative/total", response_model=CumulativeEnergyResponse)
+@user_limiter.limit(get_limit("system_monitor"))
+async def get_cumulative_energy_total(
+    request: Request, response: Response,
+    period: str = Query("today", pattern="^(today|week|month)$"),
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> CumulativeEnergyResponse:
+    """
+    Get aggregated cumulative energy across all power-monitoring devices.
+
+    Returns combined data points with cumulative kWh and cost over time.
+
+    Args:
+        period: 'today', 'week', or 'month'
+    """
+    price_config = energy_stats.get_energy_price_config(db)
+    cost_per_kwh = price_config.cost_per_kwh
+    result = energy_stats.get_cumulative_energy_total(db, period, cost_per_kwh)
+
+    # Update currency from config
+    result["currency"] = price_config.currency
+
+    # Convert data points to schema
+    data_points = [CumulativeDataPoint(**dp) for dp in result["data_points"]]
+
+    return CumulativeEnergyResponse(
+        device_id=result["device_id"],
+        device_name=result["device_name"],
+        period=result["period"],
+        cost_per_kwh=result["cost_per_kwh"],
+        currency=result["currency"],
+        total_kwh=result["total_kwh"],
+        total_cost=result["total_cost"],
+        data_points=data_points,
+    )
+
+
 @router.get("/cumulative/{device_id}", response_model=CumulativeEnergyResponse)
 @user_limiter.limit(get_limit("system_monitor"))
 async def get_cumulative_energy(
