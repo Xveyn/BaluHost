@@ -159,7 +159,8 @@
       "costsLabel": "Kosten",
       "priceMustBeBetween": "Preis muss zwischen 0.01 und 10.00 liegen",
       "priceUpdated": "Strompreis aktualisiert",
-      "saveError": "Fehler beim Speichern"
+      "saveError": "Fehler beim Speichern",
+      "total": "Gesamt"
     }
   },
   "logging": {

@@ -26,6 +26,7 @@ import {
   getEnergyPriceConfig,
   updateEnergyPriceConfig,
   getCumulativeEnergy,
+  getCumulativeEnergyTotal,
   type EnergyPriceConfig,
   type CumulativeEnergyResponse,
 } from '../../api/energy';
@@ -89,21 +90,14 @@ export function PowerTab() {
     fetchPriceConfig();
   }, []);
 
-  // Set device ID when devices become available
-  useEffect(() => {
-    if (devices.length > 0 && !selectedDeviceId) {
-      setSelectedDeviceId(devices[0].id);
-    }
-  }, [devices, selectedDeviceId]);
-
   // Fetch cumulative data with separate interval (60s - matches DB write interval)
   useEffect(() => {
-    if (!selectedDeviceId) return;
-
     const fetchCumulative = async () => {
       setCumulativeLoading(true);
       try {
-        const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
+        const data = selectedDeviceId === null
+          ? await getCumulativeEnergyTotal(cumulativePeriod)
+          : await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
         setCumulativeData(data);
       } catch {
         // Non-critical: cumulative data will remain null
@@ -137,10 +131,10 @@ export function PowerTab() {
       setEditingPrice(false);
       toast.success(t('monitor.power.priceUpdated'));
       // Refresh cumulative data with new price
-      if (selectedDeviceId) {
-        const data = await getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
-        setCumulativeData(data);
-      }
+      const refreshData = selectedDeviceId === null
+        ? getCumulativeEnergyTotal(cumulativePeriod)
+        : getCumulativeEnergy(selectedDeviceId, cumulativePeriod);
+      setCumulativeData(await refreshData);
     } catch (err: unknown) {
       toast.error(getApiErrorMessage(err, t('monitor.power.saveError')));
     } finally {
@@ -269,6 +263,35 @@ export function PowerTab() {
 
       {/* Cumulative Energy Chart Section */}
       <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        {/* Device tabs for chart */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-2">
+          <button
+            onClick={() => setSelectedDeviceId(null)}
+            className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+              selectedDeviceId === null
+                ? 'bg-blue-600 text-white'
+                : 'bg-gray-700/50 text-gray-400 hover:text-gray-200'
+            }`}
+          >
+            {t('monitor.power.total')}
+          </button>
+          {devices
+            .filter(d => d.is_active && d.capabilities?.includes('power_monitor'))
+            .map(device => (
+              <button
+                key={device.id}
+                onClick={() => setSelectedDeviceId(device.id)}
+                className={`shrink-0 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                  selectedDeviceId === device.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-gray-700/50 text-gray-400 hover:text-gray-200'
+                }`}
+              >
+                {device.name}
+              </button>
+            ))}
+        </div>
+
         {/* Header with Price Config */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">

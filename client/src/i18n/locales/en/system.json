@@ -159,7 +159,8 @@
       "costsLabel": "Costs",
       "priceMustBeBetween": "Price must be between 0.01 and 10.00",
       "priceUpdated": "Electricity price updated",
-      "saveError": "Failed to save"
+      "saveError": "Failed to save",
+      "total": "Total"
     }
   },
   "logging": {
