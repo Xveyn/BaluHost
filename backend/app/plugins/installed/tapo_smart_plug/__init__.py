@@ -17,6 +17,8 @@ import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Optional
 
+from pydantic import BaseModel, Field
+
 from app.plugins.base import DashboardPanelSpec, PluginMetadata
 from app.plugins.smart_device.base import DeviceTypeInfo, SmartDevicePlugin
 from app.services.monitoring.shm import SMART_DEVICES_FILE, read_shm
@@ -27,6 +29,17 @@ from app.plugins.smart_device.capabilities import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class TapoPluginConfig(BaseModel):
+    """Configuration schema for the Tapo Smart Plug plugin."""
+
+    panel_devices: List[int] = Field(
+        default_factory=list,
+        title="Dashboard Panel Devices",
+        description="Devices shown in the dashboard power panel",
+        json_schema_extra={"x-options-source": "smart-devices"},
+    )
 
 
 @dataclass
@@ -126,13 +139,24 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
                 "display_name": "Tapo Smart Plug",
                 "description": "TP-Link Tapo P110/P115 smart plug integration with power monitoring",
                 "panel_title": "Power Monitoring",
+                "settings_panel_devices": "Dashboard Panel Devices",
+                "settings_third_party_hint": "Enable \"Third-Party Compatibility\" in the Tapo app for each device. Without this, the device may not respond.",
             },
             "de": {
                 "display_name": "Tapo Steckdose",
                 "description": "TP-Link Tapo P110/P115 Steckdosen-Integration mit Leistungsüberwachung",
                 "panel_title": "Stromverbrauch",
+                "settings_panel_devices": "Dashboard-Panel Geräte",
+                "settings_third_party_hint": "Aktiviere \"Drittanbieter-Kompatibilität\" in der Tapo App für jedes Gerät. Ohne diese Einstellung antwortet das Gerät möglicherweise nicht.",
             },
         }
+
+    # ------------------------------------------------------------------
+    # Configuration schema
+    # ------------------------------------------------------------------
+
+    def get_config_schema(self) -> Optional[type]:
+        return TapoPluginConfig
 
     # ------------------------------------------------------------------
     # Dashboard Panel
@@ -156,7 +180,20 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
         - progress: percentage of assumed max power (default 150W)
         - delta + delta_tone: "live" (trend from SHM)
         """
+        from app.models.plugin import InstalledPlugin
         from app.models.smart_device import SmartDevice
+
+        # Read plugin config for panel_devices filter
+        panel_device_ids: list[int] = []
+        try:
+            record = db.query(InstalledPlugin).filter(
+                InstalledPlugin.name == "tapo_smart_plug"
+            ).first()
+            if record and record.config:
+                cfg = record.config if isinstance(record.config, dict) else json.loads(record.config)
+                panel_device_ids = cfg.get("panel_devices", [])
+        except Exception:
+            pass
 
         shm_data = read_shm(SMART_DEVICES_FILE, max_age_seconds=30.0)
         devices_shm: Dict[str, Any] = {}
@@ -164,15 +201,14 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
             devices_shm = shm_data.get("devices", {})
 
         # Get all active devices for this plugin
-        all_devices = (
-            db.query(SmartDevice)
-            .filter(
-                SmartDevice.plugin_name == "tapo_smart_plug",
-                SmartDevice.is_active == True,  # noqa: E712
-                SmartDevice.is_online == True,  # noqa: E712
-            )
-            .all()
+        query = db.query(SmartDevice).filter(
+            SmartDevice.plugin_name == "tapo_smart_plug",
+            SmartDevice.is_active == True,  # noqa: E712
+            SmartDevice.is_online == True,  # noqa: E712
         )
+        if panel_device_ids:
+            query = query.filter(SmartDevice.id.in_(panel_device_ids))
+        all_devices = query.all()
 
         total_watts = 0.0
         total_energy_kwh = 0.0
@@ -211,8 +247,47 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
     # ------------------------------------------------------------------
 
     async def on_startup(self) -> None:
-        """Initialize the service layer (lazy, no-op here)."""
+        """Initialize the service layer and patch known library bugs."""
+        self._patch_plugp100_bugs()
         logger.info("TapoSmartPlugPlugin started")
+
+    # ------------------------------------------------------------------
+    # Library bug workarounds
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _patch_plugp100_bugs() -> None:
+        """Monkey-patch plugp100 v5.1.5 InvalidAuthentication bug.
+
+        The library's ``InvalidAuthentication.__init__`` calls
+        ``super(f"...")`` instead of ``super().__init__(f"...")``,
+        causing ``TypeError: super() argument 1 must be a type, not str``
+        whenever a device rejects authentication.  This patch fixes the
+        broken ``__init__`` so the real auth error propagates correctly.
+        """
+        try:
+            from plugp100.new.errors.invalid_authentication import (
+                InvalidAuthentication,
+            )
+
+            original_init = InvalidAuthentication.__init__
+
+            # Only patch if the bug is still present
+            try:
+                InvalidAuthentication("test", "test")
+            except TypeError:
+                def _fixed_init(self: Exception, host: str, device_type: str) -> None:
+                    super(InvalidAuthentication, self).__init__(
+                        f"Invalid authentication error for {host}, {device_type}"
+                    )
+
+                InvalidAuthentication.__init__ = _fixed_init  # type: ignore[assignment]
+                logger.debug("Patched plugp100 InvalidAuthentication bug")
+            except Exception:
+                # Bug already fixed in newer version — no patch needed
+                pass
+        except ImportError:
+            pass  # plugp100 not installed (dev mode)
 
     async def on_shutdown(self) -> None:
         """Clean up cached clients on shutdown."""
