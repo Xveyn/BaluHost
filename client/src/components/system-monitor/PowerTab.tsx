@@ -31,12 +31,15 @@ import {
   type CumulativeEnergyResponse,
 } from '../../api/energy';
 import { StatCard } from '../ui/StatCard';
+import { PluginBadge } from '../ui/PluginBadge';
 import { formatNumber } from '../../lib/formatters';
+import { usePlugins } from '../../contexts/PluginContext';
 
 type CumulativePeriod = 'today' | 'week' | 'month';
 
 export function PowerTab() {
   const { t, i18n } = useTranslation(['system', 'common']);
+  const { plugins } = usePlugins();
   const [devices, setDevices] = useState<SmartDevice[]>([]);
   const [powerSummary, setPowerSummary] = useState<PowerSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -149,6 +152,9 @@ export function PowerTab() {
   }, [fetchPower]);
 
   const totalCurrentPower = powerSummary?.total_watts ?? 0;
+  const powerPluginName = devices.length > 0
+    ? plugins.find(p => p.name === devices[0].plugin_name)?.display_name
+    : undefined;
 
   if (loading) {
     return (
@@ -295,8 +301,9 @@ export function PowerTab() {
         {/* Header with Price Config */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
           <div className="flex items-center gap-3">
-            <h3 className="text-base sm:text-lg font-semibold text-white">
+            <h3 className="text-base sm:text-lg font-semibold text-white flex items-center">
               {t('monitor.power.cumulativeConsumptionCosts')}
+              <PluginBadge pluginName={powerPluginName} size="sm" className="ml-2" />
             </h3>
             {priceConfig && (
               <div className="flex items-center gap-2">
