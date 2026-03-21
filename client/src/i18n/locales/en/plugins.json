@@ -143,6 +143,12 @@
     "on_vpn_client_created": "Triggered when a VPN client is created",
     "on_vpn_client_revoked": "Triggered when a VPN client is revoked"
   },
+  "settings": {
+    "title": "Plugin Settings",
+    "save": "Save Settings",
+    "saved": "Settings saved",
+    "saveError": "Failed to save settings"
+  },
   "permissionDescriptions": {
     "file:read": "Read files from storage",
     "file:write": "Write and modify files in storage",

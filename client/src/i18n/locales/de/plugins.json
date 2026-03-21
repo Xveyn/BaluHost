@@ -143,6 +143,12 @@
     "on_vpn_client_created": "Wird ausgelöst wenn ein VPN-Client erstellt wird",
     "on_vpn_client_revoked": "Wird ausgelöst wenn ein VPN-Client widerrufen wird"
   },
+  "settings": {
+    "title": "Plugin-Einstellungen",
+    "save": "Einstellungen speichern",
+    "saved": "Einstellungen gespeichert",
+    "saveError": "Einstellungen konnten nicht gespeichert werden"
+  },
   "permissionDescriptions": {
     "file:read": "Dateien aus dem Speicher lesen",
     "file:write": "Dateien im Speicher schreiben und ändern",
