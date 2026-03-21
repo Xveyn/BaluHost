@@ -33,7 +33,7 @@ const REST_POLL_INTERVAL = 10_000; // 10s fallback when WS is down
 
 // Plugin name → navigation target when panel is clicked
 const PANEL_CLICK_TARGETS: Record<string, string> = {
-  tapo_smart_plug: '/system-monitor?tab=power',
+  tapo_smart_plug: '/system?tab=power',
 };
 
 export const PluginDashboardPanel: React.FC = () => {
