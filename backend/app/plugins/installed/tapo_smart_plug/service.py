@@ -22,6 +22,15 @@ logger = logging.getLogger(__name__)
 _DEVICE_TIMEOUT = 10.0
 
 
+def _is_auth_error(exc: Exception) -> bool:
+    """Check if *exc* is a plugp100 InvalidAuthentication error."""
+    try:
+        from plugp100.new.errors.invalid_authentication import InvalidAuthentication
+        return isinstance(exc, InvalidAuthentication)
+    except ImportError:
+        return False
+
+
 class TapoService:
     """Handles real plugp100 communication for Tapo smart plugs.
 
@@ -245,7 +254,7 @@ class TapoService:
             raise RuntimeError(f"Timeout polling device {device_id}")
 
         except TypeError as exc:
-            # Handle plugp100 library bugs (e.g., super() argument error)
+            # plugp100 bugs (e.g. InvalidAuthentication's broken super())
             logger.warning("Tapo library error for device %s (%s): %s", device_id, ip, exc)
             self._evict(device_id, ip)
             raise RuntimeError(f"Library error: {exc}")
@@ -260,6 +269,12 @@ class TapoService:
             raise
 
         except Exception as exc:
+            # After monkey-patch, InvalidAuthentication propagates correctly
+            if _is_auth_error(exc):
+                logger.warning("Authentication failed for Tapo device %s (%s)", device_id, ip)
+                self._evict(device_id, ip)
+                raise RuntimeError(f"Authentication failed for device {device_id}")
+
             error_str = str(exc)
             known_errors = [
                 "Cannot write", "Connection", "Errno", "Forbidden",
@@ -294,6 +309,10 @@ class TapoService:
             return self._extract_switch_state(device)
 
         except Exception as exc:
+            if _is_auth_error(exc):
+                logger.warning("Authentication failed for Tapo device %s (%s)", device_id, ip)
+                self._evict(device_id, ip)
+                raise RuntimeError(f"Authentication failed for device {device_id}")
             logger.warning("Failed to turn on Tapo device %s: %s", device_id, exc)
             self._evict(device_id, ip)
             raise RuntimeError(f"Turn on failed: {exc}")
@@ -320,6 +339,10 @@ class TapoService:
             return self._extract_switch_state(device)
 
         except Exception as exc:
+            if _is_auth_error(exc):
+                logger.warning("Authentication failed for Tapo device %s (%s)", device_id, ip)
+                self._evict(device_id, ip)
+                raise RuntimeError(f"Authentication failed for device {device_id}")
             logger.warning("Failed to turn off Tapo device %s: %s", device_id, exc)
             self._evict(device_id, ip)
             raise RuntimeError(f"Turn off failed: {exc}")
@@ -343,6 +366,10 @@ class TapoService:
             return self._extract_power(device)
 
         except Exception as exc:
+            if _is_auth_error(exc):
+                logger.warning("Authentication failed for Tapo device %s (%s)", device_id, ip)
+                self._evict(device_id, ip)
+                raise RuntimeError(f"Authentication failed for device {device_id}")
             logger.warning("Failed to read power from Tapo device %s: %s", device_id, exc)
             self._evict(device_id, ip)
             raise RuntimeError(f"Power read failed: {exc}")

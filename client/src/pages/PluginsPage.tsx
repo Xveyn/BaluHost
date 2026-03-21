@@ -430,7 +430,7 @@ export default function PluginsPage() {
                   pluginName={selectedPlugin.name}
                   configSchema={selectedPlugin.config_schema}
                   config={selectedPlugin.config ?? {}}
-                  translations={selectedPlugin.translations}
+                  translations={selectedPlugin.translations ?? undefined}
                 />
               )}
 
