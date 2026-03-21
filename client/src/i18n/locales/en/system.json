@@ -1353,5 +1353,8 @@
     "testSendButton": "Send Test",
     "testSuccess": "Test notification sent",
     "testError": "Test notification failed"
+  },
+  "badges": {
+    "pluginProvidedBy": "Provided by {{name}}"
   }
 }
