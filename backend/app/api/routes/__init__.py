@@ -13,6 +13,7 @@ from app.api.routes import (
     balupi,
     smart_devices,
     dashboard,
+    fritzbox,
 )
 
 api_router = APIRouter()
@@ -53,6 +54,7 @@ api_router.include_router(webdav.router, tags=["webdav"])
 api_router.include_router(samba.router, tags=["samba"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
 api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])
+api_router.include_router(fritzbox.router, tags=["fritzbox"])
 api_router.include_router(api_keys.router, tags=["api-keys"])
 api_router.include_router(desktop_pairing.router, tags=["desktop-pairing"])
 api_router.include_router(ssd_file_cache.router, prefix="/ssd", tags=["ssd-cache"])

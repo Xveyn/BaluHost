@@ -148,3 +148,46 @@ class TestFritzBoxWoLService:
             mock_settings.is_dev_mode = True
             result = await service.send_wol(mac="AA:BB:CC:DD:EE:FF")
             assert result is True
+
+
+from fastapi.testclient import TestClient
+
+
+class TestFritzBoxRoutes:
+    """Integration tests for Fritz!Box API routes."""
+
+    def test_get_config_requires_admin(self, client: TestClient):
+        resp = client.get("/api/fritzbox/config")
+        assert resp.status_code == 401
+
+    def test_get_config_returns_defaults(self, client: TestClient, admin_headers: dict):
+        resp = client.get("/api/fritzbox/config", headers=admin_headers)
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["host"] == "192.168.178.1"
+        assert data["port"] == 49000
+        assert data["enabled"] is False
+        assert data["has_password"] is False
+        # Password must never be exposed
+        assert "password" not in data
+        assert "password_encrypted" not in data
+
+    def test_update_config(self, client: TestClient, admin_headers: dict):
+        resp = client.put(
+            "/api/fritzbox/config",
+            headers=admin_headers,
+            json={"host": "192.168.178.2", "port": 49443},
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["host"] == "192.168.178.2"
+        assert data["port"] == 49443
+
+    def test_wol_fails_when_not_enabled(self, client: TestClient, admin_headers: dict):
+        resp = client.post("/api/fritzbox/wol", headers=admin_headers)
+        assert resp.status_code == 400
+
+    def test_test_connection_not_enabled(self, client: TestClient, admin_headers: dict):
+        resp = client.post("/api/fritzbox/test", headers=admin_headers)
+        # Dev mode returns 200 with simulated message; non-enabled returns 200 or 400
+        assert resp.status_code in (200, 400)

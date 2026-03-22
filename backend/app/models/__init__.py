@@ -72,6 +72,7 @@ from app.models.migration_job import MigrationJob
 from app.models.pihole import PiholeConfig
 from app.models.dns_queries import DnsQuery, DnsQueryHourlyStat, DnsQueryCollectorState
 from app.models.file_activity import FileActivity
+from app.models.fritzbox import FritzBoxConfig
 
 __all__ = [
     "Base",
@@ -149,4 +150,5 @@ __all__ = [
     "DnsQueryHourlyStat",
     "DnsQueryCollectorState",
     "FileActivity",
+    "FritzBoxConfig",
 ]
