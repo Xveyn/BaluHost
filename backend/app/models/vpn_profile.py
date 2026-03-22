@@ -5,8 +5,10 @@ Stores encrypted VPN profiles (OpenVPN, WireGuard) for secure remote access.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text, Enum as SQLEnum
-from sqlalchemy.orm import relationship
+from typing import Optional
+
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Text, Enum as SQLEnum
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 import enum
 
 from app.models.base import Base
@@ -29,23 +31,23 @@ class VPNProfile(Base):
     
     __tablename__ = "vpn_profiles"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)  # e.g., "Home OpenVPN", "Office WireGuard"
-    vpn_type = Column(SQLEnum(VPNType), nullable=False)
-    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g., "Home OpenVPN", "Office WireGuard"
+    vpn_type: Mapped[VPNType] = mapped_column(SQLEnum(VPNType), nullable=False)
+
     # Encrypted configurations
-    config_file_encrypted = Column(Text, nullable=False)  # .ovpn or .conf file (encrypted)
-    certificate_encrypted = Column(Text, nullable=True)  # Client certificate (encrypted)
-    private_key_encrypted = Column(Text, nullable=True)  # Private key (encrypted)
-    
+    config_file_encrypted: Mapped[str] = mapped_column(Text, nullable=False)  # .ovpn or .conf file (encrypted)
+    certificate_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Client certificate (encrypted)
+    private_key_encrypted: Mapped[Optional[str]] = mapped_column(Text, nullable=True)  # Private key (encrypted)
+
     # Options
-    auto_connect = Column(Boolean, default=False)
-    description = Column(Text, nullable=True)
-    
+    auto_connect: Mapped[Optional[bool]] = mapped_column(default=False)
+    description: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    updated_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
     # Relationships
     user = relationship("User", back_populates="vpn_profiles")

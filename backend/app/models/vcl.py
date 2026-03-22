@@ -2,7 +2,7 @@
 from datetime import datetime
 from typing import Optional, TYPE_CHECKING
 from sqlalchemy import (
-    Column, Integer, String, Text, DateTime, Boolean, Float, BigInteger,
+    Integer, String, Text, DateTime, Boolean, Float, BigInteger,
     ForeignKey, UniqueConstraint, Index, CheckConstraint
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -48,30 +48,30 @@ class FileVersion(Base):
     """
     __tablename__ = "vcl_file_versions"
     
-    id = Column(Integer, primary_key=True, index=True)
-    file_id = Column(Integer, ForeignKey("file_metadata.id", ondelete="CASCADE"), nullable=False, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    version_number = Column(Integer, nullable=False)
-    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    file_id: Mapped[int] = mapped_column(Integer, ForeignKey("file_metadata.id", ondelete="CASCADE"), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+
     # Storage Information
-    blob_id = Column(Integer, ForeignKey("version_blobs.id", ondelete="SET NULL"), nullable=True)
-    storage_type = Column(String(20), nullable=False)  # 'stored' or 'reference'
-    file_size = Column(BigInteger, nullable=False)  # Original size (uncompressed)
-    compressed_size = Column(BigInteger, nullable=False)  # Compressed size
-    compression_ratio = Column(Float, nullable=True)  # file_size / compressed_size
-    
+    blob_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("version_blobs.id", ondelete="SET NULL"), nullable=True)
+    storage_type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'stored' or 'reference'
+    file_size: Mapped[int] = mapped_column(BigInteger, nullable=False)  # Original size (uncompressed)
+    compressed_size: Mapped[int] = mapped_column(BigInteger, nullable=False)  # Compressed size
+    compression_ratio: Mapped[Optional[float]] = mapped_column(Float, nullable=True)  # file_size / compressed_size
+
     # Checksums & Integrity
-    checksum = Column(String(64), nullable=False, index=True)  # SHA256
-    
+    checksum: Mapped[str] = mapped_column(String(64), nullable=False, index=True)  # SHA256
+
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False, index=True)
-    is_high_priority = Column(Boolean, default=False, nullable=False, index=True)
-    change_type = Column(String(20), nullable=True)  # 'create', 'update', 'overwrite', 'batched'
-    comment = Column(Text, nullable=True)
-    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False, index=True)
+    is_high_priority: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False, index=True)
+    change_type: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)  # 'create', 'update', 'overwrite', 'batched'
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
     # Caching Info
-    was_cached = Column(Boolean, default=False, nullable=False)
-    cache_duration = Column(Integer, nullable=True)  # seconds in cache
+    was_cached: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cache_duration: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)  # seconds in cache
     
     # Relationships
     file = relationship("FileMetadata", back_populates="versions")
@@ -93,32 +93,32 @@ class VCLSettings(Base):
     """
     __tablename__ = "vcl_settings"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=True, index=True)
-    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), unique=True, nullable=True, index=True)
+
     # Storage Limits
-    max_size_bytes = Column(BigInteger, default=10737418240, nullable=False)  # 10 GB
-    current_usage_bytes = Column(BigInteger, default=0, nullable=False)
-    
+    max_size_bytes: Mapped[int] = mapped_column(BigInteger, default=10737418240, nullable=False)  # 10 GB
+    current_usage_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+
     # Versioning Parameters
-    depth = Column(Integer, default=5, nullable=False)  # Max versions per file
-    headroom_percent = Column(Integer, default=10, nullable=False)
-    
+    depth: Mapped[int] = mapped_column(Integer, default=5, nullable=False)  # Max versions per file
+    headroom_percent: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+
     # Mode: 'automatic' (version all files, exclude list) or 'manual' (version only tracked files)
-    vcl_mode = Column(String(20), default="automatic", server_default="automatic", nullable=False)
+    vcl_mode: Mapped[str] = mapped_column(String(20), default="automatic", server_default="automatic", nullable=False)
 
     # Feature Flags
-    is_enabled = Column(Boolean, default=True, nullable=False)
-    compression_enabled = Column(Boolean, default=True, nullable=False)
-    dedupe_enabled = Column(Boolean, default=True, nullable=False)
-    
+    is_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    compression_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    dedupe_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+
     # Caching Parameters
-    debounce_window_seconds = Column(Integer, default=30, nullable=False)
-    max_batch_window_seconds = Column(Integer, default=300, nullable=False)
-    
+    debounce_window_seconds: Mapped[int] = mapped_column(Integer, default=30, nullable=False)
+    max_batch_window_seconds: Mapped[int] = mapped_column(Integer, default=300, nullable=False)
+
     # Timestamps
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     # Relationships
     user = relationship("User")
@@ -158,29 +158,29 @@ class VCLStats(Base):
     """
     __tablename__ = "vcl_stats"
     
-    id = Column(Integer, primary_key=True)
-    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+
     # Global Stats
-    total_versions = Column(Integer, default=0, nullable=False)
-    total_size_bytes = Column(BigInteger, default=0, nullable=False)  # Uncompressed
-    total_compressed_bytes = Column(BigInteger, default=0, nullable=False)
-    total_blobs = Column(Integer, default=0, nullable=False)
-    unique_blobs = Column(Integer, default=0, nullable=False)
-    
+    total_versions: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    total_size_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)  # Uncompressed
+    total_compressed_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    total_blobs: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    unique_blobs: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # Savings
-    deduplication_savings_bytes = Column(BigInteger, default=0, nullable=False)
-    compression_savings_bytes = Column(BigInteger, default=0, nullable=False)
-    
+    deduplication_savings_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+    compression_savings_bytes: Mapped[int] = mapped_column(BigInteger, default=0, nullable=False)
+
     # Priority & Features
-    priority_count = Column(Integer, default=0, nullable=False)
-    cached_versions_count = Column(Integer, default=0, nullable=False)
-    
+    priority_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    cached_versions_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
     # Maintenance
-    last_cleanup_at = Column(DateTime, nullable=True)
-    last_priority_mode_at = Column(DateTime, nullable=True)
-    last_deduplication_scan = Column(DateTime, nullable=True)
-    
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
+    last_cleanup_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_priority_mode_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    last_deduplication_scan: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)
     
     @property
     def compression_ratio(self) -> float:
@@ -216,13 +216,13 @@ class VCLFileTracking(Base):
     """
     __tablename__ = "vcl_file_tracking"
 
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
-    file_id = Column(Integer, ForeignKey("file_metadata.id", ondelete="CASCADE"), nullable=True)
-    path_pattern = Column(String(1000), nullable=True)  # Glob patterns: "*.log", "node_modules/*"
-    action = Column(String(20), nullable=False)  # 'track' or 'exclude'
-    is_directory = Column(Boolean, default=False, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    file_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("file_metadata.id", ondelete="CASCADE"), nullable=True)
+    path_pattern: Mapped[Optional[str]] = mapped_column(String(1000), nullable=True)  # Glob patterns: "*.log", "node_modules/*"
+    action: Mapped[str] = mapped_column(String(20), nullable=False)  # 'track' or 'exclude'
+    is_directory: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
 
     # Relationships
     user = relationship("User")
