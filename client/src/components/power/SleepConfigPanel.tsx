@@ -245,6 +245,15 @@ export function SleepConfigPanel() {
               placeholder="AA:BB:CC:DD:EE:FF"
               className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
             />
+            {capabilities?.own_mac_address && capabilities.own_mac_address !== wolMac && (
+              <button
+                type="button"
+                onClick={() => setWolMac(capabilities.own_mac_address!)}
+                className="mt-1.5 text-xs text-teal-400 hover:text-teal-300 transition-colors"
+              >
+                Erkannt: <span className="font-mono">{capabilities.own_mac_address}</span> — Übernehmen?
+              </button>
+            )}
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Broadcast Address</label>

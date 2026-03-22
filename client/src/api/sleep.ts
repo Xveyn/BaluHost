@@ -98,6 +98,7 @@ export interface SleepCapabilities {
   can_suspend: boolean;
   wol_interfaces: string[];
   data_disk_devices: string[];
+  own_mac_address: string | null;
 }
 
 export interface SleepHistoryEntry {
