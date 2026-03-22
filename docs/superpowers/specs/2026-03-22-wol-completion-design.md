@@ -63,7 +63,7 @@ Core feature: send WoL via Fritz!Box router, enabling remote wake when the NAS b
 
 **New file**: `backend/app/models/fritzbox.py`
 
-Singleton DB model `FritzBoxConfig` (id=1, like `SleepConfig`). Uses SQLAlchemy 2.0 `Mapped` / `mapped_column` style to match `SleepConfig`:
+Singleton DB model `FritzBoxConfig` (id=1, like `SleepConfig`). Uses SQLAlchemy 2.0 `Mapped[T] = mapped_column()` style (the project standard for new/migrated models — see `SleepConfig`, `mobile.py`, `rate_limit_config.py`):
 
 | Column | Type | Default | Notes |
 |--------|------|---------|-------|
@@ -225,7 +225,11 @@ Extends the Remote Servers feature to support WoL as a fallback when SSH is unre
 
 **File**: `backend/app/models/server_profile.py`
 
-Add `wol_mac_address = Column(String(17), nullable=True)`. Alembic migration.
+Add `wol_mac_address` column. `ServerProfile` currently uses the legacy `Column()` style (no `Mapped` type hints). Two options:
+- **Minimal**: Add the new column in the same legacy style for file consistency: `wol_mac_address = Column(String(17), nullable=True)`
+- **Preferred**: Migrate the entire model to `Mapped[T] = mapped_column()` style (matching `SleepConfig`, `mobile.py`) in the same commit
+
+Decision deferred to implementation time. Alembic migration either way.
 
 Update `ServerProfileCreate` / `ServerProfileResponse` schemas accordingly. MAC validated with the shared validator from Phase 1.
 
