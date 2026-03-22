@@ -18,6 +18,7 @@ import {
   SLEEP_STATE_INFO,
   type SleepStatusResponse,
 } from '../../api/sleep';
+import { getFritzBoxConfig, type FritzBoxConfig } from '../../api/fritzbox';
 
 interface SleepModePanelProps {
   onRefresh?: () => void;
@@ -27,18 +28,28 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
   const [status, setStatus] = useState<SleepStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
+  const [fbConfig, setFbConfig] = useState<FritzBoxConfig | null>(null);
   const { confirm, dialog } = useConfirmDialog();
 
   const fetchStatus = useCallback(async () => {
     try {
       const data = await getSleepStatus();
       setStatus(data);
+      // Fetch Fritz!Box config (once on initial load)
+      if (!fbConfig) {
+        try {
+          const fb = await getFritzBoxConfig();
+          setFbConfig(fb);
+        } catch {
+          // Fritz!Box not configured — ignore
+        }
+      }
     } catch {
       // Silent fail for polling
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [fbConfig]);
 
   useEffect(() => {
     fetchStatus();
@@ -112,8 +123,9 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
     if (busy) return;
     setBusy(true);
     try {
-      await sendWol();
-      toast.success('WoL packet sent');
+      const method = fbConfig?.enabled ? 'fritzbox' : 'local';
+      await sendWol(undefined, undefined, method);
+      toast.success(method === 'fritzbox' ? 'WoL sent via Fritz!Box' : 'WoL packet sent');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to send WoL');
     } finally {
@@ -205,7 +217,7 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
                 onClick={handleWol}
                 disabled={busy}
                 className="flex items-center gap-1.5 rounded-lg bg-amber-500/20 px-3 py-2 text-sm font-medium text-amber-300 hover:bg-amber-500/30 transition-colors disabled:opacity-50"
-                title="Send Wake-on-LAN packet"
+                title={fbConfig?.enabled ? 'Wake-on-LAN via Fritz!Box' : 'Send Wake-on-LAN packet (local)'}
               >
                 <Wifi className="h-4 w-4" />
                 <span className="hidden sm:inline">WoL</span>

@@ -178,10 +178,11 @@ export async function enterSuspend(
 export async function sendWol(
   mac_address?: string,
   broadcast_address?: string,
+  method?: 'local' | 'fritzbox',
 ): Promise<{ success: boolean; message: string }> {
   const response = await apiClient.post<{ success: boolean; message: string }>(
     '/api/system/sleep/wol',
-    { mac_address, broadcast_address },
+    { mac_address, broadcast_address, method },
   );
   return response.data;
 }
