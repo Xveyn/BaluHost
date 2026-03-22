@@ -60,7 +60,7 @@ async def create_vpn_profile(
         config_content = (await config_file.read()).decode('utf-8')
 
         # Validate config
-        valid, error = VPNProfileValidator.validate_config(vpn_type_enum.value, config_content)
+        valid, error = VPNProfileValidator.validate_config(vpn_type_enum, config_content)
         if not valid:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
