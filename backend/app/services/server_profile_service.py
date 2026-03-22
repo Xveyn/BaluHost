@@ -64,6 +64,7 @@ def create_profile(
         ssh_key_encrypted=encrypted_key,
         vpn_profile_id=data.vpn_profile_id,
         power_on_command=data.power_on_command,
+        wol_mac_address=data.wol_mac_address,
     )
     db.add(profile)
     db.commit()
@@ -97,6 +98,8 @@ def update_profile(
         profile.vpn_profile_id = data.vpn_profile_id  # type: ignore[assignment]
     if data.power_on_command is not None:
         profile.power_on_command = data.power_on_command  # type: ignore[assignment]
+    if data.wol_mac_address is not None:
+        profile.wol_mac_address = data.wol_mac_address  # type: ignore[assignment]
 
     db.commit()
     db.refresh(profile)
