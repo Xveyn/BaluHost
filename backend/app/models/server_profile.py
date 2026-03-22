@@ -38,6 +38,9 @@ class ServerProfile(Base):
     # Server startup command
     power_on_command: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # e.g., "systemctl start baluhost-backend"
 
+    # Wake-on-LAN fallback
+    wol_mac_address: Mapped[Optional[str]] = mapped_column(String(17), nullable=True)  # e.g., "AA:BB:CC:DD:EE:FF"
+
     # Metadata
     created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, index=True)
     last_used: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
