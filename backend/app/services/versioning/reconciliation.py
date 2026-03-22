@@ -109,7 +109,7 @@ class VCLReconciliation:
             # Get settings for users gaining quota
             gaining_users = {uid for uid, delta in quota_deltas.items() if delta > 0}
             settings_map = {
-                s.user_id: s
+                int(s.user_id): s  # type: ignore[arg-type]
                 for s in self.db.query(VCLSettings)
                 .filter(VCLSettings.user_id.in_(gaining_users))
                 .all()
@@ -119,8 +119,8 @@ class VCLReconciliation:
             for uid in gaining_users:
                 s = settings_map.get(uid)
                 if s:
-                    new_usage = int(s.current_usage_bytes) + quota_deltas[uid]
-                    if new_usage > int(s.max_size_bytes):
+                    new_usage = int(s.current_usage_bytes) + quota_deltas[uid]  # type: ignore[arg-type]
+                    if new_usage > int(s.max_size_bytes):  # type: ignore[arg-type]
                         skip_user_ids.add(uid)
 
             if skip_user_ids:
@@ -194,7 +194,7 @@ class VCLReconciliation:
                 VCLSettings.user_id == uid
             ).first()
             if settings:
-                new_usage = max(0, int(settings.current_usage_bytes) + delta)
+                new_usage = max(0, int(settings.current_usage_bytes) + delta)  # type: ignore[arg-type]
                 self.db.execute(
                     sql_update(VCLSettings)
                     .where(VCLSettings.user_id == uid)
@@ -205,7 +205,7 @@ class VCLReconciliation:
                 from app.services.versioning.vcl import VCLService
                 vcl_service = VCLService(self.db)
                 new_settings = vcl_service.get_or_create_user_settings(uid)
-                new_usage = int(new_settings.current_usage_bytes) + delta
+                new_usage = int(new_settings.current_usage_bytes) + delta  # type: ignore[arg-type]
                 self.db.execute(
                     sql_update(VCLSettings)
                     .where(VCLSettings.user_id == uid)
