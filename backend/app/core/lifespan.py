@@ -351,6 +351,12 @@ async def _startup(app: FastAPI) -> None:
                 logger.info("Fan control initialized (read-only, secondary worker)")
             except Exception as e:
                 logger.warning("Fan control init failed on secondary worker: %s", e)
+        if settings.sleep_mode_enabled:
+            try:
+                await sleep_mode.start_sleep_manager(monitoring=False)
+                logger.info("Sleep manager initialized (read-only, secondary worker)")
+            except Exception as e:
+                logger.warning("Sleep manager init failed on secondary worker: %s", e)
 
     # Initialize Firebase (optional)
     FirebaseService.initialize()

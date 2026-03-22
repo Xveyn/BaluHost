@@ -151,8 +151,13 @@ class SleepManagerService:
                 cls._instance = cls(backend)
             return cls._instance
 
-    async def start(self) -> None:
-        """Start the sleep manager background tasks."""
+    async def start(self, monitoring: bool = True) -> None:
+        """Start the sleep manager.
+
+        Args:
+            monitoring: If True, start background tasks (primary worker).
+                        If False, only initialize instance (secondary workers).
+        """
         if self._is_running:
             return
         self._is_running = True
@@ -162,13 +167,15 @@ class SleepManagerService:
         # Load config from DB
         config = self._load_config()
 
-        # Start idle detection loop
-        self._idle_task = asyncio.create_task(self._idle_detection_loop())
+        if monitoring:
+            # Start idle detection loop
+            self._idle_task = asyncio.create_task(self._idle_detection_loop())
 
-        # Start schedule check loop
-        self._schedule_task = asyncio.create_task(self._schedule_check_loop())
+            # Start schedule check loop
+            self._schedule_task = asyncio.create_task(self._schedule_check_loop())
 
-        logger.info("Sleep manager started (auto_idle=%s, schedule=%s)",
+        logger.info("Sleep manager started (monitoring=%s, auto_idle=%s, schedule=%s)",
+                     monitoring,
                      config.auto_idle_enabled if config else False,
                      config.schedule_enabled if config else False)
 
@@ -258,7 +265,8 @@ class SleepManagerService:
             if io_stats:
                 # Sum read + write MB/s across all devices
                 for stats in io_stats.values():
-                    disk_io += stats.get("read_mbps", 0.0) + stats.get("write_mbps", 0.0)
+                    if stats is not None:
+                        disk_io += stats.get("read_mbps", 0.0) + stats.get("write_mbps", 0.0)
         except Exception:
             pass
 
@@ -515,7 +523,7 @@ class SleepManagerService:
             try:
                 from app.services.power.fan_control import get_fan_control_service
                 fan_service = get_fan_control_service()
-                if fan_service and fan_service._is_running:
+                if fan_service and fan_service._is_running and fan_service._backend:
                     fans = await fan_service._backend.get_fans()
                     for fan_data in fans:
                         self._original_fan_modes[fan_data.fan_id] = fan_data.mode
@@ -606,11 +614,12 @@ class SleepManagerService:
             # 2. Restore fans
             try:
                 from app.services.power.fan_control import get_fan_control_service
+                from app.schemas.fans import FanMode
                 fan_service = get_fan_control_service()
                 if fan_service and fan_service._is_running and self._original_fan_modes:
                     for fan_id, original_mode in self._original_fan_modes.items():
                         if original_mode == "auto":
-                            await fan_service.set_fan_mode(fan_id, "auto")
+                            await fan_service.set_fan_mode(fan_id, FanMode.AUTO)
                     logger.info("Fan modes restored")
             except Exception as e:
                 logger.warning("Could not restore fan modes: %s", e)
@@ -920,11 +929,16 @@ def get_sleep_manager() -> Optional[SleepManagerService]:
     return _service
 
 
-async def start_sleep_manager() -> None:
-    """Initialize and start the sleep manager service."""
+async def start_sleep_manager(monitoring: bool = True) -> None:
+    """Initialize and start the sleep manager service.
+
+    Args:
+        monitoring: If True, start background tasks (primary worker).
+                    If False, only initialize instance (secondary workers).
+    """
     global _service
     _service = await SleepManagerService.get_instance()
-    await _service.start()
+    await _service.start(monitoring=monitoring)
 
 
 async def stop_sleep_manager() -> None:
