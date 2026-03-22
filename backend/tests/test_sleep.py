@@ -94,6 +94,12 @@ class TestDevSleepBackend:
         assert await backend.check_tool_available("hdparm") is True
         assert await backend.check_tool_available("nonexistent") is True  # Dev always True
 
+    @pytest.mark.asyncio
+    async def test_get_own_mac(self):
+        backend = DevSleepBackend()
+        mac = await backend.get_own_mac()
+        assert mac == "DE:AD:BE:EF:00:01"
+
 
 # ============================================================================
 # SleepManagerService Tests

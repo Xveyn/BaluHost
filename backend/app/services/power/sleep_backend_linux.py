@@ -156,3 +156,7 @@ class LinuxSleepBackend(SleepBackend):
 
     async def check_tool_available(self, tool: str) -> bool:
         return shutil.which(tool) is not None
+
+    async def get_own_mac(self) -> Optional[str]:
+        """Placeholder — full implementation in Task 4."""
+        return None

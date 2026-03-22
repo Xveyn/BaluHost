@@ -82,6 +82,10 @@ class SleepBackend(abc.ABC):
     async def check_tool_available(self, tool: str) -> bool:
         """Check if a system tool is available (hdparm, rtcwake, systemctl)."""
 
+    @abc.abstractmethod
+    async def get_own_mac(self) -> Optional[str]:
+        """Return the MAC address of the primary network interface, or None."""
+
 
 # Re-export backend classes for backward compatibility
 from app.services.power.sleep_backend_dev import DevSleepBackend  # noqa: E402, F401
