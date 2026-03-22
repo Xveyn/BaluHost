@@ -107,6 +107,7 @@ async def send_wol(
     ok = await manager.send_wol(
         body.mac_address if body else None,
         body.broadcast_address if body else None,
+        method=body.method if body else "local",
     )
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to send WoL packet (no MAC address configured?)")

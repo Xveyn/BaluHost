@@ -6,7 +6,7 @@ for the two-stage sleep system (Soft Sleep + True Suspend).
 """
 from datetime import datetime
 from enum import Enum
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 from app.schemas.validators import validate_mac_address
@@ -98,6 +98,7 @@ class WolRequest(BaseModel):
     """Request to send a Wake-on-LAN magic packet."""
     mac_address: Optional[str] = Field(default=None, description="Target MAC address (uses configured if omitted)")
     broadcast_address: Optional[str] = Field(default=None, description="Broadcast address (uses configured if omitted)")
+    method: Literal["local", "fritzbox"] = Field(default="local", description="WoL method: local broadcast or Fritz!Box TR-064")
 
     @field_validator("mac_address", mode="before")
     @classmethod

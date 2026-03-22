@@ -191,3 +191,22 @@ class TestFritzBoxRoutes:
         resp = client.post("/api/fritzbox/test", headers=admin_headers)
         # Dev mode returns 200 with simulated message; non-enabled returns 200 or 400
         assert resp.status_code in (200, 400)
+
+
+from app.schemas.sleep import WolRequest
+
+
+class TestWolRequestMethod:
+    """Test WolRequest.method field."""
+
+    def test_default_method_is_local(self):
+        req = WolRequest()
+        assert req.method == "local"
+
+    def test_fritzbox_method_accepted(self):
+        req = WolRequest(method="fritzbox")
+        assert req.method == "fritzbox"
+
+    def test_invalid_method_rejected(self):
+        with pytest.raises(Exception):
+            WolRequest(method="invalid")

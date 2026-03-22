@@ -755,8 +755,14 @@ class SleepManagerService:
         self,
         mac_address: Optional[str] = None,
         broadcast_address: Optional[str] = None,
+        method: str = "local",
     ) -> bool:
         """Send a Wake-on-LAN magic packet."""
+        if method == "fritzbox":
+            from app.services.power.fritzbox_wol import get_fritzbox_wol_service
+            service = get_fritzbox_wol_service()
+            return await service.send_wol(mac=mac_address)
+
         config = self._load_config()
 
         mac = mac_address or (config.wol_mac_address if config else None)
