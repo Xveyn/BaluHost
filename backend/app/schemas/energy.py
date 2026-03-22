@@ -60,8 +60,8 @@ class EnergyDashboard(BaseModel):
     hourly_samples: List[HourlySample] = Field(default_factory=list)
 
     # Current status
-    current_watts: float = Field(0.0, description="Current power consumption")
-    is_online: bool = Field(True, description="Device online status")
+    current_watts: float = Field(default=0.0, description="Current power consumption")
+    is_online: bool = Field(default=True, description="Device online status")
     last_updated: datetime
 
     class Config:
@@ -99,9 +99,9 @@ class EnergyCostEstimate(BaseModel):
     device_name: str
     period_name: str = Field(..., description="e.g. 'Today', 'This Week', 'This Month'")
     total_kwh: float
-    cost_per_kwh: float = Field(0.40, description="Cost per kWh in currency")
+    cost_per_kwh: float = Field(default=0.40, description="Cost per kWh in currency")
     estimated_cost: float = Field(..., description="Estimated cost in currency")
-    currency: str = Field("EUR", description="Currency code")
+    currency: str = Field(default="EUR", description="Currency code")
 
     class Config:
         json_schema_extra = {
@@ -141,7 +141,7 @@ class EnergyPriceConfigRead(BaseModel):
 class EnergyPriceConfigUpdate(BaseModel):
     """Update schema for energy price configuration."""
     cost_per_kwh: float = Field(..., ge=0.01, le=10.0, description="Cost per kWh (0.01-10.00)")
-    currency: str = Field("EUR", max_length=10, description="Currency code")
+    currency: str = Field(default="EUR", max_length=10, description="Currency code")
 
     class Config:
         json_schema_extra = {

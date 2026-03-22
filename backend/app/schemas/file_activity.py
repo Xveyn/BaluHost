@@ -83,12 +83,12 @@ class ReportedActivity(BaseModel):
     action_type: str = Field(..., description="Activity type, e.g. file.open")
     file_path: str = Field(..., description="Server-relative file path")
     file_name: str = Field(..., description="File name for display")
-    is_directory: bool = Field(False)
-    file_size: Optional[int] = Field(None, ge=0)
+    is_directory: bool = Field(default=False)
+    file_size: Optional[int] = Field(default=None, ge=0)
     mime_type: Optional[str] = None
     device_id: Optional[str] = None
     occurred_at: Optional[datetime] = Field(
-        None,
+        default=None,
         description="When the action occurred on the client (ISO timestamp)",
     )
 
