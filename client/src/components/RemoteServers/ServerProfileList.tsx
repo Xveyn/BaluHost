@@ -7,6 +7,7 @@ import {
   Loader2,
   Clock,
   ChevronRight,
+  Wifi,
 } from 'lucide-react';
 import * as api from '../../api/remote-servers';
 
@@ -53,7 +54,10 @@ export function ServerProfileList({
   const handleStart = async (id: number) => {
     setStartingId(id);
     try {
-      await onStartServer?.(id);
+      const result = await onStartServer?.(id);
+      if (result?.method === 'wol') {
+        alert(t('servers.wolSent', { defaultValue: 'WoL-Paket gesendet — Server wird aufgeweckt' }));
+      }
     } finally {
       setStartingId(null);
     }
@@ -93,6 +97,12 @@ export function ServerProfileList({
             {profile.vpn_profile_id && (
               <span className="ml-2 px-2 py-1 bg-blue-100 text-blue-700 text-xs font-medium rounded">
                 VPN
+              </span>
+            )}
+            {profile.wol_mac_address && (
+              <span className="ml-2 px-2 py-1 bg-amber-100 text-amber-700 text-xs font-medium rounded flex items-center gap-1">
+                <Wifi className="w-3 h-3" />
+                WoL
               </span>
             )}
           </div>
