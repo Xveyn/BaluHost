@@ -152,14 +152,14 @@ class SleepConfigUpdate(BaseModel):
     wol_mac_address: Optional[str] = None
     wol_broadcast_address: Optional[str] = None
     pause_monitoring: Optional[bool] = None
+    pause_disk_io: Optional[bool] = None
+    reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
+    disk_spindown_enabled: Optional[bool] = None
 
     @field_validator("wol_mac_address", mode="before")
     @classmethod
     def _validate_wol_mac(cls, v: Optional[str]) -> Optional[str]:
         return validate_mac_address(v)
-    pause_disk_io: Optional[bool] = None
-    reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
-    disk_spindown_enabled: Optional[bool] = None
 
 
 # ---------------------------------------------------------------------------
