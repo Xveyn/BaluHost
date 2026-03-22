@@ -1,12 +1,17 @@
 """File metadata database model."""
+from __future__ import annotations
+
 from datetime import datetime
-from typing import Optional, List
+from typing import TYPE_CHECKING, Optional, List
 
 from sqlalchemy import String, DateTime, Integer, BigInteger, Boolean, ForeignKey, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.vcl import FileVersion
 
 
 class FileMetadata(Base):

@@ -1,6 +1,8 @@
 """RefreshToken database model for token revocation support."""
+from __future__ import annotations
+
 from datetime import datetime, timezone
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 import hashlib
 
 from sqlalchemy import String, DateTime, Integer, Boolean, ForeignKey, Index
@@ -8,6 +10,9 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class RefreshToken(Base):

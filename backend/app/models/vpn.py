@@ -1,11 +1,15 @@
 """Database models for VPN configuration."""
+from __future__ import annotations
 
 from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
 from sqlalchemy.orm import Mapped, relationship
 from datetime import datetime
-from typing import Optional
+from typing import TYPE_CHECKING, Optional
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class VPNConfig(Base):
