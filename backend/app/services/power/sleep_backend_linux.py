@@ -158,5 +158,31 @@ class LinuxSleepBackend(SleepBackend):
         return shutil.which(tool) is not None
 
     async def get_own_mac(self) -> Optional[str]:
-        """Placeholder — full implementation in Task 4."""
+        """Detect MAC of the primary NIC via /proc/net/route."""
+        return await self._get_own_mac_from_paths(
+            "/proc/net/route", "/sys/class/net"
+        )
+
+    async def _get_own_mac_from_paths(
+        self, route_path: str, net_dir: str
+    ) -> Optional[str]:
+        """Testable implementation: reads route and sysfs from given paths."""
+        try:
+            with open(route_path) as f:
+                for line in f:
+                    parts = line.strip().split()
+                    # Find the default route: Destination == 00000000
+                    if len(parts) >= 2 and parts[1] == "00000000":
+                        iface = parts[0]
+                        mac_path = f"{net_dir}/{iface}/address"
+                        try:
+                            with open(mac_path) as mf:
+                                raw = mf.read().strip()
+                            if raw and raw != "00:00:00:00:00:00":
+                                return raw.upper()
+                        except OSError:
+                            logger.warning("Cannot read MAC from %s", mac_path)
+                            return None
+        except OSError:
+            logger.debug("Cannot read route table from %s", route_path)
         return None
