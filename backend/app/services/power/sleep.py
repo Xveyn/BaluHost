@@ -897,6 +897,7 @@ class SleepManagerService:
         systemctl = await self._backend.check_tool_available("systemctl")
         wol_interfaces = await self._backend.get_wol_capability()
         data_disks = await self._backend.get_data_disk_devices()
+        own_mac = await self._backend.get_own_mac()
 
         can_suspend = systemctl
         if not settings.is_dev_mode:
@@ -918,6 +919,7 @@ class SleepManagerService:
             can_suspend=can_suspend,
             wol_interfaces=wol_interfaces,
             data_disk_devices=data_disks,
+            own_mac_address=own_mac,
         )
 
 

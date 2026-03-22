@@ -634,3 +634,20 @@ class TestLinuxSleepBackendGetOwnMac:
             str(route_file), str(tmp_path / "net")
         )
         assert mac is None
+
+
+# ============================================================================
+# SleepCapabilities Wiring Tests
+# ============================================================================
+
+
+class TestCapabilitiesOwnMac:
+    """Test that get_capabilities() includes own_mac_address."""
+
+    @pytest.mark.asyncio
+    async def test_capabilities_includes_own_mac(self):
+        backend = DevSleepBackend()
+        manager = SleepManagerService.__new__(SleepManagerService)
+        manager._backend = backend
+        caps = await manager.get_capabilities()
+        assert caps.own_mac_address == "DE:AD:BE:EF:00:01"

@@ -174,6 +174,7 @@ class SleepCapabilities(BaseModel):
     can_suspend: bool = Field(default=False, description="System supports suspend")
     wol_interfaces: list[str] = Field(default_factory=list, description="Network interfaces with WoL support")
     data_disk_devices: list[str] = Field(default_factory=list, description="Data disks (non-OS)")
+    own_mac_address: Optional[str] = Field(default=None, description="Detected MAC of primary NIC")
 
 
 # ---------------------------------------------------------------------------
