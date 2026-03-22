@@ -192,29 +192,29 @@ class SyncSchedulerService:
         now = datetime.now(timezone.utc)
         
         if schedule.schedule_type == "daily":
-            hour, minute = map(int, schedule.time_of_day.split(":"))
+            hour, minute = map(int, (schedule.time_of_day or "00:00").split(":"))
             next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-            
+
             if next_run <= now:
                 next_run += timedelta(days=1)
-            
+
             schedule.next_run_at = next_run
-        
+
         elif schedule.schedule_type == "weekly":
-            hour, minute = map(int, schedule.time_of_day.split(":"))
+            hour, minute = map(int, (schedule.time_of_day or "00:00").split(":"))
             target_day = schedule.day_of_week or 0
-            
+
             next_run = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
             days_ahead = target_day - now.weekday()
-            
+
             if days_ahead <= 0:
                 days_ahead += 7
-            
+
             next_run += timedelta(days=days_ahead)
             schedule.next_run_at = next_run
-        
+
         elif schedule.schedule_type == "monthly":
-            hour, minute = map(int, schedule.time_of_day.split(":"))
+            hour, minute = map(int, (schedule.time_of_day or "00:00").split(":"))
             target_day = schedule.day_of_month or 1
             
             next_run = now.replace(
