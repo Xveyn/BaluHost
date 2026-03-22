@@ -3,7 +3,7 @@ import asyncio
 import logging
 import subprocess
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, cast
 
 from sqlalchemy.orm import Session
 from sqlalchemy import desc
@@ -22,6 +22,8 @@ from app.schemas.update import (
     UpdateConfigUpdate,
     ReleaseNotesResponse,
     CancelResponse,
+    UpdateStatusEnum,
+    UpdateChannelEnum,
 )
 from app.services.update.backend import UpdateBackend
 from app.services.update.prod_backend import ProdUpdateBackend
@@ -207,6 +209,11 @@ class UpdateService:
             )
 
         target = check_result.latest_version
+        if not target:
+            return UpdateStartResponse(
+                success=False,
+                message="No target version found",
+            )
         if target_version:
             # User specified a version - we'd need to look it up
             # For now, use latest
@@ -567,9 +574,10 @@ class UpdateService:
                 if error:
                     update.error_message = error
                 if status in (UpdateStatus.COMPLETED.value, UpdateStatus.FAILED.value):
-                    update.completed_at = datetime.now(timezone.utc)
-                    if update.started_at and update.completed_at:
-                        delta = update.completed_at - update.started_at
+                    completed = datetime.now(timezone.utc)
+                    update.completed_at = completed
+                    if update.started_at:
+                        delta = completed - update.started_at
                         update.duration_seconds = int(delta.total_seconds())
                 self.db.commit()
             else:
@@ -590,7 +598,7 @@ class UpdateService:
 
         return UpdateProgressResponse(
             update_id=update.id,
-            status=status,
+            status=cast(UpdateStatusEnum, status),
             progress_percent=progress,
             current_step=step,
             started_at=update.started_at,
@@ -686,13 +694,13 @@ class UpdateService:
                     id=u.id,
                     from_version=u.from_version,
                     to_version=u.to_version,
-                    channel=u.channel,
+                    channel=cast(UpdateChannelEnum, u.channel),
                     from_commit=u.from_commit,
                     to_commit=u.to_commit,
                     started_at=u.started_at,
                     completed_at=u.completed_at,
                     duration_seconds=u.duration_seconds,
-                    status=u.status,
+                    status=cast(UpdateStatusEnum, u.status),
                     error_message=u.error_message,
                     rollback_commit=u.rollback_commit,
                     user_id=u.user_id,
