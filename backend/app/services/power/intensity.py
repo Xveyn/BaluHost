@@ -124,7 +124,7 @@ async def get_service_intensities(
         if INTENSITY_PRIORITY[intensity] > INTENSITY_PRIORITY[highest_intensity]:
             highest_intensity = intensity
 
-        service_info = ServiceIntensityInfo(
+        service_info = ServiceIntensityInfo(  # type: ignore[call-arg]
             name=source,
             display_name=get_display_name(source),
             intensity_level=intensity,
@@ -168,7 +168,7 @@ async def get_service_intensities(
             if INTENSITY_PRIORITY[intensity] > INTENSITY_PRIORITY[highest_intensity]:
                 highest_intensity = intensity
 
-            service_info = ServiceIntensityInfo(
+            service_info = ServiceIntensityInfo(  # type: ignore[call-arg]
                 name=service_name,
                 display_name=display_name,
                 intensity_level=intensity,
@@ -203,7 +203,7 @@ async def get_service_intensities(
             if INTENSITY_PRIORITY[intensity] > INTENSITY_PRIORITY[highest_intensity]:
                 highest_intensity = intensity
 
-            service_info = ServiceIntensityInfo(
+            service_info = ServiceIntensityInfo(  # type: ignore[call-arg]
                 name=process_name,
                 display_name=get_display_name(process_name),
                 intensity_level=intensity,
