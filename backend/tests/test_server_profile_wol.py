@@ -55,3 +55,72 @@ class TestServerProfileWolSchemas:
             message="Started via SSH",
         )
         assert resp.method == "ssh"
+
+
+from unittest.mock import patch, MagicMock, AsyncMock
+
+
+class TestStartServerWolFallback:
+    """Test SSH-fail-to-WoL fallback in start endpoint."""
+
+    def _mock_profile(self, power_on_command="start", wol_mac_address="AA:BB:CC:DD:EE:FF"):
+        profile = MagicMock()
+        profile.id = 1
+        profile.ssh_host = "192.168.1.100"
+        profile.ssh_port = 22
+        profile.ssh_username = "root"
+        profile.ssh_key_encrypted = "encrypted"
+        profile.power_on_command = power_on_command
+        profile.wol_mac_address = wol_mac_address
+        profile.vpn_profile_id = None
+        return profile
+
+    @pytest.mark.asyncio
+    async def test_wol_fallback_no_profile(self):
+        """When profile is None, no fallback."""
+        from app.api.routes.server_profiles import _try_wol_fallback
+        result = await _try_wol_fallback(None)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_wol_fallback_local(self):
+        """When SSH fails and MAC is set, try local WoL."""
+        from app.api.routes.server_profiles import _try_wol_fallback
+        profile = self._mock_profile()
+
+        with patch('app.api.routes.server_profiles._is_fritzbox_enabled', return_value=False):
+            with patch('app.api.routes.server_profiles.get_sleep_manager') as mock_mgr:
+                manager = MagicMock()
+                manager.send_wol = AsyncMock(return_value=True)
+                mock_mgr.return_value = manager
+
+                result = await _try_wol_fallback(profile)
+                assert result is not None
+                assert result["success"] is True
+                manager.send_wol.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_wol_fallback_no_mac(self):
+        """When SSH fails but no MAC configured, no fallback."""
+        from app.api.routes.server_profiles import _try_wol_fallback
+        profile = self._mock_profile(wol_mac_address=None)
+
+        result = await _try_wol_fallback(profile)
+        assert result is None
+
+    @pytest.mark.asyncio
+    async def test_wol_fallback_fritzbox(self):
+        """When Fritz!Box is enabled, use Fritz!Box WoL."""
+        from app.api.routes.server_profiles import _try_wol_fallback
+        profile = self._mock_profile()
+
+        with patch('app.api.routes.server_profiles._is_fritzbox_enabled', return_value=True):
+            with patch('app.api.routes.server_profiles.get_fritzbox_wol_service') as mock_fb:
+                fb_service = MagicMock()
+                fb_service.send_wol = AsyncMock(return_value=True)
+                mock_fb.return_value = fb_service
+
+                result = await _try_wol_fallback(profile)
+                assert result is not None
+                assert result["success"] is True
+                fb_service.send_wol.assert_called_once_with(mac="AA:BB:CC:DD:EE:FF")
