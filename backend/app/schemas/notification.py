@@ -193,14 +193,16 @@ class NotificationPreferencesBase(BaseModel):
     )
 
 
-class NotificationPreferencesUpdate(NotificationPreferencesBase):
-    """Schema for updating notification preferences."""
+class NotificationPreferencesUpdate(BaseModel):
+    """Schema for updating notification preferences (all fields optional for partial updates)."""
 
-    # All fields are optional for partial updates
     push_enabled: Optional[bool] = None
     in_app_enabled: Optional[bool] = None
     quiet_hours_enabled: Optional[bool] = None
-    min_priority: Optional[int] = None
+    quiet_hours_start: Optional[str] = None
+    quiet_hours_end: Optional[str] = None
+    min_priority: Optional[int] = Field(default=None, ge=0, le=3)
+    category_preferences: Optional[dict[str, CategoryPreference]] = None
 
 
 class NotificationPreferencesResponse(NotificationPreferencesBase):

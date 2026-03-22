@@ -206,9 +206,9 @@ class UnregisterDemandResponse(BaseModel):
 class AutoScalingConfig(BaseModel):
     """Configuration for auto-scaling behavior."""
     enabled: bool = Field(True, description="Whether auto-scaling is enabled")
-    cpu_surge_threshold: float = Field(80.0, description="CPU % to trigger SURGE")
-    cpu_medium_threshold: float = Field(50.0, description="CPU % to trigger MEDIUM")
-    cpu_low_threshold: float = Field(20.0, description="CPU % to trigger LOW")
+    cpu_surge_threshold: int = Field(80, description="CPU % to trigger SURGE")
+    cpu_medium_threshold: int = Field(50, description="CPU % to trigger MEDIUM")
+    cpu_low_threshold: int = Field(20, description="CPU % to trigger LOW")
     cooldown_seconds: int = Field(60, description="Seconds before downgrade allowed")
     use_cpu_monitoring: bool = Field(True, description="Whether to use CPU usage for scaling")
 

@@ -106,28 +106,28 @@ class WolRequest(BaseModel):
 class SleepConfigResponse(BaseModel):
     """Full sleep mode configuration."""
     # Auto-idle detection
-    auto_idle_enabled: bool = Field(False, description="Enable automatic idle detection")
-    idle_timeout_minutes: int = Field(15, description="Minutes of idle before entering sleep")
-    idle_cpu_threshold: float = Field(5.0, description="CPU usage % threshold for idle")
-    idle_disk_io_threshold: float = Field(0.5, description="Disk I/O MB/s threshold for idle")
-    idle_http_threshold: float = Field(5.0, description="HTTP requests/min threshold for idle")
+    auto_idle_enabled: bool = Field(default=False, description="Enable automatic idle detection")
+    idle_timeout_minutes: int = Field(default=15, description="Minutes of idle before entering sleep")
+    idle_cpu_threshold: float = Field(default=5.0, description="CPU usage % threshold for idle")
+    idle_disk_io_threshold: float = Field(default=0.5, description="Disk I/O MB/s threshold for idle")
+    idle_http_threshold: float = Field(default=5.0, description="HTTP requests/min threshold for idle")
     # Auto-escalation
-    auto_escalation_enabled: bool = Field(False, description="Auto-escalate soft sleep to suspend")
-    escalation_after_minutes: int = Field(60, description="Minutes in soft sleep before escalation")
+    auto_escalation_enabled: bool = Field(default=False, description="Auto-escalate soft sleep to suspend")
+    escalation_after_minutes: int = Field(default=60, description="Minutes in soft sleep before escalation")
     # Schedule
-    schedule_enabled: bool = Field(False, description="Enable sleep schedule")
-    schedule_sleep_time: str = Field("23:00", description="Time to enter sleep (HH:MM)")
-    schedule_wake_time: str = Field("06:00", description="Time to wake (HH:MM)")
-    schedule_mode: ScheduleMode = Field(ScheduleMode.SOFT, description="Sleep mode for schedule")
+    schedule_enabled: bool = Field(default=False, description="Enable sleep schedule")
+    schedule_sleep_time: str = Field(default="23:00", description="Time to enter sleep (HH:MM)")
+    schedule_wake_time: str = Field(default="06:00", description="Time to wake (HH:MM)")
+    schedule_mode: ScheduleMode = Field(default=ScheduleMode.SOFT, description="Sleep mode for schedule")
     # WoL
-    wol_mac_address: Optional[str] = Field(None, description="MAC address for WoL")
-    wol_broadcast_address: Optional[str] = Field(None, description="Broadcast address for WoL")
+    wol_mac_address: Optional[str] = Field(default=None, description="MAC address for WoL")
+    wol_broadcast_address: Optional[str] = Field(default=None, description="Broadcast address for WoL")
     # Service pausing
-    pause_monitoring: bool = Field(True, description="Pause monitoring during sleep")
-    pause_disk_io: bool = Field(True, description="Pause disk I/O monitor during sleep")
-    reduced_telemetry_interval: float = Field(30.0, description="Telemetry interval during sleep (seconds)")
+    pause_monitoring: bool = Field(default=True, description="Pause monitoring during sleep")
+    pause_disk_io: bool = Field(default=True, description="Pause disk I/O monitor during sleep")
+    reduced_telemetry_interval: float = Field(default=30.0, description="Telemetry interval during sleep (seconds)")
     # Disk spindown
-    disk_spindown_enabled: bool = Field(True, description="Spin down data disks during sleep")
+    disk_spindown_enabled: bool = Field(default=True, description="Spin down data disks during sleep")
 
 
 class SleepConfigUpdate(BaseModel):
@@ -184,4 +184,4 @@ class SleepHistoryEntry(BaseModel):
 class SleepHistoryResponse(BaseModel):
     """Paginated sleep state history."""
     entries: list[SleepHistoryEntry] = Field(default_factory=list)
-    total: int = Field(0)
+    total: int = Field(default=0)
