@@ -32,7 +32,13 @@ from app.schemas.files import (
 )
 from app.schemas.user import UserPublic
 from app.services import files as file_service
-from app.services.files.operations import is_path_shared_with_user, get_share_permissions, SHARED_WITH_ME_DIR
+from app.services.files.operations import (
+    is_path_shared_with_user,
+    get_share_permissions,
+    list_shared_with_me,
+    list_user_root,
+    SHARED_WITH_ME_DIR,
+)
 from app.services.permissions import PermissionDeniedError, is_privileged
 from app.services.audit.logger_db import get_audit_logger_db
 from app.models.file_metadata import FileMetadata
@@ -497,119 +503,13 @@ def list_files(
 
     # ── Non-admin root listing: show only Shared + user's home dir + Shared with me ──
     if not is_privileged(user) and not original_path.strip("/"):
-        from datetime import datetime, timezone
-        from sqlalchemy import select, func, or_
-        from app.services.files.operations import _resolve_path
-        from app.services.users import _create_home_directory
-        from app.models.file_share import FileShare
-
-        # Ensure home dir exists
-        try:
-            _create_home_directory(user.username, user.id, db=db)
-        except Exception:
-            pass
-
-        entries: list[FileItem] = []
-
-        # Shared directory
-        shared_path = _resolve_path(SHARED_DIR_NAME)
-        if shared_path.exists():
-            stats = shared_path.stat()
-            entries.append(FileItem(
-                name=SHARED_DIR_NAME,
-                path=SHARED_DIR_NAME,
-                size=0,
-                type="directory",
-                modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
-                owner_id=None,
-                mime_type=None,
-                file_id=None,
-            ))
-
-        # User's home directory
-        home_path = _resolve_path(user.username)
-        if home_path.exists():
-            stats = home_path.stat()
-            entries.append(FileItem(
-                name=user.username,
-                path=user.username,
-                size=0,
-                type="directory",
-                modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
-                owner_id=str(user.id),
-                mime_type=None,
-                file_id=None,
-            ))
-
-        # "Shared with me" virtual folder — only show if user has active shares
-        now = datetime.now(timezone.utc)
-        share_count = db.execute(
-            select(func.count(FileShare.id)).where(
-                FileShare.shared_with_user_id == user.id,
-                FileShare.owner_id != user.id,
-                FileShare.can_read.is_(True),
-                or_(
-                    FileShare.expires_at.is_(None),
-                    FileShare.expires_at > now,
-                ),
-            )
-        ).scalar_one()
-        if share_count > 0:
-            entries.append(FileItem(
-                name=SHARED_WITH_ME_DIR,
-                path=SHARED_WITH_ME_DIR,
-                size=0,
-                type="directory",
-                modified_at=datetime.now(timezone.utc),
-                owner_id=None,
-                mime_type=None,
-                file_id=None,
-            ))
-
+        entries = list_user_root(user, db)
         entries = _enrich_with_sync_info(entries, user.id, False, db)
         return FileListResponse(files=entries)
 
     # ── "Shared with me" virtual listing ──
     if not is_privileged(user) and original_path.strip("/") == SHARED_WITH_ME_DIR:
-        from datetime import datetime, timezone
-        from sqlalchemy import select, or_
-        from app.models.file_share import FileShare
-
-        now = datetime.now(timezone.utc)
-        shares = db.execute(
-            select(FileShare).where(
-                FileShare.shared_with_user_id == user.id,
-                FileShare.owner_id != user.id,
-                FileShare.can_read.is_(True),
-                or_(
-                    FileShare.expires_at.is_(None),
-                    FileShare.expires_at > now,
-                ),
-            )
-        ).scalars().all()
-
-        entries: list[FileItem] = []
-        for share in shares:
-            file_meta = db.get(FileMetadata, share.file_id)
-            if not file_meta:
-                continue
-            from app.models.user import User as UserModel
-            owner = db.get(UserModel, share.owner_id)
-            owner_name = owner.username if owner else str(share.owner_id)
-            entries.append(FileItem(
-                name=f"{file_meta.name} (from {owner_name})",
-                path=file_meta.path,
-                size=file_meta.size_bytes,
-                type="directory" if file_meta.is_directory else "file",
-                modified_at=file_meta.updated_at or file_meta.created_at,
-                owner_id=str(share.owner_id),
-                mime_type=file_meta.mime_type,
-                file_id=file_meta.id,
-                can_read=share.can_read,
-                can_write=share.can_write,
-                can_delete=share.can_delete,
-            ))
-
+        entries = list_shared_with_me(user, db)
         entries = _enrich_with_sync_info(entries, user.id, False, db)
         return FileListResponse(files=entries)
 

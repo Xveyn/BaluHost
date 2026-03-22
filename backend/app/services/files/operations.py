@@ -752,3 +752,124 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
     )
 
     return final_target_resolved
+
+
+# ── Virtual directory listings for non-admin users ────────────────────────────
+
+def list_user_root(user: UserPublic, db: Session) -> list[FileItem]:
+    """Build the virtual root listing for a non-admin user.
+
+    Shows: Shared/, user's home directory, and optionally "Shared with me".
+    """
+    from sqlalchemy import select, func, or_
+    from app.models.file_share import FileShare
+    from app.services.users import _create_home_directory
+
+    # Ensure home dir exists
+    try:
+        _create_home_directory(user.username, user.id, db=db)
+    except Exception:
+        pass
+
+    entries: list[FileItem] = []
+
+    # Shared directory
+    shared_path = _resolve_path(SHARED_DIR_NAME)
+    if shared_path.exists():
+        stats = shared_path.stat()
+        entries.append(FileItem(
+            name=SHARED_DIR_NAME,
+            path=SHARED_DIR_NAME,
+            size=0,
+            type="directory",
+            modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+            owner_id=None,
+            mime_type=None,
+            file_id=None,
+        ))
+
+    # User's home directory
+    home_path = _resolve_path(user.username)
+    if home_path.exists():
+        stats = home_path.stat()
+        entries.append(FileItem(
+            name=user.username,
+            path=user.username,
+            size=0,
+            type="directory",
+            modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
+            owner_id=str(user.id),
+            mime_type=None,
+            file_id=None,
+        ))
+
+    # "Shared with me" virtual folder — only show if user has active shares
+    now = datetime.now(timezone.utc)
+    share_count = db.execute(
+        select(func.count(FileShare.id)).where(
+            FileShare.shared_with_user_id == user.id,
+            FileShare.owner_id != user.id,
+            FileShare.can_read.is_(True),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+    ).scalar_one()
+    if share_count > 0:
+        entries.append(FileItem(
+            name=SHARED_WITH_ME_DIR,
+            path=SHARED_WITH_ME_DIR,
+            size=0,
+            type="directory",
+            modified_at=datetime.now(timezone.utc),
+            owner_id=None,
+            mime_type=None,
+            file_id=None,
+        ))
+
+    return entries
+
+
+def list_shared_with_me(user: UserPublic, db: Session) -> list[FileItem]:
+    """Build the "Shared with me" virtual directory listing for a user."""
+    from sqlalchemy import select, or_
+    from app.models.file_share import FileShare
+    from app.models.file_metadata import FileMetadata
+    from app.models.user import User as UserModel
+
+    now = datetime.now(timezone.utc)
+    shares = db.execute(
+        select(FileShare).where(
+            FileShare.shared_with_user_id == user.id,
+            FileShare.owner_id != user.id,
+            FileShare.can_read.is_(True),
+            or_(
+                FileShare.expires_at.is_(None),
+                FileShare.expires_at > now,
+            ),
+        )
+    ).scalars().all()
+
+    entries: list[FileItem] = []
+    for share in shares:
+        file_meta = db.get(FileMetadata, share.file_id)
+        if not file_meta:
+            continue
+        owner = db.get(UserModel, share.owner_id)
+        owner_name = owner.username if owner else str(share.owner_id)
+        entries.append(FileItem(
+            name=f"{file_meta.name} (from {owner_name})",
+            path=file_meta.path,
+            size=file_meta.size_bytes,
+            type="directory" if file_meta.is_directory else "file",
+            modified_at=file_meta.updated_at or file_meta.created_at,
+            owner_id=str(share.owner_id),
+            mime_type=file_meta.mime_type,
+            file_id=file_meta.id,
+            can_read=share.can_read,
+            can_write=share.can_write,
+            can_delete=share.can_delete,
+        ))
+
+    return entries
