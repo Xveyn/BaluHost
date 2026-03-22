@@ -39,3 +39,42 @@ class TestValidateMacAddress:
 
     def test_whitespace_stripped(self):
         assert validate_mac_address("  AA:BB:CC:DD:EE:FF  ") == "AA:BB:CC:DD:EE:FF"
+
+
+from app.schemas.sleep import WolRequest, SleepConfigUpdate
+
+
+class TestWolRequestValidation:
+    """Test MAC validation on WolRequest schema."""
+
+    def test_valid_mac_normalized(self):
+        req = WolRequest(mac_address="aa:bb:cc:dd:ee:ff")
+        assert req.mac_address == "AA:BB:CC:DD:EE:FF"
+
+    def test_none_mac_allowed(self):
+        req = WolRequest(mac_address=None)
+        assert req.mac_address is None
+
+    def test_no_mac_defaults_none(self):
+        req = WolRequest()
+        assert req.mac_address is None
+
+    def test_invalid_mac_rejected(self):
+        with pytest.raises(Exception):
+            WolRequest(mac_address="not-a-mac")
+
+
+class TestSleepConfigUpdateMacValidation:
+    """Test MAC validation on SleepConfigUpdate schema."""
+
+    def test_valid_mac_normalized(self):
+        update = SleepConfigUpdate(wol_mac_address="aa-bb-cc-dd-ee-ff")
+        assert update.wol_mac_address == "AA:BB:CC:DD:EE:FF"
+
+    def test_empty_string_becomes_none(self):
+        update = SleepConfigUpdate(wol_mac_address="")
+        assert update.wol_mac_address is None
+
+    def test_none_passes_through(self):
+        update = SleepConfigUpdate(wol_mac_address=None)
+        assert update.wol_mac_address is None

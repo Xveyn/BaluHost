@@ -8,7 +8,8 @@ from datetime import datetime
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
+from app.schemas.validators import validate_mac_address
 
 
 class SleepState(str, Enum):
@@ -98,6 +99,11 @@ class WolRequest(BaseModel):
     mac_address: Optional[str] = Field(default=None, description="Target MAC address (uses configured if omitted)")
     broadcast_address: Optional[str] = Field(default=None, description="Broadcast address (uses configured if omitted)")
 
+    @field_validator("mac_address", mode="before")
+    @classmethod
+    def _validate_mac(cls, v: Optional[str]) -> Optional[str]:
+        return validate_mac_address(v)
+
 
 # ---------------------------------------------------------------------------
 # Configuration
@@ -146,6 +152,11 @@ class SleepConfigUpdate(BaseModel):
     wol_mac_address: Optional[str] = None
     wol_broadcast_address: Optional[str] = None
     pause_monitoring: Optional[bool] = None
+
+    @field_validator("wol_mac_address", mode="before")
+    @classmethod
+    def _validate_wol_mac(cls, v: Optional[str]) -> Optional[str]:
+        return validate_mac_address(v)
     pause_disk_io: Optional[bool] = None
     reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
     disk_spindown_enabled: Optional[bool] = None
