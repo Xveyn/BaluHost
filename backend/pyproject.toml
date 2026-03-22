@@ -1,6 +1,6 @@
 [project]
 name = "baluhost-backend"
-version = "1.18.0"
+version = "1.19.0"
 description = "Mocked NAS management backend built with FastAPI"
 authors = [{ name = "Baluhost" }]
 requires-python = ">=3.11"
@@ -55,7 +55,7 @@ dev = [
   "qrcode>=7.0.0",
   "apscheduler>=3.10.0,<4.0.0",
   "pytest-timeout>=2.2.0,<3.0.0",
-  "pytest-cov>=4.1.0,<5.0.0"
+  "pytest-cov>=7.0.0,<8.0.0"
 ]
 
 scheduler = [
