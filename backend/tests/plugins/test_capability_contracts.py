@@ -327,3 +327,80 @@ class BrokenPollerPlugin(SmartDevicePlugin):
 
     # Cleanup
     del sys.modules[module_name]
+
+
+from app.plugins.smart_device.capabilities import validate_poll_data
+
+
+def test_validate_poll_data_valid_power_reading():
+    """Valid PowerReading passes validation."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": PowerReading(
+            watts=42.0, timestamp=datetime.now(timezone.utc)
+        )
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_valid_dict():
+    """A raw dict that matches PowerReading schema passes validation."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": {
+            "watts": 42.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_invalid_dict():
+    """A dict missing required field 'watts' is rejected."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": {"voltage": 230.0}  # missing 'watts' and 'timestamp'
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" not in validated
+    assert len(warnings) == 1
+    assert "power_monitor" in warnings[0].lower()
+
+
+def test_validate_poll_data_empty_dict():
+    """Empty poll result is valid — no errors."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    validated, warnings = validate_poll_data({}, declared)
+    assert validated == {}
+    assert warnings == []
+
+
+def test_validate_poll_data_partial_capabilities():
+    """Returning only some declared capabilities is valid."""
+    declared = [DeviceCapability.SWITCH, DeviceCapability.POWER_MONITOR]
+    data = {
+        "switch": SwitchState(is_on=True),
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "switch" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_extra_key_warned():
+    """Keys not in declared capabilities are dropped with a warning."""
+    declared = [DeviceCapability.SWITCH]
+    data = {
+        "switch": SwitchState(is_on=True),
+        "power_monitor": PowerReading(
+            watts=42.0, timestamp=datetime.now(timezone.utc)
+        ),
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "switch" in validated
+    assert "power_monitor" not in validated
+    assert len(warnings) == 1
+    assert "undeclared" in warnings[0].lower()
