@@ -266,3 +266,64 @@ class GoodDevicePlugin(SmartDevicePlugin):
     manager = PluginManager(plugins_dir=plugins_dir)
     plugin = manager.load_plugin("good_device")
     assert plugin is not None
+
+
+@pytest.mark.asyncio
+async def test_poller_skips_plugin_failing_contracts(tmp_path):
+    """Validate that dynamically loaded plugins fail contract validation
+    the same way as statically defined ones."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "broken_poller_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import DeviceCapability
+
+class BrokenPollerPlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="broken_poller_device",
+            version="1.0.0",
+            display_name="Broken Poller",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="broken",
+            display_name="Broken",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {}
+''')
+
+    import importlib.util, sys
+    module_name = "test_broken_poller_plugin"
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        plugin_dir / "__init__.py",
+        submodule_search_locations=[str(plugin_dir)],
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+
+    plugin = module.BrokenPollerPlugin()
+
+    from app.plugins.smart_device.capabilities import validate_capability_contracts
+    errors = validate_capability_contracts(plugin)
+    assert len(errors) == 1
+    assert "power_monitor" in errors[0].lower()
+
+    # Cleanup
+    del sys.modules[module_name]

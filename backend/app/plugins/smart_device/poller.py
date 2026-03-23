@@ -218,6 +218,19 @@ class SmartDevicePoller:
                     continue
 
                 plugin = plugin_cls()
+
+                # Validate capability contracts
+                from app.plugins.smart_device.capabilities import validate_capability_contracts
+                contract_errors = validate_capability_contracts(plugin)
+                if contract_errors:
+                    errors_str = "; ".join(contract_errors)
+                    logger.warning(
+                        "SmartDevicePoller: plugin '%s' failed capability contract "
+                        "validation: %s — skipping",
+                        name, errors_str,
+                    )
+                    continue
+
                 if plugin.metadata.category != "smart_device":
                     continue
 
