@@ -1,7 +1,7 @@
 # Release Downgrade Feature — Design Spec
 
 **Date**: 2026-03-23
-**Status**: Draft
+**Status**: Reviewed
 **Author**: Claude + Xveyn
 
 ## Summary
@@ -21,7 +21,7 @@ Allow administrators to downgrade BaluHost to any previous release (git tag). Th
 
 - Downgrading to arbitrary non-tagged commits (only releases)
 - Automatic rollback of file-system data (user files are untouched)
-- Multi-step downgrade chains (e.g., 1.19 → 1.17 → 1.15 in sequence)
+- Multi-step downgrade chains (e.g., 1.19 -> 1.17 -> 1.15 in sequence)
 
 ## Architecture
 
@@ -41,20 +41,65 @@ POST /api/updates/downgrade
 
 ```python
 class DowngradeRequest(BaseModel):
-    target_tag: str = Field(description="Git tag to downgrade to, e.g. 'v1.17.0'")
+    target_tag: str = Field(
+        description="Git tag to downgrade to, e.g. 'v1.17.0'",
+        pattern=r"^v\d+\.\d+\.\d+(-[\w.]+)?$",
+    )
     target_commit: str = Field(description="Expected commit hash for validation")
     skip_backup: bool = Field(default=False, description="Skip file/config backup (DB backup is always created)")
     force: bool = Field(default=False, description="Ignore non-critical blockers")
 ```
 
+The `target_tag` field has a regex validator to ensure it matches the expected tag format (`v1.17.0`, `v1.18.0-beta.1`, etc.). This prevents injection of arbitrary git refs.
+
 Response reuses `UpdateStartResponse` (success, update_id, message, blockers).
 
 #### UpdateChannelEnum Extension
 
-Add `"downgrade"` to `UpdateChannelEnum`:
+Add `"downgrade"` to both the schema Literal AND the ORM enum:
 
+Schema (`schemas/update.py`):
 ```python
 UpdateChannelEnum = Literal["stable", "unstable", "development", "downgrade"]
+```
+
+ORM model (`models/update_history.py`):
+```python
+class UpdateChannel(str, enum.Enum):
+    STABLE = "stable"
+    BETA = "beta"
+    DEVELOPMENT = "development"
+    DOWNGRADE = "downgrade"
+```
+
+**Note**: The `channel` column in `update_history` is `String(20)`, not a PostgreSQL enum type, so no Alembic migration is needed — any string value up to 20 chars is accepted. The existing mismatch between schema `"unstable"` and ORM `"beta"` is a pre-existing issue and out of scope for this feature.
+
+#### `ReleaseInfo` Schema Extension
+
+The existing `ReleaseInfo` only has `commit_short` (7-char hash). The frontend needs the full commit hash to populate `DowngradeRequest.target_commit`. Add a `commit` field:
+
+```python
+class ReleaseInfo(BaseModel):
+    tag: str
+    version: str
+    date: Optional[str] = None
+    is_prerelease: bool = False
+    commit_short: str
+    commit: str = Field(description="Full commit hash for downgrade validation")
+```
+
+Update `ProdUpdateBackend.get_all_releases()` to fetch the full hash (change `--short=7` to full `rev-parse`). Update `DevUpdateBackend.get_all_releases()` to include mock full hashes.
+
+Update `ReleaseInfo` TypeScript interface in `client/src/api/updates.ts`:
+```typescript
+export interface ReleaseInfo {
+  tag: string;
+  version: string;
+  date: string | null;
+  is_prerelease: boolean;
+  commit_short: string;
+  commit: string;
+}
 ```
 
 #### Service Method: `UpdateService.downgrade()`
@@ -70,10 +115,12 @@ async def downgrade(
 **Validation steps:**
 1. Verify `target_tag` exists in git tags
 2. Verify `target_commit` matches the tag's commit
-3. Verify target version < current version (semver comparison)
+3. Verify target version < current version (semver comparison via existing `parse_version()` from `services/update/utils.py`)
 4. Check blockers (no running update/downgrade)
 
 **On success:** Creates `UpdateHistory` entry with `channel="downgrade"`, launches async task (dev) or shell script (prod).
+
+**Semantics of `from_version` / `to_version`:** Same convention as updates — `from_version` = current version, `to_version` = target version. For downgrades, `from_version` > `to_version`. The frontend already displays both fields; no special handling needed.
 
 #### Async Downgrade Flow: `_run_dev_downgrade()`
 
@@ -83,12 +130,16 @@ async def downgrade(
 | 2 | 10-25% | `downloading` | `git fetch --all --tags --prune` |
 | 3 | 25-40% | `installing` | `git checkout <target_commit>` |
 | 4 | 40-55% | `installing` | Install dependencies (pip/npm for the older version) |
-| 5 | 55-75% | `migrating` | **Alembic downgrade**: resolve target revision, run `alembic downgrade <rev>`. On failure → restore DB backup, log warning. |
+| 5 | 55-75% | `migrating` | **Alembic downgrade**: resolve target revision, run `alembic downgrade <rev>`. On failure -> restore DB backup, log warning. |
 | 6 | 75-85% | `health_check` | Health check |
 | 7 | 85-95% | `restarting` | Restart services |
 | 8 | 100% | `completed` | Done |
 
-On any failure: attempt rollback to original commit (same as current update error handler).
+**On failure at any step:** Attempt rollback to original commit (same as current update error handler). If the Alembic downgrade failed AND the DB backup restore also fails, abort the entire downgrade, rollback git checkout to original commit, and mark as `failed` with a descriptive error message.
+
+**Cancellation:** The existing `cancel_update()` flow works for downgrades since they share the `UpdateHistory` model and async task infrastructure. Downgrade tasks are tracked in `_running_tasks` and can be cancelled via the same `POST /cancel/{id}` endpoint.
+
+**WebSocket events:** Downgrades emit the same `update_progress`, `update_complete`, and `update_failed` WebSocket events as updates. The `channel="downgrade"` field distinguishes them.
 
 #### Alembic Revision Resolution
 
@@ -102,9 +153,21 @@ async def resolve_alembic_revision(self, commit: str) -> Optional[str]:
 ```
 
 **ProdUpdateBackend implementation:**
-- Run `git ls-tree -r --name-only <commit> backend/alembic/versions/` to list migration files at that commit
-- Parse revision IDs from filenames (pattern: `NNN_description.py` or `<hash>_description.py`)
-- Build the revision chain to find the head revision for that commit
+
+The codebase has mixed migration naming conventions (numbered like `001_xxx.py`, hex-hash like `9c00b193b5bd_xxx.py`, plain names). Revision IDs are embedded inside each file as Python variables (`revision = "..."`), not reliably derivable from filenames. Additionally, merge migrations exist with multiple `down_revision` values.
+
+Therefore, the approach is NOT to parse filenames but to:
+
+1. List migration files at the target commit: `git ls-tree -r --name-only <commit> backend/alembic/versions/`
+2. For each file, extract the `revision` variable: `git show <commit>:backend/alembic/versions/<filename>` and grep for `^revision\s*=`
+3. Also extract `down_revision` to build the revision chain
+4. Walk the chain to find the head (the revision that no other revision points to as its `down_revision`)
+
+This is more expensive (one `git show` per migration file) but reliable. The number of migration files is bounded (currently ~40) so this completes in under a second.
+
+**Alternative shortcut for prod:** After `git checkout <target_commit>` in Step 3, simply run `alembic heads` against the checked-out code. This is the simplest and most reliable approach since Alembic itself resolves the chain. The `resolve_alembic_revision()` call can happen after checkout instead of before.
+
+**Recommended approach:** Use the post-checkout `alembic heads` shortcut in production. The `git show`-based approach is a fallback for cases where we need the revision before checkout (e.g., for pre-flight validation).
 
 **DevUpdateBackend implementation:**
 - Returns a mock revision string (e.g., `"mock_downgrade_rev"`)
@@ -112,24 +175,85 @@ async def resolve_alembic_revision(self, commit: str) -> Optional[str]:
 #### Alembic Downgrade Fallback
 
 ```python
-async def _run_alembic_downgrade(self, target_rev: str, backup_id: int) -> bool:
+async def _run_alembic_downgrade(
+    self, target_rev: str, backup_id: int, admin_username: str
+) -> bool:
     """Run alembic downgrade. On failure, restore DB backup."""
     success, error = await self.backend.run_alembic_downgrade(target_rev)
     if not success:
         logger.warning(f"Alembic downgrade failed: {error}. Restoring backup.")
         backup_service = BackupService(self.db)
-        backup_service.restore_backup(backup_id)
+        restore_ok = backup_service.restore_backup(
+            backup_id=backup_id,
+            user=admin_username,
+            restore_database=True,
+            restore_files=False,
+            restore_config=False,
+        )
+        if not restore_ok:
+            logger.error(
+                f"DB backup restore also failed for backup {backup_id}. "
+                "Manual intervention required."
+            )
+            raise Exception(
+                f"Alembic downgrade failed ({error}) AND backup restore failed. "
+                "Database may be in inconsistent state."
+            )
         return False
     return True
 ```
 
+The `admin_username` is threaded from `downgrade()` via the `user_id` parameter (resolved to username via a DB query at the start of the downgrade flow).
+
 #### Production: `run-update.sh` Extension
 
-New flags:
-- `--downgrade` — switches from `alembic upgrade head` to `alembic downgrade <rev>`
-- `--alembic-rev <revision>` — target Alembic revision
+New flags parsed alongside existing ones:
+- `--downgrade` — boolean flag, switches migration step from upgrade to downgrade
+- `--alembic-rev <revision>` — target Alembic revision for downgrade
 
-The script's module runner skips module `08-database-migrate` and instead runs a new downgrade block that executes `alembic downgrade $ALEMBIC_REV`.
+**`ProdUpdateBackend.launch_update_script()` changes:**
+
+The method signature gains two optional parameters:
+
+```python
+def launch_update_script(
+    self,
+    update_id: int,
+    from_commit: str,
+    to_commit: str,
+    from_version: str,
+    to_version: str,
+    downgrade: bool = False,
+    alembic_rev: Optional[str] = None,
+) -> tuple[bool, Optional[str]]:
+```
+
+When `downgrade=True`, the additional flags `--downgrade --alembic-rev <rev>` are appended to the `systemd-run` command.
+
+**Shell script changes:**
+
+```bash
+# New argument parsing
+DOWNGRADE=false
+ALEMBIC_REV=""
+
+case "$1" in
+    # ...existing cases...
+    --downgrade)    DOWNGRADE=true;    shift ;;
+    --alembic-rev)  ALEMBIC_REV="$2";  shift 2 ;;
+esac
+
+# Step 3 (database): replace module 08 when downgrading
+if [[ "$DOWNGRADE" == "true" && -n "$ALEMBIC_REV" ]]; then
+    write_status "migrating" 45 "Running alembic downgrade to $ALEMBIC_REV..."
+    sudo -u "$BALUHOST_USER" "$VENV_DIR/bin/alembic" -c "$INSTALL_DIR/backend/alembic.ini" \
+        downgrade "$ALEMBIC_REV"
+else
+    run_module "08" "database-migrate" 45 55
+fi
+```
+
+**Dependency installation (Step 2):** The older version's `pyproject.toml` may have different dependency constraints. The shell script already runs module `05-python-venv` which does `pip install -e ".[dev]"` in the venv — this works because it installs from the checked-out (older) code. If pip fails due to conflicts, the error handler triggers a rollback to the original commit.
 
 ### Frontend
 
@@ -138,10 +262,12 @@ The script's module runner skips module `08-database-migrate` and instead runs a
 Each release where `version < current_version` gets a "Downgrade" button:
 
 ```
-v1.19.0  abc1234  2026-03-20  ✅ Stable  [Current]
-v1.18.0  def5678  2026-03-15  ✅ Stable  [↩ Downgrade]
-v1.17.0  ghi9012  2026-03-08  ✅ Stable  [↩ Downgrade]
+v1.19.0  abc1234  2026-03-20  Stable  [Current]
+v1.18.0  def5678  2026-03-15  Stable  [Downgrade]
+v1.17.0  ghi9012  2026-03-08  Stable  [Downgrade]
 ```
+
+The component receives the current version as a new prop to determine which releases are eligible for downgrade.
 
 #### Two-Step Inline Confirmation
 
@@ -198,7 +324,7 @@ New keys in `en/updates.json` and `de/updates.json`:
 }
 ```
 
-German equivalents:
+German equivalents (proper UTF-8 umlauts, matching existing i18n convention):
 
 ```json
 {
@@ -213,12 +339,15 @@ German equivalents:
 }
 ```
 
+Note: Verify umlaut convention in existing `de/updates.json` at implementation time and match it (either `ue`/`ae` ASCII or proper `u`/`a` UTF-8).
+
 ### Security
 
 - Admin-only endpoint with `Depends(deps.get_current_admin)`
 - Rate-limited via `@user_limiter.limit(get_limit("admin_operations"))`
 - Audit log entry for every downgrade attempt (success and failure)
 - `target_commit` validated against `target_tag` to prevent commit injection
+- `target_tag` validated with regex pattern to prevent arbitrary git ref injection
 - DB backup always created (not skippable for downgrade)
 
 ### Tests
@@ -227,11 +356,13 @@ German equivalents:
 
 - `test_downgrade_happy_path` — full flow with DevBackend
 - `test_downgrade_alembic_failure_restores_backup` — Alembic fails, backup restored
+- `test_downgrade_alembic_and_restore_both_fail` — both fail, downgrade aborted, git rolled back
 - `test_downgrade_blocked_by_running_update` — blocker check
 - `test_downgrade_target_newer_than_current_rejected` — version validation
 - `test_downgrade_invalid_tag_rejected` — tag validation
 - `test_downgrade_commit_mismatch_rejected` — commit vs tag validation
 - `test_downgrade_creates_mandatory_backup` — backup always created even with skip_backup=True
+- `test_downgrade_cancellation` — cancelling a running downgrade works
 
 #### API Tests (backend/tests/api/test_updates_routes.py)
 
@@ -239,21 +370,27 @@ German equivalents:
 - `test_downgrade_rate_limited` — rate limiting works
 - `test_downgrade_audit_logged` — audit log entry created
 
+#### ProdUpdateBackend Tests (backend/tests/services/test_prod_update_backend.py)
+
+- `test_resolve_alembic_revision_with_mocked_git` — mock `_run_git` calls, verify correct head resolution from migration chain
+
 ## File Changes Summary
 
 | File | Change |
 |------|--------|
-| `backend/app/schemas/update.py` | Add `DowngradeRequest`, extend `UpdateChannelEnum` |
+| `backend/app/schemas/update.py` | Add `DowngradeRequest`, extend `UpdateChannelEnum`, add `commit` to `ReleaseInfo` |
+| `backend/app/models/update_history.py` | Add `DOWNGRADE = "downgrade"` to `UpdateChannel` enum |
 | `backend/app/services/update/service.py` | Add `downgrade()`, `_run_dev_downgrade()`, `_run_alembic_downgrade()` |
 | `backend/app/services/update/backend.py` | Add abstract `resolve_alembic_revision()`, `run_alembic_downgrade()` |
-| `backend/app/services/update/prod_backend.py` | Implement `resolve_alembic_revision()`, `run_alembic_downgrade()` |
-| `backend/app/services/update/dev_backend.py` | Mock implementations for downgrade |
+| `backend/app/services/update/prod_backend.py` | Implement `resolve_alembic_revision()`, `run_alembic_downgrade()`, update `get_all_releases()` for full hash, extend `launch_update_script()` |
+| `backend/app/services/update/dev_backend.py` | Mock implementations for downgrade, update `get_all_releases()` for full hash |
 | `backend/app/api/routes/updates.py` | Add `POST /downgrade` endpoint |
-| `deploy/update/run-update.sh` | Add `--downgrade` + `--alembic-rev` flags |
-| `client/src/api/updates.ts` | Add `DowngradeRequest`, `startDowngrade()` |
+| `deploy/update/run-update.sh` | Add `--downgrade` + `--alembic-rev` flags, conditional migration step |
+| `client/src/api/updates.ts` | Add `DowngradeRequest`, `startDowngrade()`, add `commit` to `ReleaseInfo` |
 | `client/src/components/updates/UpdateHistoryTab.tsx` | Downgrade button + two-step inline confirmation |
 | `client/src/components/updates/UpdateOverviewTab.tsx` | Handle downgrade channel in progress display |
 | `client/src/i18n/locales/en/updates.json` | Downgrade translation keys |
 | `client/src/i18n/locales/de/updates.json` | German downgrade translations |
 | `backend/tests/services/test_update_service.py` | Downgrade unit tests |
 | `backend/tests/api/test_updates_routes.py` | Downgrade API tests |
+| `backend/tests/services/test_prod_update_backend.py` | `resolve_alembic_revision` tests |
