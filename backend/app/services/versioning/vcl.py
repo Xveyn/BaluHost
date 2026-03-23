@@ -437,18 +437,20 @@ class VCLService:
             warning_level: None | 'warning' (>80%) | 'critical' (>95%)
         """
         settings = self.get_or_create_user_settings(user_id)
-        
-        if settings.max_size_bytes <= 0:
+
+        max_size: int = int(settings.max_size_bytes)  # type: ignore[arg-type]
+        if max_size <= 0:
             return 0.0, None
-        
-        usage_percent = (settings.current_usage_bytes / settings.max_size_bytes) * 100
-        
+
+        current_usage: int = int(settings.current_usage_bytes)  # type: ignore[arg-type]
+        usage_percent = (current_usage / max_size) * 100
+
         warning = None
         if usage_percent >= 95:
             warning = 'critical'
         elif usage_percent >= 80:
             warning = 'warning'
-        
+
         return usage_percent, warning
     
     def get_version_content(self, version: FileVersion) -> bytes:

@@ -3,6 +3,7 @@ Development backend for sleep mode that simulates all operations in-memory.
 """
 import asyncio
 import logging
+from typing import Optional
 
 from app.services.power.sleep import SleepBackend
 
@@ -51,3 +52,6 @@ class DevSleepBackend(SleepBackend):
 
     async def check_tool_available(self, tool: str) -> bool:
         return True
+
+    async def get_own_mac(self) -> Optional[str]:
+        return "DE:AD:BE:EF:00:01"

@@ -73,17 +73,17 @@ class FanInfo(BaseModel):
     """Information about a single fan."""
     fan_id: str = Field(..., description="Unique fan identifier (e.g., hwmon0_pwm1)")
     name: str = Field(..., description="Human-readable fan name")
-    rpm: Optional[int] = Field(None, description="Current RPM (revolutions per minute)")
+    rpm: Optional[int] = Field(default=None, description="Current RPM (revolutions per minute)")
     pwm_percent: int = Field(..., ge=0, le=100, description="Current PWM percentage")
-    temperature_celsius: Optional[float] = Field(None, description="Associated temperature sensor reading")
+    temperature_celsius: Optional[float] = Field(default=None, description="Associated temperature sensor reading")
     mode: FanMode = Field(..., description="Current operation mode")
-    is_active: bool = Field(True, description="Whether fan control is active")
-    min_pwm_percent: int = Field(30, ge=0, le=100)
-    max_pwm_percent: int = Field(100, ge=0, le=100)
-    emergency_temp_celsius: float = Field(85.0, ge=0, le=150)
-    temp_sensor_id: Optional[str] = Field(None, description="Associated temperature sensor ID")
+    is_active: bool = Field(default=True, description="Whether fan control is active")
+    min_pwm_percent: int = Field(default=30, ge=0, le=100)
+    max_pwm_percent: int = Field(default=100, ge=0, le=100)
+    emergency_temp_celsius: float = Field(default=85.0, ge=0, le=150)
+    temp_sensor_id: Optional[str] = Field(default=None, description="Associated temperature sensor ID")
     curve_points: List[FanCurvePoint] = Field(default_factory=list)
-    hysteresis_celsius: float = Field(3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
+    hysteresis_celsius: float = Field(default=3.0, ge=0, le=15, description="Temperature hysteresis to prevent oscillation")
     active_schedule: Optional[FanActiveSchedule] = None
 
     class Config:
@@ -331,11 +331,11 @@ class ApplyPresetResponse(BaseModel):
 class UpdateFanConfigRequest(BaseModel):
     """Request to update fan configuration (hysteresis, etc.)."""
     fan_id: str = Field(..., description="Fan identifier")
-    hysteresis_celsius: Optional[float] = Field(None, ge=0, le=15, description="Temperature hysteresis (0-15°C)")
-    min_pwm_percent: Optional[int] = Field(None, ge=0, le=100, description="Minimum PWM percentage")
-    max_pwm_percent: Optional[int] = Field(None, ge=0, le=100, description="Maximum PWM percentage")
-    emergency_temp_celsius: Optional[float] = Field(None, ge=0, le=150, description="Emergency temperature threshold")
-    temp_sensor_id: Optional[str] = Field(None, description="Temperature sensor ID to use for this fan")
+    hysteresis_celsius: Optional[float] = Field(default=None, ge=0, le=15, description="Temperature hysteresis (0-15°C)")
+    min_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100, description="Minimum PWM percentage")
+    max_pwm_percent: Optional[int] = Field(default=None, ge=0, le=100, description="Maximum PWM percentage")
+    emergency_temp_celsius: Optional[float] = Field(default=None, ge=0, le=150, description="Emergency temperature threshold")
+    temp_sensor_id: Optional[str] = Field(default=None, description="Temperature sensor ID to use for this fan")
 
     class Config:
         json_schema_extra = {
@@ -363,9 +363,9 @@ class TempSensorInfo(BaseModel):
     """Information about a temperature sensor."""
     sensor_id: str = Field(..., description="Sensor identifier (e.g., hwmon2_temp1)")
     device_name: str = Field(..., description="Hardware device name (e.g., k10temp)")
-    label: Optional[str] = Field(None, description="Sensor label (e.g., Tctl)")
+    label: Optional[str] = Field(default=None, description="Sensor label (e.g., Tctl)")
     is_cpu_sensor: bool = Field(..., description="Whether this is a CPU temperature sensor")
-    current_temp: Optional[float] = Field(None, description="Current temperature in Celsius")
+    current_temp: Optional[float] = Field(default=None, description="Current temperature in Celsius")
 
 
 class TempSensorListResponse(BaseModel):
@@ -383,8 +383,8 @@ class FanScheduleEntrySchema(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
     end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
-    curve_points: Optional[List[FanCurvePoint]] = Field(None)
-    priority: int = Field(0, ge=0, le=100)
+    curve_points: Optional[List[FanCurvePoint]] = Field(default=None)
+    priority: int = Field(default=0, ge=0, le=100)
     is_enabled: bool = True
     profile_id: Optional[int] = None
     profile_name: Optional[str] = None
@@ -397,10 +397,10 @@ class CreateFanScheduleEntryRequest(BaseModel):
     name: str = Field(..., min_length=1, max_length=100, description="Schedule entry label")
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="Start time in HH:MM format")
     end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="End time in HH:MM format")
-    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
-    profile_id: Optional[int] = Field(None, description="Reference to a saved curve profile")
-    priority: int = Field(0, ge=0, le=100, description="Lower number = higher priority")
-    is_enabled: bool = Field(True, description="Whether this entry is active")
+    curve_points: Optional[List[FanCurvePoint]] = Field(default=None, min_length=2, max_length=10)
+    profile_id: Optional[int] = Field(default=None, description="Reference to a saved curve profile")
+    priority: int = Field(default=0, ge=0, le=100, description="Lower number = higher priority")
+    is_enabled: bool = Field(default=True, description="Whether this entry is active")
 
     @model_validator(mode='after')
     def validate_curve_source(self) -> 'CreateFanScheduleEntryRequest':
@@ -457,12 +457,12 @@ class CreateFanScheduleEntryRequest(BaseModel):
 
 class UpdateFanScheduleEntryRequest(BaseModel):
     """Request to update an existing fan schedule entry."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    start_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
-    end_time: Optional[str] = Field(None, pattern=r"^\d{2}:\d{2}$")
-    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
-    profile_id: Optional[int] = Field(None, description="Reference to a saved curve profile")
-    priority: Optional[int] = Field(None, ge=0, le=100)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    curve_points: Optional[List[FanCurvePoint]] = Field(default=None, min_length=2, max_length=10)
+    profile_id: Optional[int] = Field(default=None, description="Reference to a saved curve profile")
+    priority: Optional[int] = Field(default=None, ge=0, le=100)
     is_enabled: Optional[bool] = None
 
     @field_validator('start_time', 'end_time')
@@ -525,7 +525,7 @@ class FanCurveProfileSchema(BaseModel):
 class CreateFanCurveProfileRequest(BaseModel):
     """Request to create a new fan curve profile."""
     name: str = Field(..., min_length=1, max_length=100, description="Profile name")
-    description: Optional[str] = Field(None, max_length=255)
+    description: Optional[str] = Field(default=None, max_length=255)
     curve_points: List[FanCurvePoint] = Field(..., min_length=2, max_length=10)
 
     @field_validator('name')
@@ -549,9 +549,9 @@ class CreateFanCurveProfileRequest(BaseModel):
 
 class UpdateFanCurveProfileRequest(BaseModel):
     """Request to update a fan curve profile."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100)
-    description: Optional[str] = Field(None, max_length=255)
-    curve_points: Optional[List[FanCurvePoint]] = Field(None, min_length=2, max_length=10)
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100)
+    description: Optional[str] = Field(default=None, max_length=255)
+    curve_points: Optional[List[FanCurvePoint]] = Field(default=None, min_length=2, max_length=10)
 
     @field_validator('name')
     @classmethod

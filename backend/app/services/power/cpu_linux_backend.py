@@ -17,7 +17,7 @@ import logging
 import platform
 import subprocess
 from pathlib import Path
-from typing import Dict, List, Optional, Tuple
+from typing import Any, Dict, List, Optional, Tuple
 
 from app.schemas.power import PowerProfileConfig
 from app.services.power.cpu_protocol import CpuPowerBackend
@@ -124,15 +124,15 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
 
         return permissions
 
-    def get_permission_status(self) -> Dict[str, any]:
+    def get_permission_status(self) -> Dict[str, Any]:
         """Get detailed permission status for diagnostics."""
         import os
-        import grp
-        import pwd
+        import grp  # type: ignore[import-not-found]
+        import pwd  # type: ignore[import-not-found]
 
         status = {
-            "user": pwd.getpwuid(os.getuid()).pw_name,
-            "groups": [grp.getgrgid(g).gr_name for g in os.getgroups()],
+            "user": pwd.getpwuid(os.getuid()).pw_name,  # type: ignore[attr-defined]
+            "groups": [grp.getgrgid(g).gr_name for g in os.getgroups()],  # type: ignore[attr-defined]
             "in_cpufreq_group": False,
             "sudo_available": self._sudo_available,
             "files": self.check_permissions(),
@@ -141,8 +141,8 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
 
         # Check if user is in cpufreq group
         try:
-            cpufreq_gid = grp.getgrnam("cpufreq").gr_gid
-            status["in_cpufreq_group"] = cpufreq_gid in os.getgroups()
+            cpufreq_gid = grp.getgrnam("cpufreq").gr_gid  # type: ignore[attr-defined]
+            status["in_cpufreq_group"] = cpufreq_gid in os.getgroups()  # type: ignore[attr-defined]
         except KeyError:
             status["cpufreq_group_exists"] = False
 
@@ -298,7 +298,7 @@ class LinuxCpuPowerBackend(CpuPowerBackend):
         permission_denied = False
 
         for cpu_path, result in zip(cpu_paths, results):
-            if isinstance(result, Exception):
+            if isinstance(result, BaseException):
                 logger.error(f"Exception applying profile to {cpu_path.parent.name}: {result}")
                 failed_cpus.append(cpu_path.parent.name)
                 continue

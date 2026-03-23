@@ -94,6 +94,12 @@ class TestDevSleepBackend:
         assert await backend.check_tool_available("hdparm") is True
         assert await backend.check_tool_available("nonexistent") is True  # Dev always True
 
+    @pytest.mark.asyncio
+    async def test_get_own_mac(self):
+        backend = DevSleepBackend()
+        mac = await backend.get_own_mac()
+        assert mac == "DE:AD:BE:EF:00:01"
+
 
 # ============================================================================
 # SleepManagerService Tests
@@ -574,3 +580,74 @@ class TestAutoWakeMiddleware:
         response = client.get("/api/files/list", headers=admin_headers)
         # Should still work (200 or other status, not 500)
         assert response.status_code != 500
+
+
+class TestLinuxSleepBackendGetOwnMac:
+    """Test LinuxSleepBackend.get_own_mac() with mocked filesystem."""
+
+    @pytest.mark.asyncio
+    async def test_detects_mac_from_default_route(self, tmp_path):
+        """Mocks /proc/net/route and /sys/class/net/ to test MAC detection."""
+        from app.services.power.sleep_backend_linux import LinuxSleepBackend
+
+        # Create mock /proc/net/route
+        route_file = tmp_path / "route"
+        route_file.write_text(
+            "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+            "eth0\t00000000\t0102A8C0\t0003\t0\t0\t100\t00000000\n"
+            "eth0\t0002A8C0\t00000000\t0001\t0\t0\t100\tFFFFFFFF\n"
+        )
+
+        # Create mock /sys/class/net/eth0/address
+        net_dir = tmp_path / "net" / "eth0"
+        net_dir.mkdir(parents=True)
+        (net_dir / "address").write_text("ab:cd:ef:01:23:45\n")
+
+        backend = LinuxSleepBackend.__new__(LinuxSleepBackend)
+        mac = await backend._get_own_mac_from_paths(
+            str(route_file), str(tmp_path / "net")
+        )
+        assert mac == "AB:CD:EF:01:23:45"
+
+    @pytest.mark.asyncio
+    async def test_returns_none_if_route_missing(self, tmp_path):
+        from app.services.power.sleep_backend_linux import LinuxSleepBackend
+
+        backend = LinuxSleepBackend.__new__(LinuxSleepBackend)
+        mac = await backend._get_own_mac_from_paths(
+            str(tmp_path / "nonexistent"), str(tmp_path / "net")
+        )
+        assert mac is None
+
+    @pytest.mark.asyncio
+    async def test_returns_none_if_no_default_route(self, tmp_path):
+        from app.services.power.sleep_backend_linux import LinuxSleepBackend
+
+        route_file = tmp_path / "route"
+        route_file.write_text(
+            "Iface\tDestination\tGateway\tFlags\tRefCnt\tUse\tMetric\tMask\n"
+            "eth0\t0002A8C0\t00000000\t0001\t0\t0\t100\tFFFFFFFF\n"
+        )
+
+        backend = LinuxSleepBackend.__new__(LinuxSleepBackend)
+        mac = await backend._get_own_mac_from_paths(
+            str(route_file), str(tmp_path / "net")
+        )
+        assert mac is None
+
+
+# ============================================================================
+# SleepCapabilities Wiring Tests
+# ============================================================================
+
+
+class TestCapabilitiesOwnMac:
+    """Test that get_capabilities() includes own_mac_address."""
+
+    @pytest.mark.asyncio
+    async def test_capabilities_includes_own_mac(self):
+        backend = DevSleepBackend()
+        manager = SleepManagerService.__new__(SleepManagerService)
+        manager._backend = backend
+        caps = await manager.get_capabilities()
+        assert caps.own_mac_address == "DE:AD:BE:EF:00:01"

@@ -23,8 +23,60 @@ from app.services import server_profile_service
 from app.services.ssh_service import SSHService
 from app.services.vpn.encryption import VPNEncryption
 from app.core.rate_limiter import limiter, user_limiter, get_limit
+from app.services.power.fritzbox_wol import get_fritzbox_wol_service
+from app.services.power.sleep import get_sleep_manager
+from app.models.fritzbox import FritzBoxConfig
 
 logger = logging.getLogger(__name__)
+
+
+def _is_fritzbox_enabled() -> bool:
+    """Check if Fritz!Box WoL is enabled."""
+    try:
+        from app.core.database import SessionLocal
+        from sqlalchemy import select
+        db = SessionLocal()
+        try:
+            config = db.execute(
+                select(FritzBoxConfig).where(FritzBoxConfig.id == 1)
+            ).scalar_one_or_none()
+            return config is not None and config.enabled
+        finally:
+            db.close()
+    except Exception:
+        return False
+
+
+async def _try_wol_fallback(profile) -> dict | None:
+    """Attempt WoL fallback for a server profile.
+
+    Returns dict with success/message if WoL was attempted, None if not applicable.
+    """
+    if profile is None or not getattr(profile, 'wol_mac_address', None):
+        return None
+
+    mac = cast(str, profile.wol_mac_address)
+
+    try:
+        if _is_fritzbox_enabled():
+            service = get_fritzbox_wol_service()
+            success = await service.send_wol(mac=mac)
+            method = "fritzbox"
+        else:
+            manager = get_sleep_manager()
+            if manager is None:
+                return None
+            success = await manager.send_wol(mac_address=mac)
+            method = "local"
+
+        if success:
+            return {"success": True, "message": f"WoL sent via {method}", "method": "wol"}
+        else:
+            return {"success": False, "message": f"WoL via {method} failed", "method": "wol"}
+    except Exception as e:
+        logger.error("WoL fallback failed for profile %s: %s", profile.id, e)
+        return {"success": False, "message": f"WoL fallback error: {e}", "method": "wol"}
+
 
 router = APIRouter(prefix="/server-profiles", tags=["server-profiles"])
 
@@ -251,6 +303,21 @@ async def start_remote_server(
         )
 
     if not cast(str | None, profile.power_on_command):
+        # No SSH command — try WoL directly if MAC is configured
+        if getattr(profile, 'wol_mac_address', None):
+            wol_result = await _try_wol_fallback(profile)
+            if wol_result and wol_result["success"]:
+                server_profile_service.mark_last_used(db, profile)
+                return ServerStartResponse(
+                    profile_id=profile_id,
+                    status="starting",
+                    message=wol_result["message"],
+                    method="wol",
+                )
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="WoL failed and no SSH power-on command configured",
+            )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No power on command configured for this profile"
@@ -278,15 +345,42 @@ async def start_remote_server(
                 message=message,
             )
         else:
-            logger.warning("Failed to start server %d: %s", profile_id, message)
+            # SSH failed — try WoL fallback
+            wol_result = await _try_wol_fallback(profile)
+            if wol_result and wol_result["success"]:
+                server_profile_service.mark_last_used(db, profile)
+                logger.info("Server %d WoL fallback by user %d", profile_id, current_user.id)
+                return ServerStartResponse(
+                    profile_id=profile_id,
+                    status="starting",
+                    message=wol_result["message"],
+                    method="wol",
+                )
+
+            # Both SSH and WoL failed
+            detail = message
+            if wol_result:
+                detail = f"SSH failed: {message}. WoL fallback: {wol_result['message']}"
+            logger.warning("Failed to start server %d: %s", profile_id, detail)
             raise HTTPException(
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-                detail=message,
+                detail=detail,
             )
 
     except HTTPException:
         raise
     except Exception as e:
+        # SSH connection error — try WoL fallback
+        wol_result = await _try_wol_fallback(profile)
+        if wol_result and wol_result["success"]:
+            server_profile_service.mark_last_used(db, profile)
+            return ServerStartResponse(
+                profile_id=profile_id,
+                status="starting",
+                message=wol_result["message"],
+                method="wol",
+            )
+
         logger.error("Error starting server: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,

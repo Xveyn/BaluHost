@@ -12,11 +12,11 @@ class FileShareCreate(BaseModel):
     """Schema for creating a file share with another user."""
     file_id: int = Field(..., description="ID of the file to share")
     shared_with_user_id: int = Field(..., description="User ID to share with")
-    can_read: bool = Field(True, description="Allow read access")
-    can_write: bool = Field(False, description="Allow write access")
-    can_delete: bool = Field(False, description="Allow delete access")
-    can_share: bool = Field(False, description="Allow re-sharing with others")
-    expires_at: Optional[datetime] = Field(None, description="Expiration date (None = never expires)")
+    can_read: bool = Field(default=True, description="Allow read access")
+    can_write: bool = Field(default=False, description="Allow write access")
+    can_delete: bool = Field(default=False, description="Allow delete access")
+    can_share: bool = Field(default=False, description="Allow re-sharing with others")
+    expires_at: Optional[datetime] = Field(default=None, description="Expiration date (None = never expires)")
 
 
 class FileShareUpdate(BaseModel):

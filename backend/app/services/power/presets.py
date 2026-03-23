@@ -9,7 +9,7 @@ from __future__ import annotations
 import logging
 from typing import List, Optional
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from app.core.database import SessionLocal
@@ -125,7 +125,7 @@ class PowerPresetService:
 
             # Deactivate all presets
             db.execute(
-                PowerPreset.__table__.update().values(is_active=False)
+                update(PowerPreset).values(is_active=False)
             )
 
             # Activate the selected preset

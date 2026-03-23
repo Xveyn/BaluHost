@@ -92,7 +92,7 @@ class PowerManagerService:
         self._last_profile_change: Optional[datetime] = None
         self._history: List[PowerHistoryEntry] = []
         self._max_history = 1000
-        self._auto_scaling_config = AutoScalingConfig()
+        self._auto_scaling_config = AutoScalingConfig()  # type: ignore[call-arg]
         self._cooldown_until: Optional[datetime] = None
         self._manual_override_until: Optional[datetime] = None
         self._cpu_usage_callback: Optional[Callable[[], Optional[float]]] = None
@@ -195,7 +195,7 @@ class PowerManagerService:
 
     async def get_dynamic_mode_config(self) -> DynamicModeConfigResponse:
         """Get dynamic mode configuration and system capabilities."""
-        config = self._dynamic_mode_config or load_dynamic_mode_config() or DynamicModeConfig()
+        config = self._dynamic_mode_config or load_dynamic_mode_config() or DynamicModeConfig()  # type: ignore[call-arg]
 
         available_governors = []
         sys_min, sys_max = 400, 4600

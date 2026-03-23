@@ -5,7 +5,7 @@ import logging
 from typing import Optional
 
 from app.core.config import settings
-from app.services import smart as smart_service
+from app.services.hardware import smart as smart_service
 from app.services import system as system_service
 
 logger = logging.getLogger(__name__)

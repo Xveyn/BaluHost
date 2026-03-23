@@ -14,7 +14,8 @@ from datetime import datetime
 
 from app.models.fans import FanConfig, FanScheduleEntry
 from app.schemas.fans import FanMode, FanCurvePoint
-from app.services.fan_control import FanControlService
+from app.services.power.fan_control import FanControlService
+from app.services.power.fan_schedule import FanScheduleService
 
 
 # ============================================================================
@@ -26,75 +27,75 @@ class TestTimeInWindow:
 
     def test_normal_window_inside(self):
         """08:00-18:00, current 12:00 -> True"""
-        assert FanControlService._time_in_window(720, 480, 1080) is True
+        assert FanScheduleService.time_in_window(720, 480, 1080) is True
 
     def test_normal_window_at_start(self):
         """08:00-18:00, current 08:00 -> True"""
-        assert FanControlService._time_in_window(480, 480, 1080) is True
+        assert FanScheduleService.time_in_window(480, 480, 1080) is True
 
     def test_normal_window_before_end(self):
         """08:00-18:00, current 17:59 -> True"""
-        assert FanControlService._time_in_window(1079, 480, 1080) is True
+        assert FanScheduleService.time_in_window(1079, 480, 1080) is True
 
     def test_normal_window_at_end(self):
         """08:00-18:00, current 18:00 -> False (end is exclusive)"""
-        assert FanControlService._time_in_window(1080, 480, 1080) is False
+        assert FanScheduleService.time_in_window(1080, 480, 1080) is False
 
     def test_normal_window_before_start(self):
         """08:00-18:00, current 07:00 -> False"""
-        assert FanControlService._time_in_window(420, 480, 1080) is False
+        assert FanScheduleService.time_in_window(420, 480, 1080) is False
 
     def test_normal_window_after_end(self):
         """08:00-18:00, current 20:00 -> False"""
-        assert FanControlService._time_in_window(1200, 480, 1080) is False
+        assert FanScheduleService.time_in_window(1200, 480, 1080) is False
 
     def test_overnight_window_evening(self):
         """22:00-06:00, current 23:00 -> True"""
-        assert FanControlService._time_in_window(1380, 1320, 360) is True
+        assert FanScheduleService.time_in_window(1380, 1320, 360) is True
 
     def test_overnight_window_morning(self):
         """22:00-06:00, current 03:00 -> True"""
-        assert FanControlService._time_in_window(180, 1320, 360) is True
+        assert FanScheduleService.time_in_window(180, 1320, 360) is True
 
     def test_overnight_window_at_start(self):
         """22:00-06:00, current 22:00 -> True"""
-        assert FanControlService._time_in_window(1320, 1320, 360) is True
+        assert FanScheduleService.time_in_window(1320, 1320, 360) is True
 
     def test_overnight_window_at_end(self):
         """22:00-06:00, current 06:00 -> False (end is exclusive)"""
-        assert FanControlService._time_in_window(360, 1320, 360) is False
+        assert FanScheduleService.time_in_window(360, 1320, 360) is False
 
     def test_overnight_window_daytime(self):
         """22:00-06:00, current 12:00 -> False"""
-        assert FanControlService._time_in_window(720, 1320, 360) is False
+        assert FanScheduleService.time_in_window(720, 1320, 360) is False
 
     def test_midnight_boundary(self):
         """23:00-01:00, current 00:00 -> True"""
-        assert FanControlService._time_in_window(0, 1380, 60) is True
+        assert FanScheduleService.time_in_window(0, 1380, 60) is True
 
     def test_midnight_boundary_outside(self):
         """23:00-01:00, current 02:00 -> False"""
-        assert FanControlService._time_in_window(120, 1380, 60) is False
+        assert FanScheduleService.time_in_window(120, 1380, 60) is False
 
     def test_full_day_window(self):
         """00:00-00:00 is treated as start==end, which means 0 <= x < 0 -> False"""
-        assert FanControlService._time_in_window(720, 0, 0) is False
+        assert FanScheduleService.time_in_window(720, 0, 0) is False
 
 
 class TestParseTimeToMinutes:
     """Test time string parsing."""
 
     def test_midnight(self):
-        assert FanControlService._parse_time_to_minutes("00:00") == 0
+        assert FanScheduleService.parse_time_to_minutes("00:00") == 0
 
     def test_noon(self):
-        assert FanControlService._parse_time_to_minutes("12:00") == 720
+        assert FanScheduleService.parse_time_to_minutes("12:00") == 720
 
     def test_evening(self):
-        assert FanControlService._parse_time_to_minutes("22:30") == 1350
+        assert FanScheduleService.parse_time_to_minutes("22:30") == 1350
 
     def test_end_of_day(self):
-        assert FanControlService._parse_time_to_minutes("23:59") == 1439
+        assert FanScheduleService.parse_time_to_minutes("23:59") == 1439
 
 
 # ============================================================================
@@ -120,7 +121,7 @@ class TestResolveActiveCurve:
         service = self._create_service_with_mock_db()
         default_curve = json.dumps([{"temp": 35, "pwm": 30}, {"temp": 85, "pwm": 100}])
 
-        curve, entry = service._resolve_active_curve("test_fan", default_curve, db_session)
+        curve, entry = service.schedule.resolve_active_curve("test_fan", default_curve, db_session)
 
         assert entry is None
         assert len(curve) == 2
@@ -147,7 +148,7 @@ class TestResolveActiveCurve:
         db_session.commit()
 
         default_curve = json.dumps([{"temp": 35, "pwm": 30}, {"temp": 85, "pwm": 100}])
-        curve, active = service._resolve_active_curve("test_fan", default_curve, db_session)
+        curve, active = service.schedule.resolve_active_curve("test_fan", default_curve, db_session)
 
         assert active is not None
         assert active.name == "All Day"
@@ -173,7 +174,7 @@ class TestResolveActiveCurve:
         db_session.commit()
 
         default_curve = json.dumps([{"temp": 35, "pwm": 30}, {"temp": 85, "pwm": 100}])
-        curve, active = service._resolve_active_curve("test_fan", default_curve, db_session)
+        curve, active = service.schedule.resolve_active_curve("test_fan", default_curve, db_session)
 
         assert active is None
         assert curve[0]["temp"] == 35  # Default curve
@@ -206,7 +207,7 @@ class TestResolveActiveCurve:
         db_session.commit()
 
         default_curve = json.dumps([{"temp": 35, "pwm": 30}, {"temp": 85, "pwm": 100}])
-        curve, active = service._resolve_active_curve("test_fan", default_curve, db_session)
+        curve, active = service.schedule.resolve_active_curve("test_fan", default_curve, db_session)
 
         assert active is not None
         assert active.name == "High Priority"
@@ -231,7 +232,7 @@ class TestResolveActiveCurve:
         db_session.commit()
 
         default_curve = json.dumps([{"temp": 35, "pwm": 30}, {"temp": 85, "pwm": 100}])
-        curve, active = service._resolve_active_curve("test_fan", default_curve, db_session)
+        curve, active = service.schedule.resolve_active_curve("test_fan", default_curve, db_session)
 
         assert active is None
 

@@ -90,13 +90,14 @@ def finalize_pending_updates(db: Session) -> int:
             update.current_step = "Update completed successfully"
             if completed_at_str:
                 try:
-                    update.completed_at = datetime.fromisoformat(completed_at_str)
+                    completed = datetime.fromisoformat(completed_at_str)
                 except ValueError:
-                    update.completed_at = datetime.now(timezone.utc)
+                    completed = datetime.now(timezone.utc)
             else:
-                update.completed_at = datetime.now(timezone.utc)
-            if update.started_at and update.completed_at:
-                delta = update.completed_at - update.started_at
+                completed = datetime.now(timezone.utc)
+            update.completed_at = completed
+            if update.started_at:
+                delta = completed - update.started_at
                 update.duration_seconds = int(delta.total_seconds())
             logger.info(f"Update {update.id} finalized as completed")
             finalized += 1
@@ -109,13 +110,14 @@ def finalize_pending_updates(db: Session) -> int:
                 update.rollback_commit = rollback_commit
             if completed_at_str:
                 try:
-                    update.completed_at = datetime.fromisoformat(completed_at_str)
+                    completed = datetime.fromisoformat(completed_at_str)
                 except ValueError:
-                    update.completed_at = datetime.now(timezone.utc)
+                    completed = datetime.now(timezone.utc)
             else:
-                update.completed_at = datetime.now(timezone.utc)
-            if update.started_at and update.completed_at:
-                delta = update.completed_at - update.started_at
+                completed = datetime.now(timezone.utc)
+            update.completed_at = completed
+            if update.started_at:
+                delta = completed - update.started_at
                 update.duration_seconds = int(delta.total_seconds())
             logger.info(f"Update {update.id} finalized as failed: {error_msg}")
             finalized += 1

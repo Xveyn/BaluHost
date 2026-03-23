@@ -10,6 +10,7 @@ export interface ServerProfile {
   ssh_username: string;
   vpn_profile_id?: number;
   power_on_command?: string;
+  wol_mac_address?: string;
   created_at: string;
   last_used?: string;
 }
@@ -22,6 +23,7 @@ export interface ServerProfileCreate {
   ssh_private_key: string;
   vpn_profile_id?: number;
   power_on_command?: string;
+  wol_mac_address?: string;
 }
 
 export interface SSHConnectionTest {
@@ -35,6 +37,7 @@ export interface ServerStartResponse {
   profile_id: number;
   status: 'starting' | 'started' | 'error';
   message: string;
+  method?: 'ssh' | 'wol';
   timestamp?: string;
 }
 

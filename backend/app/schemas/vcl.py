@@ -42,7 +42,7 @@ class FileVersionBase(BaseModel):
     compressed_size: int = Field(..., gt=0)
     checksum: str = Field(..., min_length=64, max_length=64)
     is_high_priority: bool = False
-    change_type: Optional[str] = Field(None, pattern="^(create|update|overwrite|batched)$")
+    change_type: Optional[str] = Field(default=None, pattern="^(create|update|overwrite|batched)$")
     comment: Optional[str] = None
 
 
@@ -89,15 +89,15 @@ class VCLSettingsBase(BaseModel):
 
 class VCLSettingsUpdate(BaseModel):
     """Schema for updating VCL settings (all optional)."""
-    max_size_bytes: Optional[int] = Field(None, gt=0)
-    depth: Optional[int] = Field(None, ge=1, le=100)
-    headroom_percent: Optional[int] = Field(None, ge=0, le=100)
+    max_size_bytes: Optional[int] = Field(default=None, gt=0)
+    depth: Optional[int] = Field(default=None, ge=1, le=100)
+    headroom_percent: Optional[int] = Field(default=None, ge=0, le=100)
     is_enabled: Optional[bool] = None
     compression_enabled: Optional[bool] = None
     dedupe_enabled: Optional[bool] = None
-    debounce_window_seconds: Optional[int] = Field(None, ge=0, le=300)
-    max_batch_window_seconds: Optional[int] = Field(None, ge=0, le=3600)
-    vcl_mode: Optional[str] = Field(None, pattern="^(automatic|manual)$")
+    debounce_window_seconds: Optional[int] = Field(default=None, ge=0, le=300)
+    max_batch_window_seconds: Optional[int] = Field(default=None, ge=0, le=3600)
+    vcl_mode: Optional[str] = Field(default=None, pattern="^(automatic|manual)$")
 
 
 class VCLSettingsInDB(VCLSettingsBase):
@@ -439,7 +439,7 @@ class FileTrackingEntry(BaseModel):
 class FileTrackingRequest(BaseModel):
     """Request to add a tracking rule."""
     file_id: Optional[int] = None
-    path_pattern: Optional[str] = Field(None, max_length=1000)
+    path_pattern: Optional[str] = Field(default=None, max_length=1000)
     action: str = Field(..., pattern="^(track|exclude)$")
     is_directory: bool = False
 

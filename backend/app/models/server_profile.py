@@ -6,8 +6,10 @@ and optional VPN configuration for remote access.
 """
 
 from datetime import datetime
-from sqlalchemy import Column, Integer, String, Boolean, DateTime, ForeignKey, Text
-from sqlalchemy.orm import relationship
+from typing import Optional
+
+from sqlalchemy import Integer, String, DateTime, ForeignKey, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.models.base import Base
 
@@ -22,23 +24,26 @@ class ServerProfile(Base):
     
     __tablename__ = "server_profiles"
     
-    id = Column(Integer, primary_key=True, index=True)
-    user_id = Column(Integer, ForeignKey("users.id"), nullable=False, index=True)
-    name = Column(String(255), nullable=False)  # e.g., "Home NAS", "Office Server"
-    ssh_host = Column(String(255), nullable=False)  # IP or hostname
-    ssh_port = Column(Integer, default=22)
-    ssh_username = Column(String(255), nullable=False)
-    ssh_key_encrypted = Column(Text, nullable=False)  # Encrypted private key
-    
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False, index=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False)  # e.g., "Home NAS", "Office Server"
+    ssh_host: Mapped[str] = mapped_column(String(255), nullable=False)  # IP or hostname
+    ssh_port: Mapped[Optional[int]] = mapped_column(Integer, default=22)
+    ssh_username: Mapped[str] = mapped_column(String(255), nullable=False)
+    ssh_key_encrypted: Mapped[str] = mapped_column(Text, nullable=False)  # Encrypted private key
+
     # VPN Configuration
-    vpn_profile_id = Column(Integer, ForeignKey("vpn_profiles.id"), nullable=True, index=True)
-    
+    vpn_profile_id: Mapped[Optional[int]] = mapped_column(Integer, ForeignKey("vpn_profiles.id"), nullable=True, index=True)
+
     # Server startup command
-    power_on_command = Column(String(500), nullable=True)  # e.g., "systemctl start baluhost-backend"
-    
+    power_on_command: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)  # e.g., "systemctl start baluhost-backend"
+
+    # Wake-on-LAN fallback
+    wol_mac_address: Mapped[Optional[str]] = mapped_column(String(17), nullable=True)  # e.g., "AA:BB:CC:DD:EE:FF"
+
     # Metadata
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
-    last_used = Column(DateTime, nullable=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime, default=datetime.utcnow, index=True)
+    last_used: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     
     # Relationships
     user = relationship("User", back_populates="server_profiles")

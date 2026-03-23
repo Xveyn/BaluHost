@@ -18,6 +18,7 @@ export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = fa
   const [sshKey, setSshKey] = useState('');
   const [vpnId, setVpnId] = useState<string>('');
   const [powerOnCommand, setPowerOnCommand] = useState('systemctl start baluhost-backend');
+  const [wolMac, setWolMac] = useState('');
   const [loading, setLoading] = useState(false);
   const { t } = useTranslation('remoteServers');
 
@@ -34,6 +35,7 @@ export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = fa
         ssh_private_key: sshKey,
         vpn_profile_id: vpnId ? parseInt(vpnId) : undefined,
         power_on_command: powerOnCommand || undefined,
+        wol_mac_address: wolMac || undefined,
       };
 
       await onCreateProfile(data);
@@ -46,6 +48,7 @@ export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = fa
       setSshKey('');
       setVpnId('');
       setPowerOnCommand('systemctl start baluhost-backend');
+      setWolMac('');
       setOpen(false);
     } finally {
       setLoading(false);
@@ -195,6 +198,24 @@ export function ServerProfileForm({ vpnProfiles, onCreateProfile, isLoading = fa
                   onChange={(e) => setPowerOnCommand(e.target.value)}
                   className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
                 />
+              </div>
+
+              {/* WoL MAC Address */}
+              <div>
+                <label htmlFor="wolMac" className="block text-sm font-medium text-gray-700 mb-1">
+                  {t('servers.wolMac', { defaultValue: 'WoL MAC-Adresse' })}
+                </label>
+                <input
+                  id="wolMac"
+                  type="text"
+                  value={wolMac}
+                  onChange={(e) => setWolMac(e.target.value)}
+                  placeholder="AA:BB:CC:DD:EE:FF"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="text-xs text-gray-500 mt-1">
+                  {t('servers.wolMacHint', { defaultValue: 'Optional: Server per WoL aufwecken wenn SSH fehlschlägt' })}
+                </p>
               </div>
 
               {/* Buttons */}

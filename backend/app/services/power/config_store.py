@@ -46,12 +46,12 @@ def load_auto_scaling_config() -> AutoScalingConfig:
             else:
                 # No config in DB yet, use defaults
                 logger.info("No auto-scaling config in DB, using defaults")
-                return AutoScalingConfig()
+                return AutoScalingConfig()  # type: ignore[call-arg]
         finally:
             db.close()
     except Exception as e:
         logger.error(f"Error loading auto-scaling config from DB: {e}")
-        return AutoScalingConfig()
+        return AutoScalingConfig()  # type: ignore[call-arg]
 
 
 def save_auto_scaling_config(config: AutoScalingConfig) -> bool:
@@ -122,12 +122,12 @@ def load_dynamic_mode_config() -> Optional[DynamicModeConfig]:
                 return config
             else:
                 logger.info("No dynamic mode config in DB, using defaults")
-                return DynamicModeConfig()
+                return DynamicModeConfig()  # type: ignore[call-arg]
         finally:
             db.close()
     except Exception as e:
         logger.error(f"Error loading dynamic mode config from DB: {e}")
-        return DynamicModeConfig()
+        return DynamicModeConfig()  # type: ignore[call-arg]
 
 
 def save_dynamic_mode_config(config: DynamicModeConfig) -> bool:

@@ -7,7 +7,7 @@
 
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal } from 'lucide-react';
+import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal, Router } from 'lucide-react';
 import {
   getSleepConfig,
   updateSleepConfig,
@@ -16,6 +16,12 @@ import {
   type SleepCapabilities,
   type ScheduleMode,
 } from '../../api/sleep';
+import {
+  getFritzBoxConfig,
+  updateFritzBoxConfig,
+  testFritzBoxConnection,
+  type FritzBoxConfig,
+} from '../../api/fritzbox';
 
 export function SleepConfigPanel() {
   const [capabilities, setCapabilities] = useState<SleepCapabilities | null>(null);
@@ -42,6 +48,16 @@ export function SleepConfigPanel() {
   const [reducedTelemetry, setReducedTelemetry] = useState(30);
   const [diskSpindown, setDiskSpindown] = useState(true);
 
+  // Fritz!Box state
+  const [fbConfig, setFbConfig] = useState<FritzBoxConfig | null>(null);
+  const [fbHost, setFbHost] = useState('192.168.178.1');
+  const [fbPort, setFbPort] = useState(49000);
+  const [fbUsername, setFbUsername] = useState('');
+  const [fbPassword, setFbPassword] = useState('');
+  const [fbMac, setFbMac] = useState('');
+  const [fbEnabled, setFbEnabled] = useState(false);
+  const [fbTesting, setFbTesting] = useState(false);
+
   useEffect(() => {
     loadData();
   }, []);
@@ -55,6 +71,19 @@ export function SleepConfigPanel() {
       ]);
       setCapabilities(caps);
       syncFormState(configData);
+
+      // Load Fritz!Box config
+      try {
+        const fb = await getFritzBoxConfig();
+        setFbConfig(fb);
+        setFbHost(fb.host);
+        setFbPort(fb.port);
+        setFbUsername(fb.username);
+        setFbMac(fb.nas_mac_address || '');
+        setFbEnabled(fb.enabled);
+      } catch {
+        // Fritz!Box config not available yet — ignore
+      }
     } catch {
       toast.error('Failed to load sleep config');
     } finally {
@@ -105,11 +134,42 @@ export function SleepConfigPanel() {
         reduced_telemetry_interval: reducedTelemetry,
         disk_spindown_enabled: diskSpindown,
       });
+
+      // Save Fritz!Box config
+      try {
+        await updateFritzBoxConfig({
+          host: fbHost,
+          port: fbPort,
+          username: fbUsername,
+          ...(fbPassword ? { password: fbPassword } : {}),
+          nas_mac_address: fbMac || undefined,
+          enabled: fbEnabled,
+        });
+      } catch (err) {
+        toast.error('Failed to save Fritz!Box config');
+      }
+
       toast.success('Sleep configuration saved');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to save config');
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleFbTest = async () => {
+    setFbTesting(true);
+    try {
+      const result = await testFritzBoxConnection();
+      if (result.success) {
+        toast.success(result.message);
+      } else {
+        toast.error(result.message);
+      }
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Connection test failed');
+    } finally {
+      setFbTesting(false);
     }
   };
 
@@ -245,6 +305,15 @@ export function SleepConfigPanel() {
               placeholder="AA:BB:CC:DD:EE:FF"
               className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
             />
+            {capabilities?.own_mac_address && capabilities.own_mac_address !== wolMac && (
+              <button
+                type="button"
+                onClick={() => setWolMac(capabilities.own_mac_address!)}
+                className="mt-1.5 text-xs text-teal-400 hover:text-teal-300 transition-colors"
+              >
+                Erkannt: <span className="font-mono">{capabilities.own_mac_address}</span> — Übernehmen?
+              </button>
+            )}
           </div>
           <div>
             <label className="block text-xs text-slate-400 mb-1">Broadcast Address</label>
@@ -257,6 +326,94 @@ export function SleepConfigPanel() {
             />
           </div>
         </div>
+      </div>
+
+      {/* Fritz!Box Integration */}
+      <div className="card border-slate-700/50 p-4 sm:p-6 space-y-3">
+        <h4 className="text-sm font-medium text-white flex items-center gap-2">
+          <Router className="h-4 w-4 text-orange-400" />
+          Fritz!Box WoL
+          <span className="ml-auto">
+            <Toggle checked={fbEnabled} onChange={setFbEnabled} />
+          </span>
+        </h4>
+        {fbEnabled && (
+          <div className="space-y-3">
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Host</label>
+                <input
+                  type="text"
+                  value={fbHost}
+                  onChange={(e) => setFbHost(e.target.value)}
+                  placeholder="192.168.178.1"
+                  className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Port</label>
+                <input
+                  type="number"
+                  value={fbPort}
+                  onChange={(e) => setFbPort(Number(e.target.value))}
+                  placeholder="49000"
+                  className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">Username</label>
+                <input
+                  type="text"
+                  value={fbUsername}
+                  onChange={(e) => setFbUsername(e.target.value)}
+                  placeholder="(often empty)"
+                  className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
+                />
+              </div>
+              <div>
+                <label className="block text-xs text-slate-400 mb-1">
+                  Password {fbConfig?.has_password && <span className="text-teal-400">(set)</span>}
+                </label>
+                <input
+                  type="password"
+                  value={fbPassword}
+                  onChange={(e) => setFbPassword(e.target.value)}
+                  placeholder={fbConfig?.has_password ? '••••••••' : 'TR-064 Password'}
+                  className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
+                />
+              </div>
+            </div>
+            <div>
+              <label className="block text-xs text-slate-400 mb-1">NAS MAC Address</label>
+              <input
+                type="text"
+                value={fbMac}
+                onChange={(e) => setFbMac(e.target.value)}
+                placeholder="AA:BB:CC:DD:EE:FF"
+                className="w-full rounded bg-slate-900 border border-slate-600 px-3 py-2 text-sm text-white placeholder-slate-600 focus:border-teal-400 focus:outline-none"
+              />
+              {capabilities?.own_mac_address && capabilities.own_mac_address !== fbMac && (
+                <button
+                  type="button"
+                  onClick={() => setFbMac(capabilities.own_mac_address!)}
+                  className="mt-1.5 text-xs text-teal-400 hover:text-teal-300 transition-colors"
+                >
+                  Erkannt: <span className="font-mono">{capabilities.own_mac_address}</span> — Übernehmen?
+                </button>
+              )}
+            </div>
+            <button
+              type="button"
+              onClick={handleFbTest}
+              disabled={fbTesting}
+              className="rounded-lg bg-orange-500/20 px-4 py-2 text-sm font-medium text-orange-300 hover:bg-orange-500/30 transition-colors disabled:opacity-50"
+            >
+              {fbTesting ? 'Testing...' : 'Test Connection'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Service & Disk Options */}

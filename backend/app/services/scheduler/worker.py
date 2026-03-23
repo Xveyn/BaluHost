@@ -378,7 +378,7 @@ class SchedulerWorker:
             try:
                 svc = FileActivityService(db)
                 deleted = svc.cleanup()
-                return f"Deleted {deleted} old activity records"
+                return {"deleted": deleted}
             finally:
                 db.close()
 

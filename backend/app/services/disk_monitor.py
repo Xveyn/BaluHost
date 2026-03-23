@@ -183,7 +183,7 @@ def _refresh_raid_members() -> None:
         return
 
     try:
-        from app.services import raid as raid_service
+        from app.services.hardware import raid as raid_service
 
         raid_data = raid_service.get_status()
         new_members: set[str] = set()

@@ -58,6 +58,10 @@ class EnergyPeriod:
 def _parse_power_from_sample(data_json: str) -> Optional[Dict]:
     """Parse a SmartDeviceSample data_json into power fields.
 
+    Supports both legacy format (save_power_sample: current_power, current_ma,
+    energy_today_wh) and plugin format (PowerReading model_dump: watts,
+    current, energy_today_kwh).
+
     Returns dict with watts, voltage, current, energy_today, is_online
     or None if parsing fails.
     """
@@ -66,15 +70,33 @@ def _parse_power_from_sample(data_json: str) -> Optional[Dict]:
     except (json.JSONDecodeError, TypeError):
         return None
 
-    watts = data.get("current_power", 0.0)
+    # watts: plugin format "watts", legacy format "current_power"
+    watts = data.get("watts") if data.get("watts") is not None else data.get("current_power", 0.0)
     if watts is None:
         watts = 0.0
 
     voltage = data.get("voltage")
+
+    # current: plugin format "current" (amps), legacy format "current_ma" (milliamps)
+    current_a_direct = data.get("current")
     current_ma = data.get("current_ma")
-    current_a = current_ma / 1000.0 if current_ma is not None else None
+    if current_a_direct is not None:
+        current_a = float(current_a_direct)
+    elif current_ma is not None:
+        current_a = current_ma / 1000.0
+    else:
+        current_a = None
+
+    # energy: plugin format "energy_today_kwh" (kWh), legacy format "energy_today_wh" (Wh)
+    energy_today_kwh_direct = data.get("energy_today_kwh")
     energy_today_wh = data.get("energy_today_wh")
-    energy_today_kwh = energy_today_wh / 1000.0 if energy_today_wh is not None else None
+    if energy_today_kwh_direct is not None:
+        energy_today_kwh = float(energy_today_kwh_direct)
+    elif energy_today_wh is not None:
+        energy_today_kwh = energy_today_wh / 1000.0
+    else:
+        energy_today_kwh = None
+
     is_online = data.get("is_online", True)
 
     return {

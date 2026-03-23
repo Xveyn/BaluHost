@@ -7,6 +7,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.0] - 2026-03-22
+
+### Added
+- **Fritz!Box Wake-on-LAN** — TR-064 SOAP integration for remote WoL via Fritz!Box router
+  - FritzBoxConfig model, migration, API routes with auth and audit logging
+  - Fritz!Box config UI and API client in frontend
+  - WolRequest extended with `method` field for Fritz!Box delegation
+  - Sleep panel button integrates Fritz!Box WoL
+- **Remote Server WoL** — Wake-on-LAN support for remote server profiles
+  - `wol_mac_address` column on ServerProfile with schemas and migration
+  - SSH-fail-to-WoL fallback in server start endpoint
+  - WoL badge and fallback result display in server profile UI
+  - MAC address field in server profile form
+- **WoL Improvements** — MAC address auto-detection and validation
+  - `get_own_mac()` via `/proc/net/route` (Linux) with dev-mode fallback
+  - Detected MAC shown as suggestion in SleepConfigPanel
+  - Shared MAC address validator with tests
+  - MAC validation wired into WolRequest and SleepConfigUpdate
+- **Multi-worker sleep init** — Sleep service supports multi-worker initialization
+
+### Changed
+- Refactored file service: extracted virtual directory listings from route to service layer
+- Refactored fan control: extracted schedule and profile logic into separate modules
+- Models use `TYPE_CHECKING` for relationship type imports (cleaner circular import handling)
+- Added `Mapped` type annotations across models (server_profile, vpn_profile, vcl, etc.)
+- Fixed Pydantic field definitions to use `Field(default=)` instead of positional defaults
+
+### Fixed
+- VPN profile config validation: pass enum directly instead of `.value`
+- Energy sample parser now supports plugin PowerReading format
+- Correct RAID import path and worker return type
+- Smart service import path in jobs.py
+- Sync schedule calculation handles nullable `time_of_day`
+- SleepConfigUpdate field ordering after validator insertion
+- Type annotations and SQLAlchemy usage fixes across power, update, versioning, and schema modules
+- pytest-cov pin updated from `<5.0.0` to `>=7.0.0,<8.0.0`
+
+### Dependencies
+- FastAPI 0.115.6 → 0.135.1 (+ Starlette 1.0.0)
+- plugp100 5.1.5 → 5.1.7
+- coverage 7.13.4 → 7.13.5
+- pytest-cov 7.0.0 → 7.1.0
+
+---
+
 ## [1.18.0] - 2026-03-22
 
 ### Added

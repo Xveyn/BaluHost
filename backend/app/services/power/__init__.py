@@ -48,6 +48,8 @@ from app.services.power.fan_control import (
     stop_fan_control,
     get_service_status as get_fan_service_status,
 )
+from app.services.power.fan_schedule import FanScheduleService
+from app.services.power.fan_profiles import FanProfileService
 from app.services.power.sleep import (
     SleepBackend,
     DevSleepBackend,
@@ -95,6 +97,8 @@ __all__ = [
     "start_fan_control",
     "stop_fan_control",
     "get_fan_service_status",
+    "FanScheduleService",
+    "FanProfileService",
     # Sleep Mode
     "SleepBackend",
     "DevSleepBackend",

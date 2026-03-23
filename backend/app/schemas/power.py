@@ -55,10 +55,10 @@ class PowerDemandInfo(BaseModel):
     """Information about an active power demand."""
     source: str = Field(..., description="Source identifier (e.g., 'backup_create', 'raid_rebuild')")
     level: PowerProfile = Field(..., description="Required power level")
-    power_property: Optional[ServicePowerProperty] = Field(None, description="Service power property (IDLE, LOW, MEDIUM, SURGE)")
+    power_property: Optional[ServicePowerProperty] = Field(default=None, description="Service power property (IDLE, LOW, MEDIUM, SURGE)")
     registered_at: datetime = Field(..., description="When demand was registered")
-    expires_at: Optional[datetime] = Field(None, description="When demand expires (None = manual unregister)")
-    description: Optional[str] = Field(None, description="Human-readable description")
+    expires_at: Optional[datetime] = Field(default=None, description="When demand expires (None = manual unregister)")
+    description: Optional[str] = Field(default=None, description="Human-readable description")
 
 
 class PowerProfileConfig(BaseModel):
@@ -66,68 +66,68 @@ class PowerProfileConfig(BaseModel):
     profile: PowerProfile
     governor: str = Field(..., description="CPU governor (powersave/performance)")
     energy_performance_preference: str = Field(..., description="EPP setting")
-    min_freq_mhz: Optional[int] = Field(None, description="Minimum frequency in MHz")
-    max_freq_mhz: Optional[int] = Field(None, description="Maximum frequency in MHz")
-    description: str = Field("", description="Profile description")
+    min_freq_mhz: Optional[int] = Field(default=None, description="Minimum frequency in MHz")
+    max_freq_mhz: Optional[int] = Field(default=None, description="Maximum frequency in MHz")
+    description: str = Field(default="", description="Profile description")
 
 
 class PermissionStatus(BaseModel):
     """Permission status for cpufreq control."""
     user: str = Field(..., description="Current user name")
     groups: list[str] = Field(default_factory=list, description="User's groups")
-    in_cpufreq_group: bool = Field(False, description="Whether user is in cpufreq group")
-    sudo_available: bool = Field(False, description="Whether passwordless sudo is available")
+    in_cpufreq_group: bool = Field(default=False, description="Whether user is in cpufreq group")
+    sudo_available: bool = Field(default=False, description="Whether passwordless sudo is available")
     files: dict[str, Optional[bool]] = Field(default_factory=dict, description="Write permission per file")
     errors: list[str] = Field(default_factory=list, description="Recent permission errors")
-    has_write_access: bool = Field(False, description="Whether we can write to cpufreq (direct or sudo)")
+    has_write_access: bool = Field(default=False, description="Whether we can write to cpufreq (direct or sudo)")
 
 
 # Dynamic Mode Schemas
 
 class DynamicModeConfig(BaseModel):
     """Configuration for dynamic kernel-governor mode."""
-    enabled: bool = Field(False, description="Whether dynamic mode is active")
-    governor: str = Field("powersave", description="Kernel governor (powersave/performance/schedutil/conservative/ondemand)")
-    min_freq_mhz: int = Field(400, description="Minimum CPU frequency in MHz")
-    max_freq_mhz: int = Field(4600, description="Maximum CPU frequency in MHz")
+    enabled: bool = Field(default=False, description="Whether dynamic mode is active")
+    governor: str = Field(default="powersave", description="Kernel governor (powersave/performance/schedutil/conservative/ondemand)")
+    min_freq_mhz: int = Field(default=400, description="Minimum CPU frequency in MHz")
+    max_freq_mhz: int = Field(default=4600, description="Maximum CPU frequency in MHz")
 
 
 class DynamicModeConfigResponse(BaseModel):
     """Response for dynamic mode configuration endpoint."""
     config: DynamicModeConfig
     available_governors: list[str] = Field(default_factory=list, description="Governors available on this system")
-    system_min_freq_mhz: int = Field(400, description="System minimum CPU frequency")
-    system_max_freq_mhz: int = Field(4600, description="System maximum CPU frequency")
+    system_min_freq_mhz: int = Field(default=400, description="System minimum CPU frequency")
+    system_max_freq_mhz: int = Field(default=4600, description="System maximum CPU frequency")
 
 
 class DynamicModeUpdateRequest(BaseModel):
     """Request to update dynamic mode configuration (all fields optional)."""
-    enabled: Optional[bool] = Field(None, description="Enable or disable dynamic mode")
-    governor: Optional[str] = Field(None, description="Kernel governor to use")
-    min_freq_mhz: Optional[int] = Field(None, description="Minimum CPU frequency in MHz")
-    max_freq_mhz: Optional[int] = Field(None, description="Maximum CPU frequency in MHz")
+    enabled: Optional[bool] = Field(default=None, description="Enable or disable dynamic mode")
+    governor: Optional[str] = Field(default=None, description="Kernel governor to use")
+    min_freq_mhz: Optional[int] = Field(default=None, description="Minimum CPU frequency in MHz")
+    max_freq_mhz: Optional[int] = Field(default=None, description="Maximum CPU frequency in MHz")
 
 
 class PowerStatusResponse(BaseModel):
     """Response for power status endpoint."""
     current_profile: PowerProfile = Field(..., description="Currently active power profile")
-    current_property: Optional[ServicePowerProperty] = Field(None, description="Current highest service power property")
-    current_frequency_mhz: Optional[float] = Field(None, description="Current CPU frequency in MHz")
-    target_frequency_range: Optional[str] = Field(None, description="Target frequency range (e.g., '400-800 MHz')")
+    current_property: Optional[ServicePowerProperty] = Field(default=None, description="Current highest service power property")
+    current_frequency_mhz: Optional[float] = Field(default=None, description="Current CPU frequency in MHz")
+    target_frequency_range: Optional[str] = Field(default=None, description="Target frequency range (e.g., '400-800 MHz')")
     active_demands: list[PowerDemandInfo] = Field(default_factory=list, description="Active power demands")
-    auto_scaling_enabled: bool = Field(True, description="Whether auto-scaling is enabled")
-    is_dev_mode: bool = Field(False, description="Whether running in dev mode (simulated)")
-    is_using_linux_backend: bool = Field(False, description="Whether using real Linux cpufreq backend")
-    linux_backend_available: bool = Field(False, description="Whether Linux backend is available on this system")
-    can_switch_backend: bool = Field(False, description="Whether backend can be switched at runtime")
-    permission_status: Optional[PermissionStatus] = Field(None, description="Permission details (only for Linux backend)")
-    last_profile_change: Optional[datetime] = Field(None, description="When profile last changed")
-    cooldown_remaining_seconds: Optional[int] = Field(None, description="Seconds until next downgrade allowed")
+    auto_scaling_enabled: bool = Field(default=True, description="Whether auto-scaling is enabled")
+    is_dev_mode: bool = Field(default=False, description="Whether running in dev mode (simulated)")
+    is_using_linux_backend: bool = Field(default=False, description="Whether using real Linux cpufreq backend")
+    linux_backend_available: bool = Field(default=False, description="Whether Linux backend is available on this system")
+    can_switch_backend: bool = Field(default=False, description="Whether backend can be switched at runtime")
+    permission_status: Optional[PermissionStatus] = Field(default=None, description="Permission details (only for Linux backend)")
+    last_profile_change: Optional[datetime] = Field(default=None, description="When profile last changed")
+    cooldown_remaining_seconds: Optional[int] = Field(default=None, description="Seconds until next downgrade allowed")
     # Preset info
-    active_preset: Optional["PowerPresetSummary"] = Field(None, description="Currently active preset")
+    active_preset: Optional["PowerPresetSummary"] = Field(default=None, description="Currently active preset")
     # Dynamic mode
-    dynamic_mode_enabled: bool = Field(False, description="Whether dynamic kernel-governor mode is active")
-    dynamic_mode_config: Optional[DynamicModeConfig] = Field(None, description="Dynamic mode configuration if enabled")
+    dynamic_mode_enabled: bool = Field(default=False, description="Whether dynamic kernel-governor mode is active")
+    dynamic_mode_config: Optional[DynamicModeConfig] = Field(default=None, description="Dynamic mode configuration if enabled")
 
 
 class PowerProfilesResponse(BaseModel):
@@ -140,10 +140,10 @@ class SetProfileRequest(BaseModel):
     """Request to manually set a power profile."""
     profile: PowerProfile = Field(..., description="Profile to activate")
     duration_seconds: Optional[int] = Field(
-        None,
+        default=None,
         description="How long to hold this profile (None = until changed)"
     )
-    reason: Optional[str] = Field(None, description="Reason for manual override")
+    reason: Optional[str] = Field(default=None, description="Reason for manual override")
 
 
 class SetProfileResponse(BaseModel):
@@ -160,16 +160,16 @@ class PowerHistoryEntry(BaseModel):
     timestamp: datetime
     profile: PowerProfile
     reason: str = Field(..., description="Why the change occurred")
-    source: Optional[str] = Field(None, description="What triggered the change")
-    frequency_mhz: Optional[float] = Field(None, description="CPU frequency at time of change")
+    source: Optional[str] = Field(default=None, description="What triggered the change")
+    frequency_mhz: Optional[float] = Field(default=None, description="CPU frequency at time of change")
 
 
 class PowerHistoryResponse(BaseModel):
     """Response for power history endpoint."""
     entries: list[PowerHistoryEntry] = Field(..., description="Profile change history")
     total_entries: int = Field(..., description="Total entries in history")
-    from_timestamp: Optional[datetime] = Field(None, description="Earliest entry timestamp")
-    to_timestamp: Optional[datetime] = Field(None, description="Latest entry timestamp")
+    from_timestamp: Optional[datetime] = Field(default=None, description="Earliest entry timestamp")
+    to_timestamp: Optional[datetime] = Field(default=None, description="Latest entry timestamp")
 
 
 class RegisterDemandRequest(BaseModel):
@@ -177,10 +177,10 @@ class RegisterDemandRequest(BaseModel):
     source: str = Field(..., description="Unique source identifier")
     level: PowerProfile = Field(..., description="Required power level")
     timeout_seconds: Optional[int] = Field(
-        None,
+        default=None,
         description="Auto-expire after this many seconds"
     )
-    description: Optional[str] = Field(None, description="Human-readable description")
+    description: Optional[str] = Field(default=None, description="Human-readable description")
 
 
 class RegisterDemandResponse(BaseModel):
@@ -205,18 +205,18 @@ class UnregisterDemandResponse(BaseModel):
 
 class AutoScalingConfig(BaseModel):
     """Configuration for auto-scaling behavior."""
-    enabled: bool = Field(True, description="Whether auto-scaling is enabled")
-    cpu_surge_threshold: float = Field(80.0, description="CPU % to trigger SURGE")
-    cpu_medium_threshold: float = Field(50.0, description="CPU % to trigger MEDIUM")
-    cpu_low_threshold: float = Field(20.0, description="CPU % to trigger LOW")
-    cooldown_seconds: int = Field(60, description="Seconds before downgrade allowed")
-    use_cpu_monitoring: bool = Field(True, description="Whether to use CPU usage for scaling")
+    enabled: bool = Field(default=True, description="Whether auto-scaling is enabled")
+    cpu_surge_threshold: int = Field(default=80, description="CPU % to trigger SURGE")
+    cpu_medium_threshold: int = Field(default=50, description="CPU % to trigger MEDIUM")
+    cpu_low_threshold: int = Field(default=20, description="CPU % to trigger LOW")
+    cooldown_seconds: int = Field(default=60, description="Seconds before downgrade allowed")
+    use_cpu_monitoring: bool = Field(default=True, description="Whether to use CPU usage for scaling")
 
 
 class AutoScalingConfigResponse(BaseModel):
     """Response for auto-scaling configuration."""
     config: AutoScalingConfig
-    current_cpu_usage: Optional[float] = Field(None, description="Current CPU usage %")
+    current_cpu_usage: Optional[float] = Field(default=None, description="Current CPU usage %")
 
 
 class SwitchBackendRequest(BaseModel):
@@ -238,12 +238,12 @@ class SwitchBackendResponse(BaseModel):
 class PowerPresetBase(BaseModel):
     """Base schema for power presets."""
     name: str = Field(..., min_length=1, max_length=100, description="Preset name")
-    description: Optional[str] = Field(None, description="Preset description")
-    base_clock_mhz: int = Field(1500, ge=100, le=10000, description="Base reference clock in MHz")
-    idle_clock_mhz: int = Field(800, ge=100, le=10000, description="Clock for IDLE property in MHz")
-    low_clock_mhz: int = Field(1200, ge=100, le=10000, description="Clock for LOW property in MHz")
-    medium_clock_mhz: int = Field(2500, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
-    surge_clock_mhz: int = Field(4200, ge=100, le=10000, description="Clock for SURGE property in MHz")
+    description: Optional[str] = Field(default=None, description="Preset description")
+    base_clock_mhz: int = Field(default=1500, ge=100, le=10000, description="Base reference clock in MHz")
+    idle_clock_mhz: int = Field(default=800, ge=100, le=10000, description="Clock for IDLE property in MHz")
+    low_clock_mhz: int = Field(default=1200, ge=100, le=10000, description="Clock for LOW property in MHz")
+    medium_clock_mhz: int = Field(default=2500, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
+    surge_clock_mhz: int = Field(default=4200, ge=100, le=10000, description="Clock for SURGE property in MHz")
 
 
 class PowerPresetCreate(PowerPresetBase):
@@ -253,13 +253,13 @@ class PowerPresetCreate(PowerPresetBase):
 
 class PowerPresetUpdate(BaseModel):
     """Schema for updating an existing preset."""
-    name: Optional[str] = Field(None, min_length=1, max_length=100, description="Preset name")
-    description: Optional[str] = Field(None, description="Preset description")
-    base_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Base reference clock in MHz")
-    idle_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for IDLE property in MHz")
-    low_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for LOW property in MHz")
-    medium_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
-    surge_clock_mhz: Optional[int] = Field(None, ge=100, le=10000, description="Clock for SURGE property in MHz")
+    name: Optional[str] = Field(default=None, min_length=1, max_length=100, description="Preset name")
+    description: Optional[str] = Field(default=None, description="Preset description")
+    base_clock_mhz: Optional[int] = Field(default=None, ge=100, le=10000, description="Base reference clock in MHz")
+    idle_clock_mhz: Optional[int] = Field(default=None, ge=100, le=10000, description="Clock for IDLE property in MHz")
+    low_clock_mhz: Optional[int] = Field(default=None, ge=100, le=10000, description="Clock for LOW property in MHz")
+    medium_clock_mhz: Optional[int] = Field(default=None, ge=100, le=10000, description="Clock for MEDIUM property in MHz")
+    surge_clock_mhz: Optional[int] = Field(default=None, ge=100, le=10000, description="Clock for SURGE property in MHz")
 
 
 class PowerPresetResponse(PowerPresetBase):
@@ -314,22 +314,22 @@ class ServiceIntensityInfo(BaseModel):
     intensity_source: str = Field(..., description="Source of intensity: 'demand', 'service', 'cpu_usage', or 'inferred'")
 
     # Power Demand Info (if registered)
-    has_active_demand: bool = Field(False, description="Whether this service has an active power demand registered")
-    demand_description: Optional[str] = Field(None, description="Description of the active demand")
-    demand_registered_at: Optional[datetime] = Field(None, description="When the demand was registered")
-    demand_expires_at: Optional[datetime] = Field(None, description="When the demand expires (None = manual)")
+    has_active_demand: bool = Field(default=False, description="Whether this service has an active power demand registered")
+    demand_description: Optional[str] = Field(default=None, description="Description of the active demand")
+    demand_registered_at: Optional[datetime] = Field(default=None, description="When the demand was registered")
+    demand_expires_at: Optional[datetime] = Field(default=None, description="When the demand expires (None = manual)")
 
     # Process Metrics (if available from process tracker)
-    cpu_percent: Optional[float] = Field(None, description="Current CPU usage percentage")
-    memory_mb: Optional[float] = Field(None, description="Current memory usage in MB")
-    pid: Optional[int] = Field(None, description="Process ID")
-    is_alive: bool = Field(True, description="Whether the process is currently running")
+    cpu_percent: Optional[float] = Field(default=None, description="Current CPU usage percentage")
+    memory_mb: Optional[float] = Field(default=None, description="Current memory usage in MB")
+    pid: Optional[int] = Field(default=None, description="Process ID")
+    is_alive: bool = Field(default=True, description="Whether the process is currently running")
 
 
 class ServiceIntensityResponse(BaseModel):
     """Response for /api/power/intensities endpoint."""
     services: list[ServiceIntensityInfo] = Field(default_factory=list, description="List of services with intensity info")
     timestamp: datetime = Field(..., description="When this data was collected")
-    total_services: int = Field(0, description="Total number of services")
-    active_demands_count: int = Field(0, description="Number of services with active power demands")
-    highest_intensity: ServicePowerProperty = Field(ServicePowerProperty.IDLE, description="Highest intensity across all services")
+    total_services: int = Field(default=0, description="Total number of services")
+    active_demands_count: int = Field(default=0, description="Number of services with active power demands")
+    highest_intensity: ServicePowerProperty = Field(default=ServicePowerProperty.IDLE, description="Highest intensity across all services")

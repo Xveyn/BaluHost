@@ -1,13 +1,18 @@
 """Notification database models."""
+from __future__ import annotations
+
 from datetime import datetime, time
 from enum import Enum
-from typing import Optional, Any
+from typing import TYPE_CHECKING, Optional, Any
 
 from sqlalchemy import String, DateTime, Integer, Boolean, Text, Time, ForeignKey, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
 from app.models.base import Base
+
+if TYPE_CHECKING:
+    from app.models.user import User
 
 
 class NotificationType(str, Enum):

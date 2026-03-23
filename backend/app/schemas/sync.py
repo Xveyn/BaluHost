@@ -8,8 +8,8 @@ from pydantic import BaseModel, Field
 class RegisterDeviceRequest(BaseModel):
     """Register a device for synchronization."""
     device_id: str = Field(..., description="Unique device identifier")
-    device_name: Optional[str] = Field(None, description="Human-readable device name")
-    registration_token: Optional[str] = Field(None, description="One-time registration token (required for registration)")
+    device_name: Optional[str] = Field(default=None, description="Human-readable device name")
+    registration_token: Optional[str] = Field(default=None, description="One-time registration token (required for registration)")
 
 
 class SyncFileInfo(BaseModel):
@@ -139,7 +139,7 @@ class CreateSyncScheduleRequest(BaseModel):
     """Create a sync schedule."""
     device_id: str
     schedule_type: str = Field(..., description="daily, weekly, monthly, on_change")
-    time_of_day: Optional[str] = Field(None, description="HH:MM format")
+    time_of_day: Optional[str] = Field(default=None, description="HH:MM format")
     day_of_week: Optional[int] = None
     day_of_month: Optional[int] = None
     sync_deletions: bool = True
@@ -150,8 +150,8 @@ class CreateSyncScheduleRequest(BaseModel):
 class UpdateSyncScheduleRequest(BaseModel):
     """Update an existing sync schedule."""
     device_id: Optional[str] = None
-    schedule_type: Optional[str] = Field(None, description="daily, weekly, monthly, on_change")
-    time_of_day: Optional[str] = Field(None, description="HH:MM format")
+    schedule_type: Optional[str] = Field(default=None, description="daily, weekly, monthly, on_change")
+    time_of_day: Optional[str] = Field(default=None, description="HH:MM format")
     day_of_week: Optional[int] = None
     day_of_month: Optional[int] = None
     sync_deletions: Optional[bool] = None
@@ -202,7 +202,7 @@ class SelectiveSyncResponse(BaseModel):
 class SyncFolderReport(BaseModel):
     """Single folder report from BaluDesk client."""
     remote_path: str = Field(..., description="Remote path on BaluHost being synced")
-    sync_direction: str = Field("bidirectional", description="bidirectional, push, or pull")
+    sync_direction: str = Field(default="bidirectional", description="bidirectional, push, or pull")
 
 
 class ReportSyncFoldersRequest(BaseModel):

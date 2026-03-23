@@ -5,6 +5,8 @@ from typing import Optional
 
 from pydantic import BaseModel, Field, field_validator
 
+from app.schemas.validators import validate_mac_address
+
 
 class ServerProfileBase(BaseModel):
     """Base schema for server profile fields."""
@@ -13,9 +15,15 @@ class ServerProfileBase(BaseModel):
     ssh_host: str = Field(..., min_length=1, max_length=255, description="SSH hostname or IP")
     ssh_port: int = Field(default=22, ge=1, le=65535, description="SSH port")
     ssh_username: str = Field(..., min_length=1, max_length=255, description="SSH username")
-    vpn_profile_id: Optional[int] = Field(None, description="Optional VPN profile ID")
-    power_on_command: Optional[str] = Field(None, max_length=500, description="Command to start server")
-    
+    vpn_profile_id: Optional[int] = Field(default=None, description="Optional VPN profile ID")
+    power_on_command: Optional[str] = Field(default=None, max_length=500, description="Command to start server")
+    wol_mac_address: Optional[str] = Field(default=None, description="MAC address for WoL fallback")
+
+    @field_validator("wol_mac_address", mode="before")
+    @classmethod
+    def _validate_wol_mac(cls, v: Optional[str]) -> Optional[str]:
+        return validate_mac_address(v)
+
     @field_validator("ssh_host")
     @classmethod
     def validate_ssh_host(cls, v: str) -> str:
@@ -52,13 +60,19 @@ class ServerProfileCreate(ServerProfileBase):
 class ServerProfileUpdate(BaseModel):
     """Schema for updating a server profile."""
     
-    name: Optional[str] = Field(None, min_length=1, max_length=255)
-    ssh_host: Optional[str] = Field(None, min_length=1, max_length=255)
-    ssh_port: Optional[int] = Field(None, ge=1, le=65535)
-    ssh_username: Optional[str] = Field(None, min_length=1, max_length=255)
-    ssh_private_key: Optional[str] = Field(None, description="Updated SSH private key (optional)")
+    name: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    ssh_host: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    ssh_port: Optional[int] = Field(default=None, ge=1, le=65535)
+    ssh_username: Optional[str] = Field(default=None, min_length=1, max_length=255)
+    ssh_private_key: Optional[str] = Field(default=None, description="Updated SSH private key (optional)")
     vpn_profile_id: Optional[int] = None
-    power_on_command: Optional[str] = Field(None, max_length=500)
+    power_on_command: Optional[str] = Field(default=None, max_length=500)
+    wol_mac_address: Optional[str] = None
+
+    @field_validator("wol_mac_address", mode="before")
+    @classmethod
+    def _validate_wol_mac(cls, v: Optional[str]) -> Optional[str]:
+        return validate_mac_address(v)
 
 
 class ServerProfileResponse(ServerProfileBase):
@@ -82,9 +96,10 @@ class ServerProfileList(BaseModel):
     ssh_host: str
     ssh_port: int
     vpn_profile_id: Optional[int] = None
+    wol_mac_address: Optional[str] = None
     created_at: datetime
     last_used: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -101,6 +116,7 @@ class ServerStartResponse(BaseModel):
     profile_id: int
     status: str = Field(..., description="Status: starting, started, failed")
     message: str
+    method: str = Field(default="ssh", description="Start method: ssh or wol")
     timestamp: datetime = Field(default_factory=datetime.utcnow)
 
 
