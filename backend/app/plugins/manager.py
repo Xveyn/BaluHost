@@ -195,6 +195,19 @@ class PluginManager:
                 )
 
             self._plugins[name] = plugin
+
+            # Validate capability contracts for smart device plugins
+            from app.plugins.smart_device.base import SmartDevicePlugin
+            if isinstance(plugin, SmartDevicePlugin):
+                from app.plugins.smart_device.capabilities import validate_capability_contracts
+                contract_errors = validate_capability_contracts(plugin)
+                if contract_errors:
+                    del self._plugins[name]
+                    errors_str = "; ".join(contract_errors)
+                    raise PluginLoadError(
+                        f"Plugin '{name}' failed capability contract validation: {errors_str}"
+                    )
+
             logger.info(f"Loaded plugin: {meta.display_name} v{meta.version}")
 
             return plugin

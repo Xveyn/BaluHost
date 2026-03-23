@@ -164,3 +164,105 @@ def test_partial_protocol_fails_validation():
     errors = validate_capability_contracts(plugin)
     assert len(errors) == 1
     assert "power_monitor" in errors[0].lower()
+
+
+from app.plugins.manager import PluginManager, PluginLoadError
+
+
+@pytest.fixture()
+def reset_manager():
+    PluginManager.reset_instance()
+    yield
+    PluginManager.reset_instance()
+
+
+def test_plugin_manager_rejects_invalid_smart_device_plugin(tmp_path, reset_manager):
+    """PluginManager.load_plugin() should reject a SmartDevicePlugin that
+    fails capability contract validation."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "broken_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import DeviceCapability
+
+class BrokenDevicePlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="broken_device",
+            version="1.0.0",
+            display_name="Broken",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="broken",
+            display_name="Broken",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {}
+''')
+
+    manager = PluginManager(plugins_dir=plugins_dir)
+    with pytest.raises(PluginLoadError, match="capability contract"):
+        manager.load_plugin("broken_device")
+
+
+def test_plugin_manager_accepts_valid_smart_device_plugin(tmp_path, reset_manager):
+    """PluginManager.load_plugin() should accept a SmartDevicePlugin that
+    satisfies all capability contracts."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "good_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from datetime import datetime, timezone
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import (
+    DeviceCapability, PowerReading,
+)
+
+class GoodDevicePlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="good_device",
+            version="1.0.0",
+            display_name="Good",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="good",
+            display_name="Good",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {"power_monitor": PowerReading(watts=1.0, timestamp=datetime.now(timezone.utc))}
+
+    async def get_power(self, device_id):
+        return PowerReading(watts=1.0, timestamp=datetime.now(timezone.utc))
+''')
+
+    manager = PluginManager(plugins_dir=plugins_dir)
+    plugin = manager.load_plugin("good_device")
+    assert plugin is not None
