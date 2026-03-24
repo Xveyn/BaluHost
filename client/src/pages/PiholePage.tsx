@@ -28,15 +28,17 @@ import PiholeContainerActions from '../components/pihole/PiholeContainerActions'
 import PiholeAnalytics from '../components/pihole/PiholeAnalytics';
 import PiholeStoredQueryLog from '../components/pihole/PiholeStoredQueryLog';
 import QueryCollectorStatus from '../components/pihole/QueryCollectorStatus';
+import AdDiscoveryTab from '../components/pihole/AdDiscoveryTab';
 import { AlertTriangle, WifiOff } from 'lucide-react';
 
-type Tab = 'overview' | 'queries' | 'analytics' | 'stored-queries' | 'domains' | 'adlists' | 'dns' | 'settings' | 'container';
+type Tab = 'overview' | 'queries' | 'analytics' | 'stored-queries' | 'ad-discovery' | 'domains' | 'adlists' | 'dns' | 'settings' | 'container';
 
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
   { key: 'queries', label: 'Query Log' },
   { key: 'analytics', label: 'Analytics' },
   { key: 'stored-queries', label: 'Query History' },
+  { key: 'ad-discovery', label: 'Ad Discovery' },
   { key: 'domains', label: 'Domains' },
   { key: 'adlists', label: 'Adlists' },
   { key: 'dns', label: 'Local DNS' },
@@ -211,6 +213,10 @@ export default function PiholePage() {
 
       {activeTab === 'stored-queries' && (
         <PiholeStoredQueryLog />
+      )}
+
+      {activeTab === 'ad-discovery' && (
+        <AdDiscoveryTab />
       )}
 
       {activeTab === 'domains' && (
