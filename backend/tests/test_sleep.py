@@ -232,6 +232,49 @@ class TestSleepManagerService:
         assert caps.can_suspend is True
         assert len(caps.data_disk_devices) > 0
 
+    @pytest.mark.asyncio
+    async def test_true_suspend_success_resumes_to_awake(self):
+        """Test that successful suspend resumes to AWAKE state."""
+        service = self._create_service()
+        # DevSleepBackend.suspend_system() returns True by default
+        ok = await service.enter_true_suspend("test_suspend", SleepTrigger.MANUAL)
+        assert ok is True
+        assert service._current_state == SleepState.AWAKE
+
+    @pytest.mark.asyncio
+    async def test_true_suspend_failure_reverts_to_soft_sleep(self):
+        """Test that failed suspend reverts to SOFT_SLEEP instead of staying stuck."""
+        service = self._create_service()
+        # Make suspend_system fail
+        service._backend.suspend_system = AsyncMock(return_value=False)
+        ok = await service.enter_true_suspend("test_suspend", SleepTrigger.MANUAL)
+        assert ok is False
+        # Must NOT be stuck on TRUE_SUSPEND
+        assert service._current_state == SleepState.SOFT_SLEEP
+
+    @pytest.mark.asyncio
+    async def test_schedule_can_retrigger_after_failed_suspend(self):
+        """Test that sleep schedule can trigger again after a failed suspend."""
+        service = self._create_service()
+        # First: fail a suspend -> should land in SOFT_SLEEP
+        service._backend.suspend_system = AsyncMock(return_value=False)
+        await service.enter_true_suspend("test", SleepTrigger.SCHEDULE)
+        assert service._current_state == SleepState.SOFT_SLEEP
+
+        # Wake up manually
+        service._soft_sleep_entered_at = datetime.now(timezone.utc)
+        service._paused_services = []
+        service._spun_down_disks = []
+        ok = await service.exit_soft_sleep("manual_wake")
+        assert ok is True
+        assert service._current_state == SleepState.AWAKE
+
+        # Now schedule should be able to trigger again
+        service._backend.suspend_system = AsyncMock(return_value=True)
+        ok = await service.enter_true_suspend("retry", SleepTrigger.SCHEDULE)
+        assert ok is True
+        assert service._current_state == SleepState.AWAKE
+
 
 # ============================================================================
 # Idle Detection Tests
