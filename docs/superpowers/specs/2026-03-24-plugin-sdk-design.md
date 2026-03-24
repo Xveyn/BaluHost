@@ -8,7 +8,7 @@
 
 Three sequential features that complete the BaluHost plugin system:
 
-1. **Feature 1 — Hook Completion:** Add 8 new hook specs and wire all 33 hooks into backend services
+1. **Feature 1 — Hook Completion:** Add 8 new hook specs and wire all 34 hooks into backend services
 2. **Feature 2 — Service Registry:** Cross-plugin service discovery and communication
 3. **Feature 3 — SDK CLI:** Plugin scaffolding, validation, and developer tooling
 
@@ -18,7 +18,7 @@ Each feature builds on the previous: Feature 1 provides hooks that Feature 3 use
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Hook wiring scope | All 33 hooks (25 existing + 8 new) | Existing hooks are defined but not wired anywhere in services |
+| Hook wiring scope | All 34 hooks (26 existing + 8 new) | Existing hooks are defined but not wired anywhere in services |
 | Telemetry throttle | Plugin-side `@throttle(seconds=N)` decorator | No framework intrusion, compatible with pluggy dispatch model |
 | SDK CLI entry-point | `baluhost-sdk` in pyproject.toml + `python -m` fallback | Consistent with existing `baluhost-tui` pattern |
 | Registry concurrency | `asyncio.Lock` per-process | Consistent with PluginManager/EventManager singleton pattern; cross-process not needed |
@@ -68,7 +68,7 @@ on_scheduler_run_failed(self, scheduler_name: str, run_id: str, error: str, dura
 
 ### 1.2 Hook Wiring Map
 
-All 33 hooks wired via `emit_hook()` from `app.plugins.emit`:
+All 34 hooks wired via `emit_hook()` from `app.plugins.emit`:
 
 | Hook | Service File | Location |
 |---|---|---|
@@ -372,7 +372,7 @@ File: `backend/tests/plugins/test_plugin_sdk.py`
 ## Files Changed Summary
 
 ### Feature 1
-- **Modified:** `backend/app/plugins/hooks.py` (8 new hook specs)
+- **Modified:** `backend/app/plugins/hooks.py` (8 new hook specs, 34 total)
 - **Modified:** ~15 service/route files (emit_hook calls)
 - **New:** `backend/tests/plugins/test_plugin_hooks_new.py`
 
