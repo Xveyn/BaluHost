@@ -218,6 +218,19 @@ class SmartDevicePoller:
                     continue
 
                 plugin = plugin_cls()
+
+                # Validate capability contracts
+                from app.plugins.smart_device.capabilities import validate_capability_contracts
+                contract_errors = validate_capability_contracts(plugin)
+                if contract_errors:
+                    errors_str = "; ".join(contract_errors)
+                    logger.warning(
+                        "SmartDevicePoller: plugin '%s' failed capability contract "
+                        "validation: %s — skipping",
+                        name, errors_str,
+                    )
+                    continue
+
                 if plugin.metadata.category != "smart_device":
                     continue
 
@@ -330,9 +343,27 @@ class SmartDevicePoller:
                     timeout=10.0,
                 )
 
-            # Serialize any Pydantic models in the state dict
+            # Validate poll data against capability contracts
+            from app.plugins.smart_device.capabilities import (
+                DeviceCapability,
+                validate_poll_data,
+            )
+            declared_caps = []
+            for c in device.capabilities:
+                try:
+                    declared_caps.append(DeviceCapability(c))
+                except ValueError:
+                    pass
+            validated_state, poll_warnings = validate_poll_data(new_state, declared_caps)
+            for warning in poll_warnings:
+                logger.warning(
+                    "SmartDevicePoller: plugin '%s' device %d ('%s'): %s",
+                    plugin.metadata.name, device_id, device.name, warning,
+                )
+
+            # Serialize any Pydantic models in the validated state dict
             serialized: Dict[str, Any] = {}
-            for cap_key, cap_value in new_state.items():
+            for cap_key, cap_value in validated_state.items():
                 if hasattr(cap_value, "model_dump"):
                     serialized[cap_key] = cap_value.model_dump(mode="json")
                 else:

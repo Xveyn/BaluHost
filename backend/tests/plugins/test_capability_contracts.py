@@ -1,0 +1,406 @@
+"""Tests for capability contract enforcement."""
+from __future__ import annotations
+
+from datetime import datetime, timezone
+from typing import Any, Dict, List, Optional
+
+import pytest
+from pydantic import BaseModel
+
+from app.plugins.smart_device.capabilities import (
+    CAPABILITY_CONTRACTS,
+    DeviceCapability,
+    PowerMonitor,
+    PowerReading,
+    Switch,
+    SwitchState,
+    validate_capability_contracts,
+)
+from app.plugins.smart_device.base import DeviceTypeInfo, SmartDevicePlugin
+from app.plugins.base import PluginMetadata
+
+
+# --- Helpers ---
+
+class _ValidPowerPlugin(SmartDevicePlugin):
+    """Plugin that correctly implements POWER_MONITOR."""
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="valid_power",
+            version="1.0.0",
+            display_name="Valid Power",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self) -> List[DeviceTypeInfo]:
+        return [
+            DeviceTypeInfo(
+                type_id="test_power",
+                display_name="Test Power",
+                manufacturer="Test",
+                capabilities=[DeviceCapability.POWER_MONITOR],
+            )
+        ]
+
+    async def connect_device(self, device_id: str, config: Dict[str, Any]) -> bool:
+        return True
+
+    async def poll_device(self, device_id: str) -> Dict[str, Any]:
+        return {
+            "power_monitor": PowerReading(
+                watts=42.0, timestamp=datetime.now(timezone.utc)
+            )
+        }
+
+    async def get_power(self, device_id: str) -> PowerReading:
+        return PowerReading(watts=42.0, timestamp=datetime.now(timezone.utc))
+
+
+class _MissingProtocolPlugin(SmartDevicePlugin):
+    """Plugin that declares POWER_MONITOR but does NOT implement get_power()."""
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="missing_protocol",
+            version="1.0.0",
+            display_name="Missing Protocol",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self) -> List[DeviceTypeInfo]:
+        return [
+            DeviceTypeInfo(
+                type_id="test_broken",
+                display_name="Test Broken",
+                manufacturer="Test",
+                capabilities=[DeviceCapability.POWER_MONITOR],
+            )
+        ]
+
+    async def connect_device(self, device_id: str, config: Dict[str, Any]) -> bool:
+        return True
+
+    async def poll_device(self, device_id: str) -> Dict[str, Any]:
+        return {}
+
+
+class _PartialProtocolPlugin(SmartDevicePlugin):
+    """Declares SWITCH + POWER_MONITOR but only implements Switch."""
+
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="partial_protocol",
+            version="1.0.0",
+            display_name="Partial",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self) -> List[DeviceTypeInfo]:
+        return [
+            DeviceTypeInfo(
+                type_id="test_partial",
+                display_name="Test Partial",
+                manufacturer="Test",
+                capabilities=[
+                    DeviceCapability.SWITCH,
+                    DeviceCapability.POWER_MONITOR,
+                ],
+            )
+        ]
+
+    async def connect_device(self, device_id: str, config: Dict[str, Any]) -> bool:
+        return True
+
+    async def poll_device(self, device_id: str) -> Dict[str, Any]:
+        return {}
+
+    # Implements Switch but NOT PowerMonitor
+    async def turn_on(self, device_id: str) -> SwitchState:
+        return SwitchState(is_on=True)
+
+    async def turn_off(self, device_id: str) -> SwitchState:
+        return SwitchState(is_on=False)
+
+    async def get_switch_state(self, device_id: str) -> SwitchState:
+        return SwitchState(is_on=True)
+
+
+# --- Tests: CAPABILITY_CONTRACTS completeness ---
+
+def test_all_capabilities_have_contracts():
+    """Every DeviceCapability enum value must have an entry in CAPABILITY_CONTRACTS."""
+    for cap in DeviceCapability:
+        assert cap in CAPABILITY_CONTRACTS, f"Missing contract for {cap.value}"
+
+
+# --- Tests: validate_capability_contracts ---
+
+def test_valid_plugin_passes_validation():
+    plugin = _ValidPowerPlugin()
+    errors = validate_capability_contracts(plugin)
+    assert errors == []
+
+
+def test_missing_protocol_fails_validation():
+    plugin = _MissingProtocolPlugin()
+    errors = validate_capability_contracts(plugin)
+    assert len(errors) == 1
+    assert "power_monitor" in errors[0].lower()
+    assert "PowerMonitor" in errors[0]
+
+
+def test_partial_protocol_fails_validation():
+    plugin = _PartialProtocolPlugin()
+    errors = validate_capability_contracts(plugin)
+    assert len(errors) == 1
+    assert "power_monitor" in errors[0].lower()
+
+
+from app.plugins.manager import PluginManager, PluginLoadError
+
+
+@pytest.fixture()
+def reset_manager():
+    PluginManager.reset_instance()
+    yield
+    PluginManager.reset_instance()
+
+
+def test_plugin_manager_rejects_invalid_smart_device_plugin(tmp_path, reset_manager):
+    """PluginManager.load_plugin() should reject a SmartDevicePlugin that
+    fails capability contract validation."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "broken_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import DeviceCapability
+
+class BrokenDevicePlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="broken_device",
+            version="1.0.0",
+            display_name="Broken",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="broken",
+            display_name="Broken",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {}
+''')
+
+    manager = PluginManager(plugins_dir=plugins_dir)
+    with pytest.raises(PluginLoadError, match="capability contract"):
+        manager.load_plugin("broken_device")
+
+
+def test_plugin_manager_accepts_valid_smart_device_plugin(tmp_path, reset_manager):
+    """PluginManager.load_plugin() should accept a SmartDevicePlugin that
+    satisfies all capability contracts."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "good_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from datetime import datetime, timezone
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import (
+    DeviceCapability, PowerReading,
+)
+
+class GoodDevicePlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="good_device",
+            version="1.0.0",
+            display_name="Good",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="good",
+            display_name="Good",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {"power_monitor": PowerReading(watts=1.0, timestamp=datetime.now(timezone.utc))}
+
+    async def get_power(self, device_id):
+        return PowerReading(watts=1.0, timestamp=datetime.now(timezone.utc))
+''')
+
+    manager = PluginManager(plugins_dir=plugins_dir)
+    plugin = manager.load_plugin("good_device")
+    assert plugin is not None
+
+
+@pytest.mark.asyncio
+async def test_poller_skips_plugin_failing_contracts(tmp_path):
+    """Validate that dynamically loaded plugins fail contract validation
+    the same way as statically defined ones."""
+    plugins_dir = tmp_path / "plugins"
+    plugin_dir = plugins_dir / "broken_poller_device"
+    plugin_dir.mkdir(parents=True)
+    (plugin_dir / "__init__.py").write_text('''
+from app.plugins.base import PluginMetadata
+from app.plugins.smart_device.base import SmartDevicePlugin, DeviceTypeInfo
+from app.plugins.smart_device.capabilities import DeviceCapability
+
+class BrokenPollerPlugin(SmartDevicePlugin):
+    @property
+    def metadata(self) -> PluginMetadata:
+        return PluginMetadata(
+            name="broken_poller_device",
+            version="1.0.0",
+            display_name="Broken Poller",
+            description="Test",
+            author="Test",
+            category="smart_device",
+        )
+
+    def get_device_types(self):
+        return [DeviceTypeInfo(
+            type_id="broken",
+            display_name="Broken",
+            manufacturer="Test",
+            capabilities=[DeviceCapability.POWER_MONITOR],
+        )]
+
+    async def connect_device(self, device_id, config):
+        return True
+
+    async def poll_device(self, device_id):
+        return {}
+''')
+
+    import importlib.util, sys
+    module_name = "test_broken_poller_plugin"
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        plugin_dir / "__init__.py",
+        submodule_search_locations=[str(plugin_dir)],
+    )
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    spec.loader.exec_module(module)
+
+    plugin = module.BrokenPollerPlugin()
+
+    from app.plugins.smart_device.capabilities import validate_capability_contracts
+    errors = validate_capability_contracts(plugin)
+    assert len(errors) == 1
+    assert "power_monitor" in errors[0].lower()
+
+    # Cleanup
+    del sys.modules[module_name]
+
+
+from app.plugins.smart_device.capabilities import validate_poll_data
+
+
+def test_validate_poll_data_valid_power_reading():
+    """Valid PowerReading passes validation."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": PowerReading(
+            watts=42.0, timestamp=datetime.now(timezone.utc)
+        )
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_valid_dict():
+    """A raw dict that matches PowerReading schema passes validation."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": {
+            "watts": 42.0,
+            "timestamp": datetime.now(timezone.utc).isoformat(),
+        }
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_invalid_dict():
+    """A dict missing required field 'watts' is rejected."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    data = {
+        "power_monitor": {"voltage": 230.0}  # missing 'watts' and 'timestamp'
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "power_monitor" not in validated
+    assert len(warnings) == 1
+    assert "power_monitor" in warnings[0].lower()
+
+
+def test_validate_poll_data_empty_dict():
+    """Empty poll result is valid — no errors."""
+    declared = [DeviceCapability.POWER_MONITOR]
+    validated, warnings = validate_poll_data({}, declared)
+    assert validated == {}
+    assert warnings == []
+
+
+def test_validate_poll_data_partial_capabilities():
+    """Returning only some declared capabilities is valid."""
+    declared = [DeviceCapability.SWITCH, DeviceCapability.POWER_MONITOR]
+    data = {
+        "switch": SwitchState(is_on=True),
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "switch" in validated
+    assert warnings == []
+
+
+def test_validate_poll_data_extra_key_warned():
+    """Keys not in declared capabilities are dropped with a warning."""
+    declared = [DeviceCapability.SWITCH]
+    data = {
+        "switch": SwitchState(is_on=True),
+        "power_monitor": PowerReading(
+            watts=42.0, timestamp=datetime.now(timezone.utc)
+        ),
+    }
+    validated, warnings = validate_poll_data(data, declared)
+    assert "switch" in validated
+    assert "power_monitor" not in validated
+    assert len(warnings) == 1
+    assert "undeclared" in warnings[0].lower()

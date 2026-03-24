@@ -744,10 +744,16 @@ class SleepManagerService:
         # Actually suspend
         ok = await self._backend.suspend_system()
 
-        # When system resumes, we'll be back here
+        # When system resumes (or suspend failed), we'll be back here.
+        # Revert to SOFT_SLEEP so _exit_soft_sleep accepts the transition.
+        self._current_state = SleepState.SOFT_SLEEP
+        self._state_since = datetime.now(timezone.utc)
+
         if ok:
             logger.info("System resumed from suspend")
             await self._exit_soft_sleep("resume_from_suspend")
+        else:
+            logger.error("System suspend failed, remaining in soft sleep")
 
         return ok
 

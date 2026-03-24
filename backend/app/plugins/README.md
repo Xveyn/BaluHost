@@ -316,6 +316,39 @@ Verfügbare Capabilities:
 | `dimmer` | `Dimmer` | `set_brightness()`, `get_dimmer_state()` |
 | `color` | `ColorControl` | `set_color()`, `set_color_temp()`, `get_color_state()` |
 
+### Capability-Verträge
+
+Capabilities sind **Verträge**, nicht nur Labels. Wenn ein Plugin eine Capability deklariert, muss es:
+
+1. **Das zugehörige Protocol implementieren** — geprüft beim Plugin-Start (sowohl im Web-Worker als auch im Monitoring-Worker)
+2. **Das zugehörige Datenmodell von `poll_device()` zurückgeben** — geprüft bei jedem Poll-Zyklus zur Laufzeit
+
+Dafür bekommt das Plugin automatisch: Mobile-App-Integration (BaluApp), Dashboard-Panel, Energie-Statistiken und Kostenberechnung.
+
+| Capability | Protocol | Datenmodell | `poll_device()` Key |
+|------------|----------|-------------|---------------------|
+| `switch` | `Switch` | `SwitchState` | `"switch"` |
+| `power_monitor` | `PowerMonitor` | `PowerReading` | `"power_monitor"` |
+| `sensor` | `Sensor` | `SensorReading` | `"sensor"` |
+| `dimmer` | `Dimmer` | `DimmerState` | `"dimmer"` |
+| `color` | `ColorControl` | `ColorState` | `"color"` |
+
+**Wichtig:** Stromverbrauchsdaten (und alle anderen Capability-Daten) müssen über die zentrale Pipeline fließen:
+
+```
+poll_device() → Poller → SHM → Energy-Service → Mobile API
+```
+
+Plugin-eigene API-Routen dürfen **keine** Capability-Daten in einem anderen Format exponieren. Die zentrale Pipeline ist der einzige Weg, damit die Mobile App und das Dashboard konsistente Daten erhalten.
+
+**Validierungs-Verhalten:**
+
+- **Startup:** Plugin wird nicht geladen, wenn ein deklariertes Protocol nicht implementiert ist
+- **Runtime:** Ungültige Daten werden verworfen (Warning im Log), gültige Daten fließen normal weiter
+- **Leere Rückgabe:** `poll_device()` darf `{}` zurückgeben (keine Daten in diesem Zyklus)
+- **Partielle Rückgabe:** Nicht alle deklarierten Capabilities müssen in jedem Poll enthalten sein
+- **Extra Keys:** Keys die nicht in den deklarierten Capabilities sind werden ignoriert (Warning im Log)
+
 Smart-Device-Plugins haben **keine eigenen Routen** — alle Interaktion läuft über die einheitliche `/api/smart-devices/` API. Der `SmartDevicePoller` läuft im separaten Monitoring-Worker-Prozess und pollt alle aktiven Geräte periodisch. Status wird per SHM (Shared Memory Files) an den Web-Worker kommuniziert.
 
 ## Mitgelieferte Plugins
