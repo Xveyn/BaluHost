@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.19.1] - 2026-03-24
+
+### Fixed
+- **Sleep schedule stuck state** — When `suspend_system()` failed, state stayed on TRUE_SUSPEND permanently, blocking schedule re-triggers, manual wake, and auto-wake middleware. Now reverts to SOFT_SLEEP on failure.
+- **Sleep resume path** — After successful suspend resume, state transition was rejected by `_exit_soft_sleep()` guard. Fixed by setting state to SOFT_SLEEP before calling exit.
+
+---
+
 ## [1.19.0] - 2026-03-22
 
 ### Added
