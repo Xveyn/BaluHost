@@ -8,7 +8,7 @@
 
 Three sequential features that complete the BaluHost plugin system:
 
-1. **Feature 1 — Hook Completion:** Add 7 new hook specs and wire all 32 hooks into backend services
+1. **Feature 1 — Hook Completion:** Add 8 new hook specs and wire all 33 hooks into backend services
 2. **Feature 2 — Service Registry:** Cross-plugin service discovery and communication
 3. **Feature 3 — SDK CLI:** Plugin scaffolding, validation, and developer tooling
 
@@ -18,12 +18,15 @@ Each feature builds on the previous: Feature 1 provides hooks that Feature 3 use
 
 | Decision | Choice | Rationale |
 |---|---|---|
-| Hook wiring scope | All 32 hooks (25 existing + 7 new) | Existing hooks are defined but not wired anywhere in services |
+| Hook wiring scope | All 33 hooks (25 existing + 8 new) | Existing hooks are defined but not wired anywhere in services |
 | Telemetry throttle | Plugin-side `@throttle(seconds=N)` decorator | No framework intrusion, compatible with pluggy dispatch model |
 | SDK CLI entry-point | `baluhost-sdk` in pyproject.toml + `python -m` fallback | Consistent with existing `baluhost-tui` pattern |
 | Registry concurrency | `asyncio.Lock` per-process | Consistent with PluginManager/EventManager singleton pattern; cross-process not needed |
 | Template engine | Pure f-strings | Templates are ~100-150 lines; no new dependency for internal tooling |
 | Dependency validation | Existence check + direct cycle detection | No installed plugin uses dependencies yet; topological sort is over-engineering |
+| Scheduler hook scope | Only "run-now" API requests, not APScheduler periodic jobs | Scheduler worker runs in a separate process without PluginManager; emit_hook would silently no-op |
+| `on_file_access_denied` placement | Outside `_jail_path()`, in route-level error handler | Avoids touching security-critical path; hooks receive sanitized info only |
+| Click dependency | Already present (`click>=8.1.0`) | Used by TUI; no new dependency needed |
 
 ---
 
@@ -31,28 +34,41 @@ Each feature builds on the previous: Feature 1 provides hooks that Feature 3 use
 
 ### 1.1 New Hook Specs
 
-Add to `BaluHostHookSpec` in `backend/app/plugins/hooks.py`, following existing style (docstring, typed args, section comments):
+Add to `BaluHostHookSpec` in `backend/app/plugins/hooks.py`. Each new hook must include `self` as first param, `@hookspec` decorator, full docstring with Args section, and `-> None` return type — matching the existing 25 hooks exactly.
 
 ```python
 # File Events (addition)
-on_file_access_denied(path: str, user_id: int, reason: str)
+on_file_access_denied(self, path: str, user_id: int, reason: str) -> None
 
 # System Events (addition)
-on_quota_exceeded(user_id: int, username: str, used_bytes: int, quota_bytes: int)
-on_telemetry_snapshot(cpu_percent: float, ram_percent: float, disk_usage: dict, timestamp: str)
+on_quota_exceeded(self, user_id: int, username: str, used_bytes: int, quota_bytes: int) -> None
+on_telemetry_snapshot(self, cpu_percent: float, ram_percent: float, disk_usage: dict, timestamp: str) -> None
 
 # Sync Events (new section)
-on_sync_conflict_detected(path: str, device_id: str, local_mtime: float, remote_mtime: float)
-on_sync_completed(device_id: str, files_synced: int, bytes_transferred: int, duration_seconds: float)
+on_sync_conflict_detected(self, path: str, device_id: str, local_mtime: float, remote_mtime: float) -> None
+on_sync_completed(self, device_id: str, files_synced: int, bytes_transferred: int, duration_seconds: float) -> None
 
 # Scheduler Events (new section)
-on_scheduler_run_started(scheduler_name: str, run_id: str)
-on_scheduler_run_failed(scheduler_name: str, run_id: str, error: str, duration_seconds: float)
+on_scheduler_run_started(self, scheduler_name: str, run_id: str) -> None
+on_scheduler_run_completed(self, scheduler_name: str, run_id: str, duration_seconds: float) -> None
+on_scheduler_run_failed(self, scheduler_name: str, run_id: str, error: str, duration_seconds: float) -> None
 ```
+
+**`disk_usage` dict schema for `on_telemetry_snapshot`:**
+```python
+{
+    "mount_point": "/data",      # str — mount path
+    "total_bytes": 1000000000,   # int — total capacity
+    "used_bytes": 500000000,     # int — used space
+    "percent": 50.0              # float — usage percentage
+}
+```
+
+**Scheduler hook caveat:** The scheduler worker (`services/scheduler/worker.py`) runs as a separate process with its own `BackgroundScheduler`. It does NOT initialize the PluginManager, so `emit_hook()` calls from within the worker would silently no-op. Scheduler hooks therefore only fire for **"run-now" requests** dispatched via the web API process. This is an accepted limitation — periodic APScheduler jobs do not trigger plugin hooks.
 
 ### 1.2 Hook Wiring Map
 
-All 32 hooks wired via `emit_hook()` from `app.plugins.emit`:
+All 33 hooks wired via `emit_hook()` from `app.plugins.emit`:
 
 | Hook | Service File | Location |
 |---|---|---|
@@ -61,7 +77,7 @@ All 32 hooks wired via `emit_hook()` from `app.plugins.emit`:
 | `on_file_deleted` | `api/routes/files.py` | After delete operation |
 | `on_file_moved` | `api/routes/files.py` | After move/rename |
 | `on_file_downloaded` | `api/routes/files.py` | After download response |
-| `on_file_access_denied` | `api/routes/files.py` | In `_jail_path()` on rejection |
+| `on_file_access_denied` | `api/routes/files.py` | In route error handlers when `_jail_path()` raises, NOT inside `_jail_path()` itself (security-critical path must stay untouched) |
 | **User Events** | | |
 | `on_user_login` | `api/routes/auth.py` | After successful login |
 | `on_user_logout` | `api/routes/auth.py` | After logout |
@@ -99,21 +115,24 @@ All 32 hooks wired via `emit_hook()` from `app.plugins.emit`:
 | `on_sync_conflict_detected` | `services/sync/` | Conflict detection |
 | `on_sync_completed` | `services/sync/` | Sync completed |
 | **Scheduler Events** | | |
-| `on_scheduler_run_started` | `services/scheduler/` | Job start |
-| `on_scheduler_run_failed` | `services/scheduler/` | Job failure |
+| `on_scheduler_run_started` | `services/scheduler/` | Job start (run-now API only) |
+| `on_scheduler_run_completed` | `services/scheduler/` | Job success (run-now API only) |
+| `on_scheduler_run_failed` | `services/scheduler/` | Job failure (run-now API only) |
 
 ### 1.3 Wiring Rules
 
 - Use `emit_hook()` from `app.plugins.emit` (fire-and-forget, catches exceptions)
 - Place after the successful operation, not before
 - Do not modify business logic — only add `emit_hook()` calls
-- `on_file_access_denied` is the exception: fires on rejection in `_jail_path()`
+- `on_file_access_denied` fires in route error handlers when `_jail_path()` raises — do NOT place inside `_jail_path()` itself (security-critical code)
+- `on_telemetry_snapshot` fires every telemetry interval (~3s). Plugin authors SHOULD use `@throttle()` decorator (Feature 3) to reduce frequency. The scaffold template for `monitoring` category demonstrates this.
+- Scheduler hooks (`on_scheduler_run_*`) only fire for "run-now" API requests, not periodic APScheduler jobs (worker runs in separate process without PluginManager)
 
 ### 1.4 Tests
 
-File: `backend/tests/test_plugin_hooks_new.py`
+File: `backend/tests/plugins/test_plugin_hooks_new.py`
 
-- MockPlugin with `@hookimpl` for each of the 7 new hooks
+- MockPlugin with `@hookimpl` for each of the 8 new hooks
 - Register MockPlugin with pluggy PluginManager
 - Each test emits the hook and asserts the mock was called with correct args
 - Pattern matches existing `test_plugins.py:TestHookSystem`
@@ -141,14 +160,15 @@ class ServiceRegistry:
         # Raises ValueError on invalid format or duplicate name
 
     async def deregister(self, name: str) -> None
-        # Removes a single service; no-op if not found
+        # Removes a single service; logs debug message if not found (silent no-op)
 
     async def deregister_all(self, plugin_name: str) -> int
         # Removes all services with prefix "{plugin_name}."
         # Returns count of removed services
 
     def get(self, name: str) -> Any
-        # Synchronous read (CPython GIL protects dict reads)
+        # Synchronous for convenience — safe because dict reads are atomic
+        # in CPython and all async callers run in the same event loop thread.
         # Raises ServiceNotFoundError if not found
 
     def list_services(self, plugin_name: Optional[str] = None) -> List[str]
@@ -190,16 +210,17 @@ await registry.deregister_all(name)
 
 **`plugins/__init__.py`** — add exports:
 - `ServiceRegistry`, `get_service_registry`, `ServiceNotFoundError`
+- Also add `DashboardPanelSpec` to existing exports (currently missing, needed by SDK scaffold templates)
 
 ### 2.3 Tests
 
-File: `backend/tests/test_plugin_registry.py`
+File: `backend/tests/plugins/test_plugin_registry.py`
 
 | Test | Description |
 |---|---|
 | `test_register_get_roundtrip` | Register, get, verify same instance |
 | `test_namespace_validation_valid` | `"my_plugin.weather"` accepted |
-| `test_namespace_validation_invalid` | `"no_dot"`, `""`, `"a.b.c"` raise ValueError |
+| `test_namespace_validation_invalid` | `"no_dot"`, `""`, `"a.b.c"`, `"A.service"` (uppercase) raise ValueError |
 | `test_get_unknown_raises` | `get("x.y")` raises ServiceNotFoundError |
 | `test_deregister_single` | Register, deregister, get raises |
 | `test_deregister_all_by_plugin` | Register 3 services, deregister_all removes only matching plugin |
@@ -261,7 +282,7 @@ Generated `__init__.py` structure:
 4. `on_startup()` / `on_shutdown()` stubs
 5. Conditional blocks per `--with-*` flag:
    - `--with-router`: `get_router()` with example GET endpoint
-   - `--with-background-task`: `get_background_tasks()` with example periodic task
+   - `--with-background-task`: `get_background_tasks()` with example periodic task; auto-adds `task:background` to `required_permissions`
    - `--with-dashboard-panel`: `get_dashboard_panel()` + `get_dashboard_data()`
    - `--with-service`: `get_services()` with example service object
 6. Hook example matching `--category`:
@@ -276,7 +297,7 @@ Generated `__init__.py` structure:
 
 ### 3.4 Validator Checks
 
-1. Metadata fields complete and non-empty (name, version, author, description)
+1. Metadata fields complete and non-empty (name, version, display_name, author, description)
 2. `plugin.metadata.name == directory_name`
 3. All `required_permissions` exist in `PluginPermission` enum
 4. Dependencies: each declared dependency exists as installed plugin
@@ -324,7 +345,7 @@ def throttle(seconds: float):
 
 ### 3.6 Tests
 
-File: `backend/tests/test_plugin_sdk.py`
+File: `backend/tests/plugins/test_plugin_sdk.py`
 
 | Test | Description |
 |---|---|
@@ -351,16 +372,16 @@ File: `backend/tests/test_plugin_sdk.py`
 ## Files Changed Summary
 
 ### Feature 1
-- **Modified:** `backend/app/plugins/hooks.py` (7 new hook specs)
+- **Modified:** `backend/app/plugins/hooks.py` (8 new hook specs)
 - **Modified:** ~15 service/route files (emit_hook calls)
-- **New:** `backend/tests/test_plugin_hooks_new.py`
+- **New:** `backend/tests/plugins/test_plugin_hooks_new.py`
 
 ### Feature 2
 - **New:** `backend/app/plugins/registry.py`
 - **Modified:** `backend/app/plugins/base.py` (add `get_services()`)
 - **Modified:** `backend/app/plugins/manager.py` (register/deregister in enable/disable)
-- **Modified:** `backend/app/plugins/__init__.py` (new exports)
-- **New:** `backend/tests/test_plugin_registry.py`
+- **Modified:** `backend/app/plugins/__init__.py` (new exports: ServiceRegistry, DashboardPanelSpec)
+- **New:** `backend/tests/plugins/test_plugin_registry.py`
 
 ### Feature 3
 - **New:** `backend/app/plugins/sdk/__init__.py`
@@ -369,5 +390,5 @@ File: `backend/tests/test_plugin_sdk.py`
 - **New:** `backend/app/plugins/sdk/scaffold.py`
 - **New:** `backend/app/plugins/sdk/validator.py`
 - **New:** `backend/app/plugins/sdk/throttle.py`
-- **Modified:** `backend/pyproject.toml` (add entry-point)
-- **New:** `backend/tests/test_plugin_sdk.py`
+- **Modified:** `backend/pyproject.toml` (add `baluhost-sdk` entry-point)
+- **New:** `backend/tests/plugins/test_plugin_sdk.py`
