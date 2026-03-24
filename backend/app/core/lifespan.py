@@ -392,6 +392,13 @@ async def _startup(app: FastAPI) -> None:
         except Exception as e:
             logger.warning("DNS query collector could not start: %s", e)
 
+        try:
+            from app.services.pihole.ad_discovery.background import get_ad_discovery_task
+            get_ad_discovery_task().start(SessionLocal)
+            logger.info("Ad Discovery background task started")
+        except Exception as e:
+            logger.warning("Ad Discovery background task could not start: %s", e)
+
     # Register update service
     register_update_service()
 
@@ -530,6 +537,13 @@ async def _shutdown() -> None:
         await get_dns_query_collector().stop()
     except Exception:
         logger.debug("DNS query collector shutdown skipped or failed")
+
+    # Stop Ad Discovery background task
+    try:
+        from app.services.pihole.ad_discovery.background import get_ad_discovery_task
+        await get_ad_discovery_task().stop()
+    except Exception:
+        logger.debug("Ad Discovery background task shutdown skipped or failed")
 
     # Stop network discovery
     if _discovery_service:
