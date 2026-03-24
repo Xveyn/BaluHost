@@ -448,12 +448,12 @@ In `BackupService.create_backup()`:
 - After successful completion (after notification emit): `emit_hook("on_backup_completed", backup_id=str(backup.id), success=True, size=backup.size_bytes)`
 - In the `except Exception` block after commit: `emit_hook("on_backup_completed", backup_id=str(backup.id), success=False, error=str(e))`
 
-- [ ] **Step 4: Wire on_storage_threshold**
+- [ ] **Step 4: Wire on_storage_threshold (conditional)**
 
-Search for where storage threshold/usage is checked (likely in monitoring or file services). Add:
-```python
-emit_hook("on_storage_threshold", mount=mount_point, usage_percent=usage, threshold_percent=threshold)
-```
+Search the codebase for existing storage threshold checks (e.g. `grep -r "threshold" backend/app/services/` looking for disk/storage usage percentage comparisons). Likely candidates: `services/files/operations.py` (quota checks), `services/monitoring/` (collector logic), or `services/disk_monitor.py`.
+
+- **If a threshold check exists:** Add `emit_hook("on_storage_threshold", mount=mount_point, usage_percent=usage, threshold_percent=threshold)` at the point where the threshold is exceeded.
+- **If no threshold check exists:** Skip this wiring — the hook spec is available for future use. Add a comment to the commit message: "on_storage_threshold: hook defined but no existing threshold check found to wire into."
 
 - [ ] **Step 5: Run tests**
 
@@ -1048,15 +1048,50 @@ Add `"DashboardPanelSpec"`, `"ServiceRegistry"`, `"get_service_registry"`, `"Ser
 Add to `backend/tests/plugins/test_plugin_registry.py`:
 ```python
 @pytest.mark.asyncio
-async def test_auto_deregister_on_disable(tmp_path, db_session):
+async def test_auto_deregister_on_disable(tmp_path):
     """Services registered by a plugin are deregistered when the plugin is disabled."""
     from app.plugins.manager import PluginManager
     from app.plugins.registry import ServiceRegistry, get_service_registry
 
-    # Setup: create a plugin that registers a service
-    # (use plugins_dir_with_plugin fixture pattern from test_plugin_manager.py)
-    # ... write a plugin __init__.py that implements get_services() ...
-    # Enable, check service exists, disable, check service gone.
+    # Reset singletons
+    PluginManager.reset_instance()
+    ServiceRegistry.reset_instance()
+
+    # Create a minimal plugin that implements get_services()
+    plugin_dir = tmp_path / "svc_plugin"
+    plugin_dir.mkdir()
+    (plugin_dir / "__init__.py").write_text('''
+from app.plugins.base import PluginBase, PluginMetadata
+
+class SvcPlugin(PluginBase):
+    @property
+    def metadata(self):
+        return PluginMetadata(
+            name="svc_plugin", version="0.1.0",
+            description="Test", author="test",
+            category="general",
+        )
+
+    def get_services(self):
+        return {"greeter": lambda name: f"Hello {name}"}
+''')
+
+    mgr = PluginManager(plugins_dir=tmp_path)
+    registry = get_service_registry()
+
+    # Enable plugin — should auto-register services
+    result = await mgr.enable_plugin("svc_plugin", granted_permissions=[], db=None)
+    assert result is True
+    svc = await registry.get("svc_plugin.greeter")
+    assert svc("World") == "Hello World"
+
+    # Disable plugin — should auto-deregister
+    await mgr.disable_plugin("svc_plugin")
+    assert await registry.list_services("svc_plugin") == {}
+
+    # Cleanup
+    PluginManager.reset_instance()
+    ServiceRegistry.reset_instance()
 ```
 
 - [ ] **Step 7: Run full test suite**
@@ -1117,10 +1152,9 @@ class TestThrottleDecorator:
         assert result is None
 
     def test_allows_after_interval(self, monkeypatch):
-        from app.plugins.sdk import throttle as throttle_mod
         from app.plugins.sdk.throttle import throttle
 
-        fake_time = [0.0]
+        fake_time = [100.0]
         monkeypatch.setattr(time, "monotonic", lambda: fake_time[0])
 
         mock = MagicMock(return_value="ok")
@@ -1129,7 +1163,7 @@ class TestThrottleDecorator:
         throttled()
         assert mock.call_count == 1
 
-        fake_time[0] = 6.0
+        fake_time[0] = 106.0
         throttled()
         assert mock.call_count == 2
 
@@ -1193,7 +1227,7 @@ def throttle(seconds: float) -> Callable[[F], F]:
             self.log_metrics(cpu_percent)
     """
     def decorator(func: F) -> F:
-        last_called = 0.0
+        last_called = -float("inf")  # ensure first call always executes
 
         @wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -1666,20 +1700,20 @@ def validate(plugin_name):
 
 @cli.command("list")
 def list_plugins():
-    """List all installed plugins."""
+    """List all installed plugins with metadata."""
     if not PLUGINS_DIR.exists():
         click.echo("No plugins directory found.")
         return
 
+    from app.plugins.manager import PluginManager
+    mgr = PluginManager(plugins_dir=PLUGINS_DIR)
+
     for path in sorted(PLUGINS_DIR.iterdir()):
         if path.is_dir() and (path / "__init__.py").exists():
             try:
-                from app.plugins.manager import PluginManager
-                mgr = PluginManager(plugins_dir=PLUGINS_DIR)
                 plugin = mgr.load_plugin(path.name)
                 meta = plugin.metadata
-                status = "enabled" if mgr.is_enabled(path.name) else "disabled"
-                click.echo(f"  {meta.name} v{meta.version} [{status}] — {meta.author}")
+                click.echo(f"  {meta.name} v{meta.version} [{meta.category}] — {meta.author}")
             except Exception as e:
                 click.echo(f"  {path.name} [error] — {e}")
 ```

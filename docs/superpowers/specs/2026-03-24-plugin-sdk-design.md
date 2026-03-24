@@ -34,7 +34,7 @@ Each feature builds on the previous: Feature 1 provides hooks that Feature 3 use
 
 ### 1.1 New Hook Specs
 
-Add to `BaluHostHookSpec` in `backend/app/plugins/hooks.py`. Each new hook must include `self` as first param, `@hookspec` decorator, full docstring with Args section, and `-> None` return type — matching the existing 25 hooks exactly.
+Add to `BaluHostHookSpec` in `backend/app/plugins/hooks.py`. Each new hook must include `self` as first param, `@hookspec` decorator, full docstring with Args section, and `-> None` return type — matching the existing 26 hooks exactly.
 
 ```python
 # File Events (addition)
