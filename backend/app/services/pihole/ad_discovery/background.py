@@ -64,6 +64,13 @@ class AdDiscoveryBackgroundTask:
 
             # Read interval from config
             interval_hours = self._get_interval_hours()
+            try:
+                from app.core.config import settings
+                if settings.is_dev_mode:
+                    await asyncio.sleep(300)  # 5 minutes in dev mode
+                    continue
+            except ImportError:
+                pass
             await asyncio.sleep(interval_hours * 3600)
 
     async def _run_analysis(self) -> None:

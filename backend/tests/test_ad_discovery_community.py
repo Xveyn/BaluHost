@@ -252,8 +252,12 @@ class TestFetchList:
 
         matcher = CommunityMatcher(cache_dir=tmp_path)
 
+        mock_settings = MagicMock()
+        mock_settings.is_dev_mode = False
+
         with patch("app.services.pihole.ad_discovery.community_matcher._validate_url") as mock_val, \
-             patch("app.services.pihole.ad_discovery.community_matcher.httpx.AsyncClient", return_value=mock_client):
+             patch("app.services.pihole.ad_discovery.community_matcher.httpx.AsyncClient", return_value=mock_client), \
+             patch("app.core.config.settings", mock_settings):
             count = _run(matcher.fetch_list(1, "https://example.com/list.txt", "Test"))
 
         mock_val.assert_called_once_with("https://example.com/list.txt")
@@ -270,7 +274,11 @@ class TestFetchList:
         """fetch_list propagates ValueError from _validate_url."""
         matcher = CommunityMatcher(cache_dir=tmp_path)
 
+        mock_settings = MagicMock()
+        mock_settings.is_dev_mode = False
+
         with patch("app.services.pihole.ad_discovery.community_matcher._validate_url",
-                   side_effect=ValueError("Only HTTPS URLs are allowed")):
+                   side_effect=ValueError("Only HTTPS URLs are allowed")), \
+             patch("app.core.config.settings", mock_settings):
             with pytest.raises(ValueError, match="Only HTTPS"):
                 _run(matcher.fetch_list(1, "http://insecure.com/list.txt", "Bad"))

@@ -20,6 +20,119 @@ _MAX_DOWNLOAD_BYTES = 50 * 1024 * 1024  # 50 MB
 _DOWNLOAD_TIMEOUT_S = 60
 
 
+# Dev mode: well-known ad/tracker domains for testing without network
+_DEV_MODE_DOMAINS: set[str] = {
+    # Ads
+    "ad.doubleclick.net",
+    "adservice.google.com",
+    "pagead2.googlesyndication.com",
+    "googleads.g.doubleclick.net",
+    "ads.facebook.com",
+    "an.facebook.com",
+    "ads.yahoo.com",
+    "ads.twitter.com",
+    "ads.linkedin.com",
+    "ads.reddit.com",
+    "advertising.amazon.com",
+    "aax.amazon-adsystem.com",
+    "adsrvr.org",
+    "adnxs.com",
+    "rubiconproject.com",
+    "pubmatic.com",
+    "openx.net",
+    "casalemedia.com",
+    "criteo.com",
+    "criteo.net",
+    "moatads.com",
+    "serving-sys.com",
+    "adform.net",
+    "bidswitch.net",
+    "smartadserver.com",
+    "media.net",
+    "outbrain.com",
+    "taboola.com",
+    "revcontent.com",
+    "mgid.com",
+    # Tracking
+    "tracking.example.com",
+    "tracker.unity3d.com",
+    "pixel.facebook.com",
+    "pixel.adsafeprotected.com",
+    "beacon.krxd.net",
+    "collect.tealiumiq.com",
+    "telemetry.microsoft.com",
+    "telemetry.mozilla.org",
+    "clickstream.hearst.com",
+    "sb.scorecardresearch.com",
+    "b.scorecardresearch.com",
+    "pixel.quantserve.com",
+    "pixel.wp.com",
+    "bat.bing.com",
+    "ct.pinterest.com",
+    "t.co",
+    "analytics.tiktok.com",
+    "tr.snapchat.com",
+    # Analytics
+    "analytics.google.com",
+    "stats.wp.com",
+    "stats.g.doubleclick.net",
+    "metrics.icloud.com",
+    "segment.io",
+    "cdn.segment.com",
+    "api.segment.io",
+    "hotjar.com",
+    "static.hotjar.com",
+    "script.hotjar.com",
+    "mouseflow.com",
+    "cdn.mouseflow.com",
+    "heapanalytics.com",
+    "cdn.heapanalytics.com",
+    "mixpanel.com",
+    "cdn.mxpnl.com",
+    "amplitude.com",
+    "api.amplitude.com",
+    "fullstory.com",
+    "rs.fullstory.com",
+    "plausible.io",
+    # Fingerprinting
+    "fingerprint.com",
+    "fpjs.io",
+    "browser-update.org",
+    "device-api.smartadserver.com",
+    # Other common ad domains
+    "doubleclick.net",
+    "googlesyndication.com",
+    "googleadservices.com",
+    "googletagmanager.com",
+    "googletagservices.com",
+    "2mdn.net",
+    "admob.com",
+    "adsymptotic.com",
+    "adtechus.com",
+    "advertising.com",
+    "agkn.com",
+    "atdmt.com",
+    "bluekai.com",
+    "btrll.com",
+    "contextweb.com",
+    "dotomi.com",
+    "everesttech.net",
+    "eyereturn.com",
+    "flashtalking.com",
+    "fls.doubleclick.net",
+    "intellitxt.com",
+    "liadm.com",
+    "mathtag.com",
+    "mookie1.com",
+    "nexac.com",
+    "quantcast.com",
+    "richrelevance.com",
+    "rlcdn.com",
+    "turn.com",
+    "yieldmanager.com",
+}
+
+
 @dataclass
 class MatchResult:
     """Result of matching a domain against community lists."""
@@ -129,6 +242,23 @@ class CommunityMatcher:
             ValueError: If the URL fails SSRF validation or content exceeds size limit.
             httpx.HTTPError: If the download fails.
         """
+        # Dev mode: use hardcoded domains instead of downloading
+        try:
+            from app.core.config import settings
+            if settings.is_dev_mode:
+                domains = _DEV_MODE_DOMAINS.copy()
+                # Cache and load into memory as normal
+                self._cache_dir.mkdir(parents=True, exist_ok=True)
+                cache_path = self._cache_dir / f"{list_id}.gz"
+                with gzip.open(cache_path, "wt", encoding="utf-8") as f:
+                    f.write("\n".join(sorted(domains)))
+                self._lists[list_id] = domains
+                self._list_names[list_id] = name
+                logger.debug("Dev mode: loaded %d mock domains for %r", len(domains), name)
+                return len(domains)
+        except ImportError:
+            pass
+
         _validate_url(url)
 
         async with httpx.AsyncClient(
