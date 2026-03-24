@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.0] - 2026-03-25
+
+### Added
+- **Ad Discovery** — New Pi-hole feature that identifies unblocked ad-serving domains via heuristic pattern-matching and community blocklist cross-referencing
+  - Heuristic scorer with substring and regex pattern matching (ReDoS-protected via ThreadPoolExecutor timeout)
+  - Community matcher: downloads, caches (gzip), and cross-references domains against 5 default community blocklists (OISD, Hagezi, Steven Black, EasyList, AdGuard)
+  - SSRF protection on all blocklist download URLs (HTTPS-only, private/loopback IP rejection)
+  - Custom blocklist builder: create lists, add/remove domains, deploy as Pi-hole adlists with per-list token auth
+  - Analyzer orchestrator combining heuristic + community scoring with configurable weights
+  - Background task (DnsQueryCollector pattern) for periodic automatic analysis
+  - 29 API endpoints under `/api/pihole/ad-discovery/` with rate limiting and audit logging
+  - Full frontend UI: Ad Discovery tab with suspects table, patterns panel, reference lists panel, custom lists panel
+  - Dev mode support: hardcoded ad domains for testing without network access, 5-minute background interval
+  - 6 new database tables with Alembic migration and default seed data (27 patterns, 5 reference lists)
+- **Plugin Capability Contracts** — Runtime validation of poll data against capability contracts at startup
+- **Plugin SDK Design Spec** — Design documentation for hooks, registry, and CLI
+
+### Fixed
+- Ad Discovery bulk-action: use correct `backend` property on PiholeService (was `_backend`)
+
+---
+
 ## [1.19.1] - 2026-03-24
 
 ### Fixed
