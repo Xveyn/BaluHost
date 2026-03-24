@@ -71,6 +71,14 @@ from app.models.version_history import VersionHistory
 from app.models.migration_job import MigrationJob
 from app.models.pihole import PiholeConfig
 from app.models.dns_queries import DnsQuery, DnsQueryHourlyStat, DnsQueryCollectorState
+from app.models.ad_discovery import (
+    AdDiscoveryPattern,
+    AdDiscoveryReferenceList,
+    AdDiscoverySuspect,
+    AdDiscoveryCustomList,
+    AdDiscoveryCustomListDomain,
+    AdDiscoveryConfig,
+)
 from app.models.file_activity import FileActivity
 from app.models.fritzbox import FritzBoxConfig
 
@@ -149,6 +157,12 @@ __all__ = [
     "DnsQuery",
     "DnsQueryHourlyStat",
     "DnsQueryCollectorState",
+    "AdDiscoveryPattern",
+    "AdDiscoveryReferenceList",
+    "AdDiscoverySuspect",
+    "AdDiscoveryCustomList",
+    "AdDiscoveryCustomListDomain",
+    "AdDiscoveryConfig",
     "FileActivity",
     "FritzBoxConfig",
 ]
