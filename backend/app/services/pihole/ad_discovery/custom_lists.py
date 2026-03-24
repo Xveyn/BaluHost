@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import uuid
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Optional
@@ -51,6 +52,7 @@ class CustomListsService:
             created_at=now,
             updated_at=now,
             deployed=False,
+            adlist_token=str(uuid.uuid4()),
         )
         db.add(new_list)
         db.commit()
@@ -372,7 +374,7 @@ class CustomListsService:
         self.generate_adlist_file(db, list_id)
 
         adlist_url = (
-            f"{base_url}/api/pihole/ad-discovery/custom-lists/{list_id}/adlist.txt"
+            f"{base_url}/api/pihole/ad-discovery/custom-lists/{list_id}/adlist.txt?token={lst.adlist_token}"
         )
 
         await pihole_backend.add_adlist(adlist_url, comment=f"BaluHost: {lst.name}")

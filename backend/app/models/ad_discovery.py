@@ -116,6 +116,7 @@ class AdDiscoveryCustomList(Base):
     )
     deployed: Mapped[bool] = mapped_column(Boolean, default=False)
     adlist_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    adlist_token: Mapped[str] = mapped_column(String(36), nullable=False, default="")
 
     domains: Mapped[list["AdDiscoveryCustomListDomain"]] = relationship(
         "AdDiscoveryCustomListDomain",

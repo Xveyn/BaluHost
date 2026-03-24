@@ -95,6 +95,7 @@ def upgrade() -> None:
         sa.Column('updated_at', sa.DateTime(timezone=True), server_default=sa.func.now(), nullable=False),
         sa.Column('deployed', sa.Boolean(), nullable=False, server_default='false'),
         sa.Column('adlist_url', sa.Text(), nullable=True),
+        sa.Column('adlist_token', sa.String(36), nullable=False, server_default=''),
         sa.PrimaryKeyConstraint('id'),
         sa.UniqueConstraint('name', name='uq_ad_discovery_custom_lists_name'),
     )
