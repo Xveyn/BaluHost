@@ -41,7 +41,7 @@ def _get_pihole_backend(db: Session):
     from app.services.pihole.service import get_pihole_service
 
     service = get_pihole_service(db)
-    return service._backend
+    return service.backend
 
 
 def _get_custom_lists_service():
