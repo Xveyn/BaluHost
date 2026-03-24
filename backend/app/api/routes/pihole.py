@@ -57,6 +57,9 @@ from app.services.audit import get_audit_logger_db
 
 router = APIRouter(prefix="/pihole", tags=["pihole"])
 
+from app.api.routes.ad_discovery import router as ad_discovery_router
+router.include_router(ad_discovery_router)
+
 
 def _get_service(db: Session = Depends(deps.get_db)):
     """Dependency to create PiholeService."""

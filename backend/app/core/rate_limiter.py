@@ -124,6 +124,9 @@ RATE_LIMITS = {
     "desktop_pairing_poll": "12/minute",
     "desktop_pairing_verify": "10/minute",
     "desktop_pairing_approve": "5/minute",
+
+    # Ad Discovery operations
+    "ad_discovery": "30/minute",
 }
 
 
