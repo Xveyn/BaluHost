@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.1] - 2026-03-25
+
+### Added
+- **VPN Mode Clarity** — Clearly distinguish Router-VPN (FritzBox) from NAS-VPN (WireGuard) in the UI
+  - Backend: `vpn_fallback` boolean in mobile token response — `true` when auto-mode silently fell back to NAS-VPN
+  - MobileDevicesPage: VPN type buttons relabeled to "Router-VPN (FritzBox)" / "NAS-VPN (WireGuard)", amber WoL warnings when NAS-VPN is selected or is the only available option, fallback notice in QR dialog
+  - VpnManagement: New NAS-VPN info card with server initialization status, active client count, and permanent WoL warning
+  - i18n: German and English translations for VPN management section
+
+---
+
 ## [1.20.0] - 2026-03-25
 
 ### Added
