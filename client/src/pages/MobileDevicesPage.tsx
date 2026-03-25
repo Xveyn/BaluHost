@@ -219,6 +219,14 @@ export default function MobileDevicesPage() {
               </label>
             </div>
 
+            {includeVpn && availableVpnTypes.length === 1 && availableVpnTypes[0] === 'wireguard' && (
+              <div className="ml-6 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                <p className="text-xs text-amber-300">
+                  ⚠ Kein Router-VPN konfiguriert. VPN wird direkt ueber das NAS bereitgestellt. Bei Nutzung von Sleep/WoL ist der VPN-Tunnel nicht erreichbar, solange das NAS schlaeft.
+                </p>
+              </div>
+            )}
+
             {includeVpn && availableVpnTypes.length > 1 && (
               <div className="ml-6 space-y-2">
                 <label className="block text-sm font-medium text-slate-300">
@@ -227,8 +235,8 @@ export default function MobileDevicesPage() {
                 <div className="flex flex-wrap gap-2">
                   {[
                     { value: 'auto', label: 'Automatisch' },
-                    ...(availableVpnTypes.includes('fritzbox') ? [{ value: 'fritzbox', label: 'FritzBox VPN' }] : []),
-                    { value: 'wireguard', label: 'WireGuard Server' },
+                    ...(availableVpnTypes.includes('fritzbox') ? [{ value: 'fritzbox', label: 'Router-VPN (FritzBox)' }] : []),
+                    { value: 'wireguard', label: 'NAS-VPN (WireGuard)' },
                   ].map((opt) => (
                     <button
                       key={opt.value}
@@ -245,10 +253,17 @@ export default function MobileDevicesPage() {
                   ))}
                 </div>
                 <p className="text-xs text-slate-500">
-                  {vpnType === 'auto' && 'FritzBox hat Priorität, WireGuard Server als Fallback'}
-                  {vpnType === 'fritzbox' && 'Nutzt die vom Admin hochgeladene FritzBox-Konfiguration'}
-                  {vpnType === 'wireguard' && 'Generiert eine eigene WireGuard-Client-Konfiguration'}
+                  {vpnType === 'auto' && 'Router-VPN bevorzugt, NAS-VPN als Fallback'}
+                  {vpnType === 'fritzbox' && 'Nutzt die vom Admin hochgeladene Router-Konfiguration'}
+                  {vpnType === 'wireguard' && 'VPN laeuft direkt ueber das NAS'}
                 </p>
+                {vpnType === 'wireguard' && (
+                  <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                    <p className="text-xs text-amber-300">
+                      ⚠ VPN laeuft direkt ueber das NAS. Bei Nutzung von Sleep/WoL ist der VPN-Tunnel nicht erreichbar, solange das NAS schlaeft.
+                    </p>
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -472,6 +487,13 @@ export default function MobileDevicesPage() {
                   <p>✓ Geräte-Autorisierung gilt für <strong className="text-sky-400">{qrData.device_token_validity_days} Tage ({Math.round(qrData.device_token_validity_days / 30)} Monate)</strong></p>
                   {qrData.vpn_config && (
                     <p className="text-green-400">✓ VPN-Konfiguration eingeschlossen</p>
+                  )}
+                  {qrData.vpn_fallback && (
+                    <div className="p-2 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+                      <p className="text-xs text-amber-300">
+                        ⚠ Kein Router-VPN konfiguriert — NAS-VPN wird als Fallback verwendet.
+                      </p>
+                    </div>
                   )}
                 </div>
 
