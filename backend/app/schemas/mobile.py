@@ -68,6 +68,7 @@ class MobileRegistrationToken(BaseModel):
     qr_code: str = Field(..., description="Base64 encoded QR code image")
     vpn_config: Optional[str] = Field(default=None, description="Base64 encoded WireGuard config (optional)")
     device_token_validity_days: int = Field(..., description="Device token validity in days (30-180)")
+    vpn_fallback: bool = Field(default=False, description="True when auto mode fell back to NAS-VPN")
 
 
 class MobileRegistrationResponse(BaseModel):

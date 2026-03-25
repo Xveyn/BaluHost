@@ -69,6 +69,7 @@ class MobileService:
         # Generate VPN config if requested
         vpn_config_base64 = None
         vpn_config_type = None
+        vpn_did_fallback = False
         if include_vpn:
             try:
                 from app.services.vpn import VPNService
@@ -90,6 +91,7 @@ class MobileService:
                         use_fritzbox = True
                     else:
                         use_wireguard = True
+                        vpn_did_fallback = True
 
                 if use_fritzbox:
                     vpn_config_base64 = VPNService.get_fritzbox_config_base64(db)
@@ -167,7 +169,8 @@ class MobileService:
             expires_at=expires_at,
             qr_code=qr_code_base64,
             vpn_config=vpn_config_base64,
-            device_token_validity_days=token_validity_days
+            device_token_validity_days=token_validity_days,
+            vpn_fallback=vpn_did_fallback and vpn_config_base64 is not None,
         )
     
     @staticmethod

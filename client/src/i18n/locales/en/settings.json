@@ -286,7 +286,12 @@
     "deleteConfirm": "Really delete VPN configuration?",
     "deleteSuccess": "Configuration deleted",
     "deleteFailed": "Delete failed",
-    "downloadFailed": "Download failed"
+    "downloadFailed": "Download failed",
+    "nasVpnTitle": "NAS-VPN (WireGuard Server)",
+    "nasVpnWolWarning": "When the NAS is suspended via Sleep/WoL, the NAS-VPN tunnel will be unreachable. For uninterrupted VPN access, Router-VPN is recommended.",
+    "nasVpnInitialized": "Initialized",
+    "nasVpnNotInitialized": "Not initialized",
+    "nasVpnActiveClients": "Active clients"
   },
   "tapo": {
     "loading": "Loading devices...",

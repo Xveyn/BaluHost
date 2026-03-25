@@ -10,6 +10,7 @@ export interface MobileRegistrationToken {
   expires_at: string;
   qr_code: string;
   vpn_config?: string;
+  vpn_fallback?: boolean;
   device_token_validity_days: number;
 }
 

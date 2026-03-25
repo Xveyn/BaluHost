@@ -22,6 +22,7 @@ export default function VpnManagement() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [qrData, setQrData] = useState<string | null>(null);
+  const [nasVpnInfo, setNasVpnInfo] = useState<{ configured: boolean; activeClients: number } | null>(null);
 
   useEffect(() => {
     loadConfig();
@@ -42,6 +43,17 @@ export default function VpnManagement() {
       } catch {
         // QR code generation failed — config is still usable
         setQrData(null);
+      }
+
+      // Load NAS-VPN server status (admin-only endpoint)
+      try {
+        const serverRes = await apiClient.get('/api/vpn/server-config');
+        setNasVpnInfo({
+          configured: true,
+          activeClients: serverRes.data.active_clients ?? 0,
+        });
+      } catch {
+        setNasVpnInfo({ configured: false, activeClients: 0 });
       }
     } catch (err: unknown) {
       const status = err != null && typeof err === 'object' && 'response' in err
@@ -280,6 +292,37 @@ export default function VpnManagement() {
           </div>
         </div>
       )}
+
+      {/* NAS-VPN Info Section */}
+      <div className="card border-slate-800/60 bg-slate-900/55">
+        <h3 className="text-lg font-semibold mb-4 flex items-center text-white">
+          <Wifi className="w-5 h-5 mr-2 text-slate-400" />
+          {t('vpn.nasVpnTitle')}
+        </h3>
+
+        <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg mb-4">
+          <p className="text-xs text-amber-300">
+            ⚠ {t('vpn.nasVpnWolWarning')}
+          </p>
+        </div>
+
+        {nasVpnInfo && (
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 text-sm">
+            <div>
+              <span className="text-slate-400">{t('vpn.status')}:</span>
+              <p className={`font-medium ${nasVpnInfo.configured ? 'text-green-400' : 'text-slate-400'}`}>
+                {nasVpnInfo.configured ? t('vpn.nasVpnInitialized') : t('vpn.nasVpnNotInitialized')}
+              </p>
+            </div>
+            {nasVpnInfo.configured && (
+              <div>
+                <span className="text-slate-400">{t('vpn.nasVpnActiveClients')}:</span>
+                <p className="text-white font-medium">{nasVpnInfo.activeClients}</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
     </div>
   );
 }
