@@ -39,6 +39,9 @@ def test_mobile_token_with_vpn_and_revoke(client):
         assert "token" in data
         # When include_vpn is true, vpn_config should be present (base64 string)
         assert data.get("vpn_config") is not None
+        # Default vpn_type is "auto" and no FritzBox config exists in test DB,
+        # so it falls back to NAS-VPN (WireGuard) — vpn_fallback should be True
+        assert data.get("vpn_fallback") is True
 
     # Create an explicit VPN client owned by the authenticated user and revoke it
     with TestClient(app, base_url="http://test") as client3:
