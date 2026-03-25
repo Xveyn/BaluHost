@@ -286,7 +286,12 @@
     "deleteConfirm": "VPN-Konfiguration wirklich löschen?",
     "deleteSuccess": "Konfiguration gelöscht",
     "deleteFailed": "Löschen fehlgeschlagen",
-    "downloadFailed": "Download fehlgeschlagen"
+    "downloadFailed": "Download fehlgeschlagen",
+    "nasVpnTitle": "NAS-VPN (WireGuard Server)",
+    "nasVpnWolWarning": "Wenn das NAS per Sleep/WoL in den Ruhezustand versetzt wird, ist der NAS-VPN-Tunnel nicht erreichbar. Fuer unterbrechungsfreien VPN-Zugang wird Router-VPN empfohlen.",
+    "nasVpnInitialized": "Initialisiert",
+    "nasVpnNotInitialized": "Nicht initialisiert",
+    "nasVpnActiveClients": "Aktive Clients"
   },
   "tapo": {
     "loading": "Lade Geräte...",
