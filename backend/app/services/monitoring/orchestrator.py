@@ -217,9 +217,47 @@ class MonitoringOrchestrator:
             if should_persist and db and process_samples:
                 self.process_tracker.save_samples_to_db(db, process_samples)
 
+            # Threshold checks (only on persist cycles to avoid spam)
+            if should_persist:
+                self._check_thresholds()
+
         finally:
             if db:
                 db.close()
+
+    def _check_thresholds(self) -> None:
+        """Check collected metrics against alert thresholds and emit notifications."""
+        try:
+            # CPU temperature check
+            cpu_sample = self.cpu_collector.get_current()
+            if cpu_sample and cpu_sample.temperature_celsius is not None:
+                temp = cpu_sample.temperature_celsius
+                if temp >= 90:
+                    from app.services.notifications.events import emit_temperature_critical_sync
+                    emit_temperature_critical_sync("CPU", temp)
+                elif temp >= 80:
+                    from app.services.notifications.events import emit_temperature_high_sync
+                    emit_temperature_high_sync("CPU", temp)
+
+            # Disk space check
+            import shutil
+            from app.core.config import settings as app_settings
+            storage_path = getattr(app_settings, "nas_storage_path", None)
+            if storage_path:
+                try:
+                    usage = shutil.disk_usage(storage_path)
+                    free_percent = int((usage.free / usage.total) * 100)
+                    free_gb = f"{usage.free / (1024**3):.1f} GB"
+                    if free_percent <= 5:
+                        from app.services.notifications.events import emit_disk_space_critical_sync
+                        emit_disk_space_critical_sync(percent=free_percent, free_space=free_gb)
+                    elif free_percent <= 15:
+                        from app.services.notifications.events import emit_disk_space_low_sync
+                        emit_disk_space_low_sync(percent=free_percent, free_space=free_gb)
+                except OSError:
+                    pass
+        except Exception as e:
+            logger.debug("Threshold check failed: %s", e)
 
     def _should_run_cleanup(self) -> bool:
         """Check if retention cleanup should run."""

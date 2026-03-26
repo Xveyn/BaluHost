@@ -183,6 +183,14 @@ class DevRaidBackend:
             self._state.degrade(payload.array, payload.device)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
+
+        try:
+            from app.services.notifications.events import emit_raid_degraded_sync
+            device_info = f" (device: {payload.device})" if payload.device else ""
+            emit_raid_degraded_sync(payload.array, details=f"Device failed{device_info}")
+        except Exception:
+            pass
+
         return RaidActionResponse(message=f"Array {payload.array} marked as degraded")
 
     def rebuild(self, payload: RaidSimulationRequest) -> RaidActionResponse:
@@ -190,6 +198,8 @@ class DevRaidBackend:
             self._state.rebuild(payload.array, payload.device)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
+
+        # Rebuild started — no push notification needed (finalize emits rebuilt)
         return RaidActionResponse(message=f"Array {payload.array} rebuild started")
 
     def finalize(self, payload: RaidSimulationRequest) -> RaidActionResponse:
@@ -197,6 +207,13 @@ class DevRaidBackend:
             self._state.finalize_rebuild(payload.array)
         except KeyError as exc:
             raise ValueError(str(exc)) from exc
+
+        try:
+            from app.services.notifications.events import emit_raid_rebuilt_sync
+            emit_raid_rebuilt_sync(payload.array)
+        except Exception:
+            pass
+
         return RaidActionResponse(message=f"Array {payload.array} restored to optimal state")
 
     def configure(self, payload: RaidOptionsRequest) -> RaidActionResponse:

@@ -3,11 +3,13 @@
  *
  * Renders N vertical segments color-coded by uptime status,
  * similar to status.anthropic.com or statuspage.io.
+ *
+ * Supports sleep state overlay: soft_sleep (indigo) and suspended (purple).
  */
 
 import { useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import type { TimeRange, UptimeSample } from '../../api/monitoring';
+import type { TimeRange, UptimeSample, SleepEvent, SleepState } from '../../api/monitoring';
 import { parseUtcTimestamp } from '../../lib/dateUtils';
 
 interface UptimeTimeslot {
@@ -15,12 +17,13 @@ interface UptimeTimeslot {
   endTime: Date;
   sampleCount: number;
   uptimePercent: number;
-  status: 'online' | 'offline' | 'partial' | 'no-data';
+  status: 'online' | 'offline' | 'partial' | 'no-data' | 'soft_sleep' | 'suspended';
   restartCount: number;
 }
 
 interface UptimeStatusBarProps {
   samples: UptimeSample[];
+  sleepEvents?: SleepEvent[];
   timeRange: TimeRange;
   label: string;
   uptimeField: 'server_uptime_seconds' | 'system_uptime_seconds';
@@ -42,6 +45,8 @@ const TIME_LABELS: Record<TimeRange, { left: string; right: string }> = {
 
 function getSlotColor(slot: UptimeTimeslot): string {
   if (slot.status === 'no-data') return '#334155';
+  if (slot.status === 'soft_sleep') return '#6366f1';
+  if (slot.status === 'suspended') return '#7c3aed';
   if (slot.uptimePercent === 100) return '#22c55e';
   if (slot.uptimePercent >= 95) return '#84cc16';
   if (slot.uptimePercent >= 75) return '#eab308';
@@ -59,13 +64,78 @@ function formatSlotTime(date: Date): string {
   });
 }
 
-export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: UptimeStatusBarProps) {
+/**
+ * Build a timeline of sleep states from events.
+ * Returns a function that, given a time range, returns the dominant state
+ * and the fraction of time spent in true_suspend.
+ */
+function buildSleepTimeline(events: SleepEvent[]) {
+  const parsed = events
+    .map(e => ({ time: parseUtcTimestamp(e.timestamp).getTime(), state: e.new_state }))
+    .sort((a, b) => a.time - b.time);
+
+  return function getSlotSleepState(
+    bucketStart: number,
+    bucketEnd: number,
+  ): { dominant: SleepState; suspendFraction: number } {
+    if (parsed.length === 0) {
+      return { dominant: 'awake', suspendFraction: 0 };
+    }
+
+    const bucketDuration = bucketEnd - bucketStart;
+
+    // Determine state at bucket start: find the last event at or before bucketStart
+    let stateAtStart: SleepState = 'awake';
+    for (let i = parsed.length - 1; i >= 0; i--) {
+      if (parsed[i].time <= bucketStart) {
+        stateAtStart = parsed[i].state as SleepState;
+        break;
+      }
+    }
+
+    // Find events within this bucket
+    const bucketEvents = parsed.filter(e => e.time > bucketStart && e.time < bucketEnd);
+
+    if (bucketEvents.length === 0) {
+      return {
+        dominant: stateAtStart,
+        suspendFraction: stateAtStart === 'true_suspend' ? 1 : 0,
+      };
+    }
+
+    // Calculate time in each state
+    const timeIn: Record<string, number> = { awake: 0, soft_sleep: 0, true_suspend: 0 };
+    let currentState: SleepState = stateAtStart;
+    let currentTime = bucketStart;
+
+    for (const event of bucketEvents) {
+      timeIn[currentState] += event.time - currentTime;
+      currentState = event.state as SleepState;
+      currentTime = event.time;
+    }
+    timeIn[currentState] += bucketEnd - currentTime;
+
+    const suspendFraction = timeIn.true_suspend / bucketDuration;
+    let dominant: SleepState = 'awake';
+
+    if (timeIn.true_suspend > 0 && timeIn.true_suspend >= timeIn.soft_sleep) {
+      dominant = 'true_suspend';
+    } else if (timeIn.soft_sleep > 0 && timeIn.soft_sleep > timeIn.true_suspend) {
+      dominant = 'soft_sleep';
+    }
+
+    return { dominant, suspendFraction };
+  };
+}
+
+export function UptimeStatusBar({ samples, sleepEvents = [], timeRange, label, uptimeField }: UptimeStatusBarProps) {
   const { t } = useTranslation('system');
   const config = SEGMENT_CONFIG[timeRange];
 
   const timeslots = useMemo<UptimeTimeslot[]>(() => {
     const clientNow = Date.now();
     const bucketDuration = config.durationMs / config.segments;
+    const getSleepState = buildSleepTimeline(sleepEvents);
 
     // Parse all samples
     const allParsed = samples
@@ -73,8 +143,6 @@ export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: Upti
       .sort((a, b) => a._time - b._time);
 
     // Use the latest sample timestamp as reference for "now" if available.
-    // This prevents clock/timezone differences between server and client
-    // from causing all samples to be filtered out.
     const now = allParsed.length > 0
       ? Math.max(clientNow, allParsed[allParsed.length - 1]._time)
       : clientNow;
@@ -88,18 +156,38 @@ export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: Upti
       const bucketStart = rangeStart + i * bucketDuration;
       const bucketEnd = bucketStart + bucketDuration;
 
-      // Samples in this bucket
       const bucketSamples = parsed.filter(s => s._time >= bucketStart && s._time < bucketEnd);
+      const { dominant: sleepDominant, suspendFraction } = getSleepState(bucketStart, bucketEnd);
 
       if (bucketSamples.length === 0) {
-        slots.push({
-          startTime: new Date(bucketStart),
-          endTime: new Date(bucketEnd),
-          sampleCount: 0,
-          uptimePercent: 0,
-          status: 'no-data',
-          restartCount: 0,
-        });
+        if (sleepDominant === 'true_suspend') {
+          slots.push({
+            startTime: new Date(bucketStart),
+            endTime: new Date(bucketEnd),
+            sampleCount: 0,
+            uptimePercent: 0,
+            status: 'suspended',
+            restartCount: 0,
+          });
+        } else if (sleepDominant === 'soft_sleep') {
+          slots.push({
+            startTime: new Date(bucketStart),
+            endTime: new Date(bucketEnd),
+            sampleCount: 0,
+            uptimePercent: 100,
+            status: 'soft_sleep',
+            restartCount: 0,
+          });
+        } else {
+          slots.push({
+            startTime: new Date(bucketStart),
+            endTime: new Date(bucketEnd),
+            sampleCount: 0,
+            uptimePercent: 0,
+            status: 'no-data',
+            restartCount: 0,
+          });
+        }
         continue;
       }
 
@@ -126,31 +214,42 @@ export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: Upti
         }
       }
 
-      // Coverage: how much of the bucket duration is covered by samples
-      const firstSampleTime = bucketSamples[0]._time;
-      const lastSampleTime = bucketSamples[bucketSamples.length - 1]._time;
-      const coverage = bucketSamples.length === 1
-        ? Math.min(1, bucketSamples.length / 3) // Single sample: partial coverage
-        : Math.min(1, (lastSampleTime - firstSampleTime) / bucketDuration + 0.1);
+      // Determine status based on sleep state + restarts
+      let status: UptimeTimeslot['status'];
+      let uptimePercent: number;
 
-      const uptimePercent = restartCount > 0
-        ? Math.max(0, Math.round((1 - restartCount * 0.2) * coverage * 100))
-        : Math.round(coverage * 100);
-
-      const clampedPercent = Math.min(100, Math.max(0, uptimePercent));
+      if (sleepDominant === 'true_suspend') {
+        status = 'suspended';
+        uptimePercent = Math.round((1 - suspendFraction) * 100);
+      } else if (sleepDominant === 'soft_sleep') {
+        status = restartCount > 0 ? 'partial' : 'soft_sleep';
+        uptimePercent = 100;
+      } else if (restartCount > 0) {
+        const firstSampleTime = bucketSamples[0]._time;
+        const lastSampleTime = bucketSamples[bucketSamples.length - 1]._time;
+        const coverage = bucketSamples.length === 1
+          ? Math.min(1, bucketSamples.length / 3)
+          : Math.min(1, (lastSampleTime - firstSampleTime) / bucketDuration + 0.1);
+        const rawPercent = Math.max(0, Math.round((1 - restartCount * 0.2) * coverage * 100));
+        uptimePercent = Math.min(100, Math.max(0, rawPercent));
+        status = 'partial';
+      } else {
+        uptimePercent = 100;
+        status = 'online';
+      }
 
       slots.push({
         startTime: new Date(bucketStart),
         endTime: new Date(bucketEnd),
         sampleCount: bucketSamples.length,
-        uptimePercent: restartCount > 0 ? clampedPercent : 100,
-        status: restartCount > 0 ? 'partial' : 'online',
+        uptimePercent,
+        status,
         restartCount,
       });
     }
 
     return slots;
-  }, [samples, config, uptimeField]);
+  }, [samples, sleepEvents, config, uptimeField]);
 
   // Overall uptime percentage
   const overallUptime = useMemo(() => {
@@ -204,6 +303,15 @@ export function UptimeStatusBar({ samples, timeRange, label, uptimeField }: Upti
               </p>
               {slot.status === 'no-data' ? (
                 <p className="text-slate-500 mt-1">{t('monitor.uptime.noDataSlot')}</p>
+              ) : slot.status === 'soft_sleep' ? (
+                <p className="text-indigo-400 mt-1">{t('monitor.uptime.slotSoftSleep')}</p>
+              ) : slot.status === 'suspended' ? (
+                <>
+                  <p className="text-purple-400 mt-1">{t('monitor.uptime.slotSuspended')}</p>
+                  <p className="text-white text-[10px]">
+                    {t('monitor.uptime.slotUptime', { percent: slot.uptimePercent })}
+                  </p>
+                </>
               ) : (
                 <>
                   <p className="text-white mt-1">

@@ -45,7 +45,12 @@
       "today": "Today",
       "noDataSlot": "No data",
       "restartDetected": "{{count}} restart(s)",
-      "slotUptime": "Uptime: {{percent}}%"
+      "slotUptime": "Uptime: {{percent}}%",
+      "softSleep": "Soft Sleep",
+      "suspended": "Suspended",
+      "slotSoftSleep": "Soft Sleep",
+      "slotSuspended": "Suspended (WoL)",
+      "sleepDuration": "Duration: {{duration}}"
     },
     "backendLogs": {
       "title": "Backend Logs",

@@ -81,6 +81,13 @@ class MdadmRaidBackend:
 
         self._run(["mdadm", array_path, "--fail", device_path])
         logger.info("Marked device %s as failed in %s", device_path, array_path)
+
+        try:
+            from app.services.notifications.events import emit_raid_degraded_sync
+            emit_raid_degraded_sync(payload.array, details=f"Device failed ({device_path})")
+        except Exception:
+            pass
+
         return RaidActionResponse(message=f"Array {payload.array} marked as degraded (failed {device_path})")
 
     def rebuild(self, payload: RaidSimulationRequest) -> RaidActionResponse:
@@ -104,6 +111,12 @@ class MdadmRaidBackend:
         array = next((item for item in status.arrays if item.name == payload.array or f"/dev/{item.name}" == payload.array), None)
         if array and array.status != "optimal":
             raise RuntimeError(f"Array {payload.array} is not optimal yet (current status: {array.status})")
+
+        try:
+            from app.services.notifications.events import emit_raid_rebuilt_sync
+            emit_raid_rebuilt_sync(payload.array)
+        except Exception:
+            pass
 
         return RaidActionResponse(message=f"Array {payload.array} synchronized and optimal")
 

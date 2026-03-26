@@ -117,6 +117,14 @@ class UptimeSampleSchema(BaseModel):
         from_attributes = True
 
 
+class SleepEventSchema(BaseModel):
+    """A sleep state transition for uptime overlay."""
+    timestamp: datetime
+    previous_state: str
+    new_state: str
+    duration_seconds: Optional[float] = None
+
+
 # ===== Request Schemas =====
 
 class MetricHistoryRequest(BaseModel):
@@ -237,6 +245,7 @@ class CurrentUptimeResponse(BaseModel):
 class UptimeHistoryResponse(BaseModel):
     """Uptime history response."""
     samples: List[UptimeSampleSchema]
+    sleep_events: List[SleepEventSchema] = []
     sample_count: int
     source: str
 

@@ -407,6 +407,11 @@ class SchedulerWorker:
                 complete_scheduler_execution(
                     execution_id, success=False, error=str(e)
                 )
+                try:
+                    from app.services.notifications.events import emit_scheduler_failed_sync
+                    emit_scheduler_failed_sync(scheduler_name, str(e))
+                except Exception:
+                    pass
             finally:
                 self._unregister_power_demand(scheduler_name)
                 self._executing_scheduler = None

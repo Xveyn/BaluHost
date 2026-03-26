@@ -4,8 +4,8 @@
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
-import { AlertTriangle, CheckCircle } from 'lucide-react';
-import type { TimeRange } from '../../api/monitoring';
+import { AlertTriangle, CheckCircle, Moon } from 'lucide-react';
+import type { TimeRange, SleepEvent } from '../../api/monitoring';
 import {
   getUptimeCurrent,
   getUptimeHistory,
@@ -34,6 +34,7 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
   const [current, setCurrent] = useState<CurrentUptimeResponse | null>(null);
   const [history, setHistory] = useState<UptimeSample[]>([]);
+  const [sleepEvents, setSleepEvents] = useState<SleepEvent[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   // Tick counter for live update between polls
@@ -47,6 +48,7 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
       ]);
       setCurrent(currentData);
       setHistory(historyData.samples);
+      setSleepEvents(historyData.sleep_events ?? []);
       setError(null);
     } catch (err) {
       if (!current) {
@@ -99,6 +101,17 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
     return events;
   }, [history]);
 
+  // Extract suspend and soft sleep events
+  const suspendEvents = useMemo(() => {
+    return sleepEvents.filter(e => e.new_state === 'true_suspend');
+  }, [sleepEvents]);
+
+  const softSleepEvents = useMemo(() => {
+    return sleepEvents.filter(e => e.new_state === 'soft_sleep');
+  }, [sleepEvents]);
+
+  const hasIncidents = restarts.length > 0 || suspendEvents.length > 0;
+
   if (error && !current) {
     return <div className="text-red-400 text-center py-8">{error}</div>;
   }
@@ -129,29 +142,31 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
       <div className="space-y-3">
         <UptimeStatusBar
           samples={history}
+          sleepEvents={sleepEvents}
           timeRange={timeRange}
           label={t('monitor.uptime.serverLabel')}
           uptimeField="server_uptime_seconds"
         />
         <UptimeStatusBar
           samples={history}
+          sleepEvents={sleepEvents}
           timeRange={timeRange}
           label={t('monitor.uptime.systemLabel')}
           uptimeField="system_uptime_seconds"
         />
       </div>
 
-      {/* Incidents / Restart History */}
+      {/* Incidents / Restart & Sleep History */}
       <div>
         <h3 className="text-base sm:text-lg font-semibold text-white mb-3 flex items-center gap-2">
-          {restarts.length > 0 ? (
+          {hasIncidents ? (
             <AlertTriangle className="w-4 h-4 text-amber-400" />
           ) : (
             <CheckCircle className="w-4 h-4 text-green-400" />
           )}
           {t('monitor.uptime.incidents')}
         </h3>
-        {restarts.length === 0 ? (
+        {!hasIncidents ? (
           <div className="card border-green-500/20 bg-green-500/5 p-4 flex items-center gap-3">
             <CheckCircle className="w-5 h-5 text-green-400 flex-shrink-0" />
             <p className="text-sm text-green-300">{t('monitor.uptime.noIncidents')}</p>
@@ -160,7 +175,7 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
           <div className="space-y-2">
             {restarts.map((restart, idx) => (
               <div
-                key={idx}
+                key={`restart-${idx}`}
                 className="card border-amber-500/20 bg-amber-500/5 p-3 flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
@@ -176,6 +191,52 @@ export function UptimeTab({ timeRange }: { timeRange: TimeRange }) {
                 </div>
                 <div className="rounded-full bg-amber-500/20 px-2 py-1">
                   <span className="text-xs text-amber-400">{t('monitor.uptime.restart')}</span>
+                </div>
+              </div>
+            ))}
+            {suspendEvents.map((event, idx) => (
+              <div
+                key={`suspend-${idx}`}
+                className="card border-purple-500/20 bg-purple-500/5 p-3 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <Moon className="w-4 h-4 text-purple-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {formatDateTime(event.timestamp)}
+                    </p>
+                    {event.duration_seconds && (
+                      <p className="text-xs text-slate-400">
+                        {t('monitor.uptime.sleepDuration', { duration: formatUptime(event.duration_seconds) })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-full bg-purple-500/20 px-2 py-1">
+                  <span className="text-xs text-purple-400">{t('monitor.uptime.suspended')}</span>
+                </div>
+              </div>
+            ))}
+            {softSleepEvents.map((event, idx) => (
+              <div
+                key={`sleep-${idx}`}
+                className="card border-indigo-500/20 bg-indigo-500/5 p-3 flex items-center justify-between"
+              >
+                <div className="flex items-center gap-3">
+                  <Moon className="w-4 h-4 text-indigo-400 flex-shrink-0" />
+                  <div>
+                    <p className="text-sm font-medium text-white">
+                      {formatDateTime(event.timestamp)}
+                    </p>
+                    {event.duration_seconds && (
+                      <p className="text-xs text-slate-400">
+                        {t('monitor.uptime.sleepDuration', { duration: formatUptime(event.duration_seconds) })}
+                      </p>
+                    )}
+                  </div>
+                </div>
+                <div className="rounded-full bg-indigo-500/20 px-2 py-1">
+                  <span className="text-xs text-indigo-400">{t('monitor.uptime.softSleep')}</span>
                 </div>
               </div>
             ))}

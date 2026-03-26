@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, type FormEvent } from 'react';
 import { useTranslation } from 'react-i18next';
+import { Eye, EyeOff } from 'lucide-react';
 import type { User } from '../types/auth';
 import logoMark from '../assets/baluhost-logo.png';
 import { localApi } from '../lib/localApi';
@@ -24,6 +25,7 @@ export default function Login() {
   const [pendingToken, setPendingToken] = useState('');
   const [totpCode, setTotpCode] = useState('');
   const totpInputRef = useRef<HTMLInputElement>(null);
+  const [showPassword, setShowPassword] = useState(false);
 
   // Check if local backend is available on component mount
   useEffect(() => {
@@ -287,15 +289,25 @@ export default function Login() {
                     <label htmlFor="password">{t('form.password')}</label>
                     <span className="hidden sm:inline text-slate-100-tertiary normal-case tracking-normal">{t('form.passwordHint')}</span>
                   </div>
-                  <input
-                    type="password"
-                    id="password"
-                    className="input"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                  />
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      id="password"
+                      className="input pr-10"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      placeholder="••••••••"
+                      required
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-100-tertiary hover:text-slate-100 transition-colors"
+                      tabIndex={-1}
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
                 </div>
 
                 <button
