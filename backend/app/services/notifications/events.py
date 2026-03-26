@@ -896,6 +896,16 @@ def emit_disk_space_low_sync(percent: int, free_space: str) -> None:
     )
 
 
+def emit_disk_space_critical_sync(percent: int, free_space: str) -> None:
+    """Emit disk space critical event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.DISK_SPACE_CRITICAL,
+        cooldown_entity="storage",
+        percent=percent,
+        free_space=free_space,
+    )
+
+
 def emit_temperature_high_sync(component: str, temperature: float) -> None:
     """Emit temperature high event (sync)."""
     get_event_emitter().emit_for_admins_sync(
