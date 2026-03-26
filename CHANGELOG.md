@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.2] - 2026-03-26
+
+### Added
+- **Push Notification Wiring** — Event emitters now called by RAID, scheduler, and monitoring services
+  - RAID: degraded/rebuilt notifications for both dev and production backends
+  - Scheduler: failure notifications for periodic APScheduler job callbacks
+  - Monitoring: CPU temperature alerts (≥80°C warning, ≥90°C critical) and disk space alerts (≤15% low, ≤5% critical)
+  - New `emit_disk_space_critical_sync` convenience function
+- **Login UX** — Password visibility toggle on login screen
+- **Uptime Monitoring** — Sleep state tracking in uptime visualization
+
+### Changed
+- Added `backend/data/` to gitignore
+
+---
+
 ## [1.20.1] - 2026-03-25
 
 ### Added
