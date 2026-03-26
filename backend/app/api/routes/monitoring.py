@@ -34,6 +34,7 @@ from app.schemas.monitoring import (
     ProcessHistoryResponse,
     UptimeHistoryResponse,
     UptimeSampleSchema,
+    SleepEventSchema,
     RetentionConfigResponse,
     RetentionConfigUpdate,
     RetentionConfigListResponse,
@@ -41,6 +42,7 @@ from app.schemas.monitoring import (
     MetricDatabaseStats,
     MonitoringStatusResponse,
 )
+from app.models.sleep import SleepStateLog
 from app.services.monitoring.orchestrator import get_monitoring_orchestrator
 
 router = APIRouter(prefix="/monitoring", tags=["monitoring"])
@@ -595,8 +597,33 @@ async def get_uptime_history(
         samples = _generate_synthetic_uptime_history(duration, limit)
         source_str = "live (computed)"
 
+    # Query sleep state events for the time range
+    range_start = datetime.now(timezone.utc) - duration
+
+    # Get the most recent event before range start to know initial state
+    initial_event = db.query(SleepStateLog).filter(
+        SleepStateLog.timestamp < range_start
+    ).order_by(SleepStateLog.timestamp.desc()).first()
+
+    sleep_rows = db.query(SleepStateLog).filter(
+        SleepStateLog.timestamp >= range_start
+    ).order_by(SleepStateLog.timestamp.asc()).all()
+
+    # Build sleep events list (include initial event if it exists)
+    all_sleep_rows = ([initial_event] if initial_event else []) + list(sleep_rows)
+    sleep_events = [
+        SleepEventSchema(
+            timestamp=row.timestamp,
+            previous_state=row.previous_state,
+            new_state=row.new_state,
+            duration_seconds=row.duration_seconds,
+        )
+        for row in all_sleep_rows
+    ]
+
     return UptimeHistoryResponse(
         samples=samples,
+        sleep_events=sleep_events,
         sample_count=len(samples),
         source=source_str,
     )

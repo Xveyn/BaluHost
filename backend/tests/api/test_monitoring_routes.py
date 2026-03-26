@@ -324,6 +324,52 @@ class TestUptimeEndpoints:
             assert response.status_code == 200
 
 
+class TestUptimeSleepEvents:
+    """Tests for sleep events in uptime history."""
+
+    def test_uptime_history_includes_sleep_events_field(self, client: TestClient, user_headers: dict):
+        """Test that uptime history response contains sleep_events field."""
+        response = client.get(
+            "/api/monitoring/uptime/history",
+            params={"time_range": "1h"},
+            headers=user_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert "sleep_events" in data
+        assert isinstance(data["sleep_events"], list)
+
+    def test_uptime_history_sleep_events_have_correct_fields(self, client: TestClient, user_headers: dict, db_session):
+        """Test that sleep events contain all required fields."""
+        from app.models.sleep import SleepStateLog
+
+        # Insert a test sleep event
+        log_entry = SleepStateLog(
+            previous_state="awake",
+            new_state="soft_sleep",
+            reason="test",
+            triggered_by="manual",
+            duration_seconds=120.0,
+        )
+        db_session.add(log_entry)
+        db_session.commit()
+
+        response = client.get(
+            "/api/monitoring/uptime/history",
+            params={"time_range": "1h"},
+            headers=user_headers,
+        )
+        assert response.status_code == 200
+        data = response.json()
+        assert len(data["sleep_events"]) >= 1
+
+        event = data["sleep_events"][0]
+        assert "timestamp" in event
+        assert event["previous_state"] == "awake"
+        assert event["new_state"] == "soft_sleep"
+        assert "duration_seconds" in event
+
+
 class TestCleanupEndpoint:
     """Tests for cleanup trigger endpoint (admin only)."""
 

@@ -74,6 +74,15 @@ export interface UptimeSample {
   system_boot_time: string;
 }
 
+export type SleepState = 'awake' | 'soft_sleep' | 'true_suspend';
+
+export interface SleepEvent {
+  timestamp: string;
+  previous_state: SleepState;
+  new_state: SleepState;
+  duration_seconds?: number;
+}
+
 // ===== Current Response Types =====
 
 export interface CurrentCpuResponse {
@@ -158,6 +167,7 @@ export interface ProcessHistoryResponse {
 
 export interface UptimeHistoryResponse {
   samples: UptimeSample[];
+  sleep_events: SleepEvent[];
   sample_count: number;
   source: string;
 }
