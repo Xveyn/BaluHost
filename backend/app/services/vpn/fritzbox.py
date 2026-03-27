@@ -93,8 +93,14 @@ class FritzBoxVPNService:
         # Handle server config (has ListenPort but no Endpoint)
         if 'endpoint' not in config and listen_port:
             if public_endpoint:
-                # Build endpoint from public address and listen port
-                config['endpoint'] = f"{public_endpoint}:{listen_port}"
+                # Strip any existing port/scheme from public_endpoint before appending listen_port
+                ep = public_endpoint
+                if "://" in ep:
+                    from urllib.parse import urlparse
+                    ep = urlparse(ep).hostname or ep
+                elif ":" in ep:
+                    ep = ep.split(":")[0]
+                config['endpoint'] = f"{ep}:{listen_port}"
                 debug_lines.append(f"Built Endpoint from server config: {config['endpoint']}")
             else:
                 # Server config without public endpoint - need user to provide it
