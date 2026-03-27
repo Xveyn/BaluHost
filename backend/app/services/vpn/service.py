@@ -90,6 +90,9 @@ class VPNService:
             if settings.vpn_public_endpoint
             else caller_endpoint
         )
+        # Strip any port that may have leaked into the hostname
+        if hostname and ":" in hostname:
+            hostname = hostname.split(":")[0]
         port = (
             settings.vpn_public_port
             if settings.vpn_public_port
