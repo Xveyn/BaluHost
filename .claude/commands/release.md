@@ -18,12 +18,11 @@ Führe einen Release-Prozess durch, der development auf main merged und eine neu
   - MAJOR (X.0.0) bei Breaking Changes
 
 ### 3. Version aktualisieren
-Aktualisiere die Version in allen relevanten Dateien:
-- `backend/pyproject.toml`
-- `client/package.json`
-- `CLAUDE.md`
-- `client/src/data/api-endpoints/sections-features.ts` (API mock response)
-- Dokumentationsdateien mit Versionsnummern
+Verwende das zentrale Bump-Script:
+```bash
+python scripts/bump_version.py <version>   # z.B. 1.21.0, patch, minor, major
+```
+Das Script aktualisiert automatisch: `backend/pyproject.toml`, `client/package.json`, `CLAUDE.md`.
 
 **FRAGE DEN BENUTZER:** Sollen diese Dateien aktualisiert werden? Zeige die Änderungen.
 
