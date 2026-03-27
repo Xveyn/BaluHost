@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.3] - 2026-03-27
+
+### Added
+- **Centralized Version Bumping** — `scripts/bump_version.py` syncs version across pyproject.toml, package.json, and CLAUDE.md from a single source of truth
+  - Supports `patch`, `minor`, `major` keywords or explicit version numbers
+
+### Fixed
+- **VPN Endpoint Parsing** — Strip port and URI scheme from `public_endpoint` before building WireGuard config, preventing malformed endpoints like `http://example.com:51820:51820`
+
+### Changed
+- Release command now uses `bump_version.py` instead of manual multi-file edits
+
+---
+
 ## [1.20.2] - 2026-03-26
 
 ### Added
