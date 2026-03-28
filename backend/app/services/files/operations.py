@@ -236,6 +236,12 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             if meta:
                 file_id = meta.id
 
+        checksum = None
+        if not is_dir and db:
+            meta = metadata_map.get(relative_entry)
+            if meta:
+                checksum = meta.checksum
+
         item = FileItem(
             name=entry.name,
             path=relative_entry,
@@ -245,6 +251,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             owner_id=entry_owner,
             mime_type=mime_type,
             file_id=file_id,
+            checksum=checksum,
         )
         # Attach share permissions for non-owner shared files
         if db and entry_owner and not can_view(user, entry_owner) and not path_utils.is_in_shared_dir(relative_entry):
