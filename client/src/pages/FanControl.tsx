@@ -151,7 +151,7 @@ export default function FanControl() {
             {t('system:fanControl.badges.devMode')}
           </span>
         )}
-        {status.is_using_linux_backend ? (
+        {status.is_dev_mode && (status.is_using_linux_backend ? (
           <span className="rounded-full border border-emerald-500/30 bg-emerald-500/10 px-3 py-1 text-xs sm:text-sm font-medium text-emerald-300">
             {t('system:fanControl.badges.linuxBackend')}
           </span>
@@ -159,7 +159,7 @@ export default function FanControl() {
           <span className="rounded-full border border-sky-500/30 bg-sky-500/10 px-3 py-1 text-xs sm:text-sm font-medium text-sky-300">
             {t('system:fanControl.badges.simulationBackend')}
           </span>
-        )}
+        ))}
         {permissionStatus?.status === 'readonly' && (
           <span className="rounded-full border border-orange-500/30 bg-orange-500/10 px-3 py-1 text-xs sm:text-sm font-medium text-orange-300 flex items-center gap-1">
             <AlertTriangle className="w-4 h-4" />

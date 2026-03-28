@@ -335,6 +335,11 @@ class PowerManagerService:
         else:
             await self.apply_profile(PowerProfile.IDLE, reason="service_start")
 
+        # Recalculate profile based on any demands registered before start()
+        if self._demands:
+            logger.info(f"Applying {len(self._demands)} pre-registered demand(s)")
+            await self._recalculate_profile("service_start_catchup")
+
         # Start background monitor for demand expiration
         self._monitor_task = asyncio.create_task(self._monitor_loop())
         logger.info("PowerManagerService started")
@@ -462,7 +467,7 @@ class PowerManagerService:
     ) -> Tuple[bool, Optional[str]]:
         """Internal method to apply a profile. Returns (success, error_message)."""
         if self._backend is None:
-            logger.error("Power backend not initialized")
+            logger.warning("Power backend not yet initialized, skipping profile change")
             return False, "Power backend not initialized"
 
         # Skip profile changes while dynamic mode is active

@@ -56,10 +56,11 @@ class MobileService:
         token = f"reg_{secrets.token_urlsafe(32)}"
         expires_at = datetime.now(timezone.utc) + timedelta(minutes=expires_minutes)
         
-        # Save token to database
+        # Save token to database (including user-chosen device name)
         db_token = MobileRegistrationToken(
             token=token,
             user_id=user_id,
+            device_name=device_name,
             expires_at=expires_at,
             used=False
         )
@@ -217,23 +218,26 @@ class MobileService:
         
         # Extract device info
         device_info = device_data.device_info
-        
+
+        # Use user-chosen name from token generation, fall back to app-reported name
+        chosen_name = token_record.device_name or device_info.device_name
+
         # Calculate device token expiration
         # Use provided token_validity_days or default to 90 days
         token_validity_days = device_data.token_validity_days or 90
-        
+
         # Enforce security constraints (30-180 days)
         if token_validity_days < 30:
             token_validity_days = 30
         elif token_validity_days > 180:
             token_validity_days = 180
-        
+
         device_expires_at = datetime.now(timezone.utc) + timedelta(days=token_validity_days)
-        
+
         # Create mobile device
         device = MobileDevice(
             user_id=token_record.user_id,
-            device_name=device_info.device_name,
+            device_name=chosen_name,
             device_type=device_info.device_type,
             device_model=device_info.device_model,
             os_version=device_info.os_version,

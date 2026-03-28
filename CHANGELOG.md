@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.4] - 2026-03-28
+
+### Fixed
+- **Mobile Device Naming** — User-chosen device name from QR generation is now persisted and applied when the device registers, instead of being replaced by the auto-detected app name
+- **Energy Dashboard** — Fixed power_monitor reading using wrong key (`current_power` → `watts`), causing dashboards to always show 0W
+- **File Upload Rate Limits** — Increased from 20 to 1000 requests/min to prevent throttling during bulk uploads
+- **Fan Control UI** — Hide backend badge in production mode
+- **Power Manager** — Handle race condition when power demands register before backend initialization
+
+---
+
 ## [1.20.3] - 2026-03-27
 
 ### Added
