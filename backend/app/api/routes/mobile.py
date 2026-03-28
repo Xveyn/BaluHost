@@ -22,6 +22,7 @@ from app.schemas.mobile import (
     CameraBackupStatus,
     SyncFolder as SyncFolderSchema,
     SyncFolderCreate,
+    SyncFolderUpdate,
     UploadQueueListResponse,
 )
 from app.models.mobile import MobileRegistrationToken as MobileRegistrationTokenModel
@@ -466,6 +467,26 @@ async def create_sync_folder(
         db=db,
         device_id=device_id,
         folder_data=folder_data
+    )
+
+
+@router.put("/sync/folders/{folder_id}", response_model=SyncFolderSchema)
+@user_limiter.limit(get_limit("mobile_sync"))
+async def update_sync_folder(
+    request: Request,
+    response: Response,
+    folder_id: str,
+    update_data: SyncFolderUpdate,
+    db: Session = Depends(get_db),
+    current_user: UserPublic = Depends(get_current_user)
+):
+    """
+    Update a sync folder configuration. Also refreshes last_sync timestamp.
+    """
+    return MobileService.update_sync_folder(
+        db=db,
+        folder_id=folder_id,
+        update_data=update_data
     )
 
 
