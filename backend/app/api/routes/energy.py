@@ -73,7 +73,7 @@ async def get_energy_dashboard(
         state = manager.get_device_state(device_id, db)
         if state and "power_monitor" in state:
             pm = state["power_monitor"]
-            current_watts = pm.get("current_power", 0.0)
+            current_watts = pm.get("watts", 0.0)
             is_online = True
         elif device.is_online:
             is_online = True
