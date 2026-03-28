@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.20.5] - 2026-03-29
+
+### Added
+- **Sync Folder Update** — PUT endpoint for updating sync folder configuration (remote path, sync type, auto-sync, status)
+- **File Checksum** — Expose file checksum in directory listing response for client-side change detection
+
+### Fixed
+- **Smart Device** — Use `anyio.from_thread.run` for async calls from sync worker threads, preventing event-loop errors
+
+---
+
 ## [1.20.4] - 2026-03-28
 
 ### Fixed
