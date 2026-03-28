@@ -52,6 +52,7 @@ class MobileRegistrationToken(Base):
 
     token: Mapped[str] = mapped_column(String, primary_key=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    device_name: Mapped[Optional[str]] = mapped_column(String, nullable=True)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     used: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow, nullable=False)
