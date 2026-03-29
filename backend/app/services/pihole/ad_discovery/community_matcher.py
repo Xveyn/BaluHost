@@ -341,7 +341,10 @@ class CommunityMatcher:
         now = datetime.now(timezone.utc)
         for ref_list in lists:
             if ref_list.last_fetched_at is not None:
-                age = now - ref_list.last_fetched_at
+                fetched = ref_list.last_fetched_at
+                if fetched.tzinfo is None:
+                    fetched = fetched.replace(tzinfo=timezone.utc)
+                age = now - fetched
                 if age < timedelta(hours=ref_list.fetch_interval_hours):
                     # Still fresh — load from cache if not already in memory
                     if ref_list.id not in self._lists:
