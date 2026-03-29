@@ -6,7 +6,7 @@ from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Callable, Optional
 
-from app.services.cloud.adapters.base import CloudAdapter, CloudFile, DownloadResult
+from app.services.cloud.adapters.base import CloudAdapter, CloudFile, DownloadResult, UploadResult
 
 logger = logging.getLogger(__name__)
 
@@ -144,6 +144,54 @@ class DevCloudAdapter(CloudAdapter):
                 result.bytes_transferred += f.size_bytes or 1024
 
         return result
+
+    async def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> None:
+        """Simulate uploading a file."""
+        size = local_path.stat().st_size if local_path.exists() else 1024
+        uploaded = 0
+        chunk = max(size // 5, 256)
+        while uploaded < size:
+            await asyncio.sleep(0.05)
+            uploaded = min(uploaded + chunk, size)
+            if progress_callback:
+                progress_callback(uploaded)
+
+    async def upload_folder(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int, Optional[str]], None]] = None,
+    ) -> UploadResult:
+        """Simulate uploading a folder."""
+        result = UploadResult()
+        if not local_path.is_dir():
+            result.errors.append(f"Not a directory: {local_path}")
+            return result
+
+        for f in local_path.rglob("*"):
+            if f.is_file():
+                if progress_callback:
+                    progress_callback(result.bytes_transferred, f.name)
+                await self.upload_file(f, f"{remote_path}/{f.relative_to(local_path)}")
+                result.files_transferred += 1
+                result.bytes_transferred += f.stat().st_size
+        return result
+
+    async def create_share_link(
+        self, remote_path: str, link_type: str = "view"
+    ) -> str:
+        """Return a mock sharing link."""
+        await asyncio.sleep(0.2)
+        import hashlib
+        file_hash = hashlib.md5(remote_path.encode()).hexdigest()[:12]
+        if self.provider == "onedrive":
+            return f"https://1drv.ms/example/{file_hash}?e={link_type}"
+        return f"https://drive.google.com/file/d/mock-{file_hash}/view?usp=sharing"
 
     async def get_file_count(self, remote_path: str) -> Optional[int]:
         """Count files in mock filesystem recursively."""

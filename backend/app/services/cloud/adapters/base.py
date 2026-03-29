@@ -24,6 +24,14 @@ class DownloadResult:
     errors: list[str] = field(default_factory=list)
 
 
+@dataclass
+class UploadResult:
+    """Result of a folder upload operation."""
+    files_transferred: int = 0
+    bytes_transferred: int = 0
+    errors: list[str] = field(default_factory=list)
+
+
 class CloudAdapter(ABC):
     """Abstract interface for cloud storage providers."""
 
@@ -60,6 +68,30 @@ class CloudAdapter(ABC):
     async def get_file_count(self, remote_path: str) -> Optional[int]:
         """Get total number of files in a folder. Returns None if unknown."""
         return None
+
+    async def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> None:
+        """Upload a single file to the cloud."""
+        raise NotImplementedError("Upload not supported by this adapter")
+
+    async def upload_folder(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int, Optional[str]], None]] = None,
+    ) -> "UploadResult":
+        """Upload an entire folder recursively."""
+        raise NotImplementedError("Upload not supported by this adapter")
+
+    async def create_share_link(
+        self, remote_path: str, link_type: str = "view"
+    ) -> str:
+        """Create a sharing link for a file/folder. Returns the URL."""
+        raise NotImplementedError("Share links not supported by this adapter")
 
     async def close(self) -> None:
         """Clean up resources. Override if adapter holds state."""

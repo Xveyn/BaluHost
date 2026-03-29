@@ -161,3 +161,53 @@ class TestCloudExportSchemas:
             total_upload_bytes=1_000_000,
         )
         assert stats.active_exports == 5
+
+
+import asyncio
+from pathlib import Path
+import tempfile
+
+from app.services.cloud.adapters.dev import DevCloudAdapter
+
+
+class TestDevCloudAdapterUpload:
+    def test_upload_file(self, tmp_path: Path):
+        adapter = DevCloudAdapter(provider="google_drive")
+        local_file = tmp_path / "test.txt"
+        local_file.write_text("hello world")
+
+        progress_values = []
+        asyncio.run(
+            adapter.upload_file(local_file, "/BaluHost Shares/test.txt", lambda b: progress_values.append(b))
+        )
+        assert len(progress_values) > 0
+        assert progress_values[-1] > 0
+
+    def test_upload_folder(self, tmp_path: Path):
+        adapter = DevCloudAdapter(provider="google_drive")
+        folder = tmp_path / "docs"
+        folder.mkdir()
+        (folder / "a.txt").write_text("aaa")
+        (folder / "b.txt").write_text("bbb")
+
+        result = asyncio.run(
+            adapter.upload_folder(folder, "/BaluHost Shares/docs")
+        )
+        assert result.files_transferred == 2
+        assert result.bytes_transferred > 0
+        assert len(result.errors) == 0
+
+    def test_create_share_link(self):
+        adapter = DevCloudAdapter(provider="google_drive")
+        link = asyncio.run(
+            adapter.create_share_link("/BaluHost Shares/test.txt", link_type="view")
+        )
+        assert link.startswith("https://")
+        assert "mock" in link.lower() or "baluhost" in link.lower() or "example" in link.lower()
+
+    def test_create_share_link_onedrive(self):
+        adapter = DevCloudAdapter(provider="onedrive")
+        link = asyncio.run(
+            adapter.create_share_link("/BaluHost Shares/test.txt", link_type="edit")
+        )
+        assert link.startswith("https://")
