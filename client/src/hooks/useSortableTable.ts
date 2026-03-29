@@ -56,7 +56,7 @@ function detectAndCompare(a: unknown, b: unknown): number {
   return strA.localeCompare(strB, undefined, { sensitivity: 'base' });
 }
 
-export function useSortableTable<T extends Record<string, unknown>>(
+export function useSortableTable<T extends Record<string, any>>(
   data: T[],
   options?: UseSortableTableOptions<T>,
 ) {
