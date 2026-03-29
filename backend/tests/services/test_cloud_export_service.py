@@ -100,3 +100,64 @@ class TestCloudExportJobModel:
         db_session.add(job)
         db_session.commit()
         assert job.is_expired() is True
+
+
+from app.schemas.cloud_export import CloudExportRequest, CloudExportJobResponse, CloudExportStatistics
+
+
+class TestCloudExportSchemas:
+    def test_export_request_defaults(self):
+        req = CloudExportRequest(connection_id=1, source_path="docs/report.pdf")
+        assert req.cloud_folder == "BaluHost Shares/"
+        assert req.link_type == "view"
+        assert req.expires_at is None
+
+    def test_export_request_custom_values(self):
+        req = CloudExportRequest(
+            connection_id=1,
+            source_path="docs/report.pdf",
+            cloud_folder="My Exports/",
+            link_type="edit",
+        )
+        assert req.cloud_folder == "My Exports/"
+        assert req.link_type == "edit"
+
+    def test_export_request_rejects_invalid_link_type(self):
+        with pytest.raises(Exception):
+            CloudExportRequest(
+                connection_id=1,
+                source_path="test.txt",
+                link_type="delete",
+            )
+
+    def test_job_response_from_model(self, db_session: Session):
+        conn = _create_connection(db_session)
+        job = CloudExportJob(
+            user_id=1,
+            connection_id=conn.id,
+            source_path="test.txt",
+            is_directory=False,
+            file_name="test.txt",
+            cloud_folder="BaluHost Shares/",
+            link_type="view",
+            status="ready",
+            progress_bytes=1024,
+            share_link="https://drive.google.com/file/d/abc123/view",
+        )
+        db_session.add(job)
+        db_session.commit()
+        db_session.refresh(job)
+
+        resp = CloudExportJobResponse.model_validate(job, from_attributes=True)
+        assert resp.id == job.id
+        assert resp.status == "ready"
+        assert resp.share_link == "https://drive.google.com/file/d/abc123/view"
+
+    def test_statistics_schema(self):
+        stats = CloudExportStatistics(
+            total_exports=10,
+            active_exports=5,
+            failed_exports=2,
+            total_upload_bytes=1_000_000,
+        )
+        assert stats.active_exports == 5
