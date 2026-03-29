@@ -48,6 +48,7 @@ _TABLE_CATEGORIES: Dict[str, List[str]] = {
         "update_history", "update_config",
     ],
     "Energy/IoT": ["smart_devices", "smart_device_samples", "energy_price_configs"],
+    "Cloud": ["cloud_oauth_configs", "cloud_connections", "cloud_import_jobs", "cloud_export_jobs"],
 }
 
 # Flat set for quick membership checks
