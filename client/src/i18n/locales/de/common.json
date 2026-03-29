@@ -88,6 +88,8 @@
     "databaseDesc": "DB-Inspektor",
     "apiCenter": "API-Center",
     "apiCenterDesc": "Docs & Limits",
+    "userManual": "Benutzerhandbuch",
+    "userManualDesc": "Setup, Wiki & API",
     "remoteServers": "Remote-Server",
     "remoteServersDesc": "SSH & VPN",
     "syncPrototype": "Geräteverwaltung",
