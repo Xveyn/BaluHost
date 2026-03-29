@@ -127,7 +127,7 @@ class TestCloudExportSchemas:
             CloudExportRequest(
                 connection_id=1,
                 source_path="test.txt",
-                link_type="delete",
+                link_type="delete",  # type: ignore[arg-type]  # intentionally invalid
             )
 
     def test_job_response_from_model(self, db_session: Session):
