@@ -259,6 +259,10 @@ async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
 
+    from app.services.files.storage_permissions import STORAGE_UMASK
+    old_umask = os.umask(STORAGE_UMASK)
+    logger.info("Storage umask set to %04o (was %04o)", STORAGE_UMASK, old_umask)
+
     from app.core.database import init_db, SessionLocal, engine
     from app.services.users import ensure_admin_user, ensure_user_home_directories
     from app.services import jobs, seed
