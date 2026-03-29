@@ -246,24 +246,15 @@ export default function FileManager() {
     if (files.length > 0) loadTrackingInfo();
   }, [files]);
 
-  // Load owner names when files change
+  // Build owner name cache from backend-provided owner_name field
   useEffect(() => {
-    const fetchOwnerNames = async (ownerIds: (string | number)[]) => {
-      const uniqueIds = Array.from(new Set(ownerIds.filter(id => id !== undefined && id !== null && String(id) !== 'null')));
-      if (uniqueIds.length === 0) return;
-      try {
-        const data = await getUsers();
-        const cache: Record<string, string> = {};
-        for (const u of data.users) {
-          cache[u.id] = u.username;
-        }
-        setUserCache(cache);
-      } catch {
-        // ignore
+    const cache: Record<string, string> = {};
+    for (const f of files) {
+      if (f.ownerId != null && f.ownerName && f.ownerName !== 'null') {
+        cache[f.ownerId] = f.ownerName;
       }
-    };
-    const ownerIds = files.map(f => f.ownerId).filter(id => id !== undefined && id !== null && String(id) !== 'null') as (string | number)[];
-    fetchOwnerNames(ownerIds);
+    }
+    setUserCache(cache);
   }, [files]);
 
   if (!user) return null;

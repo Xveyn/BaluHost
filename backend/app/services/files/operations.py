@@ -217,6 +217,25 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
                 metadata_map[rel] = meta
                 owner_map[rel] = str(meta.owner_id)
 
+    # ── Batch fetch: owner usernames (1 query) ─────────────────────────────
+    owner_name_map: dict[str, str] = {}
+    if db:
+        unique_owner_ids = {oid for oid in owner_map.values() if oid is not None}
+        if unique_owner_ids:
+            from app.models.user import User as UserModel
+            int_ids = []
+            for oid in unique_owner_ids:
+                try:
+                    int_ids.append(int(oid))
+                except (ValueError, TypeError):
+                    pass
+            if int_ids:
+                users = db.query(UserModel.id, UserModel.username).filter(
+                    UserModel.id.in_(int_ids)
+                ).all()
+                for uid, uname in users:
+                    owner_name_map[str(uid)] = uname
+
     # ── Pass 2: build FileItem list using pre-fetched data ────────────────
     items: list[FileItem] = []
     for entry, relative_entry, is_dir in entries:
@@ -254,6 +273,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             type="directory" if is_dir else "file",
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
+            owner_name=owner_name_map.get(entry_owner) if entry_owner else None,
             mime_type=mime_type,
             file_id=file_id,
             checksum=checksum,
@@ -881,6 +901,7 @@ def list_shared_with_me(user: UserPublic, db: Session) -> list[FileItem]:
             type="directory" if file_meta.is_directory else "file",
             modified_at=file_meta.updated_at or file_meta.created_at,
             owner_id=str(share.owner_id),
+            owner_name=owner_name,
             mime_type=file_meta.mime_type,
             file_id=file_meta.id,
             can_read=share.can_read,
