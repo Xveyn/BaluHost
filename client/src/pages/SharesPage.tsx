@@ -11,7 +11,15 @@ import {
   type SharedWithMe,
   type ShareStatistics
 } from '../api/shares';
-import { Users, Share2, Trash2, Edit, Search, Filter, Calendar, Loader2, Folder, File as FileIcon } from 'lucide-react';
+import { Users, Share2, Trash2, Edit, Search, Filter, Calendar, Loader2, Folder, File as FileIcon, Cloud, Copy, RefreshCw } from 'lucide-react';
+import {
+  listCloudExports,
+  getCloudExportStatistics,
+  revokeCloudExport,
+  retryCloudExport,
+  type CloudExportJob,
+  type CloudExportStatistics as CloudExportStats,
+} from '../api/cloud-export';
 import { formatBytes } from '../lib/formatters';
 import { StatCard } from '../components/ui/StatCard';
 import CreateFileShareModal from '../components/CreateFileShareModal';
@@ -23,7 +31,9 @@ export default function SharesPage() {
   const { confirm, dialog } = useConfirmDialog();
   // User list for modal
   const [users, setUsers] = useState<Array<{ id: number; username: string; role: string }>>([]);
-  const [activeTab, setActiveTab] = useState<'shares' | 'shared-with-me'>('shares');
+  const [activeTab, setActiveTab] = useState<'shares' | 'shared-with-me' | 'cloud-exports'>('shares');
+  const [cloudExports, setCloudExports] = useState<CloudExportJob[]>([]);
+  const [cloudStats, setCloudStats] = useState<CloudExportStats | null>(null);
   const [fileShares, setFileShares] = useState<FileShare[]>([]);
   const [sharedWithMe, setSharedWithMe] = useState<SharedWithMe[]>([]);
   const [statistics, setStatistics] = useState<ShareStatistics | null>(null);
@@ -55,14 +65,18 @@ export default function SharesPage() {
   const loadData = async () => {
     setLoading(true);
     try {
-      const [stats, shares, shared] = await Promise.all([
+      const [stats, shares, shared, cExports, cStats] = await Promise.all([
         getShareStatistics(),
         listFileShares(),
         listFilesSharedWithMe(),
+        listCloudExports().catch(() => []),
+        getCloudExportStatistics().catch(() => null),
       ]);
       setStatistics(stats);
       setFileShares(shares);
       setSharedWithMe(shared);
+      setCloudExports(cExports);
+      setCloudStats(cStats);
     } catch {
       // Load failure handled by empty state
     } finally {
@@ -79,6 +93,70 @@ export default function SharesPage() {
       await loadData();
     } catch {
       toast.error(t('shares:toast.revokeFailed'));
+    }
+  };
+
+  const handleCopyLink = (link: string) => {
+    navigator.clipboard.writeText(link);
+    toast.success(t('shares:cloudExport.linkCopied', 'Link copied'));
+  };
+
+  const handleRevokeExport = async (jobId: number) => {
+    const ok = await confirm(t('shares:cloudExport.revokeConfirm', 'Revoke this cloud share?'), {
+      title: t('shares:cloudExport.revoke', 'Revoke'),
+      variant: 'danger',
+      confirmLabel: t('shares:cloudExport.revoke', 'Revoke'),
+    });
+    if (!ok) return;
+    try {
+      await revokeCloudExport(jobId);
+      await loadData();
+      toast.success(t('shares:cloudExport.revoked', 'Cloud share revoked'));
+    } catch {
+      toast.error(t('shares:cloudExport.revokeFailed', 'Failed to revoke cloud share'));
+    }
+  };
+
+  const handleRetryExport = async (jobId: number) => {
+    try {
+      await retryCloudExport(jobId);
+      await loadData();
+      toast.success(t('shares:cloudExport.retryStarted', 'Retry started'));
+    } catch {
+      toast.error(t('shares:cloudExport.retryFailed', 'Retry failed'));
+    }
+  };
+
+  const getProviderLabel = (job: CloudExportJob) => {
+    if (job.share_link?.includes('drive.google')) return 'Google Drive';
+    if (job.share_link?.includes('1drv.ms') || job.share_link?.includes('sharepoint')) return 'OneDrive';
+    return 'Cloud';
+  };
+
+  const getStatusBadge = (job: CloudExportJob) => {
+    switch (job.status) {
+      case 'ready':
+        return <span className="px-2.5 py-1 bg-green-500/20 text-green-400 rounded-full text-xs font-semibold">{t('shares:cloudExport.statusReady', 'Ready')}</span>;
+      case 'uploading':
+      case 'creating_link':
+        return (
+          <span className="px-2.5 py-1 bg-blue-500/20 text-blue-400 rounded-full text-xs font-semibold inline-flex items-center gap-1">
+            <Loader2 className="w-3 h-3 animate-spin" />
+            {job.status === 'uploading'
+              ? (job.file_size_bytes
+                ? `${Math.round((job.progress_bytes / job.file_size_bytes) * 100)}%`
+                : t('shares:cloudExport.statusUploading', 'Uploading'))
+              : t('shares:cloudExport.statusCreatingLink', 'Creating link')}
+          </span>
+        );
+      case 'pending':
+        return <span className="px-2.5 py-1 bg-slate-500/20 text-slate-400 rounded-full text-xs font-semibold">{t('shares:cloudExport.statusPending', 'Pending')}</span>;
+      case 'failed':
+        return <span className="px-2.5 py-1 bg-red-500/20 text-red-400 rounded-full text-xs font-semibold">{t('shares:cloudExport.statusFailed', 'Failed')}</span>;
+      case 'revoked':
+        return <span className="px-2.5 py-1 bg-slate-500/20 text-slate-500 rounded-full text-xs font-semibold">{t('shares:cloudExport.statusRevoked', 'Revoked')}</span>;
+      default:
+        return <span className="px-2.5 py-1 bg-slate-500/20 text-slate-400 rounded-full text-xs font-semibold">{job.status}</span>;
     }
   };
 
@@ -129,6 +207,7 @@ export default function SharesPage() {
   const tabs = [
     { key: 'shares' as const, label: t('tabs.userShares'), shortLabel: t('tabs.shares'), icon: Users },
     { key: 'shared-with-me' as const, label: t('tabs.sharedWithMe'), shortLabel: t('tabs.received'), icon: Share2 },
+    { key: 'cloud-exports' as const, label: t('tabs.cloudExports', 'Cloud Shares'), shortLabel: t('tabs.cloudExportsShort', 'Cloud'), icon: Cloud },
   ];
 
   return (
@@ -142,7 +221,7 @@ export default function SharesPage() {
       </div>
 
       {/* Statistics Cards */}
-      {statistics && (
+      {activeTab !== 'cloud-exports' && statistics && (
         <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5">
           <StatCard
             label={t('stats.userShares')}
@@ -157,6 +236,24 @@ export default function SharesPage() {
             subValue={t('stats.filesAccessible')}
             color="amber"
             icon={<Share2 className="h-5 w-5 sm:h-6 sm:w-6 text-amber-400" />}
+          />
+        </div>
+      )}
+      {activeTab === 'cloud-exports' && cloudStats && (
+        <div className="grid grid-cols-1 min-[400px]:grid-cols-2 gap-3 sm:gap-5">
+          <StatCard
+            label={t('shares:cloudExport.activeShares', 'Active Cloud Shares')}
+            value={cloudStats.active_exports}
+            subValue={t('stats.ofTotal', { total: cloudStats.total_exports })}
+            color="blue"
+            icon={<Cloud className="h-5 w-5 sm:h-6 sm:w-6 text-blue-400" />}
+          />
+          <StatCard
+            label={t('shares:cloudExport.uploadVolume', 'Upload Volume')}
+            value={formatBytes(cloudStats.total_upload_bytes)}
+            subValue={t('shares:cloudExport.totalUploaded', 'Total uploaded')}
+            color="green"
+            icon={<Cloud className="h-5 w-5 sm:h-6 sm:w-6 text-green-400" />}
           />
         </div>
       )}
@@ -547,6 +644,199 @@ export default function SharesPage() {
                               <span className="flex items-center gap-1">
                                 <Calendar className="h-3 w-3" />
                                 {t('table.expires')}: {formatDate(item.expires_at)}
+                              </span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* Cloud Exports Tab */}
+              {activeTab === 'cloud-exports' && (
+                <>
+                  {cloudExports.length === 0 ? (
+                    <div className="text-center py-8 sm:py-12">
+                      <Cloud className="w-12 h-12 sm:w-16 sm:h-16 text-slate-600 mx-auto mb-4 opacity-50" />
+                      <h3 className="text-base sm:text-lg font-semibold text-slate-300 mb-2">
+                        {t('shares:cloudExport.noExports', 'No cloud shares')}
+                      </h3>
+                      <p className="text-slate-500 text-sm sm:text-base">
+                        {t('shares:cloudExport.noExportsDesc', 'Share files to cloud storage from the file manager.')}
+                      </p>
+                    </div>
+                  ) : (
+                    <>
+                      {/* Desktop Table */}
+                      <div className="hidden lg:block overflow-x-auto">
+                        <table className="min-w-full">
+                          <thead className="bg-slate-800/30 border-b border-slate-700/50">
+                            <tr>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.provider', 'Provider')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.link', 'Link')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('search.status', 'Status')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.created', 'Created')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
+                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.actions')}</th>
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y divide-slate-800/60">
+                            {cloudExports.map((job) => (
+                              <tr key={job.id} className="hover:bg-slate-800/30 transition-colors">
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <span className="text-slate-300 font-medium">{getProviderLabel(job)}</span>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex items-center gap-2">
+                                    {job.is_directory
+                                      ? <Folder className="h-4 w-4 shrink-0 text-amber-400" />
+                                      : <FileIcon className="h-4 w-4 shrink-0 text-slate-400" />}
+                                    <div>
+                                      <div className="font-semibold text-white">{job.file_name}</div>
+                                      <div className="text-xs sm:text-sm text-slate-400 mt-0.5">
+                                        {job.is_directory ? t('form.folder') : formatFileSize(job.file_size_bytes)}
+                                      </div>
+                                    </div>
+                                  </div>
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  {job.share_link ? (
+                                    <button
+                                      onClick={() => handleCopyLink(job.share_link!)}
+                                      className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 transition-colors text-sm"
+                                      title={t('shares:cloudExport.copyLink', 'Copy link')}
+                                    >
+                                      <Copy className="w-3.5 h-3.5" />
+                                      <span className="truncate max-w-[160px]">{t('shares:cloudExport.copyLink', 'Copy link')}</span>
+                                    </button>
+                                  ) : (
+                                    <span className="text-slate-500 text-sm">--</span>
+                                  )}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  {getStatusBadge(job)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(job.created_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4 text-sm text-slate-300 font-medium">
+                                  {formatDate(job.expires_at)}
+                                </td>
+                                <td className="px-4 sm:px-6 py-3 sm:py-4">
+                                  <div className="flex space-x-1">
+                                    {job.share_link && (
+                                      <button
+                                        onClick={() => handleCopyLink(job.share_link!)}
+                                        className="p-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-200 transition hover:border-blue-500/50 hover:bg-blue-500/20"
+                                        title={t('shares:cloudExport.copyLink', 'Copy link')}
+                                      >
+                                        <Copy className="w-4 h-4 sm:w-5 sm:h-5" />
+                                      </button>
+                                    )}
+                                    {job.status === 'ready' && (
+                                      <button
+                                        onClick={() => handleRevokeExport(job.id)}
+                                        className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition hover:border-rose-500/50 hover:bg-rose-500/20"
+                                        title={t('shares:cloudExport.revoke', 'Revoke')}
+                                      >
+                                        <Trash2 className="w-4 h-4 sm:w-5 sm:h-5" />
+                                      </button>
+                                    )}
+                                    {job.status === 'failed' && (
+                                      <button
+                                        onClick={() => handleRetryExport(job.id)}
+                                        className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 transition hover:border-amber-500/50 hover:bg-amber-500/20"
+                                        title={t('shares:cloudExport.retry', 'Retry')}
+                                      >
+                                        <RefreshCw className="w-4 h-4 sm:w-5 sm:h-5" />
+                                      </button>
+                                    )}
+                                  </div>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+
+                      {/* Mobile Card View */}
+                      <div className="lg:hidden space-y-3">
+                        {cloudExports.map((job) => (
+                          <div
+                            key={job.id}
+                            className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
+                          >
+                            <div className="flex items-start justify-between gap-2 mb-3">
+                              <div className="min-w-0 flex-1 flex items-center gap-2">
+                                {job.is_directory
+                                  ? <Folder className="h-4 w-4 shrink-0 text-amber-400" />
+                                  : <FileIcon className="h-4 w-4 shrink-0 text-slate-400" />}
+                                <div className="min-w-0">
+                                  <p className="font-semibold text-white truncate">{job.file_name}</p>
+                                  <p className="text-xs text-slate-400">{job.is_directory ? t('form.folder') : formatFileSize(job.file_size_bytes)}</p>
+                                </div>
+                              </div>
+                              <div className="flex gap-1 flex-shrink-0">
+                                {job.share_link && (
+                                  <button
+                                    onClick={() => handleCopyLink(job.share_link!)}
+                                    className="p-2 rounded-lg border border-blue-500/30 bg-blue-500/10 text-blue-200 transition touch-manipulation active:scale-95"
+                                    title={t('shares:cloudExport.copyLink', 'Copy link')}
+                                  >
+                                    <Copy className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {job.status === 'ready' && (
+                                  <button
+                                    onClick={() => handleRevokeExport(job.id)}
+                                    className="p-2 rounded-lg border border-rose-500/30 bg-rose-500/10 text-rose-200 transition touch-manipulation active:scale-95"
+                                    title={t('shares:cloudExport.revoke', 'Revoke')}
+                                  >
+                                    <Trash2 className="w-4 h-4" />
+                                  </button>
+                                )}
+                                {job.status === 'failed' && (
+                                  <button
+                                    onClick={() => handleRetryExport(job.id)}
+                                    className="p-2 rounded-lg border border-amber-500/30 bg-amber-500/10 text-amber-200 transition touch-manipulation active:scale-95"
+                                    title={t('shares:cloudExport.retry', 'Retry')}
+                                  >
+                                    <RefreshCw className="w-4 h-4" />
+                                  </button>
+                                )}
+                              </div>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-2">
+                              <Cloud className="h-3 w-3 text-slate-400" />
+                              <span className="text-sm text-slate-300">{getProviderLabel(job)}</span>
+                            </div>
+
+                            <div className="flex items-center gap-2 mb-2">
+                              {getStatusBadge(job)}
+                            </div>
+
+                            {job.share_link && (
+                              <button
+                                onClick={() => handleCopyLink(job.share_link!)}
+                                className="flex items-center gap-1.5 text-blue-400 hover:text-blue-300 transition-colors text-xs mb-2"
+                              >
+                                <Copy className="w-3 h-3" />
+                                {t('shares:cloudExport.copyLink', 'Copy link')}
+                              </button>
+                            )}
+
+                            <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-slate-400">
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {t('shares:cloudExport.created', 'Created')}: {formatDate(job.created_at)}
+                              </span>
+                              <span className="flex items-center gap-1">
+                                <Calendar className="h-3 w-3" />
+                                {t('table.expires')}: {formatDate(job.expires_at)}
                               </span>
                             </div>
                           </div>
