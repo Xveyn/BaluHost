@@ -5,7 +5,8 @@ from app.api.routes import (
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
     vcl, server_profiles, vpn_profiles, metrics, energy, devices, monitoring,
     power, power_presets, fans, service_status, schedulers, plugins, benchmark,
-    notifications, updates, chunked_upload, webdav, samba, cloud, sleep,
+    notifications, updates, chunked_upload, webdav, samba, cloud, cloud_export,
+    sleep,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
     backend_logs,
     activity,
@@ -53,6 +54,7 @@ api_router.include_router(updates.router, tags=["updates"])
 api_router.include_router(webdav.router, tags=["webdav"])
 api_router.include_router(samba.router, tags=["samba"])
 api_router.include_router(cloud.router, prefix="/cloud", tags=["cloud-import"])
+api_router.include_router(cloud_export.router, prefix="/cloud-export", tags=["cloud-export"])
 api_router.include_router(sleep.router, prefix="/system/sleep", tags=["sleep-mode"])
 api_router.include_router(fritzbox.router, tags=["fritzbox"])
 api_router.include_router(api_keys.router, tags=["api-keys"])
