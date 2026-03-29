@@ -211,3 +211,150 @@ class TestDevCloudAdapterUpload:
             adapter.create_share_link("/BaluHost Shares/test.txt", link_type="edit")
         )
         assert link.startswith("https://")
+
+
+from unittest.mock import patch, AsyncMock, MagicMock
+
+from app.services.cloud.export_service import CloudExportService
+
+
+class TestCloudExportServiceStartExport:
+    def test_start_export_creates_job(self, db_session: Session):
+        conn = _create_connection(db_session)
+        service = CloudExportService(db_session)
+
+        job = service.start_export(
+            connection_id=conn.id,
+            user_id=1,
+            source_path="Documents/report.pdf",
+            cloud_folder="BaluHost Shares/",
+            link_type="view",
+            expires_at=None,
+        )
+
+        assert job.id is not None
+        assert job.status == "pending"
+        assert job.file_name == "report.pdf"
+        assert job.is_directory is False
+        assert job.cloud_folder == "BaluHost Shares/"
+
+    def test_start_export_directory(self, db_session: Session):
+        conn = _create_connection(db_session)
+        service = CloudExportService(db_session)
+
+        job = service.start_export(
+            connection_id=conn.id,
+            user_id=1,
+            source_path="Photos/Vacation/",
+            cloud_folder="BaluHost Shares/",
+            link_type="view",
+            expires_at=None,
+        )
+
+        assert job.file_name == "Vacation"
+        assert job.is_directory is True
+
+    def test_start_export_rejects_path_traversal(self, db_session: Session):
+        conn = _create_connection(db_session)
+        service = CloudExportService(db_session)
+
+        with pytest.raises(ValueError, match="path traversal"):
+            service.start_export(
+                connection_id=conn.id,
+                user_id=1,
+                source_path="../etc/passwd",
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                expires_at=None,
+            )
+
+    def test_start_export_invalid_connection(self, db_session: Session):
+        service = CloudExportService(db_session)
+
+        with pytest.raises(ValueError, match="not found"):
+            service.start_export(
+                connection_id=999,
+                user_id=1,
+                source_path="test.txt",
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                expires_at=None,
+            )
+
+
+class TestCloudExportServiceQueries:
+    def _create_job(self, db: Session, conn_id: int, user_id: int = 1, status: str = "ready") -> CloudExportJob:
+        job = CloudExportJob(
+            user_id=user_id,
+            connection_id=conn_id,
+            source_path="test.txt",
+            is_directory=False,
+            file_name="test.txt",
+            cloud_folder="BaluHost Shares/",
+            link_type="view",
+            status=status,
+            progress_bytes=1024,
+        )
+        db.add(job)
+        db.commit()
+        db.refresh(job)
+        return job
+
+    def test_get_user_exports(self, db_session: Session):
+        conn = _create_connection(db_session)
+        self._create_job(db_session, conn.id)
+        self._create_job(db_session, conn.id)
+
+        service = CloudExportService(db_session)
+        jobs = service.get_user_exports(user_id=1)
+        assert len(jobs) == 2
+
+    def test_get_user_exports_filters_by_user(self, db_session: Session):
+        conn = _create_connection(db_session)
+        self._create_job(db_session, conn.id, user_id=1)
+        self._create_job(db_session, conn.id, user_id=2)
+
+        service = CloudExportService(db_session)
+        jobs = service.get_user_exports(user_id=1)
+        assert len(jobs) == 1
+
+    def test_get_export_status(self, db_session: Session):
+        conn = _create_connection(db_session)
+        job = self._create_job(db_session, conn.id)
+
+        service = CloudExportService(db_session)
+        result = service.get_export_status(job.id, user_id=1)
+        assert result is not None
+        assert result.id == job.id
+
+    def test_get_export_status_wrong_user(self, db_session: Session):
+        conn = _create_connection(db_session)
+        job = self._create_job(db_session, conn.id, user_id=1)
+
+        service = CloudExportService(db_session)
+        result = service.get_export_status(job.id, user_id=999)
+        assert result is None
+
+    def test_get_export_statistics(self, db_session: Session):
+        conn = _create_connection(db_session)
+        self._create_job(db_session, conn.id, status="ready")
+        self._create_job(db_session, conn.id, status="failed")
+        self._create_job(db_session, conn.id, status="revoked")
+
+        service = CloudExportService(db_session)
+        stats = service.get_export_statistics(user_id=1)
+        assert stats.total_exports == 3
+        assert stats.active_exports == 1
+        assert stats.failed_exports == 1
+
+    def test_revoke_export(self, db_session: Session):
+        conn = _create_connection(db_session)
+        job = self._create_job(db_session, conn.id, status="ready")
+
+        service = CloudExportService(db_session)
+        with patch.object(service, '_delete_cloud_file', new_callable=AsyncMock):
+            result = service.revoke_export(job.id, user_id=1)
+
+        assert result is True
+        db_session.refresh(job)
+        assert job.status == "revoked"
