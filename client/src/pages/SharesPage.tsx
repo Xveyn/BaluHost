@@ -25,6 +25,8 @@ import { StatCard } from '../components/ui/StatCard';
 import CreateFileShareModal from '../components/CreateFileShareModal';
 import EditFileShareModal from '../components/EditFileShareModal';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
+import { useSortableTable } from '../hooks/useSortableTable';
+import { SortableHeader } from '../components/ui/SortableHeader';
 
 export default function SharesPage() {
   const { t } = useTranslation(['shares', 'common']);
@@ -204,6 +206,35 @@ export default function SharesPage() {
     return true;
   }) : [];
 
+  const {
+    sortedData: sortedFileShares,
+    sortKey: sharesSortKey,
+    sortDirection: sharesSortDir,
+    toggleSort: toggleSharesSort,
+  } = useSortableTable(filteredFileShares);
+
+  const {
+    sortedData: sortedSharedWithMe,
+    sortKey: sharedSortKey,
+    sortDirection: sharedSortDir,
+    toggleSort: toggleSharedSort,
+  } = useSortableTable(filteredSharedWithMe);
+
+  const {
+    sortedData: sortedCloudExports,
+    sortKey: cloudSortKey,
+    sortDirection: cloudSortDir,
+    toggleSort: toggleCloudSort,
+  } = useSortableTable(cloudExports, {
+    getValueForSort: {
+      provider: (job) => {
+        if (job.share_link?.includes('drive.google')) return 'Google Drive';
+        if (job.share_link?.includes('1drv.ms') || job.share_link?.includes('sharepoint')) return 'OneDrive';
+        return 'Cloud';
+      },
+    },
+  });
+
   const tabs = [
     { key: 'shares' as const, label: t('tabs.userShares'), shortLabel: t('tabs.shares'), icon: Users },
     { key: 'shared-with-me' as const, label: t('tabs.sharedWithMe'), shortLabel: t('tabs.received'), icon: Share2 },
@@ -372,16 +403,16 @@ export default function SharesPage() {
                         <table className="min-w-full">
                           <thead className="bg-slate-800/30 border-b border-slate-700/50">
                             <tr>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.owner')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.sharedWith')}</th>
+                              <SortableHeader label={t('table.file')} sortKey="file_name" activeSortKey={sharesSortKey} sortDirection={sharesSortDir} onSort={toggleSharesSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.owner')} sortKey="owner_username" activeSortKey={sharesSortKey} sortDirection={sharesSortDir} onSort={toggleSharesSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.sharedWith')} sortKey="shared_with_username" activeSortKey={sharesSortKey} sortDirection={sharesSortDir} onSort={toggleSharesSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.permissions')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
+                              <SortableHeader label={t('table.expires')} sortKey="expires_at" activeSortKey={sharesSortKey} sortDirection={sharesSortDir} onSort={toggleSharesSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.actions')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
-                            {filteredFileShares.map((share) => (
+                            {sortedFileShares.map((share) => (
                               <tr key={share.id} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                                   <div className="flex items-center gap-2">
@@ -446,7 +477,7 @@ export default function SharesPage() {
 
                       {/* Mobile Card View */}
                       <div className="lg:hidden space-y-3">
-                        {filteredFileShares.map((share) => (
+                        {sortedFileShares.map((share) => (
                           <div
                             key={share.id}
                             className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
@@ -541,15 +572,15 @@ export default function SharesPage() {
                         <table className="min-w-full">
                           <thead className="bg-slate-800/30 border-b border-slate-700/50">
                             <tr>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.owner')}</th>
+                              <SortableHeader label={t('table.file')} sortKey="file_name" activeSortKey={sharedSortKey} sortDirection={sharedSortDir} onSort={toggleSharedSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.owner')} sortKey="owner_username" activeSortKey={sharedSortKey} sortDirection={sharedSortDir} onSort={toggleSharedSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.permissions')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.shared')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
+                              <SortableHeader label={t('table.shared')} sortKey="shared_at" activeSortKey={sharedSortKey} sortDirection={sharedSortDir} onSort={toggleSharedSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.expires')} sortKey="expires_at" activeSortKey={sharedSortKey} sortDirection={sharedSortDir} onSort={toggleSharedSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
-                            {filteredSharedWithMe.map((item) => (
+                            {sortedSharedWithMe.map((item) => (
                               <tr key={item.share_id} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                                   <div className="flex items-center gap-2">
@@ -598,7 +629,7 @@ export default function SharesPage() {
 
                       {/* Mobile Card View */}
                       <div className="lg:hidden space-y-3">
-                        {filteredSharedWithMe.map((item) => (
+                        {sortedSharedWithMe.map((item) => (
                           <div
                             key={item.share_id}
                             className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
@@ -674,17 +705,17 @@ export default function SharesPage() {
                         <table className="min-w-full">
                           <thead className="bg-slate-800/30 border-b border-slate-700/50">
                             <tr>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.provider', 'Provider')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.file')}</th>
+                              <SortableHeader label={t('shares:cloudExport.provider', 'Provider')} sortKey="provider" activeSortKey={cloudSortKey} sortDirection={cloudSortDir} onSort={toggleCloudSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.file')} sortKey="file_name" activeSortKey={cloudSortKey} sortDirection={cloudSortDir} onSort={toggleCloudSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.link', 'Link')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('search.status', 'Status')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('shares:cloudExport.created', 'Created')}</th>
-                              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.expires')}</th>
+                              <SortableHeader label={t('search.status', 'Status')} sortKey="status" activeSortKey={cloudSortKey} sortDirection={cloudSortDir} onSort={toggleCloudSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('shares:cloudExport.created', 'Created')} sortKey="created_at" activeSortKey={cloudSortKey} sortDirection={cloudSortDir} onSort={toggleCloudSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+                              <SortableHeader label={t('table.expires')} sortKey="expires_at" activeSortKey={cloudSortKey} sortDirection={cloudSortDir} onSort={toggleCloudSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
                               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">{t('table.actions')}</th>
                             </tr>
                           </thead>
                           <tbody className="divide-y divide-slate-800/60">
-                            {cloudExports.map((job) => (
+                            {sortedCloudExports.map((job) => (
                               <tr key={job.id} className="hover:bg-slate-800/30 transition-colors">
                                 <td className="px-4 sm:px-6 py-3 sm:py-4">
                                   <span className="text-slate-300 font-medium">{getProviderLabel(job)}</span>
@@ -764,7 +795,7 @@ export default function SharesPage() {
 
                       {/* Mobile Card View */}
                       <div className="lg:hidden space-y-3">
-                        {cloudExports.map((job) => (
+                        {sortedCloudExports.map((job) => (
                           <div
                             key={job.id}
                             className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4"
