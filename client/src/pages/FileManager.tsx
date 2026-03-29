@@ -24,7 +24,7 @@ import { NewFolderDialog } from '../components/file-manager/NewFolderDialog';
 import { DeleteDialog } from '../components/file-manager/DeleteDialog';
 import { RenameDialog } from '../components/file-manager/RenameDialog';
 import { useUpload } from '../contexts/UploadContext';
-import CreateFileShareModal from '../components/CreateFileShareModal';
+import ShareFileModal from '../components/ShareFileModal';
 import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
 
 export default function FileManager() {
@@ -886,13 +886,15 @@ export default function FileManager() {
 
       {/* Share File Modal */}
       {sharingFile && sharingFile.file_id && (
-        <CreateFileShareModal
+        <ShareFileModal
           fileId={sharingFile.file_id}
+          fileName={sharingFile.name}
+          filePath={sharingFile.path}
           users={allUsers}
           onClose={() => setSharingFile(null)}
           onSuccess={() => {
             setSharingFile(null);
-            toast.success('File shared successfully');
+            toast.success(t('fileManager:messages.shared', 'Shared successfully'));
           }}
         />
       )}
