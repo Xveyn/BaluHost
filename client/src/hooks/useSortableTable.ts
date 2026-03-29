@@ -1,5 +1,5 @@
 // client/src/hooks/useSortableTable.ts
-import { useState, useMemo } from 'react';
+import { useState, useMemo, useRef } from 'react';
 
 export type SortDirection = 'asc' | 'desc' | null;
 
@@ -76,19 +76,23 @@ export function useSortableTable<T extends Record<string, unknown>>(
 
   const resetSort = () => setSort({ key: null, direction: null });
 
+  // Stabilize getValueForSort to avoid useMemo re-runs on every render
+  const gettersRef = useRef(options?.getValueForSort);
+  gettersRef.current = options?.getValueForSort;
+
   const sortedData = useMemo(() => {
     if (!sort.key || !sort.direction) return data;
 
     const key = sort.key;
     const dir = sort.direction === 'asc' ? 1 : -1;
-    const customGetter = options?.getValueForSort?.[key];
+    const customGetter = gettersRef.current?.[key];
 
     return [...data].sort((a, b) => {
       const valA = customGetter ? customGetter(a) : a[key];
       const valB = customGetter ? customGetter(b) : b[key];
       return dir * detectAndCompare(valA, valB);
     });
-  }, [data, sort.key, sort.direction, options?.getValueForSort]);
+  }, [data, sort.key, sort.direction]);
 
   return {
     sortedData,
