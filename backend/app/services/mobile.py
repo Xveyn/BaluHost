@@ -23,6 +23,7 @@ from app.schemas.mobile import (
     MobileRegistrationToken as MobileRegistrationTokenSchema,
     CameraBackupSettings,
     SyncFolderCreate,
+    SyncFolderUpdate,
 )
 from app.services import auth as auth_service
 from app.core import security
@@ -458,6 +459,24 @@ class MobileService:
         db.commit()
         db.refresh(sync_folder)
         return sync_folder
+
+    @staticmethod
+    def update_sync_folder(
+        db: Session,
+        folder_id: str,
+        update_data: SyncFolderUpdate
+    ) -> SyncFolder:
+        """Update a sync folder configuration and refresh last_sync."""
+        folder = db.query(SyncFolder).filter(SyncFolder.id == folder_id).first()
+        if not folder:
+            from fastapi import HTTPException
+            raise HTTPException(status_code=404, detail="Sync folder not found")
+        for field, value in update_data.model_dump(exclude_unset=True).items():
+            setattr(folder, field, value)
+        folder.last_sync = datetime.now(timezone.utc)
+        db.commit()
+        db.refresh(folder)
+        return folder
 
     @staticmethod
     def delete_sync_folder(db: Session, folder_id: str) -> None:

@@ -109,6 +109,14 @@ class SyncFolderCreate(BaseModel):
     auto_sync: bool = True
 
 
+class SyncFolderUpdate(BaseModel):
+    """Schema for updating a sync folder."""
+    remote_path: Optional[str] = None
+    sync_type: Optional[str] = None
+    auto_sync: Optional[bool] = None
+    status: Optional[str] = None
+
+
 class SyncFolder(SyncFolderCreate):
     """Schema for sync folder in responses."""
     id: str

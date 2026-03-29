@@ -33,6 +33,7 @@ class FileItem(BaseModel):
     owner_id: str | None = None
     mime_type: str | None = None
     file_id: int | None = None
+    checksum: str | None = None
     sync_info: list[SyncDeviceInfo] | None = None
     can_read: bool | None = None
     can_write: bool | None = None

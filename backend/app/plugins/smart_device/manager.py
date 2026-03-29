@@ -147,15 +147,13 @@ class SmartDeviceManager:
         db.commit()
         db.refresh(device)
 
-        # Notify the plugin about the new device (best-effort)
+        # Notify the plugin about the new device (best-effort).
+        # This method is sync and runs in an AnyIO worker thread (via FastAPI),
+        # so we use anyio.from_thread.run() to call back into the event loop.
         if data.config:
             try:
-                import asyncio
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(
-                        plugin.connect_device(str(device.id), data.config)
-                    )
+                from anyio.from_thread import run as _anyio_run
+                _anyio_run(plugin.connect_device, str(device.id), data.config)
             except Exception as exc:
                 logger.warning(
                     "Could not schedule connect_device for device %d: %s",
@@ -237,10 +235,8 @@ class SmartDeviceManager:
         plugin = self._plugins.get(device.plugin_name)
         if plugin is not None:
             try:
-                import asyncio
-                loop = asyncio.get_event_loop()
-                if loop.is_running():
-                    asyncio.ensure_future(plugin.disconnect_device(str(device.id)))
+                from anyio.from_thread import run as _anyio_run
+                _anyio_run(plugin.disconnect_device, str(device.id))
             except Exception as exc:
                 logger.debug("disconnect_device for %d failed: %s", device.id, exc)
 
