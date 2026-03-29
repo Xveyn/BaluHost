@@ -1,12 +1,14 @@
 import { useTranslation } from 'react-i18next';
-import { ArrowUpDown, Trash2, Edit, CheckCircle, XCircle } from 'lucide-react';
+import { Trash2, Edit, CheckCircle, XCircle } from 'lucide-react';
+import { SortableHeader } from '../ui/SortableHeader';
+import type { SortDirection } from '../../hooks/useSortableTable';
 import type { UserPublic } from '../../api/users';
 
 interface UserTableProps {
   users: UserPublic[];
   selectedUsers: Set<number>;
-  sortBy: string;
-  sortOrder: 'asc' | 'desc';
+  sortBy: string | null;
+  sortOrder: SortDirection;
   onSort: (field: string) => void;
   onToggleSelection: (id: number) => void;
   onToggleAll: () => void;
@@ -19,7 +21,7 @@ export function UserTable({
   users,
   selectedUsers,
   sortBy,
-  sortOrder: _sortOrder,
+  sortOrder,
   onSort,
   onToggleSelection,
   onToggleAll,
@@ -43,26 +45,11 @@ export function UserTable({
                   className="h-4 w-4 rounded border-slate-700 bg-slate-900 text-sky-500 focus:ring-sky-500"
                 />
               </th>
-              <th className="px-6 py-4">
-                <button onClick={() => onSort('username')} className="flex items-center gap-1 hover:text-slate-300">
-                  {t('users.fields.username')}
-                  {sortBy === 'username' && <ArrowUpDown className="h-3 w-3" />}
-                </button>
-              </th>
-              <th className="px-6 py-4">{t('users.fields.email')}</th>
-              <th className="px-6 py-4">
-                <button onClick={() => onSort('role')} className="flex items-center gap-1 hover:text-slate-300">
-                  {t('users.fields.role')}
-                  {sortBy === 'role' && <ArrowUpDown className="h-3 w-3" />}
-                </button>
-              </th>
-              <th className="px-6 py-4">{t('users.fields.status')}</th>
-              <th className="px-6 py-4">
-                <button onClick={() => onSort('created_at')} className="flex items-center gap-1 hover:text-slate-300">
-                  {t('users.fields.created')}
-                  {sortBy === 'created_at' && <ArrowUpDown className="h-3 w-3" />}
-                </button>
-              </th>
+              <SortableHeader label={t('users.fields.username')} sortKey="username" activeSortKey={sortBy} sortDirection={sortOrder} onSort={onSort} className="px-6 py-4" />
+              <SortableHeader label={t('users.fields.email')} sortKey="email" activeSortKey={sortBy} sortDirection={sortOrder} onSort={onSort} className="px-6 py-4" />
+              <SortableHeader label={t('users.fields.role')} sortKey="role" activeSortKey={sortBy} sortDirection={sortOrder} onSort={onSort} className="px-6 py-4" />
+              <SortableHeader label={t('users.fields.status')} sortKey="is_active" activeSortKey={sortBy} sortDirection={sortOrder} onSort={onSort} className="px-6 py-4" />
+              <SortableHeader label={t('users.fields.created')} sortKey="created_at" activeSortKey={sortBy} sortDirection={sortOrder} onSort={onSort} className="px-6 py-4" />
               <th className="px-6 py-4">{t('users.fields.actions')}</th>
             </tr>
           </thead>
