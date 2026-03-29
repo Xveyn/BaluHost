@@ -43,8 +43,8 @@ export function useUserManagement() {
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [roleFilter, setRoleFilter] = useState('');
   const [statusFilter, setStatusFilter] = useState('');
-  const [sortBy, setSortBy] = useState('created_at');
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
+  const [sortBy, setSortBy] = useState<string | null>(null);
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout>>();
 
   // Selection
@@ -69,8 +69,8 @@ export function useUserManagement() {
         search: debouncedSearch || undefined,
         role: roleFilter || undefined,
         is_active: statusFilter || undefined,
-        sort_by: sortBy,
-        sort_order: sortOrder,
+        sort_by: sortBy || undefined,
+        sort_order: sortBy && sortOrder ? sortOrder : undefined,
       });
 
       setUsers(data.users);
@@ -95,15 +95,16 @@ export function useUserManagement() {
 
   // Sort handler
   const handleSort = useCallback((field: string) => {
-    setSortBy((prev) => {
-      if (prev === field) {
-        setSortOrder((o) => (o === 'asc' ? 'desc' : 'asc'));
-        return prev;
-      }
+    if (sortBy !== field) {
+      setSortBy(field);
       setSortOrder('asc');
-      return field;
-    });
-  }, []);
+    } else if (sortOrder === 'asc') {
+      setSortOrder('desc');
+    } else {
+      setSortBy(null);
+      setSortOrder(null);
+    }
+  }, [sortBy, sortOrder]);
 
   // Selection handlers
   const toggleUserSelection = useCallback((userId: number) => {

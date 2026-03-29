@@ -24,7 +24,7 @@ import { NewFolderDialog } from '../components/file-manager/NewFolderDialog';
 import { DeleteDialog } from '../components/file-manager/DeleteDialog';
 import { RenameDialog } from '../components/file-manager/RenameDialog';
 import { useUpload } from '../contexts/UploadContext';
-import CreateFileShareModal from '../components/CreateFileShareModal';
+import ShareFileModal from '../components/ShareFileModal';
 import type { StorageInfo, StorageMountpoint, FileItem, ApiFileItem, PermissionRule } from '../components/file-manager/types';
 
 export default function FileManager() {
@@ -246,24 +246,15 @@ export default function FileManager() {
     if (files.length > 0) loadTrackingInfo();
   }, [files]);
 
-  // Load owner names when files change
+  // Build owner name cache from backend-provided owner_name field
   useEffect(() => {
-    const fetchOwnerNames = async (ownerIds: (string | number)[]) => {
-      const uniqueIds = Array.from(new Set(ownerIds.filter(id => id !== undefined && id !== null && String(id) !== 'null')));
-      if (uniqueIds.length === 0) return;
-      try {
-        const data = await getUsers();
-        const cache: Record<string, string> = {};
-        for (const u of data.users) {
-          cache[u.id] = u.username;
-        }
-        setUserCache(cache);
-      } catch {
-        // ignore
+    const cache: Record<string, string> = {};
+    for (const f of files) {
+      if (f.ownerId != null && f.ownerName && f.ownerName !== 'null') {
+        cache[f.ownerId] = f.ownerName;
       }
-    };
-    const ownerIds = files.map(f => f.ownerId).filter(id => id !== undefined && id !== null && String(id) !== 'null') as (string | number)[];
-    fetchOwnerNames(ownerIds);
+    }
+    setUserCache(cache);
   }, [files]);
 
   if (!user) return null;
@@ -886,13 +877,15 @@ export default function FileManager() {
 
       {/* Share File Modal */}
       {sharingFile && sharingFile.file_id && (
-        <CreateFileShareModal
+        <ShareFileModal
           fileId={sharingFile.file_id}
+          fileName={sharingFile.name}
+          filePath={sharingFile.path}
           users={allUsers}
           onClose={() => setSharingFile(null)}
           onSuccess={() => {
             setSharingFile(null);
-            toast.success('File shared successfully');
+            toast.success(t('fileManager:messages.shared', 'Shared successfully'));
           }}
         />
       )}

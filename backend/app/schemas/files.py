@@ -31,6 +31,7 @@ class FileItem(BaseModel):
     type: Literal["file", "directory"]
     modified_at: datetime
     owner_id: str | None = None
+    owner_name: str | None = None
     mime_type: str | None = None
     file_id: int | None = None
     checksum: str | None = None

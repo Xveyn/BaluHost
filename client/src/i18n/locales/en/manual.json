@@ -1,0 +1,14 @@
+{
+  "title": "User Manual",
+  "version": "Documentation for v{{version}}",
+  "tabs": {
+    "setup": "Setup",
+    "wiki": "Wiki",
+    "api": "API Reference"
+  },
+  "staleness": "Last verified for v{{version}}",
+  "upToDate": "Up to date for v{{version}}",
+  "backToOverview": "Back to overview",
+  "noArticles": "No articles yet",
+  "searchPlaceholder": "Search articles..."
+}

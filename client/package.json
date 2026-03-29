@@ -1,7 +1,7 @@
 {
   "name": "baluhost-client",
   "private": true,
-  "version": "1.20.5",
+  "version": "1.21.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -27,12 +27,14 @@
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^16.5.4",
     "react-is": "^19.2.3",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.4.1"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.1",
     "@playwright/test": "^1.57.0",
+    "@tailwindcss/typography": "^0.5.19",
     "@testing-library/jest-dom": "^6.0.0",
     "@testing-library/react": "^14.0.0",
     "@types/node": "^24.10.1",

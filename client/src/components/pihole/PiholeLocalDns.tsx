@@ -6,6 +6,8 @@ import {
   addLocalDns,
   removeLocalDns,
 } from "../../api/pihole";
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { SortableHeader } from '../ui/SortableHeader';
 
 interface DnsRecord {
   domain: string;
@@ -19,6 +21,8 @@ export default function PiholeLocalDns() {
   const [newIp, setNewIp] = useState("");
   const [adding, setAdding] = useState(false);
   const [removingDomain, setRemovingDomain] = useState<string | null>(null);
+
+  const { sortedData: sortedRecords, sortKey, sortDirection, toggleSort } = useSortableTable(records);
 
   const fetchRecords = useCallback(async () => {
     setLoading(true);
@@ -98,13 +102,13 @@ export default function PiholeLocalDns() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-                <th className="pb-2 pr-4">Domain</th>
-                <th className="pb-2 pr-4">IP Address</th>
+                <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label="IP Address" sortKey="ip" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
                 <th className="pb-2 w-10" />
               </tr>
             </thead>
             <tbody>
-              {records.map((r, i) => (
+              {sortedRecords.map((r, i) => (
                 <tr
                   key={i}
                   className="border-b border-slate-700/30 hover:bg-slate-700/20"

@@ -5,7 +5,9 @@
     "userShares": "My Shares",
     "shares": "Shares",
     "sharedWithMe": "Shared With Me",
-    "received": "Received"
+    "received": "Received",
+    "cloudExports": "Cloud Shares",
+    "cloudExportsShort": "Cloud"
   },
   "stats": {
     "userShares": "My Shares",
@@ -112,5 +114,49 @@
     "allCompleted": "All files uploaded successfully!",
     "someFailed": "Some files failed to upload",
     "error": "Error: {{message}}"
+  },
+  "cloudExport": {
+    "tab": "Cloud Shares",
+    "tabShort": "Cloud",
+    "provider": "Provider",
+    "targetFolder": "Target Folder",
+    "targetFolderHint": "Folder in your cloud drive",
+    "linkType": "Link Type",
+    "linkTypeView": "View only",
+    "linkTypeEdit": "Can edit",
+    "noConnections": "No cloud accounts connected",
+    "connectHint": "Connect a Google Drive or OneDrive account in Cloud Import first.",
+    "goToCloudImport": "Go to Cloud Import",
+    "upgradeScope": "Grant write access",
+    "upgradeScopeHint": "Your cloud connection needs write permission for exports.",
+    "startExport": "Share via Cloud",
+    "exporting": "Starting export...",
+    "exportStarted": "Cloud export started — upload is running in the background",
+    "status": {
+      "pending": "Pending",
+      "uploading": "Uploading",
+      "creating_link": "Creating link",
+      "ready": "Ready",
+      "failed": "Failed",
+      "revoked": "Revoked"
+    },
+    "copyLink": "Copy link",
+    "linkCopied": "Link copied to clipboard",
+    "revoke": "Revoke",
+    "revokeConfirm": "This will delete the file from your cloud drive and invalidate the sharing link. This cannot be undone.",
+    "revoked": "Export revoked",
+    "revokeFailed": "Failed to revoke export",
+    "retry": "Retry",
+    "retryStarted": "Retrying export...",
+    "retryFailed": "Failed to retry export",
+    "cancel": "Cancel",
+    "stats": {
+      "activeExports": "Active Cloud Shares",
+      "uploadVolume": "Upload Volume"
+    },
+    "empty": {
+      "noExports": "No cloud exports yet",
+      "noExportsDesc": "Share files externally by using the Cloud Export tab in the Share dialog."
+    }
   }
 }

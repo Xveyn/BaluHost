@@ -37,7 +37,7 @@ const SystemMonitor = lazyWithRetry(() => import('./pages/SystemMonitor'));
 const FileManager = isDesktop ? lazyWithRetry(() => import('./pages/FileManager')) : null;
 const UserManagement = isDesktop ? lazyWithRetry(() => import('./pages/UserManagement')) : null;
 const SchedulerDashboard = isDesktop ? lazyWithRetry(() => import('./pages/SchedulerDashboard')) : null;
-const ApiCenterPage = isDesktop ? lazyWithRetry(() => import('./pages/ApiCenterPage')) : null;
+const UserManualPage = isDesktop ? lazyWithRetry(() => import('./pages/UserManualPage')) : null;
 const SharesPage = isDesktop ? lazyWithRetry(() => import('./pages/SharesPage')) : null;
 const SettingsPage = isDesktop ? lazyWithRetry(() => import('./pages/SettingsPage')) : null;
 const AdminDatabase = isDesktop ? lazyWithRetry(() => import('./pages/AdminDatabase')) : null;
@@ -210,7 +210,8 @@ function AppRoutes() {
         {NotificationsArchivePage && <Route path="/notifications" element={user ? <Layout><NotificationsArchivePage /></Layout> : <Navigate to="/login" />} />}
         {isDesktop && <Route path="/notifications/settings" element={<Navigate to="/settings?tab=notifications" replace />} />}
         {SyncSettings && <Route path="/sync" element={user ? <Layout><SyncSettings /></Layout> : <Navigate to="/login" />} />}
-        {ApiCenterPage && <Route path="/docs" element={user ? <Layout><ApiCenterPage /></Layout> : <Navigate to="/login" />} />}
+        {UserManualPage && <Route path="/manual" element={user ? <Layout><UserManualPage /></Layout> : <Navigate to="/login" />} />}
+        {isDesktop && <Route path="/docs" element={<Navigate to="/manual" replace />} />}
         {PluginsPage && <Route path="/plugins" element={isAdmin ? <Layout><PluginsPage /></Layout> : <Navigate to="/" />} />}
         {PluginPage && <Route path="/plugins/:pluginName/*" element={user ? <Layout><PluginPage /></Layout> : <Navigate to="/login" />} />}
         {UpdatePage && <Route path="/updates" element={isAdmin ? <Layout><UpdatePage /></Layout> : <Navigate to="/" />} />}

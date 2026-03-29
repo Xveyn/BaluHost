@@ -201,9 +201,11 @@ async def oauth_callback_redirect(
     except (json.JSONDecodeError, KeyError):
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
+    upgrade_connection_id = state_data.get("upgrade_connection_id")
+
     service = CloudService(db)
     try:
-        service.handle_oauth_callback(provider, code, user_id)
+        service.handle_oauth_callback(provider, code, user_id, upgrade_connection_id=upgrade_connection_id)
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
         return RedirectResponse(url=f"/cloud-import?oauth_error={quote(str(e))}")
@@ -226,9 +228,11 @@ async def oauth_callback(
     except (json.JSONDecodeError, KeyError):
         raise HTTPException(status_code=400, detail="Invalid OAuth state")
 
+    upgrade_connection_id = state_data.get("upgrade_connection_id")
+
     service = CloudService(db)
     try:
-        conn = service.handle_oauth_callback(provider, body.code, user_id)
+        conn = service.handle_oauth_callback(provider, body.code, user_id, upgrade_connection_id=upgrade_connection_id)
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
         raise HTTPException(status_code=400, detail=f"OAuth failed: {e}")

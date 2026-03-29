@@ -295,6 +295,17 @@ class TestCreateFolder:
 
         assert result.exists()
 
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+    def test_create_folder_sets_permissions(self, storage_root, db_session, user_public):
+        """Test that created folders get 2775 permissions."""
+        import stat
+        from app.services.files.storage_permissions import STORAGE_DIR_MODE
+
+        result = file_ops.create_folder("", "permtest", owner=user_public, db=db_session)
+
+        actual = stat.S_IMODE(result.stat().st_mode)
+        assert actual == STORAGE_DIR_MODE
+
 
 class TestDeletePath:
     """Tests for delete_path function."""
@@ -521,6 +532,30 @@ class TestSaveUploads:
         assert len(saved) == 1
         # Default filename is "upload.bin"
         assert (storage_root / "upload.bin").exists()
+
+
+    @pytest.mark.asyncio
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX permissions only")
+    async def test_save_upload_sets_file_permissions(self, storage_root, db_session, user_public):
+        """Test that uploaded files get 0664 permissions."""
+        import stat
+        from app.services.files.storage_permissions import STORAGE_FILE_MODE
+
+        upload = MagicMock(spec=UploadFile)
+        upload.filename = "perms.txt"
+        upload.read = AsyncMock(return_value=b"test data")
+        upload.close = AsyncMock()
+
+        saved = await file_ops.save_uploads(
+            relative_path="",
+            uploads=[upload],
+            user=user_public,
+            db=db_session,
+        )
+
+        dest = storage_root / "perms.txt"
+        actual = stat.S_IMODE(dest.stat().st_mode)
+        assert actual == STORAGE_FILE_MODE
 
 
 class TestGetOwner:

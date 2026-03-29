@@ -7,7 +7,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import Callable, Optional
 
-from app.services.cloud.adapters.base import CloudAdapter, CloudFile, DownloadResult
+from app.services.cloud.adapters.base import CloudAdapter, CloudFile, DownloadResult, UploadResult
 
 logger = logging.getLogger(__name__)
 
@@ -282,6 +282,135 @@ class RcloneAdapter(CloudAdapter):
             except Exception:
                 pass
             self._config_file = None
+
+    async def upload_file(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int], None]] = None,
+    ) -> None:
+        """Upload a single file using rclone copyto."""
+        remote = f"{self.remote_name}:{remote_path.lstrip('/')}"
+
+        if not progress_callback:
+            await self._run_rclone("copyto", str(local_path), remote, timeout=3600)
+            return
+
+        config_path = self._get_config_path()
+        cmd = [
+            "rclone", "--config", config_path,
+            "copyto", str(local_path), remote,
+            "--stats", "1s", "--stats-one-line", "-v",
+        ]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        if proc.stderr:
+            while True:
+                line = await proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode().strip()
+                if "Transferred:" in text and "/" in text:
+                    try:
+                        parts = text.split("Transferred:")[1].strip()
+                        transferred_part = parts.split("/")[0].strip()
+                        bytes_done = self._parse_size(transferred_part)
+                        if bytes_done is not None:
+                            progress_callback(bytes_done)
+                    except (IndexError, ValueError):
+                        pass
+
+        await proc.wait()
+        if proc.returncode != 0:
+            raise RuntimeError(f"rclone copyto upload failed (exit {proc.returncode})")
+
+        if local_path.exists():
+            progress_callback(local_path.stat().st_size)
+
+    async def upload_folder(
+        self,
+        local_path: Path,
+        remote_path: str,
+        progress_callback: Optional[Callable[[int, Optional[str]], None]] = None,
+    ) -> UploadResult:
+        """Upload a folder using rclone copy."""
+        remote = f"{self.remote_name}:{remote_path.lstrip('/')}"
+
+        config_path = self._get_config_path()
+        cmd = [
+            "rclone", "--config", config_path,
+            "copy", str(local_path), remote,
+            "--stats", "2s", "--stats-one-line", "-v",
+        ]
+
+        proc = await asyncio.create_subprocess_exec(
+            *cmd,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+
+        result = UploadResult()
+        _current_file: Optional[str] = None
+
+        if proc.stderr:
+            while True:
+                line = await proc.stderr.readline()
+                if not line:
+                    break
+                text = line.decode().strip()
+
+                if text.startswith("* ") and ":" in text:
+                    fname = text[2:].split(":")[0].strip()
+                    if fname:
+                        _current_file = fname
+
+                if "Transferred:" in text and "/" in text:
+                    try:
+                        parts = text.split("Transferred:")[1].strip()
+                        transferred_part = parts.split("/")[0].strip()
+                        bytes_done = self._parse_size(transferred_part)
+                        if progress_callback and bytes_done is not None:
+                            progress_callback(bytes_done, _current_file)
+                    except (IndexError, ValueError):
+                        pass
+
+        await proc.wait()
+
+        if proc.returncode != 0:
+            stderr_text = ""
+            if proc.stderr:
+                remaining = await proc.stderr.read()
+                stderr_text = remaining.decode().strip()
+            result.errors.append(f"rclone exit code {proc.returncode}: {stderr_text}")
+
+        for f in local_path.rglob("*"):
+            if f.is_file():
+                result.files_transferred += 1
+                result.bytes_transferred += f.stat().st_size
+
+        return result
+
+    async def create_share_link(
+        self, remote_path: str, link_type: str = "view"
+    ) -> str:
+        """Create a sharing link using rclone link."""
+        remote = f"{self.remote_name}:{remote_path.lstrip('/')}"
+        output = await self._run_rclone("link", remote, timeout=60)
+        # rclone link outputs the URL on the last non-empty line
+        lines = [l.strip() for l in output.strip().splitlines() if l.strip()]
+        if not lines:
+            raise RuntimeError("rclone link returned no output")
+        return lines[-1]
+
+    async def delete_file(self, remote_path: str) -> None:
+        """Delete a file/folder from the cloud using rclone delete."""
+        remote = f"{self.remote_name}:{remote_path.lstrip('/')}"
+        await self._run_rclone("delete", remote, timeout=60)
 
     @staticmethod
     def generate_config(provider: str, token_json: str) -> tuple[str, str]:

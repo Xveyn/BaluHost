@@ -7,6 +7,44 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.21.0] - 2026-03-29
+
+### Added
+- **Cloud Export** — Share files to cloud providers (Google Drive, Dropbox, OneDrive) with OAuth2 integration, upload/share-link adapters, scope checks, and retry support
+  - Cloud Shares tab in SharesPage with stats and job list
+  - Unified ShareFileModal with internal + cloud export tabs
+  - Full i18n support (en + de)
+  - Integration tests for export flow
+- **User Manual Page** — Three-tab layout (Setup, Wiki, API Reference) with markdown rendering, replacing the old ApiCenterPage
+  - ArticleCard, ArticleView, VersionBadge components
+  - useManualContent hook with initial cloud-import article
+- **Storage Permissions** — Permission constants and helpers applied across upload, folder creation, and home directory operations
+- **Sortable Tables** — Reusable SortableHeader component and useSortableTable hook with 3-stage sort cycle (asc → desc → default)
+  - Sortable columns in FileListView (Name, Size, Modified, Owner)
+  - Sortable columns in SharesPage (all 3 tabs)
+  - Sortable columns in PiholeLocalDns (Domain, IP)
+  - Sortable columns in UserTable (all columns)
+  - Upgraded AdminDataTable to 3-stage sort cycle
+- **SSL Setup** — Self-signed SSL setup script for LAN deployments
+
+### Changed
+- Removed old ApiCenterPage (replaced by UserManualPage)
+- Removed unused Docker and monitoring stack files
+- Added `@tailwindcss/typography` and `react-markdown` dependencies
+
+### Fixed
+- **FileManager** — Owner name display for non-admin users now resolved correctly
+- **TypeScript** — Relaxed useSortableTable generic constraint, fixing 157 TS errors
+- **Pi-hole** — Handle naive datetimes from SQLite in ad discovery background poll
+- **Cloud Export** — Type safety fixes and added delete_file to adapter base class
+- **Manual** — TypeScript error in lucide icon resolution
+- **Storage** — Permissions applied consistently across upload, folder creation, and home dirs
+
+### Performance
+- Stabilized getValueForSort reference to avoid unnecessary re-sorts in sortable tables
+
+---
+
 ## [1.20.5] - 2026-03-29
 
 ### Added

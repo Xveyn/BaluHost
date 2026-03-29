@@ -28,6 +28,11 @@ from app.schemas.user import UserPublic
 from app.services.files import metadata_db as file_metadata_db
 from app.services.files import path_utils
 from app.services.files.folder_size import get_folder_size, invalidate_folder_sizes_for_path
+from app.services.files.storage_permissions import (
+    ensure_dir_with_permissions,
+    set_storage_dir_permissions,
+    set_storage_file_permissions,
+)
 from app.services.audit.logger_db import get_audit_logger_db
 from app.services.permissions import PermissionDeniedError, can_view, ensure_owner_or_privileged
 
@@ -212,6 +217,25 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
                 metadata_map[rel] = meta
                 owner_map[rel] = str(meta.owner_id)
 
+    # ── Batch fetch: owner usernames (1 query) ─────────────────────────────
+    owner_name_map: dict[str, str] = {}
+    if db:
+        unique_owner_ids = {oid for oid in owner_map.values() if oid is not None}
+        if unique_owner_ids:
+            from app.models.user import User as UserModel
+            int_ids = []
+            for oid in unique_owner_ids:
+                try:
+                    int_ids.append(int(oid))
+                except (ValueError, TypeError):
+                    pass
+            if int_ids:
+                users = db.query(UserModel.id, UserModel.username).filter(
+                    UserModel.id.in_(int_ids)
+                ).all()
+                for uid, uname in users:
+                    owner_name_map[str(uid)] = uname
+
     # ── Pass 2: build FileItem list using pre-fetched data ────────────────
     items: list[FileItem] = []
     for entry, relative_entry, is_dir in entries:
@@ -249,6 +273,7 @@ def list_directory(relative_path: str = "", user: UserPublic | None = None, db: 
             type="directory" if is_dir else "file",
             modified_at=datetime.fromtimestamp(stats.st_mtime, tz=timezone.utc),
             owner_id=entry_owner,
+            owner_name=owner_name_map.get(entry_owner) if entry_owner else None,
             mime_type=mime_type,
             file_id=file_id,
             checksum=checksum,
@@ -302,7 +327,7 @@ async def save_uploads(
             override_filename = last_part
             target = target.parent
 
-    target.mkdir(parents=True, exist_ok=True)
+    ensure_dir_with_permissions(target)
 
     if relative_path and not path_utils.is_in_shared_dir(relative_path):
         # Determine ownership rules:
@@ -370,12 +395,13 @@ async def save_uploads(
             if len(file_parts) > 1:
                 subfolder = target / Path(*file_parts[:-1])
                 subfolder.mkdir(parents=True, exist_ok=True)
+                set_storage_dir_permissions(subfolder)
             destination = target / file_relative_path
         else:
             filename = override_filename or upload.filename or "upload.bin"
             destination = target / filename
 
-        await asyncio.to_thread(destination.parent.mkdir, parents=True, exist_ok=True)
+        await asyncio.to_thread(ensure_dir_with_permissions, destination.parent)
         try:
             existing_size = destination.stat().st_size if destination.exists() else 0
 
@@ -400,6 +426,7 @@ async def save_uploads(
                     await asyncio.to_thread(f.close)
                 await upload.close()
                 file_checksum = hasher.hexdigest()
+                await asyncio.to_thread(set_storage_file_permissions, destination)
             else:
                 # Fallback: read entire content at once (small files or test mocks).
                 data = await upload.read()
@@ -410,6 +437,7 @@ async def save_uploads(
                     return hashlib.sha256(data).hexdigest()
 
                 file_checksum = await asyncio.to_thread(_write_and_hash_small)
+                await asyncio.to_thread(set_storage_file_permissions, destination)
                 written = len(data)
 
             # Post-write check for uploads where size was unknown beforehand
@@ -604,7 +632,7 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
     audit = get_audit_logger_db()
 
     base = path_utils._resolve_path(parent_path)
-    base.mkdir(parents=True, exist_ok=True)
+    ensure_dir_with_permissions(base)
 
     if base == path_utils.ROOT_DIR and path_utils.is_system_directory(name):
         raise SystemDirectoryError(f"Cannot create folder with reserved name '{name}'")
@@ -615,6 +643,7 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
 
     folder = base / name
     folder.mkdir(parents=True, exist_ok=True)
+    set_storage_dir_permissions(folder)
     owner_id = owner.id if owner else None
     relative_folder = str(folder.relative_to(path_utils.ROOT_DIR).as_posix())
 
@@ -872,6 +901,7 @@ def list_shared_with_me(user: UserPublic, db: Session) -> list[FileItem]:
             type="directory" if file_meta.is_directory else "file",
             modified_at=file_meta.updated_at or file_meta.created_at,
             owner_id=str(share.owner_id),
+            owner_name=owner_name,
             mime_type=file_meta.mime_type,
             file_id=file_meta.id,
             can_read=share.can_read,

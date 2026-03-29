@@ -12,6 +12,7 @@ from app.core.config import Settings, settings
 from app.core.database import SessionLocal
 from app.models.user import User
 from app.schemas.user import UserCreate, UserPublic, UserUpdate
+from app.services.files.storage_permissions import set_storage_dir_permissions
 
 pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 logger = logging.getLogger(__name__)
@@ -39,6 +40,7 @@ def _create_home_directory(username: str, user_id: int, db: Optional[Session] = 
     storage_root = _get_storage_root()
     home_dir = storage_root / username
     home_dir.mkdir(parents=True, exist_ok=True)
+    set_storage_dir_permissions(home_dir)
 
     existing = get_metadata(username, db=db)
     if not existing:
@@ -67,6 +69,7 @@ def ensure_user_home_directories(db: Optional[Session] = None) -> None:
         # Ensure Shared folder
         shared_dir = storage_root / SHARED_DIR_NAME
         shared_dir.mkdir(parents=True, exist_ok=True)
+        set_storage_dir_permissions(shared_dir)
         existing_shared = get_metadata(SHARED_DIR_NAME, db=db)
         if not existing_shared:
             # Shared folder owned by admin (owner_id is NOT NULL in DB)

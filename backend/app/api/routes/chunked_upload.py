@@ -38,6 +38,10 @@ from app.services.files.operations import (
     get_owner,
     is_in_shared_dir,
 )
+from app.services.files.storage_permissions import (
+    ensure_dir_with_permissions,
+    set_storage_file_permissions,
+)
 from app.services.permissions import PermissionDeniedError, ensure_owner_or_privileged
 from app.services.upload_progress import get_upload_progress_manager
 from app.core.rate_limiter import user_limiter, get_limit
@@ -216,9 +220,9 @@ async def chunked_complete(
 
     # --- Move temp file to final destination ---
     target_dir = _resolve_path(session.target_path)
-    target_dir.mkdir(parents=True, exist_ok=True)
+    ensure_dir_with_permissions(target_dir)
     destination = target_dir / session.filename
-    destination.parent.mkdir(parents=True, exist_ok=True)
+    ensure_dir_with_permissions(destination.parent)
 
     file_size = await asyncio.to_thread(lambda: temp_path.stat().st_size)
 
@@ -236,6 +240,7 @@ async def chunked_complete(
         )
 
     await asyncio.to_thread(shutil.move, str(temp_path), str(destination))
+    await asyncio.to_thread(set_storage_file_permissions, destination)
 
     relative_destination = str(destination.relative_to(ROOT_DIR).as_posix())
 

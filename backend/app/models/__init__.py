@@ -62,6 +62,7 @@ from app.models.update_history import (
 from app.models.energy_price_config import EnergyPriceConfig
 from app.models.ssd_file_cache import SSDCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
+from app.models.cloud_export import CloudExportJob
 from app.models.sleep import SleepConfig, SleepStateLog
 from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
@@ -145,6 +146,7 @@ __all__ = [
     "CloudOAuthConfig",
     "CloudConnection",
     "CloudImportJob",
+    "CloudExportJob",
     "SleepConfig",
     "SleepStateLog",
     "ApiKey",
