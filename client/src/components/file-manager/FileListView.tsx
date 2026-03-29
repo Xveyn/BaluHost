@@ -17,6 +17,8 @@ import {
 } from 'lucide-react';
 import { formatBytes } from '../../lib/formatters';
 import type { FileItem } from './types';
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { SortableHeader } from '../ui/SortableHeader';
 
 export interface FileListViewProps {
   files: FileItem[];
@@ -112,6 +114,11 @@ export function FileListView({
   onDragOver,
   onDrop,
 }: FileListViewProps) {
+  const { sortedData, sortKey, sortDirection, toggleSort } = useSortableTable(files, {
+    getValueForSort: {
+      owner: (file) => renderOwnerName(file, userCache),
+    },
+  });
   return (
     <div
       className={`card border-slate-800/60 bg-slate-900/55 transition-all relative ${_dragActive ? 'border-sky-500 bg-sky-500/10' : ''}`}
@@ -137,23 +144,23 @@ export function FileListView({
         <table className="min-w-full">
           <thead className="bg-slate-800/30 border-b border-slate-700/50">
             <tr>
-              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Name</th>
+              <SortableHeader label="Name" sortKey="name" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Type</th>
-              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Size</th>
-              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Modified</th>
-              <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Owner</th>
+              <SortableHeader label="Size" sortKey="size" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+              <SortableHeader label="Modified" sortKey="modifiedAt" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
+              <SortableHeader label="Owner" sortKey="owner" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider" />
               <th className="px-4 sm:px-6 py-3 sm:py-4 text-left text-xs font-semibold text-slate-400 uppercase tracking-wider">Actions</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-800/60">
-            {files.length === 0 ? (
+            {sortedData.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-6 py-12 text-center text-sm text-slate-500">
                   No files found
                 </td>
               </tr>
             ) : (
-              files.map((file) => (
+              sortedData.map((file) => (
                 <tr
                   key={file.path}
                   className="hover:bg-slate-800/30 transition-colors"
@@ -310,12 +317,12 @@ export function FileListView({
 
       {/* Mobile Card View */}
       <div className="lg:hidden space-y-3">
-        {files.length === 0 ? (
+        {sortedData.length === 0 ? (
           <div className="py-12 text-center text-sm text-slate-500">
             No files found
           </div>
         ) : (
-          files.map((file) => (
+          sortedData.map((file) => (
             <div
               key={file.path}
               className="rounded-xl border border-slate-800/60 bg-slate-950/70 p-4 space-y-3 touch-manipulation active:bg-slate-900/50 transition"
