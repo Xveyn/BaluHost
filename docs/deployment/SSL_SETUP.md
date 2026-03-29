@@ -624,6 +624,121 @@ ssl_trusted_certificate /path/to/ca-bundle.crt;
 
 ---
 
+## Self-Signed Certificate (LAN-only)
+
+For LAN-only or VPN-only deployments without a public domain, use a self-signed certificate instead of Let's Encrypt.
+
+### Quick Start
+
+```bash
+cd /opt/baluhost
+sudo ./deploy/ssl/setup-selfsigned.sh --ip 192.168.178.53
+```
+
+The script:
+1. Generates a self-signed certificate (10 years, RSA 2048, SHA-256)
+2. Adds SANs: `baluhost.local`, `baluhost`, `localhost`, LAN IP, `127.0.0.1`
+3. Generates DH parameters (if missing)
+4. Installs HTTPS Nginx config (`baluhost-https.conf`)
+5. Enables HTTP → HTTPS redirect
+6. Opens port 443 in firewall
+7. Adds `https://` CORS origins to `.env.production`
+8. Tests and reloads Nginx + restarts backend
+
+Options:
+```bash
+sudo ./deploy/ssl/setup-selfsigned.sh --ip <IP> --hostname <NAME> --cert-days <DAYS>
+sudo ./deploy/ssl/setup-selfsigned.sh --dry-run     # Preview without changes
+sudo ./deploy/ssl/setup-selfsigned.sh --skip-backend # Don't restart backend
+```
+
+### Client Trust Setup
+
+Browsers will show a certificate warning on first visit. Trust the certificate once per device:
+
+#### Browser (Windows/Mac/Linux)
+
+1. Open `https://<LAN_IP>` (e.g. `https://192.168.178.53`)
+2. Click **Advanced** → **Proceed** (Chrome) or **Accept the Risk** (Firefox)
+3. Done — the warning won't appear again for this site
+
+For permanent trust (no warning at all), import the certificate into the OS trust store:
+
+**Windows:**
+1. Copy `baluhost.crt` from the server: `scp sven@<LAN_IP>:/etc/nginx/ssl/baluhost.crt .`
+2. Double-click `baluhost.crt` → **Install Certificate** → **Local Machine** → **Trusted Root Certification Authorities**
+
+**macOS:**
+1. Copy `baluhost.crt` from the server
+2. Open **Keychain Access** → drag `baluhost.crt` into **System** keychain → set to **Always Trust**
+
+**Linux:**
+```bash
+scp sven@<LAN_IP>:/etc/nginx/ssl/baluhost.crt /tmp/
+sudo cp /tmp/baluhost.crt /usr/local/share/ca-certificates/baluhost.crt
+sudo update-ca-certificates
+```
+
+#### BaluApp (Android)
+
+**Option A — System-wide trust:**
+1. Copy `baluhost.crt` to the phone (via USB, AirDrop, or email)
+2. Go to **Settings** → **Security** → **Encryption & credentials** → **Install a certificate** → **CA certificate**
+3. Select `baluhost.crt`
+
+**Option B — App-only trust (recommended):**
+Add to `res/xml/network_security_config.xml`:
+```xml
+<network-security-config>
+    <domain-config>
+        <domain includeSubdomains="true">192.168.178.53</domain>
+        <domain includeSubdomains="true">baluhost.local</domain>
+        <trust-anchors>
+            <certificates src="@raw/baluhost"/>
+        </trust-anchors>
+    </domain-config>
+</network-security-config>
+```
+Place `baluhost.crt` as `res/raw/baluhost.pem`.
+
+#### BaluDesk (Electron)
+
+Set the `NODE_EXTRA_CA_CERTS` environment variable before launching:
+```bash
+# Linux/macOS
+export NODE_EXTRA_CA_CERTS=/path/to/baluhost.crt
+
+# Windows (PowerShell)
+$env:NODE_EXTRA_CA_CERTS = "C:\path\to\baluhost.crt"
+```
+
+Or import the certificate into the OS trust store (see Browser section above).
+
+### Verify Certificate
+
+```bash
+# Show certificate details
+openssl x509 -in /etc/nginx/ssl/baluhost.crt -noout -text
+
+# Check expiry from remote
+echo | openssl s_client -connect <LAN_IP>:443 -servername baluhost.local 2>/dev/null | openssl x509 -noout -dates
+
+# Test HTTPS connection
+curl -sk https://<LAN_IP>/health
+```
+
+### Renew / Regenerate
+
+To regenerate the certificate (e.g. after IP change):
+```bash
+sudo ./deploy/ssl/setup-selfsigned.sh --ip <NEW_IP>
+# Script detects existing cert and asks whether to overwrite
+```
+
+After regeneration, clients need to trust the new certificate again.
+
+---
+
 ## Support
 
 - **Let's Encrypt Community**: https://community.letsencrypt.org/
@@ -633,5 +748,5 @@ ssl_trusted_certificate /path/to/ca-bundle.crt;
 
 ---
 
-**Last Updated**: January 13, 2026
-**Tested with**: Nginx 1.24+, Certbot 2.0+, Ubuntu 22.04 LTS
+**Last Updated**: March 29, 2026
+**Tested with**: Nginx 1.24+, Certbot 2.0+, Debian 13, Ubuntu 22.04 LTS
