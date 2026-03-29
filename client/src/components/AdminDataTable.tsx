@@ -19,7 +19,7 @@ interface Props {
   ownerMap?: Record<string, string>
   sortBy?: string | null
   sortOrder?: 'asc' | 'desc' | null
-  onSortChange?: (column: string, order: 'asc' | 'desc') => void
+  onSortChange?: (column: string | null, order: 'asc' | 'desc' | null) => void
   onRowClick?: (row: Record<string, any>) => void
 }
 
@@ -93,7 +93,12 @@ export default function AdminDataTable({ columns, rows, ownerMap, sortBy, sortOr
   const handleHeaderClick = (colName: string) => {
     if (!onSortChange) return
     if (sortBy === colName) {
-      onSortChange(colName, sortOrder === 'asc' ? 'desc' : 'asc')
+      if (sortOrder === 'asc') {
+        onSortChange(colName, 'desc')
+      } else {
+        // desc -> reset to default
+        onSortChange(null, null)
+      }
     } else {
       onSortChange(colName, 'asc')
     }

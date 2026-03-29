@@ -32,7 +32,7 @@ export default function AdminDatabase() {
 
   // Sort state
   const [sortBy, setSortBy] = useState<string | null>(null)
-  const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('asc')
+  const [sortOrder, setSortOrder] = useState<'asc' | 'desc' | null>(null)
 
   // Filter state
   const [filters, setFilters] = useState<ColumnFilters>({})
@@ -104,7 +104,7 @@ export default function AdminDatabase() {
     setError(null)
 
     const sortByParam = sortBy || undefined
-    const sortOrderParam = sortBy ? sortOrder : undefined
+    const sortOrderParam = sortBy && sortOrder ? sortOrder : undefined
     const filtersParam = activeFilterCount > 0 ? filters : undefined
     const qParam = debouncedSearch || undefined
 
@@ -126,7 +126,7 @@ export default function AdminDatabase() {
     setSelected(tableName)
     setPage(1)
     setSortBy(null)
-    setSortOrder('asc')
+    setSortOrder(null)
     setFilters({})
     setGlobalSearch('')
     setDebouncedSearch('')
@@ -134,7 +134,7 @@ export default function AdminDatabase() {
     setSelectedRow(null)
   }
 
-  const handleSortChange = useCallback((column: string, order: 'asc' | 'desc') => {
+  const handleSortChange = useCallback((column: string | null, order: 'asc' | 'desc' | null) => {
     setSortBy(column)
     setSortOrder(order)
     setPage(1)
