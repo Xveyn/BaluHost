@@ -27,6 +27,7 @@
     "react-hot-toast": "^2.6.0",
     "react-i18next": "^16.5.4",
     "react-is": "^19.2.3",
+    "react-markdown": "^10.1.0",
     "react-router-dom": "^7.9.6",
     "recharts": "^3.4.1"
   },
