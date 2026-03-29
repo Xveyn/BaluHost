@@ -5,7 +5,9 @@
     "userShares": "Meine Freigaben",
     "shares": "Freigaben",
     "sharedWithMe": "Mit mir geteilt",
-    "received": "Empfangen"
+    "received": "Empfangen",
+    "cloudExports": "Cloud-Freigaben",
+    "cloudExportsShort": "Cloud"
   },
   "stats": {
     "userShares": "Meine Freigaben",
@@ -112,5 +114,49 @@
     "allCompleted": "Alle Dateien erfolgreich hochgeladen!",
     "someFailed": "Einige Dateien konnten nicht hochgeladen werden",
     "error": "Fehler: {{message}}"
+  },
+  "cloudExport": {
+    "tab": "Cloud-Freigaben",
+    "tabShort": "Cloud",
+    "provider": "Anbieter",
+    "targetFolder": "Zielordner",
+    "targetFolderHint": "Ordner in deinem Cloud-Laufwerk",
+    "linkType": "Link-Typ",
+    "linkTypeView": "Nur ansehen",
+    "linkTypeEdit": "Bearbeiten erlaubt",
+    "noConnections": "Kein Cloud-Konto verbunden",
+    "connectHint": "Verbinde zuerst ein Google Drive oder OneDrive Konto unter Cloud-Import.",
+    "goToCloudImport": "Zum Cloud-Import",
+    "upgradeScope": "Schreibzugriff gewähren",
+    "upgradeScopeHint": "Deine Cloud-Verbindung benötigt Schreibberechtigung für Exports.",
+    "startExport": "Per Cloud teilen",
+    "exporting": "Export wird gestartet...",
+    "exportStarted": "Cloud-Export gestartet — Upload läuft im Hintergrund",
+    "status": {
+      "pending": "Wartend",
+      "uploading": "Wird hochgeladen",
+      "creating_link": "Link wird erstellt",
+      "ready": "Bereit",
+      "failed": "Fehlgeschlagen",
+      "revoked": "Widerrufen"
+    },
+    "copyLink": "Link kopieren",
+    "linkCopied": "Link in Zwischenablage kopiert",
+    "revoke": "Widerrufen",
+    "revokeConfirm": "Dies löscht die Datei aus deinem Cloud-Laufwerk und macht den Freigabelink ungültig. Dies kann nicht rückgängig gemacht werden.",
+    "revoked": "Export widerrufen",
+    "revokeFailed": "Export konnte nicht widerrufen werden",
+    "retry": "Wiederholen",
+    "retryStarted": "Export wird wiederholt...",
+    "retryFailed": "Export konnte nicht wiederholt werden",
+    "cancel": "Abbrechen",
+    "stats": {
+      "activeExports": "Aktive Cloud-Freigaben",
+      "uploadVolume": "Upload-Volumen"
+    },
+    "empty": {
+      "noExports": "Noch keine Cloud-Exports",
+      "noExportsDesc": "Teile Dateien extern über den Cloud-Export-Tab im Teilen-Dialog."
+    }
   }
 }
