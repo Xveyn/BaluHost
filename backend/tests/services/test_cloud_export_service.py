@@ -358,3 +358,32 @@ class TestCloudExportServiceQueries:
         assert result is True
         db_session.refresh(job)
         assert job.status == "revoked"
+
+
+from app.services.cloud.service import CloudService
+
+
+class TestCloudServiceScopeCheck:
+    def test_check_scope_readonly_google(self, db_session: Session):
+        conn = CloudConnection(
+            user_id=1,
+            provider="google_drive",
+            display_name="GDrive",
+            encrypted_config="fake",
+            rclone_remote_name="gdrive_test",
+            is_active=True,
+        )
+        db_session.add(conn)
+        db_session.commit()
+        db_session.refresh(conn)
+
+        service = CloudService(db_session)
+        result = service.check_connection_scope(conn.id, 1)
+        assert result["provider"] == "google_drive"
+        # With fake config, default assumption is no export scope
+        assert result["has_export_scope"] is False
+
+    def test_check_scope_invalid_connection(self, db_session: Session):
+        service = CloudService(db_session)
+        with pytest.raises(ValueError):
+            service.check_connection_scope(999, 1)

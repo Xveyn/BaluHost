@@ -97,7 +97,7 @@ class CloudService:
         raise ValueError(f"Unknown provider: {provider}")
 
     def handle_oauth_callback(
-        self, provider: str, code: str, user_id: int
+        self, provider: str, code: str, user_id: int, upgrade_connection_id: int | None = None
     ) -> CloudConnection:
         """Exchange OAuth code for tokens and create a connection."""
         import httpx
@@ -135,6 +135,18 @@ class CloudService:
 
         token_data = resp.json()
         token_json = json.dumps(token_data)
+
+        # Handle scope upgrade — update existing connection instead of creating new
+        if upgrade_connection_id is not None:
+            existing = self.get_connection(upgrade_connection_id, user_id)
+            from app.services.cloud.adapters.rclone import RcloneAdapter
+            _remote_name, config_content = RcloneAdapter.generate_config(provider, token_json)
+            existing.encrypted_config = encrypt_credentials(config_content)
+            existing.rclone_remote_name = _remote_name
+            self.db.commit()
+            self.db.refresh(existing)
+            logger.info("Upgraded scope for connection %d (user %d)", upgrade_connection_id, user_id)
+            return existing
 
         # Generate rclone config
         from app.services.cloud.adapters.rclone import RcloneAdapter
@@ -213,6 +225,76 @@ class CloudService:
         if validate_fn is not None:
             return validate_fn(code)
         return False
+
+    # ─── Scope Check & Upgrade ───────────────────────────────────
+
+    EXPORT_SCOPES = {
+        "google_drive": "https://www.googleapis.com/auth/drive.file",
+        "onedrive": "Files.ReadWrite offline_access",
+    }
+
+    READONLY_SCOPES = {
+        "google_drive": "drive.readonly",
+        "onedrive": "Files.Read",
+    }
+
+    def check_connection_scope(self, connection_id: int, user_id: int) -> dict:
+        """Check if a connection has export-capable (ReadWrite) scope."""
+        conn = self.get_connection(connection_id, user_id)
+
+        has_export_scope = False
+        if conn.provider in ("google_drive", "onedrive") and conn.encrypted_config:
+            try:
+                config = decrypt_credentials(conn.encrypted_config)
+                if conn.provider == "google_drive":
+                    has_export_scope = "drive.file" in config or ("drive" in config.lower() and "readonly" not in config.lower())
+                elif conn.provider == "onedrive":
+                    has_export_scope = "ReadWrite" in config or "readwrite" in config.lower()
+            except Exception:
+                pass
+
+        return {"has_export_scope": has_export_scope, "provider": conn.provider}
+
+    def get_export_oauth_url(self, provider: str, user_id: int, connection_id: int) -> str:
+        """Generate OAuth URL with export scopes, including upgrade_connection_id in state."""
+        if provider not in ("google_drive", "onedrive"):
+            raise ValueError(f"Export not supported for provider: {provider}")
+
+        from app.services.cloud.oauth_config import CloudOAuthConfigService
+        creds = CloudOAuthConfigService(self.db).get_credentials(provider, user_id)
+        if not creds:
+            raise ValueError(f"OAuth not configured for {provider}")
+        client_id, _client_secret = creds
+
+        state = json.dumps({
+            "provider": provider,
+            "user_id": user_id,
+            "upgrade_connection_id": connection_id,
+        })
+
+        if provider == "google_drive":
+            params = {
+                "client_id": client_id,
+                "redirect_uri": self._get_redirect_uri(),
+                "response_type": "code",
+                "scope": self.EXPORT_SCOPES["google_drive"],
+                "access_type": "offline",
+                "prompt": "consent",
+                "state": state,
+            }
+            return f"https://accounts.google.com/o/oauth2/v2/auth?{urlencode(params)}"
+
+        elif provider == "onedrive":
+            params = {
+                "client_id": client_id,
+                "redirect_uri": self._get_redirect_uri(),
+                "response_type": "code",
+                "scope": self.EXPORT_SCOPES["onedrive"],
+                "state": state,
+            }
+            return f"https://login.microsoftonline.com/common/oauth2/v2.0/authorize?{urlencode(params)}"
+
+        raise ValueError(f"Unknown provider: {provider}")
 
     # ─── File Browsing ────────────────────────────────────────────
 
