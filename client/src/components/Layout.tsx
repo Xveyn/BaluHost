@@ -207,9 +207,9 @@ export default function Layout({ children }: LayoutProps) {
       icon: navIcon.settings
     },
     {
-      path: '/docs',
-      label: t('navigation.apiCenter'),
-      description: t('navigation.apiCenterDesc'),
+      path: '/manual',
+      label: t('navigation.userManual'),
+      description: t('navigation.userManualDesc'),
       icon: navIcon.docs
     },
     {
