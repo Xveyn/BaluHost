@@ -193,6 +193,11 @@ class DevCloudAdapter(CloudAdapter):
             return f"https://1drv.ms/example/{file_hash}?e={link_type}"
         return f"https://drive.google.com/file/d/mock-{file_hash}/view?usp=sharing"
 
+    async def delete_file(self, remote_path: str) -> None:
+        """Mock file deletion — just sleeps."""
+        await asyncio.sleep(0.1)
+        logger.info("DevCloudAdapter: mock deleted %s", remote_path)
+
     async def get_file_count(self, remote_path: str) -> Optional[int]:
         """Count files in mock filesystem recursively."""
         await asyncio.sleep(0.1)

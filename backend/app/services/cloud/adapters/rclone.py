@@ -407,6 +407,11 @@ class RcloneAdapter(CloudAdapter):
             raise RuntimeError("rclone link returned no output")
         return lines[-1]
 
+    async def delete_file(self, remote_path: str) -> None:
+        """Delete a file/folder from the cloud using rclone delete."""
+        remote = f"{self.remote_name}:{remote_path.lstrip('/')}"
+        await self._run_rclone("delete", remote, timeout=60)
+
     @staticmethod
     def generate_config(provider: str, token_json: str) -> tuple[str, str]:
         """

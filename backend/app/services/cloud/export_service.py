@@ -197,8 +197,7 @@ class CloudExportService:
             cloud_service = CloudService(self.db)
             adapter = cloud_service.get_adapter_for_connection(connection)
             try:
-                remote = f"{adapter.remote_name}:{job.cloud_path.lstrip('/')}"
-                await adapter._run_rclone("delete", remote, timeout=60)
+                await adapter.delete_file(job.cloud_path)
             finally:
                 await adapter.close()
         except Exception:

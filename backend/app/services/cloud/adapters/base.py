@@ -93,6 +93,10 @@ class CloudAdapter(ABC):
         """Create a sharing link for a file/folder. Returns the URL."""
         raise NotImplementedError("Share links not supported by this adapter")
 
+    async def delete_file(self, remote_path: str) -> None:
+        """Delete a file/folder from the cloud. Best-effort."""
+        raise NotImplementedError("Delete not supported by this adapter")
+
     async def close(self) -> None:
         """Clean up resources. Override if adapter holds state."""
         pass
