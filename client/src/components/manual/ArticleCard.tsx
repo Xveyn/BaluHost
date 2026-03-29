@@ -15,7 +15,8 @@ function getLucideIcon(name: string): React.ReactNode {
     .split('-')
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
     .join('');
-  const IconComponent = (Icons as Record<string, React.ComponentType<{ className?: string }>>)[pascal];
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const IconComponent = (Icons as Record<string, any>)[pascal];
   if (IconComponent) return <IconComponent className="h-5 w-5" />;
   return <Icons.FileText className="h-5 w-5" />;
 }
