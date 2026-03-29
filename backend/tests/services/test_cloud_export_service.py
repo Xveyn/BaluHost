@@ -387,3 +387,75 @@ class TestCloudServiceScopeCheck:
         service = CloudService(db_session)
         with pytest.raises(ValueError):
             service.check_connection_scope(999, 1)
+
+
+class TestCloudExportExecuteFlow:
+    """Integration test for the full export flow using DevCloudAdapter."""
+
+    async def test_execute_export_file(self, db_session: Session, tmp_path: Path):
+        """Test full export: upload file + create link in dev mode."""
+        # Setup: create connection and a local file
+        conn = _create_connection(db_session)
+
+        from app.core.config import settings
+        original_storage = settings.nas_storage_path
+
+        try:
+            settings.nas_storage_path = str(tmp_path)
+            test_file = tmp_path / "report.pdf"
+            test_file.write_bytes(b"x" * 5000)
+
+            service = CloudExportService(db_session)
+            job = service.start_export(
+                connection_id=conn.id,
+                user_id=1,
+                source_path="report.pdf",
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                expires_at=None,
+            )
+
+            assert job.status == "pending"
+
+            # Execute (uses DevCloudAdapter in dev mode)
+            await service.execute_export(job.id)
+
+            db_session.refresh(job)
+            assert job.status == "ready"
+            assert job.share_link is not None
+            assert job.share_link.startswith("https://")
+            assert job.cloud_path == "BaluHost Shares/report.pdf"
+            assert job.completed_at is not None
+
+        finally:
+            settings.nas_storage_path = original_storage
+
+    async def test_execute_export_missing_file(self, db_session: Session, tmp_path: Path):
+        """Test export fails gracefully when source file doesn't exist."""
+        conn = _create_connection(db_session)
+
+        from app.core.config import settings
+        original_storage = settings.nas_storage_path
+
+        try:
+            settings.nas_storage_path = str(tmp_path)
+            # Don't create the file
+
+            service = CloudExportService(db_session)
+            job = service.start_export(
+                connection_id=conn.id,
+                user_id=1,
+                source_path="nonexistent.txt",
+                cloud_folder="BaluHost Shares/",
+                link_type="view",
+                expires_at=None,
+            )
+
+            await service.execute_export(job.id)
+
+            db_session.refresh(job)
+            assert job.status == "failed"
+            assert "does not exist" in (job.error_message or "")
+
+        finally:
+            settings.nas_storage_path = original_storage
