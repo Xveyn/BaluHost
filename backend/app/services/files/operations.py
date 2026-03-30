@@ -82,6 +82,25 @@ from app.services.files.storage import (  # noqa: F401
 logger = logging.getLogger(__name__)
 
 
+def _emit_permission_error(operation: str, path: str, username: str) -> None:
+    """Emit storage permission error notification to admins.
+
+    Called from PermissionError catch blocks before re-raising as
+    PermissionDeniedError. Uses sync emit since file operations
+    are called from synchronous contexts.
+    """
+    try:
+        from app.services.notifications.events import emit_storage_permission_error_sync
+        emit_storage_permission_error_sync(
+            operation=operation,
+            path=path,
+            username=username,
+        )
+    except Exception:
+        # Never let notification failure mask the original error
+        logger.debug("Failed to emit storage permission error notification", exc_info=True)
+
+
 # ── VCL helper (only used by save_uploads / chunked_upload) ──────────────────
 
 def _schedule_vcl_version(
@@ -543,6 +562,13 @@ async def save_uploads(
             if upload_ids and idx < len(upload_ids):
                 await progress_manager.complete_upload(upload_ids[idx])
 
+        except PermissionError as exc:
+            _emit_permission_error("upload", str(destination.relative_to(path_utils.ROOT_DIR).as_posix()), user.username)
+            if upload_ids and idx < len(upload_ids):
+                await progress_manager.fail_upload(upload_ids[idx], str(exc))
+            raise PermissionDeniedError(
+                f"No write permission on '{str(destination.relative_to(path_utils.ROOT_DIR).as_posix())}'"
+            ) from exc
         except Exception as e:
             # Mark upload as failed
             if upload_ids and idx < len(upload_ids):
@@ -590,7 +616,13 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
         children = list(target.iterdir())
         for child in children:
             delete_path(path_utils._relative_posix(child), user=user, db=db)
-        target.rmdir()
+        try:
+            target.rmdir()
+        except PermissionError as exc:
+            _emit_permission_error("delete", path_utils._relative_posix(target), user.username if user else "system")
+            raise PermissionDeniedError(
+                f"No delete permission on '{relative_path}'"
+            ) from exc
     else:
         file_relative = path_utils._relative_posix(target)
         if user:
@@ -603,7 +635,13 @@ def delete_path(relative_path: str, user: UserPublic | None = None, db: Optional
                         raise
                 else:
                     raise
-        target.unlink()
+        try:
+            target.unlink()
+        except PermissionError as exc:
+            _emit_permission_error("delete", file_relative, user.username if user else "system")
+            raise PermissionDeniedError(
+                f"No delete permission on '{relative_path}'"
+            ) from exc
 
     # Delete metadata from database
     file_metadata_db.delete_metadata(relative_path, db=db)
@@ -645,6 +683,7 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
     try:
         folder.mkdir(parents=True, exist_ok=True)
     except PermissionError as exc:
+        _emit_permission_error("create_folder", parent_path, owner.username if owner else "system")
         raise PermissionDeniedError(
             f"No write permission on '{parent_path}'"
         ) from exc
@@ -701,7 +740,13 @@ def rename_path(old_path: str, new_name: str, user: UserPublic | None = None, db
     target = path_utils._resolve_path(target_relative)
 
     is_dir = source.is_dir()
-    source.rename(target)
+    try:
+        source.rename(target)
+    except PermissionError as exc:
+        _emit_permission_error("rename", source_relative, user.username if user else "system")
+        raise PermissionDeniedError(
+            f"No write permission on '{source_relative}'"
+        ) from exc
 
     # Update metadata in database
     file_metadata_db.rename_metadata(
@@ -764,7 +809,13 @@ def move_path(source_path: str, target_path: str, user: UserPublic | None = None
     final_target_resolved = path_utils._resolve_path(final_relative)
     source_parent = source.parent
     is_file = source.is_file()
-    source.rename(final_target_resolved)
+    try:
+        source.rename(final_target_resolved)
+    except PermissionError as exc:
+        _emit_permission_error("move", source_relative, user.username if user else "system")
+        raise PermissionDeniedError(
+            f"No write permission on '{source_relative}'"
+        ) from exc
 
     # Update metadata in database
     file_metadata_db.rename_metadata(
