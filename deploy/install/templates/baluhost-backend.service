@@ -6,7 +6,7 @@ Wants=postgresql.service
 [Service]
 Type=simple
 User=@@BALUHOST_USER@@
-Group=@@BALUHOST_USER@@
+Group=baluhost
 WorkingDirectory=@@INSTALL_DIR@@/backend
 
 # Load production environment variables

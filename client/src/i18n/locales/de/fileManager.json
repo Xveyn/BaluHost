@@ -23,7 +23,9 @@
     "selectAll": "Alle auswählen",
     "deselectAll": "Auswahl aufheben",
     "home": "Startseite",
-    "shared": "Gemeinsam"
+    "shared": "Gemeinsam",
+    "myFiles": "Meine Dateien",
+    "myFilesHint": "Speicherverbrauch deines Home-Ordners (ohne VCL-Versionen)"
   },
   "types": {
     "folder": "Ordner",

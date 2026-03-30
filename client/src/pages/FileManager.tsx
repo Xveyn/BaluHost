@@ -6,11 +6,12 @@ import {
   FolderUp,
   Upload,
   Archive,
+  Home,
   Loader2,
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/api';
-import { getFilePermissions, setFilePermissions } from '../api/files';
+import { getFilePermissions, getUserRootUsage, setFilePermissions } from '../api/files';
 import { getUsers } from '../api/users';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi, addTrackingRule, removeTrackingRule, getTrackingRules, checkFileTracking } from '../api/vcl';
@@ -115,6 +116,7 @@ export default function FileManager() {
     current: number;
     max: number;
   } | null>(null);
+  const [userRootUsageBytes, setUserRootUsageBytes] = useState<number | null>(null);
 
   const getErrorMessage = (error: unknown): string => {
     if (!error || typeof error !== 'object') return 'Unknown error';
@@ -125,6 +127,7 @@ export default function FileManager() {
   useEffect(() => {
     loadMountpoints();
     loadVclQuota();
+    loadUserRootUsage();
   }, []);
 
   // Reload files + storage when uploads complete
@@ -135,6 +138,7 @@ export default function FileManager() {
       loadFiles(currentPath, false);
       loadStorageInfo();
       loadVclQuota();
+      loadUserRootUsage();
     });
   }, [currentPath, onUploadsComplete]);
 
@@ -176,6 +180,15 @@ export default function FileManager() {
       }
     } catch {
       // Silently ignore quota errors
+    }
+  };
+
+  const loadUserRootUsage = async () => {
+    try {
+      const usage = await getUserRootUsage();
+      setUserRootUsageBytes(usage.user_root_used_bytes);
+    } catch {
+      // Silently ignore root usage errors
     }
   };
 
@@ -676,6 +689,17 @@ export default function FileManager() {
               }`}>
                 <Archive className="h-3 w-3" />
                 VCL: {formatNumber(vclQuota.usagePercent, 1)}% ({formatBytes(vclQuota.current)} / {formatBytes(vclQuota.max)})
+              </span>
+            </div>
+          )}
+          {userRootUsageBytes !== null && (
+            <div className="mt-1">
+              <span
+                title={t('fileManager:labels.myFilesHint', 'Storage used by your home folder (excluding VCL versions)')}
+                className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-semibold border border-emerald-500/40 bg-emerald-500/15 text-emerald-300"
+              >
+                <Home className="h-3 w-3" />
+                {t('fileManager:labels.myFiles', 'My Files')}: {formatBytes(userRootUsageBytes)}
               </span>
             </div>
           )}

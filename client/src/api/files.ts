@@ -97,9 +97,20 @@ export interface EnforceResidencyResponse {
   fixed_count: number;
 }
 
+export interface UserRootUsage {
+  user_root_used_bytes: number;
+  home_total_bytes: number;
+  vcl_bytes: number;
+}
+
 export async function enforceResidency(
   request: EnforceResidencyRequest
 ): Promise<EnforceResidencyResponse> {
   const res = await apiClient.post('/api/files/enforce-residency', request);
+  return res.data;
+}
+
+export async function getUserRootUsage(): Promise<UserRootUsage> {
+  const res = await apiClient.get('/api/files/user/root-usage');
   return res.data;
 }

@@ -16,6 +16,7 @@ from app.schemas.files import (
     FileListResponse,
     FileOperationResponse,
     FileUploadResponse,
+    UserRootUsageResponse,
     FolderCreateRequest,
     MoveRequest,
     PathRequest,
@@ -487,6 +488,23 @@ async def get_mountpoints(
         mountpoints=mountpoints,
         default_mountpoint=default_id
     )
+
+
+@router.get("/user/root-usage", response_model=UserRootUsageResponse)
+@user_limiter.limit(get_limit("file_list"))
+async def get_user_root_usage(
+    request: Request,
+    response: Response,
+    user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> UserRootUsageResponse:
+    """Return current user's home-directory usage excluding VCL usage."""
+    usage = file_service.calculate_user_root_usage_excluding_vcl(
+        user_id=user.id,
+        username=user.username,
+        db=db,
+    )
+    return UserRootUsageResponse(**usage)
 
 
 @router.get("/list", response_model=FileListResponse)

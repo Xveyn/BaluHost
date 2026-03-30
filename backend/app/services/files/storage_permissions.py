@@ -21,23 +21,28 @@ STORAGE_UMASK = 0o002        # complement of 0775/0664
 def set_storage_dir_permissions(path: Path) -> None:
     """Set standard storage directory permissions (2775) on *path*.
 
-    Silently skips non-existent paths (e.g. race with deletion).
+    Silently skips non-existent paths (e.g. race with deletion)
+    and permission errors (e.g. RAID mountpoints owned by root).
     """
     try:
         os.chmod(path, STORAGE_DIR_MODE)
     except FileNotFoundError:
         pass
+    except PermissionError:
+        logger.debug("Cannot chmod %s (permission denied, skipping)", path)
 
 
 def set_storage_file_permissions(path: Path) -> None:
     """Set standard storage file permissions (0664) on *path*.
 
-    Silently skips non-existent paths.
+    Silently skips non-existent paths and permission errors.
     """
     try:
         os.chmod(path, STORAGE_FILE_MODE)
     except FileNotFoundError:
         pass
+    except PermissionError:
+        logger.debug("Cannot chmod %s (permission denied, skipping)", path)
 
 
 def ensure_dir_with_permissions(path: Path) -> None:

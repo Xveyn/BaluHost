@@ -23,7 +23,9 @@
     "selectAll": "Select All",
     "deselectAll": "Deselect All",
     "home": "Home",
-    "shared": "Shared"
+    "shared": "Shared",
+    "myFiles": "My Files",
+    "myFilesHint": "Storage used by your home folder (excluding VCL versions)"
   },
   "types": {
     "folder": "Folder",

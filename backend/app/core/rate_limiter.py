@@ -127,6 +127,10 @@ RATE_LIMITS = {
 
     # Ad Discovery operations
     "ad_discovery": "30/minute",
+
+    # Documentation endpoints
+    "docs_index": "60/minute",
+    "docs_article": "120/minute",
 }
 
 

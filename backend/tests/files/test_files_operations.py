@@ -31,7 +31,9 @@ from app.services.files.operations import (
     ROOT_DIR,
     is_system_directory,
 )
+from app.services.files import metadata_db as file_metadata_db
 from app.services.permissions import PermissionDeniedError
+from app.models.vcl import VCLSettings
 
 
 @pytest.fixture(autouse=True)
@@ -62,6 +64,7 @@ def storage_root(tmp_path, monkeypatch):
     monkeypatch.setattr(file_ops, "ROOT_DIR", storage)
     # Clear used-bytes cache so each test gets a fresh filesystem scan
     file_storage._used_bytes_cache.clear()
+    file_storage._user_root_usage_cache.clear()
     return storage
 
 
@@ -216,6 +219,57 @@ class TestCalculateBytes:
 
         assert used == 300
 
+    def test_calculate_user_root_usage_excluding_vcl(self, storage_root, db_session, regular_user):
+        """User root usage excludes the user's VCL usage bytes."""
+        user_home = storage_root / regular_user.username
+        user_home.mkdir(parents=True, exist_ok=True)
+        (user_home / "file_a.bin").write_bytes(b"a" * 100)
+        (user_home / "file_b.bin").write_bytes(b"b" * 60)
+
+        db_session.add(
+            VCLSettings(
+                user_id=regular_user.id,
+                max_size_bytes=10 * 1024 * 1024,
+                current_usage_bytes=40,
+            )
+        )
+        db_session.commit()
+
+        usage = file_storage.calculate_user_root_usage_excluding_vcl(
+            user_id=regular_user.id,
+            username=regular_user.username,
+            db=db_session,
+        )
+
+        assert usage["home_total_bytes"] == 160
+        assert usage["vcl_bytes"] == 40
+        assert usage["user_root_used_bytes"] == 120
+
+    def test_calculate_user_root_usage_clamps_at_zero(self, storage_root, db_session, regular_user):
+        """When VCL is larger than home size, exposed root usage is clamped to zero."""
+        user_home = storage_root / regular_user.username
+        user_home.mkdir(parents=True, exist_ok=True)
+        (user_home / "tiny.bin").write_bytes(b"x" * 20)
+
+        db_session.add(
+            VCLSettings(
+                user_id=regular_user.id,
+                max_size_bytes=10 * 1024 * 1024,
+                current_usage_bytes=200,
+            )
+        )
+        db_session.commit()
+
+        usage = file_storage.calculate_user_root_usage_excluding_vcl(
+            user_id=regular_user.id,
+            username=regular_user.username,
+            db=db_session,
+        )
+
+        assert usage["home_total_bytes"] == 20
+        assert usage["vcl_bytes"] == 200
+        assert usage["user_root_used_bytes"] == 0
+
     def test_calculate_used_bytes_nested(self, storage_root):
         """Test calculating used bytes with nested files."""
         subdir = storage_root / "nested"
@@ -262,8 +316,6 @@ class TestCreateFolder:
 
     def test_create_folder_nested(self, storage_root, db_session, user_public, regular_user):
         """Test creating folder in subdirectory owned by user."""
-        from app.services import file_metadata_db
-
         # First create parent and set ownership
         parent = storage_root / "parent"
         parent.mkdir()
@@ -467,8 +519,6 @@ class TestSaveUploads:
     @pytest.mark.asyncio
     async def test_save_upload_to_subdirectory(self, storage_root, db_session, user_public, regular_user):
         """Test saving upload to subdirectory owned by user."""
-        from app.services import file_metadata_db
-
         # Create subdirectory owned by user
         subdir = storage_root / "subdir"
         subdir.mkdir()
@@ -579,8 +629,6 @@ class TestEnsureCanView:
 
     def test_ensure_can_view_own_file(self, storage_root, db_session, user_public, regular_user):
         """Test viewing own file."""
-        from app.services import file_metadata_db
-
         # Create file with ownership
         file_metadata_db.create_metadata(
             relative_path="owned.txt",
@@ -594,8 +642,6 @@ class TestEnsureCanView:
 
     def test_ensure_can_view_others_file_denied(self, storage_root, db_session, user_public, admin_user):
         """Test that non-privileged user cannot view other's file."""
-        from app.services import file_metadata_db
-
         # Create file owned by admin
         file_metadata_db.create_metadata(
             relative_path="adminfile.txt",
@@ -761,8 +807,6 @@ class TestSystemDirectoryProtection:
 
     def test_nested_lost_found_allowed(self, storage_root, db_session, user_public, regular_user):
         """A lost+found inside a user directory is not protected."""
-        from app.services import file_metadata_db
-
         userdir = storage_root / "userdir"
         userdir.mkdir()
         file_metadata_db.create_metadata(

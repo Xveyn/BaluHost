@@ -54,9 +54,8 @@ DRY_RUN=false
 
 # Paths to search for env file
 ENV_SEARCH_PATHS=(
-    "/home/sven/projects/BaluHost/backend/.env.production"
-    "/home/sven/projects/BaluHost/.env.production"
     "/opt/baluhost/backend/.env.production"
+    "/opt/baluhost/.env.production"
     "/etc/baluhost/.env.production"
 )
 
@@ -352,10 +351,10 @@ update_nginx_config() {
     else
         log_info "Config is HTTP-only — upgrading to HTTPS..."
 
-        # The current prod config is HTTP-only. Install the full HTTPS template.
+        # The current prod config is HTTP-only. Install the HTTPS template.
         SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
         DEPLOY_DIR="$(dirname "$SCRIPT_DIR")"
-        TEMPLATE="$DEPLOY_DIR/nginx/baluhost.conf"
+        TEMPLATE="$DEPLOY_DIR/nginx/baluhost-https.conf"
 
         if [ ! -f "$TEMPLATE" ]; then
             log_error "Nginx template not found: $TEMPLATE"
@@ -363,37 +362,9 @@ update_nginx_config() {
             exit 1
         fi
 
-        # Copy template and configure for self-signed
+        # Copy HTTPS template (based on working baluhost-http.conf + SSL)
         cp "$TEMPLATE" "$NGINX_CONF"
-        log_info "Installed HTTPS Nginx config from template"
-
-        # Set self-signed certificate paths
-        sed -i \
-            -e "s|ssl_certificate /etc/letsencrypt/.*fullchain.pem;|ssl_certificate $CERT_DIR/baluhost.crt;|" \
-            -e "s|ssl_certificate_key /etc/letsencrypt/.*privkey.pem;|ssl_certificate_key $CERT_DIR/baluhost.key;|" \
-            "$NGINX_CONF"
-
-        # Production serves static files directly, not via Docker proxy
-        # Activate "Option 3" (static files) and deactivate Docker proxy
-        sed -i \
-            -e '/# Option 2: Docker Compose/,/proxy_set_header X-Forwarded-Proto/s/^/#/' \
-            -e "s|# root /var/www/baluhost/frontend;|root /var/www/baluhost;|" \
-            -e "s|# try_files \$uri \$uri/ /index.html;|try_files \$uri \$uri/ /index.html;|" \
-            "$NGINX_CONF"
-
-        # Same for static assets: switch from Docker proxy to direct serving
-        sed -i \
-            -e '/# For Docker: Proxy to frontend/s/^/#/' \
-            -e '/proxy_pass http:\/\/localhost:80;/{
-                /# Static Assets/,/}/{
-                    s/^/#/
-                }
-            }' \
-            -e "s|# root /var/www/baluhost/frontend;|root /var/www/baluhost;|" \
-            -e "s|# expires 1y;|expires 1y;|" \
-            -e 's|# add_header Cache-Control "public, immutable";|add_header Cache-Control "public, immutable";|' \
-            -e "s|# access_log off;|access_log off;|" \
-            "$NGINX_CONF"
+        log_info "Installed HTTPS Nginx config from baluhost-https.conf template"
     fi
 
     # Update server_name in all server blocks

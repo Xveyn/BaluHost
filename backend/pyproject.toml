@@ -1,6 +1,6 @@
 [project]
 name = "baluhost-backend"
-version = "1.21.0"
+version = "1.22.0"
 description = "Mocked NAS management backend built with FastAPI"
 authors = [{ name = "Baluhost" }]
 requires-python = ">=3.11"
@@ -16,7 +16,7 @@ dependencies = [
   "psycopg2-binary>=2.9.0,<3.0.0",  # PostgreSQL adapter
   "passlib[bcrypt]>=1.7.4,<2.0.0",
   "bcrypt>=4.0.0,<4.1.0",
-  "python-multipart>=0.0.9,<0.0.10",
+  "python-multipart>=0.0.22,<1.0.0",
   "psutil>=5.9.0,<6.0.0",
   "pySMART>=1.3.0",
   "sse-starlette>=2.1.0,<3.0.0",

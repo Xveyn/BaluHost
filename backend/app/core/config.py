@@ -98,6 +98,9 @@ class Settings(BaseSettings):
     nas_quota_bytes: int | None = 5 * 1024 * 1024 * 1024
     nas_backup_path: str = "./backups"
 
+    # Linux group for shared storage ownership (backend + Samba)
+    storage_group: str = "baluhost"
+
     # VCL storage path (empty = use nas_storage_path/.system/versions)
     vcl_storage_path: str = ""
     nas_backup_retention_days: int = 30

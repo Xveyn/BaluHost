@@ -8,6 +8,7 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 SERVICE_USER="${SERVICE_USER:-sven}"
+STORAGE_GROUP="${STORAGE_GROUP:-baluhost}"
 SHARES_CONF="/etc/samba/baluhost-shares.conf"
 
 echo "=== BaluHost Samba Setup ==="
@@ -27,7 +28,7 @@ cp "$SCRIPT_DIR/smb.conf" /etc/samba/smb.conf
 # 3. Create empty shares config (owned by service user)
 echo "[3/5] Creating shares config..."
 touch "$SHARES_CONF"
-chown "$SERVICE_USER:$SERVICE_USER" "$SHARES_CONF"
+chown "$SERVICE_USER:$STORAGE_GROUP" "$SHARES_CONF"
 chmod 644 "$SHARES_CONF"
 
 # 4. Install sudoers

@@ -7,6 +7,39 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.22.0] - 2026-03-30
+
+### Added
+- **Storage Permissions & Notifications** — Shared `baluhost` Linux group infrastructure with setgid for safe multi-process file ownership on RAID mounts
+  - New `STORAGE_PERMISSION_ERROR` notification event with FCM push to admin mobile devices
+  - 5-minute cooldown per path prevents notification spam
+  - `_emit_permission_error` helper catches OS PermissionError in all file operations (upload, delete, rename, move, create folder)
+  - New `storage_group` config setting (default: `baluhost`)
+- **Docs-as-Manual** — Dynamic manual tabs served from backend docs API
+  - `/api/docs/index` and `/api/docs/article` endpoints with DocsService
+  - `useDocsIndex` and `useDocsArticle` hooks, DocsGroupTab component
+  - Multilingual docs with `.de`/`.en` suffix convention and `manual-index.json`
+- **HTTPS/SSL** — Nginx HTTPS template and self-signed certificate setup with client trust guide
+- **User Home Storage Indicator** — Storage usage display per user in FileManager
+
+### Changed
+- Samba `force group` now uses `storage_group` setting instead of service user name
+- Samba system users created with `--group baluhost` for storage group membership
+- systemd service template uses `Group=baluhost`
+- Samba setup script accepts `STORAGE_GROUP` variable
+
+### Fixed
+- **PermissionError on RAID mounts** — All file operations now catch OS-level PermissionError and return 403 instead of 500
+- **Startup PermissionError** — Handle permission errors on RAID mountpoints during startup gracefully
+- **Dependabot** — Patched 5 security vulnerabilities
+- **Frontend** — Removed unused title destructuring in ArticleView
+
+### Documentation
+- Added CLAUDE.md files for all backend and frontend sub-modules
+- Storage permissions design spec and implementation plan
+
+---
+
 ## [1.21.0] - 2026-03-29
 
 ### Added

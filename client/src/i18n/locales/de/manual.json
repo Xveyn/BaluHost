@@ -2,13 +2,10 @@
   "title": "Benutzerhandbuch",
   "version": "Dokumentation für v{{version}}",
   "tabs": {
-    "setup": "Setup",
-    "wiki": "Wiki",
     "api": "API-Referenz"
   },
-  "staleness": "Zuletzt geprüft für v{{version}}",
-  "upToDate": "Aktuell für v{{version}}",
   "backToOverview": "Zurück zur Übersicht",
   "noArticles": "Noch keine Artikel vorhanden",
+  "errorLoading": "Artikel konnte nicht geladen werden",
   "searchPlaceholder": "Artikel suchen..."
 }

@@ -8,7 +8,8 @@ from fastapi.testclient import TestClient
 from sqlalchemy.orm import Session, sessionmaker
 
 from app.core.config import settings
-from app.services import file_metadata_db
+from app.services.files import metadata_db as file_metadata_db
+from app.models.vcl import VCLSettings
 
 
 @pytest.fixture(autouse=True)
@@ -275,3 +276,41 @@ def test_admin_can_see_all_files(client: TestClient, admin_headers: dict, user_h
     files = response.json()["files"]
     file_names = {f["name"] for f in files}
     assert "user_file.txt" in file_names
+
+
+def test_user_root_usage_endpoint_requires_auth(client: TestClient):
+    response = client.get(f"{settings.api_prefix}/files/user/root-usage")
+    assert response.status_code == 401
+
+
+def test_user_root_usage_endpoint_excludes_vcl(
+    client: TestClient,
+    user_headers: dict,
+    db_session: Session,
+    regular_user,
+):
+    from app.services.files import ROOT_DIR
+    import app.services.files.storage as file_storage
+
+    user_home = ROOT_DIR / regular_user.username
+    user_home.mkdir(parents=True, exist_ok=True)
+    (user_home / "one.bin").write_bytes(b"1" * 80)
+    (user_home / "two.bin").write_bytes(b"2" * 20)
+
+    db_session.add(
+        VCLSettings(
+            user_id=regular_user.id,
+            max_size_bytes=10 * 1024 * 1024,
+            current_usage_bytes=30,
+        )
+    )
+    db_session.commit()
+    file_storage.invalidate_used_bytes_cache()
+
+    response = client.get(f"{settings.api_prefix}/files/user/root-usage", headers=user_headers)
+    assert response.status_code == 200
+
+    data = response.json()
+    assert data["vcl_bytes"] == 30
+    assert data["home_total_bytes"] >= 100
+    assert data["user_root_used_bytes"] == max(0, data["home_total_bytes"] - 30)

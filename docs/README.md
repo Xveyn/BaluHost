@@ -14,44 +14,44 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 ## 📁 Verzeichnisstruktur
 
 ### [getting-started/](getting-started/) - Einstieg
-- **[USER_GUIDE.md](getting-started/USER_GUIDE.md)** - Benutzerhandbuch
-- **[DEV_CHECKLIST.md](getting-started/DEV_CHECKLIST.md)** - Entwickler-Checkliste
+- **[USER_GUIDE.de.md](getting-started/USER_GUIDE.de.md)** - Benutzerhandbuch
+- **[DEV_CHECKLIST.de.md](getting-started/DEV_CHECKLIST.de.md)** - Entwickler-Checkliste
 
 ### [deployment/](deployment/) - Deployment & Betrieb
-- **[DEPLOYMENT.md](deployment/DEPLOYMENT.md)** - Deployment-Guide
-- **[PRODUCTION_QUICKSTART.md](deployment/PRODUCTION_QUICKSTART.md)** - Produktion Quick-Start
-- **[PRODUCTION_READINESS.md](deployment/PRODUCTION_READINESS.md)** - Produktionsreife-Checkliste
-- **[PRODUCTION_DEPLOYMENT_NOTES.md](deployment/PRODUCTION_DEPLOYMENT_NOTES.md)** - Deployment-Notizen
-- **[FRONTEND_DEPLOYMENT.md](deployment/FRONTEND_DEPLOYMENT.md)** - Frontend-Deployment
-- **[SSL_SETUP.md](deployment/SSL_SETUP.md)** - SSL/TLS-Konfiguration
-- **[REVERSE_PROXY_SETUP.md](deployment/REVERSE_PROXY_SETUP.md)** - Reverse-Proxy-Setup
+- **[DEPLOYMENT.de.md](deployment/DEPLOYMENT.de.md)** - Deployment-Guide
+- **[PRODUCTION_QUICKSTART.de.md](deployment/PRODUCTION_QUICKSTART.de.md)** - Produktion Quick-Start
+- **[PRODUCTION_READINESS.de.md](deployment/PRODUCTION_READINESS.de.md)** - Produktionsreife-Checkliste
+- **[PRODUCTION_DEPLOYMENT_NOTES.de.md](deployment/PRODUCTION_DEPLOYMENT_NOTES.de.md)** - Deployment-Notizen
+- **[FRONTEND_DEPLOYMENT.de.md](deployment/FRONTEND_DEPLOYMENT.de.md)** - Frontend-Deployment
+- **[SSL_SETUP.de.md](deployment/SSL_SETUP.de.md)** - SSL/TLS-Konfiguration
+- **[REVERSE_PROXY_SETUP.de.md](deployment/REVERSE_PROXY_SETUP.de.md)** - Reverse-Proxy-Setup
 
 ### [monitoring/](monitoring/) - Monitoring & Performance
-- **[MONITORING.md](monitoring/MONITORING.md)** - Monitoring-Setup (Prometheus/Grafana)
-- **[MONITORING_QUICKSTART.md](monitoring/MONITORING_QUICKSTART.md)** - Monitoring Quick-Start
-- **[DISK_IO_MONITOR.md](monitoring/DISK_IO_MONITOR.md)** - Disk I/O Monitor
-- **[TELEMETRY_CONFIG_RECOMMENDATIONS.md](monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.md)** - Telemetrie-Konfiguration
+- **[MONITORING.de.md](monitoring/MONITORING.de.md)** - Monitoring-Setup (Prometheus/Grafana)
+- **[MONITORING_QUICKSTART.de.md](monitoring/MONITORING_QUICKSTART.de.md)** - Monitoring Quick-Start
+- **[DISK_IO_MONITOR.de.md](monitoring/DISK_IO_MONITOR.de.md)** - Disk I/O Monitor
+- **[TELEMETRY_CONFIG_RECOMMENDATIONS.de.md](monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS.de.md)** - Telemetrie-Konfiguration
 
 ### [security/](security/) - Sicherheit & Logging
-- **[SECURITY.md](security/SECURITY.md)** - Sicherheitsübersicht
-- **[AUDIT_LOGGING.md](security/AUDIT_LOGGING.md)** - Audit-Logging-System
-- **[API_RATE_LIMITING.md](security/API_RATE_LIMITING.md)** - Rate Limiting
-- **[RATE_LIMITING_QUICKSTART.md](security/RATE_LIMITING_QUICKSTART.md)** - Rate Limit Quick-Reference
+- **[SECURITY.de.md](security/SECURITY.de.md)** - Sicherheitsübersicht
+- **[AUDIT_LOGGING.de.md](security/AUDIT_LOGGING.de.md)** - Audit-Logging-System
+- **[API_RATE_LIMITING.de.md](security/API_RATE_LIMITING.de.md)** - Rate Limiting
+- **[RATE_LIMITING_QUICKSTART.de.md](security/RATE_LIMITING_QUICKSTART.de.md)** - Rate Limit Quick-Reference
 
 ### [network/](network/) - Netzwerk & Zugriff
-- **[VPN_INTEGRATION.md](network/VPN_INTEGRATION.md)** - WireGuard VPN
-- **[WEBDAV_NETWORK_DRIVE.md](network/WEBDAV_NETWORK_DRIVE.md)** - WebDAV-Setup
-- **[NETWORK_DRIVE_SETUP.md](network/NETWORK_DRIVE_SETUP.md)** - Netzlaufwerk-Mounting
-- **[NETWORK_DRIVE_QUICKSTART.md](network/NETWORK_DRIVE_QUICKSTART.md)** - Netzlaufwerk Quick-Start
-- **[CLIENT_MDNS_SETUP.md](network/CLIENT_MDNS_SETUP.md)** - mDNS-Client-Konfiguration
+- **[VPN_INTEGRATION.de.md](network/VPN_INTEGRATION.de.md)** - WireGuard VPN
+- **[WEBDAV_NETWORK_DRIVE.de.md](network/WEBDAV_NETWORK_DRIVE.de.md)** - WebDAV-Setup
+- **[NETWORK_DRIVE_SETUP.de.md](network/NETWORK_DRIVE_SETUP.de.md)** - Netzlaufwerk-Mounting
+- **[NETWORK_DRIVE_QUICKSTART.de.md](network/NETWORK_DRIVE_QUICKSTART.de.md)** - Netzlaufwerk Quick-Start
+- **[CLIENT_MDNS_SETUP.de.md](network/CLIENT_MDNS_SETUP.de.md)** - mDNS-Client-Konfiguration
 
 ### [api/](api/) - API-Dokumentation
-- **[API_REFERENCE.md](api/API_REFERENCE.md)** - API-Referenz
+- **[API_REFERENCE.de.md](api/API_REFERENCE.de.md)** - API-Referenz
 
 ### [features/](features/) - Feature-Dokumentation
-- **[USER_MANAGEMENT_FEATURES.md](features/USER_MANAGEMENT_FEATURES.md)** - User-Management
-- **[SHARING_FEATURES_PHASE1.md](features/SHARING_FEATURES_PHASE1.md)** - File-Sharing
-- **[UPLOAD_PROGRESS.md](features/UPLOAD_PROGRESS.md)** - Upload-Progress (SSE)
+- **[USER_MANAGEMENT_FEATURES.de.md](features/USER_MANAGEMENT_FEATURES.de.md)** - User-Management
+- **[SHARING_FEATURES_PHASE1.de.md](features/SHARING_FEATURES_PHASE1.de.md)** - File-Sharing
+- **[UPLOAD_PROGRESS.de.md](features/UPLOAD_PROGRESS.de.md)** - Upload-Progress (SSE)
 
 ### Plugins & Smart Devices
 - **[../backend/app/plugins/README.md](../backend/app/plugins/README.md)** - Plugin-System (Architektur, Lifecycle, Hooks, Events, Permissions, Anleitung)
@@ -73,8 +73,8 @@ Willkommen zur technischen Dokumentation des BaluHost NAS Managers.
 | Thema | Link |
 |-------|------|
 | Projekt-Setup | [README.md](../README.md#setup) |
-| API-Endpunkte | [API_REFERENCE.md](api/API_REFERENCE.md) |
-| Dev-Mode | [DEV_CHECKLIST.md](getting-started/DEV_CHECKLIST.md) |
-| Produktion | [PRODUCTION_QUICKSTART.md](deployment/PRODUCTION_QUICKSTART.md) |
+| API-Endpunkte | [API_REFERENCE.de.md](api/API_REFERENCE.de.md) |
+| Dev-Mode | [DEV_CHECKLIST.de.md](getting-started/DEV_CHECKLIST.de.md) |
+| Produktion | [PRODUCTION_QUICKSTART.de.md](deployment/PRODUCTION_QUICKSTART.de.md) |
 | Features | [TECHNICAL_DOCUMENTATION.md](TECHNICAL_DOCUMENTATION.md) |
 | Plugin-System | [backend/app/plugins/README.md](../backend/app/plugins/README.md) |

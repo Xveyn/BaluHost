@@ -38,6 +38,7 @@ from app.services.files.access import (
 from app.services.files.storage import (
     calculate_used_bytes,
     calculate_available_bytes,
+    calculate_user_root_usage_excluding_vcl,
     invalidate_used_bytes_cache,
 )
 from app.services.files.operations import (
@@ -108,6 +109,7 @@ __all__ = [
     # Storage / quota
     "calculate_used_bytes",
     "calculate_available_bytes",
+    "calculate_user_root_usage_excluding_vcl",
     "invalidate_used_bytes_cache",
     # CRUD operations
     "list_directory",
