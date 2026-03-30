@@ -45,6 +45,12 @@ class FileListResponse(BaseModel):
     files: list[FileItem]
 
 
+class UserRootUsageResponse(BaseModel):
+    user_root_used_bytes: int
+    home_total_bytes: int = 0
+    vcl_bytes: int = 0
+
+
 class FileOperationResponse(BaseModel):
     message: str
 

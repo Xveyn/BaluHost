@@ -5,7 +5,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from app.models.file_metadata import FileMetadata
-from app.services import file_metadata_db as metadata_service
+from app.services.files import metadata_db as metadata_service
 
 
 def test_create_metadata(db_session: Session, regular_user):
