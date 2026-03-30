@@ -70,7 +70,7 @@ async def _ensure_system_user(username: str) -> None:
         "--system",
         "--no-create-home",
         "--shell", "/usr/sbin/nologin",
-        "--group", service_user,
+        "--group", settings.storage_group,
         username,
     ])
     if rc != 0:
@@ -192,7 +192,7 @@ async def regenerate_shares_config() -> bool:
                     "   read only = no",
                     "   browseable = yes",
                     f"   force user = {service_user}",
-                    f"   force group = {service_user}",
+                    f"   force group = {settings.storage_group}",
                     "   create mask = 0664",
                     "   directory mask = 0775",
                     "   strict locking = auto",
@@ -208,7 +208,7 @@ async def regenerate_shares_config() -> bool:
                 "   read only = no",
                 "   browseable = yes",
                 f"   force user = {service_user}",
-                f"   force group = {service_user}",
+                f"   force group = {settings.storage_group}",
                 "   create mask = 0664",
                 "   directory mask = 0775",
                 "   strict locking = auto",
