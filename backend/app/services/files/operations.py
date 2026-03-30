@@ -642,7 +642,12 @@ def create_folder(parent_path: str, name: str, owner: UserPublic | None = None, 
         ensure_owner_or_privileged(owner, parent_owner)
 
     folder = base / name
-    folder.mkdir(parents=True, exist_ok=True)
+    try:
+        folder.mkdir(parents=True, exist_ok=True)
+    except PermissionError as exc:
+        raise PermissionDeniedError(
+            f"No write permission on '{parent_path}'"
+        ) from exc
     set_storage_dir_permissions(folder)
     owner_id = owner.id if owner else None
     relative_folder = str(folder.relative_to(path_utils.ROOT_DIR).as_posix())
