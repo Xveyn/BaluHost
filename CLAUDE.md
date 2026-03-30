@@ -70,6 +70,28 @@ client/
 **Scheduler service**: `backend/app/services/scheduler/service.py`
 **Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
 
+Each major directory has its own CLAUDE.md with structure, conventions, and patterns specific to that area. **Keep these in sync when adding/removing files or changing patterns.**
+
+### Backend (`backend/app/`)
+- `api/CLAUDE.md` — Routes, auth dependencies, endpoint conventions
+- `compat/CLAUDE.md` — WebDAV bridge, asyncio patches
+- `core/CLAUDE.md` — Config, DB, security, lifespan, rate limiting
+- `middleware/CLAUDE.md` — All 7 middleware with purpose and scope
+- `models/CLAUDE.md` — SQLAlchemy model groups, conventions
+- `plugins/CLAUDE.md` — Plugin system architecture and lifecycle
+- `schemas/CLAUDE.md` — Pydantic schema conventions
+- `services/CLAUDE.md` — Service layer structure, dev/prod backends
+
+### Frontend (`client/src/`)
+- `api/CLAUDE.md` — API client modules, axios patterns
+- `components/CLAUDE.md` — Component structure, ui/ primitives, feature dirs
+- `contexts/CLAUDE.md` — React contexts, provider nesting
+- `hooks/CLAUDE.md` — Custom hooks, data fetching patterns
+- `i18n/CLAUDE.md` — i18next setup, namespaces, locale files
+- `lib/CLAUDE.md` — Core utilities, feature flags, error handling
+- `pages/CLAUDE.md` — Route pages, device modes, lazy loading
+- `types/CLAUDE.md` — TypeScript types, ambient declarations
+
 ## Contact & Support
 
 - **Issues**: GitHub Issues (repository URL needed)
