@@ -1,0 +1,118 @@
+{
+  "groups": [
+    {
+      "id": "getting-started",
+      "labelDe": "Erste Schritte",
+      "labelEn": "Getting Started",
+      "icon": "rocket",
+      "order": 1,
+      "visibility": "all",
+      "articles": [
+        {
+          "slug": "user-guide",
+          "path": "getting-started/USER_GUIDE",
+          "titleDe": "Benutzerhandbuch",
+          "titleEn": "User Guide",
+          "icon": "book-open",
+          "order": 1
+        },
+        {
+          "slug": "dev-checklist",
+          "path": "getting-started/DEV_CHECKLIST",
+          "titleDe": "Entwickler-Checkliste",
+          "titleEn": "Developer Checklist",
+          "icon": "list-checks",
+          "order": 2
+        }
+      ]
+    },
+    {
+      "id": "setup",
+      "labelDe": "Setup & Einrichtung",
+      "labelEn": "Setup & Configuration",
+      "icon": "wrench",
+      "order": 2,
+      "visibility": "all",
+      "articles": [
+        { "slug": "vpn", "path": "network/VPN_INTEGRATION", "titleDe": "VPN (WireGuard) einrichten", "titleEn": "VPN (WireGuard) Setup", "icon": "shield", "order": 1 },
+        { "slug": "webdav", "path": "network/WEBDAV_NETWORK_DRIVE", "titleDe": "WebDAV-Netzlaufwerk", "titleEn": "WebDAV Network Drive", "icon": "hard-drive", "order": 2 },
+        { "slug": "network-drive", "path": "network/NETWORK_DRIVE_SETUP", "titleDe": "Netzlaufwerk einrichten", "titleEn": "Network Drive Setup", "icon": "folder-sync", "order": 3 },
+        { "slug": "network-drive-quickstart", "path": "network/NETWORK_DRIVE_QUICKSTART", "titleDe": "Netzlaufwerk Schnellstart", "titleEn": "Network Drive Quickstart", "icon": "zap", "order": 4 },
+        { "slug": "mdns", "path": "network/CLIENT_MDNS_SETUP", "titleDe": "mDNS-Client einrichten", "titleEn": "mDNS Client Setup", "icon": "radio", "order": 5 },
+        { "slug": "fritzbox-wol", "path": "network/FRITZBOX_WOL_PROTOCOL", "titleDe": "Fritz!Box Wake-on-LAN", "titleEn": "Fritz!Box Wake-on-LAN", "icon": "power", "order": 6 }
+      ]
+    },
+    {
+      "id": "features",
+      "labelDe": "Features",
+      "labelEn": "Features",
+      "icon": "layers",
+      "order": 3,
+      "visibility": "all",
+      "articles": [
+        { "slug": "sharing", "path": "features/SHARING_FEATURES_PHASE1", "titleDe": "Dateifreigaben", "titleEn": "File Sharing", "icon": "share-2", "order": 1 },
+        { "slug": "upload-progress", "path": "features/UPLOAD_PROGRESS", "titleDe": "Upload-Fortschritt", "titleEn": "Upload Progress", "icon": "upload", "order": 2 },
+        { "slug": "user-management", "path": "features/USER_MANAGEMENT_FEATURES", "titleDe": "Benutzerverwaltung", "titleEn": "User Management", "icon": "users", "order": 3 }
+      ]
+    },
+    {
+      "id": "deployment",
+      "labelDe": "Deployment",
+      "labelEn": "Deployment",
+      "icon": "server",
+      "order": 4,
+      "visibility": "admin",
+      "articles": [
+        { "slug": "deployment", "path": "deployment/DEPLOYMENT", "titleDe": "Deployment-Guide", "titleEn": "Deployment Guide", "icon": "rocket", "order": 1 },
+        { "slug": "production-quickstart", "path": "deployment/PRODUCTION_QUICKSTART", "titleDe": "Produktion Schnellstart", "titleEn": "Production Quickstart", "icon": "zap", "order": 2 },
+        { "slug": "production-readiness", "path": "deployment/PRODUCTION_READINESS", "titleDe": "Produktionsreife-Checkliste", "titleEn": "Production Readiness Checklist", "icon": "clipboard-check", "order": 3 },
+        { "slug": "production-notes", "path": "deployment/PRODUCTION_DEPLOYMENT_NOTES", "titleDe": "Deployment-Notizen", "titleEn": "Deployment Notes", "icon": "file-text", "order": 4 },
+        { "slug": "frontend-deployment", "path": "deployment/FRONTEND_DEPLOYMENT", "titleDe": "Frontend-Deployment", "titleEn": "Frontend Deployment", "icon": "layout", "order": 5 },
+        { "slug": "ssl-setup", "path": "deployment/SSL_SETUP", "titleDe": "SSL/TLS-Konfiguration", "titleEn": "SSL/TLS Configuration", "icon": "lock", "order": 6 },
+        { "slug": "reverse-proxy", "path": "deployment/REVERSE_PROXY_SETUP", "titleDe": "Reverse-Proxy-Setup", "titleEn": "Reverse Proxy Setup", "icon": "arrow-right-left", "order": 7 },
+        { "slug": "infrastructure", "path": "deployment/infrastructure", "titleDe": "Infrastruktur", "titleEn": "Infrastructure", "icon": "network", "order": 8 },
+        { "slug": "emergency-runbook", "path": "deployment/emergency-runbook", "titleDe": "Notfall-Runbook", "titleEn": "Emergency Runbook", "icon": "alert-triangle", "order": 9 }
+      ]
+    },
+    {
+      "id": "monitoring",
+      "labelDe": "Monitoring",
+      "labelEn": "Monitoring",
+      "icon": "activity",
+      "order": 5,
+      "visibility": "admin",
+      "articles": [
+        { "slug": "monitoring", "path": "monitoring/MONITORING", "titleDe": "Monitoring-Setup", "titleEn": "Monitoring Setup", "icon": "bar-chart-3", "order": 1 },
+        { "slug": "monitoring-quickstart", "path": "monitoring/MONITORING_QUICKSTART", "titleDe": "Monitoring Schnellstart", "titleEn": "Monitoring Quickstart", "icon": "zap", "order": 2 },
+        { "slug": "disk-io", "path": "monitoring/DISK_IO_MONITOR", "titleDe": "Disk-I/O-Monitor", "titleEn": "Disk I/O Monitor", "icon": "hard-drive", "order": 3 },
+        { "slug": "telemetry-config", "path": "monitoring/TELEMETRY_CONFIG_RECOMMENDATIONS", "titleDe": "Telemetrie-Konfiguration", "titleEn": "Telemetry Configuration", "icon": "settings", "order": 4 }
+      ]
+    },
+    {
+      "id": "security",
+      "labelDe": "Sicherheit",
+      "labelEn": "Security",
+      "icon": "shield-check",
+      "order": 6,
+      "visibility": "admin",
+      "articles": [
+        { "slug": "security", "path": "security/SECURITY", "titleDe": "Sicherheitsübersicht", "titleEn": "Security Overview", "icon": "shield", "order": 1 },
+        { "slug": "audit-logging", "path": "security/AUDIT_LOGGING", "titleDe": "Audit-Logging", "titleEn": "Audit Logging", "icon": "scroll-text", "order": 2 },
+        { "slug": "rate-limiting", "path": "security/API_RATE_LIMITING", "titleDe": "API Rate Limiting", "titleEn": "API Rate Limiting", "icon": "gauge", "order": 3 },
+        { "slug": "rate-limiting-quickstart", "path": "security/RATE_LIMITING_QUICKSTART", "titleDe": "Rate Limiting Schnellreferenz", "titleEn": "Rate Limiting Quick Reference", "icon": "zap", "order": 4 },
+        { "slug": "security-audit", "path": "security/SECURITY_AUDIT_2026-03-16", "titleDe": "Security Audit (März 2026)", "titleEn": "Security Audit (March 2026)", "icon": "file-search", "order": 5 }
+      ]
+    },
+    {
+      "id": "api-docs",
+      "labelDe": "API-Dokumentation",
+      "labelEn": "API Documentation",
+      "icon": "code",
+      "order": 7,
+      "visibility": "admin",
+      "articles": [
+        { "slug": "api-reference", "path": "api/API_REFERENCE", "titleDe": "API-Referenz", "titleEn": "API Reference", "icon": "file-code", "order": 1 }
+      ]
+    }
+  ]
+}
