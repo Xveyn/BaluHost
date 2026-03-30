@@ -1,33 +1,41 @@
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, Wrench, Library, Code } from 'lucide-react';
+import { BookOpen, Code, Loader2 } from 'lucide-react';
+import * as Icons from 'lucide-react';
 import { useVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
-import SetupTab from '../components/manual/SetupTab';
-import WikiTab from '../components/manual/WikiTab';
+import { useDocsIndex } from '../hooks/useDocsIndex';
+import DocsGroupTab from '../components/manual/DocsGroupTab';
 import { ApiReferenceTab } from '../components/manual/ApiReferenceTab';
 
-type TabType = 'setup' | 'wiki' | 'api';
+const API_REF_TAB_ID = '__api-reference__';
 
-const VALID_TABS = new Set<TabType>(['setup', 'wiki', 'api']);
-
-const TAB_CONFIG: { id: TabType; labelKey: string; icon: React.ReactNode }[] = [
-  { id: 'setup', labelKey: 'manual:tabs.setup', icon: <Wrench className="h-4 w-4" /> },
-  { id: 'wiki', labelKey: 'manual:tabs.wiki', icon: <Library className="h-4 w-4" /> },
-  { id: 'api', labelKey: 'manual:tabs.api', icon: <Code className="h-4 w-4" /> },
-];
+function getTabIcon(name: string): React.ReactNode {
+  const pascal = name
+    .split('-')
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const IconComp = (Icons as Record<string, any>)[pascal];
+  if (IconComp) return <IconComp className="h-4 w-4" />;
+  return <Icons.FileText className="h-4 w-4" />;
+}
 
 export default function UserManualPage() {
   const { t } = useTranslation(['manual', 'system', 'common']);
   const { version } = useVersion();
   const { token, isAdmin } = useAuth();
+  const { groups, isLoading, error } = useDocsIndex();
   const [searchParams, setSearchParams] = useSearchParams();
 
-  const rawTab = searchParams.get('tab') || 'setup';
-  const activeTab = (VALID_TABS.has(rawTab as TabType) ? rawTab : 'setup') as TabType;
+  const rawTab = searchParams.get('tab') || '';
   const selectedArticle = searchParams.get('article') || null;
 
-  const handleTabChange = (tab: TabType) => {
+  const validTabIds = new Set(groups.map((g) => g.id));
+  if (isAdmin) validTabIds.add(API_REF_TAB_ID);
+  const activeTab = validTabIds.has(rawTab) ? rawTab : (groups[0]?.id ?? '');
+
+  const handleTabChange = (tab: string) => {
     setSearchParams({ tab });
   };
 
@@ -52,7 +60,6 @@ export default function UserManualPage() {
             {t('manual:version', { version: version ?? '...' })}
           </p>
         </div>
-        {/* Global version badge */}
         {version && (
           <span className="self-start sm:self-center inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-mono bg-cyan-500/10 text-cyan-400 border border-cyan-500/30">
             v{version}
@@ -60,35 +67,68 @@ export default function UserManualPage() {
         )}
       </div>
 
-      {/* Tab Navigation */}
-      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
-        <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
-          {TAB_CONFIG.map((tab) => (
-            <button
-              key={tab.id}
-              onClick={() => handleTabChange(tab.id)}
-              className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
-                activeTab === tab.id
-                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
-                  : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
-              }`}
-            >
-              {tab.icon}
-              <span>{t(tab.labelKey)}</span>
-            </button>
-          ))}
+      {/* Loading state */}
+      {isLoading && (
+        <div className="flex items-center justify-center py-16">
+          <Loader2 className="h-8 w-8 text-cyan-400 animate-spin" />
         </div>
-      </div>
+      )}
 
-      {/* Tab Content */}
-      {activeTab === 'setup' && (
-        <SetupTab selectedArticle={selectedArticle} onSelectArticle={handleSelectArticle} />
+      {/* Error state */}
+      {error && !isLoading && (
+        <div className="text-center py-16 text-red-400 text-sm">{error}</div>
       )}
-      {activeTab === 'wiki' && (
-        <WikiTab selectedArticle={selectedArticle} onSelectArticle={handleSelectArticle} />
-      )}
-      {activeTab === 'api' && (
-        <ApiReferenceTab isAdmin={isAdmin} token={token} />
+
+      {/* Tab Navigation + Content */}
+      {!isLoading && !error && (
+        <>
+          <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+            <div className="flex gap-2 min-w-max sm:min-w-0 sm:flex-wrap">
+              {groups.map((group) => (
+                <button
+                  key={group.id}
+                  onClick={() => handleTabChange(group.id)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                    activeTab === group.id
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+                  }`}
+                >
+                  {getTabIcon(group.icon)}
+                  <span>{group.label}</span>
+                </button>
+              ))}
+              {isAdmin && (
+                <button
+                  onClick={() => handleTabChange(API_REF_TAB_ID)}
+                  className={`flex items-center gap-2 rounded-xl px-4 py-2 sm:py-2.5 text-sm sm:text-base font-semibold transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                    activeTab === API_REF_TAB_ID
+                      ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40 shadow-lg shadow-blue-500/10'
+                      : 'bg-slate-800/40 text-slate-400 hover:bg-slate-800/60 hover:text-slate-300 border border-slate-700/40'
+                  }`}
+                >
+                  <Code className="h-4 w-4" />
+                  <span>{t('manual:tabs.api')}</span>
+                </button>
+              )}
+            </div>
+          </div>
+
+          {activeTab === API_REF_TAB_ID && isAdmin ? (
+            <ApiReferenceTab isAdmin={isAdmin} token={token} />
+          ) : (
+            (() => {
+              const activeGroup = groups.find((g) => g.id === activeTab);
+              return activeGroup ? (
+                <DocsGroupTab
+                  group={activeGroup}
+                  selectedArticle={selectedArticle}
+                  onSelectArticle={handleSelectArticle}
+                />
+              ) : null;
+            })()
+          )}
+        </>
       )}
     </div>
   );
