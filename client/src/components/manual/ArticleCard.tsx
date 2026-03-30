@@ -1,16 +1,13 @@
 import * as Icons from 'lucide-react';
-import type { Article } from '../../hooks/useManualContent';
-import VersionBadge from './VersionBadge';
 
 interface ArticleCardProps {
-  article: Article;
-  appVersion: string;
+  title: string;
+  icon: string;
   onClick: () => void;
 }
 
 /** Resolve a lucide icon name (e.g. "cloud-download") to a component */
 function getLucideIcon(name: string): React.ReactNode {
-  // Convert kebab-case to PascalCase: "cloud-download" → "CloudDownload"
   const pascal = name
     .split('-')
     .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
@@ -21,7 +18,7 @@ function getLucideIcon(name: string): React.ReactNode {
   return <Icons.FileText className="h-5 w-5" />;
 }
 
-export default function ArticleCard({ article, appVersion, onClick }: ArticleCardProps) {
+export default function ArticleCard({ title, icon, onClick }: ArticleCardProps) {
   return (
     <button
       onClick={onClick}
@@ -29,15 +26,12 @@ export default function ArticleCard({ article, appVersion, onClick }: ArticleCar
     >
       <div className="flex items-start gap-3">
         <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400 group-hover:bg-cyan-500/30 transition-colors flex-shrink-0">
-          {getLucideIcon(article.icon)}
+          {getLucideIcon(icon)}
         </div>
         <div className="flex-1 min-w-0">
-          <div className="flex items-center gap-2 flex-wrap">
-            <h3 className="text-sm sm:text-base font-semibold text-white truncate">
-              {article.title}
-            </h3>
-            <VersionBadge articleVersion={article.version} appVersion={appVersion} />
-          </div>
+          <h3 className="text-sm sm:text-base font-semibold text-white truncate">
+            {title}
+          </h3>
         </div>
         <Icons.ChevronRight className="h-5 w-5 text-slate-500 group-hover:text-slate-300 transition-colors flex-shrink-0 mt-0.5" />
       </div>
