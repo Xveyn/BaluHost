@@ -26,6 +26,7 @@ _COOLDOWN_SECONDS: dict[str, int] = {
     "system.disk_space_critical": 3600, # 1h
     "system.temperature_high": 1800,    # 30min
     "system.temperature_critical": 1800, # 30min
+    "system.storage_permission": 300,  # 5min per path
 }
 
 
@@ -88,6 +89,7 @@ class EventType(str, Enum):
     MEMORY_HIGH = "system.memory_high"
     TEMPERATURE_HIGH = "system.temperature_high"
     TEMPERATURE_CRITICAL = "system.temperature_critical"
+    STORAGE_PERMISSION_ERROR = "system.storage_permission"
 
     # Security events
     LOGIN_FAILED = "security.login_failed"
@@ -262,6 +264,18 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="Temperatur kritisch: {component}",
         message_template="KRITISCH: Die Temperatur von {component} hat {temperature}°C erreicht!",
         action_url="/fans",
+    ),
+    EventType.STORAGE_PERMISSION_ERROR: EventConfig(
+        priority=2,
+        category="system",
+        notification_type="warning",
+        title_template="Speicherzugriff verweigert: {operation}",
+        message_template=(
+            "Dateioperation '{operation}' fehlgeschlagen auf Pfad '{path}': "
+            "Keine Berechtigung. Benutzer: {username}. "
+            "Mögliche Ursache: Datei/Ordner gehört einem anderen Systemprozess."
+        ),
+        action_url="/files",
     ),
 
     # Security events
@@ -940,4 +954,15 @@ def emit_brute_force_detected_sync(ip_address: str) -> None:
     get_event_emitter().emit_for_admins_sync(
         EventType.BRUTE_FORCE_DETECTED,
         ip_address=ip_address,
+    )
+
+
+def emit_storage_permission_error_sync(operation: str, path: str, username: str) -> None:
+    """Emit storage permission error event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.STORAGE_PERMISSION_ERROR,
+        cooldown_entity=path,
+        operation=operation,
+        path=path,
+        username=username,
     )
