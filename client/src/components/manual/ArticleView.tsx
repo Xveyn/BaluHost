@@ -8,7 +8,7 @@ interface ArticleViewProps {
   onBack: () => void;
 }
 
-export default function ArticleView({ content, title, onBack }: ArticleViewProps) {
+export default function ArticleView({ content, onBack }: ArticleViewProps) {
   const { t } = useTranslation('manual');
 
   return (
