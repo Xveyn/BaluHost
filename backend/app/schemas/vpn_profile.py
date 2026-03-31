@@ -1,7 +1,7 @@
 """Pydantic schemas for VPN Profile requests and responses."""
 
 from datetime import datetime
-from typing import Optional
+from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -88,3 +88,18 @@ class VPNConnectionTest(BaseModel):
     error_message: Optional[str] = None
     server_info: Optional[str] = None
     timestamp: datetime = Field(default_factory=datetime.utcnow)
+
+
+class VPNProfileExportResponse(BaseModel):
+    """Response for exporting VPN profile content as QR or file download."""
+
+    profile_id: int
+    profile_name: str
+    vpn_type: VPNType
+    mode: Literal["qr", "download"]
+    filename: str
+    mime_type: str
+    config_base64: str
+    size_bytes: int
+    qr_code: Optional[str] = None
+    reason: Optional[str] = None

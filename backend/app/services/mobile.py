@@ -473,7 +473,15 @@ class MobileService:
             raise HTTPException(status_code=404, detail="Sync folder not found")
         for field, value in update_data.model_dump(exclude_unset=True).items():
             setattr(folder, field, value)
-        folder.last_sync = datetime.now(timezone.utc)
+        now = datetime.now(timezone.utc)
+        folder.last_sync = now
+
+        # Also update the parent device's last_sync so the device manager
+        # shows the correct "Last Synced" timestamp instead of "Never".
+        device = db.query(MobileDevice).filter(MobileDevice.id == folder.device_id).first()
+        if device:
+            device.last_sync = now
+
         db.commit()
         db.refresh(folder)
         return folder

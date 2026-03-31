@@ -14,7 +14,7 @@ from typing import Any, Callable
 from sqlalchemy import delete, distinct, func
 from sqlalchemy.orm import Session
 
-from app.core.database import DATABASE_URL
+from app.core.database import DATABASE_URL, commit_with_retry
 from app.models.dns_queries import (
     DnsQuery,
     DnsQueryCollectorState,
@@ -165,7 +165,7 @@ class DnsQueryCollector:
             state_row.total_queries_stored = (state_row.total_queries_stored or 0) + new_count
             state_row.last_error = None
             state_row.last_error_at = None
-            db.commit()
+            commit_with_retry(db)
 
             if new_count > 0:
                 logger.debug("DnsQueryCollector stored %d new queries", new_count)
@@ -244,7 +244,7 @@ class DnsQueryCollector:
                         avg_response_time_ms=round(row.avg_rt, 2) if row.avg_rt else None,
                     ))
 
-            db.commit()
+            commit_with_retry(db)
             logger.debug("Hourly stats recomputed for %d hours", len(rows))
         except Exception:
             db.rollback()
@@ -272,7 +272,7 @@ class DnsQueryCollector:
             )
             deleted_stats: int = s_result.rowcount or 0
 
-            db.commit()
+            commit_with_retry(db)
             if deleted_queries or deleted_stats:
                 logger.info(
                     "Retention cleanup: deleted %d queries, %d hourly stats (cutoff=%s)",
@@ -311,7 +311,7 @@ class DnsQueryCollector:
             existing = db.query(DnsQueryCollectorState).filter_by(id=1).first()
             if not existing:
                 db.add(DnsQueryCollectorState(id=1))
-                db.commit()
+                commit_with_retry(db)
         except Exception:
             db.rollback()
         finally:
@@ -327,7 +327,7 @@ class DnsQueryCollector:
             if row:
                 row.last_error = message[:500]
                 row.last_error_at = datetime.now(timezone.utc)
-                db.commit()
+                commit_with_retry(db)
         except Exception:
             db.rollback()
         finally:

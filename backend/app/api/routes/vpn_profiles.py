@@ -14,6 +14,7 @@ from app.schemas.vpn_profile import (
     VPNProfileResponse,
     VPNProfileList,
     VPNConnectionTest,
+    VPNProfileExportResponse,
 )
 from app.services.vpn.profile_crud import (
     list_user_profiles,
@@ -24,6 +25,7 @@ from app.services.vpn.profile_crud import (
 )
 from app.services.vpn.profiles import VPNService as VPNProfileValidator
 from app.services.vpn import VPNEncryption
+from app.services.audit.logger_db import get_audit_logger_db
 
 logger = logging.getLogger(__name__)
 
@@ -261,4 +263,75 @@ async def test_vpn_connection(
             connected=False,
             error_message=f"Test failed: {str(e)}",
             server_info=None,
+        )
+
+
+@router.get("/{profile_id}/export", response_model=VPNProfileExportResponse)
+@user_limiter.limit(get_limit("vpn_operations"))
+async def export_vpn_profile(
+    request: Request,
+    response: Response,
+    profile_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(deps.get_current_user),
+) -> VPNProfileExportResponse:
+    """Export VPN profile as QR payload or file-download payload."""
+    audit_logger = get_audit_logger_db()
+    profile = get_user_profile(db, profile_id, current_user.id)
+    if not profile:
+        audit_logger.log_vpn_operation(
+            action="vpn_profile_export_failed",
+            user=current_user.username,
+            vpn_client=f"profile:{profile_id}",
+            details={"reason": "not_found_or_forbidden"},
+            success=False,
+            error_message="VPN profile not found",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="VPN profile not found",
+        )
+
+    try:
+        export_data = VPNProfileValidator.build_profile_export(profile)
+        audit_logger.log_vpn_operation(
+            action="vpn_profile_exported",
+            user=current_user.username,
+            vpn_client=profile.name,
+            details={
+                "profile_id": profile.id,
+                "vpn_type": profile.vpn_type.value,
+                "mode": export_data["mode"],
+                "size_bytes": export_data["size_bytes"],
+            },
+            success=True,
+            db=db,
+        )
+        return VPNProfileExportResponse(
+            profile_id=profile.id,
+            profile_name=profile.name,
+            vpn_type=profile.vpn_type,
+            mode=export_data["mode"],
+            filename=export_data["filename"],
+            mime_type=export_data["mime_type"],
+            config_base64=export_data["config_base64"],
+            size_bytes=export_data["size_bytes"],
+            qr_code=export_data["qr_code"],
+            reason=export_data["reason"],
+        )
+    except Exception as e:
+        logger.error("Error exporting VPN profile: %s", e)
+        audit_logger.log_vpn_operation(
+            action="vpn_profile_export_failed",
+            user=current_user.username,
+            vpn_client=profile.name,
+            details={"profile_id": profile.id},
+            success=False,
+            error_message="VPN profile export failed",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to export VPN profile",
         )

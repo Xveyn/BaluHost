@@ -22,7 +22,7 @@ from typing import Optional
 from cheroot import wsgi
 
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, commit_with_retry
 from app.models.webdav_state import WebdavState
 
 logger = logging.getLogger(__name__)
@@ -236,7 +236,7 @@ class WebdavWorker:
                     state.started_at = now
                 state.error_message = error_message
 
-            db.commit()
+            commit_with_retry(db)
         finally:
             db.close()
 
@@ -250,7 +250,7 @@ class WebdavWorker:
                 state.last_heartbeat = now
                 state.worker_pid = self.pid
                 state.is_running = True
-                db.commit()
+                commit_with_retry(db)
             else:
                 # State row doesn't exist yet — create it
                 self._update_state(is_running=True)
@@ -268,6 +268,6 @@ class WebdavWorker:
                 state.worker_pid = None
                 state.started_at = None
                 state.error_message = None
-                db.commit()
+                commit_with_retry(db)
         finally:
             db.close()

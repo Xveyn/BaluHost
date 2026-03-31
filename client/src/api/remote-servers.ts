@@ -95,6 +95,19 @@ export interface VPNConnectionTest {
   timestamp?: string;
 }
 
+export interface VPNProfileExport {
+  profile_id: number;
+  profile_name: string;
+  vpn_type: 'openvpn' | 'wireguard' | 'custom';
+  mode: 'qr' | 'download';
+  filename: string;
+  mime_type: string;
+  config_base64: string;
+  size_bytes: number;
+  qr_code?: string | null;
+  reason?: string | null;
+}
+
 // VPN Profile API
 export async function createVPNProfile(formData: FormData): Promise<VPNProfile> {
   const res = await apiClient.post('/api/vpn-profiles', formData, {
@@ -126,5 +139,10 @@ export async function deleteVPNProfile(id: number): Promise<void> {
 
 export async function testVPNConnection(id: number): Promise<VPNConnectionTest> {
   const res = await apiClient.post(`/api/vpn-profiles/${id}/test-connection`);
+  return res.data;
+}
+
+export async function exportVPNProfile(id: number): Promise<VPNProfileExport> {
+  const res = await apiClient.get(`/api/vpn-profiles/${id}/export`);
   return res.data;
 }

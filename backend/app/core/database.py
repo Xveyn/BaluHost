@@ -3,6 +3,7 @@ from typing import Generator
 from pathlib import Path
 import os
 import logging
+import time
 
 from sqlalchemy import create_engine, event
 from sqlalchemy.exc import OperationalError
@@ -20,6 +21,8 @@ logger = logging.getLogger(__name__)
 def _configure_sqlite(dbapi_conn, _connection_record):
     """Configure SQLite for optimal performance."""
     cursor = dbapi_conn.cursor()
+    # Wait for locks instead of failing immediately when another writer holds lock.
+    cursor.execute("PRAGMA busy_timeout=30000")
     # Enable Write-Ahead Logging for better concurrent access
     cursor.execute("PRAGMA journal_mode=WAL")
     # Synchronous mode for balance between speed and safety
@@ -81,7 +84,7 @@ if DATABASE_URL.startswith("sqlite"):
     logger.info("Using SQLite database with WAL mode")
     engine = create_engine(
         DATABASE_URL,
-        connect_args={"check_same_thread": False},
+        connect_args={"check_same_thread": False, "timeout": 30},
         pool_pre_ping=True,
         echo=os.getenv("DB_ECHO", "false").lower() == "true"
     )
@@ -124,6 +127,29 @@ else:
 
 # Session factory
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+
+
+def _is_sqlite_locked_error(exc: OperationalError) -> bool:
+    """Return True when an OperationalError originates from SQLite lock contention."""
+    if not DATABASE_URL.startswith("sqlite"):
+        return False
+    message = str(exc).lower()
+    return "database is locked" in message or "database table is locked" in message
+
+
+def commit_with_retry(db: Session, *, retries: int = 3, delay_seconds: float = 0.15) -> None:
+    """Commit session with short retries for transient SQLite lock contention."""
+    for attempt in range(retries + 1):
+        try:
+            db.commit()
+            return
+        except OperationalError as exc:
+            db.rollback()
+            if not _is_sqlite_locked_error(exc) or attempt >= retries:
+                raise
+            sleep_for = delay_seconds * (attempt + 1)
+            logger.debug("SQLite locked on commit, retrying in %.2fs (attempt %d/%d)", sleep_for, attempt + 1, retries)
+            time.sleep(sleep_for)
 
 
 def get_db() -> Generator[Session, None, None]:

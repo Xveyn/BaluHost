@@ -3,6 +3,8 @@ import { Upload, Wifi, Trash2, Check, AlertCircle, Download } from 'lucide-react
 import { Trans, useTranslation } from 'react-i18next';
 import { apiClient } from '../lib/api';
 import { getApiErrorMessage } from '../lib/errorHandling';
+import { useVPNProfiles } from '../hooks/useRemoteServers';
+import { VPNProfileList } from './RemoteServers/VPNProfileList';
 
 interface FritzBoxConfig {
   id: number;
@@ -14,6 +16,7 @@ interface FritzBoxConfig {
 
 export default function VpnManagement() {
   const { t } = useTranslation('settings');
+  const vpnProfiles = useVPNProfiles();
   const [config, setConfig] = useState<FritzBoxConfig | null>(null);
   const [uploadFile, setUploadFile] = useState<File | null>(null);
   const [publicEndpoint, setPublicEndpoint] = useState<string>('');
@@ -322,6 +325,34 @@ export default function VpnManagement() {
             )}
           </div>
         )}
+      </div>
+
+      {/* VPN Profiles + Export (moved from Remote Servers for admin workflow) */}
+      <div className="card border-slate-800/60 bg-slate-900/55">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-lg font-semibold text-white">VPN Profiles</h3>
+          <button
+            onClick={vpnProfiles.fetchProfiles}
+            disabled={vpnProfiles.loading}
+            className="p-2 text-slate-400 hover:text-white transition-colors disabled:opacity-50"
+            title="Refresh VPN profiles"
+          >
+            <Download className="w-4 h-4" />
+          </button>
+        </div>
+
+        {vpnProfiles.error && (
+          <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-sm text-red-300">
+            {vpnProfiles.error}
+          </div>
+        )}
+
+        <VPNProfileList
+          profiles={vpnProfiles.profiles}
+          isLoading={vpnProfiles.loading}
+          onDelete={vpnProfiles.deleteProfile}
+          onTestConnection={vpnProfiles.testConnection}
+        />
       </div>
     </div>
   );

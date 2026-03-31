@@ -19,7 +19,7 @@ from typing import Optional
 from apscheduler.schedulers.background import BackgroundScheduler
 
 from app.core.config import settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, commit_with_retry
 from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
@@ -610,7 +610,7 @@ class SchedulerWorker:
                     state.last_heartbeat = now
                     state.worker_pid = self.pid
 
-            db.commit()
+            commit_with_retry(db)
         finally:
             db.close()
 
@@ -626,7 +626,7 @@ class SchedulerWorker:
             if state:
                 state.is_executing = is_executing
                 state.last_heartbeat = datetime.now(timezone.utc)
-                db.commit()
+                commit_with_retry(db)
         finally:
             db.close()
 
@@ -643,7 +643,7 @@ class SchedulerWorker:
                 SchedulerState.worker_pid: None,
                 SchedulerState.next_run_at: None,
             })
-            db.commit()
+            commit_with_retry(db)
         finally:
             db.close()
 

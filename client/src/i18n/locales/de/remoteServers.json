@@ -11,7 +11,24 @@
   },
   "vpn": {
     "title": "VPN-Profile",
-    "description": "VPN-Konfigurationen für sichere Verbindungen hochladen und verwalten"
+    "description": "VPN-Konfigurationen für sichere Verbindungen hochladen und verwalten",
+    "export": {
+      "button": "Export",
+      "title": "VPN-Profil exportieren",
+      "profile": "Profil",
+      "type": "Typ",
+      "size": "Groesse",
+      "qrAlt": "VPN-Profil QR-Code",
+      "qrHint": "Scanne diesen QR-Code in deinem VPN-Client, falls QR-Import unterstuetzt wird.",
+      "downloadHint": "Das Profil ist fuer einen zuverlaessigen QR-Scan zu gross. Nutze den Direktdownload.",
+      "showConfig": "Konfiguration anzeigen",
+      "hideConfig": "Konfiguration verbergen",
+      "copyConfig": "Konfiguration kopieren",
+      "downloadConfig": "Konfiguration herunterladen",
+      "copySuccess": "Konfiguration kopiert",
+      "copyFailed": "Konfiguration konnte nicht kopiert werden",
+      "downloadFailed": "Konfiguration konnte nicht heruntergeladen werden"
+    }
   },
   "quickStart": {
     "title": "Schnellstart",
