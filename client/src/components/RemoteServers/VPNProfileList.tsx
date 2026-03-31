@@ -1,13 +1,16 @@
 import { useState } from 'react';
 import { useTranslation } from 'react-i18next';
+import toast from 'react-hot-toast';
 import {
   Trash2,
   Loader2,
   Shield,
   RefreshCw,
   ChevronRight,
+  QrCode,
 } from 'lucide-react';
 import * as api from '../../api/remote-servers';
+import { VPNProfileExportDialog } from './VPNProfileExportDialog';
 
 interface VPNProfileListProps {
   profiles: api.VPNProfile[];
@@ -25,6 +28,9 @@ export function VPNProfileList({
   const { t } = useTranslation('remoteServers');
   const [testingId, setTestingId] = useState<number | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [exportingId, setExportingId] = useState<number | null>(null);
+  const [exportData, setExportData] = useState<api.VPNProfileExport | null>(null);
+  const [exportOpen, setExportOpen] = useState(false);
 
   const handleTest = async (id: number) => {
     setTestingId(id);
@@ -43,6 +49,19 @@ export function VPNProfileList({
       } finally {
         setDeleteConfirm(null);
       }
+    }
+  };
+
+  const handleExport = async (id: number) => {
+    setExportingId(id);
+    try {
+      const data = await api.exportVPNProfile(id);
+      setExportData(data);
+      setExportOpen(true);
+    } catch {
+      toast.error(t('vpn.export.downloadFailed'));
+    } finally {
+      setExportingId(null);
     }
   };
 
@@ -74,8 +93,9 @@ export function VPNProfileList({
   }
 
   return (
-    <div className="space-y-3">
-      {profiles.map((profile) => (
+    <>
+      <div className="space-y-3">
+        {profiles.map((profile) => (
         <div
           key={profile.id}
           className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
@@ -110,6 +130,20 @@ export function VPNProfileList({
           {/* Actions */}
           <div className="flex gap-2 flex-wrap">
             <button
+              onClick={() => handleExport(profile.id)}
+              disabled={isLoading || exportingId === profile.id}
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              title={t('vpn.export.button')}
+            >
+              {exportingId === profile.id ? (
+                <Loader2 className="w-4 h-4 animate-spin" />
+              ) : (
+                <QrCode className="w-4 h-4" />
+              )}
+              {t('vpn.export.button')}
+            </button>
+
+            <button
               onClick={() => handleTest(profile.id)}
               disabled={isLoading || testingId === profile.id}
               className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
@@ -133,7 +167,17 @@ export function VPNProfileList({
             </button>
           </div>
         </div>
-      ))}
-    </div>
+        ))}
+      </div>
+
+      <VPNProfileExportDialog
+        open={exportOpen}
+        data={exportData}
+        onClose={() => {
+          setExportOpen(false);
+          setExportData(null);
+        }}
+      />
+    </>
   );
 }

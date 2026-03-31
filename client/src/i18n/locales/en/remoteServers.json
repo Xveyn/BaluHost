@@ -11,7 +11,24 @@
   },
   "vpn": {
     "title": "VPN Profiles",
-    "description": "Upload and manage VPN configurations for secure connections"
+    "description": "Upload and manage VPN configurations for secure connections",
+    "export": {
+      "button": "Export",
+      "title": "Export VPN Profile",
+      "profile": "Profile",
+      "type": "Type",
+      "size": "Size",
+      "qrAlt": "VPN profile QR code",
+      "qrHint": "Scan this QR code in your VPN client if QR import is supported.",
+      "downloadHint": "Profile is too large for reliable QR scan. Use direct download.",
+      "showConfig": "Show Config",
+      "hideConfig": "Hide Config",
+      "copyConfig": "Copy Config",
+      "downloadConfig": "Download Config",
+      "copySuccess": "Configuration copied",
+      "copyFailed": "Could not copy configuration",
+      "downloadFailed": "Could not download configuration"
+    }
   },
   "quickStart": {
     "title": "Quick Start",

@@ -1,15 +1,23 @@
 """VPN Service for managing VPN connections."""
 
+import base64
+import io
 import logging
 import re
+import qrcode
 from typing import Optional, Tuple
+from app.models.vpn_profile import VPNProfile
 from app.models.vpn_profile import VPNType
+from app.services.vpn.encryption import VPNEncryption
 
 logger = logging.getLogger(__name__)
 
 
 class VPNService:
     """Service for VPN operations and configuration management."""
+
+    # Conservative max payload for robust scanner compatibility.
+    MAX_QR_TEXT_LENGTH = 1800
     
     @staticmethod
     def validate_openvpn_config(config_content: str) -> Tuple[bool, Optional[str]]:
@@ -177,3 +185,94 @@ class VPNService:
             return False
         
         return False
+
+    @staticmethod
+    def _build_export_content(profile: VPNProfile) -> str:
+        """Build exportable config content from encrypted profile payload."""
+        config_content = VPNEncryption.decrypt_vpn_config(profile.config_file_encrypted)
+
+        if profile.vpn_type != VPNType.OPENVPN:
+            return config_content
+
+        lower = config_content.lower()
+        if "<cert>" not in lower and profile.certificate_encrypted:
+            certificate = VPNEncryption.decrypt_vpn_config(profile.certificate_encrypted)
+            config_content = (
+                f"{config_content}\n\n"
+                "<cert>\n"
+                f"{certificate.strip()}\n"
+                "</cert>\n"
+            )
+
+        if "<key>" not in lower and profile.private_key_encrypted:
+            private_key = VPNEncryption.decrypt_vpn_config(profile.private_key_encrypted)
+            config_content = (
+                f"{config_content}\n"
+                "<key>\n"
+                f"{private_key.strip()}\n"
+                "</key>\n"
+            )
+
+        return config_content
+
+    @staticmethod
+    def _generate_qr_base64(payload: str) -> str:
+        """Create a base64-encoded QR image from a text payload."""
+        qr = qrcode.QRCode(version=1, box_size=10, border=4)
+        qr.add_data(payload)
+        qr.make(fit=True)
+
+        buffer = io.BytesIO()
+        try:
+            image = qr.make_image(fill_color="black", back_color="white")
+            image.save(buffer, "PNG")
+        except ImportError:
+            modules = qr.modules
+            box = 10
+            border = 4
+            size = (len(modules) + 2 * border) * box
+            paths = []
+            for r, row in enumerate(modules):
+                for c, value in enumerate(row):
+                    if value:
+                        x = (c + border) * box
+                        y = (r + border) * box
+                        paths.append(f"M{x},{y}h{box}v{box}h-{box}z")
+            svg = (
+                f'<svg xmlns="http://www.w3.org/2000/svg" '
+                f'viewBox="0 0 {size} {size}" width="{size}" height="{size}">'
+                f'<rect width="{size}" height="{size}" fill="#fff"/>'
+                f'<path d="{"".join(paths)}" fill="#000"/>'
+                "</svg>"
+            )
+            buffer.write(svg.encode("utf-8"))
+
+        return base64.b64encode(buffer.getvalue()).decode()
+
+    @staticmethod
+    def build_profile_export(profile: VPNProfile) -> dict:
+        """Prepare export payload for a VPN profile with QR/download mode selection."""
+        config_content = VPNService._build_export_content(profile)
+        config_base64 = base64.b64encode(config_content.encode("utf-8")).decode("utf-8")
+        size_bytes = len(config_content.encode("utf-8"))
+        filename_ext = "conf" if profile.vpn_type == VPNType.WIREGUARD else "ovpn"
+        filename = f"{profile.name.strip().replace(' ', '_')}.{filename_ext}"
+
+        mode = "qr"
+        qr_code = None
+        reason = None
+        if len(config_content) <= VPNService.MAX_QR_TEXT_LENGTH:
+            qr_code = VPNService._generate_qr_base64(config_content)
+        else:
+            mode = "download"
+            reason = "payload_too_large"
+
+        return {
+            "mode": mode,
+            "filename": filename,
+            "mime_type": "text/plain",
+            "config_base64": config_base64,
+            "size_bytes": size_bytes,
+            "qr_code": qr_code,
+            "reason": reason,
+        }
