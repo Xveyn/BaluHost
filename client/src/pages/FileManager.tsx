@@ -12,7 +12,7 @@ import {
 import { useAuth } from '../contexts/AuthContext';
 import { apiClient } from '../lib/api';
 import { getFilePermissions, getUserRootUsage, setFilePermissions } from '../api/files';
-import { getUsers } from '../api/users';
+import { getShareableUsers } from '../api/shares';
 import { VersionHistoryModal } from '../components/vcl/VersionHistoryModal';
 import { vclApi, addTrackingRule, removeTrackingRule, getTrackingRules, checkFileTracking } from '../api/vcl';
 import { formatBytes, formatNumber } from '../lib/formatters';
@@ -36,12 +36,8 @@ export default function FileManager() {
   const [allUsers, setAllUsers] = useState<Array<{ id: number; username: string }>>([]);
 
   useEffect(() => {
-    getUsers()
-      .then(data => {
-        if (data && Array.isArray(data.users)) {
-          setAllUsers(data.users.map((u) => ({ id: u.id, username: u.username })));
-        }
-      })
+    getShareableUsers()
+      .then(users => setAllUsers(users))
       .catch(() => {});
   }, []);
 
