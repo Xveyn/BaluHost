@@ -32,6 +32,11 @@ jobs:
 
           echo "Auto-merging PR #$PR_NUMBER (branch: $HEAD_BRANCH)"
 
+          # Read release label before merging
+          RELEASE_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("release:"))] | first // empty')
+          echo "RELEASE_LABEL=$RELEASE_LABEL" >> "$GITHUB_ENV"
+          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
+
           if [ "$HEAD_BRANCH" = "development" ]; then
             # Never delete the development branch
             gh pr merge "$PR_NUMBER" --repo "$REPO" --merge
@@ -39,11 +44,39 @@ jobs:
             gh pr merge "$PR_NUMBER" --repo "$REPO" --merge --delete-branch
           fi
 
-          # Auto-tag from version in pyproject.toml on main
+      - name: Checkout main
+        env:
+          GH_TOKEN: ${{ secrets.DEPLOY_PAT }}
+          REPO: ${{ github.repository }}
+        run: |
           git clone --branch main "https://x-access-token:${GH_TOKEN}@github.com/${REPO}.git" /tmp/repo
           cd /tmp/repo
-          git config --global user.name "github-actions[bot]"
-          git config --global user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Bump version from release label
+        if: env.RELEASE_LABEL != ''
+        working-directory: /tmp/repo
+        run: |
+          BUMP_TYPE="${RELEASE_LABEL#release:}"
+          echo "Release label: $RELEASE_LABEL → bump type: $BUMP_TYPE"
+
+          CURRENT_VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
+          echo "Current version: $CURRENT_VERSION"
+
+          python3 scripts/bump_version.py "$BUMP_TYPE"
+
+          NEW_VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
+          echo "New version: $NEW_VERSION"
+          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
+
+          git add backend/pyproject.toml client/package.json CLAUDE.md
+          git commit -m "chore: bump version to v${NEW_VERSION}"
+          git push origin main
+
+      - name: Auto-tag from pyproject.toml
+        working-directory: /tmp/repo
+        run: |
           VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
           TAG="v${VERSION}"
           if [ -z "$VERSION" ]; then
@@ -62,9 +95,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.DEPLOY_PAT }}
           REPO: ${{ github.repository }}
+        working-directory: /tmp/repo
         run: |
-          cd /tmp/repo
-          git fetch origin development
+          git fetch origin main development
           git checkout development
           git merge origin/main --no-edit
           git push origin development
