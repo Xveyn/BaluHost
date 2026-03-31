@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.23.0] - 2026-03-31
+
+### Added
+- **VPN Profile Export** — Export VPN profiles as QR code or file download
+  - QR code generation for configs under 1800 bytes (scanner-compatible threshold)
+  - Automatic fallback to download mode for large OpenVPN profiles with embedded certs/keys
+  - Export dialog with copy-to-clipboard, direct download, and config preview
+  - Full audit logging for export operations
+- **Release Workflow** — Label-based release automation via PR (`release:patch/minor/major`)
+
+### Changed
+- VPN Profiles section added to VPN Management page for admin workflow
+
+### Fixed
+- **SQLite Lock Contention** — Added `busy_timeout=30s`, WAL mode, and `commit_with_retry` with exponential backoff for background workers (PiHole collector, scheduler, WebDAV)
+- **Mobile Device last_sync** — Device tracking middleware now updates `last_sync` on file upload/download/sync operations; sync folder updates propagate to parent device
+- **File Permissions** — Use shareable users endpoint for permission/ownership dialogs
+
+---
+
 ## [1.22.0] - 2026-03-30
 
 ### Added
