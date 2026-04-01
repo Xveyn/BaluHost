@@ -7,6 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.24.0] - 2026-04-01
+
+### Added
+- **Setup Wizard** — First-time configuration wizard for fresh BaluHost installations
+  - Admin account creation, user setup, file access configuration
+  - Welcome screen with cat logo, progress indicator, security-guarded endpoints
+  - Frontend integration with gated routing (blocks app until setup completes)
+- **Integrations Tab** — New tab in Settings for managing cloud provider credentials
+  - Per-provider cards (Google Drive, OneDrive, iCloud) with configuration status and capability badges (Import/Export)
+  - Inline OAuth credential forms for Google Drive and OneDrive
+  - Admin overview table showing all users' configured integrations
+  - iCloud displays "Import only" hint (login remains in Cloud Import wizard)
+- **VPN Page Unification** — Unified VPN management page with profile CRUD
+  - VPN profile creation/editing with Modal component
+  - Fritz!Box upload UI replaced by profile-based workflow
+
+### Changed
+- CloudConnectWizard simplified — inline OAuth configuration removed, redirects to Settings > Integrations for unconfigured providers
+- Update service reads version from `pyproject.toml` instead of git tags
+- User manual overhauled for v1.23.0
+
+### Fixed
+- SQLite race condition on dev startup — stagger worker starts
+- Plaintext admin password removed from deployment notes
+- Modal rendering via portal to escape ancestor stacking contexts
+- VPN profile form and list restyled to dark theme
+- Unused toast import removed from VPNProfileForm
+
+---
+
 ## [1.23.0] - 2026-03-31
 
 ### Added
