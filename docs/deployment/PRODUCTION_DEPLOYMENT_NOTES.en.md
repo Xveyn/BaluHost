@@ -76,7 +76,7 @@
 - `TOKEN_SECRET`: 64-char secure token (legacy auth)
 - `POSTGRES_PASSWORD`: 43-char secure token
 - `VPN_ENCRYPTION_KEY`: Fernet key for WireGuard encryption
-- `ADMIN_PASSWORD`: `SecureAdmin2026!P3lPPhaBmqA` ⚠️ **CHANGE AFTER FIRST LOGIN**
+- `ADMIN_PASSWORD`: *(set during setup)* ⚠️ **Change after first login**
 
 ### Admin Account
 - **Username:** `admin`
@@ -251,7 +251,7 @@ systemctl status postgresql
 
 **Admin Credentials:**
 - Username: `admin`
-- Password: `SecureAdmin2026!P3lPPhaBmqA` ⚠️ **CHANGE IMMEDIATELY**
+- Password: *(set during setup — not documented here)* ⚠️ **Change immediately**
 
 ---
 
