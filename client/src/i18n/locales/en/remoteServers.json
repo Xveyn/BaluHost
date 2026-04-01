@@ -1,4 +1,7 @@
 {
+  "common": {
+    "cancel": "Cancel"
+  },
   "title": "Remote Servers",
   "description": "Manage and control your remote BaluHost servers with SSH and VPN profiles",
   "tabs": {
@@ -12,6 +15,28 @@
   "vpn": {
     "title": "VPN Profiles",
     "description": "Upload and manage VPN configurations for secure connections",
+    "noProfiles": "No VPN Profiles",
+    "noProfilesDescription": "Add a VPN profile to establish secure connections to your servers.",
+    "created": "Created",
+    "updated": "Updated",
+    "deleteConfirm": "Delete VPN profile \"{{name}}\"?",
+    "validate": "Validate",
+    "validateConfig": "Validate configuration",
+    "deleteProfile": "Delete profile",
+    "addProfile": "Add VPN Profile",
+    "addProfileDescription": "Upload a VPN configuration file to create a new profile.",
+    "profileName": "Profile Name",
+    "profileNamePlaceholder": "e.g. Office VPN",
+    "type": "VPN Type",
+    "descriptionPlaceholder": "Optional description...",
+    "configFile": "Configuration File",
+    "clickToUploadConfig": "Click to upload configuration file (.ovpn, .conf)",
+    "certificate": "Certificate",
+    "clickToUploadCert": "Click to upload certificate (.crt, .pem)",
+    "privateKey": "Private Key",
+    "clickToUploadKey": "Click to upload private key (.key, .pem)",
+    "autoConnect": "Auto-connect on startup",
+    "createProfile": "Create Profile",
     "export": {
       "button": "Export",
       "title": "Export VPN Profile",
