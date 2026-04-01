@@ -4,6 +4,8 @@ Usage:
     Windows: python start_dev.py
     Linux:   python3 start_dev.py
 
+    python start_dev.py --setup   Start with empty DB to test the setup wizard
+
 Press Ctrl+C to stop both processes. The script ensures that the backend virtual
 environment exists and uses it to run Uvicorn. Run it from the repository root.
 
@@ -212,16 +214,17 @@ def terminate_processes(processes: List[ProcessInfo]) -> None:
 
 def _print_dev_banner() -> None:
     """Print a structured overview of the dev-mode configuration."""
+    setup_mode = os.environ.get("BALUHOST_SKIP_SETUP", "").lower() == "false"
     quota_gb = int(os.environ.get("NAS_QUOTA_BYTES", 0)) / (1024 ** 3)
     print("""
 ============================================
-  BaluHost Dev Mode
+  BaluHost Dev Mode{setup_label}
 ============================================
   NAS_MODE    = dev
   Storage     = ./dev-storage (RAID1 sim, 2x5GB)
   Database    = SQLite (baluhost.db)
   Quota       = {quota:.1f} GB
-  Seed Users  = admin/DevMode2024, user/User123
+  Seed Users  = {seed_info}
 
   Mocked Services:
     RAID .............. DevRaidBackend (7 mock disks)
@@ -240,10 +243,34 @@ def _print_dev_banner() -> None:
   Real (cross-platform via psutil):
     CPU/RAM, Disk I/O, Network counters
 ============================================
-""".format(quota=quota_gb))
+""".format(
+        setup_label=" (Setup Wizard)" if setup_mode else "",
+        quota=quota_gb,
+        seed_info="NONE — setup wizard will create users" if setup_mode else "admin/DevMode2024, user/User123",
+    ))
+
+
+def _prepare_setup_mode() -> None:
+    """Prepare the environment for setup wizard testing.
+
+    Deletes the SQLite dev database so the server starts with zero users,
+    triggering the setup wizard in the frontend.
+    """
+    db_path = BACKEND_DIR / "baluhost.db"
+    if db_path.exists():
+        db_path.unlink()
+        print("[setup] Deleted dev database for fresh setup wizard experience")
+    else:
+        print("[setup] No existing dev database — clean start")
+
+    # Ensure skip_setup is off (the default, but be explicit)
+    os.environ["BALUHOST_SKIP_SETUP"] = "false"
+    print("[setup] BALUHOST_SKIP_SETUP=false — setup wizard will appear")
 
 
 def main() -> int:
+    setup_mode = "--setup" in sys.argv
+
     processes: List[ProcessInfo] = []
     backend_python = resolve_backend_python()
 
@@ -326,6 +353,9 @@ def main() -> int:
         os.environ.setdefault("NAS_MODE", "dev")
         os.environ.setdefault("NAS_QUOTA_BYTES", str(5 * 1024 * 1024 * 1024))  # 5 GB effektiv (RAID1: 2x5GB)
 
+        if setup_mode:
+            _prepare_setup_mode()
+
         _print_dev_banner()
 
         npm_binary = resolve_npm_binary()
@@ -381,11 +411,22 @@ def main() -> int:
             print(f"[info] - Local: http://localhost:8000")
             print(f"[info] - Network: http://{local_ip}:8000")
 
-        commands: Dict[str, Dict[str, object]] = {
+        # Start backend + frontend first, then workers after a delay.
+        # Workers call init_db() which races with the backend's init_db() on a
+        # fresh SQLite DB (--setup deletes it). Staggering avoids the
+        # "database schema has changed" error from concurrent create_all().
+        primary_commands: Dict[str, Dict[str, object]] = {
             "backend": {
                 "cmd": backend_cmd,
                 "cwd": BACKEND_DIR,
             },
+            "frontend": {
+                "cmd": [npm_binary, "run", "dev"],
+                "cwd": CLIENT_DIR,
+            },
+        }
+
+        worker_commands: Dict[str, Dict[str, object]] = {
             "monitoring": {
                 "cmd": [backend_python, "scripts/monitoring_worker.py"],
                 "cwd": BACKEND_DIR,
@@ -398,13 +439,28 @@ def main() -> int:
                 "cmd": [backend_python, "scripts/webdav_worker.py"],
                 "cwd": BACKEND_DIR,
             },
-            "frontend": {
-                "cmd": [npm_binary, "run", "dev"],
-                "cwd": CLIENT_DIR,
-            },
         }
 
-        for name, config in commands.items():
+        # Critical processes — if these die, we shut everything down.
+        # Worker crashes (monitoring, scheduler, webdav) are logged but tolerated.
+        critical_processes = {"backend", "frontend"}
+
+        for name, config in primary_commands.items():
+            proc = start_process(name, config["cmd"], config["cwd"])  # type: ignore[arg-type]
+            processes.append((name, proc))
+
+        # Wait for backend to initialize DB before starting workers
+        db_path = BACKEND_DIR / "baluhost.db"
+        print("[info] Waiting for backend to initialize database...")
+        for _ in range(40):  # up to ~4 seconds
+            if db_path.exists() and db_path.stat().st_size > 0:
+                break
+            time.sleep(0.1)
+        else:
+            print("[warning] DB not detected after timeout — starting workers anyway")
+        time.sleep(0.5)  # extra margin for schema creation to finish
+
+        for name, config in worker_commands.items():
             proc = start_process(name, config["cmd"], config["cwd"])  # type: ignore[arg-type]
             processes.append((name, proc))
 
@@ -414,9 +470,12 @@ def main() -> int:
                 retcode = proc.poll()
                 if retcode is not None and name not in exit_codes:
                     exit_codes[name] = retcode
-                    print(f"[info] {name} exited with code {retcode}")
-                    loop_break = True
-                    break
+                    if name in critical_processes:
+                        print(f"[info] {name} exited with code {retcode}")
+                        loop_break = True
+                        break
+                    else:
+                        print(f"[warning] {name} worker exited with code {retcode} (non-critical, continuing)")
             if loop_break:
                 break
             time.sleep(0.5)

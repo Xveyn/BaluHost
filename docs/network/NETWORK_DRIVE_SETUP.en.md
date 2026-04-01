@@ -9,7 +9,7 @@ Dieses Dokument beschreibt, wie du auf das BaluHost RAID-Storage als Netzlaufwer
 ## 🖥️ Dev-Mode (Windows)
 
 Im Dev-Mode liegt der Storage als normales Verzeichnis vor:
-- **Pfad:** `F:\Programme (x86)\Baluhost\backend\dev-storage`
+- **Pfad:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
 - **Größe:** 5 GB (simuliert)
 
 ### Methode 1: Direkter Zugriff (Einfachste Lösung)
@@ -17,7 +17,7 @@ Im Dev-Mode liegt der Storage als normales Verzeichnis vor:
 Da der Dev-Storage ein lokales Verzeichnis ist, kannst du direkt darauf zugreifen:
 
 1. **Windows Explorer öffnen**
-2. **Pfad eingeben:** `F:\Programme (x86)\Baluhost\backend\dev-storage`
+2. **Pfad eingeben:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
 3. **Favoriten hinzufügen** für schnellen Zugriff
 
 ### Methode 2: Als Netzlaufwerk mounten (Empfohlen)
@@ -29,7 +29,7 @@ Windows kann auch lokale Ordner als Netzlaufwerk einbinden:
 ```powershell
 # 1. Als Administrator ausführen
 # 2. Symbolischen Link erstellen (einmalig)
-New-Item -ItemType Junction -Path "C:\NAS" -Target "F:\Programme (x86)\Baluhost\backend\dev-storage"
+New-Item -ItemType Junction -Path "C:\NAS" -Target "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
 # 3. Netzlaufwerk verbinden
 # Rechtsklick auf "Dieser PC" → "Netzlaufwerk verbinden"
@@ -41,7 +41,7 @@ New-Item -ItemType Junction -Path "C:\NAS" -Target "F:\Programme (x86)\Baluhost\
 
 ```powershell
 # Als Administrator ausführen
-$devStoragePath = "F:\Programme (x86)\Baluhost\backend\dev-storage"
+$devStoragePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 $driveLetter = "Z:"
 
 # Prüfe ob Pfad existiert
@@ -77,7 +77,7 @@ Wenn du das Verhalten der Live-Version testen möchtest:
 # Als Administrator PowerShell öffnen:
 
 $shareName = "BaluHostNAS"
-$sharePath = "F:\Programme (x86)\Baluhost\backend\dev-storage"
+$sharePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
 # Freigabe erstellen
 New-SmbShare -Name $shareName -Path $sharePath -FullAccess "Everyone"
@@ -329,7 +329,7 @@ param(
     [switch]$UseSMB = $false
 )
 
-$devStoragePath = "F:\Programme (x86)\Baluhost\backend\dev-storage"
+$devStoragePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
 Write-Host "🚀 BaluHost Dev-Storage Mounting..."
 Write-Host "   Pfad: $devStoragePath"
@@ -476,7 +476,7 @@ sudo systemctl status smbd
 ```powershell
 # Als Administrator ausführen
 # Berechtigungen prüfen
-icacls "F:\Programme (x86)\Baluhost\backend\dev-storage"
+icacls "D:\Programme (x86)\Baluhost\backend\dev-storage"
 ```
 
 ---
@@ -493,7 +493,7 @@ icacls "F:\Programme (x86)\Baluhost\backend\dev-storage"
 
 | Szenario | Befehl |
 |----------|--------|
-| **Dev: Einfaches Mount** | `subst Z: "F:\Programme (x86)\Baluhost\backend\dev-storage"` |
+| **Dev: Einfaches Mount** | `subst Z: "D:\Programme (x86)\Baluhost\backend\dev-storage"` |
 | **Dev: Unmount** | `subst Z: /d` |
 | **Prod: Netzlaufwerk** | `net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost` |
 | **Prod: Trennen** | `net use Z: /delete` |

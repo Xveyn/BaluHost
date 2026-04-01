@@ -1,4 +1,7 @@
 {
+  "common": {
+    "cancel": "Abbrechen"
+  },
   "title": "Remote-Server",
   "description": "Remote BaluHost Server mit SSH- und VPN-Profilen verwalten und steuern",
   "tabs": {
@@ -12,6 +15,28 @@
   "vpn": {
     "title": "VPN-Profile",
     "description": "VPN-Konfigurationen für sichere Verbindungen hochladen und verwalten",
+    "noProfiles": "Keine VPN-Profile",
+    "noProfilesDescription": "Füge ein VPN-Profil hinzu, um sichere Verbindungen zu deinen Servern herzustellen.",
+    "created": "Erstellt",
+    "updated": "Aktualisiert",
+    "deleteConfirm": "VPN-Profil \"{{name}}\" wirklich löschen?",
+    "validate": "Validieren",
+    "validateConfig": "Konfiguration validieren",
+    "deleteProfile": "Profil löschen",
+    "addProfile": "VPN-Profil hinzufügen",
+    "addProfileDescription": "Lade eine VPN-Konfigurationsdatei hoch, um ein neues Profil zu erstellen.",
+    "profileName": "Profilname",
+    "profileNamePlaceholder": "z.B. Büro-VPN",
+    "type": "VPN-Typ",
+    "descriptionPlaceholder": "Optionale Beschreibung...",
+    "configFile": "Konfigurationsdatei",
+    "clickToUploadConfig": "Klicken, um Konfigurationsdatei hochzuladen (.ovpn, .conf)",
+    "certificate": "Zertifikat",
+    "clickToUploadCert": "Klicken, um Zertifikat hochzuladen (.crt, .pem)",
+    "privateKey": "Privater Schlüssel",
+    "clickToUploadKey": "Klicken, um privaten Schlüssel hochzuladen (.key, .pem)",
+    "autoConnect": "Automatisch verbinden beim Start",
+    "createProfile": "Profil erstellen",
     "export": {
       "button": "Export",
       "title": "VPN-Profil exportieren",

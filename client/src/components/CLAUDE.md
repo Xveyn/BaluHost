@@ -56,6 +56,7 @@ Reusable, generic building blocks. No business logic, no API calls.
 | `system-monitor/` | System monitor detail views |
 | `updates/` | Self-update UI |
 | `user-management/` | User CRUD, 2FA management |
+| `setup/` | Setup wizard step components |
 | `vcl/` | File versioning UI |
 | `webdav/` | WebDAV server control |
 

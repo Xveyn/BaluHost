@@ -176,6 +176,41 @@ async def get_current_admin(
     return user
 
 
+async def get_setup_user(
+    request: Request,
+    token: Optional[str] = Depends(oauth2_scheme),
+    db: Session = Depends(get_db),
+) -> UserPublic:
+    """
+    Validate a setup token.
+
+    Only accepts JWT with type='setup'. Used for setup wizard endpoints
+    after admin creation (Step 1).
+    """
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Setup token required",
+        )
+
+    try:
+        payload: TokenPayload = auth_service.decode_token(token, token_type="setup")
+    except auth_service.InvalidTokenError:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired setup token",
+        )
+
+    user = user_service.get_user(payload.sub, db=db)
+    if not user:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Setup user not found",
+        )
+
+    return user_service.serialize_user(user)
+
+
 async def verify_mobile_device_token(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),

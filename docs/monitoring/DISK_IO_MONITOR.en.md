@@ -215,33 +215,11 @@ dd if=/dev/zero of=test.dat bs=1M count=1000
 dd if=test.dat of=/dev/null bs=1M
 ```
 
-## Zukünftige Erweiterungen
+## Features
 
-### Mögliche Features
-
-1. **Historische Daten**: Speicherung in Datenbank für langfristige Analyse
-2. **Alerts**: Benachrichtigungen bei ungewöhnlich hoher I/O-Last
-3. **Export**: CSV/JSON Export der Monitoring-Daten
-4. **Per-Process I/O**: Welcher Prozess verursacht die meiste I/O
-5. **Latency Monitoring**: Durchschnittliche Read/Write Latenz
-6. **Queue Depth**: Wie viele I/O-Requests warten
-7. **Disk Temperature**: Integration mit SMART-Daten
-8. **Vergleichs-Ansicht**: Mehrere Disks im selben Chart
-
-### Datenbank-Schema für Historie
-
-```sql
-CREATE TABLE disk_io_samples (
-    id SERIAL PRIMARY KEY,
-    disk_name VARCHAR(50) NOT NULL,
-    timestamp TIMESTAMP NOT NULL,
-    read_mbps DECIMAL(10,2),
-    write_mbps DECIMAL(10,2),
-    read_iops INTEGER,
-    write_iops INTEGER,
-    INDEX idx_disk_timestamp (disk_name, timestamp)
-);
-```
+- Historical data is stored in the database (`disk_io_samples` table)
+- SMART data and disk temperatures are collected via the Monitoring Orchestrator
+- Retention is configurable
 
 ## Troubleshooting
 
@@ -312,7 +290,7 @@ const samples = disk.samples.slice(-60);
 ### Frontend
 
 - `recharts >= 2.0.0`: Chart-Bibliothek
-- `react >= 19.0.0`: UI-Framework
+- `react >= 18.2.0`: UI-Framework
 - `tailwindcss`: Styling
 
 ## Lizenz & Credits

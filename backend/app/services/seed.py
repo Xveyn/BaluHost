@@ -69,3 +69,20 @@ def seed_dev_data() -> None:
     # Mark seed as applied
     _DEMO_MARKER.write_text("Seed applied", encoding="utf-8")
     logger.info("Dev seed created demo users and sample files")
+
+
+def seed_dev_files_only() -> None:
+    """Seed only the demo directory structure and files (no users).
+
+    Used in setup wizard mode so storage directories exist but the DB
+    stays empty for the wizard to populate.
+    """
+    if not settings.is_dev_mode:
+        return
+
+    storage_root = Path(settings.nas_storage_path)
+    shared_dir = storage_root / "Shared"
+    shared_dir.mkdir(parents=True, exist_ok=True)
+    (shared_dir / "Demo" / "Documents").mkdir(parents=True, exist_ok=True)
+    (shared_dir / "Demo" / "Media").mkdir(parents=True, exist_ok=True)
+    logger.info("Dev seed: created storage directories only (setup wizard mode)")

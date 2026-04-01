@@ -4,6 +4,7 @@ import re
 from pydantic import BaseModel, EmailStr, field_validator
 
 from app.schemas.user import UserPublic
+from app.schemas.validators import validate_username
 
 
 class LoginRequest(BaseModel):
@@ -67,20 +68,7 @@ class RegisterRequest(BaseModel):
     @classmethod
     def validate_username(cls, v: str) -> str:
         """✅ Security Fix #4: Validate username format and length."""
-        v = v.strip()  # Remove leading/trailing whitespace
-
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters long")
-
-        if len(v) > 32:
-            raise ValueError("Username must be less than 32 characters")
-
-        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError(
-                "Username can only contain letters, numbers, hyphens, and underscores"
-            )
-
-        return v
+        return validate_username(v)
 
 
 class TokenPayload(BaseModel):

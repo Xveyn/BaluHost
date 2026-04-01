@@ -52,6 +52,10 @@ class Settings(BaseSettings):
     admin_password: str = "DevMode2024"  # Not in blacklist, meets all validation requirements
     admin_role: str = "admin"
 
+    # Setup wizard
+    skip_setup: bool = False  # BALUHOST_SKIP_SETUP — skip wizard, use env-var admin creation
+    setup_secret: str = ""  # BALUHOST_SETUP_SECRET — if set, required for admin creation endpoint
+
     # Mobile device registration
     mobile_server_url: str | None = None  # Optional: Override server URL for mobile QR codes
     mobile_pairing_allow_lan: bool = True  # Allow token generation from local network IPs (192.168.*, 10.*, etc.)
@@ -228,6 +232,10 @@ class Settings(BaseSettings):
                 self.sleep_mode_enabled = False
             if self.pihole_enabled:
                 self.pihole_enabled = False
+            # Auto-generate VPN encryption key for dev mode
+            if not self.vpn_encryption_key:
+                from cryptography.fernet import Fernet
+                self.vpn_encryption_key = Fernet.generate_key().decode()
         else:
             # Production mode: enable audit logging by default
             if not self.audit_logging_enabled:

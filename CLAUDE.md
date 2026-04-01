@@ -69,6 +69,7 @@ client/
 **Network discovery**: `backend/app/services/network_discovery.py`
 **Scheduler service**: `backend/app/services/scheduler/service.py`
 **Scheduler Dashboard**: `client/src/pages/SchedulerDashboard.tsx`
+**Setup wizard**: `backend/app/services/setup/`, `backend/app/api/routes/setup.py`
 
 Each major directory has its own CLAUDE.md with structure, conventions, and patterns specific to that area. **Keep these in sync when adding/removing files or changing patterns.**
 
