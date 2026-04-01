@@ -69,7 +69,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
     <>
       <button
         onClick={() => setOpen(true)}
-        className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+        className="flex items-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         disabled={isLoading}
       >
         <Plus className="w-4 h-4" />
@@ -77,17 +77,17 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-white rounded-lg shadow-lg w-full max-w-md my-8">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-lg w-full max-w-md my-8">
             {/* Header */}
-            <div className="flex items-center justify-between border-b px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
               <div>
-                <h2 className="text-lg font-semibold text-gray-900">{t('vpn.addProfile')}</h2>
-                <p className="text-sm text-gray-600 mt-1">{t('vpn.addProfileDescription')}</p>
+                <h2 className="text-lg font-semibold text-white">{t('vpn.addProfile')}</h2>
+                <p className="text-sm text-slate-400 mt-1">{t('vpn.addProfileDescription')}</p>
               </div>
               <button
                 onClick={() => setOpen(false)}
-                className="text-gray-400 hover:text-gray-600"
+                className="text-slate-400 hover:text-slate-200"
               >
                 <X className="w-5 h-5" />
               </button>
@@ -97,7 +97,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
             <form onSubmit={handleSubmit} className="p-6 space-y-4">
               {/* Profile Name */}
               <div>
-                <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-1">
                   {t('vpn.profileName')} <span className="text-red-500">*</span>
                 </label>
                 <input
@@ -107,20 +107,20 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   required
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 />
               </div>
 
               {/* VPN Type */}
               <div>
-                <label htmlFor="type" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="type" className="block text-sm font-medium text-slate-300 mb-1">
                   {t('vpn.type')} <span className="text-red-500">*</span>
                 </label>
                 <select
                   id="type"
                   value={vpnType}
                   onChange={(e) => setVpnType(e.target.value as 'openvpn' | 'wireguard' | 'custom')}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 >
                   <option value="openvpn">OpenVPN</option>
                   <option value="wireguard">WireGuard</option>
@@ -130,7 +130,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
 
               {/* Description */}
               <div>
-                <label htmlFor="description" className="block text-sm font-medium text-gray-700 mb-1">
+                <label htmlFor="description" className="block text-sm font-medium text-slate-300 mb-1">
                   {t('vpn.description')}
                 </label>
                 <input
@@ -139,22 +139,22 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   placeholder={t('vpn.descriptionPlaceholder')}
                   value={description}
                   onChange={(e) => setDescription(e.target.value)}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  className="w-full px-3 py-2 border border-slate-700 bg-slate-800 text-slate-100 rounded-lg focus:outline-none focus:ring-2 focus:ring-sky-500 focus:border-sky-500"
                 />
               </div>
 
               {/* Config File Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   {t('vpn.configFile')} <span className="text-red-500">*</span>
                 </label>
                 <div
                   onClick={() => configInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  className="border-2 border-dashed border-slate-600 rounded-lg p-4 cursor-pointer hover:border-sky-500 hover:bg-sky-500/10 transition-colors"
                 >
                   <div className="flex items-center justify-center gap-2">
-                    <Upload className="w-4 h-4 text-gray-400" />
-                    <span className="text-sm text-gray-600">
+                    <Upload className="w-4 h-4 text-slate-500" />
+                    <span className="text-sm text-slate-400">
                       {configFile ? configFile.name : t('vpn.clickToUploadConfig')}
                     </span>
                   </div>
@@ -170,21 +170,21 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
 
               {/* Certificate File Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   {t('vpn.certificate')}
                 </label>
                 <div
                   onClick={() => certInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  className="border-2 border-dashed border-slate-600 rounded-lg p-4 cursor-pointer hover:border-sky-500 hover:bg-sky-500/10 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-gray-600 flex items-center gap-2">
+                    <span className="text-sm text-slate-400 flex items-center gap-2">
                       <Upload className="w-4 h-4" />
                       {certFile ? certFile.name : t('vpn.clickToUploadCert')}
                     </span>
                     {certFile && (
                       <X
-                        className="w-4 h-4 cursor-pointer text-gray-400 hover:text-red-500"
+                        className="w-4 h-4 cursor-pointer text-slate-500 hover:text-red-400"
                         onClick={(e) => {
                           e.stopPropagation();
                           setCertFile(null);
@@ -204,21 +204,21 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
 
               {/* Private Key File Upload */}
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
+                <label className="block text-sm font-medium text-slate-300 mb-2">
                   {t('vpn.privateKey')}
                 </label>
                 <div
                   onClick={() => keyInputRef.current?.click()}
-                  className="border-2 border-dashed border-gray-300 rounded-lg p-4 cursor-pointer hover:border-blue-500 hover:bg-blue-50 transition-colors"
+                  className="border-2 border-dashed border-slate-600 rounded-lg p-4 cursor-pointer hover:border-sky-500 hover:bg-sky-500/10 transition-colors"
                 >
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-sm text-gray-600 flex items-center gap-2">
+                    <span className="text-sm text-slate-400 flex items-center gap-2">
                       <Upload className="w-4 h-4" />
                       {keyFile ? keyFile.name : t('vpn.clickToUploadKey')}
                     </span>
                     {keyFile && (
                       <X
-                        className="w-4 h-4 cursor-pointer text-gray-400 hover:text-red-500"
+                        className="w-4 h-4 cursor-pointer text-slate-500 hover:text-red-400"
                         onClick={(e) => {
                           e.stopPropagation();
                           setKeyFile(null);
@@ -243,9 +243,9 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                   type="checkbox"
                   checked={autoConnect}
                   onChange={(e) => setAutoConnect(e.target.checked)}
-                  className="w-4 h-4 border border-gray-300 rounded focus:ring-2 focus:ring-blue-500 cursor-pointer"
+                  className="w-4 h-4 border border-slate-600 rounded focus:ring-2 focus:ring-sky-500 bg-slate-800 cursor-pointer"
                 />
-                <label htmlFor="auto" className="text-sm text-gray-700 cursor-pointer">
+                <label htmlFor="auto" className="text-sm text-slate-300 cursor-pointer">
                   {t('vpn.autoConnect')}
                 </label>
               </div>
@@ -255,14 +255,14 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
                 <button
                   type="button"
                   onClick={() => setOpen(false)}
-                  className="flex-1 px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors"
+                  className="flex-1 px-4 py-2 border border-slate-600 text-slate-300 rounded-lg hover:bg-slate-800 transition-colors"
                 >
                   {t('common.cancel')}
                 </button>
                 <button
                   type="submit"
                   disabled={loading || isLoading || !configFile}
-                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                  className="flex-1 flex items-center justify-center gap-2 px-4 py-2 bg-sky-500 text-white rounded-lg hover:bg-sky-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   {(loading || isLoading) && <Loader2 className="w-4 h-4 animate-spin" />}
                   {t('vpn.createProfile')}
