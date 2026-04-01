@@ -57,7 +57,7 @@ class TestSetupAdmin:
             "password": "SecurePass123!",
             "email": "admin@example.com",
         })
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         data = resp.json()
         assert data["success"] is True
         assert "setup_token" in data
@@ -115,7 +115,7 @@ class TestSetupUsers:
             json={"username": "alice", "password": "Alice123!"},
             headers={"Authorization": f"Bearer {token}"},
         )
-        assert resp.status_code == 200
+        assert resp.status_code == 201
         assert resp.json()["username"] == "alice"
 
     def test_create_user_without_token_fails(self, client: TestClient, db_session: Session):
