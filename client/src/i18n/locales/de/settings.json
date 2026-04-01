@@ -11,7 +11,8 @@
     "vcl": "Versionskontrolle",
     "language": "Sprache",
     "apiKeys": "API-Schlüssel",
-    "notifications": "Benachrichtigungen"
+    "notifications": "Benachrichtigungen",
+    "integrations": "Integrationen"
   },
   "profile": {
     "title": "Profilinformationen",
@@ -322,5 +323,38 @@
     "addFailed": "Gerät konnte nicht hinzugefügt werden",
     "deleteSuccess": "Gerät gelöscht",
     "deleteFailed": "Gerät konnte nicht gelöscht werden"
+  },
+  "integrations": {
+    "title": "Cloud-Integrationen",
+    "description": "Cloud-Provider-Zugangsdaten fuer Import und Teilen konfigurieren.",
+    "cloudImport": "Cloud Import",
+    "cloudExport": "Cloud Export",
+    "importOnly": "Nur Import — Login ueber Cloud Import Seite",
+    "configured": "Konfiguriert",
+    "notConfigured": "Nicht konfiguriert",
+    "source": "Quelle",
+    "sourceEnv": "Umgebungsvariable",
+    "sourceDb": "Eigene",
+    "configure": "Konfigurieren",
+    "delete": "Loeschen",
+    "deleteConfirm": "Zugangsdaten fuer {{provider}} entfernen? Falls vorhanden, wird der Umgebungsvariablen-Fallback verwendet.",
+    "deleteSuccess": "Zugangsdaten geloescht",
+    "deleteFailed": "Fehler beim Loeschen der Zugangsdaten",
+    "saveSuccess": "Zugangsdaten gespeichert",
+    "saveFailed": "Fehler beim Speichern der Zugangsdaten",
+    "clientId": "Client-ID",
+    "clientIdPlaceholder": "z.B. 123456789.apps.googleusercontent.com",
+    "clientSecret": "Client Secret",
+    "clientSecretPlaceholder": "Client Secret",
+    "save": "Speichern",
+    "cancel": "Abbrechen",
+    "adminOverview": "Alle Benutzer-Konfigurationen",
+    "adminOverviewDescription": "Uebersicht der Cloud-Zugangsdaten aller Benutzer.",
+    "noConfigs": "Noch keine Benutzer haben Cloud-Zugangsdaten konfiguriert.",
+    "user": "Benutzer",
+    "provider": "Provider",
+    "lastUpdated": "Zuletzt aktualisiert",
+    "helpGoogle": "Zugangsdaten in der Google Cloud Console unter APIs & Services > Credentials erstellen.",
+    "helpOneDrive": "App im Azure Portal unter App-Registrierungen registrieren."
   }
 }

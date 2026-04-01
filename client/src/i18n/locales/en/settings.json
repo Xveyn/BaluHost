@@ -11,7 +11,8 @@
     "vcl": "Version Control",
     "language": "Language",
     "apiKeys": "API Keys",
-    "notifications": "Notifications"
+    "notifications": "Notifications",
+    "integrations": "Integrations"
   },
   "profile": {
     "title": "Profile Information",
@@ -322,5 +323,38 @@
     "addFailed": "Failed to add device",
     "deleteSuccess": "Device deleted",
     "deleteFailed": "Failed to delete device"
+  },
+  "integrations": {
+    "title": "Cloud Integrations",
+    "description": "Configure cloud provider credentials for importing and sharing files.",
+    "cloudImport": "Cloud Import",
+    "cloudExport": "Cloud Export",
+    "importOnly": "Import only — login via Cloud Import page",
+    "configured": "Configured",
+    "notConfigured": "Not configured",
+    "source": "Source",
+    "sourceEnv": "Environment",
+    "sourceDb": "Custom",
+    "configure": "Configure",
+    "delete": "Delete",
+    "deleteConfirm": "Remove credentials for {{provider}}? The environment fallback will be used if available.",
+    "deleteSuccess": "Credentials deleted",
+    "deleteFailed": "Failed to delete credentials",
+    "saveSuccess": "Credentials saved",
+    "saveFailed": "Failed to save credentials",
+    "clientId": "Client ID",
+    "clientIdPlaceholder": "e.g. 123456789.apps.googleusercontent.com",
+    "clientSecret": "Client Secret",
+    "clientSecretPlaceholder": "Client Secret",
+    "save": "Save",
+    "cancel": "Cancel",
+    "adminOverview": "All User Configurations",
+    "adminOverviewDescription": "Overview of cloud credentials configured by all users.",
+    "noConfigs": "No users have configured cloud credentials yet.",
+    "user": "User",
+    "provider": "Provider",
+    "lastUpdated": "Last Updated",
+    "helpGoogle": "Create credentials in the Google Cloud Console under APIs & Services > Credentials.",
+    "helpOneDrive": "Register an app in the Azure Portal under App registrations."
   }
 }
