@@ -1,6 +1,5 @@
 import { useState, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import toast from 'react-hot-toast';
 import { Plus, Upload, Loader2 } from 'lucide-react';
 import * as api from '../../api/remote-servers';
 import { Modal } from '../ui/Modal';
