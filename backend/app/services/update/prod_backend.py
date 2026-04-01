@@ -24,6 +24,7 @@ from app.services.update.utils import (
     ProgressCallback,
     parse_version,
     version_to_string,
+    get_installed_version,
     _CONVENTIONAL_RE,
     _parse_conventional_commits,
 )
@@ -57,20 +58,19 @@ class ProdUpdateBackend(UpdateBackend):
             return False, "", str(e)
 
     async def get_current_version(self) -> VersionInfo:
-        """Get version from git describe or latest tag."""
-        # Get current commit
+        """Get version from pyproject.toml, git for commit metadata."""
+        # Version from pyproject.toml (single source of truth)
+        version = version_to_string(get_installed_version())
+
+        # Git commit metadata
         success, commit, _ = self._run_git("rev-parse", "HEAD")
         if not success:
             commit = "unknown"
 
-        # Try git describe for version
-        success, describe, _ = self._run_git("describe", "--tags", "--abbrev=0")
-        if success:
-            tag = describe
-            version = tag.lstrip("v")
-        else:
-            # Fallback to checking package version
-            version = "1.0.0"
+        # Get matching tag for this version
+        tag = f"v{version}"
+        success, _, _ = self._run_git("tag", "-l", tag)
+        if not success or not _:
             tag = None
 
         # Get commit date

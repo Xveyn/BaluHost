@@ -55,6 +55,8 @@ const PluginPage = isDesktop ? lazyWithRetry(() => import('./components/PluginPa
 // Pi-only pages — NOT bundled in desktop builds
 const PiDashboard = FEATURES.piDashboard ? lazyWithRetry(() => import('./pages/PiDashboard')) : null;
 
+const SetupWizard = lazyWithRetry(() => import('./pages/SetupWizard'));
+
 function LoadingFallback() {
   return (
     <div className="flex min-h-screen items-center justify-center">
@@ -243,6 +245,7 @@ function AppRoutes() {
 function App() {
   const [backendReady, setBackendReady] = useState(false);
   const [backendCheckAttempts, setBackendCheckAttempts] = useState(0);
+  const [setupRequired, setSetupRequired] = useState<boolean | null>(null);
 
   // Clear stale-chunk reload flag on successful app mount
   useEffect(() => { sessionStorage.removeItem('chunk-reload'); }, []);
@@ -260,6 +263,7 @@ function App() {
       if (attemptCount >= MAX_ATTEMPTS) {
         if (isMounted) {
           setBackendReady(true); // Show login anyway after timeout
+          setSetupRequired(false); // Assume setup done on timeout
         }
         return;
       }
@@ -286,6 +290,13 @@ function App() {
 
         if (response.ok && isMounted) {
           setBackendReady(true);
+          try {
+            const { getSetupStatus } = await import('./api/setup');
+            const status = await getSetupStatus();
+            if (isMounted) setSetupRequired(status.setup_required);
+          } catch {
+            if (isMounted) setSetupRequired(false); // On error, assume setup done
+          }
           return;
         }
       } catch {
@@ -307,8 +318,16 @@ function App() {
     };
   }, []); // Empty dependency array - only run once on mount
 
-  // Show loading screen if backend is not ready
-  if (!backendReady) return <LoadingScreen backendReady={backendReady} backendCheckAttempts={backendCheckAttempts} />;
+  // Show loading screen if backend is not ready or setup status is pending
+  if (!backendReady || setupRequired === null) return <LoadingScreen backendReady={backendReady} backendCheckAttempts={backendCheckAttempts} />;
+
+  if (setupRequired) {
+    return (
+      <Suspense fallback={<LoadingFallback />}>
+        <SetupWizard onComplete={() => setSetupRequired(false)} />
+      </Suspense>
+    );
+  }
 
   return (
     <AuthProvider>

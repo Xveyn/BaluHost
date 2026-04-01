@@ -6,7 +6,7 @@ import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user, get_db
+from app.api.deps import get_current_admin, get_current_user, get_db
 from app.core.rate_limiter import user_limiter, get_limit
 from app.core.config import settings
 from app.models.user import User
@@ -15,6 +15,7 @@ from app.schemas.cloud import (
     CloudFileResponse,
     CloudImportJobResponse,
     CloudImportRequest,
+    CloudOAuthConfigAdminResponse,
     CloudOAuthConfigCreate,
     CloudOAuthConfigResponse,
     DevConnectRequest,
@@ -129,6 +130,19 @@ async def delete_oauth_config(
     )
 
     return {"success": True, "message": f"OAuth credentials for {provider} deleted"}
+
+
+@router.get("/oauth-configs/all", response_model=list[CloudOAuthConfigAdminResponse])
+@user_limiter.limit(get_limit("admin_operations"))
+async def list_all_oauth_configs(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+):
+    """List all OAuth configs across users (admin only)."""
+    svc = CloudOAuthConfigService(db)
+    configs = svc.get_all_configs()
+    return [CloudOAuthConfigAdminResponse(**c) for c in configs]
 
 
 # ─── Connections ──────────────────────────────────────────────────

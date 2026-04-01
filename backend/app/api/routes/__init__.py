@@ -16,6 +16,7 @@ from app.api.routes import (
     dashboard,
     fritzbox,
     docs,
+    setup,
 )
 
 api_router = APIRouter()
@@ -71,5 +72,6 @@ api_router.include_router(balupi.router, prefix="/admin", tags=["admin", "balupi
 api_router.include_router(smart_devices.router, prefix="/smart-devices", tags=["smart-devices"])
 api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(docs.router, tags=["docs"])
+api_router.include_router(setup.router, tags=["setup"])
 
 __all__ = ["api_router"]

@@ -4,8 +4,8 @@
 
 | Version | Supported          |
 | ------- | ------------------ |
-| 1.15.x  | :white_check_mark: |
-| < 1.15  | :x:                |
+| 1.23.x  | :white_check_mark: |
+| < 1.23  | :x:                |
 
 ## Reporting a Vulnerability
 
@@ -170,5 +170,5 @@ For security-related questions or concerns:
 
 ---
 
-**Last Updated:** March 2026
-**Version:** 1.15.6
+**Last Updated:** April 2026
+**Version:** 1.23.0

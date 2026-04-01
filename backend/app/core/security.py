@@ -184,6 +184,33 @@ def create_2fa_pending_token(user_id: int | str, expires_seconds: int = 300) -> 
     return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
 
 
+def create_setup_token(user_id: int | str, username: str, expires_seconds: int = 1800) -> str:
+    """
+    Create a short-lived token for the setup wizard.
+
+    Grants admin-equivalent access to setup endpoints only.
+    TTL: 30 minutes (enough for full wizard completion).
+
+    Args:
+        user_id: The admin user's ID.
+        username: The admin user's username.
+        expires_seconds: Token lifetime in seconds (default 1800 = 30 min).
+
+    Returns:
+        Encoded JWT token string.
+    """
+    now = datetime.now(timezone.utc)
+    payload = {
+        "sub": str(user_id),
+        "username": username,
+        "role": "admin",
+        "type": "setup",
+        "exp": now + timedelta(seconds=expires_seconds),
+        "iat": now,
+    }
+    return jwt.encode(payload, settings.SECRET_KEY, algorithm="HS256")
+
+
 def decode_token(token: str, token_type: str = "access") -> dict:
     """
     Decode and verify a JWT token.

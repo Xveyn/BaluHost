@@ -80,11 +80,11 @@ export function VPNProfileList({
     return (
       <div className="flex flex-col items-center justify-center py-12 px-4">
         <div className="text-center max-w-md">
-          <div className="w-12 h-12 rounded-full bg-gray-100 flex items-center justify-center mx-auto mb-4">
-            <ChevronRight className="w-6 h-6 text-gray-400" />
+          <div className="w-12 h-12 rounded-full bg-slate-800 flex items-center justify-center mx-auto mb-4">
+            <ChevronRight className="w-6 h-6 text-slate-500" />
           </div>
-          <h3 className="text-lg font-medium text-gray-900 mb-2">{t('vpn.noProfiles')}</h3>
-          <p className="text-sm text-gray-600">
+          <h3 className="text-lg font-medium text-white mb-2">{t('vpn.noProfiles')}</h3>
+          <p className="text-sm text-slate-400">
             {t('vpn.noProfilesDescription')}
           </p>
         </div>
@@ -98,13 +98,13 @@ export function VPNProfileList({
         {profiles.map((profile) => (
         <div
           key={profile.id}
-          className="bg-white border border-gray-200 rounded-lg p-4 hover:shadow-md transition-shadow"
+          className="bg-slate-800/60 border border-slate-700 rounded-lg p-4 hover:border-slate-600 transition-colors"
         >
           {/* Profile Header */}
           <div className="flex items-start justify-between mb-3">
             <div className="flex-1 min-w-0">
               <div className="flex items-center gap-2 mb-1">
-                <h3 className="text-base font-semibold text-gray-900 truncate">{profile.name}</h3>
+                <h3 className="text-base font-semibold text-white truncate">{profile.name}</h3>
                 <span className={`px-2 py-1 text-xs font-medium rounded ${getVpnTypeColor(profile.vpn_type)}`}>
                   {profile.vpn_type.toUpperCase()}
                 </span>
@@ -116,13 +116,13 @@ export function VPNProfileList({
                 )}
               </div>
               {profile.description && (
-                <p className="text-sm text-gray-600">{profile.description}</p>
+                <p className="text-sm text-slate-400">{profile.description}</p>
               )}
             </div>
           </div>
 
           {/* Dates */}
-          <div className="mb-3 text-xs text-gray-500 space-y-1">
+          <div className="mb-3 text-xs text-slate-500 space-y-1">
             <p>{t('vpn.created')}: {new Date(profile.created_at).toLocaleString()}</p>
             <p>{t('vpn.updated')}: {new Date(profile.updated_at).toLocaleString()}</p>
           </div>
@@ -132,7 +132,7 @@ export function VPNProfileList({
             <button
               onClick={() => handleExport(profile.id)}
               disabled={isLoading || exportingId === profile.id}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-blue-100 text-blue-700 rounded hover:bg-blue-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-sky-500/20 text-sky-400 rounded hover:bg-sky-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('vpn.export.button')}
             >
               {exportingId === profile.id ? (
@@ -146,7 +146,7 @@ export function VPNProfileList({
             <button
               onClick={() => handleTest(profile.id)}
               disabled={isLoading || testingId === profile.id}
-              className="flex items-center gap-2 px-3 py-2 text-sm bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="flex items-center gap-2 px-3 py-2 text-sm bg-slate-700 text-slate-300 rounded hover:bg-slate-600 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('vpn.validateConfig')}
             >
               {testingId === profile.id ? (
@@ -160,7 +160,7 @@ export function VPNProfileList({
             <button
               onClick={() => handleDelete(profile.id, profile.name)}
               disabled={isLoading || deleteConfirm === profile.id}
-              className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-100 text-red-700 rounded hover:bg-red-200 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+              className="ml-auto flex items-center gap-2 px-3 py-2 text-sm bg-red-500/20 text-red-400 rounded hover:bg-red-500/30 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
               title={t('vpn.deleteProfile')}
             >
               <Trash2 className="w-4 h-4" />

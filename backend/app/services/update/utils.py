@@ -1,8 +1,12 @@
 """Utility functions and constants for the update service."""
+import logging
 import re
+from pathlib import Path
 from typing import Callable
 
 from app.schemas.update import ReleaseNoteCategory
+
+logger = logging.getLogger(__name__)
 
 # Type for progress callback
 ProgressCallback = Callable[[int, str], None]
@@ -28,6 +32,26 @@ def version_to_string(version: tuple[int, int, int, str]) -> str:
     major, minor, patch, prerelease = version
     base = f"{major}.{minor}.{patch}"
     return f"{base}-{prerelease}" if prerelease else base
+
+
+def get_installed_version() -> tuple[int, int, int, str]:
+    """Read the version from pyproject.toml (single source of truth)."""
+    try:
+        pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
+        for line in pyproject.read_text(encoding="utf-8").splitlines():
+            if line.strip().startswith("version") and "=" in line:
+                ver = line.split("=", 1)[1].strip().strip('"').strip("'")
+                return parse_version(ver)
+    except Exception:
+        pass
+    # Fallback to importlib.metadata
+    try:
+        from importlib.metadata import version as pkg_version
+        ver = pkg_version("baluhost-backend")
+        return parse_version(ver)
+    except Exception:
+        logger.warning("Could not read version, falling back to 0.0.0")
+        return (0, 0, 0, "")
 
 
 # Mapping from conventional commit type to display name + icon

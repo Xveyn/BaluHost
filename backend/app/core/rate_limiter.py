@@ -131,6 +131,9 @@ RATE_LIMITS = {
     # Documentation endpoints
     "docs_index": "60/minute",
     "docs_article": "120/minute",
+
+    # Setup wizard - strict limit to prevent brute force against admin creation
+    "setup_admin": "3/minute",
 }
 
 

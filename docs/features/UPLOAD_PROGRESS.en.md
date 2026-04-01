@@ -263,10 +263,8 @@ const manager = getUploadProgressManager();
 manager.closeAll(); // Close all active connections
 ```
 
-## Future Enhancements
+## Implemented Features
 
-- [ ] Upload pause/resume functionality
-- [ ] Bandwidth throttling
-- [ ] Upload queue management
-- [ ] Progress persistence across page reloads
-- [ ] Chunk-based upload with retry logic
+- [x] Chunked upload with automatic retry
+- [x] Real-time progress indicator via Server-Sent Events
+- [x] Upload queue management

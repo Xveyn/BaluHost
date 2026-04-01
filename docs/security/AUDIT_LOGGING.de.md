@@ -1,297 +1,83 @@
-# Audit Logging System
+# Audit-Logging
 
-Das Audit-Logging-System protokolliert alle wichtigen Operationen im Backend für Sicherheit und Compliance.
+BaluHost protokolliert sicherheitsrelevante Aktionen automatisch in der Datenbank. Die Logs sind über die Weboberfläche einsehbar.
 
-## Übersicht
+## Was wird protokolliert?
 
-Das System erfasst:
-- **Dateizugriffe und -änderungen**: Uploads, Downloads, Löschungen, Verschiebungen, Ordner-Erstellungen
-- **Disk-Monitor-Aktivitäten**: Start, Stop, Fehler, periodische Zusammenfassungen
-- **System-Ereignisse**: Startup, Shutdown, Konfigurationsänderungen
+### Authentifizierung
+- Erfolgreiche und fehlgeschlagene Anmeldungen
+- Passwortänderungen
+- 2FA-Aktivierung/Deaktivierung
+- Token-Erneuerungen
 
-## Konfiguration
+### Dateizugriffe
+- Uploads, Downloads, Löschungen
+- Ordner erstellen, verschieben, umbenennen
+- Freigaben erstellen und löschen
 
-### Dev-Mode vs. Production-Mode
+### Administration
+- Benutzer erstellen, bearbeiten, löschen
+- RAID-Operationen
+- VPN-Client-Verwaltung
+- Konfigurationsänderungen
 
-- **Dev-Mode** (`nas_mode=dev`): Logging ist **deaktiviert** - keine Audit-Log-Dateien werden geschrieben
-- **Production-Mode** (`nas_mode!=dev`): Logging ist **aktiviert** - alle Events werden protokolliert
+### System
+- Server-Start und -Stop
+- Backup-Operationen
+- Scheduler-Ausführungen
 
-### Log-Speicherort
+## Logging-Seite
 
-Audit-Logs werden in `{nas_temp_path}/audit/audit.log` gespeichert.
+Die Logging-Seite ist unter **Logging** in der Seitenleiste erreichbar (Admin-Bereich).
 
-Standardpfade:
-- Dev: `./dev-tmp/audit/audit.log`
-- Production: `./tmp/audit/audit.log`
+### Filter
 
-## Log-Format
+| Filter | Optionen |
+|--------|----------|
+| **Zeitraum** | 1 Tag, 7 Tage, 30 Tage, bis zu 365 Tage |
+| **Event-Typ** | FILE_ACCESS, AUTH, SYSTEM, ADMIN |
+| **Benutzer** | Nach Benutzername filtern (nur Admin) |
+| **Aktion** | upload, download, delete, login, etc. |
+| **Status** | Erfolgreich / Fehlgeschlagen |
 
-Logs werden im JSON-Format geschrieben, eine Zeile pro Event:
+### Paginierung
 
-```json
-{
-  "timestamp": "2025-11-23T10:30:45.123456+00:00",
-  "event_type": "FILE_ACCESS",
-  "user": "admin",
-  "action": "upload",
-  "resource": "/documents/report.pdf",
-  "success": true,
-  "details": {
-    "size_bytes": 2048000
-  }
-}
+Logs werden seitenweise angezeigt (50 Einträge pro Seite). Navigation über die Seitenleiste.
+
+### Sichtbarkeit nach Rolle
+
+| Rolle | Sichtbarkeit |
+|-------|-------------|
+| **Admin** | Alle Events, alle Benutzer, vollständige Details |
+| **Benutzer** | Eingeschränkte Events, anonymisierte Benutzernamen, keine Details |
+
+## Jeder Log-Eintrag enthält
+
+- **Zeitstempel** — Wann die Aktion stattfand
+- **Event-Typ** — Kategorie (FILE_ACCESS, AUTH, SYSTEM, ADMIN)
+- **Benutzer** — Wer die Aktion ausgeführt hat
+- **Aktion** — Was getan wurde (upload, login, delete, etc.)
+- **Ressource** — Betroffene Datei oder Ressource
+- **Status** — Erfolg oder Fehlschlag
+- **Details** — Zusätzliche Informationen (z.B. Dateigröße, Zielpfad)
+
+## Speicherung
+
+- Logs werden in der PostgreSQL-Datenbank gespeichert (Tabelle `audit_logs`)
+- Retention ist über die Monitoring-Konfiguration einstellbar
+- Sensible Daten (Passwörter, Tokens, Private Keys) werden **niemals** geloggt
+
+## API-Zugriff
+
+Audit-Logs sind auch über die REST-API abrufbar:
+
+```
+GET /api/logging/audit?days=7&page=1&page_size=50
 ```
 
-### Event-Typen
+Erfordert Authentifizierung. Admins sehen vollständige Logs, normale Benutzer eine eingeschränkte Ansicht.
 
-#### FILE_ACCESS
-Alle Datei- und Ordneroperationen:
+---
 
-**Upload:**
-```json
-{
-  "event_type": "FILE_ACCESS",
-  "action": "upload",
-  "user": "username",
-  "resource": "/path/to/file.txt",
-  "details": {"size_bytes": 1024}
-}
-```
-
-**Delete:**
-```json
-{
-  "event_type": "FILE_ACCESS",
-  "action": "delete",
-  "user": "username",
-  "resource": "/path/to/file.txt",
-  "details": {"is_directory": false}
-}
-```
-
-**Move:**
-```json
-{
-  "event_type": "FILE_ACCESS",
-  "action": "move",
-  "user": "username",
-  "resource": "/old/path.txt",
-  "details": {"target_path": "/new/path.txt"}
-}
-```
-
-**Create Folder:**
-```json
-{
-  "event_type": "FILE_ACCESS",
-  "action": "create_folder",
-  "user": "username",
-  "resource": "/new/folder"
-}
-```
-
-#### DISK_MONITOR
-Disk-Monitor-Operationen:
-
-**Monitor Started:**
-```json
-{
-  "event_type": "DISK_MONITOR",
-  "action": "monitor_started",
-  "user": "system"
-}
-```
-
-**Periodic Summary:**
-```json
-{
-  "event_type": "DISK_MONITOR",
-  "action": "periodic_summary",
-  "user": "system",
-  "details": {
-    "interval_seconds": 60,
-    "disks": {
-      "PhysicalDrive0": {
-        "avg_read_mbps": 10.5,
-        "avg_write_mbps": 5.2,
-        "max_read_mbps": 25.0,
-        "max_write_mbps": 15.0,
-        "avg_read_iops": 100,
-        "avg_write_iops": 50
-      }
-    }
-  }
-}
-```
-
-**Sampling Error:**
-```json
-{
-  "event_type": "DISK_MONITOR",
-  "action": "sampling_error",
-  "user": "system",
-  "success": false,
-  "error": "Permission denied"
-}
-```
-
-#### SYSTEM
-System-weite Ereignisse:
-
-```json
-{
-  "event_type": "SYSTEM",
-  "action": "startup",
-  "user": "system",
-  "details": {"version": "1.0.0"}
-}
-```
-
-## API-Verwendung
-
-### Grundlegende Verwendung
-
-```python
-from app.services.audit_logger import get_audit_logger
-
-audit = get_audit_logger()
-
-# Log Datei-Upload
-audit.log_file_access(
-    user="admin",
-    action="upload",
-    file_path="/documents/file.pdf",
-    size_bytes=2048000,
-    success=True
-)
-
-# Log Disk-Monitor-Event
-audit.log_disk_monitor(
-    action="monitor_started"
-)
-
-# Log System-Event
-audit.log_system_event(
-    action="startup",
-    user="system",
-    details={"version": "1.0.0"}
-)
-```
-
-### Fehlerbehandlung
-
-```python
-try:
-    # Operation durchführen
-    delete_file(path)
-    
-    # Erfolg loggen
-    audit.log_file_access(
-        user="admin",
-        action="delete",
-        file_path=path,
-        success=True
-    )
-except Exception as e:
-    # Fehler loggen
-    audit.log_file_access(
-        user="admin",
-        action="delete",
-        file_path=path,
-        success=False,
-        error_message=str(e)
-    )
-    raise
-```
-
-### Logs Abrufen
-
-```python
-# Alle Logs abrufen (letzte 100)
-logs = audit.get_logs(limit=100)
-
-# Nach Event-Typ filtern
-file_logs = audit.get_logs(event_type="FILE_ACCESS", limit=50)
-
-# Nach Benutzer filtern
-user_logs = audit.get_logs(user="admin", limit=50)
-```
-
-## Integration in Services
-
-### files.py
-
-Alle Datei-Operationen werden automatisch geloggt:
-- `save_uploads()` - Upload-Events
-- `delete_path()` - Lösch-Events
-- `create_folder()` - Ordner-Erstellungs-Events
-- `move_path()` - Verschiebungs-Events
-
-### disk_monitor.py
-
-Disk-Monitor-Events werden automatisch geloggt:
-- `start_monitoring()` - Monitor-Start
-- `stop_monitoring()` - Monitor-Stop
-- `_sample_disk_io()` - Sampling-Fehler
-- `_log_disk_activity()` - Periodische Zusammenfassungen (alle 60s)
-
-## Testing
-
-Das Logging-System ist vollständig getestet:
-
-```bash
-# Alle Logging-Tests ausführen
-pytest tests/test_audit_logging.py tests/test_file_logging.py tests/test_disk_monitor_logging.py
-
-# Nur Audit-Logger-Tests
-pytest tests/test_audit_logging.py
-
-# Nur File-Operation-Tests
-pytest tests/test_file_logging.py
-
-# Nur Disk-Monitor-Tests
-pytest tests/test_disk_monitor_logging.py
-```
-
-### Test-Coverage
-
-- **test_audit_logging.py**: 16 Tests für Core-Audit-Logger
-  - Aktivierung/Deaktivierung basierend auf Modus
-  - Log-Erstellung und -Abruf
-  - Fehlerbehandlung
-  - Filterung
-
-- **test_file_logging.py**: 8 Tests für Datei-Operations-Logging
-  - Upload-Logging
-  - Delete-Logging (Dateien & Ordner)
-  - Move-Logging
-  - Create-Folder-Logging
-
-- **test_disk_monitor_logging.py**: 9 Tests für Disk-Monitor-Logging
-  - Start/Stop-Logging
-  - Error-Logging
-  - Periodische Summaries
-  - Multi-Disk-Support
-
-## Performance
-
-- Logging ist asynchron und blockiert keine Operationen
-- Im Dev-Mode ist Logging komplett deaktiviert (kein Overhead)
-- Log-Dateien werden gestreamt (keine Memory-Probleme bei großen Logs)
-- Alte Logs können über Cronjob oder manuell rotiert/archiviert werden
-
-## Sicherheit
-
-- Logs enthalten keine Passwörter oder sensible Daten
-- Nur authentifizierte Benutzer können Logs abrufen (über API)
-- Log-Dateien sind nur für den Server-Prozess lesbar
-- Logs sind im JSON-Format für maschinelle Verarbeitung
-
-## Zukünftige Erweiterungen
-
-Mögliche Verweiterungen:
-- Log-Rotation (nach Größe oder Zeit)
-- Export-Funktionen (CSV, Excel)
-- Dashboard für Log-Visualisierung
-- Alerting bei kritischen Events
-- Integration mit externen Logging-Services (Syslog, etc.)
+**Version:** 1.23.0  
+**Letzte Aktualisierung:** April 2026

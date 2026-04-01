@@ -198,3 +198,18 @@ export async function setOAuthConfig(
 export async function deleteOAuthConfig(provider: CloudProvider): Promise<void> {
   await apiClient.delete(`/api/cloud/oauth-config/${provider}`);
 }
+
+// ─── Admin: All OAuth Configs ───────────────────────────────
+
+export interface OAuthConfigAdmin {
+  provider: CloudProvider;
+  user_id: number;
+  username: string;
+  client_id_hint: string | null;
+  updated_at: string | null;
+}
+
+export async function getAllOAuthConfigs(): Promise<OAuthConfigAdmin[]> {
+  const res = await apiClient.get('/api/cloud/oauth-configs/all');
+  return res.data;
+}
