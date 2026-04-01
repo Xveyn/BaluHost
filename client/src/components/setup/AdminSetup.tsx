@@ -11,7 +11,7 @@ export interface AdminSetupProps {
 }
 
 function getPasswordStrength(password: string): { score: number; label: string; color: string } {
-  if (!password) return { score: 0, label: '', color: 'bg-gray-700' };
+  if (!password) return { score: 0, label: '', color: 'bg-slate-700' };
 
   let score = 0;
   if (password.length >= 8) score++;
@@ -23,7 +23,7 @@ function getPasswordStrength(password: string): { score: number; label: string; 
   if (score <= 1) return { score, label: 'Sehr schwach', color: 'bg-red-600' };
   if (score === 2) return { score, label: 'Schwach', color: 'bg-orange-500' };
   if (score === 3) return { score, label: 'Mittel', color: 'bg-yellow-500' };
-  if (score === 4) return { score, label: 'Stark', color: 'bg-blue-500' };
+  if (score === 4) return { score, label: 'Stark', color: 'bg-sky-500' };
   return { score, label: 'Sehr stark', color: 'bg-green-500' };
 }
 
@@ -93,12 +93,12 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
-          <Shield className="w-5 h-5 text-blue-400" />
+        <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center">
+          <Shield className="w-5 h-5 text-sky-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">Administrator-Konto erstellen</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-slate-100">Administrator-Konto erstellen</h2>
+          <p className="text-sm text-slate-400">
             Dies wird das Hauptverwaltungskonto Ihres NAS-Systems sein.
           </p>
         </div>
@@ -130,7 +130,7 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
             <button
               type="button"
               onClick={() => setShowPassword((v) => !v)}
-              className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-200 transition-colors"
+              className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-200 transition-colors"
               tabIndex={-1}
             >
               {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -144,13 +144,13 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
                   <div
                     key={level}
                     className={`flex-1 rounded-full transition-all ${
-                      strength.score >= level ? strength.color : 'bg-gray-700'
+                      strength.score >= level ? strength.color : 'bg-slate-700'
                     }`}
                   />
                 ))}
               </div>
-              <p className="text-xs text-gray-400">
-                Passwortstärke: <span className="text-gray-200">{strength.label}</span>
+              <p className="text-xs text-slate-400">
+                Passwortstärke: <span className="text-slate-200">{strength.label}</span>
               </p>
             </div>
           )}
@@ -170,7 +170,7 @@ export function AdminSetup({ onComplete }: AdminSetupProps) {
           <button
             type="button"
             onClick={() => setShowConfirm((v) => !v)}
-            className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-200 transition-colors"
+            className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-200 transition-colors"
             tabIndex={-1}
           >
             {showConfirm ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}

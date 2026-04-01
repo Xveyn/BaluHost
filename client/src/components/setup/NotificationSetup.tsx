@@ -10,12 +10,12 @@ export function NotificationSetup({ onComplete, onSkip }: OptionalStepProps) {
           <Bell className="w-5 h-5 text-yellow-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">Push-Benachrichtigungen</h2>
-          <p className="text-sm text-gray-400">Firebase-Benachrichtigungen für mobile Apps</p>
+          <h2 className="text-lg font-semibold text-slate-100">Push-Benachrichtigungen</h2>
+          <p className="text-sm text-slate-400">Firebase-Benachrichtigungen für mobile Apps</p>
         </div>
       </div>
 
-      <p className="text-sm text-gray-300 mb-5">
+      <p className="text-sm text-slate-300 mb-5">
         BaluHost kann Push-Benachrichtigungen an die BaluApp senden — etwa bei neuen Uploads,
         abgeschlossenen Backups oder Systemwarnungen. Dafür wird ein Firebase-Projekt mit einem
         Service-Account-Schlüssel benötigt.
@@ -34,18 +34,18 @@ export function NotificationSetup({ onComplete, onSkip }: OptionalStepProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-blue-800/50 bg-blue-900/10 p-4 mb-6">
+      <div className="rounded-lg border border-sky-800/50 bg-sky-900/10 p-4 mb-6">
         <div className="flex gap-3">
-          <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-300/80">
+          <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-sky-300/80">
             Den Firebase-Schlüssel können Sie nach dem Setup unter{' '}
-            <strong className="text-blue-300">Einstellungen → Benachrichtigungen</strong> hochladen
+            <strong className="text-sky-300">Einstellungen → Benachrichtigungen</strong> hochladen
             und konfigurieren.
           </p>
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-700 flex justify-between">
+      <div className="pt-4 border-t border-slate-700 flex justify-between">
         <Button variant="ghost" onClick={onSkip}>
           Überspringen
         </Button>

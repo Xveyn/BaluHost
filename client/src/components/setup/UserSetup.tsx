@@ -95,12 +95,12 @@ export function UserSetup({ setupToken, onComplete }: UserSetupProps) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
-          <Users className="w-5 h-5 text-blue-400" />
+        <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center">
+          <Users className="w-5 h-5 text-sky-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">Benutzer anlegen</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-slate-100">Benutzer anlegen</h2>
+          <p className="text-sm text-slate-400">
             Erstellen Sie mindestens einen regulären Benutzer für Ihr NAS-System.
           </p>
         </div>
@@ -109,18 +109,18 @@ export function UserSetup({ setupToken, onComplete }: UserSetupProps) {
       {/* Created users list */}
       {users.length > 0 && (
         <div className="mb-5 space-y-2">
-          <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+          <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
             Angelegte Benutzer ({users.length})
           </p>
           {users.map((user) => (
             <div
               key={user.user_id}
-              className="flex items-center justify-between px-4 py-3 bg-gray-700/40 rounded-lg border border-gray-700"
+              className="flex items-center justify-between px-4 py-3 bg-slate-800/40 rounded-lg border border-slate-700"
             >
               <div>
-                <span className="text-sm font-medium text-white">{user.username}</span>
+                <span className="text-sm font-medium text-slate-100">{user.username}</span>
                 {user.email && (
-                  <span className="ml-2 text-xs text-gray-400">{user.email}</span>
+                  <span className="ml-2 text-xs text-slate-400">{user.email}</span>
                 )}
               </div>
               <Button
@@ -139,7 +139,7 @@ export function UserSetup({ setupToken, onComplete }: UserSetupProps) {
 
       {/* Add user form */}
       <form onSubmit={handleAddUser} className="space-y-4">
-        <p className="text-sm font-medium text-gray-300">
+        <p className="text-sm font-medium text-slate-300">
           {users.length === 0 ? 'Benutzer hinzufügen' : 'Weiteren Benutzer hinzufügen'}
         </p>
 
@@ -166,7 +166,7 @@ export function UserSetup({ setupToken, onComplete }: UserSetupProps) {
           <button
             type="button"
             onClick={() => setShowPassword((v) => !v)}
-            className="absolute right-3 top-[38px] text-gray-400 hover:text-gray-200 transition-colors"
+            className="absolute right-3 top-[38px] text-slate-400 hover:text-slate-200 transition-colors"
             tabIndex={-1}
           >
             {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
@@ -193,8 +193,8 @@ export function UserSetup({ setupToken, onComplete }: UserSetupProps) {
         </Button>
       </form>
 
-      <div className="mt-6 pt-4 border-t border-gray-700 flex justify-between items-center">
-        <p className="text-sm text-gray-500">
+      <div className="mt-6 pt-4 border-t border-slate-700 flex justify-between items-center">
+        <p className="text-sm text-slate-500">
           {users.length === 0
             ? 'Bitte mindestens einen Benutzer anlegen'
             : `${users.length} Benutzer angelegt`}

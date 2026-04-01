@@ -10,32 +10,32 @@ export function MobileAppSetup({ onComplete, onSkip }: OptionalStepProps) {
           <Smartphone className="w-5 h-5 text-indigo-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">BaluApp – Mobile App</h2>
-          <p className="text-sm text-gray-400">Android-App für unterwegs</p>
+          <h2 className="text-lg font-semibold text-slate-100">BaluApp – Mobile App</h2>
+          <p className="text-sm text-slate-400">Android-App für unterwegs</p>
         </div>
       </div>
 
-      <p className="text-sm text-gray-300 mb-5">
+      <p className="text-sm text-slate-300 mb-5">
         Die BaluApp ermöglicht den Zugriff auf Ihr NAS direkt vom Smartphone. Dateien hochladen,
         herunterladen und verwalten, Push-Benachrichtigungen empfangen und den Systemstatus
         im Blick behalten — alles in einer nativen Android-App.
       </p>
 
       <div className="space-y-2 mb-5">
-        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gray-700/40 border border-gray-700">
+        <div className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700">
           <QrCode className="w-4 h-4 text-indigo-400 flex-shrink-0" />
           <div>
-            <p className="text-sm font-medium text-white">QR-Code-Kopplung</p>
-            <p className="text-xs text-gray-400">
+            <p className="text-sm font-medium text-slate-100">QR-Code-Kopplung</p>
+            <p className="text-xs text-slate-400">
               Gerät über QR-Code in Sekunden verbinden (inklusive VPN-Profil)
             </p>
           </div>
         </div>
 
-        <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-gray-700/40 border border-gray-700">
+        <div className="flex items-center justify-between px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700">
           <div>
-            <p className="text-sm font-medium text-white">BaluApp herunterladen</p>
-            <p className="text-xs text-gray-400">Android – kostenlos</p>
+            <p className="text-sm font-medium text-slate-100">BaluApp herunterladen</p>
+            <p className="text-xs text-slate-400">Android – kostenlos</p>
           </div>
           <a
             href="https://github.com/Xveyn/BaluApp/releases"
@@ -49,18 +49,18 @@ export function MobileAppSetup({ onComplete, onSkip }: OptionalStepProps) {
         </div>
       </div>
 
-      <div className="rounded-lg border border-blue-800/50 bg-blue-900/10 p-4 mb-6">
+      <div className="rounded-lg border border-sky-800/50 bg-sky-900/10 p-4 mb-6">
         <div className="flex gap-3">
-          <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-300/80">
+          <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-sky-300/80">
             Nach der Installation scannen Sie den Kopplungs-QR-Code unter{' '}
-            <strong className="text-blue-300">Mobile Geräte</strong>. Das Gerät erhält
+            <strong className="text-sky-300">Mobile Geräte</strong>. Das Gerät erhält
             automatisch ein 30-Tage-Token und optional ein VPN-Profil.
           </p>
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-700 flex justify-between">
+      <div className="pt-4 border-t border-slate-700 flex justify-between">
         <Button variant="ghost" onClick={onSkip}>
           Überspringen
         </Button>

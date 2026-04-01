@@ -58,12 +58,12 @@ export function RaidSetup({ onComplete, onSkip }: RaidSetupProps) {
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
-          <HardDrive className="w-5 h-5 text-blue-400" />
+        <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center">
+          <HardDrive className="w-5 h-5 text-sky-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">RAID-Konfiguration</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-slate-100">RAID-Konfiguration</h2>
+          <p className="text-sm text-slate-400">
             Überprüfen Sie den aktuellen RAID-Status Ihres Systems.
           </p>
         </div>
@@ -95,12 +95,12 @@ export function RaidSetup({ onComplete, onSkip }: RaidSetupProps) {
       {!loading && !authError && raidStatus && (
         <>
           {raidStatus.arrays.length === 0 ? (
-            <div className="rounded-lg border border-gray-700 bg-gray-800/50 p-5 mb-5 text-center">
-              <HardDrive className="w-10 h-10 text-gray-500 mx-auto mb-3" />
-              <p className="text-sm text-gray-400">
+            <div className="rounded-lg border border-slate-700 bg-slate-800/50 p-5 mb-5 text-center">
+              <HardDrive className="w-10 h-10 text-slate-500 mx-auto mb-3" />
+              <p className="text-sm text-slate-400">
                 Keine RAID-Arrays konfiguriert.
               </p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-xs text-slate-500 mt-1">
                 Sie können RAID-Arrays nach dem Setup im RAID-Management-Bereich erstellen.
               </p>
             </div>
@@ -109,13 +109,13 @@ export function RaidSetup({ onComplete, onSkip }: RaidSetupProps) {
               {raidStatus.arrays.map((array) => (
                 <div
                   key={array.name}
-                  className="flex items-center justify-between px-4 py-3 bg-gray-700/40 rounded-lg border border-gray-700"
+                  className="flex items-center justify-between px-4 py-3 bg-slate-800/40 rounded-lg border border-slate-700"
                 >
                   <div className="flex items-center gap-3">
-                    <HardDrive className="w-4 h-4 text-gray-400" />
+                    <HardDrive className="w-4 h-4 text-slate-400" />
                     <div>
-                      <p className="text-sm font-medium text-white">{array.name}</p>
-                      <p className="text-xs text-gray-400">
+                      <p className="text-sm font-medium text-slate-100">{array.name}</p>
+                      <p className="text-xs text-slate-400">
                         {array.level.toUpperCase()} &middot; {array.devices} Disks &middot; {array.size}
                       </p>
                     </div>
@@ -130,17 +130,17 @@ export function RaidSetup({ onComplete, onSkip }: RaidSetupProps) {
         </>
       )}
 
-      <div className="rounded-lg border border-blue-800/50 bg-blue-900/10 p-4 mb-6">
+      <div className="rounded-lg border border-sky-800/50 bg-sky-900/10 p-4 mb-6">
         <div className="flex gap-3">
-          <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-300/80">
+          <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-sky-300/80">
             Die vollständige RAID-Verwaltung (Arrays erstellen, verwalten, Festplatten hinzufügen)
-            ist nach dem Setup im Bereich <strong className="text-blue-300">RAID-Management</strong> verfügbar.
+            ist nach dem Setup im Bereich <strong className="text-sky-300">RAID-Management</strong> verfügbar.
           </p>
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-700 flex justify-between">
+      <div className="pt-4 border-t border-slate-700 flex justify-between">
         <Button variant="ghost" onClick={onSkip}>
           Überspringen
         </Button>

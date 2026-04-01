@@ -54,12 +54,12 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
   return (
     <div>
       <div className="flex items-center gap-3 mb-6">
-        <div className="w-10 h-10 rounded-full bg-blue-600/20 flex items-center justify-center">
-          <Folder className="w-5 h-5 text-blue-400" />
+        <div className="w-10 h-10 rounded-full bg-sky-500/20 flex items-center justify-center">
+          <Folder className="w-5 h-5 text-sky-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">Dateizugriff einrichten</h2>
-          <p className="text-sm text-gray-400">
+          <h2 className="text-lg font-semibold text-slate-100">Dateizugriff einrichten</h2>
+          <p className="text-sm text-slate-400">
             Aktivieren Sie Netzwerkfreigaben für den Zugriff auf Dateien.
           </p>
         </div>
@@ -70,8 +70,8 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
         <div
           className={`rounded-lg border transition-colors ${
             sambaEnabled
-              ? 'border-blue-600/50 bg-blue-900/10'
-              : 'border-gray-700 bg-gray-800/30'
+              ? 'border-sky-500/50 bg-sky-900/10'
+              : 'border-slate-700 bg-slate-800/30'
           }`}
         >
           <div className="flex items-center justify-between p-4">
@@ -81,8 +81,8 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
                 role="switch"
                 aria-checked={sambaEnabled}
                 onClick={() => setSambaEnabled((v) => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
-                  sambaEnabled ? 'bg-blue-600' : 'bg-gray-600'
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                  sambaEnabled ? 'bg-sky-500' : 'bg-slate-600'
                 }`}
               >
                 <span
@@ -92,15 +92,15 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
                 />
               </button>
               <div>
-                <p className="text-sm font-medium text-white">Samba / SMB</p>
-                <p className="text-xs text-gray-400">Windows-Netzwerkfreigabe (\\server\share)</p>
+                <p className="text-sm font-medium text-slate-100">Samba / SMB</p>
+                <p className="text-xs text-slate-400">Windows-Netzwerkfreigabe (\\server\share)</p>
               </div>
             </div>
             {sambaEnabled && (
               <button
                 type="button"
                 onClick={() => setSambaExpanded((v) => !v)}
-                className="text-gray-400 hover:text-gray-200 transition-colors"
+                className="text-slate-400 hover:text-slate-200 transition-colors"
               >
                 {sambaExpanded ? (
                   <ChevronUp className="w-4 h-4" />
@@ -112,7 +112,7 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
           </div>
 
           {sambaEnabled && sambaExpanded && (
-            <div className="px-4 pb-4 pt-0 border-t border-gray-700/50">
+            <div className="px-4 pb-4 pt-0 border-t border-slate-700/50">
               <div className="pt-4">
                 <Input
                   label="Arbeitsgruppe"
@@ -130,8 +130,8 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
         <div
           className={`rounded-lg border transition-colors ${
             webdavEnabled
-              ? 'border-blue-600/50 bg-blue-900/10'
-              : 'border-gray-700 bg-gray-800/30'
+              ? 'border-sky-500/50 bg-sky-900/10'
+              : 'border-slate-700 bg-slate-800/30'
           }`}
         >
           <div className="flex items-center justify-between p-4">
@@ -141,8 +141,8 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
                 role="switch"
                 aria-checked={webdavEnabled}
                 onClick={() => setWebdavEnabled((v) => !v)}
-                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 focus:ring-offset-gray-900 ${
-                  webdavEnabled ? 'bg-blue-600' : 'bg-gray-600'
+                className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-sky-500 focus:ring-offset-2 focus:ring-offset-slate-900 ${
+                  webdavEnabled ? 'bg-sky-500' : 'bg-slate-600'
                 }`}
               >
                 <span
@@ -152,15 +152,15 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
                 />
               </button>
               <div>
-                <p className="text-sm font-medium text-white">WebDAV</p>
-                <p className="text-xs text-gray-400">Zugriff über Browser & WebDAV-Clients</p>
+                <p className="text-sm font-medium text-slate-100">WebDAV</p>
+                <p className="text-xs text-slate-400">Zugriff über Browser & WebDAV-Clients</p>
               </div>
             </div>
             {webdavEnabled && (
               <button
                 type="button"
                 onClick={() => setWebdavExpanded((v) => !v)}
-                className="text-gray-400 hover:text-gray-200 transition-colors"
+                className="text-slate-400 hover:text-slate-200 transition-colors"
               >
                 {webdavExpanded ? (
                   <ChevronUp className="w-4 h-4" />
@@ -172,7 +172,7 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
           </div>
 
           {webdavEnabled && webdavExpanded && (
-            <div className="px-4 pb-4 pt-0 border-t border-gray-700/50">
+            <div className="px-4 pb-4 pt-0 border-t border-slate-700/50">
               <div className="pt-4">
                 <Input
                   label="Port"
@@ -199,7 +199,7 @@ export function FileAccessSetup({ setupToken, onComplete }: FileAccessSetupProps
         </div>
       )}
 
-      <div className="pt-4 border-t border-gray-700 flex justify-end">
+      <div className="pt-4 border-t border-slate-700 flex justify-end">
         <Button
           onClick={handleSubmit}
           loading={loading}

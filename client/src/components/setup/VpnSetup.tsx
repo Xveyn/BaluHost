@@ -15,12 +15,12 @@ export function VpnSetup({ onComplete, onSkip }: OptionalStepProps) {
           <Shield className="w-5 h-5 text-purple-400" />
         </div>
         <div>
-          <h2 className="text-lg font-semibold text-white">WireGuard VPN</h2>
-          <p className="text-sm text-gray-400">Sicherer Fernzugriff auf Ihr NAS</p>
+          <h2 className="text-lg font-semibold text-slate-100">WireGuard VPN</h2>
+          <p className="text-sm text-slate-400">Sicherer Fernzugriff auf Ihr NAS</p>
         </div>
       </div>
 
-      <p className="text-sm text-gray-300 mb-5">
+      <p className="text-sm text-slate-300 mb-5">
         Mit dem integrierten WireGuard-VPN können Sie von überall sicher auf Ihr NAS zugreifen.
         Jeder Client erhält ein eigenes Schlüsselpaar und eine QR-Code-Konfiguration zur einfachen
         Einrichtung auf Smartphones oder Desktops.
@@ -30,26 +30,26 @@ export function VpnSetup({ onComplete, onSkip }: OptionalStepProps) {
         {FEATURES.map(({ icon: Icon, text }) => (
           <div
             key={text}
-            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-gray-700/40 border border-gray-700"
+            className="flex items-center gap-3 px-4 py-3 rounded-lg bg-slate-800/40 border border-slate-700"
           >
             <Icon className="w-4 h-4 text-purple-400 flex-shrink-0" />
-            <p className="text-sm text-gray-300">{text}</p>
+            <p className="text-sm text-slate-300">{text}</p>
           </div>
         ))}
       </div>
 
-      <div className="rounded-lg border border-blue-800/50 bg-blue-900/10 p-4 mb-6">
+      <div className="rounded-lg border border-sky-800/50 bg-sky-900/10 p-4 mb-6">
         <div className="flex gap-3">
-          <Info className="w-4 h-4 text-blue-400 flex-shrink-0 mt-0.5" />
-          <p className="text-sm text-blue-300/80">
+          <Info className="w-4 h-4 text-sky-400 flex-shrink-0 mt-0.5" />
+          <p className="text-sm text-sky-300/80">
             Die VPN-Konfiguration (Clients hinzufügen, Schlüssel verwalten) erfolgt nach dem Setup
-            im Bereich <strong className="text-blue-300">VPN</strong>. Für den Betrieb muss
+            im Bereich <strong className="text-sky-300">VPN</strong>. Für den Betrieb muss
             WireGuard auf dem Server installiert sein.
           </p>
         </div>
       </div>
 
-      <div className="pt-4 border-t border-gray-700 flex justify-between">
+      <div className="pt-4 border-t border-slate-700 flex justify-between">
         <Button variant="ghost" onClick={onSkip}>
           Überspringen
         </Button>

@@ -31,10 +31,10 @@ export function OptionalGate({ onSkipAll, onContinue }: OptionalGateProps) {
         <div className="w-16 h-16 rounded-full bg-green-600/20 flex items-center justify-center mx-auto mb-4">
           <ArrowRight className="w-8 h-8 text-green-400" />
         </div>
-        <h2 className="text-xl font-semibold text-white mb-2">
+        <h2 className="text-xl font-semibold text-slate-100 mb-2">
           Pflichtschritte abgeschlossen
         </h2>
-        <p className="text-gray-400 text-sm max-w-md mx-auto">
+        <p className="text-slate-400 text-sm max-w-md mx-auto">
           Ihr NAS ist einsatzbereit. Sie können jetzt optionale Features konfigurieren
           oder direkt zum Dashboard wechseln — diese Einstellungen sind jederzeit
           erreichbar.
@@ -42,20 +42,20 @@ export function OptionalGate({ onSkipAll, onContinue }: OptionalGateProps) {
       </div>
 
       <div className="space-y-3 mb-8">
-        <p className="text-xs font-medium text-gray-400 uppercase tracking-wide">
+        <p className="text-xs font-medium text-slate-400 uppercase tracking-wide">
           Verfügbare optionale Features
         </p>
         {OPTIONAL_FEATURES.map(({ icon: Icon, title, description }) => (
           <div
             key={title}
-            className="flex items-start gap-3 px-4 py-3 rounded-lg bg-gray-800/50 border border-gray-700"
+            className="flex items-start gap-3 px-4 py-3 rounded-lg bg-slate-800/50 border border-slate-700"
           >
-            <div className="w-8 h-8 rounded-lg bg-gray-700/60 flex items-center justify-center flex-shrink-0">
-              <Icon className="w-4 h-4 text-gray-300" />
+            <div className="w-8 h-8 rounded-lg bg-slate-800/60 flex items-center justify-center flex-shrink-0">
+              <Icon className="w-4 h-4 text-slate-300" />
             </div>
             <div>
-              <p className="text-sm font-medium text-white">{title}</p>
-              <p className="text-xs text-gray-400">{description}</p>
+              <p className="text-sm font-medium text-slate-100">{title}</p>
+              <p className="text-xs text-slate-400">{description}</p>
             </div>
           </div>
         ))}
