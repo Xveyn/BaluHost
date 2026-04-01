@@ -2,7 +2,7 @@ import { useState, useEffect, lazy, Suspense } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useSearchParams } from 'react-router-dom';
 import toast from 'react-hot-toast';
-import { User, Lock, Clock, Download, Globe, KeyRound, GitBranch, Bell, HardDrive } from 'lucide-react';
+import { User, Lock, Clock, Download, Globe, KeyRound, GitBranch, Bell, HardDrive, Plug } from 'lucide-react';
 import ApiKeysTab from '../components/settings/ApiKeysTab';
 import TwoFactorCard from '../components/settings/TwoFactorCard';
 import VCLTrackingPanel from '../components/vcl/VCLTrackingPanel';
@@ -10,6 +10,7 @@ import { apiClient } from '../lib/api';
 import LanguageSettings from '../components/LanguageSettings';
 import ByteUnitSettings from '../components/ByteUnitSettings';
 import StorageTab from '../components/settings/StorageTab';
+import IntegrationsTab from '../components/settings/IntegrationsTab';
 
 const NotificationPreferencesPage = lazy(() => import('./NotificationPreferencesPage'));
 
@@ -27,8 +28,8 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  type SettingsTab = 'profile' | 'security' | 'storage' | 'language' | 'api-keys' | 'vcl' | 'notifications';
-  const validTabs: SettingsTab[] = ['profile', 'security', 'storage', 'language', 'api-keys', 'vcl', 'notifications'];
+  type SettingsTab = 'profile' | 'security' | 'storage' | 'language' | 'api-keys' | 'vcl' | 'notifications' | 'integrations';
+  const validTabs: SettingsTab[] = ['profile', 'security', 'storage', 'language', 'api-keys', 'vcl', 'notifications', 'integrations'];
   const tabParam = searchParams.get('tab') as SettingsTab | null;
   const [activeTab, setActiveTab] = useState<SettingsTab>(
     tabParam && validTabs.includes(tabParam) ? tabParam : 'profile'
@@ -149,6 +150,7 @@ export default function SettingsPage() {
               { id: 'vcl' as const, label: 'VCL', icon: GitBranch },
               { id: 'language' as const, label: t('tabs.language'), icon: Globe },
               { id: 'notifications' as const, label: t('tabs.notifications'), icon: Bell },
+              { id: 'integrations' as const, label: t('tabs.integrations'), icon: Plug },
               ...(profile?.role === 'admin' ? [{ id: 'api-keys' as const, label: t('tabs.apiKeys'), icon: KeyRound }] : []),
             ]).map(tab => (
               <button
@@ -352,6 +354,10 @@ export default function SettingsPage() {
           <Suspense fallback={<div className="text-center py-8 text-slate-400">{t('profile.loading')}</div>}>
             <NotificationPreferencesPage embedded />
           </Suspense>
+        )}
+
+        {activeTab === 'integrations' && (
+          <IntegrationsTab isAdmin={profile?.role === 'admin'} />
         )}
 
       </div>
