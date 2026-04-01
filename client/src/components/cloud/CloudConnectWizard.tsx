@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { X, ArrowRight, Loader2, KeyRound, Info } from 'lucide-react';
 import {
   getOAuthUrl,
@@ -27,6 +28,7 @@ interface CloudConnectWizardProps {
 }
 
 export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardProps) {
+  const navigate = useNavigate();
   const [step, setStep] = useState<'provider' | 'icloud-login' | 'icloud-2fa'>('provider');
   const [loading, setLoading] = useState(false);
   const [providerStatus, setProviderStatus] = useState<ProvidersStatus | null>(null);
@@ -71,8 +73,9 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
 
     // Unconfigured OAuth provider — redirect to settings
     if (info && !info.configured && info.auth_type === 'oauth') {
-      toast.error('Bitte zuerst in Settings > Integrations konfigurieren');
-      window.location.href = '/settings?tab=integrations';
+      toast.error('Please configure credentials in Settings > Integrations first');
+      onClose();
+      navigate('/settings?tab=integrations');
       return;
     }
 

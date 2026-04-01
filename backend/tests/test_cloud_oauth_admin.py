@@ -1,10 +1,7 @@
 """Tests for the cloud OAuth admin list endpoint."""
-import pytest
 from fastapi.testclient import TestClient
-from sqlalchemy.orm import Session
 
 from app.core.config import settings
-from tests.conftest import get_auth_headers
 
 
 class TestCloudOAuthAdminEndpoint:
