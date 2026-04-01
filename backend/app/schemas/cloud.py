@@ -92,3 +92,12 @@ class CloudOAuthConfigResponse(BaseModel):
     client_id_hint: Optional[str] = None  # "1234...5678" or "(env)"
     user_id: Optional[int] = None
     updated_at: Optional[datetime] = None
+
+
+class CloudOAuthConfigAdminResponse(BaseModel):
+    """Admin view of OAuth config for any user."""
+    provider: str
+    user_id: int
+    username: str
+    client_id_hint: Optional[str] = None
+    updated_at: Optional[datetime] = None
