@@ -4,6 +4,8 @@ Usage:
     Windows: python start_dev.py
     Linux:   python3 start_dev.py
 
+    python start_dev.py --setup   Start with empty DB to test the setup wizard
+
 Press Ctrl+C to stop both processes. The script ensures that the backend virtual
 environment exists and uses it to run Uvicorn. Run it from the repository root.
 
@@ -212,16 +214,17 @@ def terminate_processes(processes: List[ProcessInfo]) -> None:
 
 def _print_dev_banner() -> None:
     """Print a structured overview of the dev-mode configuration."""
+    setup_mode = os.environ.get("BALUHOST_SKIP_SETUP", "").lower() == "false"
     quota_gb = int(os.environ.get("NAS_QUOTA_BYTES", 0)) / (1024 ** 3)
     print("""
 ============================================
-  BaluHost Dev Mode
+  BaluHost Dev Mode{setup_label}
 ============================================
   NAS_MODE    = dev
   Storage     = ./dev-storage (RAID1 sim, 2x5GB)
   Database    = SQLite (baluhost.db)
   Quota       = {quota:.1f} GB
-  Seed Users  = admin/DevMode2024, user/User123
+  Seed Users  = {seed_info}
 
   Mocked Services:
     RAID .............. DevRaidBackend (7 mock disks)
@@ -240,10 +243,34 @@ def _print_dev_banner() -> None:
   Real (cross-platform via psutil):
     CPU/RAM, Disk I/O, Network counters
 ============================================
-""".format(quota=quota_gb))
+""".format(
+        setup_label=" (Setup Wizard)" if setup_mode else "",
+        quota=quota_gb,
+        seed_info="NONE — setup wizard will create users" if setup_mode else "admin/DevMode2024, user/User123",
+    ))
+
+
+def _prepare_setup_mode() -> None:
+    """Prepare the environment for setup wizard testing.
+
+    Deletes the SQLite dev database so the server starts with zero users,
+    triggering the setup wizard in the frontend.
+    """
+    db_path = BACKEND_DIR / "baluhost.db"
+    if db_path.exists():
+        db_path.unlink()
+        print("[setup] Deleted dev database for fresh setup wizard experience")
+    else:
+        print("[setup] No existing dev database — clean start")
+
+    # Ensure skip_setup is off (the default, but be explicit)
+    os.environ["BALUHOST_SKIP_SETUP"] = "false"
+    print("[setup] BALUHOST_SKIP_SETUP=false — setup wizard will appear")
 
 
 def main() -> int:
+    setup_mode = "--setup" in sys.argv
+
     processes: List[ProcessInfo] = []
     backend_python = resolve_backend_python()
 
@@ -325,6 +352,9 @@ def main() -> int:
         # Ensure development-specific environment toggles are present during local runs
         os.environ.setdefault("NAS_MODE", "dev")
         os.environ.setdefault("NAS_QUOTA_BYTES", str(5 * 1024 * 1024 * 1024))  # 5 GB effektiv (RAID1: 2x5GB)
+
+        if setup_mode:
+            _prepare_setup_mode()
 
         _print_dev_banner()
 
