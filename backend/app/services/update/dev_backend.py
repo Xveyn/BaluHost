@@ -2,7 +2,6 @@
 import asyncio
 import logging
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Optional
 
 from app.schemas.update import (
@@ -23,29 +22,10 @@ from app.services.update.utils import (
     ProgressCallback,
     parse_version,
     version_to_string,
+    get_installed_version,
 )
 
 logger = logging.getLogger(__name__)
-
-
-def _get_installed_version() -> tuple[int, int, int, str]:
-    """Read the version from pyproject.toml (always current, even without reinstall)."""
-    try:
-        pyproject = Path(__file__).resolve().parents[3] / "pyproject.toml"
-        for line in pyproject.read_text(encoding="utf-8").splitlines():
-            if line.strip().startswith("version") and "=" in line:
-                ver = line.split("=", 1)[1].strip().strip('"').strip("'")
-                return parse_version(ver)
-    except Exception:
-        pass
-    # Fallback to importlib.metadata
-    try:
-        from importlib.metadata import version as pkg_version
-        ver = pkg_version("baluhost-backend")
-        return parse_version(ver)
-    except Exception:
-        logger.warning("Could not read version, falling back to 0.0.0")
-        return (0, 0, 0, "")
 
 
 def _next_minor(ver: tuple[int, int, int, str]) -> tuple[int, int, int, str]:
@@ -58,7 +38,7 @@ class DevUpdateBackend(UpdateBackend):
     """Development backend that simulates updates without real changes."""
 
     def __init__(self):
-        self._simulated_version = _get_installed_version()
+        self._simulated_version = get_installed_version()
         self._latest_version = _next_minor(self._simulated_version)
         self._current_commit = "abc1234567890abcdef1234567890abcdef12"
         self._latest_commit = "def7890123456789abcdef1234567890abcd56"
