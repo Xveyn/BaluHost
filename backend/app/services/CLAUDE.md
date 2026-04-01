@@ -107,6 +107,9 @@ Business logic layer. Routes delegate to services — services contain the actua
 
 **`update/`** — Self-hosted update mechanism with rollback
 
+**`setup/`** — First-run setup wizard: detection, step tracking, completion
+- `service.py` — Setup required detection, completed step tracking, completion flag
+
 ## Key Patterns
 
 - **Dev/Prod backends**: Hardware services use a protocol/interface with separate `dev_backend` (mocks) and `linux_backend` (real commands). Selected based on `settings.is_dev_mode`

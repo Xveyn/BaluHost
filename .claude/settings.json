@@ -1,0 +1,33 @@
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Grep|Glob",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo 'Verwende stattdessen die vectordb-search MCP Tools (search_code, search_files, search_symbols)' >&2; exit 2"
+          }
+        ]
+      },
+      {
+        "matcher": "Agent",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); if echo \"$input\" | grep -qi '\"subagent_type\".*\"Explore\"'; then echo 'Verwende vectordb-search MCP Tools statt Agent Explore für Codebase-Suchen' >&2; exit 2; fi; exit 0"
+          }
+        ]
+      },
+      {
+        "matcher": "Bash",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "input=$(cat); if echo \"$input\" | grep -qE '\"command\".*\\b(grep|rg)\\b'; then echo 'Verwende vectordb-search MCP Tools statt grep/rg im Terminal' >&2; exit 2; fi; exit 0"
+          }
+        ]
+      }
+    ]
+  }
+}

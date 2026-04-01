@@ -7,6 +7,13 @@ import { UserSetup } from '../components/setup/UserSetup';
 import { RaidSetup } from '../components/setup/RaidSetup';
 import { FileAccessSetup } from '../components/setup/FileAccessSetup';
 import { OptionalGate } from '../components/setup/OptionalGate';
+import { SharingSetup } from '../components/setup/SharingSetup';
+import { VpnSetup } from '../components/setup/VpnSetup';
+import { NotificationSetup } from '../components/setup/NotificationSetup';
+import { CloudImportSetup } from '../components/setup/CloudImportSetup';
+import { PiholeSetup } from '../components/setup/PiholeSetup';
+import { DesktopSyncSetup } from '../components/setup/DesktopSyncSetup';
+import { MobileAppSetup } from '../components/setup/MobileAppSetup';
 import { SetupComplete } from '../components/setup/SetupComplete';
 import { Spinner } from '../components/ui/Spinner';
 import { getSetupStatus, completeSetup } from '../api/setup';
@@ -22,7 +29,14 @@ const STEP_USERS = 1;
 const STEP_RAID = 2;
 const STEP_FILE_ACCESS = 3;
 const STEP_OPTIONAL_GATE = 4;
-const STEP_COMPLETE = 5;
+const STEP_SHARING = 5;
+const STEP_VPN = 6;
+const STEP_NOTIFICATIONS = 7;
+const STEP_CLOUD = 8;
+const STEP_PIHOLE = 9;
+const STEP_DESKTOP = 10;
+const STEP_MOBILE = 11;
+const STEP_COMPLETE = 12;
 
 const REQUIRED_STEPS = 4; // Steps 0–3 are required
 
@@ -32,6 +46,13 @@ const STEP_LABELS = [
   'RAID',
   'Dateizugriff',
   'Optional',
+  'Freigabe',
+  'VPN',
+  'Benachrichtigungen',
+  'Cloud',
+  'Pi-hole',
+  'Desktop',
+  'Mobile',
   'Fertig',
 ];
 
@@ -141,8 +162,41 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   };
 
   const handleOptionalGateContinue = () => {
-    // Future: advance into optional steps (Task 10)
-    // For now, go to complete
+    setCurrentStep(STEP_SHARING);
+  };
+
+  const handleSharingDone = () => {
+    addConfigured('sharing');
+    setCurrentStep(STEP_VPN);
+  };
+
+  const handleVpnDone = () => {
+    addConfigured('vpn');
+    setCurrentStep(STEP_NOTIFICATIONS);
+  };
+
+  const handleNotificationsDone = () => {
+    addConfigured('notifications');
+    setCurrentStep(STEP_CLOUD);
+  };
+
+  const handleCloudDone = () => {
+    addConfigured('cloud');
+    setCurrentStep(STEP_PIHOLE);
+  };
+
+  const handlePiholeDone = () => {
+    addConfigured('pihole');
+    setCurrentStep(STEP_DESKTOP);
+  };
+
+  const handleDesktopDone = () => {
+    addConfigured('desktop');
+    setCurrentStep(STEP_MOBILE);
+  };
+
+  const handleMobileDone = () => {
+    addConfigured('mobile');
     setCurrentStep(STEP_COMPLETE);
   };
 
@@ -172,7 +226,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   }
 
   // Don't show progress bar on the complete screen
-  const showProgress = currentStep <= STEP_OPTIONAL_GATE;
+  const showProgress = currentStep < STEP_COMPLETE;
 
   return (
     <div className="min-h-screen bg-gray-900 flex flex-col">
@@ -232,6 +286,62 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
               <OptionalGate
                 onSkipAll={handleOptionalGateSkipAll}
                 onContinue={handleOptionalGateContinue}
+              />
+            )}
+
+            {currentStep === STEP_SHARING && (
+              <SharingSetup
+                setupToken={setupToken}
+                onComplete={handleSharingDone}
+                onSkip={() => setCurrentStep(STEP_VPN)}
+              />
+            )}
+
+            {currentStep === STEP_VPN && (
+              <VpnSetup
+                setupToken={setupToken}
+                onComplete={handleVpnDone}
+                onSkip={() => setCurrentStep(STEP_NOTIFICATIONS)}
+              />
+            )}
+
+            {currentStep === STEP_NOTIFICATIONS && (
+              <NotificationSetup
+                setupToken={setupToken}
+                onComplete={handleNotificationsDone}
+                onSkip={() => setCurrentStep(STEP_CLOUD)}
+              />
+            )}
+
+            {currentStep === STEP_CLOUD && (
+              <CloudImportSetup
+                setupToken={setupToken}
+                onComplete={handleCloudDone}
+                onSkip={() => setCurrentStep(STEP_PIHOLE)}
+              />
+            )}
+
+            {currentStep === STEP_PIHOLE && (
+              <PiholeSetup
+                setupToken={setupToken}
+                onComplete={handlePiholeDone}
+                onSkip={() => setCurrentStep(STEP_DESKTOP)}
+              />
+            )}
+
+            {currentStep === STEP_DESKTOP && (
+              <DesktopSyncSetup
+                setupToken={setupToken}
+                onComplete={handleDesktopDone}
+                onSkip={() => setCurrentStep(STEP_MOBILE)}
+              />
+            )}
+
+            {currentStep === STEP_MOBILE && (
+              <MobileAppSetup
+                setupToken={setupToken}
+                onComplete={handleMobileDone}
+                onSkip={() => setCurrentStep(STEP_COMPLETE)}
               />
             )}
 

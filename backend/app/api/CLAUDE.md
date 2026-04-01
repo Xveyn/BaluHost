@@ -7,6 +7,7 @@ REST API endpoints for BaluHost. All routes are registered in `routes/__init__.p
 - `deps.py` — FastAPI dependency injection for auth (`get_current_user`, `get_current_admin`, `get_current_user_optional`, `verify_mobile_device_token`)
 - `docs.py` — Custom Swagger UI + ReDoc with BaluHost dark theme styling
 - `routes/` — One file per feature domain (~55 route modules)
+  - `setup.py` — Setup wizard endpoints (status, admin creation, user creation, file access, completion)
 - `versioned/` — API versioning support (reserved)
 
 ## Auth Dependencies (deps.py)
