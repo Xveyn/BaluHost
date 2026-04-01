@@ -3,13 +3,11 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.setup import (
-    SetupStatusResponse,
     SetupAdminRequest,
     SetupUserRequest,
     SetupFileAccessRequest,
     SambaConfig,
     WebdavConfig,
-    SetupCompleteResponse,
 )
 
 
@@ -39,6 +37,34 @@ class TestSetupAdminRequest:
     def test_setup_secret_is_optional(self):
         req = SetupAdminRequest(username="admin", password="StrongPass123!")
         assert req.setup_secret is None
+
+    def test_rejects_invalid_username_format(self):
+        with pytest.raises(ValidationError):
+            SetupAdminRequest(username="admin@host", password="StrongPass123!")
+
+
+class TestSetupUserRequest:
+    """Tests for regular user creation request schema."""
+
+    def test_valid_user_request(self):
+        req = SetupUserRequest(
+            username="alice",
+            password="StrongPass123!",
+            email="alice@example.com",
+        )
+        assert req.username == "alice"
+
+    def test_rejects_short_password(self):
+        with pytest.raises(ValidationError):
+            SetupUserRequest(username="alice", password="short")
+
+    def test_rejects_invalid_username_format(self):
+        with pytest.raises(ValidationError):
+            SetupUserRequest(username="alice@host", password="StrongPass123!")
+
+    def test_email_is_optional(self):
+        req = SetupUserRequest(username="alice", password="StrongPass123!")
+        assert req.email is None
 
 
 class TestSetupFileAccessRequest:
@@ -70,3 +96,9 @@ class TestSetupFileAccessRequest:
         config = WebdavConfig(enabled=True)
         assert config.port == 8443
         assert config.ssl is False
+
+    def test_webdav_rejects_invalid_port(self):
+        with pytest.raises(ValidationError):
+            WebdavConfig(enabled=True, port=0)
+        with pytest.raises(ValidationError):
+            WebdavConfig(enabled=True, port=65536)

@@ -1,12 +1,12 @@
 """Pydantic schemas for the setup wizard API."""
 from __future__ import annotations
 
-import re
 from typing import Optional
 
-from pydantic import BaseModel, EmailStr, field_validator
+from pydantic import BaseModel, EmailStr, Field, field_validator
 
 from app.schemas.auth import _validate_password_strength
+from app.schemas.validators import validate_username
 
 
 class SetupStatusResponse(BaseModel):
@@ -30,14 +30,7 @@ class SetupAdminRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
-        v = v.strip()
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters long")
-        if len(v) > 32:
-            raise ValueError("Username must be less than 32 characters")
-        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError("Username can only contain letters, numbers, hyphens, and underscores")
-        return v
+        return validate_username(v)
 
 
 class SetupAdminResponse(BaseModel):
@@ -62,14 +55,7 @@ class SetupUserRequest(BaseModel):
     @field_validator("username")
     @classmethod
     def validate_username(cls, v: str) -> str:
-        v = v.strip()
-        if len(v) < 3:
-            raise ValueError("Username must be at least 3 characters long")
-        if len(v) > 32:
-            raise ValueError("Username must be less than 32 characters")
-        if not re.match(r"^[a-zA-Z0-9_-]+$", v):
-            raise ValueError("Username can only contain letters, numbers, hyphens, and underscores")
-        return v
+        return validate_username(v)
 
 
 class SetupUserResponse(BaseModel):
@@ -90,7 +76,7 @@ class SambaConfig(BaseModel):
 class WebdavConfig(BaseModel):
     """WebDAV configuration for setup."""
     enabled: bool
-    port: int = 8443
+    port: int = Field(default=8443, ge=1, le=65535)
     ssl: bool = False
 
 
