@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { Server } from 'lucide-react';
+import logoMark from '../assets/baluhost-logo.png';
 import { SetupProgress } from '../components/setup/SetupProgress';
+import { SetupWelcome } from '../components/setup/SetupWelcome';
 import { AdminSetup } from '../components/setup/AdminSetup';
 import { UserSetup } from '../components/setup/UserSetup';
 import { RaidSetup } from '../components/setup/RaidSetup';
@@ -65,6 +66,7 @@ const FEATURE_LABELS: Record<string, string> = {
 };
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
+  const [showWelcome, setShowWelcome] = useState(true);
   const [currentStep, setCurrentStep] = useState(STEP_ADMIN);
   const [setupToken, setSetupToken] = useState<string>('');
   const [configuredFeatures, setConfiguredFeatures] = useState<string[]>([]);
@@ -87,6 +89,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
         const newConfigured: string[] = [];
 
         if (completed.includes('admin')) {
+          setShowWelcome(false);
           newConfigured.push(FEATURE_LABELS.admin);
           if (completed.includes('users')) {
             newConfigured.push(FEATURE_LABELS.users);
@@ -219,32 +222,45 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   if (initializing) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+      <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
         <Spinner size="xl" label="Setup wird initialisiert..." />
       </div>
     );
   }
 
-  // Don't show progress bar on the complete screen
-  const showProgress = currentStep < STEP_COMPLETE;
+  const showHeader = !showWelcome;
+  const showProgress = !showWelcome && currentStep < STEP_COMPLETE;
 
   return (
-    <div className="min-h-screen bg-gray-900 flex flex-col">
-      {/* Header */}
-      <div className="flex-shrink-0 pt-8 pb-4 px-4 text-center">
-        <div className="flex items-center justify-center gap-3 mb-2">
-          <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center">
-            <Server className="w-5 h-5 text-white" />
-          </div>
-          <h1 className="text-2xl font-bold text-white">BaluHost</h1>
-        </div>
-        <p className="text-sm text-gray-400">Ersteinrichtung</p>
+    <div className="relative min-h-screen flex flex-col overflow-hidden text-slate-100">
+      {/* Gradient blur orbs */}
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-24 top-[-120px] h-[420px] w-[420px] rounded-full bg-sky-500/10 blur-3xl" />
+        <div className="absolute right-[-120px] top-[18%] h-[460px] w-[460px] rounded-full bg-indigo-500/10 blur-[140px]" />
+        <div className="absolute left-[45%] bottom-[-180px] h-[340px] w-[340px] rounded-full bg-sky-500/5 blur-[120px]" />
       </div>
 
+      {/* Header — hidden on welcome screen (welcome has its own logo) */}
+      {showHeader && (
+        <div className="relative z-10 flex-shrink-0 pt-8 pb-4 px-4 text-center">
+          <div className="flex flex-col items-center gap-3 mb-2">
+            <div className="glow-ring h-14 w-14">
+              <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
+                <img src={logoMark} alt="BaluHost logo" className="h-full w-full rounded-full" />
+              </div>
+            </div>
+            <h1 className="text-2xl font-semibold tracking-wide text-slate-100">BaluHost</h1>
+          </div>
+          <p className="text-sm text-slate-400">Ersteinrichtung</p>
+        </div>
+      )}
+
       {/* Main content */}
-      <div className="flex-1 flex items-start justify-center px-4 pb-12 pt-4">
+      <div className={`relative z-10 flex-1 flex justify-center px-4 pb-12 ${
+        showWelcome ? 'items-center pt-4' : 'items-start pt-4'
+      }`}>
         <div className="w-full max-w-2xl">
-          {/* Progress bar (not shown on complete screen) */}
+          {/* Progress bar */}
           {showProgress && (
             <SetupProgress
               currentStep={currentStep}
@@ -254,103 +270,109 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             />
           )}
 
-          {/* Step card */}
-          <div className="bg-gray-800 rounded-2xl border border-gray-700 shadow-xl p-6 sm:p-8">
-            {currentStep === STEP_ADMIN && (
-              <AdminSetup onComplete={handleAdminComplete} />
-            )}
+          {/* Card */}
+          <div className="card p-6 sm:p-8">
+            {showWelcome ? (
+              <SetupWelcome onStart={() => setShowWelcome(false)} />
+            ) : (
+              <>
+                {currentStep === STEP_ADMIN && (
+                  <AdminSetup onComplete={handleAdminComplete} />
+                )}
 
-            {currentStep === STEP_USERS && (
-              <UserSetup
-                setupToken={setupToken}
-                onComplete={handleUsersComplete}
-              />
-            )}
+                {currentStep === STEP_USERS && (
+                  <UserSetup
+                    setupToken={setupToken}
+                    onComplete={handleUsersComplete}
+                  />
+                )}
 
-            {currentStep === STEP_RAID && (
-              <RaidSetup
-                setupToken={setupToken}
-                onComplete={handleRaidComplete}
-                onSkip={handleRaidSkip}
-              />
-            )}
+                {currentStep === STEP_RAID && (
+                  <RaidSetup
+                    setupToken={setupToken}
+                    onComplete={handleRaidComplete}
+                    onSkip={handleRaidSkip}
+                  />
+                )}
 
-            {currentStep === STEP_FILE_ACCESS && (
-              <FileAccessSetup
-                setupToken={setupToken}
-                onComplete={handleFileAccessComplete}
-              />
-            )}
+                {currentStep === STEP_FILE_ACCESS && (
+                  <FileAccessSetup
+                    setupToken={setupToken}
+                    onComplete={handleFileAccessComplete}
+                  />
+                )}
 
-            {currentStep === STEP_OPTIONAL_GATE && (
-              <OptionalGate
-                onSkipAll={handleOptionalGateSkipAll}
-                onContinue={handleOptionalGateContinue}
-              />
-            )}
+                {currentStep === STEP_OPTIONAL_GATE && (
+                  <OptionalGate
+                    onSkipAll={handleOptionalGateSkipAll}
+                    onContinue={handleOptionalGateContinue}
+                  />
+                )}
 
-            {currentStep === STEP_SHARING && (
-              <SharingSetup
-                setupToken={setupToken}
-                onComplete={handleSharingDone}
-                onSkip={() => setCurrentStep(STEP_VPN)}
-              />
-            )}
+                {currentStep === STEP_SHARING && (
+                  <SharingSetup
+                    setupToken={setupToken}
+                    onComplete={handleSharingDone}
+                    onSkip={() => setCurrentStep(STEP_VPN)}
+                  />
+                )}
 
-            {currentStep === STEP_VPN && (
-              <VpnSetup
-                setupToken={setupToken}
-                onComplete={handleVpnDone}
-                onSkip={() => setCurrentStep(STEP_NOTIFICATIONS)}
-              />
-            )}
+                {currentStep === STEP_VPN && (
+                  <VpnSetup
+                    setupToken={setupToken}
+                    onComplete={handleVpnDone}
+                    onSkip={() => setCurrentStep(STEP_NOTIFICATIONS)}
+                  />
+                )}
 
-            {currentStep === STEP_NOTIFICATIONS && (
-              <NotificationSetup
-                setupToken={setupToken}
-                onComplete={handleNotificationsDone}
-                onSkip={() => setCurrentStep(STEP_CLOUD)}
-              />
-            )}
+                {currentStep === STEP_NOTIFICATIONS && (
+                  <NotificationSetup
+                    setupToken={setupToken}
+                    onComplete={handleNotificationsDone}
+                    onSkip={() => setCurrentStep(STEP_CLOUD)}
+                  />
+                )}
 
-            {currentStep === STEP_CLOUD && (
-              <CloudImportSetup
-                setupToken={setupToken}
-                onComplete={handleCloudDone}
-                onSkip={() => setCurrentStep(STEP_PIHOLE)}
-              />
-            )}
+                {currentStep === STEP_CLOUD && (
+                  <CloudImportSetup
+                    setupToken={setupToken}
+                    onComplete={handleCloudDone}
+                    onSkip={() => setCurrentStep(STEP_PIHOLE)}
+                  />
+                )}
 
-            {currentStep === STEP_PIHOLE && (
-              <PiholeSetup
-                setupToken={setupToken}
-                onComplete={handlePiholeDone}
-                onSkip={() => setCurrentStep(STEP_DESKTOP)}
-              />
-            )}
+                {currentStep === STEP_PIHOLE && (
+                  <PiholeSetup
+                    setupToken={setupToken}
+                    onComplete={handlePiholeDone}
+                    onSkip={() => setCurrentStep(STEP_DESKTOP)}
+                  />
+                )}
 
-            {currentStep === STEP_DESKTOP && (
-              <DesktopSyncSetup
-                setupToken={setupToken}
-                onComplete={handleDesktopDone}
-                onSkip={() => setCurrentStep(STEP_MOBILE)}
-              />
-            )}
+                {currentStep === STEP_DESKTOP && (
+                  <DesktopSyncSetup
+                    setupToken={setupToken}
+                    onComplete={handleDesktopDone}
+                    onSkip={() => setCurrentStep(STEP_MOBILE)}
+                  />
+                )}
 
-            {currentStep === STEP_MOBILE && (
-              <MobileAppSetup
-                setupToken={setupToken}
-                onComplete={handleMobileDone}
-                onSkip={() => setCurrentStep(STEP_COMPLETE)}
-              />
-            )}
+                {currentStep === STEP_MOBILE && (
+                  <MobileAppSetup
+                    setupToken={setupToken}
+                    onComplete={handleMobileDone}
+                    onSkip={() => setCurrentStep(STEP_COMPLETE)}
+                  />
+                )}
 
-            {currentStep === STEP_COMPLETE && (
-              <SetupComplete
-                configuredFeatures={configuredFeatures}
-                skippedFeatures={skippedFeatures}
-                onFinish={finishing ? () => {} : handleFinish}
-              />
+                {currentStep === STEP_COMPLETE && (
+                  <SetupComplete
+                    configuredFeatures={configuredFeatures}
+                    skippedFeatures={skippedFeatures}
+                    onFinish={finishing ? () => {} : handleFinish}
+                  />
+                )}
+              </>
             )}
           </div>
         </div>
