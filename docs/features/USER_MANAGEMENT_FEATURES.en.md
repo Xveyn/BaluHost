@@ -155,7 +155,7 @@ alembic upgrade head
 
 ### Backend
 - **FastAPI** mit SQLAlchemy
-- **SQLite** Datenbank
+- **SQLite** (Dev) / **PostgreSQL** (Prod)
 - **Alembic** für Migrationen
 - **Pydantic** für Validierung
 
@@ -178,22 +178,14 @@ alembic upgrade head
 - Passwort-Hashing mit bcrypt
 - CORS-konforme API-Requests
 
-## Zukünftige Erweiterungen (Optional)
-
-1. **Pagination**: Für sehr große Benutzerlisten
-2. **Last Login**: Letzter Login-Timestamp
-3. **User Roles Erweitert**: Mehr als nur User/Admin
-4. **Permission System**: Granulare Berechtigungen
-5. **Activity Log**: Benutzer-Aktivitätsprotokolle
-6. **Bulk Edit**: Mehrere Benutzer gleichzeitig bearbeiten
-7. **Password Reset**: Passwort-Reset-Funktion
-8. **Email Notifications**: Benachrichtigungen bei Account-Änderungen
-
 ## Testing
 
-Das System kann getestet werden:
-1. `python start_dev.py` - Startet Backend + Frontend
-2. Login als Admin (admin / admin123)
-3. Navigation zu "User Management"
+The system can be tested in dev mode:
+1. `python start_dev.py` — Starts backend + frontend
+2. Login as admin (`admin` / `DevMode2024`)
+3. Navigate to "User Management"
 
-Alle Features sollten sofort funktionsfähig sein.
+---
+
+**Version:** 1.23.0  
+**Last updated:** April 2026

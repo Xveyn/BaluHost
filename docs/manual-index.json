@@ -15,14 +15,6 @@
           "titleEn": "User Guide",
           "icon": "book-open",
           "order": 1
-        },
-        {
-          "slug": "dev-checklist",
-          "path": "getting-started/DEV_CHECKLIST",
-          "titleDe": "Entwickler-Checkliste",
-          "titleEn": "Developer Checklist",
-          "icon": "list-checks",
-          "order": 2
         }
       ]
     },
@@ -66,12 +58,11 @@
         { "slug": "deployment", "path": "deployment/DEPLOYMENT", "titleDe": "Deployment-Guide", "titleEn": "Deployment Guide", "icon": "rocket", "order": 1 },
         { "slug": "production-quickstart", "path": "deployment/PRODUCTION_QUICKSTART", "titleDe": "Produktion Schnellstart", "titleEn": "Production Quickstart", "icon": "zap", "order": 2 },
         { "slug": "production-readiness", "path": "deployment/PRODUCTION_READINESS", "titleDe": "Produktionsreife-Checkliste", "titleEn": "Production Readiness Checklist", "icon": "clipboard-check", "order": 3 },
-        { "slug": "production-notes", "path": "deployment/PRODUCTION_DEPLOYMENT_NOTES", "titleDe": "Deployment-Notizen", "titleEn": "Deployment Notes", "icon": "file-text", "order": 4 },
-        { "slug": "frontend-deployment", "path": "deployment/FRONTEND_DEPLOYMENT", "titleDe": "Frontend-Deployment", "titleEn": "Frontend Deployment", "icon": "layout", "order": 5 },
-        { "slug": "ssl-setup", "path": "deployment/SSL_SETUP", "titleDe": "SSL/TLS-Konfiguration", "titleEn": "SSL/TLS Configuration", "icon": "lock", "order": 6 },
-        { "slug": "reverse-proxy", "path": "deployment/REVERSE_PROXY_SETUP", "titleDe": "Reverse-Proxy-Setup", "titleEn": "Reverse Proxy Setup", "icon": "arrow-right-left", "order": 7 },
-        { "slug": "infrastructure", "path": "deployment/infrastructure", "titleDe": "Infrastruktur", "titleEn": "Infrastructure", "icon": "network", "order": 8 },
-        { "slug": "emergency-runbook", "path": "deployment/emergency-runbook", "titleDe": "Notfall-Runbook", "titleEn": "Emergency Runbook", "icon": "alert-triangle", "order": 9 }
+        { "slug": "frontend-deployment", "path": "deployment/FRONTEND_DEPLOYMENT", "titleDe": "Frontend-Deployment", "titleEn": "Frontend Deployment", "icon": "layout", "order": 4 },
+        { "slug": "ssl-setup", "path": "deployment/SSL_SETUP", "titleDe": "SSL/TLS-Konfiguration", "titleEn": "SSL/TLS Configuration", "icon": "lock", "order": 5 },
+        { "slug": "reverse-proxy", "path": "deployment/REVERSE_PROXY_SETUP", "titleDe": "Reverse-Proxy-Setup", "titleEn": "Reverse Proxy Setup", "icon": "arrow-right-left", "order": 6 },
+        { "slug": "infrastructure", "path": "deployment/infrastructure", "titleDe": "Infrastruktur", "titleEn": "Infrastructure", "icon": "network", "order": 7 },
+        { "slug": "emergency-runbook", "path": "deployment/emergency-runbook", "titleDe": "Notfall-Runbook", "titleEn": "Emergency Runbook", "icon": "alert-triangle", "order": 8 }
       ]
     },
     {

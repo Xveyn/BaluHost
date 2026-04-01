@@ -85,11 +85,7 @@ Open your browser and navigate to:
 http://baluhost.local
 ```
 
-**Note**: If using Nginx reverse proxy on port 80, otherwise use:
-```
-http://baluhost.local:5173  (Frontend)
-http://baluhost.local:8000  (Backend API)
-```
+In production, Nginx serves everything on port 80. No port needed in the URL.
 
 ---
 
@@ -298,7 +294,7 @@ You can use network utility apps to verify mDNS services:
 
 BaluHost mobile app allows manual server entry via IP:
 ```
-http://192.168.1.100:8000
+http://192.168.1.100
 ```
 
 ---
@@ -523,5 +519,5 @@ If you encounter issues with mDNS discovery:
 
 ---
 
-**Last Updated**: 2026-01-25
-**BaluHost Version**: 1.3.0+
+**Last Updated**: April 2026
+**BaluHost Version**: 1.23.0

@@ -22,14 +22,14 @@ Schnellanleitung zum Einbinden des BaluHost Storage als Netzlaufwerk in Windows.
 ### Manuell (Windows Explorer)
 
 1. **Explorer öffnen**
-2. **Pfad eingeben:** `F:\Programme (x86)\Baluhost\backend\dev-storage`
+2. **Pfad eingeben:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
 3. **Als Favorit speichern**
 
 ### Manuell (PowerShell)
 
 ```powershell
 # Einfaches virtuelles Laufwerk erstellen
-subst Z: "F:\Programme (x86)\Baluhost\backend\dev-storage"
+subst Z: "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
 # Entfernen
 subst Z: /d
