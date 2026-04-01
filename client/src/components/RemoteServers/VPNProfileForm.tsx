@@ -77,10 +77,10 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
       </button>
 
       {open && (
-        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 overflow-y-auto">
-          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-lg w-full max-w-md my-8">
+        <div className="fixed inset-0 bg-black/60 flex items-center justify-center z-50 p-4">
+          <div className="bg-slate-900 border border-slate-700 rounded-lg shadow-lg w-full max-w-md max-h-[90vh] flex flex-col">
             {/* Header */}
-            <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4">
+            <div className="flex items-center justify-between border-b border-slate-700 px-6 py-4 shrink-0">
               <div>
                 <h2 className="text-lg font-semibold text-white">{t('vpn.addProfile')}</h2>
                 <p className="text-sm text-slate-400 mt-1">{t('vpn.addProfileDescription')}</p>
@@ -94,7 +94,7 @@ export function VPNProfileForm({ onCreateProfile, isLoading = false }: VPNProfil
             </div>
 
             {/* Form */}
-            <form onSubmit={handleSubmit} className="p-6 space-y-4">
+            <form onSubmit={handleSubmit} className="p-6 space-y-4 overflow-y-auto">
               {/* Profile Name */}
               <div>
                 <label htmlFor="name" className="block text-sm font-medium text-slate-300 mb-1">
