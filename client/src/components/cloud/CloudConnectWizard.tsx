@@ -1,12 +1,11 @@
 import { useState, useEffect } from 'react';
-import { X, ArrowRight, Loader2, KeyRound, Info, Settings, ExternalLink } from 'lucide-react';
+import { X, ArrowRight, Loader2, KeyRound, Info } from 'lucide-react';
 import {
   getOAuthUrl,
   getProviders,
   connectICloud,
   submitICloud2FA,
   createDevConnection,
-  setOAuthConfig,
   extractErrorMessage,
   type CloudProvider,
   type CloudConnection,
@@ -21,16 +20,6 @@ const PROVIDERS: { id: CloudProvider; gradient: string; icon: string }[] = [
   { id: 'icloud', gradient: 'from-slate-400 to-slate-200', icon: 'iC' },
 ];
 
-const PROVIDER_HELP: Record<string, { label: string; hint: string }> = {
-  google_drive: {
-    label: 'Google Drive',
-    hint: 'Create credentials in the Google Cloud Console under APIs & Services > Credentials.',
-  },
-  onedrive: {
-    label: 'OneDrive',
-    hint: 'Register an app in the Azure Portal under App registrations.',
-  },
-};
 
 interface CloudConnectWizardProps {
   onClose: () => void;
@@ -38,14 +27,9 @@ interface CloudConnectWizardProps {
 }
 
 export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardProps) {
-  const [step, setStep] = useState<'provider' | 'configure' | 'icloud-login' | 'icloud-2fa'>('provider');
+  const [step, setStep] = useState<'provider' | 'icloud-login' | 'icloud-2fa'>('provider');
   const [loading, setLoading] = useState(false);
   const [providerStatus, setProviderStatus] = useState<ProvidersStatus | null>(null);
-
-  // Configure step fields
-  const [configProvider, setConfigProvider] = useState<CloudProvider | null>(null);
-  const [clientId, setClientId] = useState('');
-  const [clientSecret, setClientSecret] = useState('');
 
   // iCloud fields
   const [appleId, setAppleId] = useState('');
@@ -85,12 +69,10 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
       return;
     }
 
-    // Unconfigured OAuth provider — user can configure their own credentials
+    // Unconfigured OAuth provider — redirect to settings
     if (info && !info.configured && info.auth_type === 'oauth') {
-      setConfigProvider(provider);
-      setClientId('');
-      setClientSecret('');
-      setStep('configure');
+      toast.error('Bitte zuerst in Settings > Integrations konfigurieren');
+      window.location.href = '/settings?tab=integrations';
       return;
     }
 
@@ -106,22 +88,6 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
       window.location.href = url;
     } catch (err: unknown) {
       toast.error(extractErrorMessage(err, 'Failed to start OAuth'));
-      setLoading(false);
-    }
-  };
-
-  const handleSaveConfig = async () => {
-    if (!configProvider || !clientId || !clientSecret) return;
-
-    setLoading(true);
-    try {
-      await setOAuthConfig(configProvider, clientId, clientSecret);
-      toast.success(`${PROVIDER_LABELS[configProvider]} configured successfully`);
-      loadProviders();
-      setStep('provider');
-    } catch (err: unknown) {
-      toast.error(extractErrorMessage(err, 'Failed to save credentials'));
-    } finally {
       setLoading(false);
     }
   };
@@ -170,7 +136,6 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
         <div className="mb-6 flex items-center justify-between">
           <h3 className="text-lg font-semibold text-slate-100">
             {step === 'provider' && 'Connect Cloud Storage'}
-            {step === 'configure' && configProvider && `Configure ${PROVIDER_LABELS[configProvider]}`}
             {step === 'icloud-login' && 'iCloud Login'}
             {step === 'icloud-2fa' && 'Two-Factor Authentication'}
           </h3>
@@ -209,9 +174,9 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
                   <div className="flex-1">
                     <p className="font-medium text-slate-200">{PROVIDER_LABELS[p.id]}</p>
                     {!isDevMode && !isConfigured && isOAuth ? (
-                      <p className="flex items-center gap-1 text-xs text-sky-400/80">
-                        <Settings className="h-3 w-3" />
-                        Click to configure
+                      <p className="flex items-center gap-1 text-xs text-amber-400/80">
+                        <Info className="h-3 w-3" />
+                        Configure in Settings
                       </p>
                     ) : (
                       <p className="text-xs text-slate-500">
@@ -219,24 +184,10 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
                       </p>
                     )}
                   </div>
-                  {!isDevMode && !isConfigured && isOAuth ? (
-                    <Settings className="h-4 w-4 text-sky-500/60" />
-                  ) : (
-                    <ArrowRight className="h-4 w-4 text-slate-600" />
-                  )}
+                  <ArrowRight className="h-4 w-4 text-slate-600" />
                 </button>
               );
             })}
-
-            {/* Hint for unconfigured providers */}
-            {!isDevMode && providerStatus && Object.values(providerStatus.providers).some(p => !p.configured) && (
-              <div className="mt-2 flex items-start gap-2 rounded-lg border border-slate-700/30 bg-slate-800/20 px-3 py-2">
-                <Info className="mt-0.5 h-3.5 w-3.5 shrink-0 text-slate-500" />
-                <p className="text-xs text-slate-500">
-                  Enter your own OAuth credentials to connect unconfigured providers.
-                </p>
-              </div>
-            )}
 
             {loading && (
               <div className="flex items-center justify-center gap-2 py-4 text-slate-500">
@@ -244,59 +195,6 @@ export function CloudConnectWizard({ onClose, onConnected }: CloudConnectWizardP
                 <span>Connecting...</span>
               </div>
             )}
-          </div>
-        )}
-
-        {/* Step: Configure OAuth credentials */}
-        {step === 'configure' && configProvider && (
-          <div className="space-y-4">
-            <div className="rounded-lg border border-sky-500/20 bg-sky-500/5 px-3 py-2">
-              <p className="text-xs text-sky-400">
-                <ExternalLink className="mr-1 inline h-3 w-3" />
-                {PROVIDER_HELP[configProvider]?.hint}
-              </p>
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-400">Client ID</label>
-              <input
-                type="text"
-                value={clientId}
-                onChange={(e) => setClientId(e.target.value)}
-                placeholder="e.g. 123456789.apps.googleusercontent.com"
-                className="w-full rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500/50"
-                autoFocus
-              />
-            </div>
-            <div>
-              <label className="mb-1.5 block text-sm font-medium text-slate-400">Client Secret</label>
-              <input
-                type="password"
-                value={clientSecret}
-                onChange={(e) => setClientSecret(e.target.value)}
-                placeholder="Client Secret"
-                className="w-full rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-2 text-sm text-slate-200 outline-none placeholder:text-slate-600 focus:border-sky-500/50"
-              />
-            </div>
-            <div className="flex justify-end gap-3 pt-2">
-              <button
-                onClick={() => setStep('provider')}
-                className="rounded-lg border border-slate-700/50 px-4 py-2 text-sm text-slate-400 hover:bg-slate-800"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleSaveConfig}
-                disabled={loading || !clientId || !clientSecret}
-                className="flex items-center gap-2 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
-              >
-                {loading ? (
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                ) : (
-                  <KeyRound className="h-4 w-4" />
-                )}
-                Save
-              </button>
-            </div>
           </div>
         )}
 
