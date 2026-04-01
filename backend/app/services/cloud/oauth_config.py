@@ -129,6 +129,49 @@ class CloudOAuthConfigService:
         logger.info("Deleted OAuth credentials for provider %s (user %d)", provider, user_id)
         return True
 
+    def get_all_configs(self) -> list[dict]:
+        """
+        Return all DB-stored OAuth configs with associated usernames.
+
+        Used by admin endpoint to show an overview of all users' configurations.
+        Returns a list of dicts with provider, user_id, username, client_id_hint, updated_at.
+        """
+        from app.models.user import User
+
+        try:
+            rows = (
+                self.db.query(CloudOAuthConfig, User.username)
+                .join(User, CloudOAuthConfig.user_id == User.id)
+                .order_by(User.username, CloudOAuthConfig.provider)
+                .all()
+            )
+        except ProgrammingError:
+            self.db.rollback()
+            logger.debug("cloud_oauth_configs table not found")
+            return []
+
+        results = []
+        for config, username in rows:
+            hint = None
+            try:
+                cid = decrypt_credentials(config.encrypted_client_id)
+                if len(cid) > 8:
+                    hint = f"{cid[:4]}...{cid[-4:]}"
+                else:
+                    hint = cid
+            except ValueError:
+                hint = "(error)"
+
+            results.append({
+                "provider": config.provider,
+                "user_id": config.user_id,
+                "username": username,
+                "client_id_hint": hint,
+                "updated_at": config.updated_at,
+            })
+
+        return results
+
     # ─── Internal ─────────────────────────────────────────────────
 
     def _get_config(self, provider: str, user_id: int) -> Optional[CloudOAuthConfig]:
