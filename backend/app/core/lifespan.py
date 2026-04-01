@@ -284,8 +284,12 @@ async def _startup(app: FastAPI) -> None:
     init_db()
     logger.info("Database initialized")
 
-    ensure_admin_user(settings)
-    logger.info("Admin user ensured with username '%s'", settings.admin_username)
+    if settings.skip_setup:
+        ensure_admin_user(settings)
+        logger.info("Admin user ensured with username '%s' (SKIP_SETUP=true)", settings.admin_username)
+    else:
+        logger.info("Setup wizard mode — admin creation deferred to /api/setup/admin")
+
     seed.seed_dev_data()
 
     # Record current version in database
