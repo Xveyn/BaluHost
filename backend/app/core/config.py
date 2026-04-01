@@ -228,6 +228,10 @@ class Settings(BaseSettings):
                 self.sleep_mode_enabled = False
             if self.pihole_enabled:
                 self.pihole_enabled = False
+            # Auto-generate VPN encryption key for dev mode
+            if not self.vpn_encryption_key:
+                from cryptography.fernet import Fernet
+                self.vpn_encryption_key = Fernet.generate_key().decode()
         else:
             # Production mode: enable audit logging by default
             if not self.audit_logging_enabled:
