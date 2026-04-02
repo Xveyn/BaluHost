@@ -13,9 +13,11 @@ import {
   getSyncDevices,
   getDeviceFolders,
   revokeVpnClient as revokeVpnApi,
+  getSyncPreflight,
   type SyncDevice,
   type SyncSchedule,
   type SyncFolderItem,
+  type SyncPreflightResponse,
 } from '../api/sync';
 
 export interface ScheduleFormData {
@@ -47,6 +49,10 @@ export function useSyncSettings() {
     data: bandwidth,
     refetch: refetchBandwidth,
   } = useAsyncData(getBandwidthLimits);
+
+  const {
+    data: preflight,
+  } = useAsyncData<SyncPreflightResponse>(getSyncPreflight);
 
   // ── Fetch folders for all devices ─────────────────────────────────────
   useEffect(() => {
@@ -169,6 +175,7 @@ export function useSyncSettings() {
     refetchSchedules,
     refetchDevices,
     deviceFolders,
+    sleepSchedule: preflight?.sleep_schedule ?? null,
     handleCreateSchedule,
     handleUpdateSchedule,
     handleDisableSchedule,
