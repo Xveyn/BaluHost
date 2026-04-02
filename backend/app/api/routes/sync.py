@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.api import deps
+from app.api.deps import require_sync_allowed
 from app.core.database import get_db
 from app.models.user import User
 from app.services.sync import FileSyncService
@@ -221,7 +222,8 @@ async def detect_changes(
     response: Response,
     payload: SyncChangesRequest,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: FileSyncService = Depends(get_sync_service)
+    sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """
     Detect changes and return delta sync data.
@@ -308,6 +310,7 @@ async def get_sync_state(
     response: Response,
     current_user: User = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Return a simple sync state summary for the current user.
 
@@ -367,6 +370,7 @@ async def report_sync_folders(
     payload: ReportSyncFoldersRequest,
     current_user: UserPublic = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """BaluDesk client reports its currently active sync folders.
 

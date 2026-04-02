@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app import api
 from app.api import deps
+from app.api.deps import require_sync_allowed
 from app.core.database import get_db
 from app.models.user import User
 from app.services.sync.progressive import ProgressiveSyncService
@@ -50,7 +51,8 @@ async def start_chunked_upload(
     payload: StartChunkedUploadRequest,
     device_id: str,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Start a chunked upload session for a large file."""
     result = sync_service.start_chunked_upload(
@@ -74,7 +76,8 @@ async def upload_chunk(
     chunk_hash: str,
     chunk_file: UploadFile = File(...),
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Upload a single chunk."""
     chunk_data = await chunk_file.read()
@@ -117,7 +120,8 @@ async def resume_upload(
     response: Response,
     upload_id: str,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Resume a paused chunked upload."""
     result = sync_service.resume_upload(upload_id)
