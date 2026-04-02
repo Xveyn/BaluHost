@@ -83,6 +83,8 @@ from app.models.ad_discovery import (
 from app.models.file_activity import FileActivity
 from app.models.fritzbox import FritzBoxConfig
 from app.models.power_permissions import UserPowerPermission
+from app.models.sync_progress import ChunkedUpload, SyncBandwidthLimit, SyncSchedule, SelectiveSync
+from app.models.sync_state import SyncState, SyncMetadata, SyncFileVersion
 
 __all__ = [
     "Base",
@@ -169,4 +171,11 @@ __all__ = [
     "FileActivity",
     "FritzBoxConfig",
     "UserPowerPermission",
+    "ChunkedUpload",
+    "SyncBandwidthLimit",
+    "SyncSchedule",
+    "SelectiveSync",
+    "SyncState",
+    "SyncMetadata",
+    "SyncFileVersion",
 ]
