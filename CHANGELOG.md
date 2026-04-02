@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.25.0] - 2026-04-02
+
+### Added
+- **Power Permissions** — Granular per-user power action delegation for mobile app users
+  - Admins can grant individual permissions: Soft Sleep, Wake, Suspend, Wake-on-LAN
+  - New `user_power_permissions` database table with foreign keys to users
+  - Implication logic: enabling Soft Sleep auto-enables Wake, enabling Suspend auto-enables WoL (and reverse)
+  - `GET /api/system/sleep/my-permissions` endpoint for mobile app permission fetching
+  - Admin endpoints on `/api/users/{id}/power-permissions` for viewing and updating
+  - Power action endpoints (`/soft`, `/wake`, `/suspend`, `/wol`) now accept delegated users, not just admins
+  - Audit logging for permission changes and delegated power actions
+  - Frontend toggle UI in user edit modal (Settings > Users) with implied-permission indicators
+
+---
+
 ## [1.24.0] - 2026-04-01
 
 ### Added

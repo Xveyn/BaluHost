@@ -5,8 +5,19 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, Response
-from app.api.deps import get_current_user, get_current_admin
+from app.api.deps import (
+    get_current_user,
+    get_current_admin,
+    require_power_soft_sleep,
+    require_power_wake,
+    require_power_suspend,
+    require_power_wol,
+)
 from app.core.rate_limiter import user_limiter, get_limit
+from app.schemas.power_permissions import MyPowerPermissionsResponse
+from app.core.database import get_db
+from sqlalchemy.orm import Session
+from app.services.audit.logger_db import get_audit_logger_db
 from app.models.user import User
 from app.schemas.sleep import (
     SleepStatusResponse,
@@ -49,15 +60,26 @@ async def get_sleep_status(
 async def enter_soft_sleep(
     request: Request, response: Response,
     body: Optional[EnterSoftSleepRequest] = None,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_power_soft_sleep),
+    db: Session = Depends(get_db),
 ) -> dict:
-    """Enter soft sleep mode (admin only)."""
+    """Enter soft sleep mode (admin or delegated users)."""
     manager = _get_manager()
     reason = (body.reason if body else None) or f"manual by {current_user.username}"
     ok = await manager.enter_soft_sleep(reason, SleepTrigger.MANUAL)
     if not ok:
         raise HTTPException(status_code=409, detail="Cannot enter soft sleep from current state")
     logger.info("Soft sleep activated by %s", current_user.username)
+    if current_user.role != "admin":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="soft_sleep",
+            details={"action": "soft_sleep"},
+            success=True,
+            db=db,
+        )
     return {"success": True, "message": "Entered soft sleep mode"}
 
 
@@ -65,14 +87,25 @@ async def enter_soft_sleep(
 @user_limiter.limit(get_limit("admin_operations"))
 async def wake_from_sleep(
     request: Request, response: Response,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_power_wake),
+    db: Session = Depends(get_db),
 ) -> dict:
-    """Exit soft sleep mode (admin only)."""
+    """Exit soft sleep mode (admin or delegated users)."""
     manager = _get_manager()
     ok = await manager.exit_soft_sleep(f"manual wake by {current_user.username}")
     if not ok:
         raise HTTPException(status_code=409, detail="Cannot wake from current state")
     logger.info("Manual wake triggered by %s", current_user.username)
+    if current_user.role != "admin":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="wake",
+            details={"action": "wake"},
+            success=True,
+            db=db,
+        )
     return {"success": True, "message": "Exited soft sleep mode"}
 
 
@@ -81,9 +114,10 @@ async def wake_from_sleep(
 async def enter_suspend(
     request: Request, response: Response,
     body: Optional[EnterSuspendRequest] = None,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_power_suspend),
+    db: Session = Depends(get_db),
 ) -> dict:
-    """Enter true system suspend (admin only)."""
+    """Enter true system suspend (admin or delegated users)."""
     manager = _get_manager()
     reason = (body.reason if body else None) or f"manual suspend by {current_user.username}"
     ok = await manager.enter_true_suspend(
@@ -92,6 +126,16 @@ async def enter_suspend(
     if not ok:
         raise HTTPException(status_code=409, detail="Cannot suspend from current state")
     logger.info("System suspend triggered by %s", current_user.username)
+    if current_user.role != "admin":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="suspend",
+            details={"action": "suspend"},
+            success=True,
+            db=db,
+        )
     return {"success": True, "message": "System suspended"}
 
 
@@ -100,9 +144,10 @@ async def enter_suspend(
 async def send_wol(
     request: Request, response: Response,
     body: Optional[WolRequest] = None,
-    current_user: User = Depends(get_current_admin),
+    current_user: User = Depends(require_power_wol),
+    db: Session = Depends(get_db),
 ) -> dict:
-    """Send a Wake-on-LAN magic packet (admin only)."""
+    """Send a Wake-on-LAN magic packet (admin or delegated users)."""
     manager = _get_manager()
     ok = await manager.send_wol(
         body.mac_address if body else None,
@@ -112,6 +157,16 @@ async def send_wol(
     if not ok:
         raise HTTPException(status_code=400, detail="Failed to send WoL packet (no MAC address configured?)")
     logger.info("WoL packet sent by %s", current_user.username)
+    if current_user.role != "admin":
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_security_event(
+            action="delegated_power_action",
+            user=current_user.username,
+            resource="wol",
+            details={"action": "wol"},
+            success=True,
+            db=db,
+        )
     return {"success": True, "message": "WoL packet sent"}
 
 
@@ -165,3 +220,25 @@ async def get_sleep_capabilities(
     """Check system capabilities for sleep features (admin only)."""
     manager = _get_manager()
     return await manager.get_capabilities()
+
+
+@router.get("/my-permissions", response_model=MyPowerPermissionsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_my_power_permissions(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+) -> MyPowerPermissionsResponse:
+    """Get the current user's power permissions (for mobile app)."""
+    if current_user.role == "admin":
+        return MyPowerPermissionsResponse(
+            can_soft_sleep=True, can_wake=True, can_suspend=True, can_wol=True,
+        )
+    from app.services.power_permissions import get_permissions
+    perms = get_permissions(db, current_user.id)
+    return MyPowerPermissionsResponse(
+        can_soft_sleep=perms.can_soft_sleep,
+        can_wake=perms.can_wake,
+        can_suspend=perms.can_suspend,
+        can_wol=perms.can_wol,
+    )

@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X } from 'lucide-react';
 import type { UserPublic } from '../../api/users';
 import type { UserFormData } from '../../hooks/useUserManagement';
+import { PowerPermissionsSection } from './PowerPermissionsSection';
 
 interface UserFormModalProps {
   open: boolean;
@@ -122,6 +123,13 @@ export function UserFormModal({ open, editingUser, onClose, onSubmit }: UserForm
               {t('users.fields.activeUser')}
             </label>
           </div>
+
+          {editingUser && (
+            <PowerPermissionsSection
+              userId={editingUser.id}
+              userRole={editingUser.role}
+            />
+          )}
         </div>
 
         <div className="mt-4 sm:mt-6 flex gap-2">

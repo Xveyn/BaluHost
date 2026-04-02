@@ -281,11 +281,49 @@ async def verify_mobile_device_token(
         # Automatically deactivate expired device
         device.is_active = False
         db.commit()
-        
+
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Device authorization expired. Please re-register your device. "
                    f"Expired on: {device.expires_at.strftime('%Y-%m-%d %H:%M:%S')}"
         )
-    
+
     return user
+
+
+def _make_power_dependency(action: str):
+    """Factory for power-action-specific auth dependencies."""
+
+    async def get_power_authorized_user(
+        request: Request,
+        user: UserPublic = Depends(get_current_user),
+        db: Session = Depends(get_db),
+    ) -> UserPublic:
+        """Allow admins or users with the specific power permission."""
+        if user.role == "admin":
+            return user
+
+        from app.services.power_permissions import check_permission
+
+        if check_permission(db, user.id, action):
+            return user
+
+        audit_logger = get_audit_logger_db()
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action=f"power_{action}_denied",
+            required_permission=f"power:{action}",
+            db=db,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Insufficient permissions: power:{action} required",
+        )
+
+    return get_power_authorized_user
+
+
+require_power_soft_sleep = _make_power_dependency("soft_sleep")
+require_power_wake = _make_power_dependency("wake")
+require_power_suspend = _make_power_dependency("suspend")
+require_power_wol = _make_power_dependency("wol")
