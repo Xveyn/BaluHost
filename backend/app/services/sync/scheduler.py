@@ -69,14 +69,14 @@ class SyncSchedulerService:
         if not schedule:
             return None
 
-        for key, value in kwargs.items():
-            if hasattr(schedule, key) and value is not None:
-                setattr(schedule, key, value)
-
-        # Validate updated time against sleep window
+        # Validate updated time against sleep window BEFORE mutating the model
         new_time = kwargs.get("time_of_day") or schedule.time_of_day
         if new_time:
             self._validate_time_against_sleep(new_time)
+
+        for key, value in kwargs.items():
+            if hasattr(schedule, key) and value is not None:
+                setattr(schedule, key, value)
 
         self._calculate_next_run(schedule)
         self.db.commit()

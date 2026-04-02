@@ -1,6 +1,7 @@
 import { useTranslation } from 'react-i18next';
 import { AlertTriangle } from 'lucide-react';
 import { isTimeInSleepWindow } from '../../lib/sleep-utils';
+import type { SleepScheduleInfo } from '../../api/sync';
 
 const WEEKDAYS = [
   { value: 0, label: 'Mo' },
@@ -11,13 +12,6 @@ const WEEKDAYS = [
   { value: 5, label: 'Sa' },
   { value: 6, label: 'So' },
 ];
-
-interface SleepScheduleInfo {
-  enabled: boolean;
-  sleep_time: string;
-  wake_time: string;
-  mode: string;
-}
 
 interface ScheduleFormFieldsProps {
   scheduleType: string;

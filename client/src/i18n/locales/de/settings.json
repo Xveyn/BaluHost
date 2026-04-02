@@ -225,7 +225,8 @@
     "saveLimitsFailed": "Fehler beim Speichern der Limits",
     "vpnRevoked": "VPN-Zugang widerrufen",
     "revokeVpnFailed": "Fehler beim Widerrufen des VPN-Clients",
-    "sleepWindowWarning": "Dieser Zeitpunkt liegt im Sleep-Fenster ({{sleepTime}}–{{wakeTime}}). Der Sync wird nicht ausgeführt."
+    "sleepWindowWarning": "Dieser Zeitpunkt liegt im Sleep-Fenster ({{sleepTime}}–{{wakeTime}}). Der Sync wird nicht ausgeführt.",
+    "sleepBlockedTooltip": "Wird blockiert durch Sleep-Schedule ({{sleepTime}}\u2013{{wakeTime}})"
   },
   "backup": {
     "title": "Backup & Restore",

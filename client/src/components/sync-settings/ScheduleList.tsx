@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Clock, Edit2, Trash2, X, Save, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
-import type { SyncSchedule, SyncDevice } from '../../api/sync';
+import type { SyncSchedule, SyncDevice, SleepScheduleInfo } from '../../api/sync';
 import type { ScheduleFormData } from '../../hooks/useSyncSettings';
 import { ScheduleFormFields } from './ScheduleFormFields';
 import { isTimeInSleepWindow } from '../../lib/sleep-utils';
@@ -15,13 +15,6 @@ const WEEKDAYS = [
   { value: 5, label: 'Sa' },
   { value: 6, label: 'So' },
 ];
-
-interface SleepScheduleInfo {
-  enabled: boolean;
-  sleep_time: string;
-  wake_time: string;
-  mode: string;
-}
 
 interface ScheduleListProps {
   schedules: SyncSchedule[];
@@ -115,7 +108,7 @@ export function ScheduleList({ schedules, devices, onUpdate, onDisable, sleepSch
                       isTimeInSleepWindow(schedule.time_of_day, sleepSchedule.sleep_time, sleepSchedule.wake_time) && (
                         <span
                           className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full border border-amber-500/30"
-                          title={`Wird blockiert durch Sleep-Schedule (${sleepSchedule.sleep_time}\u2013${sleepSchedule.wake_time})`}
+                          title={t('sync.sleepBlockedTooltip', { sleepTime: sleepSchedule.sleep_time, wakeTime: sleepSchedule.wake_time })}
                         >
                           <AlertTriangle className="w-3 h-3" />
                           Sleep
@@ -196,7 +189,12 @@ export function ScheduleList({ schedules, devices, onUpdate, onDisable, sleepSch
               </button>
               <button
                 onClick={handleSave}
-                disabled={isSaving}
+                disabled={
+                  isSaving ||
+                  (sleepSchedule?.enabled
+                    ? isTimeInSleepWindow(editTime, sleepSchedule.sleep_time, sleepSchedule.wake_time)
+                    : false)
+                }
                 className="inline-flex items-center gap-2 px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white text-sm rounded-lg transition-colors"
               >
                 <Save className="w-4 h-4" />

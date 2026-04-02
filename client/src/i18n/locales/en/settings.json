@@ -225,7 +225,8 @@
     "saveLimitsFailed": "Failed to save limits",
     "vpnRevoked": "VPN access revoked",
     "revokeVpnFailed": "Failed to revoke VPN client",
-    "sleepWindowWarning": "This time falls within the sleep window ({{sleepTime}}–{{wakeTime}}). The sync will not run."
+    "sleepWindowWarning": "This time falls within the sleep window ({{sleepTime}}–{{wakeTime}}). The sync will not run.",
+    "sleepBlockedTooltip": "Blocked by sleep schedule ({{sleepTime}}\u2013{{wakeTime}})"
   },
   "backup": {
     "title": "Backup & Restore",

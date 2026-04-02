@@ -367,6 +367,11 @@ async def require_sync_allowed(request: Request) -> None:
 
     raise HTTPException(
         status_code=503,
-        detail="Sync blocked: NAS is in sleep mode",
+        detail={
+            "message": "Sync blocked: NAS is in sleep mode",
+            "sleep_state": state.value,
+            "next_wake_at": next_wake_at,
+            "retry_after_seconds": retry_after,
+        },
         headers={"Retry-After": str(retry_after)} if retry_after else {},
     )
