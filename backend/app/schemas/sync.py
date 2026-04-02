@@ -242,3 +242,25 @@ class SyncedFolderInfo(BaseModel):
 class SyncedFoldersResponse(BaseModel):
     """List of synced folders."""
     folders: list[SyncedFolderInfo]
+
+
+# ============================================================================
+# SYNC PREFLIGHT (SLEEP-AWARE SYNC)
+# ============================================================================
+
+class SleepScheduleInfo(BaseModel):
+    """Sleep schedule info for sync clients."""
+    enabled: bool = Field(..., description="Whether sleep schedule is active")
+    sleep_time: str = Field(..., description="Sleep start time (HH:MM)")
+    wake_time: str = Field(..., description="Wake time (HH:MM)")
+    mode: str = Field(..., description="Sleep mode: soft or suspend")
+
+
+class SyncPreflightResponse(BaseModel):
+    """Response for sync preflight check."""
+    sync_allowed: bool = Field(..., description="Whether automatic sync is currently allowed")
+    current_sleep_state: str = Field(..., description="Current NAS sleep state")
+    sleep_schedule: Optional[SleepScheduleInfo] = Field(default=None, description="Sleep schedule if active")
+    next_sleep_at: Optional[str] = Field(default=None, description="Next scheduled sleep time (ISO 8601)")
+    next_wake_at: Optional[str] = Field(default=None, description="Next scheduled wake time (ISO 8601)")
+    block_reason: Optional[str] = Field(default=None, description="Why sync is blocked: sleep_active or null")
