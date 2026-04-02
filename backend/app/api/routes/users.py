@@ -328,3 +328,45 @@ async def upload_avatar(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return user_service.serialize_user(user)
+
+
+from app.schemas.power_permissions import UserPowerPermissionsResponse, UserPowerPermissionsUpdate
+
+
+@router.get("/{user_id}/power-permissions", response_model=UserPowerPermissionsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_user_power_permissions(
+    request: Request,
+    response: Response,
+    user_id: int,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UserPowerPermissionsResponse:
+    """Get power permissions for a user (admin only)."""
+    from app.services.power_permissions import get_permissions
+
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return get_permissions(db, user_id)
+
+
+@router.put("/{user_id}/power-permissions", response_model=UserPowerPermissionsResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_user_power_permissions(
+    request: Request,
+    response: Response,
+    user_id: int,
+    body: UserPowerPermissionsUpdate,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> UserPowerPermissionsResponse:
+    """Update power permissions for a user (admin only)."""
+    from app.services.power_permissions import update_permissions
+
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return update_permissions(db, user_id, body, granted_by=current_admin.id)
