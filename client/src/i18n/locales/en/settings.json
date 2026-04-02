@@ -224,7 +224,8 @@
     "bandwidthSaved": "Bandwidth limits saved",
     "saveLimitsFailed": "Failed to save limits",
     "vpnRevoked": "VPN access revoked",
-    "revokeVpnFailed": "Failed to revoke VPN client"
+    "revokeVpnFailed": "Failed to revoke VPN client",
+    "sleepWindowWarning": "This time falls within the sleep window ({{sleepTime}}–{{wakeTime}}). The sync will not run."
   },
   "backup": {
     "title": "Backup & Restore",
