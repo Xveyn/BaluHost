@@ -70,8 +70,9 @@ async def login(payload: LoginRequest, request: Request, response: Response, db:
                 if len(_failed_login_attempts[ip_address]) >= _BRUTE_FORCE_THRESHOLD:
                     emit_brute_force_detected_sync(ip_address)
                     _failed_login_attempts[ip_address] = []  # Reset after alert
-        except Exception:
-            pass
+        except Exception as exc:
+            import logging as _logging
+            _logging.getLogger(__name__).error("Failed to emit login-failed notification: %s", exc)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid credentials")
 
     # Check if 2FA is enabled
