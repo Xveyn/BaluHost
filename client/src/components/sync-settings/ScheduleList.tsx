@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { Clock, Edit2, Trash2, X, Save } from 'lucide-react';
+import { Clock, Edit2, Trash2, X, Save, AlertTriangle } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import type { SyncSchedule, SyncDevice } from '../../api/sync';
 import type { ScheduleFormData } from '../../hooks/useSyncSettings';
 import { ScheduleFormFields } from './ScheduleFormFields';
+import { isTimeInSleepWindow } from '../../lib/sleep-utils';
 
 const WEEKDAYS = [
   { value: 0, label: 'Mo' },
@@ -15,11 +16,19 @@ const WEEKDAYS = [
   { value: 6, label: 'So' },
 ];
 
+interface SleepScheduleInfo {
+  enabled: boolean;
+  sleep_time: string;
+  wake_time: string;
+  mode: string;
+}
+
 interface ScheduleListProps {
   schedules: SyncSchedule[];
   devices: SyncDevice[];
   onUpdate: (id: number, form: ScheduleFormData) => Promise<boolean>;
   onDisable: (id: number) => Promise<void>;
+  sleepSchedule?: SleepScheduleInfo | null;
 }
 
 function formatDate(date: string | null) {
@@ -42,7 +51,7 @@ function getScheduleDescription(schedule: SyncSchedule): string {
   return desc;
 }
 
-export function ScheduleList({ schedules, devices, onUpdate, onDisable }: ScheduleListProps) {
+export function ScheduleList({ schedules, devices, onUpdate, onDisable, sleepSchedule }: ScheduleListProps) {
   const { t } = useTranslation('settings');
 
   const [editingSchedule, setEditingSchedule] = useState<SyncSchedule | null>(null);
@@ -102,6 +111,16 @@ export function ScheduleList({ schedules, devices, onUpdate, onDisable }: Schedu
                     <span className="text-sm text-slate-400">
                       {getScheduleDescription(schedule)}
                     </span>
+                    {sleepSchedule?.enabled &&
+                      isTimeInSleepWindow(schedule.time_of_day, sleepSchedule.sleep_time, sleepSchedule.wake_time) && (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-1 bg-amber-500/20 text-amber-400 text-xs rounded-full border border-amber-500/30"
+                          title={`Wird blockiert durch Sleep-Schedule (${sleepSchedule.sleep_time}\u2013${sleepSchedule.wake_time})`}
+                        >
+                          <AlertTriangle className="w-3 h-3" />
+                          Sleep
+                        </span>
+                      )}
                   </div>
                   <div className="text-xs text-slate-500 mt-1">
                     {t('sync.nextRun')}: {formatDate(schedule.next_run_at)} | {t('sync.lastRun')}: {formatDate(schedule.last_run_at)}
@@ -163,6 +182,7 @@ export function ScheduleList({ schedules, devices, onUpdate, onDisable }: Schedu
                 onChangeTime={setEditTime}
                 onChangeDayOfWeek={setEditDayOfWeek}
                 onChangeDayOfMonth={setEditDayOfMonth}
+                sleepSchedule={sleepSchedule}
               />
             </div>
 

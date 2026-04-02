@@ -136,6 +136,7 @@ export default function SyncSettings() {
           devices={devices}
           onUpdate={handleUpdateSchedule}
           onDisable={handleDisableSchedule}
+          sleepSchedule={sleepSchedule}
         />
       </div>
 
