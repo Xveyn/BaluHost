@@ -61,6 +61,31 @@ export interface CreateScheduleRequest {
   auto_vpn?: boolean;
 }
 
+export interface SleepScheduleInfo {
+  enabled: boolean;
+  sleep_time: string;
+  wake_time: string;
+  mode: string;
+}
+
+export interface SyncPreflightResponse {
+  sync_allowed: boolean;
+  current_sleep_state: string;
+  sleep_schedule: SleepScheduleInfo | null;
+  next_sleep_at: string | null;
+  next_wake_at: string | null;
+  block_reason: string | null;
+}
+
+// ---------------------------------------------------------------------------
+// Preflight (Sleep-Aware Sync)
+// ---------------------------------------------------------------------------
+
+export async function getSyncPreflight(): Promise<SyncPreflightResponse> {
+  const res = await apiClient.get('/api/sync/preflight');
+  return res.data;
+}
+
 // ---------------------------------------------------------------------------
 // Schedules
 // ---------------------------------------------------------------------------
