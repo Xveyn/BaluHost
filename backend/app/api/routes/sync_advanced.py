@@ -207,18 +207,21 @@ async def create_sync_schedule(
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
     """Create a new sync schedule."""
-    result = scheduler.create_schedule(
-        user_id=current_user.id,
-        device_id=payload.device_id,
-        schedule_type=payload.schedule_type,
-        time_of_day=payload.time_of_day,
-        day_of_week=payload.day_of_week,
-        day_of_month=payload.day_of_month,
-        sync_deletions=payload.sync_deletions,
-        resolve_conflicts=payload.resolve_conflicts,
-        auto_vpn=payload.auto_vpn
-    )
-    return result
+    try:
+        result = scheduler.create_schedule(
+            user_id=current_user.id,
+            device_id=payload.device_id,
+            schedule_type=payload.schedule_type,
+            time_of_day=payload.time_of_day,
+            day_of_week=payload.day_of_week,
+            day_of_month=payload.day_of_month,
+            sync_deletions=payload.sync_deletions,
+            resolve_conflicts=payload.resolve_conflicts,
+            auto_vpn=payload.auto_vpn
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.get("/schedule/list")
@@ -299,19 +302,22 @@ async def update_sync_schedule(
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
     """Update an existing sync schedule."""
-    result = scheduler.update_schedule(
-        schedule_id=schedule_id,
-        user_id=current_user.id,
-        device_id=payload.device_id,
-        schedule_type=payload.schedule_type,
-        time_of_day=payload.time_of_day,
-        day_of_week=payload.day_of_week,
-        day_of_month=payload.day_of_month,
-        sync_deletions=payload.sync_deletions,
-        resolve_conflicts=payload.resolve_conflicts,
-        is_active=payload.is_active,
-        auto_vpn=payload.auto_vpn,
-    )
+    try:
+        result = scheduler.update_schedule(
+            schedule_id=schedule_id,
+            user_id=current_user.id,
+            device_id=payload.device_id,
+            schedule_type=payload.schedule_type,
+            time_of_day=payload.time_of_day,
+            day_of_week=payload.day_of_week,
+            day_of_month=payload.day_of_month,
+            sync_deletions=payload.sync_deletions,
+            resolve_conflicts=payload.resolve_conflicts,
+            is_active=payload.is_active,
+            auto_vpn=payload.auto_vpn,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
