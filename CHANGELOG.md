@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.26.0] - 2026-04-03
+
+### Added
+- **Sleep-Aware Sync** — Automatic syncs respect admin sleep schedules
+  - `GET /api/sync/preflight` endpoint for clients to check sync availability
+  - Server-side guard rejects auto/scheduled syncs during sleep with 503 + Retry-After
+  - `X-Sync-Trigger` header distinguishes auto vs manual sync requests
+  - Auto-wake middleware skips wake for auto/scheduled syncs during sleep
+  - Sync schedule validation prevents creating schedules in planned sleep windows
+  - Frontend sleep conflict warnings on schedule form and schedule list
+  - Client integration guide for BaluDesk (C++/Electron) and BaluApp (Kotlin/Android)
+- **Pi-hole** — Clickable column sorting on all Pi-hole tables
+
+### Fixed
+- Auth: log notification emit errors instead of silently swallowing them
+- Sync: make `auto_vpn` migration safe when `sync_schedules` table is missing
+- Sync: recreate sync tables erroneously dropped by refresh token migration
+
+---
+
 ## [1.25.0] - 2026-04-02
 
 ### Added
