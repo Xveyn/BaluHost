@@ -6,6 +6,8 @@ import {
   type SuspectEntry,
 } from '../../../api/adDiscovery';
 import BlockDialog from './BlockDialog';
+import { useSortableTable } from '../../../hooks/useSortableTable';
+import { SortableHeader } from '../../ui/SortableHeader';
 
 function scoreColor(score: number): string {
   if (score >= 0.8) return 'text-red-400';
@@ -47,16 +49,18 @@ export default function SuspectsTable() {
   const [loading, setLoading] = useState(false);
   const [statusFilter, setStatusFilter] = useState<string>('');
   const [sourceFilter, setSourceFilter] = useState<string>('');
-  const [sortBy, setSortBy] = useState('heuristic_score');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [blockingDomain, setBlockingDomain] = useState<string | null>(null);
   const [manualDomain, setManualDomain] = useState('');
   const [showManualAdd, setShowManualAdd] = useState(false);
+  const { sortedData: sortedSuspects, sortKey, sortDirection, toggleSort } = useSortableTable(suspects, {
+    defaultSort: { key: 'heuristic_score', direction: 'desc' },
+  });
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const params: Record<string, unknown> = { page, page_size: pageSize, sort_by: sortBy };
+      const params: Record<string, unknown> = { page, page_size: pageSize };
       if (statusFilter) params.status = statusFilter;
       if (sourceFilter) params.source = sourceFilter;
       const result = await getSuspects(params);
@@ -68,7 +72,7 @@ export default function SuspectsTable() {
     } finally {
       setLoading(false);
     }
-  }, [page, pageSize, statusFilter, sourceFilter, sortBy]);
+  }, [page, pageSize, statusFilter, sourceFilter]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
 
@@ -151,13 +155,6 @@ export default function SuspectsTable() {
           <option value="both">Both</option>
           <option value="manual">Manual</option>
         </select>
-        <select value={sortBy} onChange={e => setSortBy(e.target.value)}
-          className="rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-white">
-          <option value="heuristic_score">Score</option>
-          <option value="query_count">Queries</option>
-          <option value="community_hits">Community Hits</option>
-          <option value="last_seen_at">Last Seen</option>
-        </select>
         <div className="flex-1" />
         {selected.size > 0 && (
           <div className="flex items-center gap-2">
@@ -191,12 +188,12 @@ export default function SuspectsTable() {
                 <input type="checkbox" className="rounded border-slate-600"
                   onChange={e => setSelected(e.target.checked ? new Set(suspects.map(s => s.domain)) : new Set())} />
               </th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Domain</th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Score</th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Source</th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Queries</th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Community</th>
-              <th className="px-3 py-3 text-slate-400 font-medium">Status</th>
+              <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
+              <SortableHeader label="Score" sortKey="heuristic_score" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
+              <SortableHeader label="Source" sortKey="source" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
+              <SortableHeader label="Queries" sortKey="query_count" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
+              <SortableHeader label="Community" sortKey="community_hits" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
+              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-3 py-3 text-slate-400 font-medium" />
               <th className="px-3 py-3 text-slate-400 font-medium">Actions</th>
             </tr>
           </thead>
@@ -205,7 +202,7 @@ export default function SuspectsTable() {
               <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">Loading...</td></tr>
             ) : suspects.length === 0 ? (
               <tr><td colSpan={8} className="px-3 py-8 text-center text-slate-500">No suspects found</td></tr>
-            ) : suspects.map(s => (
+            ) : sortedSuspects.map(s => (
               <tr key={s.id} className="hover:bg-slate-800/40">
                 <td className="px-3 py-2">
                   <input type="checkbox" checked={selected.has(s.domain)}

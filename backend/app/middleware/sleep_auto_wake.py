@@ -24,6 +24,7 @@ _WAKE_WHITELIST_PREFIXES = (
     "/api/system/info",
     "/api/monitoring/",
     "/api/admin/services",
+    "/api/sync/preflight",
     "/health",
     "/docs",
     "/openapi.json",
@@ -59,12 +60,21 @@ class SleepAutoWakeMiddleware(BaseHTTPMiddleware):
 
                 manager = get_sleep_manager()
                 if manager and manager._current_state == SleepState.SOFT_SLEEP:
-                    # Non-whitelisted request while in soft sleep -> auto-wake
-                    logger.info(
-                        "Auto-wake triggered by %s %s",
-                        method, path,
-                    )
-                    await manager.exit_soft_sleep(f"auto_wake: {method} {path}")
+                    # Check X-Sync-Trigger header for sync paths
+                    sync_trigger = request.headers.get("X-Sync-Trigger", "").lower()
+                    if sync_trigger in ("auto", "scheduled"):
+                        # Automatic sync during sleep — do NOT wake, let guard return 503
+                        logger.debug(
+                            "Skipping auto-wake for automatic sync: %s %s (trigger=%s)",
+                            method, path, sync_trigger,
+                        )
+                    else:
+                        # Non-whitelisted request while in soft sleep -> auto-wake
+                        logger.info(
+                            "Auto-wake triggered by %s %s",
+                            method, path,
+                        )
+                        await manager.exit_soft_sleep(f"auto_wake: {method} {path}")
             except Exception as e:
                 logger.debug("Auto-wake check failed: %s", e)
 

@@ -8,6 +8,8 @@ import {
   toggleAdlist,
   updateGravity,
 } from "../../api/pihole";
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { SortableHeader } from '../ui/SortableHeader';
 
 interface AdlistRow {
   id: number;
@@ -26,6 +28,7 @@ export default function PiholeAdlistManagement() {
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const [updatingGravity, setUpdatingGravity] = useState(false);
+  const { sortedData: sortedAdlists, sortKey, sortDirection, toggleSort } = useSortableTable(adlists);
 
   const fetchAdlists = useCallback(async () => {
     setLoading(true);
@@ -141,15 +144,15 @@ export default function PiholeAdlistManagement() {
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-                <th className="pb-2 pr-4">URL</th>
-                <th className="pb-2 pr-4">Comment</th>
-                <th className="pb-2 pr-4 text-right">Domains</th>
-                <th className="pb-2 pr-4 text-center">Enabled</th>
+                <SortableHeader label="URL" sortKey="url" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label="Comment" sortKey="comment" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label="Domains" sortKey="domain_count" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-right" />
+                <SortableHeader label="Enabled" sortKey="enabled" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-center" />
                 <th className="pb-2 w-10" />
               </tr>
             </thead>
             <tbody>
-              {adlists.map((al) => (
+              {sortedAdlists.map((al) => (
                 <tr
                   key={al.id}
                   className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${!al.enabled ? "opacity-50" : ""}`}

@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.api import deps
+from app.api.deps import require_sync_allowed
 from app.core.database import get_db
 from app.models.user import User
 from app.services.sync import FileSyncService
@@ -22,7 +23,10 @@ from app.schemas.sync import (
     ReportSyncFoldersResponse,
     SyncedFoldersResponse,
     SyncedFolderInfo,
+    SyncPreflightResponse,
+    SleepScheduleInfo,
 )
+from app.services.power.sleep import get_sleep_manager
 from app.schemas.user import UserPublic
 
 Logger = logging.getLogger(__name__)
@@ -33,6 +37,67 @@ router = APIRouter(prefix="/sync", tags=["sync"])
 def get_sync_service(db: Session = Depends(get_db)) -> FileSyncService:
     """Dependency injection for sync service."""
     return FileSyncService(db)
+
+
+@router.get("/preflight", response_model=SyncPreflightResponse)
+@user_limiter.limit(get_limit("sync_operations"))
+async def sync_preflight(
+    request: Request,
+    response: Response,
+    current_user: User = Depends(deps.get_current_user),
+) -> SyncPreflightResponse:
+    """Check if automatic sync is currently allowed and return sleep schedule.
+
+    Lightweight endpoint for sync clients to call before starting automatic sync.
+    Does NOT wake the NAS from sleep (whitelisted in auto-wake middleware).
+    """
+    manager = get_sleep_manager()
+
+    if manager is None:
+        return SyncPreflightResponse(
+            sync_allowed=True,
+            current_sleep_state="awake",
+        )
+
+    from app.schemas.sleep import SleepState
+    current_state = manager._current_state
+    is_awake = current_state == SleepState.AWAKE
+
+    schedule_info = None
+    next_sleep_at = None
+    next_wake_at = None
+    config = manager._load_config()
+
+    if config and config.schedule_enabled:
+        schedule_info = SleepScheduleInfo(
+            enabled=True,
+            sleep_time=config.schedule_sleep_time,
+            wake_time=config.schedule_wake_time,
+            mode=config.schedule_mode,
+        )
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        for time_str, attr in [
+            (config.schedule_sleep_time, "next_sleep_at"),
+            (config.schedule_wake_time, "next_wake_at"),
+        ]:
+            h, m = map(int, time_str.split(":"))
+            target = now.replace(hour=h, minute=m, second=0, microsecond=0)
+            if target <= now:
+                target += timedelta(days=1)
+            if attr == "next_sleep_at":
+                next_sleep_at = target.isoformat()
+            else:
+                next_wake_at = target.isoformat()
+
+    return SyncPreflightResponse(
+        sync_allowed=is_awake,
+        current_sleep_state=current_state.value,
+        sleep_schedule=schedule_info,
+        next_sleep_at=next_sleep_at,
+        next_wake_at=next_wake_at,
+        block_reason="sleep_active" if not is_awake else None,
+    )
 
 
 @router.post("/register")
@@ -157,7 +222,8 @@ async def detect_changes(
     response: Response,
     payload: SyncChangesRequest,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: FileSyncService = Depends(get_sync_service)
+    sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """
     Detect changes and return delta sync data.
@@ -244,6 +310,7 @@ async def get_sync_state(
     response: Response,
     current_user: User = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Return a simple sync state summary for the current user.
 
@@ -303,6 +370,7 @@ async def report_sync_folders(
     payload: ReportSyncFoldersRequest,
     current_user: UserPublic = Depends(deps.get_current_user),
     sync_service: FileSyncService = Depends(get_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """BaluDesk client reports its currently active sync folders.
 

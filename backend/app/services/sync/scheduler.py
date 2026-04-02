@@ -7,6 +7,7 @@ import asyncio
 
 from app.models.sync_progress import SyncSchedule
 from app.services.sync.file_sync import FileSyncService
+from app.services.sync.sleep_check import is_time_in_sleep_window
 
 
 class SyncSchedulerService:
@@ -30,6 +31,8 @@ class SyncSchedulerService:
         auto_vpn: bool = False
     ) -> dict:
         """Create a sync schedule."""
+
+        self._validate_time_against_sleep(time_of_day or "02:00")
 
         schedule = SyncSchedule(
             user_id=user_id,
@@ -65,6 +68,11 @@ class SyncSchedulerService:
 
         if not schedule:
             return None
+
+        # Validate updated time against sleep window BEFORE mutating the model
+        new_time = kwargs.get("time_of_day") or schedule.time_of_day
+        if new_time:
+            self._validate_time_against_sleep(new_time)
 
         for key, value in kwargs.items():
             if hasattr(schedule, key) and value is not None:
@@ -187,6 +195,29 @@ class SyncSchedulerService:
             except Exception as e:
                 print(f"Error running sync {schedule.id}: {e}")
     
+    def _get_sleep_config(self):
+        """Load sleep config from DB for validation."""
+        from sqlalchemy import select
+        from app.models.sleep import SleepConfig as SleepConfigModel
+        try:
+            return self.db.execute(
+                select(SleepConfigModel).where(SleepConfigModel.id == 1)
+            ).scalar_one_or_none()
+        except Exception:
+            return None
+
+    def _validate_time_against_sleep(self, time_of_day: str) -> None:
+        """Raise ValueError if time_of_day falls within the sleep window."""
+        config = self._get_sleep_config()
+        if not config or not config.schedule_enabled:
+            return
+        if is_time_in_sleep_window(time_of_day, config.schedule_sleep_time, config.schedule_wake_time):
+            raise ValueError(
+                f"Sync schedule conflicts with sleep window "
+                f"({config.schedule_sleep_time}-{config.schedule_wake_time}). "
+                f"Choose a time outside the sleep window."
+            )
+
     def _calculate_next_run(self, schedule: SyncSchedule):
         """Calculate next run time for a schedule."""
         now = datetime.now(timezone.utc)

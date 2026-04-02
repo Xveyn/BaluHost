@@ -1,4 +1,7 @@
 import { useTranslation } from 'react-i18next';
+import { AlertTriangle } from 'lucide-react';
+import { isTimeInSleepWindow } from '../../lib/sleep-utils';
+import type { SleepScheduleInfo } from '../../api/sync';
 
 const WEEKDAYS = [
   { value: 0, label: 'Mo' },
@@ -19,6 +22,7 @@ interface ScheduleFormFieldsProps {
   onChangeTime: (time: string) => void;
   onChangeDayOfWeek: (day: number) => void;
   onChangeDayOfMonth: (day: number) => void;
+  sleepSchedule?: SleepScheduleInfo | null;
 }
 
 export function ScheduleFormFields({
@@ -30,8 +34,13 @@ export function ScheduleFormFields({
   onChangeTime,
   onChangeDayOfWeek,
   onChangeDayOfMonth,
+  sleepSchedule,
 }: ScheduleFormFieldsProps) {
   const { t } = useTranslation('settings');
+
+  const inSleepWindow = sleepSchedule?.enabled
+    ? isTimeInSleepWindow(scheduleTime, sleepSchedule.sleep_time, sleepSchedule.wake_time)
+    : false;
 
   return (
     <>
@@ -56,8 +65,21 @@ export function ScheduleFormFields({
           type="time"
           value={scheduleTime}
           onChange={(e) => onChangeTime(e.target.value)}
-          className="w-full px-3 py-2 bg-slate-800 border border-slate-700 rounded-lg text-slate-100"
+          className={`w-full px-3 py-2 bg-slate-800 border rounded-lg text-slate-100 ${
+            inSleepWindow ? 'border-amber-500' : 'border-slate-700'
+          }`}
         />
+        {inSleepWindow && (
+          <div className="mt-2 flex items-start gap-2 p-3 bg-amber-500/10 border border-amber-500/30 rounded-lg">
+            <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+            <span className="text-sm text-amber-300">
+              {t('sync.sleepWindowWarning', {
+                sleepTime: sleepSchedule!.sleep_time,
+                wakeTime: sleepSchedule!.wake_time,
+              })}
+            </span>
+          </div>
+        )}
       </div>
 
       {/* Day of Week (for weekly) */}

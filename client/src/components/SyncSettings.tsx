@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Calendar, Smartphone, Settings } from 'lucide-react';
 import { useTranslation } from 'react-i18next';
 import { useSyncSettings } from '../hooks/useSyncSettings';
+import { isTimeInSleepWindow } from '../lib/sleep-utils';
 import {
   ScheduleFormFields,
   ScheduleList,
@@ -16,6 +17,7 @@ export default function SyncSettings() {
     schedules,
     bandwidth,
     deviceFolders,
+    sleepSchedule,
     handleCreateSchedule,
     handleUpdateSchedule,
     handleDisableSchedule,
@@ -102,12 +104,18 @@ export default function SyncSettings() {
                 onChangeTime={setScheduleTime}
                 onChangeDayOfWeek={setDayOfWeek}
                 onChangeDayOfMonth={setDayOfMonth}
+                sleepSchedule={sleepSchedule}
               />
             </div>
 
             <button
               onClick={onCreate}
-              disabled={!selectedDevice}
+              disabled={
+                !selectedDevice ||
+                (sleepSchedule?.enabled
+                  ? isTimeInSleepWindow(scheduleTime, sleepSchedule.sleep_time, sleepSchedule.wake_time)
+                  : false)
+              }
               className="px-4 py-2 bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 disabled:cursor-not-allowed text-white rounded-lg transition-colors"
             >
               {t('sync.createScheduleBtn')}
@@ -128,6 +136,7 @@ export default function SyncSettings() {
           devices={devices}
           onUpdate={handleUpdateSchedule}
           onDisable={handleDisableSchedule}
+          sleepSchedule={sleepSchedule}
         />
       </div>
 

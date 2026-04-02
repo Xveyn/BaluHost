@@ -327,3 +327,51 @@ require_power_soft_sleep = _make_power_dependency("soft_sleep")
 require_power_wake = _make_power_dependency("wake")
 require_power_suspend = _make_power_dependency("suspend")
 require_power_wol = _make_power_dependency("wol")
+
+
+async def require_sync_allowed(request: Request) -> None:
+    """Dependency that blocks automatic sync requests during sleep mode.
+
+    Reads X-Sync-Trigger header:
+    - "auto" / "scheduled" -> blocked during sleep (503)
+    - "manual" / missing   -> allowed (auto-wake middleware handles waking)
+    """
+    from app.services.power.sleep import get_sleep_manager
+    from app.schemas.sleep import SleepState
+
+    trigger = (request.headers.get("X-Sync-Trigger") or "manual").lower()
+    if trigger not in ("auto", "scheduled"):
+        return  # manual or unknown -> allow
+
+    manager = get_sleep_manager()
+    if manager is None:
+        return  # sleep manager not running -> allow
+
+    state = manager._current_state
+    if state == SleepState.AWAKE:
+        return  # system is awake -> allow
+
+    # Compute next_wake_at and retry_after from config
+    config = manager._load_config()
+    next_wake_at = None
+    retry_after = None
+    if config and config.schedule_enabled:
+        from datetime import datetime, timedelta
+        now = datetime.now()
+        h, m = map(int, config.schedule_wake_time.split(":"))
+        wake_dt = now.replace(hour=h, minute=m, second=0, microsecond=0)
+        if wake_dt <= now:
+            wake_dt += timedelta(days=1)
+        next_wake_at = wake_dt.isoformat()
+        retry_after = int((wake_dt - now).total_seconds())
+
+    raise HTTPException(
+        status_code=503,
+        detail={
+            "message": "Sync blocked: NAS is in sleep mode",
+            "sleep_state": state.value,
+            "next_wake_at": next_wake_at,
+            "retry_after_seconds": retry_after,
+        },
+        headers={"Retry-After": str(retry_after)} if retry_after else {},
+    )

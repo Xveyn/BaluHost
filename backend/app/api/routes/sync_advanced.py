@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from app import api
 from app.api import deps
+from app.api.deps import require_sync_allowed
 from app.core.database import get_db
 from app.models.user import User
 from app.services.sync.progressive import ProgressiveSyncService
@@ -50,7 +51,8 @@ async def start_chunked_upload(
     payload: StartChunkedUploadRequest,
     device_id: str,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Start a chunked upload session for a large file."""
     result = sync_service.start_chunked_upload(
@@ -74,7 +76,8 @@ async def upload_chunk(
     chunk_hash: str,
     chunk_file: UploadFile = File(...),
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Upload a single chunk."""
     chunk_data = await chunk_file.read()
@@ -117,7 +120,8 @@ async def resume_upload(
     response: Response,
     upload_id: str,
     current_user: User = Depends(deps.get_current_user),
-    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service)
+    sync_service: ProgressiveSyncService = Depends(get_progressive_sync_service),
+    _guard=Depends(require_sync_allowed),
 ):
     """Resume a paused chunked upload."""
     result = sync_service.resume_upload(upload_id)
@@ -203,18 +207,21 @@ async def create_sync_schedule(
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
     """Create a new sync schedule."""
-    result = scheduler.create_schedule(
-        user_id=current_user.id,
-        device_id=payload.device_id,
-        schedule_type=payload.schedule_type,
-        time_of_day=payload.time_of_day,
-        day_of_week=payload.day_of_week,
-        day_of_month=payload.day_of_month,
-        sync_deletions=payload.sync_deletions,
-        resolve_conflicts=payload.resolve_conflicts,
-        auto_vpn=payload.auto_vpn
-    )
-    return result
+    try:
+        result = scheduler.create_schedule(
+            user_id=current_user.id,
+            device_id=payload.device_id,
+            schedule_type=payload.schedule_type,
+            time_of_day=payload.time_of_day,
+            day_of_week=payload.day_of_week,
+            day_of_month=payload.day_of_month,
+            sync_deletions=payload.sync_deletions,
+            resolve_conflicts=payload.resolve_conflicts,
+            auto_vpn=payload.auto_vpn
+        )
+        return result
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
 
 @router.get("/schedule/list")
@@ -295,19 +302,22 @@ async def update_sync_schedule(
     scheduler: SyncSchedulerService = Depends(get_sync_scheduler_service)
 ):
     """Update an existing sync schedule."""
-    result = scheduler.update_schedule(
-        schedule_id=schedule_id,
-        user_id=current_user.id,
-        device_id=payload.device_id,
-        schedule_type=payload.schedule_type,
-        time_of_day=payload.time_of_day,
-        day_of_week=payload.day_of_week,
-        day_of_month=payload.day_of_month,
-        sync_deletions=payload.sync_deletions,
-        resolve_conflicts=payload.resolve_conflicts,
-        is_active=payload.is_active,
-        auto_vpn=payload.auto_vpn,
-    )
+    try:
+        result = scheduler.update_schedule(
+            schedule_id=schedule_id,
+            user_id=current_user.id,
+            device_id=payload.device_id,
+            schedule_type=payload.schedule_type,
+            time_of_day=payload.time_of_day,
+            day_of_week=payload.day_of_week,
+            day_of_month=payload.day_of_month,
+            sync_deletions=payload.sync_deletions,
+            resolve_conflicts=payload.resolve_conflicts,
+            is_active=payload.is_active,
+            auto_vpn=payload.auto_vpn,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(e))
 
     if not result:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Schedule not found")
