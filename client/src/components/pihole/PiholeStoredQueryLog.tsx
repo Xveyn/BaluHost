@@ -6,6 +6,8 @@ import {
   type StoredQueryEntry,
   type Period,
 } from "../../api/pihole";
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { SortableHeader } from '../ui/SortableHeader';
 
 const STATUS_COLORS: Record<string, string> = {
   FORWARDED: "text-emerald-400",
@@ -30,6 +32,7 @@ export default function PiholeStoredQueryLog() {
   const [statusFilter, setStatusFilter] = useState("");
 
   const pageSize = 100;
+  const { sortedData: sortedQueries, sortKey, sortDirection, toggleSort } = useSortableTable(queries);
 
   const fetchQueries = useCallback(async () => {
     setLoading(true);
@@ -137,12 +140,12 @@ export default function PiholeStoredQueryLog() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-700/50 text-left text-xs text-slate-400">
-              <th className="px-4 py-3">Time</th>
-              <th className="px-4 py-3">Domain</th>
-              <th className="px-4 py-3">Client</th>
-              <th className="px-4 py-3">Type</th>
-              <th className="px-4 py-3">Status</th>
-              <th className="px-4 py-3 text-right">Response</th>
+              <SortableHeader label="Time" sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="Client" sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="Type" sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label="Response" sortKey="response_time_ms" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3 text-right" />
             </tr>
           </thead>
           <tbody>
@@ -163,7 +166,7 @@ export default function PiholeStoredQueryLog() {
                 </td>
               </tr>
             ) : (
-              queries.map((q) => (
+              sortedQueries.map((q) => (
                 <tr key={q.id} className="border-b border-slate-700/30 hover:bg-slate-700/20">
                   <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-400">
                     {new Date(q.timestamp).toLocaleString([], {

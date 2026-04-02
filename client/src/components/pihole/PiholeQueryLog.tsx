@@ -2,6 +2,8 @@ import { useEffect, useState, useCallback } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import toast from "react-hot-toast";
 import { getQueries, type QueryEntry } from "../../api/pihole";
+import { useSortableTable } from '../../hooks/useSortableTable';
+import { SortableHeader } from '../ui/SortableHeader';
 
 const PAGE_SIZE = 25;
 
@@ -26,6 +28,7 @@ export default function PiholeQueryLog() {
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
   const [page, setPage] = useState(0);
+  const { sortedData: sortedQueries, sortKey, sortDirection, toggleSort } = useSortableTable(queries);
   const totalPages = Math.max(1, Math.ceil(total / PAGE_SIZE));
 
   const fetchQueries = useCallback(async () => {
@@ -62,12 +65,12 @@ export default function PiholeQueryLog() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-              <th className="px-4 py-2.5">Time</th>
-              <th className="px-4 py-2.5">Domain</th>
-              <th className="px-4 py-2.5">Client</th>
-              <th className="px-4 py-2.5">Type</th>
-              <th className="px-4 py-2.5">Status</th>
-              <th className="px-4 py-2.5 text-right">Response</th>
+              <SortableHeader label="Time" sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label="Client" sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label="Type" sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label="Response" sortKey="response_time" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5 text-right" />
             </tr>
           </thead>
           <tbody>
@@ -91,7 +94,7 @@ export default function PiholeQueryLog() {
                 </td>
               </tr>
             ) : (
-              queries.map((q, i) => {
+              sortedQueries.map((q, i) => {
                 const badge = statusBadge[q.status] ?? {
                   bg: "bg-slate-500/20",
                   text: "text-slate-400",
