@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Bell, Upload, Trash2, Loader2, AlertCircle, CheckCircle2, XCircle, Info, RefreshCw, Send } from 'lucide-react';
+import { Bell, Upload, Trash2, Loader2, AlertCircle, CheckCircle2, XCircle, Info, RefreshCw, Send, Smartphone } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getFirebaseStatus,
@@ -9,6 +9,7 @@ import {
   sendTestNotification,
   type FirebaseStatus,
 } from '../../api/firebase';
+import { getAllDevices, type Device } from '../../api/devices';
 
 export default function FirebaseManagementCard() {
   const { t } = useTranslation('system');
@@ -22,6 +23,8 @@ export default function FirebaseManagementCard() {
   const [testBody, setTestBody] = useState('');
   const [testToken, setTestToken] = useState('');
   const [showTokenField, setShowTokenField] = useState(false);
+  const [devices, setDevices] = useState<Device[]>([]);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string>('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const fetchStatus = async () => {
@@ -35,8 +38,18 @@ export default function FirebaseManagementCard() {
     }
   };
 
+  const fetchDevices = async () => {
+    try {
+      const all = await getAllDevices();
+      setDevices(all.filter((d) => d.type === 'mobile' && d.is_active));
+    } catch {
+      // Non-critical — selector just stays empty
+    }
+  };
+
   useEffect(() => {
     fetchStatus();
+    fetchDevices();
   }, []);
 
   const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -260,6 +273,25 @@ export default function FirebaseManagementCard() {
           <p className="text-sm text-slate-400">{t('firebase.testDescription')}</p>
 
           <div className="space-y-3">
+            {/* Device selector */}
+            <div>
+              <label className="block text-xs text-slate-500 mb-1">
+                <Smartphone className="inline h-3 w-3 mr-1" />
+                {t('firebase.testDeviceLabel')}
+              </label>
+              <select
+                value={selectedDeviceId}
+                onChange={(e) => setSelectedDeviceId(e.target.value)}
+                className="w-full rounded-lg bg-slate-900/50 border border-slate-700/50 px-3 py-2 text-sm text-white focus:border-blue-500/50 focus:outline-none"
+              >
+                <option value="">{t('firebase.testDeviceAll')}</option>
+                {devices.map((d) => (
+                  <option key={d.id} value={d.id}>
+                    {d.name}{d.username ? ` (${d.username})` : ''} — {d.platform}
+                  </option>
+                ))}
+              </select>
+            </div>
             <div>
               <label className="block text-xs text-slate-500 mb-1">{t('firebase.testTitleLabel')}</label>
               <input
@@ -308,6 +340,7 @@ export default function FirebaseManagementCard() {
                   title: testTitle || undefined,
                   body: testBody || undefined,
                   token: testToken || undefined,
+                  device_id: selectedDeviceId || undefined,
                 });
                 if (res.success && res.sent_to > 0) {
                   toast.success(`${t('firebase.testSuccess')} (${res.sent_to})`);

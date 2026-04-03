@@ -33,8 +33,18 @@ def main() -> int:
     logger.info("BaluHost Scheduler Worker starting...")
 
     # Initialize database (create tables if missing)
-    from app.core.database import init_db
+    from app.core.database import init_db, SessionLocal
     init_db()
+
+    # Initialize Firebase so notification_check and emit_scheduler_failed_sync
+    # can send push notifications from this process.
+    from app.services.notifications.firebase import FirebaseService
+    FirebaseService.initialize()
+
+    # Initialize the EventEmitter with a DB session factory so emit_sync
+    # calls (e.g. scheduler failure notifications) can create DB records.
+    from app.services.notifications.events import init_event_emitter
+    init_event_emitter(SessionLocal)
 
     # Create and start the worker
     from app.services.scheduler.worker import SchedulerWorker

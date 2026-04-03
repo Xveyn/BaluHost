@@ -1358,7 +1358,9 @@
     "tokenPlaceholder": "Paste FCM token (from Logcat or Firebase Console)",
     "testSendButton": "Send Test",
     "testSuccess": "Test notification sent",
-    "testError": "Test notification failed"
+    "testError": "Test notification failed",
+    "testDeviceLabel": "Target device",
+    "testDeviceAll": "All own devices"
   },
   "badges": {
     "pluginProvidedBy": "Provided by {{name}}"
