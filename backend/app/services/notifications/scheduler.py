@@ -67,9 +67,13 @@ class NotificationScheduler:
                 try:
                     if device.expires_at is None:
                         continue
+                    # Ensure expires_at is timezone-aware (PostgreSQL may store naive)
+                    expires_at = device.expires_at
+                    if expires_at.tzinfo is None:
+                        expires_at = expires_at.replace(tzinfo=timezone.utc)
                     # Check each warning threshold
                     for warning_type, threshold in cls.WARNING_THRESHOLDS.items():
-                        warning_time = device.expires_at - threshold
+                        warning_time = expires_at - threshold
                         
                         # Check if we should send this warning
                         should_send, reason = cls._should_send_warning(
