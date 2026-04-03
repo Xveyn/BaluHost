@@ -39,8 +39,8 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Refresh token TTL (long)
     privileged_roles: list[str] = ["admin"]
     
-    # Registration control
-    registration_enabled: bool = True  # Set False in production (via REGISTRATION_ENABLED env var) to require admin-created accounts
+    # Registration control — defaults to False for security (production requires admin-created accounts)
+    registration_enabled: bool = False
 
     # Local-only access enforcement (Option B security)
     enforce_local_only: bool = False  # Set True to restrict sensitive endpoints to localhost
@@ -232,6 +232,9 @@ class Settings(BaseSettings):
                 self.sleep_mode_enabled = False
             if self.pihole_enabled:
                 self.pihole_enabled = False
+            # Enable registration in dev mode for convenience
+            if not self.registration_enabled:
+                self.registration_enabled = True
             # Auto-generate VPN encryption key for dev mode
             if not self.vpn_encryption_key:
                 from cryptography.fernet import Fernet
@@ -286,6 +289,36 @@ class Settings(BaseSettings):
                 )
             if len(v) < 32:
                 raise ValueError("token_secret must be at least 32 characters for security")
+        return v
+
+    @field_validator("registration_enabled")
+    @classmethod
+    def validate_registration(cls, v: bool, info) -> bool:
+        """Warn when open registration is enabled in production."""
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+
+        if not (is_dev or is_test) and v:
+            logging.warning(
+                "REGISTRATION_ENABLED=true in production — anyone can create accounts. "
+                "Set REGISTRATION_ENABLED=false to require admin-created accounts."
+            )
+        return v
+
+    @field_validator("totp_encryption_key")
+    @classmethod
+    def validate_totp_key(cls, v: str, info) -> str:
+        """Warn when TOTP encryption key is not set in production."""
+        import os
+        is_dev = os.getenv("NAS_MODE", "dev").lower() == "dev"
+        is_test = os.getenv("SKIP_APP_INIT") == "1" or os.getenv("PYTEST_CURRENT_TEST")
+
+        if not (is_dev or is_test) and not v:
+            logging.warning(
+                "TOTP_ENCRYPTION_KEY not set — TOTP secrets will use VPN_ENCRYPTION_KEY as fallback. "
+                "Set a dedicated TOTP_ENCRYPTION_KEY for proper key isolation."
+            )
         return v
 
     @field_validator("balupi_handshake_secret")
