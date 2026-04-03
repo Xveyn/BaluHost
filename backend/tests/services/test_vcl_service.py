@@ -5,7 +5,7 @@ import pytest
 from pathlib import Path
 from sqlalchemy.orm import Session
 
-from app.services.vcl import VCLService
+from app.services.versioning.vcl import VCLService
 from app.models.vcl import FileVersion, VersionBlob, VCLSettings, VCLStats
 from app.models.file_metadata import FileMetadata
 from app.models.user import User

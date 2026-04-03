@@ -9,7 +9,7 @@ import os
 # Add backend to path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-from app.services.raid import DevRaidBackend
+from app.services.hardware.raid import DevRaidBackend
 from app.schemas.system import CreateArrayRequest
 
 def test_raid_backend():

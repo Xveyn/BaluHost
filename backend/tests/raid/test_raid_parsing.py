@@ -1,5 +1,5 @@
 from app.schemas.system import RaidDevice
-from app.services.raid import MdstatInfo, _derive_array_status, _map_device_state, _parse_mdstat
+from app.services.hardware.raid import MdstatInfo, _derive_array_status, _map_device_state, _parse_mdstat
 
 
 def test_parse_mdstat_with_progress() -> None:

@@ -8,7 +8,7 @@ from unittest.mock import patch, MagicMock
 from app.models import ServerProfile, VPNProfile, VPNType
 from app.main import app
 from app.core.config import settings
-from app.services.vpn_encryption import VPNEncryption
+from app.services.vpn.encryption import VPNEncryption
 
 
 @pytest.fixture

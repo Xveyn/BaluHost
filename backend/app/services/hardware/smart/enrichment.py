@@ -58,7 +58,7 @@ def _enrich_with_filesystem_usage(devices: list[SmartDevice]) -> None:
         # RAID-aware: Erstelle Mapping member_base_name -> (used, total, mountpoint, array_name)
         raid_member_map: dict[str, tuple[int, int, str | None, str]] = {}
         try:
-            from app.services import raid as raid_service
+            from app.services.hardware import raid as raid_service
             from app.services.hardware.raid import find_raid_mountpoint
             raid_data = raid_service.get_status()
             if raid_data and raid_data.arrays:

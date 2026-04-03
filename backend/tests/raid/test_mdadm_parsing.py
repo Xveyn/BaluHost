@@ -1,7 +1,7 @@
 import pytest
 from pathlib import Path
 
-from app.services.raid import MdadmRaidBackend, MdstatInfo
+from app.services.hardware.raid import MdadmRaidBackend, MdstatInfo
 
 
 def _mk_backend():

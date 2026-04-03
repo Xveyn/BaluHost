@@ -3,6 +3,7 @@ Development backend for sleep mode that simulates all operations in-memory.
 """
 import asyncio
 import logging
+from datetime import datetime
 from typing import Optional
 
 from app.services.power.sleep import SleepBackend
@@ -27,9 +28,12 @@ class DevSleepBackend(SleepBackend):
         logger.info("[DEV] Simulated disk spinup: %s", devices)
         return devices
 
-    async def suspend_system(self) -> bool:
+    async def suspend_system(self, wake_at: Optional[datetime] = None) -> bool:
         self._suspended = True
-        logger.info("[DEV] Simulated system suspend")
+        if wake_at:
+            logger.info("[DEV] Simulated system suspend with RTC wake at %s", wake_at.isoformat())
+        else:
+            logger.info("[DEV] Simulated system suspend")
         # Simulate waking up after a short delay
         await asyncio.sleep(2)
         self._suspended = False

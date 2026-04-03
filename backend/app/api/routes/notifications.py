@@ -20,6 +20,7 @@ from app.schemas.notification import (
     NotificationPreferencesResponse,
     NotificationCategoryEnum,
 )
+from app.schemas.notification_routing import MyNotificationRoutingResponse
 from app.services.notifications import get_notification_service
 from app.services import auth as auth_service
 from app.services.permissions import is_privileged
@@ -279,6 +280,29 @@ async def update_notification_preferences(
     )
 
     return NotificationPreferencesResponse.from_db(prefs)
+
+
+@router.get("/my-routing", response_model=MyNotificationRoutingResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_my_notification_routing(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get the current user's notification routing (read-only)."""
+    from app.services.notification_routing import get_routing
+
+    routing = get_routing(db, current_user.id)
+    return MyNotificationRoutingResponse(
+        receive_raid=routing.receive_raid,
+        receive_smart=routing.receive_smart,
+        receive_backup=routing.receive_backup,
+        receive_scheduler=routing.receive_scheduler,
+        receive_system=routing.receive_system,
+        receive_security=routing.receive_security,
+        receive_sync=routing.receive_sync,
+        receive_vpn=routing.receive_vpn,
+    )
 
 
 # Admin endpoints for creating notifications

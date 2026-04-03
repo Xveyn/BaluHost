@@ -87,23 +87,17 @@ class AuditLoggerDB:
         )
         
         # Use provided session or create a new one
-        should_close = False
-        if db is None:
-            db = next(get_db())
-            should_close = True
-        
+        from app.core.database import ensure_db
+
         try:
-            db.add(audit_entry)
-            db.commit()
-            db.refresh(audit_entry)
-            return audit_entry
+            with ensure_db(db) as session:
+                session.add(audit_entry)
+                session.commit()
+                session.refresh(audit_entry)
+                return audit_entry
         except Exception as e:
-            logger.error(f"Failed to write audit log to database: {e}")
-            db.rollback()
+            logger.error("Failed to write audit log to database: %s", e)
             return None
-        finally:
-            if should_close:
-                db.close()
     
     def log_file_access(
         self,

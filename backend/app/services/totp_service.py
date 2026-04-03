@@ -28,9 +28,16 @@ ISSUER_NAME = "BaluHost"
 
 
 def _get_totp_fernet() -> Fernet:
-    """Get Fernet instance for TOTP encryption, using dedicated key or VPN key fallback."""
+    """Get Fernet instance for TOTP encryption, using dedicated key."""
     from app.core.config import settings
-    key = settings.totp_encryption_key or settings.vpn_encryption_key
+    key = settings.totp_encryption_key
+    if not key:
+        if not settings.is_dev_mode:
+            logger.warning(
+                "TOTP_ENCRYPTION_KEY not set — falling back to VPN_ENCRYPTION_KEY. "
+                "Set a dedicated TOTP_ENCRYPTION_KEY in production for key isolation."
+            )
+        key = settings.vpn_encryption_key
     if not key:
         raise ValueError(
             "No encryption key configured for TOTP "

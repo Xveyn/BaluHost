@@ -10,6 +10,7 @@ In dev mode all system commands are no-ops.
 import asyncio
 import logging
 import os
+import re
 import tempfile
 from pathlib import Path
 from typing import Optional
@@ -19,6 +20,21 @@ from app.core.database import SessionLocal
 from app.models.user import User
 
 logger = logging.getLogger(__name__)
+
+# Defense-in-depth: validate usernames before passing to system commands.
+# Only allow lowercase alphanumeric, hyphens, and underscores (standard Linux username rules).
+_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+
+
+def _validate_username(username: str) -> None:
+    """Validate username before use in subprocess commands.
+
+    Raises ValueError if username contains unexpected characters.
+    This is defense-in-depth — Pydantic validates at registration,
+    but service functions must not trust callers blindly.
+    """
+    if not _USERNAME_RE.match(username):
+        raise ValueError(f"Invalid username for Samba operation: {username!r}")
 
 SAMBA_SHARES_CONF = "/etc/samba/baluhost-shares.conf"
 
@@ -55,6 +71,7 @@ async def _ensure_system_user(username: str) -> None:
     The user is added to the same group as the BaluHost service user
     so Samba can access files owned by that group.
     """
+    _validate_username(username)
     if settings.is_dev_mode:
         logger.info("[DEV] Mock _ensure_system_user('%s')", username)
         return
@@ -84,6 +101,7 @@ async def sync_smb_password(username: str, plaintext_password: str) -> bool:
 
     This creates the Samba account if it doesn't exist yet (smbpasswd -a).
     """
+    _validate_username(username)
     if settings.is_dev_mode:
         logger.info("[DEV] Mock sync_smb_password('%s')", username)
         return True
@@ -106,6 +124,7 @@ async def sync_smb_password(username: str, plaintext_password: str) -> bool:
 
 async def remove_smb_user(username: str) -> bool:
     """Remove a user from the Samba password database."""
+    _validate_username(username)
     if settings.is_dev_mode:
         logger.info("[DEV] Mock remove_smb_user('%s')", username)
         return True
@@ -121,6 +140,7 @@ async def remove_smb_user(username: str) -> bool:
 
 async def enable_smb_user(username: str) -> bool:
     """Enable a Samba user account."""
+    _validate_username(username)
     if settings.is_dev_mode:
         logger.info("[DEV] Mock enable_smb_user('%s')", username)
         return True
@@ -136,6 +156,7 @@ async def enable_smb_user(username: str) -> bool:
 
 async def disable_smb_user(username: str) -> bool:
     """Disable a Samba user account."""
+    _validate_username(username)
     if settings.is_dev_mode:
         logger.info("[DEV] Mock disable_smb_user('%s')", username)
         return True

@@ -370,3 +370,45 @@ async def update_user_power_permissions(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
 
     return update_permissions(db, user_id, body, granted_by=current_admin.id)
+
+
+from app.schemas.notification_routing import NotificationRoutingResponse, NotificationRoutingUpdate
+
+
+@router.get("/{user_id}/notification-routing", response_model=NotificationRoutingResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_user_notification_routing(
+    request: Request,
+    response: Response,
+    user_id: int,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> NotificationRoutingResponse:
+    """Get notification routing for a user (admin only)."""
+    from app.services.notification_routing import get_routing
+
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return get_routing(db, user_id)
+
+
+@router.put("/{user_id}/notification-routing", response_model=NotificationRoutingResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_user_notification_routing(
+    request: Request,
+    response: Response,
+    user_id: int,
+    body: NotificationRoutingUpdate,
+    current_admin: UserPublic = Depends(deps.get_current_admin),
+    db: Session = Depends(get_db),
+) -> NotificationRoutingResponse:
+    """Update notification routing for a user (admin only)."""
+    from app.services.notification_routing import update_routing
+
+    user = user_service.get_user(user_id, db=db)
+    if not user:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
+
+    return update_routing(db, user_id, body, granted_by=current_admin.id)

@@ -341,7 +341,7 @@ class TestPiholeService:
     def test_deploy_container_persists_password(self, db_session: Session):
         """After deploy_container(), the generated password is saved encrypted in the DB."""
         from app.services.pihole.service import PiholeService
-        from app.services.vpn_encryption import VPNEncryption
+        from app.services.vpn.encryption import VPNEncryption
 
         svc = PiholeService(db_session)
 
@@ -390,7 +390,7 @@ class TestPiholeService:
         13-60s window while wait_for_ready polls Pi-hole.
         """
         from app.services.pihole.service import PiholeService
-        from app.services.vpn_encryption import VPNEncryption
+        from app.services.vpn.encryption import VPNEncryption
         import app.services.pihole.service as svc_mod
 
         svc = PiholeService(db_session)

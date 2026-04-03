@@ -9,7 +9,7 @@ from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
 from app.core.config import Settings, settings
-from app.core.database import SessionLocal
+from app.core.database import SessionLocal, ensure_db
 from app.models.user import User
 from app.schemas.user import UserCreate, UserPublic, UserUpdate
 from app.services.files.storage_permissions import set_storage_dir_permissions
@@ -59,21 +59,17 @@ def ensure_user_home_directories(db: Optional[Session] = None) -> None:
     """Ensure home directories exist for all non-admin users and create the Shared folder."""
     from app.services.files.metadata_db import get_metadata, create_metadata
 
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-
-    try:
+    with ensure_db(db) as session:
         storage_root = _get_storage_root()
 
         # Ensure Shared folder
         shared_dir = storage_root / SHARED_DIR_NAME
         shared_dir.mkdir(parents=True, exist_ok=True)
         set_storage_dir_permissions(shared_dir)
-        existing_shared = get_metadata(SHARED_DIR_NAME, db=db)
+        existing_shared = get_metadata(SHARED_DIR_NAME, db=session)
         if not existing_shared:
             # Shared folder owned by admin (owner_id is NOT NULL in DB)
-            admin_user = db.query(User).filter(User.role == "admin").first()
+            admin_user = session.query(User).filter(User.role == "admin").first()
             if admin_user:
                 create_metadata(
                     relative_path=SHARED_DIR_NAME,
@@ -81,17 +77,14 @@ def ensure_user_home_directories(db: Optional[Session] = None) -> None:
                     owner_id=admin_user.id,
                     size_bytes=0,
                     is_directory=True,
-                    db=db,
+                    db=session,
                 )
                 logger.info("Shared directory created at %s", shared_dir)
 
         # Ensure home dirs for all non-admin users
-        users = db.query(User).filter(User.role != "admin").all()
+        users = session.query(User).filter(User.role != "admin").all()
         for user in users:
-            _create_home_directory(user.username, user.id, db=db)
-    finally:
-        if should_close:
-            db.close()
+            _create_home_directory(user.username, user.id, db=session)
 
 
 def _rename_home_directory(old_username: str, new_username: str, db: Optional[Session] = None) -> None:
@@ -99,11 +92,7 @@ def _rename_home_directory(old_username: str, new_username: str, db: Optional[Se
     from app.services.files.metadata_db import rename_metadata
     from app.models.file_metadata import FileMetadata
 
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-
-    try:
+    with ensure_db(db) as session:
         storage_root = _get_storage_root()
         old_dir = storage_root / old_username
         new_dir = storage_root / new_username
@@ -116,13 +105,13 @@ def _rename_home_directory(old_username: str, new_username: str, db: Optional[Se
             old_path=old_username,
             new_path=new_username,
             new_name=new_username,
-            db=db,
+            db=session,
         )
 
         # Update all child metadata paths with the old prefix
         old_prefix = f"{old_username}/"
         new_prefix = f"{new_username}/"
-        children = db.query(FileMetadata).filter(
+        children = session.query(FileMetadata).filter(
             FileMetadata.path.startswith(old_prefix)
         ).all()
         for child in children:
@@ -131,11 +120,8 @@ def _rename_home_directory(old_username: str, new_username: str, db: Optional[Se
                 child.parent_path = new_prefix + child.parent_path[len(old_prefix):]
             elif child.parent_path == old_username:
                 child.parent_path = new_username
-        db.commit()
+        session.commit()
         logger.info("Renamed home directory from '%s' to '%s'", old_username, new_username)
-    finally:
-        if should_close:
-            db.close()
 
 
 def ensure_admin_user(settings: Settings) -> None:
@@ -159,56 +145,31 @@ def ensure_admin_user(settings: Settings) -> None:
 
 def list_users(db: Optional[Session] = None) -> Iterable[User]:
     """List all users from database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
-        return db.query(User).all()
-    finally:
-        if should_close:
-            db.close()
+    with ensure_db(db) as session:
+        return session.query(User).all()
 
 
 def get_user(user_id: int | str, db: Optional[Session] = None) -> Optional[User]:
     """Get user by ID from database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
+    with ensure_db(db) as session:
         # Support both int and string IDs for backward compatibility
         if isinstance(user_id, str):
             try:
                 user_id = int(user_id)
             except ValueError:
                 return None
-        return db.query(User).filter(User.id == user_id).first()
-    finally:
-        if should_close:
-            db.close()
+        return session.query(User).filter(User.id == user_id).first()
 
 
 def get_user_by_username(username: str, db: Optional[Session] = None) -> Optional[User]:
     """Get user by username from database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
-        return db.query(User).filter(User.username == username).first()
-    finally:
-        if should_close:
-            db.close()
+    with ensure_db(db) as session:
+        return session.query(User).filter(User.username == username).first()
 
 
 def create_user(payload: UserCreate, db: Optional[Session] = None) -> User:
     """Create new user in database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-
-    try:
+    with ensure_db(db) as session:
         password_hash = pwd_context.hash(payload.password)
         # Convert empty string to None for email (database nullable field)
         email = payload.email if payload.email and payload.email.strip() else None
@@ -218,31 +179,24 @@ def create_user(payload: UserCreate, db: Optional[Session] = None) -> User:
             role=(getattr(payload, "role", None) or "user"),
             hashed_password=password_hash,
         )
-        db.add(user)
-        db.commit()
-        db.refresh(user)
+        session.add(user)
+        session.commit()
+        session.refresh(user)
 
         # Create home directory for non-admin users
         if user.role != "admin":
             try:
-                _create_home_directory(user.username, user.id, db=db)
+                _create_home_directory(user.username, user.id, db=session)
             except Exception:
                 logger.warning("Failed to create home directory for user '%s'", user.username, exc_info=True)
 
         return user
-    finally:
-        if should_close:
-            db.close()
 
 
 def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] = None) -> Optional[User]:
     """Update user in database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
-        user = get_user(user_id, db=db)
+    with ensure_db(db) as session:
+        user = get_user(user_id, db=session)
         if not user:
             return None
 
@@ -260,13 +214,13 @@ def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] =
         if payload.is_active is not None:
             user.is_active = payload.is_active
 
-        db.commit()
-        db.refresh(user)
+        session.commit()
+        session.refresh(user)
 
         # Rename home directory if username changed and user is not admin
         if payload.username and payload.username != old_username and user.role != "admin":
             try:
-                _rename_home_directory(old_username, payload.username, db=db)
+                _rename_home_directory(old_username, payload.username, db=session)
             except Exception:
                 logger.warning(
                     "Failed to rename home directory from '%s' to '%s'",
@@ -274,27 +228,20 @@ def update_user(user_id: int | str, payload: UserUpdate, db: Optional[Session] =
                 )
 
         return user
-    finally:
-        if should_close:
-            db.close()
 
 
 def delete_user(user_id: int | str, db: Optional[Session] = None) -> bool:
     """Delete user from database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
-        user = get_user(user_id, db=db)
+    with ensure_db(db) as session:
+        user = get_user(user_id, db=session)
         if not user:
             return False
 
         username = user.username
         is_admin = user.role == "admin"
 
-        db.delete(user)
-        db.commit()
+        session.delete(user)
+        session.commit()
 
         # Remove home directory for non-admin users
         if not is_admin:
@@ -308,9 +255,6 @@ def delete_user(user_id: int | str, db: Optional[Session] = None) -> bool:
                 logger.warning("Failed to delete home directory for user '%s'", username, exc_info=True)
 
         return True
-    finally:
-        if should_close:
-            db.close()
 
 
 def verify_password(plain_password: str, hashed_password: str) -> bool:
@@ -320,21 +264,14 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 def update_user_password(user_id: int | str, new_password: str, db: Optional[Session] = None) -> bool:
     """Update user password in database."""
-    should_close = db is None
-    if db is None:
-        db = _get_db()
-    
-    try:
-        user = get_user(user_id, db=db)
+    with ensure_db(db) as session:
+        user = get_user(user_id, db=session)
         if not user:
             return False
-        
+
         user.hashed_password = pwd_context.hash(new_password)
-        db.commit()
+        session.commit()
         return True
-    finally:
-        if should_close:
-            db.close()
 
 
 def list_users_filtered(

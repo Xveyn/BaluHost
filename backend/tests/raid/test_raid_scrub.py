@@ -1,6 +1,6 @@
 import pytest
 
-from app.services import raid as raid_service
+from app.services.hardware import raid as raid_service
 
 
 @pytest.mark.skipif(not isinstance(raid_service._backend, raid_service.DevRaidBackend), reason="Dev backend not active")

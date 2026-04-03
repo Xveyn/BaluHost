@@ -124,8 +124,30 @@ class NotificationService:
         """
         if notification.user_id is None:
             # System notification - broadcast to all admins via WebSocket + Push
-            await self._broadcast_to_admins(notification)
-            await self._send_push_to_admins(db, notification)
+            await self._broadcast_to_recipients(db, notification)
+            await self._send_push_to_recipients(db, notification)
+
+            # Create per-user notification copies for routed non-admin users
+            # so they appear in the user's notification list
+            from app.services.notification_routing import get_routed_user_ids
+            routed_ids = get_routed_user_ids(db, notification.category)
+            for uid in routed_ids:
+                prefs = self.get_user_preferences(db, uid)
+                if prefs:
+                    if self._is_quiet_hours(prefs) and notification.priority < 3:
+                        continue
+                user_copy = Notification(
+                    user_id=uid,
+                    category=notification.category,
+                    notification_type=notification.notification_type,
+                    title=notification.title,
+                    message=notification.message,
+                    action_url=notification.action_url,
+                    extra_data=notification.extra_data,
+                    priority=notification.priority,
+                )
+                db.add(user_copy)
+            db.commit()
             return
 
         # Get user preferences
@@ -152,27 +174,35 @@ class NotificationService:
         if self._should_send_to_channel(prefs, notification.category, "push"):
             await self._send_push(db, notification)
 
-    async def _broadcast_to_admins(self, notification: Notification) -> None:
-        """Broadcast notification to all admin users via WebSocket.
-
-        Args:
-            notification: Notification to broadcast
-        """
-        if self._websocket_manager:
-            try:
-                await self._websocket_manager.broadcast_to_admins(notification.to_dict())
-            except Exception as e:
-                logger.error(f"Failed to broadcast to admins: {e}")
-
-    async def _send_push_to_admins(
+    async def _broadcast_to_recipients(
         self, db: Session, notification: Notification
     ) -> None:
-        """Send push notification to all admin users' mobile devices.
+        """Broadcast notification to admin users and routed non-admin users via WebSocket."""
+        if not self._websocket_manager:
+            return
 
-        Args:
-            db: Database session
-            notification: Notification to send
-        """
+        try:
+            # Broadcast to all admins
+            await self._websocket_manager.broadcast_to_admins(notification.to_dict())
+
+            # Also broadcast to routed non-admin users (respecting preferences)
+            from app.services.notification_routing import get_routed_user_ids
+            routed_ids = get_routed_user_ids(db, notification.category)
+            for uid in routed_ids:
+                prefs = self.get_user_preferences(db, uid)
+                if prefs:
+                    if self._is_quiet_hours(prefs) and notification.priority < 3:
+                        continue
+                    if not self._should_send_to_channel(prefs, notification.category, "in_app"):
+                        continue
+                await self._websocket_manager.broadcast_to_user(uid, notification.to_dict())
+        except Exception as e:
+            logger.error(f"Failed to broadcast notification: {e}")
+
+    async def _send_push_to_recipients(
+        self, db: Session, notification: Notification
+    ) -> None:
+        """Send push notification to admin users and routed non-admin users."""
         from app.services.notifications.firebase import FirebaseService
         from app.models.mobile import MobileDevice
 
@@ -180,17 +210,24 @@ class NotificationService:
             return
 
         try:
+            # 1. Always include all admin users
             admin_ids = [
                 uid for (uid,) in db.query(User.id).filter(
                     User.role == "admin",
                     User.is_active == True,
                 ).all()
             ]
-            if not admin_ids:
+
+            # 2. Include non-admin users with routing for this category
+            from app.services.notification_routing import get_routed_user_ids
+            routed_ids = get_routed_user_ids(db, notification.category)
+
+            all_recipient_ids = list(set(admin_ids + routed_ids))
+            if not all_recipient_ids:
                 return
 
             devices = db.query(MobileDevice).filter(
-                MobileDevice.user_id.in_(admin_ids),
+                MobileDevice.user_id.in_(all_recipient_ids),
                 MobileDevice.is_active == True,
                 MobileDevice.push_token.isnot(None),
             ).all()
@@ -198,6 +235,16 @@ class NotificationService:
             for device in devices:
                 if not device.push_token:
                     continue
+
+                # For routed non-admin users, check their preferences
+                if device.user_id not in admin_ids:
+                    prefs = self.get_user_preferences(db, device.user_id)
+                    if prefs:
+                        if self._is_quiet_hours(prefs) and notification.priority < 3:
+                            continue
+                        if not self._should_send_to_channel(prefs, notification.category, "push"):
+                            continue
+
                 result = FirebaseService.send_notification(
                     device_token=device.push_token,
                     title=notification.title,
@@ -209,7 +256,7 @@ class NotificationService:
                     notification_type=notification.notification_type,
                 )
                 if result["success"]:
-                    logger.debug(f"Admin push sent to device {device.id}")
+                    logger.debug(f"Push sent to device {device.id}")
                 elif result["error"] == "unregistered":
                     logger.warning(
                         f"Device {device.id} token unregistered, clearing"
@@ -218,10 +265,10 @@ class NotificationService:
                     db.commit()
                 else:
                     logger.error(
-                        f"Admin push to device {device.id} failed: {result['error']}"
+                        f"Push to device {device.id} failed: {result['error']}"
                     )
         except Exception as e:
-            logger.error(f"Failed to send admin push notifications: {e}")
+            logger.error(f"Failed to send push notifications: {e}")
 
     async def _send_in_app(self, notification: Notification) -> None:
         """Send notification via WebSocket for in-app display.

@@ -1,6 +1,6 @@
 import pytest
 
-from app.services.raid import _parse_mdstat
+from app.services.hardware.raid import _parse_mdstat
 
 
 def test_parse_simple_resync():

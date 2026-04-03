@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.config import settings
-from app.services import smart as smart_service
+from app.services.hardware import smart as smart_service
 
 
 def test_trigger_smart_test_api_admin(client, admin_headers):

@@ -4,7 +4,7 @@ from pathlib import Path
 from unittest.mock import patch
 from sqlalchemy.orm import Session
 
-from app.services.vcl import VCLService
+from app.services.versioning.vcl import VCLService
 from app.models.user import User
 from app.models.file_metadata import FileMetadata
 

@@ -2,7 +2,7 @@ import json
 import subprocess
 from types import SimpleNamespace
 
-from app.services.raid import MdadmRaidBackend, MdstatInfo
+from app.services.hardware.raid import MdadmRaidBackend, MdstatInfo
 from app.schemas.system import RaidSpeedLimits, RaidStatusResponse, RaidArray, RaidDevice
 
 
