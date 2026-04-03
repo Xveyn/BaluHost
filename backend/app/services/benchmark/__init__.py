@@ -3,10 +3,6 @@ Disk Benchmark Service.
 
 Provides CrystalDiskMark-style disk performance benchmarks using fio.
 Supports both production (real fio) and development (simulated) modes.
-
-This package re-exports all public symbols so that existing imports
-like ``from app.services.benchmark_service import X`` continue to work
-(via the sys.modules alias registered in ``app.services.__init__``).
 """
 
 from app.services.benchmark.api import (

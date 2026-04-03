@@ -13,7 +13,7 @@ from unittest.mock import MagicMock, patch
 import pytest
 from sqlalchemy.orm import Session
 
-from app.services.scheduler_service import SchedulerService, _format_interval
+from app.services.scheduler.service import SchedulerService, _format_interval
 from app.models.scheduler_history import (
     SchedulerExecution,
     SchedulerConfig,
