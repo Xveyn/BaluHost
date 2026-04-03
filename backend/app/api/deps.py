@@ -19,6 +19,14 @@ logger = logging.getLogger(__name__)
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl=f"{settings.api_prefix}/auth/login", auto_error=False)
 
 
+def get_audit_logger():
+    """FastAPI dependency that provides the database-backed audit logger.
+
+    Use as: audit_logger: AuditLoggerDB = Depends(deps.get_audit_logger)
+    """
+    return get_audit_logger_db()
+
+
 async def get_current_user(
     request: Request,
     token: Optional[str] = Depends(oauth2_scheme),
