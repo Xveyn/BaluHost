@@ -22,8 +22,8 @@ from app.models.user import User
 logger = logging.getLogger(__name__)
 
 # Defense-in-depth: validate usernames before passing to system commands.
-# Only allow lowercase alphanumeric, hyphens, and underscores (standard Linux username rules).
-_USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+# Only allow alphanumeric, hyphens, and underscores (Samba supports mixed case).
+_USERNAME_RE = re.compile(r"^[a-zA-Z_][a-zA-Z0-9_-]{0,31}$")
 
 
 def _validate_username(username: str) -> None:
