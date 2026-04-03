@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.3] - 2026-04-03
+
+### Fixed
+- Notifications: normalize timezone-naive `expires_at` from PostgreSQL to
+  UTC-aware before datetime comparison in device expiration check
+
+---
+
 ## [1.27.2] - 2026-04-03
 
 ### Added
