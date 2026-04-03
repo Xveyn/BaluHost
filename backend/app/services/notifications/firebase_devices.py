@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.models.mobile import MobileDevice
 
 
-def get_active_device_by_id(db: Session, device_id: int) -> Optional[MobileDevice]:
+def get_active_device_by_id(db: Session, device_id: str) -> Optional[MobileDevice]:
     """Get an active mobile device by its ID."""
     return (
         db.query(MobileDevice)
