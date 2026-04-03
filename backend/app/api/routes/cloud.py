@@ -33,6 +33,20 @@ logger = logging.getLogger(__name__)
 router = APIRouter()
 
 
+def _build_oauth_redirect_uri(request: Request) -> str:
+    """Build external OAuth callback URI, preferring configured public URL."""
+    if settings.public_url:
+        base_url = settings.public_url.rstrip("/")
+        return f"{base_url}/api/cloud/oauth/callback"
+
+    forwarded_proto = request.headers.get("x-forwarded-proto", "").split(",", 1)[0].strip()
+    forwarded_host = request.headers.get("x-forwarded-host", "").split(",", 1)[0].strip()
+
+    scheme = forwarded_proto or request.url.scheme
+    host = forwarded_host or request.headers.get("host") or request.url.netloc
+    return f"{scheme}://{host}/api/cloud/oauth/callback"
+
+
 # ─── Provider Status ──────────────────────────────────────────────
 
 @router.get("/providers")
@@ -189,8 +203,9 @@ async def start_oauth(
 ):
     """Get the OAuth authorization URL for a provider."""
     service = CloudService(db)
+    redirect_uri = _build_oauth_redirect_uri(request)
     try:
-        url = service.get_oauth_url(provider, current_user.id)
+        url = service.get_oauth_url(provider, current_user.id, redirect_uri=redirect_uri)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))
     return {"oauth_url": url}
@@ -218,8 +233,15 @@ async def oauth_callback_redirect(
     upgrade_connection_id = state_data.get("upgrade_connection_id")
 
     service = CloudService(db)
+    redirect_uri = _build_oauth_redirect_uri(request)
     try:
-        service.handle_oauth_callback(provider, code, user_id, upgrade_connection_id=upgrade_connection_id)
+        service.handle_oauth_callback(
+            provider,
+            code,
+            user_id,
+            upgrade_connection_id=upgrade_connection_id,
+            redirect_uri=redirect_uri,
+        )
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
         return RedirectResponse(url=f"/cloud-import?oauth_error={quote(str(e))}")
@@ -245,8 +267,15 @@ async def oauth_callback(
     upgrade_connection_id = state_data.get("upgrade_connection_id")
 
     service = CloudService(db)
+    redirect_uri = _build_oauth_redirect_uri(request)
     try:
-        conn = service.handle_oauth_callback(provider, body.code, user_id, upgrade_connection_id=upgrade_connection_id)
+        conn = service.handle_oauth_callback(
+            provider,
+            body.code,
+            user_id,
+            upgrade_connection_id=upgrade_connection_id,
+            redirect_uri=redirect_uri,
+        )
     except Exception as e:
         logger.error("OAuth callback failed: %s", e)
         raise HTTPException(status_code=400, detail=f"OAuth failed: {e}")
