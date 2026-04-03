@@ -7,6 +7,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.0] - 2026-04-03
+
+### Added
+- **Notification Routing** — Admin-configurable notification categories for non-admin users
+  - Admins can assign notification categories (RAID, SMART, Backup, Scheduler, System, Security, Sync, VPN) per user
+  - New `user_notification_routing` database table with per-category boolean flags
+  - Admin endpoints on `/api/users/{id}/notification-routing` for viewing and updating
+  - `GET /api/notifications/my-routing` read-only endpoint for users to see assigned categories
+  - Routed users receive both push (Firebase) and in-app (WebSocket) notifications
+  - User's own NotificationPreferences (quiet hours, channel opt-out) respected after routing
+  - Per-user notification copies created for routed users so they appear in notification list
+  - Frontend toggle UI in user edit modal with category icons and descriptions
+  - Read-only badge display in user's notification settings showing assigned categories
+  - Audit logging for routing changes
+- **Dependencies** — Audit logger added as FastAPI dependency for cleaner injection
+
+### Fixed
+- Sleep: use atomic rtcwake suspend to fix scheduled wake-up failure
+- Security: add defense-in-depth username validation for Samba
+- Security: harden config defaults and add production validators
+
+### Changed
+- Refactor: add `ensure_db()` context manager to deduplicate session boilerplate
+- Refactor: remove legacy `sys.modules` backward-compat shims
+
+---
+
 ## [1.26.0] - 2026-04-03
 
 ### Added
