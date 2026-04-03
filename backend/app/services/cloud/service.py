@@ -59,7 +59,7 @@ class CloudService:
 
     # ─── OAuth Flow (Google Drive, OneDrive) ──────────────────────
 
-    def get_oauth_url(self, provider: str, user_id: int) -> str:
+    def get_oauth_url(self, provider: str, user_id: int, redirect_uri: str | None = None) -> str:
         """Generate an OAuth authorization URL for the given provider."""
         if provider not in ("google_drive", "onedrive"):
             raise ValueError(f"OAuth not supported for provider: {provider}")
@@ -69,13 +69,14 @@ class CloudService:
         if not creds:
             raise ValueError(f"OAuth not configured for {provider}")
         client_id, _client_secret = creds
+        callback_uri = redirect_uri or self._get_redirect_uri()
 
         state = json.dumps({"provider": provider, "user_id": user_id})
 
         if provider == "google_drive":
             params = {
                 "client_id": client_id,
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
                 "response_type": "code",
                 "scope": "https://www.googleapis.com/auth/drive.readonly",
                 "access_type": "offline",
@@ -87,7 +88,7 @@ class CloudService:
         elif provider == "onedrive":
             params = {
                 "client_id": client_id,
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
                 "response_type": "code",
                 "scope": "Files.Read offline_access",
                 "state": state,
@@ -97,7 +98,12 @@ class CloudService:
         raise ValueError(f"Unknown provider: {provider}")
 
     def handle_oauth_callback(
-        self, provider: str, code: str, user_id: int, upgrade_connection_id: int | None = None
+        self,
+        provider: str,
+        code: str,
+        user_id: int,
+        upgrade_connection_id: int | None = None,
+        redirect_uri: str | None = None,
     ) -> CloudConnection:
         """Exchange OAuth code for tokens and create a connection."""
         import httpx
@@ -107,6 +113,7 @@ class CloudService:
         if not creds:
             raise ValueError(f"OAuth not configured for {provider}")
         client_id, client_secret = creds
+        callback_uri = redirect_uri or self._get_redirect_uri()
 
         if provider == "google_drive":
             token_url = "https://oauth2.googleapis.com/token"
@@ -115,7 +122,7 @@ class CloudService:
                 "client_secret": client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
             }
         elif provider == "onedrive":
             token_url = "https://login.microsoftonline.com/common/oauth2/v2.0/token"
@@ -124,7 +131,7 @@ class CloudService:
                 "client_secret": client_secret,
                 "code": code,
                 "grant_type": "authorization_code",
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
             }
         else:
             raise ValueError(f"OAuth not supported for provider: {provider}")
@@ -255,7 +262,13 @@ class CloudService:
 
         return {"has_export_scope": has_export_scope, "provider": conn.provider}
 
-    def get_export_oauth_url(self, provider: str, user_id: int, connection_id: int) -> str:
+    def get_export_oauth_url(
+        self,
+        provider: str,
+        user_id: int,
+        connection_id: int,
+        redirect_uri: str | None = None,
+    ) -> str:
         """Generate OAuth URL with export scopes, including upgrade_connection_id in state."""
         if provider not in ("google_drive", "onedrive"):
             raise ValueError(f"Export not supported for provider: {provider}")
@@ -265,6 +278,7 @@ class CloudService:
         if not creds:
             raise ValueError(f"OAuth not configured for {provider}")
         client_id, _client_secret = creds
+        callback_uri = redirect_uri or self._get_redirect_uri()
 
         state = json.dumps({
             "provider": provider,
@@ -275,7 +289,7 @@ class CloudService:
         if provider == "google_drive":
             params = {
                 "client_id": client_id,
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
                 "response_type": "code",
                 "scope": self.EXPORT_SCOPES["google_drive"],
                 "access_type": "offline",
@@ -287,7 +301,7 @@ class CloudService:
         elif provider == "onedrive":
             params = {
                 "client_id": client_id,
-                "redirect_uri": self._get_redirect_uri(),
+                "redirect_uri": callback_uri,
                 "response_type": "code",
                 "scope": self.EXPORT_SCOPES["onedrive"],
                 "state": state,

@@ -37,7 +37,7 @@ def main() -> int:
     init_db()
 
     # Create and start the worker
-    from app.services.scheduler_worker_service import SchedulerWorker
+    from app.services.scheduler.worker import SchedulerWorker
     worker = SchedulerWorker()
 
     # Handle shutdown signals
