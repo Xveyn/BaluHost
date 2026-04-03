@@ -1353,7 +1353,9 @@
     "tokenPlaceholder": "FCM-Token einfügen (aus Logcat oder Firebase Console)",
     "testSendButton": "Test senden",
     "testSuccess": "Test-Benachrichtigung gesendet",
-    "testError": "Test-Benachrichtigung fehlgeschlagen"
+    "testError": "Test-Benachrichtigung fehlgeschlagen",
+    "testDeviceLabel": "Zielgerät",
+    "testDeviceAll": "Alle eigenen Geräte"
   },
   "badges": {
     "pluginProvidedBy": "Bereitgestellt von {{name}}"
