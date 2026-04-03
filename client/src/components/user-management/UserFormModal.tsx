@@ -4,6 +4,7 @@ import { X } from 'lucide-react';
 import type { UserPublic } from '../../api/users';
 import type { UserFormData } from '../../hooks/useUserManagement';
 import { PowerPermissionsSection } from './PowerPermissionsSection';
+import { NotificationRoutingSection } from './NotificationRoutingSection';
 
 interface UserFormModalProps {
   open: boolean;
@@ -126,6 +127,13 @@ export function UserFormModal({ open, editingUser, onClose, onSubmit }: UserForm
 
           {editingUser && (
             <PowerPermissionsSection
+              userId={editingUser.id}
+              userRole={editingUser.role}
+            />
+          )}
+
+          {editingUser && (
+            <NotificationRoutingSection
               userId={editingUser.id}
               userRole={editingUser.role}
             />

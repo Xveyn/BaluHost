@@ -26,6 +26,7 @@ import {
   type NotificationCategory,
   type CategoryPreference,
 } from '../api/notifications';
+import { getMyNotificationRouting, type MyNotificationRouting } from '../api/notificationRouting';
 
 const ALL_CATEGORIES: NotificationCategory[] = [
   'raid',
@@ -60,9 +61,16 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [minPriority, setMinPriority] = useState(0);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, CategoryPreference>>({});
+  const [routing, setRouting] = useState<MyNotificationRouting | null>(null);
 
   useEffect(() => {
     loadPreferences();
+  }, []);
+
+  useEffect(() => {
+    getMyNotificationRouting()
+      .then(setRouting)
+      .catch(() => setRouting(null));
   }, []);
 
   const loadPreferences = async () => {
@@ -305,6 +313,33 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
           </div>
         )}
       </div>
+
+      {/* Admin-assigned routing (read-only) */}
+      {routing && Object.values(routing).some((v) => v === true) && (
+        <div className="border border-slate-700 rounded-lg p-4 mb-6">
+          <h3 className="text-sm font-medium text-slate-300 mb-2">
+            Zugewiesene System-Benachrichtigungen
+          </h3>
+          <p className="text-xs text-slate-500 mb-3">
+            Diese Kategorien wurden dir von einem Administrator zugewiesen.
+          </p>
+          <div className="flex flex-wrap gap-2">
+            {(Object.entries(routing) as [string, boolean][])
+              .filter(([_, enabled]) => enabled)
+              .map(([key]) => {
+                const category = key.replace('receive_', '') as NotificationCategory;
+                return (
+                  <span
+                    key={key}
+                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20"
+                  >
+                    {getCategoryName(category)}
+                  </span>
+                );
+              })}
+          </div>
+        </div>
+      )}
 
       {/* Category Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
