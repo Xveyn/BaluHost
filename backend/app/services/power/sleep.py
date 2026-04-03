@@ -59,8 +59,10 @@ class SleepBackend(abc.ABC):
         """Spin up given disk devices. Returns list of successfully spun-up devices."""
 
     @abc.abstractmethod
-    async def suspend_system(self) -> bool:
-        """Suspend the system. Returns True on success."""
+    async def suspend_system(self, wake_at: Optional[datetime] = None) -> bool:
+        """Suspend the system. If *wake_at* is given, schedule an RTC alarm
+        atomically (i.e. ``rtcwake -m mem``) so the system wakes at that time.
+        Returns True on success."""
 
     @abc.abstractmethod
     async def schedule_rtc_wake(self, wake_at: datetime) -> bool:
@@ -725,14 +727,6 @@ class SleepManagerService:
 
         self._current_state = SleepState.ENTERING_SUSPEND
 
-        # Schedule RTC wake if requested
-        if wake_at:
-            try:
-                await self._backend.schedule_rtc_wake(wake_at)
-                logger.info("RTC wake scheduled for %s", wake_at.isoformat())
-            except Exception as e:
-                logger.warning("Could not schedule RTC wake: %s", e)
-
         self._log_state_change(
             SleepState.SOFT_SLEEP, SleepState.TRUE_SUSPEND, reason, trigger,
             details={"wake_at": wake_at.isoformat() if wake_at else None},
@@ -741,8 +735,9 @@ class SleepManagerService:
         self._current_state = SleepState.TRUE_SUSPEND
         self._state_since = datetime.now(timezone.utc)
 
-        # Actually suspend
-        ok = await self._backend.suspend_system()
+        # Suspend the system.  When *wake_at* is given the backend uses
+        # ``rtcwake -m mem`` which sets the RTC alarm and suspends atomically.
+        ok = await self._backend.suspend_system(wake_at=wake_at)
 
         # When system resumes (or suspend failed), we'll be back here.
         # Revert to SOFT_SLEEP so _exit_soft_sleep accepts the transition.

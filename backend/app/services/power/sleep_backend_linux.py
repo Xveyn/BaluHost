@@ -57,15 +57,27 @@ class LinuxSleepBackend(SleepBackend):
                 logger.warning("Failed to spin up %s: %s", device, output)
         return spun_up
 
-    async def suspend_system(self) -> bool:
-        ok, output = await self._run_cmd(["sudo", "systemctl", "suspend"], timeout=30)
+    async def suspend_system(self, wake_at: Optional[datetime] = None) -> bool:
+        if wake_at:
+            # Use rtcwake -m mem to set the RTC alarm and suspend atomically.
+            # This is more reliable than setting the alarm separately and then
+            # calling systemctl suspend, because the kernel may clear a
+            # previously-set wakealarm during its own suspend path.
+            timestamp = str(int(wake_at.timestamp()))
+            # Let rtcwake auto-detect UTC/local from /etc/adjtime (no -l/-u).
+            cmd = ["sudo", "rtcwake", "-m", "mem", "-t", timestamp]
+            logger.info("Suspending with RTC wake at %s (ts=%s)", wake_at.isoformat(), timestamp)
+            ok, output = await self._run_cmd(cmd, timeout=30)
+        else:
+            ok, output = await self._run_cmd(["sudo", "systemctl", "suspend"], timeout=30)
         if not ok:
             logger.error("System suspend failed: %s", output)
         return ok
 
     async def schedule_rtc_wake(self, wake_at: datetime) -> bool:
         timestamp = str(int(wake_at.timestamp()))
-        ok, output = await self._run_cmd(["sudo", "rtcwake", "-m", "no", "-l", "-t", timestamp])
+        # Let rtcwake auto-detect UTC/local from /etc/adjtime (no -l/-u).
+        ok, output = await self._run_cmd(["sudo", "rtcwake", "-m", "no", "-t", timestamp])
         if not ok:
             logger.error("RTC wake schedule failed: %s", output)
         return ok
