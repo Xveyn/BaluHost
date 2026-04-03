@@ -579,14 +579,22 @@ class EventEmitter:
                         User.is_active == True,
                     ).all()
                 ]
-                if not admin_ids:
+
+                # Also include non-admin users with routing for this category
+                from app.services.notification_routing import get_routed_user_ids
+                routed_ids = get_routed_user_ids(db, category)
+
+                all_recipient_ids = list(set(admin_ids + routed_ids))
+                if not all_recipient_ids:
                     return
+
                 devices = db.query(MobileDevice).filter(
-                    MobileDevice.user_id.in_(admin_ids),
+                    MobileDevice.user_id.in_(all_recipient_ids),
                     MobileDevice.is_active == True,
                     MobileDevice.push_token.isnot(None),
                 ).all()
             else:
+                admin_ids = []
                 devices = db.query(MobileDevice).filter(
                     MobileDevice.user_id == user_id,
                     MobileDevice.is_active == True,
@@ -594,6 +602,17 @@ class EventEmitter:
                 ).all()
 
             for device in devices:
+                # For routed non-admin users, check their preferences
+                if user_id is None and device.user_id not in admin_ids:
+                    from app.services.notifications.service import get_notification_service
+                    svc = get_notification_service()
+                    prefs = svc.get_user_preferences(db, device.user_id)
+                    if prefs:
+                        if svc._is_quiet_hours(prefs) and priority < 3:
+                            continue
+                        if not svc._should_send_to_channel(prefs, category, "push"):
+                            continue
+
                 result = FirebaseService.send_notification(
                     device_token=device.push_token,
                     title=title,
