@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.1] - 2026-04-03
+
+### Fixed
+- Firebase: accept string device_id without int conversion
+- Samba: allow mixed-case usernames in validation regex
+- Cloud: improve OAuth redirect handling and error responses
+- Tests: update stale imports in logging tests after services reorganization
+
+---
+
 ## [1.27.0] - 2026-04-03
 
 ### Added
