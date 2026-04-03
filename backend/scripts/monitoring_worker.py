@@ -31,6 +31,16 @@ async def async_main() -> int:
     from app.core.database import init_db, SessionLocal
     init_db()
 
+    # Initialize Firebase so threshold-triggered push notifications
+    # (temperature, disk space) can be sent from this process.
+    from app.services.notifications.firebase import FirebaseService
+    FirebaseService.initialize()
+
+    # Initialize the EventEmitter with a DB session factory so emit_sync
+    # calls (e.g. temperature/disk space alerts) can create DB records.
+    from app.services.notifications.events import init_event_emitter
+    init_event_emitter(SessionLocal)
+
     # Clean up any stale SHM files from a previous run
     from app.services.monitoring.shm import cleanup_shm
     cleanup_shm()
