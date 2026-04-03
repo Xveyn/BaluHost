@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.config import settings
-from app.services import raid as raid_service
+from app.services.hardware import raid as raid_service
 
 
 def test_trigger_raid_scrub_api(client, admin_headers):

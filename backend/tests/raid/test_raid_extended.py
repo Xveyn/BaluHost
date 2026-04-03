@@ -1,8 +1,8 @@
 import math
 import pytest
 
-from app.services import raid
-from app.services.raid import DevRaidBackend
+from app.services.hardware import raid
+from app.services.hardware.raid import DevRaidBackend
 from app.core import config
 from app.schemas.system import CreateArrayRequest, RaidDevice
 

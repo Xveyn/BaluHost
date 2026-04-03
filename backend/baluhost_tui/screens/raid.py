@@ -54,7 +54,7 @@ class RaidControlScreen(Screen):
                     arrays = data.get("arrays", [])
                 else:
                     # local import
-                    from app.services import raid as raid_service
+                    from app.services.hardware import raid as raid_service
                     st = raid_service.get_status()
                     arrays = [a.__dict__ for a in st.arrays]
 
@@ -90,7 +90,7 @@ class RaidControlScreen(Screen):
                     token = data.get("token")
                     expires = data.get("expires_at")
                 else:
-                    from app.services.raid import request_confirmation
+                    from app.services.hardware.raid import request_confirmation
                     data = request_confirmation("delete_array", {"array": array})
                     token = data["token"]
                     expires = data["expires_at"]
@@ -113,7 +113,7 @@ class RaidControlScreen(Screen):
                     res.raise_for_status()
                     data = res.json()
                 else:
-                    from app.services.raid import execute_confirmation
+                    from app.services.hardware.raid import execute_confirmation
                     data = execute_confirmation(self.last_token)
 
             self.notify(f"Execute result: {data}", severity="information")
