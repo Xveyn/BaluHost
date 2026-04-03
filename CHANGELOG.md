@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.2] - 2026-04-03
+
+### Added
+- Firebase: device selector in test notification UI
+
+### Fixed
+- Firebase: initialize Firebase SDK and EventEmitter in scheduler and monitoring
+  worker processes — push notifications were silently failing since the scheduler
+  was extracted into a separate process (Feb 2026)
+
+---
+
 ## [1.27.1] - 2026-04-03
 
 ### Fixed
