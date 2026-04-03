@@ -126,6 +126,28 @@ class NotificationService:
             # System notification - broadcast to all admins via WebSocket + Push
             await self._broadcast_to_recipients(db, notification)
             await self._send_push_to_recipients(db, notification)
+
+            # Create per-user notification copies for routed non-admin users
+            # so they appear in the user's notification list
+            from app.services.notification_routing import get_routed_user_ids
+            routed_ids = get_routed_user_ids(db, notification.category)
+            for uid in routed_ids:
+                prefs = self.get_user_preferences(db, uid)
+                if prefs:
+                    if self._is_quiet_hours(prefs) and notification.priority < 3:
+                        continue
+                user_copy = Notification(
+                    user_id=uid,
+                    category=notification.category,
+                    notification_type=notification.notification_type,
+                    title=notification.title,
+                    message=notification.message,
+                    action_url=notification.action_url,
+                    extra_data=notification.extra_data,
+                    priority=notification.priority,
+                )
+                db.add(user_copy)
+            db.commit()
             return
 
         # Get user preferences
@@ -163,10 +185,16 @@ class NotificationService:
             # Broadcast to all admins
             await self._websocket_manager.broadcast_to_admins(notification.to_dict())
 
-            # Also broadcast to routed non-admin users
+            # Also broadcast to routed non-admin users (respecting preferences)
             from app.services.notification_routing import get_routed_user_ids
             routed_ids = get_routed_user_ids(db, notification.category)
             for uid in routed_ids:
+                prefs = self.get_user_preferences(db, uid)
+                if prefs:
+                    if self._is_quiet_hours(prefs) and notification.priority < 3:
+                        continue
+                    if not self._should_send_to_channel(prefs, notification.category, "in_app"):
+                        continue
                 await self._websocket_manager.broadcast_to_user(uid, notification.to_dict())
         except Exception as e:
             logger.error(f"Failed to broadcast notification: {e}")
