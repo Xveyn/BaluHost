@@ -1,5 +1,6 @@
 """Database configuration and session management."""
-from typing import Generator
+from contextlib import contextmanager
+from typing import Generator, Optional
 from pathlib import Path
 import os
 import logging
@@ -155,7 +156,7 @@ def commit_with_retry(db: Session, *, retries: int = 3, delay_seconds: float = 0
 def get_db() -> Generator[Session, None, None]:
     """
     Dependency to get database session.
-    
+
     Usage in FastAPI:
         @router.get("/users")
         def get_users(db: Session = Depends(get_db)):
@@ -166,6 +167,28 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def ensure_db(db: Optional[Session] = None) -> Generator[Session, None, None]:
+    """Context manager that reuses an existing session or creates a temporary one.
+
+    Replaces the 'should_close = db is None' boilerplate pattern.
+
+    Usage::
+
+        def my_service_func(db: Optional[Session] = None):
+            with ensure_db(db) as session:
+                session.query(...)
+    """
+    if db is not None:
+        yield db
+    else:
+        session = SessionLocal()
+        try:
+            yield session
+        finally:
+            session.close()
 
 
 def init_db() -> None:
