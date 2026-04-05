@@ -1,138 +1,138 @@
-# SSL/TLS Configuration Guide for BaluHost
+# SSL/TLS-Konfigurationsanleitung für BaluHost
 
-Complete guide for setting up production-grade SSL/TLS encryption with Let's Encrypt.
+Vollständige Anleitung zur Einrichtung einer produktionsreifen SSL/TLS-Verschlüsselung mit Let's Encrypt.
 
-## Table of Contents
+## Inhaltsverzeichnis
 
-1. [Overview](#overview)
-2. [Prerequisites](#prerequisites)
-3. [Quick Start (Automated)](#quick-start-automated)
-4. [Manual Setup](#manual-setup)
-5. [Configuration Reference](#configuration-reference)
-6. [Security Best Practices](#security-best-practices)
-7. [Troubleshooting](#troubleshooting)
-8. [Maintenance](#maintenance)
-
----
-
-## Overview
-
-This guide covers setting up:
-- **Let's Encrypt SSL certificates** (free, auto-renewing)
-- **Nginx reverse proxy** with SSL termination
-- **Modern TLS configuration** (TLS 1.2, TLS 1.3)
-- **Security headers** (HSTS, CSP, etc.)
-- **Rate limiting** and DDoS protection
-- **Automatic certificate renewal**
-
-Target SSL grade: **A or A+** on [SSL Labs](https://www.ssllabs.com/ssltest/)
+1. [Überblick](#überblick)
+2. [Voraussetzungen](#voraussetzungen)
+3. [Schnellstart (Automatisiert)](#schnellstart-automatisiert)
+4. [Manuelle Einrichtung](#manuelle-einrichtung)
+5. [Konfigurationsreferenz](#konfigurationsreferenz)
+6. [Bewährte Sicherheitspraktiken](#bewährte-sicherheitspraktiken)
+7. [Fehlerbehebung](#fehlerbehebung)
+8. [Wartung](#wartung)
 
 ---
 
-## Prerequisites
+## Überblick
 
-### System Requirements
+Diese Anleitung behandelt die Einrichtung von:
+- **Let's Encrypt SSL-Zertifikaten** (kostenlos, automatische Verlängerung)
+- **Nginx Reverse Proxy** mit SSL-Terminierung
+- **Moderne TLS-Konfiguration** (TLS 1.2, TLS 1.3)
+- **Sicherheitsheader** (HSTS, CSP usw.)
+- **Rate Limiting** und DDoS-Schutz
+- **Automatische Zertifikatsverlängerung**
 
-- **OS**: Ubuntu 20.04+, Debian 11+, RHEL 8+, or compatible
-- **RAM**: 512MB minimum (1GB recommended)
-- **Disk**: 2GB free space
-- **Access**: Root or sudo privileges
-
-### Network Requirements
-
-1. **Domain name** pointing to your server
-   - Configure DNS A record: `yourdomain.com → your-server-ip`
-   - Wait for DNS propagation (up to 48 hours)
-   - Verify with: `host yourdomain.com`
-
-2. **Open firewall ports**:
-   - Port 80 (HTTP) - required for Let's Encrypt validation
-   - Port 443 (HTTPS) - for encrypted traffic
-   - Port 22 (SSH) - for server access
-
-3. **BaluHost deployed**:
-   - Docker Compose: Backend running on `localhost:8000`
-   - Systemd: Backend service active
+Angestrebte SSL-Bewertung: **A oder A+** auf [SSL Labs](https://www.ssllabs.com/ssltest/)
 
 ---
 
-## Quick Start (Automated)
+## Voraussetzungen
 
-### Step 1: Install Nginx
+### Systemanforderungen
+
+- **Betriebssystem**: Ubuntu 20.04+, Debian 11+, RHEL 8+ oder kompatibel
+- **RAM**: Mindestens 512 MB (1 GB empfohlen)
+- **Festplatte**: 2 GB freier Speicherplatz
+- **Zugriff**: Root- oder Sudo-Berechtigungen
+
+### Netzwerkanforderungen
+
+1. **Domainname**, der auf Ihren Server zeigt
+   - DNS-A-Eintrag konfigurieren: `yourdomain.com → Ihre-Server-IP`
+   - Auf DNS-Propagierung warten (bis zu 48 Stunden)
+   - Überprüfen mit: `host yourdomain.com`
+
+2. **Offene Firewall-Ports**:
+   - Port 80 (HTTP) – erforderlich für die Let's Encrypt-Validierung
+   - Port 443 (HTTPS) – für verschlüsselten Datenverkehr
+   - Port 22 (SSH) – für den Serverzugriff
+
+3. **BaluHost bereitgestellt**:
+   - Docker Compose: Backend läuft auf `localhost:8000`
+   - Systemd: Backend-Dienst aktiv
+
+---
+
+## Schnellstart (Automatisiert)
+
+### Schritt 1: Nginx installieren
 
 ```bash
 cd /path/to/baluhost
 sudo ./deploy/scripts/install-nginx.sh
 ```
 
-This script:
-- Installs Nginx
-- Configures firewall (ufw/firewalld)
-- Creates necessary directories
-- Optimizes nginx.conf
-- Installs BaluHost config templates
+Dieses Skript:
+- Installiert Nginx
+- Konfiguriert die Firewall (ufw/firewalld)
+- Erstellt notwendige Verzeichnisse
+- Optimiert nginx.conf
+- Installiert BaluHost-Konfigurationsvorlagen
 
-### Step 2: Setup SSL with Let's Encrypt
+### Schritt 2: SSL mit Let's Encrypt einrichten
 
 ```bash
 sudo ./deploy/ssl/setup-letsencrypt.sh yourdomain.com admin@yourdomain.com
 ```
 
-Replace:
-- `yourdomain.com` with your actual domain
-- `admin@yourdomain.com` with your email (for renewal notifications)
+Ersetzen Sie:
+- `yourdomain.com` durch Ihre tatsächliche Domain
+- `admin@yourdomain.com` durch Ihre E-Mail-Adresse (für Verlängerungsbenachrichtigungen)
 
-This script:
-- Checks DNS configuration
-- Installs Certbot
-- Obtains SSL certificate
-- Generates dhparam.pem (2048-bit)
-- Configures auto-renewal
-- Updates Nginx config with your domain
+Dieses Skript:
+- Prüft die DNS-Konfiguration
+- Installiert Certbot
+- Beschafft das SSL-Zertifikat
+- Generiert dhparam.pem (2048-Bit)
+- Konfiguriert die automatische Verlängerung
+- Aktualisiert die Nginx-Konfiguration mit Ihrer Domain
 
-### Step 3: Enable BaluHost Site
+### Schritt 3: BaluHost-Seite aktivieren
 
 ```bash
-# Review configuration
+# Konfiguration überprüfen
 sudo nano /etc/nginx/sites-available/baluhost.conf
 
-# Verify backend upstream is correct:
+# Backend-Upstream verifizieren:
 # - Docker: server localhost:8000;
 # - Systemd: server unix:/run/baluhost/backend.sock;
 
-# Enable site
+# Seite aktivieren
 sudo ln -s /etc/nginx/sites-available/baluhost.conf /etc/nginx/sites-enabled/
 
-# Test configuration
+# Konfiguration testen
 sudo nginx -t
 
-# Reload Nginx
+# Nginx neu laden
 sudo systemctl reload nginx
 ```
 
-### Step 4: Verify
+### Schritt 4: Überprüfen
 
 ```bash
-# Check SSL certificate
+# SSL-Zertifikat prüfen
 curl -I https://yourdomain.com
 
-# Test in browser
+# Im Browser testen
 open https://yourdomain.com
 ```
 
-**Verification Tests**:
+**Überprüfungstests**:
 - SSL Labs: https://www.ssllabs.com/ssltest/analyze.html?d=yourdomain.com
 - Security Headers: https://securityheaders.com/?q=yourdomain.com
 
-Target grades: SSL Labs A/A+, Security Headers A
+Zielbewertungen: SSL Labs A/A+, Security Headers A
 
 ---
 
-## Manual Setup
+## Manuelle Einrichtung
 
-If automated scripts fail or you prefer manual control:
+Falls die automatisierten Skripte fehlschlagen oder Sie manuelle Kontrolle bevorzugen:
 
-### 1. Install Nginx
+### 1. Nginx installieren
 
 **Ubuntu/Debian**:
 ```bash
@@ -145,14 +145,14 @@ sudo systemctl start nginx
 **RHEL/CentOS/Fedora**:
 ```bash
 sudo yum install nginx
-# or
+# oder
 sudo dnf install nginx
 
 sudo systemctl enable nginx
 sudo systemctl start nginx
 ```
 
-### 2. Configure Firewall
+### 2. Firewall konfigurieren
 
 **UFW (Ubuntu/Debian)**:
 ```bash
@@ -170,7 +170,7 @@ sudo firewall-cmd --reload
 sudo firewall-cmd --list-all
 ```
 
-### 3. Install Certbot
+### 3. Certbot installieren
 
 **Ubuntu/Debian**:
 ```bash
@@ -180,204 +180,204 @@ sudo apt install certbot python3-certbot-nginx
 **RHEL/CentOS**:
 ```bash
 sudo yum install certbot python3-certbot-nginx
-# or
+# oder
 sudo dnf install certbot python3-certbot-nginx
 ```
 
-### 4. Obtain Certificate
+### 4. Zertifikat beschaffen
 
-**Method A: Nginx plugin (recommended)**:
+**Methode A: Nginx-Plugin (empfohlen)**:
 ```bash
 sudo certbot --nginx -d yourdomain.com -d www.yourdomain.com
 ```
 
-**Method B: Webroot method**:
+**Methode B: Webroot-Methode**:
 ```bash
-# Create webroot
+# Webroot erstellen
 sudo mkdir -p /var/www/certbot
 
-# Obtain certificate
+# Zertifikat beschaffen
 sudo certbot certonly --webroot -w /var/www/certbot \
   -d yourdomain.com -d www.yourdomain.com \
   --email admin@yourdomain.com \
   --agree-tos
 ```
 
-### 5. Generate dhparam
+### 5. dhparam generieren
 
 ```bash
 sudo openssl dhparam -out /etc/nginx/dhparam.pem 2048
 ```
 
-*Note: This takes 5-10 minutes. For faster generation (less secure):*
+*Hinweis: Dies dauert 5–10 Minuten. Für schnellere Generierung (weniger sicher):*
 ```bash
 sudo openssl dhparam -out /etc/nginx/dhparam.pem 1024
 ```
 
-### 6. Install Configuration Files
+### 6. Konfigurationsdateien installieren
 
 ```bash
-# Create snippets directory
+# Snippets-Verzeichnis erstellen
 sudo mkdir -p /etc/nginx/snippets
 
-# Copy config files
+# Konfigurationsdateien kopieren
 sudo cp deploy/nginx/ssl-params.conf /etc/nginx/snippets/
 sudo cp deploy/nginx/security-headers.conf /etc/nginx/snippets/
 sudo cp deploy/nginx/baluhost.conf /etc/nginx/sites-available/
 
-# Update domain in config
+# Domain in der Konfiguration aktualisieren
 sudo sed -i 's/YOUR_DOMAIN_HERE/yourdomain.com/g' /etc/nginx/sites-available/baluhost.conf
 ```
 
-### 7. Enable Site
+### 7. Seite aktivieren
 
 ```bash
-# Disable default site
+# Standard-Seite deaktivieren
 sudo rm /etc/nginx/sites-enabled/default
 
-# Enable BaluHost
+# BaluHost aktivieren
 sudo ln -s /etc/nginx/sites-available/baluhost.conf /etc/nginx/sites-enabled/
 
-# Test
+# Testen
 sudo nginx -t
 
-# Reload
+# Neu laden
 sudo systemctl reload nginx
 ```
 
-### 8. Setup Auto-Renewal
+### 8. Automatische Verlängerung einrichten
 
-Certbot usually installs a systemd timer automatically. Verify:
+Certbot installiert normalerweise automatisch einen Systemd-Timer. Überprüfen Sie dies:
 
 ```bash
-sudo systemctl list-timers | grep certbot
+sudo systemctl list-timers | command grep certbot
 ```
 
-If not found, add a cron job:
+Falls nicht vorhanden, fügen Sie einen Cron-Job hinzu:
 
 ```bash
 sudo crontab -e
 ```
 
-Add this line:
+Fügen Sie diese Zeile hinzu:
 ```
 0 */12 * * * certbot renew --quiet --post-hook "systemctl reload nginx"
 ```
 
-Test renewal:
+Verlängerung testen:
 ```bash
 sudo certbot renew --dry-run
 ```
 
 ---
 
-## Configuration Reference
+## Konfigurationsreferenz
 
-### SSL Certificate Locations
+### SSL-Zertifikatsspeicherorte
 
 ```
 /etc/letsencrypt/live/yourdomain.com/
-├── fullchain.pem       # Full certificate chain
-├── privkey.pem         # Private key
-├── cert.pem            # Certificate only
-└── chain.pem           # Intermediate certificates
+├── fullchain.pem       # Vollständige Zertifikatskette
+├── privkey.pem         # Privater Schlüssel
+├── cert.pem            # Nur Zertifikat
+└── chain.pem           # Zwischenzertifikate
 ```
 
-### Nginx Configuration Files
+### Nginx-Konfigurationsdateien
 
 ```
 /etc/nginx/
-├── nginx.conf                          # Main config
+├── nginx.conf                          # Hauptkonfiguration
 ├── sites-available/
-│   └── baluhost.conf                   # BaluHost site config
+│   └── baluhost.conf                   # BaluHost-Seitenkonfiguration
 ├── sites-enabled/
 │   └── baluhost.conf -> ../sites-available/baluhost.conf
 ├── snippets/
-│   ├── ssl-params.conf                 # SSL/TLS settings
-│   └── security-headers.conf           # Security headers
-├── dhparam.pem                         # DH parameters
-└── conf.d/                             # Additional configs
+│   ├── ssl-params.conf                 # SSL/TLS-Einstellungen
+│   └── security-headers.conf           # Sicherheitsheader
+├── dhparam.pem                         # DH-Parameter
+└── conf.d/                             # Zusätzliche Konfigurationen
 ```
 
-### Rate Limiting Zones
+### Rate-Limiting-Zonen
 
-Configured in `baluhost.conf`:
+Konfiguriert in `baluhost.conf`:
 
-| Zone | Rate | Burst | Endpoints |
+| Zone | Rate | Burst | Endpunkte |
 |------|------|-------|-----------|
-| `api_limit` | 10 req/s | 20 | `/api/*` |
-| `auth_limit` | 5 req/min | 3 | Login, register, refresh |
-| `upload_limit` | 10 req/min | 5 | File uploads |
+| `api_limit` | 10 Anf./s | 20 | `/api/*` |
+| `auth_limit` | 5 Anf./min | 3 | Anmeldung, Registrierung, Aktualisierung |
+| `upload_limit` | 10 Anf./min | 5 | Datei-Uploads |
 
-Adjust rates based on your needs:
+Passen Sie die Raten nach Bedarf an:
 ```nginx
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=20r/s;
 ```
 
 ---
 
-## Security Best Practices
+## Bewährte Sicherheitspraktiken
 
-### 1. SSL/TLS Configuration
+### 1. SSL/TLS-Konfiguration
 
-✅ **Enabled**:
-- TLS 1.2, TLS 1.3 (no SSLv3, TLS 1.0, TLS 1.1)
-- Forward secrecy (ECDHE ciphers)
-- Perfect forward secrecy (DHE)
-- OCSP stapling
-- Session resumption
+Aktiviert:
+- TLS 1.2, TLS 1.3 (kein SSLv3, TLS 1.0, TLS 1.1)
+- Forward Secrecy (ECDHE-Chiffren)
+- Perfect Forward Secrecy (DHE)
+- OCSP Stapling
+- Session Resumption
 
-❌ **Disabled**:
-- Weak ciphers (RC4, 3DES, MD5)
-- SSL compression (CRIME attack)
-- TLS early data (0-RTT) - optional, disabled by default
+Deaktiviert:
+- Schwache Chiffren (RC4, 3DES, MD5)
+- SSL-Komprimierung (CRIME-Angriff)
+- TLS Early Data (0-RTT) – optional, standardmäßig deaktiviert
 
-### 2. Security Headers
+### 2. Sicherheitsheader
 
-| Header | Value | Purpose |
-|--------|-------|---------|
-| `Strict-Transport-Security` | `max-age=31536000` | Force HTTPS for 1 year |
-| `X-Frame-Options` | `SAMEORIGIN` | Prevent clickjacking |
-| `X-Content-Type-Options` | `nosniff` | Prevent MIME sniffing |
-| `Content-Security-Policy` | Restrictive | Prevent XSS |
-| `Referrer-Policy` | `strict-origin-when-cross-origin` | Control referrer info |
-| `Permissions-Policy` | Restrictive | Disable unused features |
+| Header | Wert | Zweck |
+|--------|------|-------|
+| `Strict-Transport-Security` | `max-age=31536000` | HTTPS für 1 Jahr erzwingen |
+| `X-Frame-Options` | `SAMEORIGIN` | Clickjacking verhindern |
+| `X-Content-Type-Options` | `nosniff` | MIME-Sniffing verhindern |
+| `Content-Security-Policy` | Restriktiv | XSS verhindern |
+| `Referrer-Policy` | `strict-origin-when-cross-origin` | Referrer-Informationen kontrollieren |
+| `Permissions-Policy` | Restriktiv | Ungenutzte Funktionen deaktivieren |
 
-### 3. Certificate Management
+### 3. Zertifikatsverwaltung
 
-- **Renew before expiry**: Certbot auto-renews at 30 days remaining
-- **Monitor expiry**: Check `/var/log/letsencrypt/letsencrypt.log`
-- **Backup certificates**: Include `/etc/letsencrypt/` in backups
-- **Test renewals**: `sudo certbot renew --dry-run` monthly
+- **Vor Ablauf verlängern**: Certbot verlängert automatisch bei 30 verbleibenden Tagen
+- **Ablauf überwachen**: Prüfen Sie `/var/log/letsencrypt/letsencrypt.log`
+- **Zertifikate sichern**: Fügen Sie `/etc/letsencrypt/` in Backups ein
+- **Verlängerung testen**: `sudo certbot renew --dry-run` monatlich
 
-### 4. Access Control
+### 4. Zugriffskontrolle
 
-**Restrict Admin Endpoints** (optional):
+**Admin-Endpunkte einschränken** (optional):
 ```nginx
 location /api/admin {
-    allow 192.168.1.0/24;  # Local network
+    allow 192.168.1.0/24;  # Lokales Netzwerk
     deny all;
 
     proxy_pass http://baluhost_backend;
 }
 ```
 
-**Block Bad Bots**:
+**Bösartige Bots blockieren**:
 ```nginx
 if ($http_user_agent ~* (bot|crawler|scanner)) {
     return 403;
 }
 ```
 
-### 5. DDoS Protection
+### 5. DDoS-Schutz
 
-Enable in `nginx.conf`:
+In `nginx.conf` aktivieren:
 ```nginx
-# Connection limits
+# Verbindungslimits
 limit_conn_zone $binary_remote_addr zone=addr:10m;
 limit_conn addr 10;
 
-# Request timeouts
+# Anfrage-Timeouts
 client_body_timeout 10s;
 client_header_timeout 10s;
 keepalive_timeout 30s;
@@ -386,84 +386,84 @@ send_timeout 10s;
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
-### Certificate Issuance Failures
+### Fehler bei der Zertifikatsausstellung
 
-**Error: DNS doesn't resolve**
+**Fehler: DNS löst nicht auf**
 ```bash
-# Check DNS
+# DNS prüfen
 host yourdomain.com
 
-# Check from external source
+# Von externer Quelle prüfen
 dig @8.8.8.8 yourdomain.com +short
 ```
 
-**Error: Port 80 not accessible**
+**Fehler: Port 80 nicht erreichbar**
 ```bash
-# Check firewall
+# Firewall prüfen
 sudo ufw status
 sudo iptables -L -n
 
-# Check if Nginx is running
+# Prüfen ob Nginx läuft
 sudo systemctl status nginx
 
-# Test port
+# Port testen
 curl http://yourdomain.com/.well-known/acme-challenge/test
 ```
 
-**Error: Too many failed attempts**
-- Let's Encrypt has rate limits (5 failures/hour, 50 certs/week)
-- Use `--dry-run` flag for testing
-- Wait 1 hour before retrying
+**Fehler: Zu viele fehlgeschlagene Versuche**
+- Let's Encrypt hat Ratenlimits (5 Fehlschläge/Stunde, 50 Zertifikate/Woche)
+- Verwenden Sie das `--dry-run`-Flag zum Testen
+- Warten Sie 1 Stunde vor dem nächsten Versuch
 
-### Nginx Configuration Errors
+### Nginx-Konfigurationsfehler
 
-**Test configuration**:
+**Konfiguration testen**:
 ```bash
 sudo nginx -t
 ```
 
-**Common issues**:
-- Missing semicolons
-- Duplicate server blocks
-- Wrong file paths
-- Permission errors
+**Häufige Probleme**:
+- Fehlende Semikolons
+- Doppelte Server-Blöcke
+- Falsche Dateipfade
+- Berechtigungsfehler
 
-**View detailed logs**:
+**Detaillierte Logs anzeigen**:
 ```bash
 sudo tail -f /var/log/nginx/error.log
 ```
 
-### SSL Handshake Failures
+### SSL-Handshake-Fehler
 
-**Check certificate chain**:
+**Zertifikatskette prüfen**:
 ```bash
 openssl s_client -connect yourdomain.com:443 -servername yourdomain.com
 ```
 
-**Verify certificate**:
+**Zertifikat überprüfen**:
 ```bash
 sudo certbot certificates
 ```
 
-**Test with different browsers**:
-- Chrome/Edge: Works with most configs
-- Firefox: More strict, requires full chain
-- Safari: Check compatibility
+**Mit verschiedenen Browsern testen**:
+- Chrome/Edge: Funktioniert mit den meisten Konfigurationen
+- Firefox: Strenger, erfordert vollständige Kette
+- Safari: Kompatibilität prüfen
 
-### Mixed Content Warnings
+### Mixed-Content-Warnungen
 
-**Cause**: HTTP resources loaded on HTTPS page
+**Ursache**: HTTP-Ressourcen werden auf HTTPS-Seite geladen
 
-**Fix**:
-1. Update frontend to use relative URLs
-2. Update API calls to use HTTPS
-3. Enable automatic HTTPS redirects
+**Lösung**:
+1. Frontend auf relative URLs umstellen
+2. API-Aufrufe auf HTTPS aktualisieren
+3. Automatische HTTPS-Weiterleitungen aktivieren
 
-### Performance Issues
+### Leistungsprobleme
 
-**Enable caching**:
+**Caching aktivieren**:
 ```nginx
 proxy_cache_path /var/cache/nginx levels=1:2 keys_zone=api_cache:10m max_size=100m;
 
@@ -474,125 +474,125 @@ location /api/ {
 }
 ```
 
-**Enable HTTP/2**:
-Already enabled in `baluhost.conf`:
+**HTTP/2 aktivieren**:
+Bereits in `baluhost.conf` aktiviert:
 ```nginx
 listen 443 ssl http2;
 ```
 
 ---
 
-## Maintenance
+## Wartung
 
-### Check Certificate Expiry
+### Zertifikatsablauf prüfen
 
 ```bash
-# Via certbot
+# Über Certbot
 sudo certbot certificates
 
-# Via openssl
+# Über OpenSSL
 echo | openssl s_client -connect yourdomain.com:443 2>/dev/null | openssl x509 -noout -dates
 ```
 
-### Manual Renewal
+### Manuelle Verlängerung
 
 ```bash
 sudo certbot renew
 sudo systemctl reload nginx
 ```
 
-### Revoke Certificate
+### Zertifikat widerrufen
 
 ```bash
 sudo certbot revoke --cert-path /etc/letsencrypt/live/yourdomain.com/cert.pem
 ```
 
-### Update Nginx Configuration
+### Nginx-Konfiguration aktualisieren
 
 ```bash
-# Edit config
+# Konfiguration bearbeiten
 sudo nano /etc/nginx/sites-available/baluhost.conf
 
-# Test
+# Testen
 sudo nginx -t
 
-# Apply
+# Anwenden
 sudo systemctl reload nginx
 ```
 
-### Monitor Logs
+### Logs überwachen
 
 ```bash
-# Access logs
+# Zugriffslogs
 sudo tail -f /var/log/nginx/baluhost_access.log
 
-# Error logs
+# Fehlerlogs
 sudo tail -f /var/log/nginx/baluhost_error.log
 
-# Certbot logs
+# Certbot-Logs
 sudo tail -f /var/log/letsencrypt/letsencrypt.log
 ```
 
-### Security Audits
+### Sicherheitsaudits
 
-**Test SSL Configuration**:
+**SSL-Konfiguration testen**:
 ```bash
 # SSL Labs (online)
 https://www.ssllabs.com/ssltest/analyze.html?d=yourdomain.com
 
-# testssl.sh (local)
+# testssl.sh (lokal)
 git clone https://github.com/drwetter/testssl.sh.git
 cd testssl.sh
 ./testssl.sh yourdomain.com
 ```
 
-**Test Security Headers**:
+**Sicherheitsheader testen**:
 ```bash
-curl -I https://yourdomain.com | grep -E "(Strict-Transport|X-Frame|X-Content|Content-Security)"
+curl -I https://yourdomain.com | command grep -E "(Strict-Transport|X-Frame|X-Content|Content-Security)"
 
-# Or online:
+# Oder online:
 https://securityheaders.com/?q=yourdomain.com
 ```
 
-### Backup Configuration
+### Konfiguration sichern
 
 ```bash
-# Create backup directory
+# Backup-Verzeichnis erstellen
 sudo mkdir -p /backups/nginx
 
-# Backup Nginx config
+# Nginx-Konfiguration sichern
 sudo tar czf /backups/nginx/nginx-$(date +%Y%m%d).tar.gz \
     /etc/nginx/sites-available \
     /etc/nginx/snippets \
     /etc/nginx/nginx.conf
 
-# Backup Let's Encrypt
+# Let's Encrypt sichern
 sudo tar czf /backups/nginx/letsencrypt-$(date +%Y%m%d).tar.gz \
     /etc/letsencrypt
 ```
 
-### Update Ciphers and Protocols
+### Chiffren und Protokolle aktualisieren
 
-As cryptographic standards evolve, update `ssl-params.conf`:
+Da sich kryptographische Standards weiterentwickeln, aktualisieren Sie `ssl-params.conf`:
 
 ```bash
-# Check Mozilla SSL Configuration Generator
+# Mozilla SSL Configuration Generator prüfen
 https://ssl-config.mozilla.org/
 
-# Update ssl-params.conf
+# ssl-params.conf aktualisieren
 sudo nano /etc/nginx/snippets/ssl-params.conf
 
-# Test and reload
+# Testen und neu laden
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
 ---
 
-## Advanced Topics
+## Fortgeschrittene Themen
 
-### Wildcard Certificates
+### Wildcard-Zertifikate
 
-For subdomains (`*.yourdomain.com`):
+Für Subdomains (`*.yourdomain.com`):
 
 ```bash
 sudo certbot certonly --manual \
@@ -601,9 +601,9 @@ sudo certbot certonly --manual \
     -d *.yourdomain.com
 ```
 
-Requires DNS TXT record verification.
+Erfordert DNS-TXT-Eintrag-Verifizierung.
 
-### Multiple Domains
+### Mehrere Domains
 
 ```bash
 sudo certbot --nginx \
@@ -612,9 +612,9 @@ sudo certbot --nginx \
     -d nas.yourdomain.com
 ```
 
-### Custom Certificate (Not Let's Encrypt)
+### Benutzerdefiniertes Zertifikat (nicht Let's Encrypt)
 
-If using a commercial certificate:
+Wenn Sie ein kommerzielles Zertifikat verwenden:
 
 ```nginx
 ssl_certificate /path/to/certificate.crt;
@@ -624,53 +624,53 @@ ssl_trusted_certificate /path/to/ca-bundle.crt;
 
 ---
 
-## Self-Signed Certificate (LAN-only)
+## Selbstsigniertes Zertifikat (nur LAN)
 
-For LAN-only or VPN-only deployments without a public domain, use a self-signed certificate instead of Let's Encrypt.
+Für reine LAN- oder VPN-Bereitstellungen ohne öffentliche Domain verwenden Sie ein selbstsigniertes Zertifikat anstelle von Let's Encrypt.
 
-### Quick Start
+### Schnellstart
 
 ```bash
 cd /opt/baluhost
 sudo ./deploy/ssl/setup-selfsigned.sh --ip 192.168.178.53
 ```
 
-The script:
-1. Generates a self-signed certificate (10 years, RSA 2048, SHA-256)
-2. Adds SANs: `baluhost.local`, `baluhost`, `localhost`, LAN IP, `127.0.0.1`
-3. Generates DH parameters (if missing)
-4. Installs HTTPS Nginx config (`baluhost-https.conf`)
-5. Enables HTTP → HTTPS redirect
-6. Opens port 443 in firewall
-7. Adds `https://` CORS origins to `.env.production`
-8. Tests and reloads Nginx + restarts backend
+Das Skript:
+1. Generiert ein selbstsigniertes Zertifikat (10 Jahre, RSA 2048, SHA-256)
+2. Fügt SANs hinzu: `baluhost.local`, `baluhost`, `localhost`, LAN-IP, `127.0.0.1`
+3. Generiert DH-Parameter (falls nicht vorhanden)
+4. Installiert HTTPS-Nginx-Konfiguration (`baluhost-https.conf`)
+5. Aktiviert HTTP-zu-HTTPS-Weiterleitung
+6. Öffnet Port 443 in der Firewall
+7. Fügt `https://`-CORS-Origins zu `.env.production` hinzu
+8. Testet und lädt Nginx neu + startet Backend neu
 
-Options:
+Optionen:
 ```bash
 sudo ./deploy/ssl/setup-selfsigned.sh --ip <IP> --hostname <NAME> --cert-days <DAYS>
-sudo ./deploy/ssl/setup-selfsigned.sh --dry-run     # Preview without changes
-sudo ./deploy/ssl/setup-selfsigned.sh --skip-backend # Don't restart backend
+sudo ./deploy/ssl/setup-selfsigned.sh --dry-run     # Vorschau ohne Änderungen
+sudo ./deploy/ssl/setup-selfsigned.sh --skip-backend # Backend nicht neu starten
 ```
 
-### Client Trust Setup
+### Client-Vertrauenseinrichtung
 
-Browsers will show a certificate warning on first visit. Trust the certificate once per device:
+Browser zeigen beim ersten Besuch eine Zertifikatswarnung an. Vertrauen Sie dem Zertifikat einmalig pro Gerät:
 
 #### Browser (Windows/Mac/Linux)
 
-1. Open `https://<LAN_IP>` (e.g. `https://192.168.178.53`)
-2. Click **Advanced** → **Proceed** (Chrome) or **Accept the Risk** (Firefox)
-3. Done — the warning won't appear again for this site
+1. Öffnen Sie `https://<LAN_IP>` (z. B. `https://192.168.178.53`)
+2. Klicken Sie auf **Erweitert** -> **Weiter** (Chrome) oder **Risiko akzeptieren** (Firefox)
+3. Fertig -- die Warnung erscheint für diese Seite nicht mehr
 
-For permanent trust (no warning at all), import the certificate into the OS trust store:
+Für dauerhaftes Vertrauen (ohne Warnung) importieren Sie das Zertifikat in den OS-Vertrauensspeicher:
 
 **Windows:**
-1. Copy `baluhost.crt` from the server: `scp sven@<LAN_IP>:/etc/nginx/ssl/baluhost.crt .`
-2. Double-click `baluhost.crt` → **Install Certificate** → **Local Machine** → **Trusted Root Certification Authorities**
+1. Kopieren Sie `baluhost.crt` vom Server: `scp sven@<LAN_IP>:/etc/nginx/ssl/baluhost.crt .`
+2. Doppelklicken Sie auf `baluhost.crt` -> **Zertifikat installieren** -> **Lokaler Computer** -> **Vertrauenswürdige Stammzertifizierungsstellen**
 
 **macOS:**
-1. Copy `baluhost.crt` from the server
-2. Open **Keychain Access** → drag `baluhost.crt` into **System** keychain → set to **Always Trust**
+1. Kopieren Sie `baluhost.crt` vom Server
+2. Öffnen Sie **Schlüsselbundverwaltung** -> ziehen Sie `baluhost.crt` in den **System**-Schlüsselbund -> setzen Sie auf **Immer vertrauen**
 
 **Linux:**
 ```bash
@@ -681,13 +681,13 @@ sudo update-ca-certificates
 
 #### BaluApp (Android)
 
-**Option A — System-wide trust:**
-1. Copy `baluhost.crt` to the phone (via USB, AirDrop, or email)
-2. Go to **Settings** → **Security** → **Encryption & credentials** → **Install a certificate** → **CA certificate**
-3. Select `baluhost.crt`
+**Option A -- Systemweites Vertrauen:**
+1. Kopieren Sie `baluhost.crt` auf das Telefon (per USB, AirDrop oder E-Mail)
+2. Gehen Sie zu **Einstellungen** -> **Sicherheit** -> **Verschlüsselung & Anmeldedaten** -> **Zertifikat installieren** -> **CA-Zertifikat**
+3. Wählen Sie `baluhost.crt`
 
-**Option B — App-only trust (recommended):**
-Add to `res/xml/network_security_config.xml`:
+**Option B -- Nur App-Vertrauen (empfohlen):**
+Fügen Sie in `res/xml/network_security_config.xml` hinzu:
 ```xml
 <network-security-config>
     <domain-config>
@@ -699,11 +699,11 @@ Add to `res/xml/network_security_config.xml`:
     </domain-config>
 </network-security-config>
 ```
-Place `baluhost.crt` as `res/raw/baluhost.pem`.
+Speichern Sie `baluhost.crt` als `res/raw/baluhost.pem`.
 
 #### BaluDesk (Electron)
 
-Set the `NODE_EXTRA_CA_CERTS` environment variable before launching:
+Setzen Sie die Umgebungsvariable `NODE_EXTRA_CA_CERTS` vor dem Start:
 ```bash
 # Linux/macOS
 export NODE_EXTRA_CA_CERTS=/path/to/baluhost.crt
@@ -712,41 +712,41 @@ export NODE_EXTRA_CA_CERTS=/path/to/baluhost.crt
 $env:NODE_EXTRA_CA_CERTS = "C:\path\to\baluhost.crt"
 ```
 
-Or import the certificate into the OS trust store (see Browser section above).
+Oder importieren Sie das Zertifikat in den OS-Vertrauensspeicher (siehe Abschnitt Browser oben).
 
-### Verify Certificate
+### Zertifikat überprüfen
 
 ```bash
-# Show certificate details
+# Zertifikatsdetails anzeigen
 openssl x509 -in /etc/nginx/ssl/baluhost.crt -noout -text
 
-# Check expiry from remote
+# Ablauf von remote prüfen
 echo | openssl s_client -connect <LAN_IP>:443 -servername baluhost.local 2>/dev/null | openssl x509 -noout -dates
 
-# Test HTTPS connection
+# HTTPS-Verbindung testen
 curl -sk https://<LAN_IP>/health
 ```
 
-### Renew / Regenerate
+### Erneuern / Neu generieren
 
-To regenerate the certificate (e.g. after IP change):
+Um das Zertifikat neu zu generieren (z. B. nach IP-Änderung):
 ```bash
 sudo ./deploy/ssl/setup-selfsigned.sh --ip <NEW_IP>
-# Script detects existing cert and asks whether to overwrite
+# Skript erkennt vorhandenes Zertifikat und fragt, ob es überschrieben werden soll
 ```
 
-After regeneration, clients need to trust the new certificate again.
+Nach der Neugenerierung müssen Clients dem neuen Zertifikat erneut vertrauen.
 
 ---
 
 ## Support
 
 - **Let's Encrypt Community**: https://community.letsencrypt.org/
-- **Nginx Documentation**: https://nginx.org/en/docs/
+- **Nginx-Dokumentation**: https://nginx.org/en/docs/
 - **Mozilla SSL Config**: https://ssl-config.mozilla.org/
-- **BaluHost Issues**: See repository issues page
+- **BaluHost Issues**: Siehe Repository-Issues-Seite
 
 ---
 
-**Last Updated**: March 29, 2026
-**Tested with**: Nginx 1.24+, Certbot 2.0+, Debian 13, Ubuntu 22.04 LTS
+**Zuletzt aktualisiert**: 29. März 2026
+**Getestet mit**: Nginx 1.24+, Certbot 2.0+, Debian 13, Ubuntu 22.04 LTS

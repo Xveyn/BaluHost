@@ -1,194 +1,194 @@
-# Reverse Proxy & SSL Setup - Quick Reference
+# Reverse Proxy & SSL-Einrichtung -- Kurzreferenz
 
-Production-grade Nginx reverse proxy with SSL/TLS for BaluHost.
+Produktionsreifer Nginx Reverse Proxy mit SSL/TLS für BaluHost.
 
-## What's Included
+## Enthaltene Komponenten
 
-### Configuration Files
+### Konfigurationsdateien
 
-✅ **Nginx Configs**:
-- `deploy/nginx/baluhost.conf` - Main reverse proxy configuration (263 lines)
-- `deploy/nginx/ssl-params.conf` - SSL/TLS best practices (Mozilla Intermediate)
-- `deploy/nginx/security-headers.conf` - OWASP security headers
+**Nginx-Konfigurationen**:
+- `deploy/nginx/baluhost.conf` -- Hauptkonfiguration des Reverse Proxy (263 Zeilen)
+- `deploy/nginx/ssl-params.conf` -- SSL/TLS Best Practices (Mozilla Intermediate)
+- `deploy/nginx/security-headers.conf` -- OWASP-Sicherheitsheader
 
-✅ **Automated Scripts**:
-- `deploy/scripts/install-nginx.sh` - Nginx installation & setup
-- `deploy/ssl/setup-letsencrypt.sh` - Let's Encrypt SSL automation
+**Automatisierte Skripte**:
+- `deploy/scripts/install-nginx.sh` -- Nginx-Installation & -Einrichtung
+- `deploy/ssl/setup-letsencrypt.sh` -- Let's Encrypt SSL-Automatisierung
 
-✅ **Documentation**:
-- `docs/SSL_SETUP.md` - Comprehensive SSL/TLS guide (600+ lines)
+**Dokumentation**:
+- `docs/SSL_SETUP.md` -- Umfassende SSL/TLS-Anleitung (600+ Zeilen)
 
 ---
 
-## Features
+## Funktionen
 
-### SSL/TLS Security
-- ✅ Let's Encrypt free certificates
-- ✅ TLS 1.2 + 1.3 only (no weak protocols)
-- ✅ Modern cipher suites (ECDHE, AES-GCM, ChaCha20-Poly1305)
-- ✅ Perfect forward secrecy
-- ✅ OCSP stapling
-- ✅ HSTS with preload
-- ✅ Automatic renewal (systemd timer + cron fallback)
-- 🎯 Target: SSL Labs A/A+ grade
+### SSL/TLS-Sicherheit
+- Let's Encrypt kostenlose Zertifikate
+- Nur TLS 1.2 + 1.3 (keine schwachen Protokolle)
+- Moderne Cipher-Suites (ECDHE, AES-GCM, ChaCha20-Poly1305)
+- Perfect Forward Secrecy
+- OCSP Stapling
+- HSTS mit Preload
+- Automatische Verlängerung (Systemd-Timer + Cron-Fallback)
+- Ziel: SSL Labs A/A+ Bewertung
 
-### Security Headers (OWASP)
-- ✅ X-Frame-Options (clickjacking protection)
-- ✅ X-Content-Type-Options (MIME sniffing protection)
-- ✅ Content-Security-Policy (XSS prevention)
-- ✅ Strict-Transport-Security (HSTS)
-- ✅ Referrer-Policy
-- ✅ Permissions-Policy
-- ✅ Cross-Origin policies (COEP, COOP, CORP)
-- 🎯 Target: securityheaders.com A grade
+### Sicherheitsheader (OWASP)
+- X-Frame-Options (Clickjacking-Schutz)
+- X-Content-Type-Options (MIME-Sniffing-Schutz)
+- Content-Security-Policy (XSS-Prävention)
+- Strict-Transport-Security (HSTS)
+- Referrer-Policy
+- Permissions-Policy
+- Cross-Origin-Richtlinien (COEP, COOP, CORP)
+- Ziel: securityheaders.com A-Bewertung
 
 ### Rate Limiting
-- ✅ API endpoints: 10 req/s (burst: 20)
-- ✅ Auth endpoints: 5 req/min (burst: 3)
-- ✅ Upload endpoints: 10 req/min (burst: 5)
-- ✅ Health checks: unlimited
-- ✅ Custom 429 error pages
+- API-Endpunkte: 10 Anf./s (Burst: 20)
+- Auth-Endpunkte: 5 Anf./min (Burst: 3)
+- Upload-Endpunkte: 10 Anf./min (Burst: 5)
+- Health Checks: unbegrenzt
+- Benutzerdefinierte 429-Fehlerseiten
 
-### Performance
-- ✅ HTTP/2 enabled
-- ✅ Gzip compression (text, json, svg)
-- ✅ Keep-alive connections
-- ✅ Static asset caching (1 year)
-- ✅ SPA fallback (React Router support)
-- ✅ WebSocket/SSE support (for real-time features)
-- ✅ Large file uploads (10GB max, configurable)
+### Leistung
+- HTTP/2 aktiviert
+- Gzip-Komprimierung (Text, JSON, SVG)
+- Keep-Alive-Verbindungen
+- Statisches Asset-Caching (1 Jahr)
+- SPA-Fallback (React Router-Unterstützung)
+- WebSocket/SSE-Unterstützung (für Echtzeitfunktionen)
+- Große Datei-Uploads (10 GB max, konfigurierbar)
 
-### Proxy Features
-- ✅ Backend API proxy (`/api/*` → `localhost:8000`)
-- ✅ Avatar uploads (`/avatars/*` → backend)
-- ✅ Frontend serving (Docker container or static files)
-- ✅ Health check endpoint (no rate limit)
-- ✅ Long-running request support (600s+ timeouts)
-- ✅ Request buffering control
+### Proxy-Funktionen
+- Backend-API-Proxy (`/api/*` -> `localhost:8000`)
+- Avatar-Uploads (`/avatars/*` -> Backend)
+- Frontend-Bereitstellung (Docker-Container oder statische Dateien)
+- Health-Check-Endpunkt (kein Rate Limit)
+- Unterstützung für langlebige Anfragen (600s+ Timeouts)
+- Steuerung der Anfragepufferung
 
 ---
 
-## Quick Start
+## Schnellstart
 
-### 1. Deploy BaluHost with Docker
+### 1. BaluHost mit Docker bereitstellen
 
 ```bash
 cd /path/to/baluhost
 cp .env.production.example .env
 
-# Generate secrets
+# Geheimnisse generieren
 python -c "import secrets; print('SECRET_KEY=' + secrets.token_urlsafe(32))"
 python -c "import secrets; print('TOKEN_SECRET=' + secrets.token_urlsafe(32))"
 python -c "import secrets; print('POSTGRES_PASSWORD=' + secrets.token_urlsafe(24))"
 
-# Update .env with generated values
+# .env mit generierten Werten aktualisieren
 nano .env
 
-# Start BaluHost
+# BaluHost starten
 docker-compose up -d
 ```
 
-Verify backend is running:
+Überprüfen Sie, ob das Backend läuft:
 ```bash
 curl http://localhost:8000/api/system/health
 ```
 
-### 2. Install Nginx
+### 2. Nginx installieren
 
 ```bash
 sudo ./deploy/scripts/install-nginx.sh
 ```
 
-This installs and configures Nginx with all necessary directories and optimizations.
+Dies installiert und konfiguriert Nginx mit allen erforderlichen Verzeichnissen und Optimierungen.
 
-### 3. Setup SSL with Let's Encrypt
+### 3. SSL mit Let's Encrypt einrichten
 
 ```bash
 sudo ./deploy/ssl/setup-letsencrypt.sh yourdomain.com admin@yourdomain.com
 ```
 
-Replace:
-- `yourdomain.com` with your actual domain
-- `admin@yourdomain.com` with your email
+Ersetzen Sie:
+- `yourdomain.com` durch Ihre tatsächliche Domain
+- `admin@yourdomain.com` durch Ihre E-Mail-Adresse
 
-Prerequisites:
-- Domain's DNS A record points to your server IP
-- Ports 80 and 443 are open in firewall
+Voraussetzungen:
+- Der DNS-A-Eintrag der Domain zeigt auf Ihre Server-IP
+- Ports 80 und 443 sind in der Firewall geöffnet
 
-### 4. Enable BaluHost Site
+### 4. BaluHost-Seite aktivieren
 
 ```bash
-# Review config (verify backend upstream)
+# Konfiguration überprüfen (Backend-Upstream verifizieren)
 sudo nano /etc/nginx/sites-available/baluhost.conf
 
-# Enable site
+# Seite aktivieren
 sudo ln -s /etc/nginx/sites-available/baluhost.conf /etc/nginx/sites-enabled/
 
-# Test
+# Testen
 sudo nginx -t
 
-# Reload
+# Neu laden
 sudo systemctl reload nginx
 ```
 
-### 5. Verify
+### 5. Überprüfen
 
 ```bash
-# Test HTTPS
+# HTTPS testen
 curl -I https://yourdomain.com
 
-# Check certificate
+# Zertifikat prüfen
 echo | openssl s_client -connect yourdomain.com:443 -servername yourdomain.com | openssl x509 -noout -dates
 
-# Test in browser
+# Im Browser testen
 open https://yourdomain.com
 ```
 
-**Security Audits**:
+**Sicherheitsaudits**:
 - SSL Labs: https://www.ssllabs.com/ssltest/analyze.html?d=yourdomain.com
 - Security Headers: https://securityheaders.com/?q=yourdomain.com
 
 ---
 
-## Configuration Overview
+## Konfigurationsübersicht
 
-### Nginx Site Structure
+### Nginx-Seitenstruktur
 
 ```nginx
-# HTTP Server (Port 80)
+# HTTP-Server (Port 80)
 server {
     listen 80;
 
-    # ACME challenge for Let's Encrypt
+    # ACME-Challenge für Let's Encrypt
     location ^~ /.well-known/acme-challenge/ { ... }
 
-    # Redirect everything else to HTTPS
+    # Alles andere auf HTTPS umleiten
     location / { return 301 https://$server_name$request_uri; }
 }
 
-# HTTPS Server (Port 443)
+# HTTPS-Server (Port 443)
 server {
     listen 443 ssl http2;
 
-    # SSL configuration
+    # SSL-Konfiguration
     ssl_certificate /etc/letsencrypt/live/domain/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/domain/privkey.pem;
     include /etc/nginx/snippets/ssl-params.conf;
     include /etc/nginx/snippets/security-headers.conf;
 
     # Locations:
-    # - /api/ → Backend proxy
-    # - /api/auth/* → Stricter rate limiting
-    # - /api/files/upload → Upload-specific config
-    # - /avatars/ → Backend proxy with caching
-    # - / → Frontend (SPA)
-    # - Static assets → Caching
+    # - /api/ -> Backend-Proxy
+    # - /api/auth/* -> Strengeres Rate Limiting
+    # - /api/files/upload -> Upload-spezifische Konfiguration
+    # - /avatars/ -> Backend-Proxy mit Caching
+    # - / -> Frontend (SPA)
+    # - Statische Assets -> Caching
 }
 ```
 
-### Backend Upstream
+### Backend-Upstream
 
-**For Docker Compose deployment**:
+**Für Docker-Compose-Bereitstellung**:
 ```nginx
 upstream baluhost_backend {
     server localhost:8000;
@@ -196,7 +196,7 @@ upstream baluhost_backend {
 }
 ```
 
-**For systemd deployment**:
+**Für Systemd-Bereitstellung**:
 ```nginx
 upstream baluhost_backend {
     server unix:/run/baluhost/backend.sock;
@@ -204,15 +204,15 @@ upstream baluhost_backend {
 }
 ```
 
-### Rate Limiting Zones
+### Rate-Limiting-Zonen
 
 ```nginx
-# Define zones
+# Zonen definieren
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=10r/s;
 limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=5r/m;
 limit_req_zone $binary_remote_addr zone=upload_limit:10m rate=10r/m;
 
-# Apply to locations
+# Auf Locations anwenden
 location /api/ {
     limit_req zone=api_limit burst=20 nodelay;
     limit_req_status 429;
@@ -222,34 +222,34 @@ location /api/ {
 
 ---
 
-## Customization
+## Anpassung
 
-### Adjust Rate Limits
+### Rate Limits anpassen
 
-Edit `deploy/nginx/baluhost.conf`:
+Bearbeiten Sie `deploy/nginx/baluhost.conf`:
 
 ```nginx
-# More permissive (for high-traffic sites)
+# Großzügiger (für stark frequentierte Seiten)
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=50r/s;
 limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=10r/m;
 
-# More restrictive (for private deployments)
+# Restriktiver (für private Bereitstellungen)
 limit_req_zone $binary_remote_addr zone=api_limit:10m rate=5r/s;
 limit_req_zone $binary_remote_addr zone=auth_limit:10m rate=3r/m;
 ```
 
-### Adjust Upload Size Limit
+### Upload-Größenlimit anpassen
 
 ```nginx
-# Increase max upload size to 50GB
+# Maximale Upload-Größe auf 50 GB erhöhen
 client_max_body_size 50G;
 ```
 
-### Restrict Admin Endpoints
+### Admin-Endpunkte einschränken
 
 ```nginx
 location /api/admin {
-    # Only allow from local network
+    # Nur aus dem lokalen Netzwerk erlauben
     allow 192.168.1.0/24;
     allow 10.0.0.0/8;
     deny all;
@@ -258,7 +258,7 @@ location /api/admin {
 }
 ```
 
-### Custom Error Pages
+### Benutzerdefinierte Fehlerseiten
 
 ```nginx
 error_page 404 /404.html;
@@ -269,13 +269,13 @@ location = /50x.html {
 }
 ```
 
-### Enable Caching
+### Caching aktivieren
 
 ```nginx
-# Define cache
+# Cache definieren
 proxy_cache_path /var/cache/nginx/baluhost levels=1:2 keys_zone=baluhost_cache:10m max_size=1g inactive=60m;
 
-# Use cache
+# Cache verwenden
 location /api/ {
     proxy_cache baluhost_cache;
     proxy_cache_valid 200 5m;
@@ -288,159 +288,159 @@ location /api/ {
 
 ---
 
-## Maintenance
+## Wartung
 
-### Certificate Renewal
+### Zertifikatsverlängerung
 
-Automatic via systemd timer. Manual renewal:
+Automatisch über Systemd-Timer. Manuelle Verlängerung:
 
 ```bash
 sudo certbot renew
 sudo systemctl reload nginx
 ```
 
-Test renewal:
+Verlängerung testen:
 ```bash
 sudo certbot renew --dry-run
 ```
 
-### Update Nginx Config
+### Nginx-Konfiguration aktualisieren
 
 ```bash
-# Edit
+# Bearbeiten
 sudo nano /etc/nginx/sites-available/baluhost.conf
 
-# Test
+# Testen
 sudo nginx -t
 
-# Apply
+# Anwenden
 sudo systemctl reload nginx
 ```
 
-### Monitor Logs
+### Logs überwachen
 
 ```bash
-# Access logs
+# Zugriffslogs
 sudo tail -f /var/log/nginx/baluhost_access.log
 
-# Error logs
+# Fehlerlogs
 sudo tail -f /var/log/nginx/baluhost_error.log
 
-# Filter by IP
-sudo grep "192.168.1.100" /var/log/nginx/baluhost_access.log
+# Nach IP filtern
+sudo command grep "192.168.1.100" /var/log/nginx/baluhost_access.log
 
-# Show only errors
-sudo grep "error" /var/log/nginx/baluhost_error.log
+# Nur Fehler anzeigen
+sudo command grep "error" /var/log/nginx/baluhost_error.log
 ```
 
-### Check SSL Certificate
+### SSL-Zertifikat prüfen
 
 ```bash
-# Expiry date
+# Ablaufdatum
 sudo certbot certificates
 
-# Via OpenSSL
+# Über OpenSSL
 echo | openssl s_client -connect yourdomain.com:443 -servername yourdomain.com 2>/dev/null | openssl x509 -noout -dates
 ```
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
-### Common Issues
+### Häufige Probleme
 
-**1. SSL Certificate Fails to Obtain**
-- Check DNS: `host yourdomain.com`
-- Check port 80: `curl http://yourdomain.com/.well-known/acme-challenge/test`
-- Check firewall: `sudo ufw status` or `sudo iptables -L -n`
-- View logs: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
+**1. SSL-Zertifikat kann nicht bezogen werden**
+- DNS prüfen: `host yourdomain.com`
+- Port 80 prüfen: `curl http://yourdomain.com/.well-known/acme-challenge/test`
+- Firewall prüfen: `sudo ufw status` oder `sudo iptables -L -n`
+- Logs ansehen: `sudo tail -f /var/log/letsencrypt/letsencrypt.log`
 
 **2. 502 Bad Gateway**
-- Backend not running: `docker-compose ps` or `systemctl status baluhost-backend`
-- Wrong upstream: Check `upstream baluhost_backend` in config
-- Backend listening on wrong interface: Should be `0.0.0.0:8000`
+- Backend läuft nicht: `docker-compose ps` oder `systemctl status baluhost-backend`
+- Falscher Upstream: `upstream baluhost_backend` in der Konfiguration prüfen
+- Backend hört auf falscher Schnittstelle: Sollte `0.0.0.0:8000` sein
 
-**3. Rate Limit Errors (429)**
-- Adjust rate limits in config
-- Check client IP: `$binary_remote_addr` in logs
-- Consider IP whitelisting for trusted sources
+**3. Rate-Limit-Fehler (429)**
+- Rate Limits in der Konfiguration anpassen
+- Client-IP prüfen: `$binary_remote_addr` in den Logs
+- IP-Whitelisting für vertrauenswürdige Quellen erwägen
 
-**4. Mixed Content Warnings**
-- Update frontend to use relative URLs
-- Check CORS_ORIGINS in .env includes https://
-- Verify all API calls use HTTPS
+**4. Mixed-Content-Warnungen**
+- Frontend auf relative URLs umstellen
+- CORS_ORIGINS in .env enthält https:// prüfen
+- Sicherstellen, dass alle API-Aufrufe HTTPS verwenden
 
-**5. Large Upload Fails**
-- Increase `client_max_body_size`
-- Increase timeouts: `client_body_timeout`, `proxy_read_timeout`
-- Check disk space on server
+**5. Großer Upload schlägt fehl**
+- `client_max_body_size` erhöhen
+- Timeouts erhöhen: `client_body_timeout`, `proxy_read_timeout`
+- Festplattenspeicher auf dem Server prüfen
 
-### Debug Commands
+### Debug-Befehle
 
 ```bash
-# Test Nginx config
+# Nginx-Konfiguration testen
 sudo nginx -t
 
-# Reload Nginx
+# Nginx neu laden
 sudo systemctl reload nginx
 
-# Restart Nginx
+# Nginx neu starten
 sudo systemctl restart nginx
 
-# Check Nginx status
+# Nginx-Status prüfen
 sudo systemctl status nginx
 
-# Test SSL handshake
+# SSL-Handshake testen
 openssl s_client -connect yourdomain.com:443 -servername yourdomain.com
 
-# Check certificate chain
+# Zertifikatskette prüfen
 openssl s_client -connect yourdomain.com:443 -showcerts
 
-# Test from different location (bypass cache)
+# Von anderem Standort testen (Cache umgehen)
 curl -H "Cache-Control: no-cache" https://yourdomain.com/api/system/health
 
-# Check rate limiting
+# Rate Limiting prüfen
 for i in {1..20}; do curl -s -o /dev/null -w "%{http_code}\n" https://yourdomain.com/api/; done
 ```
 
 ---
 
-## Security Checklist
+## Sicherheitscheckliste
 
-Before going live:
+Vor der Inbetriebnahme:
 
-- [ ] SSL certificate valid and auto-renewing
-- [ ] HTTPS enforced (HTTP redirects to HTTPS)
-- [ ] Security headers configured (A grade on securityheaders.com)
-- [ ] Rate limiting active on all endpoints
-- [ ] Firewall configured (only 80, 443, 22 open)
-- [ ] Admin endpoints restricted (optional)
-- [ ] Server version hidden (`server_tokens off`)
-- [ ] Logs monitored and rotated
-- [ ] Backup of Nginx config and SSL certificates
-- [ ] DNS CAA records configured (optional but recommended)
-- [ ] DNSSEC enabled (optional)
-
----
-
-## Performance Checklist
-
-- [ ] HTTP/2 enabled
-- [ ] Gzip compression enabled
-- [ ] Static asset caching configured
-- [ ] Keep-alive connections enabled
-- [ ] Worker connections optimized (2048+)
-- [ ] Connection pooling to backend (keepalive)
-- [ ] Slow log configured (optional)
-- [ ] Monitoring setup (optional: Prometheus, Grafana)
+- [ ] SSL-Zertifikat gültig und automatisch verlängernd
+- [ ] HTTPS erzwungen (HTTP leitet auf HTTPS um)
+- [ ] Sicherheitsheader konfiguriert (A-Bewertung auf securityheaders.com)
+- [ ] Rate Limiting auf allen Endpunkten aktiv
+- [ ] Firewall konfiguriert (nur Ports 80, 443, 22 offen)
+- [ ] Admin-Endpunkte eingeschränkt (optional)
+- [ ] Serverversion verborgen (`server_tokens off`)
+- [ ] Logs überwacht und rotiert
+- [ ] Backup der Nginx-Konfiguration und SSL-Zertifikate
+- [ ] DNS-CAA-Einträge konfiguriert (optional, aber empfohlen)
+- [ ] DNSSEC aktiviert (optional)
 
 ---
 
-## Resources
+## Leistungscheckliste
 
-- **Full Guide**: See `docs/SSL_SETUP.md` for comprehensive documentation
-- **Production Readiness**: See `PRODUCTION_READINESS.md`
-- **Nginx Docs**: https://nginx.org/en/docs/
+- [ ] HTTP/2 aktiviert
+- [ ] Gzip-Komprimierung aktiviert
+- [ ] Statisches Asset-Caching konfiguriert
+- [ ] Keep-Alive-Verbindungen aktiviert
+- [ ] Worker-Verbindungen optimiert (2048+)
+- [ ] Connection Pooling zum Backend (Keepalive)
+- [ ] Slow Log konfiguriert (optional)
+- [ ] Monitoring eingerichtet (optional: Prometheus, Grafana)
+
+---
+
+## Ressourcen
+
+- **Vollständige Anleitung**: Siehe `docs/SSL_SETUP.md` für umfassende Dokumentation
+- **Produktionsbereitschaft**: Siehe `PRODUCTION_READINESS.md`
+- **Nginx-Dokumentation**: https://nginx.org/en/docs/
 - **Let's Encrypt**: https://letsencrypt.org/docs/
 - **Mozilla SSL Config**: https://ssl-config.mozilla.org/
 - **OWASP Headers**: https://owasp.org/www-project-secure-headers/
@@ -449,14 +449,14 @@ Before going live:
 
 ## Support
 
-Issues? Check:
-1. `docs/SSL_SETUP.md` - Comprehensive troubleshooting
-2. Nginx error logs: `/var/log/nginx/baluhost_error.log`
-3. Let's Encrypt logs: `/var/log/letsencrypt/letsencrypt.log`
-4. BaluHost logs: `docker-compose logs backend`
+Probleme? Prüfen Sie:
+1. `docs/SSL_SETUP.md` -- Umfassende Fehlerbehebung
+2. Nginx-Fehlerlogs: `/var/log/nginx/baluhost_error.log`
+3. Let's Encrypt-Logs: `/var/log/letsencrypt/letsencrypt.log`
+4. BaluHost-Logs: `docker-compose logs backend`
 
 ---
 
-**Created**: January 13, 2026
-**Status**: Production-ready reverse proxy with SSL/TLS
-**Grade Targets**: SSL Labs A+, Security Headers A
+**Erstellt**: 13. Januar 2026
+**Status**: Produktionsreifer Reverse Proxy mit SSL/TLS
+**Zielbewertungen**: SSL Labs A+, Security Headers A

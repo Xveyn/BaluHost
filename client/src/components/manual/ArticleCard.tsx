@@ -22,18 +22,18 @@ export default function ArticleCard({ title, icon, onClick }: ArticleCardProps) 
   return (
     <button
       onClick={onClick}
-      className="w-full text-left bg-slate-800/40 backdrop-blur-sm rounded-xl border border-slate-700/50 p-4 hover:border-slate-600/50 hover:bg-slate-800/60 transition-all group touch-manipulation active:scale-[0.99]"
+      className="w-full text-left relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-4 shadow-[0_20px_60px_rgba(2,6,23,0.55)] backdrop-blur-xl hover:border-slate-700/80 transition-all duration-200 group touch-manipulation active:scale-[0.99]"
     >
       <div className="flex items-start gap-3">
-        <div className="p-2 bg-cyan-500/20 rounded-lg text-cyan-400 group-hover:bg-cyan-500/30 transition-colors flex-shrink-0">
+        <div className="flex h-9 w-9 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/60 text-sky-400 group-hover:border-sky-500/40 transition-colors flex-shrink-0">
           {getLucideIcon(icon)}
         </div>
-        <div className="flex-1 min-w-0">
-          <h3 className="text-sm sm:text-base font-semibold text-white truncate">
+        <div className="flex-1 min-w-0 pt-1">
+          <h3 className="text-sm sm:text-base font-medium text-white truncate">
             {title}
           </h3>
         </div>
-        <Icons.ChevronRight className="h-5 w-5 text-slate-500 group-hover:text-slate-300 transition-colors flex-shrink-0 mt-0.5" />
+        <Icons.ChevronRight className="h-5 w-5 text-slate-600 group-hover:text-slate-400 transition-colors flex-shrink-0 mt-1.5" />
       </div>
     </button>
   );

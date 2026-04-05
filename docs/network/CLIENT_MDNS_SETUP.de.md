@@ -1,136 +1,136 @@
-# Client mDNS Setup Guide
+# Client mDNS Einrichtungsanleitung
 
-This guide explains how to configure different client devices (Windows, Mac, Linux, Mobile) to access BaluHost via the hostname `baluhost.local` instead of using IP addresses.
+Diese Anleitung erklärt, wie Sie verschiedene Client-Geräte (Windows, Mac, Linux, Mobilgeräte) konfigurieren, um auf BaluHost über den Hostnamen `baluhost.local` statt über IP-Adressen zuzugreifen.
 
-## Table of Contents
+## Inhaltsverzeichnis
 
-- [Overview](#overview)
-- [Server Requirements](#server-requirements)
-- [Client Setup by Platform](#client-setup-by-platform)
+- [Übersicht](#übersicht)
+- [Server-Voraussetzungen](#server-voraussetzungen)
+- [Client-Einrichtung nach Plattform](#client-einrichtung-nach-plattform)
   - [Mac/macOS](#macmacos)
   - [Linux](#linux)
   - [Windows](#windows)
   - [iOS (iPhone/iPad)](#ios-iphoneipad)
   - [Android](#android)
-- [Troubleshooting](#troubleshooting)
-- [Testing mDNS Resolution](#testing-mdns-resolution)
+- [Fehlerbehebung](#fehlerbehebung)
+- [mDNS-Auflösung testen](#mdns-auflösung-testen)
 
 ---
 
-## Overview
+## Übersicht
 
-**What is mDNS?**
+**Was ist mDNS?**
 
-mDNS (Multicast DNS) is a protocol that allows devices on a local network to discover each other using `.local` hostnames without requiring a DNS server. It's also known as:
-- **Bonjour** (Apple's implementation)
-- **Avahi** (Linux implementation)
-- **Zeroconf** (Zero-configuration networking)
+mDNS (Multicast DNS) ist ein Protokoll, das es Geräten in einem lokalen Netzwerk ermöglicht, sich gegenseitig über `.local`-Hostnamen zu finden, ohne einen DNS-Server zu benötigen. Es ist auch bekannt als:
+- **Bonjour** (Apples Implementierung)
+- **Avahi** (Linux-Implementierung)
+- **Zeroconf** (Zero-Configuration Networking)
 
-**Why use mDNS?**
+**Warum mDNS verwenden?**
 
-Instead of accessing BaluHost via:
+Anstatt auf BaluHost über folgende Adresse zuzugreifen:
 ```
 http://192.168.1.100:5173
 ```
 
-You can use a friendly hostname:
+Können Sie einen benutzerfreundlichen Hostnamen verwenden:
 ```
 http://baluhost.local
 ```
 
-This makes access easier and eliminates the need to remember IP addresses, especially useful when:
-- The server IP changes (DHCP)
-- You have multiple devices accessing BaluHost
-- You want bookmarks/shortcuts that always work
+Dies erleichtert den Zugriff und macht es überflüssig, sich IP-Adressen zu merken. Besonders nützlich, wenn:
+- Sich die Server-IP ändert (DHCP)
+- Sie mehrere Geräte haben, die auf BaluHost zugreifen
+- Sie Lesezeichen/Verknüpfungen möchten, die immer funktionieren
 
 ---
 
-## Server Requirements
+## Server-Voraussetzungen
 
-Before configuring clients, ensure the BaluHost server has mDNS enabled:
+Bevor Sie Clients konfigurieren, stellen Sie sicher, dass mDNS auf dem BaluHost-Server aktiviert ist:
 
-1. **Server OS**: Linux (recommended for production)
-2. **Avahi installed**: Run `deploy/scripts/install-avahi.sh` or `deploy/scripts/setup-hostname.sh`
-3. **Backend configured**: `MDNS_HOSTNAME=baluhost` in `.env` (default value)
-4. **Network Discovery enabled**: Automatically starts with BaluHost backend
+1. **Server-Betriebssystem**: Linux (empfohlen für den Produktivbetrieb)
+2. **Avahi installiert**: Führen Sie `deploy/scripts/install-avahi.sh` oder `deploy/scripts/setup-hostname.sh` aus
+3. **Backend konfiguriert**: `MDNS_HOSTNAME=baluhost` in `.env` (Standardwert)
+4. **Netzwerkerkennung aktiviert**: Startet automatisch mit dem BaluHost-Backend
 
-Verify server is broadcasting mDNS:
+Überprüfen Sie, ob der Server mDNS sendet:
 ```bash
-# On the server
+# Auf dem Server
 avahi-browse -a -t | grep baluhost
 ```
 
 ---
 
-## Client Setup by Platform
+## Client-Einrichtung nach Plattform
 
 ### Mac/macOS
 
-**✅ Works automatically** - macOS has native Bonjour support built-in.
+**Funktioniert automatisch** - macOS hat native Bonjour-Unterstützung integriert.
 
-#### Verification
+#### Überprüfung
 
 ```bash
-# Test hostname resolution
+# Hostname-Auflösung testen
 ping baluhost.local
 
-# Browse available services
+# Verfügbare Dienste durchsuchen
 dns-sd -B _baluhost._tcp local.
 ```
 
-#### Access BaluHost
+#### Auf BaluHost zugreifen
 
-Open your browser and navigate to:
+Öffnen Sie Ihren Browser und navigieren Sie zu:
 ```
 http://baluhost.local
 ```
 
-In production, Nginx serves everything on port 80. No port needed in the URL.
+Im Produktivbetrieb liefert Nginx alles über Port 80 aus. Kein Port in der URL erforderlich.
 
 ---
 
 ### Linux
 
-**✅ Works automatically** - Most modern Linux distributions include Avahi by default.
+**Funktioniert automatisch** - Die meisten modernen Linux-Distributionen enthalten Avahi standardmäßig.
 
-#### Check if Avahi is installed
+#### Prüfen, ob Avahi installiert ist
 
 ```bash
-# Check if avahi-daemon is running
+# Prüfen, ob avahi-daemon läuft
 systemctl status avahi-daemon
 
-# If not installed:
+# Falls nicht installiert:
 sudo apt install avahi-daemon avahi-utils  # Debian/Ubuntu
 sudo dnf install avahi avahi-tools         # Fedora/RHEL
 sudo pacman -S avahi nss-mdns              # Arch
 ```
 
-#### Enable NSS-mDNS (if needed)
+#### NSS-mDNS aktivieren (falls nötig)
 
-Some distributions require NSS-mDNS for `.local` resolution:
+Einige Distributionen benötigen NSS-mDNS für die `.local`-Auflösung:
 
 ```bash
-# Edit /etc/nsswitch.conf
+# /etc/nsswitch.conf bearbeiten
 sudo nano /etc/nsswitch.conf
 
-# Ensure the "hosts" line includes "mdns4_minimal":
+# Stellen Sie sicher, dass die "hosts"-Zeile "mdns4_minimal" enthält:
 hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4
 
-# Restart Avahi
+# Avahi neu starten
 sudo systemctl restart avahi-daemon
 ```
 
-#### Verification
+#### Überprüfung
 
 ```bash
-# Test hostname resolution
+# Hostname-Auflösung testen
 ping baluhost.local
 
-# Browse services
+# Dienste durchsuchen
 avahi-browse -a -t | grep baluhost
 ```
 
-#### Access BaluHost
+#### Auf BaluHost zugreifen
 
 ```
 http://baluhost.local
@@ -140,231 +140,231 @@ http://baluhost.local
 
 ### Windows
 
-**❌ Does not work by default** - Windows does not include native mDNS support.
+**Funktioniert standardmäßig nicht** - Windows enthält keine native mDNS-Unterstützung.
 
-You have **three options**:
+Sie haben **drei Möglichkeiten**:
 
 ---
 
-#### Option 1: Install Bonjour Print Services (Recommended)
+#### Option 1: Bonjour Print Services installieren (Empfohlen)
 
-This is the official Apple mDNS client for Windows.
+Dies ist der offizielle Apple mDNS-Client für Windows.
 
 **Download**:
-- [Bonjour Print Services for Windows](https://support.apple.com/kb/DL999)
-- Official Apple download (free, ~2 MB)
+- [Bonjour Print Services für Windows](https://support.apple.com/kb/DL999)
+- Offizieller Apple-Download (kostenlos, ~2 MB)
 
 **Installation**:
-1. Download and run the installer
-2. Follow the installation wizard
-3. Restart your computer (recommended)
-4. Test: `ping baluhost.local` in Command Prompt
+1. Laden Sie das Installationsprogramm herunter und führen Sie es aus
+2. Folgen Sie dem Installationsassistenten
+3. Starten Sie Ihren Computer neu (empfohlen)
+4. Test: `ping baluhost.local` in der Eingabeaufforderung
 
-**Pros**:
-- ✅ Official Apple implementation
-- ✅ Works system-wide for all apps
-- ✅ Automatic, no manual configuration
+**Vorteile**:
+- Offizielle Apple-Implementierung
+- Funktioniert systemweit für alle Anwendungen
+- Automatisch, keine manuelle Konfiguration
 
-**Cons**:
-- ❌ Requires admin rights to install
-- ❌ Additional software dependency
+**Nachteile**:
+- Erfordert Administratorrechte zur Installation
+- Zusätzliche Softwareabhängigkeit
 
 ---
 
-#### Option 2: Manual Hosts File Entry (Simple Alternative)
+#### Option 2: Manueller Hosts-Datei-Eintrag (Einfache Alternative)
 
-Add a static entry to Windows hosts file to resolve `baluhost.local`.
+Fügen Sie einen statischen Eintrag in die Windows-Hosts-Datei ein, um `baluhost.local` aufzulösen.
 
-**Steps**:
+**Schritte**:
 
-1. **Get BaluHost server IP address**:
-   - On server: `ip addr show | grep "inet "`
-   - Or check router DHCP leases
-   - Example: `192.168.1.100`
+1. **BaluHost-Server-IP-Adresse ermitteln**:
+   - Auf dem Server: `ip addr show | grep "inet "`
+   - Oder DHCP-Leases im Router prüfen
+   - Beispiel: `192.168.1.100`
 
-2. **Edit hosts file as Administrator**:
+2. **Hosts-Datei als Administrator bearbeiten**:
    ```powershell
-   # Open Notepad as Administrator
+   # Notepad als Administrator öffnen
    notepad C:\Windows\System32\drivers\etc\hosts
    ```
 
-3. **Add entry**:
+3. **Eintrag hinzufügen**:
    ```
-   # BaluHost mDNS hostname
+   # BaluHost mDNS Hostname
    192.168.1.100  baluhost baluhost.local
    ```
 
-4. **Save and close**
+4. **Speichern und schließen**
 
-5. **Test**:
+5. **Testen**:
    ```powershell
    ping baluhost
    ping baluhost.local
    ```
 
-**Pros**:
-- ✅ No additional software needed
-- ✅ Fast and simple
-- ✅ Works immediately
+**Vorteile**:
+- Keine zusätzliche Software erforderlich
+- Schnell und einfach
+- Funktioniert sofort
 
-**Cons**:
-- ❌ Manual update needed if server IP changes
-- ❌ Requires admin rights to edit
-- ❌ Must be configured on each Windows PC
+**Nachteile**:
+- Manuelle Aktualisierung nötig, wenn sich die Server-IP ändert
+- Erfordert Administratorrechte zum Bearbeiten
+- Muss auf jedem Windows-PC konfiguriert werden
 
 ---
 
-#### Option 3: Router DNS Configuration (Best for Multiple Devices)
+#### Option 3: Router-DNS-Konfiguration (Am besten für mehrere Geräte)
 
-Configure your router to assign a hostname to the BaluHost server.
+Konfigurieren Sie Ihren Router, um dem BaluHost-Server einen Hostnamen zuzuweisen.
 
-**Steps** (varies by router model):
+**Schritte** (variiert je nach Router-Modell):
 
-1. **Access router admin panel**:
-   - Common addresses: `192.168.1.1`, `192.168.0.1`, `192.168.178.1`
+1. **Router-Administrationsoberfläche aufrufen**:
+   - Häufige Adressen: `192.168.1.1`, `192.168.0.1`, `192.168.178.1`
 
-2. **Find DHCP Settings** or **Static Leases**
+2. **DHCP-Einstellungen** oder **Statische Leases** finden
 
-3. **Create DHCP Reservation**:
-   - MAC Address: (BaluHost server's network card MAC)
-   - IP Address: `192.168.1.100` (choose a static IP)
+3. **DHCP-Reservierung erstellen**:
+   - MAC-Adresse: (MAC-Adresse der Netzwerkkarte des BaluHost-Servers)
+   - IP-Adresse: `192.168.1.100` (wählen Sie eine statische IP)
    - Hostname: `baluhost`
 
-4. **Save and restart router** (if required)
+4. **Speichern und Router neu starten** (falls erforderlich)
 
-5. **Test from Windows**:
+5. **Von Windows aus testen**:
    ```powershell
    ping baluhost
    ```
 
-**Pros**:
-- ✅ Works for all devices on the network automatically
-- ✅ No client-side configuration needed
-- ✅ IP remains static
+**Vorteile**:
+- Funktioniert automatisch für alle Geräte im Netzwerk
+- Keine clientseitige Konfiguration erforderlich
+- IP bleibt statisch
 
-**Cons**:
-- ❌ Router-specific configuration
-- ❌ Requires router admin access
-- ❌ May not support `.local` suffix (depends on router)
+**Nachteile**:
+- Routerspezifische Konfiguration
+- Erfordert Router-Administratorzugang
+- Unterstützt möglicherweise nicht das `.local`-Suffix (routerabhängig)
 
 ---
 
 ### iOS (iPhone/iPad)
 
-**✅ Works automatically** - iOS has native Bonjour support.
+**Funktioniert automatisch** - iOS hat native Bonjour-Unterstützung.
 
-#### Access BaluHost
+#### Auf BaluHost zugreifen
 
-1. Open Safari (or any browser)
-2. Navigate to: `http://baluhost.local`
-3. Bookmark for easy access
+1. Öffnen Sie Safari (oder einen anderen Browser)
+2. Navigieren Sie zu: `http://baluhost.local`
+3. Lesezeichen setzen für einfachen Zugriff
 
-#### Verification
+#### Überprüfung
 
-You can use network utility apps to verify mDNS services:
-- [Discovery - DNS-SD Browser](https://apps.apple.com/app/discovery-dns-sd-browser/id1381004916) (Free)
+Sie können Netzwerk-Utility-Apps verwenden, um mDNS-Dienste zu überprüfen:
+- [Discovery - DNS-SD Browser](https://apps.apple.com/app/discovery-dns-sd-browser/id1381004916) (Kostenlos)
 
-**Note**: The BaluHost mobile app includes automatic server discovery and does not require manual hostname configuration.
+**Hinweis**: Die BaluHost-Mobile-App enthält eine automatische Servererkennung und erfordert keine manuelle Hostname-Konfiguration.
 
 ---
 
 ### Android
 
-**⚠️ Varies by version and manufacturer**
+**Variiert je nach Version und Hersteller**
 
-- **Android 5.0 (Lollipop) and later**: Generally supports mDNS
-- **Older versions**: May not support `.local` resolution
+- **Android 5.0 (Lollipop) und höher**: Unterstützt mDNS im Allgemeinen
+- **Ältere Versionen**: Unterstützen möglicherweise keine `.local`-Auflösung
 
-#### Test Support
+#### Unterstützung testen
 
-1. **Install network utilities app**:
-   - [Network Tools](https://play.google.com/store/apps/details?id=net.he.networktools) (Free)
-   - [Network Discovery](https://play.google.com/store/apps/details?id=info.lamatricexiste.network) (Free)
+1. **Netzwerk-Utilities-App installieren**:
+   - [Network Tools](https://play.google.com/store/apps/details?id=net.he.networktools) (Kostenlos)
+   - [Network Discovery](https://play.google.com/store/apps/details?id=info.lamatricexiste.network) (Kostenlos)
 
-2. **Try ping test**:
+2. **Ping-Test versuchen**:
    ```
    ping baluhost.local
    ```
 
-3. **If it works**: Use `http://baluhost.local` in browser
+3. **Falls es funktioniert**: Verwenden Sie `http://baluhost.local` im Browser
 
-4. **If it doesn't work**: Use IP address or configure via router DNS
+4. **Falls es nicht funktioniert**: Verwenden Sie die IP-Adresse oder konfigurieren Sie über Router-DNS
 
-#### Alternative: Use IP Address
+#### Alternative: IP-Adresse verwenden
 
-BaluHost mobile app allows manual server entry via IP:
+Die BaluHost-Mobile-App ermöglicht die manuelle Servereingabe per IP:
 ```
 http://192.168.1.100
 ```
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
-### Cannot resolve `baluhost.local`
+### `baluhost.local` kann nicht aufgelöst werden
 
-**Symptoms**: `ping baluhost.local` fails with "Unknown host" or "Name not found"
+**Symptome**: `ping baluhost.local` schlägt fehl mit "Unknown host" oder "Name not found"
 
-**Solutions**:
+**Lösungen**:
 
-1. **Verify server is broadcasting**:
+1. **Überprüfen Sie, ob der Server sendet**:
    ```bash
-   # On BaluHost server
+   # Auf dem BaluHost-Server
    systemctl status avahi-daemon
    avahi-browse -a -t | grep baluhost
    ```
 
-2. **Check network connectivity**:
-   - Client and server on same network/VLAN?
-   - Firewall blocking UDP port 5353?
+2. **Netzwerkverbindung prüfen**:
+   - Sind Client und Server im selben Netzwerk/VLAN?
+   - Blockiert die Firewall UDP-Port 5353?
 
-3. **Restart Avahi on server**:
+3. **Avahi auf dem Server neu starten**:
    ```bash
    sudo systemctl restart avahi-daemon
    ```
 
-4. **Windows**: Install Bonjour or use hosts file (see above)
+4. **Windows**: Bonjour installieren oder Hosts-Datei verwenden (siehe oben)
 
-5. **Linux**: Ensure `mdns4_minimal` is in `/etc/nsswitch.conf`
+5. **Linux**: Stellen Sie sicher, dass `mdns4_minimal` in `/etc/nsswitch.conf` steht
 
-6. **Check DNS suffix**:
-   - Try without `.local`: `ping baluhost`
-   - Try with explicit suffix: `ping baluhost.local.`
+6. **DNS-Suffix prüfen**:
+   - Versuchen Sie es ohne `.local`: `ping baluhost`
+   - Versuchen Sie es mit explizitem Suffix: `ping baluhost.local.`
 
 ---
 
-### Firewall Blocking mDNS
+### Firewall blockiert mDNS
 
-**Symptoms**: Server shows service published, but clients cannot discover
+**Symptome**: Server zeigt veröffentlichten Dienst an, aber Clients können ihn nicht finden
 
-**Solution**:
+**Lösung**:
 
-**On server**:
+**Auf dem Server**:
 ```bash
-# Allow mDNS traffic (UDP port 5353)
+# mDNS-Verkehr erlauben (UDP-Port 5353)
 sudo ufw allow 5353/udp
-# OR
+# ODER
 sudo firewall-cmd --permanent --add-service=mdns
 sudo firewall-cmd --reload
 ```
 
-**On Windows client**:
+**Auf dem Windows-Client**:
 ```powershell
-# Allow mDNS in Windows Firewall
+# mDNS in der Windows-Firewall erlauben
 New-NetFirewallRule -DisplayName "mDNS (UDP-In)" -Direction Inbound -Protocol UDP -LocalPort 5353 -Action Allow
 ```
 
 ---
 
-### Multiple BaluHost Servers on Network
+### Mehrere BaluHost-Server im Netzwerk
 
-**Symptoms**: Confusion when multiple servers broadcast `baluhost.local`
+**Symptome**: Verwechslung, wenn mehrere Server `baluhost.local` senden
 
-**Solution**:
+**Lösung**:
 
-Configure unique hostnames per server:
+Konfigurieren Sie eindeutige Hostnamen pro Server:
 
-1. **Edit `.env` on each server**:
+1. **`.env` auf jedem Server bearbeiten**:
    ```bash
    # Server 1
    MDNS_HOSTNAME=baluhost1
@@ -373,12 +373,12 @@ Configure unique hostnames per server:
    MDNS_HOSTNAME=baluhost2
    ```
 
-2. **Restart backend**:
+2. **Backend neu starten**:
    ```bash
    systemctl restart baluhost-backend
    ```
 
-3. **Access**:
+3. **Zugriff**:
    ```
    http://baluhost1.local
    http://baluhost2.local
@@ -386,138 +386,138 @@ Configure unique hostnames per server:
 
 ---
 
-### Slow Hostname Resolution
+### Langsame Hostname-Auflösung
 
-**Symptoms**: `ping baluhost.local` takes 5-10 seconds to resolve
+**Symptome**: `ping baluhost.local` braucht 5-10 Sekunden zur Auflösung
 
-**Cause**: DNS server timeout before falling back to mDNS
+**Ursache**: DNS-Server-Timeout bevor auf mDNS zurückgegriffen wird
 
-**Solution**:
+**Lösung**:
 
-**Linux**: Prioritize mDNS in `/etc/nsswitch.conf`:
+**Linux**: mDNS in `/etc/nsswitch.conf` priorisieren:
 ```
-# Before
+# Vorher
 hosts: files dns mdns4
 
-# After (prioritize mDNS)
+# Nachher (mDNS priorisieren)
 hosts: files mdns4_minimal [NOTFOUND=return] dns mdns4
 ```
 
-**Windows**: Use hosts file for instant resolution (see Option 2 above)
+**Windows**: Hosts-Datei für sofortige Auflösung verwenden (siehe Option 2 oben)
 
 ---
 
-## Testing mDNS Resolution
+## mDNS-Auflösung testen
 
-### Server-Side Tests
+### Serverseitige Tests
 
 ```bash
-# 1. Check Avahi daemon status
+# 1. Avahi-Daemon-Status prüfen
 systemctl status avahi-daemon
 
-# 2. List published services
+# 2. Veröffentlichte Dienste auflisten
 avahi-browse -a -t -r
 
-# 3. Resolve own hostname
+# 3. Eigenen Hostnamen auflösen
 avahi-resolve -n baluhost.local
 
-# 4. Check mDNS traffic (requires tcpdump)
+# 4. mDNS-Verkehr prüfen (erfordert tcpdump)
 sudo tcpdump -i any port 5353
 ```
 
-### Client-Side Tests
+### Clientseitige Tests
 
 **Mac/Linux**:
 ```bash
-# Ping test
+# Ping-Test
 ping -c 4 baluhost.local
 
-# DNS lookup
+# DNS-Abfrage
 nslookup baluhost.local
 dig baluhost.local
 
-# Avahi browse (Linux only)
+# Avahi durchsuchen (nur Linux)
 avahi-browse -r _baluhost._tcp
 ```
 
-**Windows** (with Bonjour installed):
+**Windows** (mit installiertem Bonjour):
 ```powershell
-# Ping test
+# Ping-Test
 ping baluhost.local
 
-# DNS lookup
+# DNS-Abfrage
 nslookup baluhost.local
 ```
 
 ---
 
-## Advanced: Custom mDNS Configuration
+## Erweitert: Benutzerdefinierte mDNS-Konfiguration
 
-### Change mDNS Hostname
+### mDNS-Hostname ändern
 
-Edit backend configuration:
+Backend-Konfiguration bearbeiten:
 
-**Option 1: Environment variable**:
+**Option 1: Umgebungsvariable**:
 ```bash
 export MDNS_HOSTNAME=mynas
 ```
 
-**Option 2: `.env` file**:
+**Option 2: `.env`-Datei**:
 ```env
 MDNS_HOSTNAME=mynas
 ```
 
-**Option 3: Server-wide (via Avahi)**:
+**Option 3: Systemweit (über Avahi)**:
 ```bash
-# Edit Avahi config
+# Avahi-Konfiguration bearbeiten
 sudo nano /etc/avahi/avahi-daemon.conf
 
-# Set hostname
+# Hostname setzen
 [server]
 host-name=mynas
 ```
 
-Restart services:
+Dienste neu starten:
 ```bash
 sudo systemctl restart avahi-daemon
-# Restart BaluHost backend
+# BaluHost-Backend neu starten
 ```
 
 ---
 
-## Summary
+## Zusammenfassung
 
-| Platform | mDNS Support | Action Required |
-|----------|-------------|-----------------|
-| **macOS** | ✅ Native (Bonjour) | None - works automatically |
-| **Linux** | ✅ Native (Avahi) | Ensure avahi-daemon is running |
-| **Windows** | ❌ Not included | Install Bonjour or use hosts file |
-| **iOS** | ✅ Native (Bonjour) | None - works automatically |
-| **Android** | ⚠️ Varies | Test on your device, fallback to IP |
-
----
-
-## Related Documentation
-
-- [DEPLOYMENT.md](./DEPLOYMENT.md) - Production deployment with Nginx
-- [../deploy/scripts/install-avahi.sh](../deploy/scripts/install-avahi.sh) - Server-side Avahi installation
-- [../deploy/scripts/setup-hostname.sh](../deploy/scripts/setup-hostname.sh) - Complete hostname setup script
+| Plattform | mDNS-Unterstützung | Erforderliche Aktion |
+|-----------|--------------------|-----------------------|
+| **macOS** | Nativ (Bonjour) | Keine - funktioniert automatisch |
+| **Linux** | Nativ (Avahi) | Sicherstellen, dass avahi-daemon läuft |
+| **Windows** | Nicht enthalten | Bonjour installieren oder Hosts-Datei verwenden |
+| **iOS** | Nativ (Bonjour) | Keine - funktioniert automatisch |
+| **Android** | Variiert | Auf Ihrem Gerät testen, Fallback auf IP |
 
 ---
 
-## Support
+## Verwandte Dokumentation
 
-If you encounter issues with mDNS discovery:
-
-1. Check this troubleshooting guide first
-2. Verify server-side mDNS is broadcasting (`avahi-browse -a -t`)
-3. Test from a Mac/Linux device (known working mDNS support)
-4. Open an issue on GitHub with:
-   - Client OS and version
-   - Output of `ping baluhost.local`
-   - Server-side `avahi-browse` output
+- [DEPLOYMENT.md](./DEPLOYMENT.md) - Produktivbereitstellung mit Nginx
+- [../deploy/scripts/install-avahi.sh](../deploy/scripts/install-avahi.sh) - Serverseitige Avahi-Installation
+- [../deploy/scripts/setup-hostname.sh](../deploy/scripts/setup-hostname.sh) - Vollständiges Hostname-Setup-Skript
 
 ---
 
-**Last Updated**: April 2026
-**BaluHost Version**: 1.23.0
+## Hilfe
+
+Falls Sie Probleme mit der mDNS-Erkennung haben:
+
+1. Überprüfen Sie zuerst diese Fehlerbehebungsanleitung
+2. Stellen Sie sicher, dass der Server mDNS sendet (`avahi-browse -a -t`)
+3. Testen Sie von einem Mac/Linux-Gerät aus (bekannte mDNS-Unterstützung)
+4. Erstellen Sie ein Issue auf GitHub mit:
+   - Client-Betriebssystem und Version
+   - Ausgabe von `ping baluhost.local`
+   - Serverseitige `avahi-browse`-Ausgabe
+
+---
+
+**Zuletzt aktualisiert**: April 2026
+**BaluHost-Version**: 1.23.0

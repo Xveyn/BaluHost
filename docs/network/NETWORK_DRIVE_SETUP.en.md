@@ -1,140 +1,140 @@
-# Netzlaufwerk-Zugriff auf BaluHost NAS
+# Network Drive Access for BaluHost NAS
 
-## Übersicht
+## Overview
 
-Dieses Dokument beschreibt, wie du auf das BaluHost RAID-Storage als Netzlaufwerk zugreifen kannst - sowohl im Dev-Mode (Windows) als auch in der Live-Version (Linux).
+This document describes how to access the BaluHost RAID storage as a network drive -- both in dev mode (Windows) and in the production version (Linux).
 
 ---
 
-## 🖥️ Dev-Mode (Windows)
+## Dev Mode (Windows)
 
-Im Dev-Mode liegt der Storage als normales Verzeichnis vor:
-- **Pfad:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
-- **Größe:** 5 GB (simuliert)
+In dev mode, the storage is a regular local directory:
+- **Path:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
+- **Size:** 5 GB (simulated)
 
-### Methode 1: Direkter Zugriff (Einfachste Lösung)
+### Method 1: Direct Access (Simplest Solution)
 
-Da der Dev-Storage ein lokales Verzeichnis ist, kannst du direkt darauf zugreifen:
+Since the dev storage is a local directory, you can access it directly:
 
-1. **Windows Explorer öffnen**
-2. **Pfad eingeben:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
-3. **Favoriten hinzufügen** für schnellen Zugriff
+1. **Open Windows Explorer**
+2. **Enter path:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
+3. **Add to favorites** for quick access
 
-### Methode 2: Als Netzlaufwerk mounten (Empfohlen)
+### Method 2: Mount as Network Drive (Recommended)
 
-Windows kann auch lokale Ordner als Netzlaufwerk einbinden:
+Windows can also mount local folders as network drives:
 
-#### Option A: Per GUI (Windows Explorer)
+#### Option A: Via GUI (Windows Explorer)
 
 ```powershell
-# 1. Als Administrator ausführen
-# 2. Symbolischen Link erstellen (einmalig)
+# 1. Run as administrator
+# 2. Create symbolic link (one-time)
 New-Item -ItemType Junction -Path "C:\NAS" -Target "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
-# 3. Netzlaufwerk verbinden
-# Rechtsklick auf "Dieser PC" → "Netzlaufwerk verbinden"
-# Buchstabe: Z:
-# Ordner: \\localhost\C$\NAS
+# 3. Map network drive
+# Right-click "This PC" -> "Map network drive"
+# Letter: Z:
+# Folder: \\localhost\C$\NAS
 ```
 
-#### Option B: Per PowerShell (Automatisiert)
+#### Option B: Via PowerShell (Automated)
 
 ```powershell
-# Als Administrator ausführen
+# Run as administrator
 $devStoragePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 $driveLetter = "Z:"
 
-# Prüfe ob Pfad existiert
+# Check if path exists
 if (Test-Path $devStoragePath) {
-    # Entferne altes Mapping falls vorhanden
+    # Remove old mapping if present
     if (Test-Path $driveLetter) {
         net use $driveLetter /delete /y
     }
     
-    # Erstelle symbolischen Link
+    # Create symbolic link
     $linkPath = "C:\BaluHost-NAS"
     if (-not (Test-Path $linkPath)) {
         New-Item -ItemType Junction -Path $linkPath -Target $devStoragePath
     }
     
-    # Mappe als Netzlaufwerk
+    # Map as network drive
     subst $driveLetter $devStoragePath
     
-    Write-Host "✅ Netzlaufwerk $driveLetter erstellt!"
-    Write-Host "   Pfad: $devStoragePath"
+    Write-Host "Network drive $driveLetter created!"
+    Write-Host "   Path: $devStoragePath"
     explorer $driveLetter
 } else {
-    Write-Host "❌ Dev-Storage Pfad nicht gefunden: $devStoragePath"
+    Write-Host "Dev storage path not found: $devStoragePath"
 }
 ```
 
-#### Option C: Per SMB-Freigabe (Wie in Produktion)
+#### Option C: Via SMB Share (Like Production)
 
-Wenn du das Verhalten der Live-Version testen möchtest:
+If you want to test the behavior of the production version:
 
 ```powershell
-# 1. Windows SMB-Freigabe erstellen
-# Als Administrator PowerShell öffnen:
+# 1. Create Windows SMB share
+# Open PowerShell as administrator:
 
 $shareName = "BaluHostNAS"
 $sharePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
-# Freigabe erstellen
+# Create share
 New-SmbShare -Name $shareName -Path $sharePath -FullAccess "Everyone"
 
-# Zugriff gewähren
+# Grant access
 Grant-SmbShareAccess -Name $shareName -AccountName "Everyone" -AccessRight Full -Force
 
-# 2. Netzlaufwerk verbinden
+# 2. Map network drive
 net use Z: \\localhost\BaluHostNAS
 
-Write-Host "✅ SMB-Freigabe erstellt und gemountet als Z:"
+Write-Host "SMB share created and mounted as Z:"
 ```
 
-**Freigabe wieder entfernen:**
+**Remove share:**
 ```powershell
 Remove-SmbShare -Name "BaluHostNAS" -Force
 ```
 
 ---
 
-## 🐧 Live-Version (Linux mit RAID)
+## Production (Linux with RAID)
 
-In der Produktionsumgebung wird das RAID-Array über Samba (SMB/CIFS) freigegeben.
+In the production environment, the RAID array is shared via Samba (SMB/CIFS).
 
-### Server-Konfiguration (Linux NAS)
+### Server Configuration (Linux NAS)
 
-#### 1. RAID-Array mounten
+#### 1. Mount RAID Array
 
 ```bash
-# RAID-Array erstellen (falls noch nicht vorhanden)
+# Create RAID array (if not already present)
 sudo mdadm --create /dev/md0 --level=1 --raid-devices=2 /dev/sda1 /dev/sdb1
 
-# Dateisystem erstellen
+# Create filesystem
 sudo mkfs.ext4 /dev/md0
 
-# Mount-Point erstellen
+# Create mount point
 sudo mkdir -p /mnt/baluhost-storage
 
-# RAID mounten
+# Mount RAID
 sudo mount /dev/md0 /mnt/baluhost-storage
 
-# Permanent in /etc/fstab eintragen
+# Add permanent entry to /etc/fstab
 echo "/dev/md0 /mnt/baluhost-storage ext4 defaults 0 2" | sudo tee -a /etc/fstab
 ```
 
-#### 2. Samba installieren und konfigurieren
+#### 2. Install and Configure Samba
 
 ```bash
-# Samba installieren
+# Install Samba
 sudo apt update
 sudo apt install samba samba-common-bin -y
 
-# Konfiguration bearbeiten
+# Edit configuration
 sudo nano /etc/samba/smb.conf
 ```
 
-**Samba-Konfiguration (`/etc/samba/smb.conf`):**
+**Samba configuration (`/etc/samba/smb.conf`):**
 
 ```ini
 [global]
@@ -144,7 +144,7 @@ sudo nano /etc/samba/smb.conf
    map to guest = bad user
    dns proxy = no
    
-   # Performance-Optimierungen
+   # Performance optimizations
    socket options = TCP_NODELAY IPTOS_LOWDELAY SO_RCVBUF=524288 SO_SNDBUF=524288
    read raw = yes
    write raw = yes
@@ -170,77 +170,77 @@ sudo nano /etc/samba/smb.conf
    recycle:versions = yes
 ```
 
-#### 3. Benutzer einrichten
+#### 3. Set Up Users
 
 ```bash
-# System-Benutzer erstellen
+# Create system user
 sudo useradd -m -s /bin/bash baluhost
 sudo passwd baluhost
 
-# Samba-Benutzer erstellen
+# Create Samba user
 sudo smbpasswd -a baluhost
 
-# Berechtigungen setzen
+# Set permissions
 sudo chown -R baluhost:baluhost /mnt/baluhost-storage
 sudo chmod -R 775 /mnt/baluhost-storage
 
-# Samba neu starten
+# Restart Samba
 sudo systemctl restart smbd
 sudo systemctl enable smbd
 ```
 
-#### 4. Firewall konfigurieren
+#### 4. Configure Firewall
 
 ```bash
 # UFW (Ubuntu Firewall)
 sudo ufw allow samba
 
-# Oder spezifische Ports
+# Or specific ports
 sudo ufw allow 445/tcp
 sudo ufw allow 139/tcp
 sudo ufw allow 138/udp
 sudo ufw allow 137/udp
 ```
 
-### Client-Konfiguration (Windows)
+### Client Configuration (Windows)
 
-#### Methode 1: Windows Explorer GUI
+#### Method 1: Windows Explorer GUI
 
-1. **Windows Explorer öffnen**
-2. **Rechtsklick auf "Dieser PC"** → "Netzlaufwerk verbinden"
-3. **Laufwerksbuchstabe:** `Z:`
-4. **Ordner:** `\\<NAS-IP-ADRESSE>\BaluHostStorage`
-   - Beispiel: `\\192.168.1.100\BaluHostStorage`
-5. **"Verbindung mit anderen Anmeldeinformationen herstellen"** aktivieren
-6. **Anmeldedaten eingeben:**
-   - Benutzername: `baluhost`
-   - Passwort: `<dein-passwort>`
-7. **"Anmeldedaten speichern"** aktivieren
-8. **"Fertig stellen"** klicken
+1. **Open Windows Explorer**
+2. **Right-click "This PC"** -> "Map network drive"
+3. **Drive letter:** `Z:`
+4. **Folder:** `\\<NAS-IP-ADDRESS>\BaluHostStorage`
+   - Example: `\\192.168.1.100\BaluHostStorage`
+5. **Check "Connect using different credentials"**
+6. **Enter credentials:**
+   - Username: `baluhost`
+   - Password: `<your-password>`
+7. **Check "Remember my credentials"**
+8. **Click "Finish"**
 
-#### Methode 2: PowerShell/CMD
+#### Method 2: PowerShell/CMD
 
 ```powershell
-# Netzlaufwerk verbinden
-$nasIP = "192.168.1.100"  # Deine NAS IP-Adresse
+# Map network drive
+$nasIP = "192.168.1.100"  # Your NAS IP address
 $shareName = "BaluHostStorage"
 $driveLetter = "Z:"
 $username = "baluhost"
-$password = "dein-passwort"
+$password = "your-password"
 
-# Mit Anmeldedaten
+# With credentials
 net use $driveLetter \\$nasIP\$shareName /user:$username $password /persistent:yes
 
-# Oder mit Abfrage
+# Or with interactive prompt
 net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost /persistent:yes
-# Passwort wird interaktiv abgefragt
+# Password will be prompted interactively
 
-Write-Host "✅ Netzlaufwerk Z: verbunden!"
+Write-Host "Network drive Z: connected!"
 ```
 
-#### Methode 3: Automatisches Mapping beim Login
+#### Method 3: Automatic Mapping on Login
 
-Erstelle ein PowerShell-Script `mount-baluhost-nas.ps1`:
+Create a PowerShell script `mount-baluhost-nas.ps1`:
 
 ```powershell
 # mount-baluhost-nas.ps1
@@ -249,35 +249,35 @@ $shareName = "BaluHostStorage"
 $driveLetter = "Z:"
 $username = "baluhost"
 
-# Prüfe ob bereits verbunden
+# Check if already connected
 if (Test-Path $driveLetter) {
-    Write-Host "✅ Netzlaufwerk $driveLetter bereits verbunden"
+    Write-Host "Network drive $driveLetter already connected"
     exit 0
 }
 
-# Verbinde Netzlaufwerk
+# Connect network drive
 try {
     net use $driveLetter "\\$nasIP\$shareName" /user:$username /persistent:yes
-    Write-Host "✅ Netzlaufwerk $driveLetter erfolgreich verbunden!"
+    Write-Host "Network drive $driveLetter connected successfully!"
 } catch {
-    Write-Host "❌ Fehler beim Verbinden: $_"
+    Write-Host "Error connecting: $_"
     exit 1
 }
 ```
 
-**Im Windows Task Scheduler hinzufügen:**
-1. Task Scheduler öffnen
-2. "Aufgabe erstellen"
-3. Trigger: "Bei Anmeldung"
-4. Aktion: PowerShell-Script ausführen
+**Add to Windows Task Scheduler:**
+1. Open Task Scheduler
+2. "Create Task"
+3. Trigger: "At log on"
+4. Action: Run PowerShell script
 
 ---
 
-## 🔧 Integration in BaluHost Backend
+## BaluHost Backend Integration
 
-Um den Netzwerk-Zugriff in die Anwendung zu integrieren:
+To integrate network access into the application:
 
-### 1. API-Endpunkt für Netzwerk-Info
+### 1. API Endpoint for Network Info
 
 ```python
 # backend/app/api/routes/system.py
@@ -294,7 +294,7 @@ async def get_network_share_info(
             "mode": "dev",
             "share_type": "local",
             "path": os.path.abspath(settings.nas_storage_path),
-            "instructions": "Verwende lokalen Pfad oder erstelle SMB-Freigabe für Tests"
+            "instructions": "Use local path or create SMB share for testing"
         }
     else:
         hostname = socket.gethostname()
@@ -306,24 +306,24 @@ async def get_network_share_info(
             "server": ip_address,
             "share_name": "BaluHostStorage",
             "mount_path": f"\\\\{ip_address}\\BaluHostStorage",
-            "instructions": "Netzlaufwerk über Windows Explorer verbinden"
+            "instructions": "Connect network drive via Windows Explorer"
         }
 ```
 
-### 2. Frontend-Integration (Anzeige der Mount-Info)
+### 2. Frontend Integration (Display Mount Info)
 
-Zeige in der UI (z.B. Dashboard oder Settings) die Netzwerk-Informationen an.
+Display network information in the UI (e.g., Dashboard or Settings).
 
 ---
 
-## 📋 Schnell-Setup Scripts
+## Quick Setup Scripts
 
-### Dev-Mode: Automatisches Mount-Script
+### Dev Mode: Automatic Mount Script
 
 **`scripts/mount-dev-storage.ps1`:**
 
 ```powershell
-# Automatisches Mounting des Dev-Storage als Netzlaufwerk
+# Automatic mounting of dev storage as network drive
 param(
     [string]$DriveLetter = "Z:",
     [switch]$UseSMB = $false
@@ -331,170 +331,170 @@ param(
 
 $devStoragePath = "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
-Write-Host "🚀 BaluHost Dev-Storage Mounting..."
-Write-Host "   Pfad: $devStoragePath"
-Write-Host "   Laufwerk: $DriveLetter"
+Write-Host "BaluHost Dev Storage Mounting..."
+Write-Host "   Path: $devStoragePath"
+Write-Host "   Drive: $DriveLetter"
 
-# Prüfe ob Pfad existiert
+# Check if path exists
 if (-not (Test-Path $devStoragePath)) {
-    Write-Host "❌ Dev-Storage nicht gefunden!"
+    Write-Host "Dev storage not found!"
     exit 1
 }
 
-# Entferne existierendes Mapping
+# Remove existing mapping
 if (Test-Path $DriveLetter) {
-    Write-Host "⚠️  Laufwerk $DriveLetter bereits vorhanden - entferne..."
+    Write-Host "Drive $DriveLetter already exists - removing..."
     subst $DriveLetter /d
 }
 
 if ($UseSMB) {
-    # Methode 1: SMB-Freigabe (wie in Produktion)
+    # Method 1: SMB share (like production)
     $shareName = "BaluHostNAS-Dev"
     
-    # Erstelle Freigabe
+    # Create share
     try {
         New-SmbShare -Name $shareName -Path $devStoragePath -FullAccess "Everyone" -ErrorAction Stop
         Grant-SmbShareAccess -Name $shareName -AccountName "Everyone" -AccessRight Full -Force
         net use $DriveLetter "\\localhost\$shareName"
-        Write-Host "✅ SMB-Freigabe '$shareName' erstellt und gemountet als $DriveLetter"
+        Write-Host "SMB share '$shareName' created and mounted as $DriveLetter"
     } catch {
-        Write-Host "❌ SMB-Fehler: $_"
+        Write-Host "SMB error: $_"
         exit 1
     }
 } else {
-    # Methode 2: SUBST (einfacher)
+    # Method 2: SUBST (simpler)
     subst $DriveLetter $devStoragePath
     if ($?) {
-        Write-Host "✅ Dev-Storage gemountet als $DriveLetter"
+        Write-Host "Dev storage mounted as $DriveLetter"
         explorer $DriveLetter
     } else {
-        Write-Host "❌ Fehler beim Mounten"
+        Write-Host "Error mounting"
         exit 1
     }
 }
 ```
 
-**Verwendung:**
+**Usage:**
 
 ```powershell
-# Einfaches Mounting (SUBST)
+# Simple mounting (SUBST)
 .\scripts\mount-dev-storage.ps1
 
-# Mit SMB (wie in Produktion)
+# With SMB (like production)
 .\scripts\mount-dev-storage.ps1 -UseSMB
 
-# Anderer Laufwerksbuchstabe
+# Different drive letter
 .\scripts\mount-dev-storage.ps1 -DriveLetter "Y:"
 ```
 
-### Dev-Mode: Unmount-Script
+### Dev Mode: Unmount Script
 
 **`scripts/unmount-dev-storage.ps1`:**
 
 ```powershell
 param([string]$DriveLetter = "Z:")
 
-Write-Host "🔌 Trenne Netzlaufwerk $DriveLetter..."
+Write-Host "Disconnecting network drive $DriveLetter..."
 
-# SUBST entfernen
+# Remove SUBST
 subst $DriveLetter /d 2>$null
 
-# SMB-Verbindung trennen
+# Disconnect SMB connection
 net use $DriveLetter /delete /y 2>$null
 
-# SMB-Freigabe entfernen
+# Remove SMB share
 Remove-SmbShare -Name "BaluHostNAS-Dev" -Force 2>$null
 
-Write-Host "✅ Netzlaufwerk getrennt"
+Write-Host "Network drive disconnected"
 ```
 
 ---
 
-## 🎯 Empfohlene Workflows
+## Recommended Workflows
 
-### Entwicklung (Dev-Mode)
+### Development (Dev Mode)
 
 ```powershell
-# 1. Server starten
+# 1. Start server
 python start_dev.py
 
-# 2. Dev-Storage als Netzlaufwerk mounten
+# 2. Mount dev storage as network drive
 .\scripts\mount-dev-storage.ps1
 
-# 3. Dateien per Drag & Drop in Z:\ verwalten
-# 4. Im Frontend (http://localhost:5173) arbeiten
+# 3. Manage files via drag & drop in Z:\
+# 4. Work in frontend (http://localhost:5173)
 
-# 5. Nach der Arbeit: Unmount
+# 5. After work: Unmount
 .\scripts\unmount-dev-storage.ps1
 ```
 
-### Produktion (Live NAS)
+### Production (Live NAS)
 
 ```bash
-# Server-Setup (einmalig)
-# 1. RAID erstellen und mounten
-# 2. Samba installieren und konfigurieren
-# 3. Firewall-Regeln setzen
+# Server setup (one-time)
+# 1. Create and mount RAID
+# 2. Install and configure Samba
+# 3. Set firewall rules
 
 # Client (Windows)
-# 1. Netzlaufwerk Z: verbinden
-# 2. Automatisches Mapping beim Login einrichten
+# 1. Map network drive Z:
+# 2. Set up automatic mapping on login
 ```
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
-### Windows: "Netzwerkpfad nicht gefunden"
+### Windows: "Network path not found"
 
 ```powershell
-# Prüfe SMB-Dienst
+# Check SMB service
 Get-Service LanmanWorkstation, LanmanServer | Start-Service
 
-# Prüfe Firewall
+# Check firewall
 Test-NetConnection -ComputerName 192.168.1.100 -Port 445
 
-# Aktiviere SMB1 (falls nötig, nur für alte NAS)
+# Enable SMB1 (if needed, only for legacy NAS)
 Enable-WindowsOptionalFeature -Online -FeatureName SMB1Protocol
 ```
 
-### Linux: Samba startet nicht
+### Linux: Samba won't start
 
 ```bash
-# Prüfe Konfiguration
+# Check configuration
 testparm
 
-# Logs anzeigen
+# View logs
 sudo tail -f /var/log/samba/log.smbd
 
-# Service Status
+# Service status
 sudo systemctl status smbd
 ```
 
-### Dev-Mode: Zugriff verweigert
+### Dev Mode: Access denied
 
 ```powershell
-# Als Administrator ausführen
-# Berechtigungen prüfen
+# Run as administrator
+# Check permissions
 icacls "D:\Programme (x86)\Baluhost\backend\dev-storage"
 ```
 
 ---
 
-## 📚 Zusätzliche Ressourcen
+## Additional Resources
 
-- **Samba Dokumentation:** https://www.samba.org/samba/docs/
-- **Windows Netzlaufwerke:** https://support.microsoft.com/de-de/windows/
+- **Samba Documentation:** https://www.samba.org/samba/docs/
+- **Windows Network Drives:** https://support.microsoft.com/de-de/windows/
 - **mdadm RAID:** https://raid.wiki.kernel.org/
 
 ---
 
-## ⚡ Quick Reference
+## Quick Reference
 
-| Szenario | Befehl |
-|----------|--------|
-| **Dev: Einfaches Mount** | `subst Z: "D:\Programme (x86)\Baluhost\backend\dev-storage"` |
+| Scenario | Command |
+|----------|---------|
+| **Dev: Simple Mount** | `subst Z: "D:\Programme (x86)\Baluhost\backend\dev-storage"` |
 | **Dev: Unmount** | `subst Z: /d` |
-| **Prod: Netzlaufwerk** | `net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost` |
-| **Prod: Trennen** | `net use Z: /delete` |
-| **Prod: Alle anzeigen** | `net use` |
+| **Prod: Network Drive** | `net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost` |
+| **Prod: Disconnect** | `net use Z: /delete` |
+| **Prod: Show All** | `net use` |

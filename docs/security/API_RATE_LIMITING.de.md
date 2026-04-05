@@ -1,136 +1,136 @@
-# API Rate Limiting - Implementation Documentation
+# API Rate Limiting - Implementierungsdokumentation
 
-## Overview
+## Übersicht
 
-API rate limiting has been successfully implemented using `slowapi` to protect the BaluHost NAS API from abuse and ensure fair resource allocation.
+API Rate Limiting wurde erfolgreich mit `slowapi` implementiert, um die BaluHost-NAS-API vor Missbrauch zu schützen und eine faire Ressourcenverteilung zu gewährleisten.
 
-## Implementation Details
+## Implementierungsdetails
 
-### Technology Stack
+### Technologie-Stack
 
-- **Library**: [slowapi](https://github.com/laurentS/slowapi) v0.1.9+
-- **Storage Backend**: In-memory storage (`memory://`)
-- **Identification Methods**: 
-  - IP-based for unauthenticated endpoints
-  - User-based (JWT) for authenticated endpoints
+- **Bibliothek**: [slowapi](https://github.com/laurentS/slowapi) v0.1.9+
+- **Speicher-Backend**: In-Memory-Speicher (`memory://`)
+- **Identifikationsmethoden**: 
+  - IP-basiert für nicht authentifizierte Endpoints
+  - Benutzerbasiert (JWT) für authentifizierte Endpoints
 
-### Architecture
+### Architektur
 
 ```
 ┌─────────────────────────────────────────────────────────┐
 │                     FastAPI App                         │
 │  ┌───────────────────────────────────────────────────┐  │
 │  │  Rate Limit Middleware (slowapi)                  │  │
-│  │  - Tracks requests per IP/User                    │  │
-│  │  - Returns 429 when limit exceeded                │  │
-│  │  - Adds X-RateLimit-* headers                     │  │
+│  │  - Verfolgt Requests pro IP/Benutzer              │  │
+│  │  - Gibt 429 zurück bei Überschreitung           │  │
+│  │  - Fuegt X-RateLimit-* Header hinzu               │  │
 │  └───────────────────────────────────────────────────┘  │
 │                          ↓                              │
 │  ┌───────────────────────────────────────────────────┐  │
-│  │  API Routes (with @limiter.limit decorators)      │  │
-│  │  - /api/auth/login (5/minute)                     │  │
-│  │  - /api/auth/register (3/minute)                  │  │
-│  │  - /api/files/upload (20/minute)                  │  │
-│  │  - /api/files/download (100/minute)               │  │
-│  │  - /api/shares/links (10/minute)                  │  │
+│  │  API-Routen (mit @limiter.limit Dekoratoren)      │  │
+│  │  - /api/auth/login (5/Minute)                     │  │
+│  │  - /api/auth/register (3/Minute)                  │  │
+│  │  - /api/files/upload (20/Minute)                  │  │
+│  │  - /api/files/download (100/Minute)               │  │
+│  │  - /api/shares/links (10/Minute)                  │  │
 │  └───────────────────────────────────────────────────┘  │
 └─────────────────────────────────────────────────────────┘
 ```
 
-## Rate Limit Configuration
+## Rate-Limit-Konfiguration
 
-### Authentication Endpoints (Strict Limits)
+### Authentifizierungs-Endpoints (Strenge Limits)
 
-| Endpoint | Limit | Reason |
-|----------|-------|--------|
-| `POST /api/auth/login` | 5/minute | Prevent brute force attacks |
-| `POST /api/auth/register` | 3/minute | Prevent spam registrations |
-| `POST /api/mobile/register` | 3/minute | Prevent device registration spam |
+| Endpoint | Limit | Grund |
+|----------|-------|-------|
+| `POST /api/auth/login` | 5/Minute | Brute-Force-Angriffe verhindern |
+| `POST /api/auth/register` | 3/Minute | Spam-Registrierungen verhindern |
+| `POST /api/mobile/register` | 3/Minute | Spam bei Geräteregistrierung verhindern |
 
-### File Operations (Moderate Limits)
+### Dateioperationen (Moderate Limits)
 
-| Endpoint | Limit | Reason |
-|----------|-------|--------|
-| `POST /api/files/upload` | 20/minute | Balance upload capacity |
-| `GET /api/files/download/*` | 100/minute | Allow reasonable file access |
-| `GET /api/files/list` | 60/minute | Moderate directory listing |
-| `DELETE /api/files/*` | 30/minute | Control file deletion rate |
+| Endpoint | Limit | Grund |
+|----------|-------|-------|
+| `POST /api/files/upload` | 20/Minute | Upload-Kapazitaet ausbalancieren |
+| `GET /api/files/download/*` | 100/Minute | Angemessenen Dateizugriff ermöglichen |
+| `GET /api/files/list` | 60/Minute | Moderates Verzeichnis-Listing |
+| `DELETE /api/files/*` | 30/Minute | Dateiloeschrate kontrollieren |
 
-### Share Operations (Moderate Limits)
+### Share-Operationen (Moderate Limits)
 
-| Endpoint | Limit | Reason |
-|----------|-------|--------|
-| `POST /api/shares/links` | 10/minute | Control share creation |
-| `GET /api/shares/links` | 60/minute | Allow listing shares |
-| `POST /api/shares/public/{token}/access` | 100/minute | Public share access |
+| Endpoint | Limit | Grund |
+|----------|-------|-------|
+| `POST /api/shares/links` | 10/Minute | Share-Erstellung kontrollieren |
+| `GET /api/shares/links` | 60/Minute | Auflisten von Shares ermöglichen |
+| `POST /api/shares/public/{token}/access` | 100/Minute | Öffentlicher Share-Zugriff |
 
-### System Operations (Generous Limits)
+### Systemoperationen (Großzügige Limits)
 
-| Endpoint | Limit | Reason |
-|----------|-------|--------|
-| System monitor endpoints | 120/minute | Allow frequent monitoring |
-| User operations | 30/minute | Standard CRUD operations |
-| Admin operations | 30/minute | Administrative tasks |
+| Endpoint | Limit | Grund |
+|----------|-------|-------|
+| System-Monitor-Endpoints | 120/Minute | Häufiges Monitoring ermöglichen |
+| Benutzeroperationen | 30/Minute | Standard-CRUD-Operationen |
+| Admin-Operationen | 30/Minute | Administrative Aufgaben |
 
-## Files Changed
+## Geänderte Dateien
 
-### New Files
+### Neue Dateien
 
 1. **`backend/app/core/rate_limiter.py`**
-   - Limiter initialization with memory backend
-   - Rate limit configurations (RATE_LIMITS dict)
-   - Custom exception handler for 429 responses
-   - User-based identifier function for JWT users
+   - Limiter-Initialisierung mit Memory-Backend
+   - Rate-Limit-Konfigurationen (RATE_LIMITS-Dictionary)
+   - Benutzerdefinierter Exception-Handler für 429-Antworten
+   - Benutzerbasierte Identifikationsfunktion für JWT-Benutzer
 
-### Modified Files
+### Geänderte Dateien
 
 1. **`backend/pyproject.toml`**
-   - Added `slowapi>=0.1.9,<0.2.0` dependency
+   - `slowapi>=0.1.9,<0.2.0` als Abhängigkeit hinzugefügt
 
 2. **`backend/app/main.py`**
-   - Import slowapi components
-   - Register limiter with app state
-   - Add exception handler for RateLimitExceeded
+   - Import der slowapi-Komponenten
+   - Registrierung des Limiters im App-State
+   - Exception-Handler für RateLimitExceeded hinzugefügt
 
 3. **`backend/app/api/routes/auth.py`**
-   - Added `@limiter.limit()` to login endpoint
-   - Added `@limiter.limit()` to register endpoint
-   - Added `Request` parameter to function signatures
+   - `@limiter.limit()` zum Login-Endpoint hinzugefügt
+   - `@limiter.limit()` zum Register-Endpoint hinzugefügt
+   - `Request`-Parameter zu Funktionssignaturen hinzugefügt
 
 4. **`backend/app/api/routes/files.py`**
-   - Added rate limiting to all critical file endpoints
-   - Used `user_limiter` for authenticated endpoints
-   - Added `Request` parameter to function signatures
+   - Rate Limiting zu allen kritischen Datei-Endpoints hinzugefügt
+   - `user_limiter` für authentifizierte Endpoints verwendet
+   - `Request`-Parameter zu Funktionssignaturen hinzugefügt
 
 5. **`backend/app/api/routes/shares.py`**
-   - Added rate limiting to share creation and listing
-   - Added rate limiting to public share access
-   - Added `Request` parameter to function signatures
+   - Rate Limiting für Share-Erstellung und -Auflistung hinzugefügt
+   - Rate Limiting für öffentlichen Share-Zugriff hinzugefügt
+   - `Request`-Parameter zu Funktionssignaturen hinzugefügt
 
-### Test Files
+### Testdateien
 
 1. **`backend/tests/test_rate_limiting.py`**
-   - Tests for rate limit enforcement
-   - Tests for rate limit configuration
-   - Tests for response format and headers
+   - Tests für Rate-Limit-Durchsetzung
+   - Tests für Rate-Limit-Konfiguration
+   - Tests für Antwortformat und Header
 
-## Usage
+## Verwendung
 
-### For Developers
+### Für Entwickler
 
-Apply rate limiting to a new endpoint:
+Rate Limiting auf einen neuen Endpoint anwenden:
 
 ```python
 from app.core.rate_limiter import limiter, user_limiter, get_limit
 from fastapi import Request
 
-# For unauthenticated endpoints (IP-based)
+# Für nicht authentifizierte Endpoints (IP-basiert)
 @router.post("/public-endpoint")
 @limiter.limit(get_limit("public_share"))
 async def public_endpoint(request: Request, ...):
     pass
 
-# For authenticated endpoints (User-based)
+# Für authentifizierte Endpoints (benutzerbasiert)
 @router.get("/protected-endpoint")
 @user_limiter.limit(get_limit("file_list"))
 async def protected_endpoint(
@@ -141,20 +141,20 @@ async def protected_endpoint(
     pass
 ```
 
-### Adding New Rate Limits
+### Neue Rate Limits hinzufügen
 
-Edit `backend/app/core/rate_limiter.py`:
+Bearbeiten Sie `backend/app/core/rate_limiter.py`:
 
 ```python
 RATE_LIMITS = {
-    # ... existing limits ...
-    "new_endpoint_type": "50/minute",  # 50 requests per minute
+    # ... bestehende Limits ...
+    "new_endpoint_type": "50/minute",  # 50 Requests pro Minute
 }
 ```
 
-## Response Format
+## Antwortformat
 
-### Successful Request (Within Limit)
+### Erfolgreicher Request (innerhalb des Limits)
 
 ```http
 HTTP/1.1 200 OK
@@ -163,7 +163,7 @@ X-RateLimit-Remaining: 95
 X-RateLimit-Reset: 1704283200
 ```
 
-### Rate Limit Exceeded
+### Rate Limit überschritten
 
 ```http
 HTTP/1.1 429 Too Many Requests
@@ -179,35 +179,35 @@ Content-Type: application/json
 }
 ```
 
-## Testing
+## Tests
 
-Run rate limiting tests:
+Rate-Limiting-Tests ausführen:
 
 ```bash
 cd backend
 python -m pytest tests/test_rate_limiting.py -v
 ```
 
-Test specific scenarios:
+Spezifische Szenarien testen:
 
 ```bash
-# Configuration tests
+# Konfigurationstests
 pytest tests/test_rate_limiting.py::TestRateLimitConfiguration -v
 
-# Rate limit enforcement tests
+# Rate-Limit-Durchsetzungstests
 pytest tests/test_rate_limiting.py::TestRateLimiting -v
 ```
 
-## Configuration Options
+## Konfigurationsoptionen
 
-### Memory Backend (Current)
+### Memory-Backend (aktuell)
 
-- **Pros**: No external dependencies, simple setup
-- **Cons**: Resets on server restart, not suitable for multi-instance deployments
+- **Vorteile**: Keine externen Abhängigkeiten, einfache Einrichtung
+- **Nachteile**: Wird bei Serverneustart zurückgesetzt, nicht für Multi-Instanz-Deployments geeignet
 
-### Redis Backend (Future Enhancement)
+### Redis-Backend (zukünftige Erweiterung)
 
-For production with multiple instances, consider switching to Redis:
+Für den Produktionsbetrieb mit mehreren Instanzen kann auf Redis umgestellt werden:
 
 ```python
 limiter = Limiter(
@@ -218,37 +218,37 @@ limiter = Limiter(
 )
 ```
 
-## Security Considerations
+## Sicherheitsaspekte
 
-1. **Bypass Prevention**: Rate limits are enforced at the FastAPI level before reaching business logic
-2. **Header Information**: X-RateLimit-* headers inform clients about their usage
-3. **Graceful Degradation**: 429 responses include retry-after information
-4. **User-based Tracking**: Authenticated users are tracked independently of IP
+1. **Umgehungsschutz**: Rate Limits werden auf FastAPI-Ebene durchgesetzt, bevor die Geschäftslogik erreicht wird
+2. **Header-Informationen**: X-RateLimit-*-Header informieren Clients über ihre Nutzung
+3. **Graceful Degradation**: 429-Antworten enthalten Retry-After-Informationen
+4. **Benutzerbasiertes Tracking**: Authentifizierte Benutzer werden unabhängig von der IP verfolgt
 
 ## Monitoring
 
-Monitor rate limit hits through:
+Überwachung von Rate-Limit-Treffern über:
 
-1. **Application Logs**: Check for rate limit warnings
-2. **Audit Logs**: Failed authentication attempts are logged
-3. **Metrics** (Future): Export rate limit metrics to monitoring systems
+1. **Anwendungs-Logs**: Prüfen Sie die Logs auf Rate-Limit-Warnungen
+2. **Audit-Logs**: Fehlgeschlagene Authentifizierungsversuche werden protokolliert
+3. **Metriken** (Zukunft): Export von Rate-Limit-Metriken an Monitoring-Systeme
 
-## Future Enhancements
+## Zukünftige Erweiterungen
 
-- [ ] Add Redis backend for distributed rate limiting
-- [ ] Implement per-user quotas (daily/monthly limits)
-- [ ] Add admin API to view/modify rate limits dynamically
-- [ ] Export rate limit metrics to Prometheus
-- [ ] Implement tiered rate limits based on user roles
-- [ ] Add configurable rate limits via environment variables
+- [ ] Redis-Backend für verteiltes Rate Limiting hinzufügen
+- [ ] Benutzerspezifische Kontingente implementieren (Tages-/Monatslimits)
+- [ ] Admin-API zur dynamischen Anzeige/Änderung von Rate Limits hinzufügen
+- [ ] Rate-Limit-Metriken nach Prometheus exportieren
+- [ ] Gestaffelte Rate Limits basierend auf Benutzerrollen implementieren
+- [ ] Konfigurierbare Rate Limits über Umgebungsvariablen hinzufügen
 
-## References
+## Referenzen
 
-- [slowapi Documentation](https://github.com/laurentS/slowapi)
-- [Flask-Limiter](https://flask-limiter.readthedocs.io/) (slowapi is based on this)
+- [slowapi-Dokumentation](https://github.com/laurentS/slowapi)
+- [Flask-Limiter](https://flask-limiter.readthedocs.io/) (slowapi basiert darauf)
 - [IETF Draft: RateLimit Header Fields](https://datatracker.ietf.org/doc/html/draft-ietf-httpapi-ratelimit-headers)
 
 ---
 
-**Implementation Date**: January 2, 2026  
-**Status**: ✅ Complete and Tested
+**Implementierungsdatum**: 2. Januar 2026  
+**Status**: Abgeschlossen und getestet

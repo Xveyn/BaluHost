@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
+import { BookOpen } from 'lucide-react';
 import logoMark from '../assets/baluhost-logo.png';
 import { SetupProgress } from '../components/setup/SetupProgress';
 import { SetupWelcome } from '../components/setup/SetupWelcome';
@@ -16,6 +17,7 @@ import { PiholeSetup } from '../components/setup/PiholeSetup';
 import { DesktopSyncSetup } from '../components/setup/DesktopSyncSetup';
 import { MobileAppSetup } from '../components/setup/MobileAppSetup';
 import { SetupComplete } from '../components/setup/SetupComplete';
+import { SetupManualDrawer } from '../components/setup/SetupManualDrawer';
 import { Spinner } from '../components/ui/Spinner';
 import { getSetupStatus, completeSetup } from '../api/setup';
 import { handleApiError } from '../lib/errorHandling';
@@ -73,6 +75,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   const [skippedFeatures, setSkippedFeatures] = useState<string[]>([]);
   const [initializing, setInitializing] = useState(true);
   const [finishing, setFinishing] = useState(false);
+  const [manualOpen, setManualOpen] = useState(false);
 
   // On mount: check already completed setup steps and resume accordingly
   useEffect(() => {
@@ -251,7 +254,17 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             </div>
             <h1 className="text-2xl font-semibold tracking-wide text-slate-100">BaluHost</h1>
           </div>
-          <p className="text-sm text-slate-400">Ersteinrichtung</p>
+          <div className="flex items-center justify-center gap-3">
+            <p className="text-sm text-slate-400">Ersteinrichtung</p>
+            <button
+              onClick={() => setManualOpen(true)}
+              className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/50 px-2.5 py-1 text-xs text-slate-400 transition-colors hover:border-sky-500/40 hover:text-sky-400 hover:bg-slate-800/80"
+              title="Benutzerhandbuch öffnen"
+            >
+              <BookOpen className="h-3.5 w-3.5" />
+              Handbuch
+            </button>
+          </div>
         </div>
       )}
 
@@ -377,6 +390,8 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           </div>
         </div>
       </div>
+
+      <SetupManualDrawer open={manualOpen} onClose={() => setManualOpen(false)} />
     </div>
   );
 }

@@ -1,37 +1,37 @@
-# Disk I/O Monitor - Implementierung
+# Disk I/O Monitor - Implementation
 
-## Übersicht
+## Overview
 
-Die Disk I/O Monitor Seite zeigt in Echtzeit die Lese- und Schreibaktivität aller physischen Festplatten an. Die Implementierung basiert auf `psutil` für das Backend und Recharts für die Visualisierung im Frontend.
+The Disk I/O Monitor page displays real-time read and write activity for all physical disks. The implementation is based on `psutil` for the backend and Recharts for frontend visualization.
 
-## Backend-Implementierung
+## Backend Implementation
 
 ### 1. Disk Monitor Service (`app/services/disk_monitor.py`)
 
-Der Service überwacht kontinuierlich die I/O-Aktivität aller physischen Festplatten:
+The service continuously monitors I/O activity across all physical disks:
 
 **Features:**
-- Sampling alle 1 Sekunde für Echtzeit-Monitoring
-- Speichert 120 Samples (2 Minuten Historie) pro Festplatte
-- Berechnet MB/s (Durchsatz) und IOPS (Operations per Second)
-- Filtert physische Festplatten (keine Partitionen)
-- Automatisches Logging alle 60 Sekunden
+- Sampling every 1 second for real-time monitoring
+- Stores 120 samples (2 minutes of history) per disk
+- Calculates MB/s (throughput) and IOPS (Operations per Second)
+- Filters physical disks (no partitions)
+- Automatic logging every 60 seconds
 
-**Wichtige Funktionen:**
-- `start_monitoring()`: Startet den Background-Task
-- `stop_monitoring()`: Stoppt den Background-Task
-- `get_disk_io_history()`: Gibt komplette Historie aller Disks zurück
-- `get_available_disks()`: Liste aller überwachten Disks
-- `_sample_disk_io()`: Nimmt eine Messung aller Disks vor
-- `_log_disk_activity()`: Loggt Zusammenfassung der Aktivität
+**Key Functions:**
+- `start_monitoring()`: Starts the background task
+- `stop_monitoring()`: Stops the background task
+- `get_disk_io_history()`: Returns the complete history for all disks
+- `get_available_disks()`: List of all monitored disks
+- `_sample_disk_io()`: Takes a measurement of all disks
+- `_log_disk_activity()`: Logs an activity summary
 
-**Plattform-Unterstützung:**
-- **Windows**: Erkennt `PhysicalDrive0`, `PhysicalDrive1`, etc.
-- **Linux**: Erkennt `sda`, `sdb`, `nvme0n1`, etc. (ohne Partitionsnummern)
+**Platform Support:**
+- **Windows**: Detects `PhysicalDrive0`, `PhysicalDrive1`, etc.
+- **Linux**: Detects `sda`, `sdb`, `nvme0n1`, etc. (without partition numbers)
 
-### 2. API-Endpunkt (`app/api/routes/system.py`)
+### 2. API Endpoint (`app/api/routes/system.py`)
 
-**Neuer Endpunkt:**
+**New Endpoint:**
 ```
 GET /api/system/disk-io/history
 ```
@@ -59,52 +59,52 @@ GET /api/system/disk-io/history
 
 ### 3. Schemas (`app/schemas/system.py`)
 
-Neue Pydantic-Models:
-- `DiskIOSample`: Einzelne Messung mit Timestamp, MB/s und IOPS
-- `DiskIOHistory`: Historie für eine Festplatte
-- `DiskIOResponse`: Komplette API-Response
+New Pydantic models:
+- `DiskIOSample`: Single measurement with timestamp, MB/s, and IOPS
+- `DiskIOHistory`: History for a single disk
+- `DiskIOResponse`: Complete API response
 
 ### 4. Integration (`app/main.py`)
 
-Der Disk Monitor wird beim Server-Start automatisch initialisiert:
+The Disk Monitor is automatically initialized at server startup:
 ```python
 disk_monitor.start_monitoring()  # In _lifespan
 ```
 
-## Frontend-Implementierung
+## Frontend Implementation
 
-### 1. SystemMonitor Komponente (`client/src/pages/SystemMonitor.tsx`)
+### 1. SystemMonitor Component (`client/src/pages/SystemMonitor.tsx`)
 
 **Features:**
-- Echtzeit-Diagramme mit Recharts
-- Disk-Auswahl per Button
-- Umschaltung zwischen Durchsatz (MB/s) und IOPS
-- 4 Stat-Karten: Lesen, Schreiben, Lese-IOPS, Schreib-IOPS
-- Live-Chart mit 60 Sekunden Historie
-- Auto-Update alle 2 Sekunden
+- Real-time charts with Recharts
+- Disk selection via buttons
+- Toggle between throughput (MB/s) and IOPS
+- 4 stat cards: Read, Write, Read IOPS, Write IOPS
+- Live chart with 60 seconds of history
+- Auto-update every 2 seconds
 
-**Komponenten:**
-- Disk Selector: Button-Gruppe zur Auswahl der Festplatte
-- Stats Cards: 4 Karten mit aktuellen Werten
-- Interactive Chart: LineChart mit Read/Write Linien
-- View Mode Toggle: Wechsel zwischen MB/s und IOPS Ansicht
+**Components:**
+- Disk Selector: Button group for disk selection
+- Stats Cards: 4 cards with current values
+- Interactive Chart: LineChart with Read/Write lines
+- View Mode Toggle: Switch between MB/s and IOPS view
 
-### 2. Chart-Konfiguration
+### 2. Chart Configuration
 
-**Recharts-Komponenten:**
-- `LineChart`: Haupt-Chart Container
-- `CartesianGrid`: Gitter im Hintergrund
-- `XAxis`: Zeit-Achse (HH:MM:SS Format)
-- `YAxis`: Wert-Achse mit dynamischem Label
-- `Tooltip`: Hover-Informationen
-- `Legend`: Legende für Read/Write
-- `Line`: Zwei Linien (blau für Read, grün für Write)
+**Recharts Components:**
+- `LineChart`: Main chart container
+- `CartesianGrid`: Background grid
+- `XAxis`: Time axis (HH:MM:SS format)
+- `YAxis`: Value axis with dynamic label
+- `Tooltip`: Hover information
+- `Legend`: Legend for Read/Write
+- `Line`: Two lines (blue for Read, green for Write)
 
 ## Logging
 
-### Log-Format
+### Log Format
 
-Alle 60 Sekunden wird eine Zusammenfassung geloggt:
+An activity summary is logged every 60 seconds:
 
 ```
 Disk Activity Log (last 60s):
@@ -112,15 +112,15 @@ Disk Activity Log (last 60s):
   PhysicalDrive1: Read=0.00MB/s (max 0.00), Write=0.00MB/s (max 0.00), IOPS R=0/W=0
 ```
 
-### Log-Level
+### Log Levels
 
-- `INFO`: Normale Aktivitäts-Logs, Start/Stop des Monitors
-- `DEBUG`: Detaillierte Sampling-Informationen
-- `ERROR`: Fehler beim Sampling oder in der Monitor-Loop
+- `INFO`: Normal activity logs, monitor start/stop
+- `DEBUG`: Detailed sampling information
+- `ERROR`: Errors during sampling or in the monitor loop
 
-### Log-Konfiguration
+### Log Configuration
 
-Logs erscheinen im Standard-Backend-Log. Für separate Disk-Logs:
+Logs appear in the standard backend log. For separate disk logs:
 
 ```python
 # In logging config
@@ -132,40 +132,40 @@ Logs erscheinen im Standard-Backend-Log. Für separate Disk-Logs:
 
 ## Performance
 
-### Ressourcen-Verbrauch
+### Resource Consumption
 
-- **CPU**: Minimal (~0.1% pro Sample)
-- **Memory**: ~50KB pro Disk für 120 Samples
-- **Disk I/O**: Lesen von `/proc/diskstats` (Linux) oder WMI (Windows)
+- **CPU**: Minimal (~0.1% per sample)
+- **Memory**: ~50KB per disk for 120 samples
+- **Disk I/O**: Reading from `/proc/diskstats` (Linux) or WMI (Windows)
 
-### Optimierungen
+### Optimizations
 
-1. **Sampling-Intervall**: 1 Sekunde ist optimal für Echtzeit ohne Overhead
-2. **Historie-Größe**: 120 Samples = 2 Minuten sind ausreichend für Charts
-3. **Frontend-Update**: 2 Sekunden reduziert API-Calls ohne Datenverlust
+1. **Sampling interval**: 1 second is optimal for real-time monitoring without overhead
+2. **History size**: 120 samples = 2 minutes is sufficient for charts
+3. **Frontend update**: 2 seconds reduces API calls without data loss
 
-## Plattform-Spezifika
+## Platform Specifics
 
 ### Windows
 
-- Verwendet `psutil.disk_io_counters(perdisk=True)`
-- Disk-Namen: `PhysicalDrive0`, `PhysicalDrive1`, etc.
-- Funktioniert out-of-the-box, keine Admin-Rechte nötig
+- Uses `psutil.disk_io_counters(perdisk=True)`
+- Disk names: `PhysicalDrive0`, `PhysicalDrive1`, etc.
+- Works out of the box, no administrator privileges required
 
 ### Linux
 
-- Verwendet `/proc/diskstats`
-- Disk-Namen: `sda`, `sdb`, `nvme0n1`, etc.
-- Filtert automatisch Partitionen (`sda1`, `nvme0n1p1`)
+- Uses `/proc/diskstats`
+- Disk names: `sda`, `sdb`, `nvme0n1`, etc.
+- Automatically filters partitions (`sda1`, `nvme0n1p1`)
 
 ### macOS
 
-- Begrenzte Unterstützung durch psutil
-- Disk-Namen: `disk0`, `disk1`, etc.
+- Limited support through psutil
+- Disk names: `disk0`, `disk1`, etc.
 
 ## Testing
 
-### Backend-Tests
+### Backend Tests
 
 ```bash
 # Test disk monitor service
@@ -182,25 +182,25 @@ disk_monitor.stop_monitoring()
 "
 ```
 
-### Frontend-Tests
+### Frontend Tests
 
-1. Backend starten
-2. Frontend starten
-3. Zur System Monitor Seite navigieren
-4. Verschiedene Disks auswählen
-5. Zwischen MB/s und IOPS umschalten
-6. I/O-Last erzeugen und Änderungen beobachten
+1. Start the backend
+2. Start the frontend
+3. Navigate to the System Monitor page
+4. Select different disks
+5. Switch between MB/s and IOPS
+6. Generate I/O load and observe changes
 
-### Last-Erzeugung für Tests
+### Generating Load for Tests
 
 **Windows (PowerShell):**
 ```powershell
-# Schreib-Last
+# Write load
 1..100 | ForEach-Object { 
     [System.IO.File]::WriteAllBytes("test_$_.dat", (New-Object byte[] 10MB))
 }
 
-# Lese-Last
+# Read load
 1..100 | ForEach-Object {
     Get-Content "test_$_.dat" | Out-Null
 }
@@ -208,10 +208,10 @@ disk_monitor.stop_monitoring()
 
 **Linux:**
 ```bash
-# Schreib-Last
+# Write load
 dd if=/dev/zero of=test.dat bs=1M count=1000
 
-# Lese-Last  
+# Read load  
 dd if=test.dat of=/dev/null bs=1M
 ```
 
@@ -223,58 +223,58 @@ dd if=test.dat of=/dev/null bs=1M
 
 ## Troubleshooting
 
-### Problem: Keine Disks erkannt
+### Problem: No Disks Detected
 
-**Ursache**: psutil kann keine Disk-Counter lesen
-**Lösung**: 
-- Windows: Prüfe ob `wmi` installiert ist
-- Linux: Prüfe Zugriff auf `/proc/diskstats`
-- Führe als Administrator/Root aus
+**Cause**: psutil cannot read disk counters
+**Solution**: 
+- Windows: Check if `wmi` is installed
+- Linux: Check access to `/proc/diskstats`
+- Run as administrator/root
 
-### Problem: Nur Nullen in den Werten
+### Problem: Only Zeros in Values
 
-**Ursache**: Erster Sample hat keine Referenz
-**Lösung**: Warte 2-3 Sekunden, dann werden Deltas berechnet
+**Cause**: First sample has no reference point
+**Solution**: Wait 2-3 seconds, then deltas will be calculated
 
-### Problem: Chart zeigt nichts an
+### Problem: Chart Shows Nothing
 
-**Ursache**: Frontend erhält keine Daten
-**Lösung**:
-1. Prüfe Backend-Logs auf Fehler
-2. Prüfe API-Response im Browser DevTools
-3. Stelle sicher dass Disk Monitor läuft
+**Cause**: Frontend is not receiving data
+**Solution**:
+1. Check backend logs for errors
+2. Check API response in browser DevTools
+3. Ensure the Disk Monitor is running
 
-### Problem: Hohe CPU-Last
+### Problem: High CPU Load
 
-**Ursache**: Sampling-Intervall zu kurz
-**Lösung**: Erhöhe `_SAMPLE_INTERVAL_SECONDS` in `disk_monitor.py`
+**Cause**: Sampling interval too short
+**Solution**: Increase `_SAMPLE_INTERVAL_SECONDS` in `disk_monitor.py`
 
-## Konfiguration
+## Configuration
 
-### Backend-Konfiguration
+### Backend Configuration
 
 In `app/services/disk_monitor.py`:
 
 ```python
-# Sampling-Intervall (Sekunden)
+# Sampling interval (seconds)
 _SAMPLE_INTERVAL_SECONDS = 1.0
 
-# Maximale Anzahl Samples pro Disk
+# Maximum number of samples per disk
 _MAX_SAMPLES = 120
 
-# Log-Intervall (Sekunden)
+# Log interval (seconds)
 _LOG_INTERVAL_SECONDS = 60.0
 ```
 
-### Frontend-Konfiguration
+### Frontend Configuration
 
 In `client/src/pages/SystemMonitor.tsx`:
 
 ```typescript
-// Update-Intervall (Millisekunden)
+// Update interval (milliseconds)
 const interval = setInterval(loadDiskIO, 2000);
 
-// Anzahl angezeigter Samples im Chart
+// Number of displayed samples in the chart
 const samples = disk.samples.slice(-60);
 ```
 
@@ -282,20 +282,20 @@ const samples = disk.samples.slice(-60);
 
 ### Backend
 
-- `psutil >= 5.9.0`: Für Disk I/O Counter
-- `asyncio`: Für Background-Task
-- `FastAPI`: Für API-Endpunkt
-- `Pydantic`: Für Schemas
+- `psutil >= 5.9.0`: For disk I/O counters
+- `asyncio`: For background task
+- `FastAPI`: For API endpoint
+- `Pydantic`: For schemas
 
 ### Frontend
 
-- `recharts >= 2.0.0`: Chart-Bibliothek
-- `react >= 18.2.0`: UI-Framework
+- `recharts >= 2.0.0`: Chart library
+- `react >= 18.2.0`: UI framework
 - `tailwindcss`: Styling
 
-## Lizenz & Credits
+## License and Credits
 
-Basiert auf:
+Based on:
 - psutil: https://github.com/giampaolo/psutil
 - Recharts: https://recharts.org
-- Windows Ressourcenmonitor als UI-Inspiration
+- Windows Resource Monitor as UI inspiration

@@ -1,42 +1,42 @@
-# API Rate Limiting - Quick Start Guide
+# API Rate Limiting - Schnellstart-Anleitung
 
-## 🚀 What's Implemented
+## Was implementiert wurde
 
-API rate limiting is now active to protect against:
-- ✅ Brute force login attacks (5 attempts/minute)
-- ✅ Spam registrations (3/minute)
-- ✅ Upload flooding (20/minute)
-- ✅ Share link abuse (10/minute)
-- ✅ General API abuse (custom limits per endpoint type)
+API Rate Limiting ist jetzt aktiv und schützt vor:
+- Brute-Force-Login-Angriffen (5 Versuche/Minute)
+- Spam-Registrierungen (3/Minute)
+- Upload-Flooding (20/Minute)
+- Missbrauch von Share-Links (10/Minute)
+- Allgemeinem API-Missbrauch (individuelle Limits pro Endpoint-Typ)
 
-## 📋 Rate Limits Summary
+## Rate-Limits-Übersicht
 
-### Critical Security Endpoints
-- **Login**: 5 requests/minute
-- **Register**: 3 requests/minute
-- **Mobile Registration**: 3 requests/minute
+### Kritische Sicherheits-Endpoints
+- **Login**: 5 Requests/Minute
+- **Registrierung**: 3 Requests/Minute
+- **Mobile Registrierung**: 3 Requests/Minute
 
-### File Operations
-- **Upload**: 20 requests/minute
-- **Download**: 100 requests/minute
-- **List Files**: 60 requests/minute
-- **Delete**: 30 requests/minute
+### Dateioperationen
+- **Upload**: 20 Requests/Minute
+- **Download**: 100 Requests/Minute
+- **Dateien auflisten**: 60 Requests/Minute
+- **Löschen**: 30 Requests/Minute
 
-### Sharing
-- **Create Share**: 10 requests/minute
-- **List Shares**: 60 requests/minute
-- **Public Access**: 100 requests/minute
+### Freigaben
+- **Freigabe erstellen**: 10 Requests/Minute
+- **Freigaben auflisten**: 60 Requests/Minute
+- **Öffentlicher Zugriff**: 100 Requests/Minute
 
-## 🔧 How It Works
+## Funktionsweise
 
-1. **IP-based tracking** for unauthenticated requests
-2. **User-based tracking** for authenticated requests (via JWT)
-3. **Automatic 429 responses** when limits are exceeded
-4. **X-RateLimit-* headers** inform clients about usage
+1. **IP-basiertes Tracking** für nicht authentifizierte Requests
+2. **Benutzerbasiertes Tracking** für authentifizierte Requests (via JWT)
+3. **Automatische 429-Antworten** bei Überschreitung der Limits
+4. **X-RateLimit-*-Header** informieren Clients über die Nutzung
 
-## 📖 For Frontend Developers
+## Für Frontend-Entwickler
 
-When you hit a rate limit, you'll receive:
+Wenn Sie ein Rate Limit erreichen, erhalten Sie:
 
 ```json
 HTTP/1.1 429 Too Many Requests
@@ -49,56 +49,56 @@ Retry-After: 60
 }
 ```
 
-**Recommended client behavior:**
-1. Check for `429` status code
-2. Read `Retry-After` header or `retry_after` from response
-3. Display user-friendly message: "Too many requests. Please wait {retry_after} seconds."
-4. Optionally implement automatic retry with exponential backoff
+**Empfohlenes Client-Verhalten:**
+1. Prüfen Sie auf den Statuscode `429`
+2. Lesen Sie den `Retry-After`-Header oder `retry_after` aus der Antwort
+3. Zeigen Sie eine benutzerfreundliche Nachricht an: "Zu viele Anfragen. Bitte warten Sie {retry_after} Sekunden."
+4. Implementieren Sie optional einen automatischen Retry mit exponentiellem Backoff
 
-## 🧪 Testing
+## Tests
 
 ```bash
-# Run all rate limiting tests
+# Alle Rate-Limiting-Tests ausführen
 cd backend
 python -m pytest tests/test_rate_limiting.py -v
 
-# Test configuration only
+# Nur Konfigurationstests
 pytest tests/test_rate_limiting.py::TestRateLimitConfiguration -v
 ```
 
-## 🛠️ Configuration
+## Konfiguration
 
-All rate limits are defined in `backend/app/core/rate_limiter.py`:
+Alle Rate Limits sind in `backend/app/core/rate_limiter.py` definiert:
 
 ```python
 RATE_LIMITS = {
     "auth_login": "5/minute",
     "file_upload": "20/minute",
-    # ... etc
+    # ... usw.
 }
 ```
 
-## 📊 Monitoring
+## Monitoring
 
-- Check logs for rate limit warnings
-- Audit logs track authentication failures
-- 429 responses are logged with IP/user info
+- Prüfen Sie die Logs auf Rate-Limit-Warnungen
+- Audit-Logs verfolgen fehlgeschlagene Authentifizierungsversuche
+- 429-Antworten werden mit IP-/Benutzerinformationen protokolliert
 
-## 🔒 Security Benefits
+## Sicherheitsvorteile
 
-1. **Brute Force Protection**: Login rate limits prevent password guessing
-2. **DoS Prevention**: Request limits prevent resource exhaustion
-3. **Fair Usage**: Ensures all users get equal access
-4. **Spam Prevention**: Limits prevent automated abuse
+1. **Brute-Force-Schutz**: Login-Rate-Limits verhindern Passwort-Erraten
+2. **DoS-Prävention**: Request-Limits verhindern Ressourcenerschöpfung
+3. **Faire Nutzung**: Stellt sicher, dass alle Benutzer gleichmäßigen Zugriff erhalten
+4. **Spam-Prävention**: Limits verhindern automatisierten Missbrauch
 
-## 🚀 Future Enhancements
+## Zukünftige Erweiterungen
 
-- [ ] Redis backend for multi-instance deployments
-- [ ] Per-user daily/monthly quotas
-- [ ] Admin dashboard for rate limit monitoring
-- [ ] Configurable limits via environment variables
-- [ ] Role-based rate limit tiers (premium users get higher limits)
+- [ ] Redis-Backend für Multi-Instanz-Deployments
+- [ ] Benutzerspezifische Tages-/Monatskontingente
+- [ ] Admin-Dashboard für Rate-Limit-Monitoring
+- [ ] Konfigurierbare Limits über Umgebungsvariablen
+- [ ] Rollenbasierte Rate-Limit-Stufen (Premium-Benutzer erhalten höhere Limits)
 
-## 📚 Full Documentation
+## Vollständige Dokumentation
 
-See `docs/API_RATE_LIMITING.md` for complete implementation details.
+Siehe `docs/API_RATE_LIMITING.md` für vollständige Implementierungsdetails.

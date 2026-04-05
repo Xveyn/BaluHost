@@ -1,149 +1,149 @@
-# Monitoring Quick Start
+# Monitoring-Schnellstart
 
-Production-grade monitoring for BaluHost with Prometheus and Grafana.
+Produktionsreifes Monitoring für BaluHost mit Prometheus und Grafana.
 
-## What's Included
+## Enthaltene Komponenten
 
-✅ **Prometheus**: Metrics collection & alerting (Port 9090)
-✅ **Grafana**: Visualization dashboards (Port 3001)
-✅ **Custom Metrics**: 40+ metrics at `/api/metrics`
-✅ **Pre-configured Dashboard**: System Overview
-✅ **Alert Rules**: 20+ rules for critical events
-✅ **Auto-provisioning**: Datasource & dashboards
+- **Prometheus**: Metrik-Erfassung und Alarmierung (Port 9090)
+- **Grafana**: Visualisierungs-Dashboards (Port 3001)
+- **Benutzerdefinierte Metriken**: Über 40 Metriken unter `/api/metrics`
+- **Vorkonfiguriertes Dashboard**: Systemübersicht
+- **Alarmregeln**: Über 20 Regeln für kritische Ereignisse
+- **Auto-Provisioning**: Datenquelle und Dashboards
 
 ---
 
-## Quick Start (3 Steps)
+## Schnellstart (3 Schritte)
 
-### 1. Enable Monitoring
+### 1. Monitoring aktivieren
 
 ```bash
-# Start with monitoring profile
+# Mit Monitoring-Profil starten
 docker-compose --profile monitoring up -d
 
-# Or update existing deployment
+# Oder bestehende Bereitstellung aktualisieren
 docker-compose up -d prometheus grafana
 ```
 
-### 2. Access Dashboards
+### 2. Dashboards aufrufen
 
-**Grafana** (Main UI):
+**Grafana** (Hauptoberfläche):
 - URL: http://localhost:3001
-- Login: `admin` / `admin`
+- Anmeldung: `admin` / `admin`
 - Dashboard: "BaluHost - System Overview"
 
-**Prometheus** (Metrics Engine):
+**Prometheus** (Metriken-Engine):
 - URL: http://localhost:9090
 - Targets: http://localhost:9090/targets
-- Alerts: http://localhost:9090/alerts
+- Alarme: http://localhost:9090/alerts
 
-**Raw Metrics**:
+**Rohe Metriken**:
 - URL: http://localhost:8000/api/metrics
 
-### 3. Verify
+### 3. Überprüfen
 
 ```bash
-# Check services are running
+# Prüfen, ob die Dienste laufen
 docker-compose ps prometheus grafana
 
-# Test metrics endpoint
+# Metriken-Endpunkt testen
 curl http://localhost:8000/api/metrics
 
-# Check Prometheus targets
+# Prometheus-Targets prüfen
 curl http://localhost:9090/api/v1/targets | jq
 ```
 
 ---
 
-## Key Metrics
+## Wichtige Metriken
 
 ### System
-- `baluhost_cpu_usage_percent` - CPU usage
-- `baluhost_memory_usage_percent` - Memory usage
-- `baluhost_disk_usage_percent` - Disk usage
+- `baluhost_cpu_usage_percent` - CPU-Auslastung
+- `baluhost_memory_usage_percent` - Speicherauslastung
+- `baluhost_disk_usage_percent` - Festplattenauslastung
 
 ### RAID
-- `baluhost_raid_array_status` - RAID health (1=active, 0=degraded)
-- `baluhost_raid_disk_count` - Disk count (total/active)
-- `baluhost_raid_sync_progress_percent` - Resync progress
+- `baluhost_raid_array_status` - RAID-Gesundheit (1=aktiv, 0=degradiert)
+- `baluhost_raid_disk_count` - Festplattenanzahl (gesamt/aktiv)
+- `baluhost_raid_sync_progress_percent` - Resync-Fortschritt
 
-### Disks
-- `baluhost_disk_smart_health` - SMART status (1=healthy, 0=failing)
-- `baluhost_disk_temperature_celsius` - Disk temperature
-- `baluhost_disk_power_on_hours` - Power-on hours
+### Festplatten
+- `baluhost_disk_smart_health` - SMART-Status (1=gesund, 0=fehlerhaft)
+- `baluhost_disk_temperature_celsius` - Festplattentemperatur
+- `baluhost_disk_power_on_hours` - Betriebsstunden
 
-### Application
-- `baluhost_http_requests_total` - HTTP requests
-- `baluhost_file_uploads_total` - File uploads
-- `baluhost_app_uptime_seconds` - Application uptime
-
----
-
-## Key Alerts
-
-### Critical (Immediate Action Required)
-- **CPU > 95%** for 2 minutes
-- **Memory > 95%** for 2 minutes
-- **Disk > 90%** for 5 minutes
-- **RAID array degraded**
-- **Disk SMART failing**
-- **Disk temperature > 65°C**
-- **Backend down**
-
-### Warning (Requires Attention)
-- **CPU > 85%** for 5 minutes
-- **Memory > 80%** for 5 minutes
-- **Disk > 75%** for 10 minutes
-- **Disk temperature > 55°C**
-- **HTTP error rate > 5%**
-
-View alerts: http://localhost:9090/alerts
+### Anwendung
+- `baluhost_http_requests_total` - HTTP-Anfragen
+- `baluhost_file_uploads_total` - Datei-Uploads
+- `baluhost_app_uptime_seconds` - Anwendungs-Laufzeit
 
 ---
 
-## Common Commands
+## Wichtige Alarme
 
-### Start/Stop Monitoring
+### Critical (Sofortiges Handeln erforderlich)
+- **CPU > 95%** für 2 Minuten
+- **Speicher > 95%** für 2 Minuten
+- **Festplatte > 90%** für 5 Minuten
+- **RAID-Array degradiert**
+- **Festplatte SMART fehlerhaft**
+- **Festplattentemperatur > 65°C**
+- **Backend nicht erreichbar**
+
+### Warning (Erfordert Aufmerksamkeit)
+- **CPU > 85%** für 5 Minuten
+- **Speicher > 80%** für 5 Minuten
+- **Festplatte > 75%** für 10 Minuten
+- **Festplattentemperatur > 55°C**
+- **HTTP-Fehlerrate > 5%**
+
+Alarme anzeigen: http://localhost:9090/alerts
+
+---
+
+## Häufige Befehle
+
+### Monitoring starten/stoppen
 
 ```bash
-# Start monitoring
+# Monitoring starten
 docker-compose --profile monitoring up -d
 
-# Stop monitoring
+# Monitoring stoppen
 docker-compose stop prometheus grafana
 
-# Restart monitoring
+# Monitoring neu starten
 docker-compose restart prometheus grafana
 
-# View logs
+# Logs anzeigen
 docker-compose logs -f prometheus
 docker-compose logs -f grafana
 ```
 
-### Check Status
+### Status prüfen
 
 ```bash
-# Service status
+# Dienststatus
 docker-compose ps prometheus grafana
 
-# Health checks
+# Gesundheitschecks
 curl http://localhost:9090/-/healthy
 curl http://localhost:3001/api/health
 
-# Prometheus targets
+# Prometheus-Targets
 curl http://localhost:9090/api/v1/targets
 ```
 
 ### Backup
 
 ```bash
-# Backup Grafana dashboards
+# Grafana-Dashboards sichern
 docker run --rm \
   -v baluhost_grafana_data:/data \
   -v $(pwd)/backups:/backup \
   alpine tar czf /backup/grafana_$(date +%Y%m%d).tar.gz -C /data .
 
-# Backup Prometheus metrics
+# Prometheus-Metriken sichern
 docker run --rm \
   -v baluhost_prometheus_data:/data \
   -v $(pwd)/backups:/backup \
@@ -152,11 +152,11 @@ docker run --rm \
 
 ---
 
-## Configuration
+## Konfiguration
 
-### Environment Variables
+### Umgebungsvariablen
 
-Add to `.env`:
+Zur `.env` hinzufügen:
 
 ```bash
 # Prometheus
@@ -165,135 +165,135 @@ PROMETHEUS_PORT=9090
 # Grafana
 GRAFANA_PORT=3001
 GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=changeme  # CHANGE THIS!
+GRAFANA_ADMIN_PASSWORD=changeme  # AENDERN SIE DIES!
 GRAFANA_ROOT_URL=http://localhost:3001
 ```
 
-### Data Retention
+### Datenaufbewahrung
 
-Edit `docker-compose.yml`:
+In `docker-compose.yml` bearbeiten:
 
 ```yaml
 prometheus:
   command:
-    - '--storage.tsdb.retention.time=30d'  # Keep 30 days (default: 15d)
-    - '--storage.tsdb.retention.size=10GB'  # Or limit by size
+    - '--storage.tsdb.retention.time=30d'  # 30 Tage aufbewahren (Standard: 15d)
+    - '--storage.tsdb.retention.size=10GB'  # Oder nach Größe begrenzen
 ```
 
-### Scrape Interval
+### Scrape-Intervall
 
-Edit `deploy/prometheus/prometheus.yml`:
+In `deploy/prometheus/prometheus.yml` bearbeiten:
 
 ```yaml
 global:
-  scrape_interval: 30s  # Increase to reduce load (default: 15s)
+  scrape_interval: 30s  # Erhöhen zur Lastreduzierung (Standard: 15s)
 ```
 
 ---
 
-## Creating Custom Dashboards
+## Benutzerdefinierte Dashboards erstellen
 
-1. **Login to Grafana**: http://localhost:3001
-2. **Create Dashboard**: + → Dashboard
-3. **Add Panel** with query:
+1. **Bei Grafana anmelden**: http://localhost:3001
+2. **Dashboard erstellen**: + → Dashboard
+3. **Panel hinzufügen** mit Abfrage:
 
 ```promql
-# Example queries
+# Beispiel-Abfragen
 
-# CPU usage
+# CPU-Auslastung
 baluhost_cpu_usage_percent
 
-# Disk I/O rate
+# Festplatten-I/O-Rate
 rate(baluhost_disk_read_bytes_total[5m])
 
-# HTTP requests by status
+# HTTP-Anfragen nach Status
 sum(rate(baluhost_http_requests_total[5m])) by (status)
 
-# RAID status
+# RAID-Status
 baluhost_raid_array_status
 
-# Disk temperature
+# Festplattentemperatur
 baluhost_disk_temperature_celsius
 ```
 
-4. **Save dashboard**
-5. **Export**: Settings → JSON Model
-6. **Save** to `deploy/grafana/dashboards/<name>.json`
+4. **Dashboard speichern**
+5. **Exportieren**: Settings → JSON Model
+6. **Speichern** unter `deploy/grafana/dashboards/<name>.json`
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
-### No Data in Dashboards
+### Keine Daten in Dashboards
 
 ```bash
-# 1. Check metrics endpoint
+# 1. Metriken-Endpunkt prüfen
 curl http://localhost:8000/api/metrics
 
-# 2. Check Prometheus targets
+# 2. Prometheus-Targets prüfen
 http://localhost:9090/targets
-# Should show: baluhost-backend = UP
+# Sollte anzeigen: baluhost-backend = UP
 
-# 3. Check Grafana datasource
+# 3. Grafana-Datenquelle prüfen
 # Grafana → Configuration → Data Sources
-# Test connection
+# Verbindung testen
 
-# 4. Test query in Prometheus
+# 4. Abfrage in Prometheus testen
 http://localhost:9090/graph
-# Query: baluhost_cpu_usage_percent
+# Abfrage: baluhost_cpu_usage_percent
 ```
 
-### Metrics Endpoint Error
+### Fehler am Metriken-Endpunkt
 
 ```bash
-# Check backend logs
+# Backend-Logs prüfen
 docker-compose logs backend | grep metrics
 
-# Check backend is healthy
+# Prüfen, ob das Backend gesund ist
 curl http://localhost:8000/api/system/health
 
-# Restart backend
+# Backend neu starten
 docker-compose restart backend
 ```
 
-### High Resource Usage
+### Hoher Ressourcenverbrauch
 
 ```bash
-# Reduce retention
-# Edit docker-compose.yml:
+# Aufbewahrung reduzieren
+# In docker-compose.yml bearbeiten:
 # prometheus:
 #   command:
 #     - '--storage.tsdb.retention.time=7d'
 
-# Reduce scrape frequency
-# Edit deploy/prometheus/prometheus.yml:
+# Scrape-Häufigkeit reduzieren
+# In deploy/prometheus/prometheus.yml bearbeiten:
 # global:
 #   scrape_interval: 30s
 
-# Restart Prometheus
+# Prometheus neu starten
 docker-compose restart prometheus
 ```
 
 ---
 
-## Security
+## Sicherheit
 
-### 1. Change Grafana Password
+### 1. Grafana-Passwort ändern
 
 ```bash
-# Update .env
-GRAFANA_ADMIN_PASSWORD=strong-random-password
+# .env aktualisieren
+GRAFANA_ADMIN_PASSWORD=starkes-zufälliges-passwort
 
-# Restart Grafana
+# Grafana neu starten
 docker-compose restart grafana
 ```
 
-### 2. Restrict Access (Nginx)
+### 2. Zugriff einschränken (Nginx)
 
-Add to `deploy/nginx/baluhost.conf`:
+Zur `deploy/nginx/baluhost.conf` hinzufügen:
 
 ```nginx
-# Grafana (restrict to local network)
+# Grafana (auf lokales Netzwerk beschränken)
 location /grafana/ {
     allow 192.168.1.0/24;
     allow 10.0.0.0/8;
@@ -302,7 +302,7 @@ location /grafana/ {
     proxy_pass http://localhost:3001/;
 }
 
-# Prometheus (restrict to localhost only)
+# Prometheus (nur auf localhost beschränken)
 location /prometheus/ {
     allow 127.0.0.1;
     deny all;
@@ -311,14 +311,14 @@ location /prometheus/ {
 }
 ```
 
-### 3. Restrict Metrics Endpoint
+### 3. Metriken-Endpunkt einschränken
 
-Add to `deploy/nginx/baluhost.conf`:
+Zur `deploy/nginx/baluhost.conf` hinzufügen:
 
 ```nginx
 location /api/metrics {
-    # Only allow from monitoring infrastructure
-    allow 172.16.0.0/12;  # Docker network
+    # Nur von Monitoring-Infrastruktur erlauben
+    allow 172.16.0.0/12;  # Docker-Netzwerk
     allow 127.0.0.1;
     deny all;
 
@@ -328,13 +328,13 @@ location /api/metrics {
 
 ---
 
-## File Structure
+## Dateistruktur
 
 ```
 deploy/
 ├── prometheus/
-│   ├── prometheus.yml       # Main config
-│   └── alerts.yml           # Alert rules
+│   ├── prometheus.yml       # Hauptkonfiguration
+│   └── alerts.yml           # Alarmregeln
 └── grafana/
     ├── provisioning/
     │   ├── datasources/
@@ -347,73 +347,73 @@ deploy/
 
 ---
 
-## Architecture
+## Architektur
 
 ```
 ┌─────────────────────┐
-│   Grafana           │  Dashboards & Visualization
-│   Port 3001         │  (Queries Prometheus)
+│   Grafana           │  Dashboards und Visualisierung
+│   Port 3001         │  (Fragt Prometheus ab)
 └──────────┬──────────┘
            │
-           ▼ Queries
+           ▼ Abfragen
 ┌─────────────────────┐
-│   Prometheus        │  Metrics Collection & Alerting
-│   Port 9090         │  (Scrapes /api/metrics every 15s)
+│   Prometheus        │  Metrik-Erfassung und Alarmierung
+│   Port 9090         │  (Scraping von /api/metrics alle 15s)
 └──────────┬──────────┘
            │
-           ▼ Scrapes
+           ▼ Scraping
 ┌─────────────────────┐
-│   BaluHost Backend  │  Metrics Endpoint
-│   /api/metrics      │  (Exposes 40+ metrics)
+│   BaluHost Backend  │  Metriken-Endpunkt
+│   /api/metrics      │  (Stellt über 40 Metriken bereit)
 │   Port 8000         │
 └─────────────────────┘
 ```
 
 ---
 
-## Key Features
+## Hauptfunktionen
 
-### Metrics Collection
-- ✅ 40+ custom metrics
-- ✅ 15-second scrape interval
-- ✅ 15-day retention (configurable)
-- ✅ Automatic service discovery
+### Metrik-Erfassung
+- Über 40 benutzerdefinierte Metriken
+- 15-Sekunden-Scrape-Intervall
+- 15 Tage Aufbewahrung (konfigurierbar)
+- Automatische Service-Erkennung
 
 ### Dashboards
-- ✅ System Overview (CPU, Memory, Disk, Network)
-- ✅ Auto-provisioned on startup
-- ✅ Customizable via UI
-- ✅ Exportable as JSON
+- Systemübersicht (CPU, Speicher, Festplatte, Netzwerk)
+- Automatisches Provisioning beim Start
+- Anpassbar über die Oberfläche
+- Exportierbar als JSON
 
-### Alerts
-- ✅ 20+ pre-configured rules
-- ✅ 3 severity levels (Critical, Warning, Info)
-- ✅ Covers: System, Disk, RAID, SMART, Application
-- ✅ Extensible with custom rules
-
----
-
-## Next Steps
-
-1. **Change Grafana password** (see Security section)
-2. **Create custom dashboards** (RAID, Application)
-3. **Configure alert notifications** (optional)
-4. **Set up Nginx access restrictions** (optional)
-5. **Monitor the monitors** (set resource limits)
+### Alarme
+- Über 20 vorkonfigurierte Regeln
+- 3 Schweregrade (Critical, Warning, Info)
+- Abdeckung: System, Festplatte, RAID, SMART, Anwendung
+- Erweiterbar mit benutzerdefinierten Regeln
 
 ---
 
-## Resources
+## Naechste Schritte
 
-- **Full Guide**: `docs/MONITORING.md`
-- **Metrics Reference**: http://localhost:8000/api/metrics
-- **Prometheus Docs**: https://prometheus.io/docs/
-- **Grafana Docs**: https://grafana.com/docs/
-- **PromQL Tutorial**: https://prometheus.io/docs/prometheus/latest/querying/basics/
+1. **Grafana-Passwort ändern** (siehe Abschnitt Sicherheit)
+2. **Benutzerdefinierte Dashboards erstellen** (RAID, Anwendung)
+3. **Alarm-Benachrichtigungen konfigurieren** (optional)
+4. **Nginx-Zugriffsbeschränkungen einrichten** (optional)
+5. **Die Überwachung überwachen** (Ressourcenlimits setzen)
 
 ---
 
-**Status**: Production-ready monitoring stack
-**Metrics**: 40+ custom metrics
-**Alerts**: 20+ pre-configured rules
-**Dashboards**: Auto-provisioned System Overview
+## Ressourcen
+
+- **Vollständige Anleitung**: `docs/MONITORING.md`
+- **Metriken-Referenz**: http://localhost:8000/api/metrics
+- **Prometheus-Dokumentation**: https://prometheus.io/docs/
+- **Grafana-Dokumentation**: https://grafana.com/docs/
+- **PromQL-Tutorial**: https://prometheus.io/docs/prometheus/latest/querying/basics/
+
+---
+
+**Status**: Produktionsreifer Monitoring-Stack
+**Metriken**: Über 40 benutzerdefinierte Metriken
+**Alarme**: Über 20 vorkonfigurierte Regeln
+**Dashboards**: Automatisch bereitgestellte Systemübersicht

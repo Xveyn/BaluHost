@@ -1,11 +1,11 @@
-# Emergency Runbook
+# Notfall-Runbook
 
-Quick reference for production incident response on the BaluHost NAS.
+Schnellreferenz für die Reaktion auf Produktionsvorfälle am BaluHost NAS.
 
-## Service Overview
+## Dienstübersicht
 
-| Service | Port | Check |
-|---------|------|-------|
+| Dienst | Port | Prüfung |
+|--------|------|---------|
 | `baluhost-backend` | 8000 | `curl localhost:8000/api/system/health` |
 | `baluhost-scheduler` | — | `systemctl status baluhost-scheduler` |
 | `baluhost-monitoring` | — | `systemctl status baluhost-monitoring` |
@@ -13,151 +13,151 @@ Quick reference for production incident response on the BaluHost NAS.
 | `nginx` | 80 | `curl localhost/health` |
 | `postgresql` | 5432 | `pg_isready -h localhost` |
 
-## Quick Commands
+## Schnellbefehle
 
 ```bash
-# Check all services
+# Alle Dienste prüfen
 sudo systemctl status 'baluhost-*'
 sudo systemctl status nginx postgresql
 
-# View backend logs
+# Backend-Logs anzeigen
 sudo journalctl -u baluhost-backend -f
 sudo journalctl -u baluhost-backend --since "10 minutes ago"
 
-# Restart everything
+# Alles neu starten
 sudo systemctl restart baluhost-backend baluhost-scheduler baluhost-monitoring baluhost-webdav
 sudo systemctl reload nginx
 ```
 
-## Rollback After Bad Deploy
+## Rollback nach fehlgeschlagenem Deploy
 
 ```bash
 cd /opt/baluhost
 
-# 1. Check what was deployed
+# 1. Prüfen, was deployt wurde
 cat .deploy-state
-# Shows: previous_commit, current_commit, backup_file, db_revision_before/after
+# Zeigt: previous_commit, current_commit, backup_file, db_revision_before/after
 
-# 2. Automatic rollback (restores code + DB revision)
+# 2. Automatischer Rollback (stellt Code + DB-Revision wieder her)
 ./deploy/scripts/ci-deploy.sh --rollback
 
-# 3. Verify
+# 3. Verifizieren
 curl localhost/api/system/health
 ```
 
-## Database Restore (Nuclear Option)
+## Datenbankwiederherstellung (Letzte Option)
 
-Use this if the database itself is corrupted or a migration caused data loss.
+Verwenden Sie dies, wenn die Datenbank selbst beschädigt ist oder eine Migration zu Datenverlust geführt hat.
 
 ```bash
-# 1. List available backups
-ls -lt /opt/baluhost/backups/deploys/   # Pre-deploy backups
-ls -lt /opt/baluhost/backups/daily/     # Daily cron backups
+# 1. Verfügbare Backups auflisten
+ls -lt /opt/baluhost/backups/deploys/   # Pre-Deploy-Backups
+ls -lt /opt/baluhost/backups/daily/     # Tägliche Cron-Backups
 
-# 2. Restore (interactive — asks for confirmation)
+# 2. Wiederherstellen (interaktiv — fragt nach Bestätigung)
 /opt/baluhost/deploy/scripts/db-restore.sh /opt/baluhost/backups/deploys/pre-deploy-20260302-143000.sql.gz
 ```
 
-### Manual Database Restore
+### Manuelle Datenbankwiederherstellung
 
-If the restore script fails:
+Falls das Wiederherstellungsskript fehlschlägt:
 
 ```bash
-# 1. Stop services
+# 1. Dienste stoppen
 sudo systemctl stop baluhost-backend baluhost-scheduler baluhost-monitoring baluhost-webdav
 
-# 2. Drop and recreate
+# 2. Datenbank löschen und neu erstellen
 sudo -u postgres dropdb baluhost
 sudo -u postgres createdb -O baluhost baluhost
 
-# 3. Restore from backup
+# 3. Aus Backup wiederherstellen
 gunzip -c /opt/baluhost/backups/deploys/<BACKUP>.sql.gz | sudo -u postgres psql baluhost
 
-# 4. Verify alembic revision
+# 4. Alembic-Revision prüfen
 cd /opt/baluhost/backend
 .venv/bin/alembic current
 
-# 5. Restart services
+# 5. Dienste starten
 sudo systemctl start baluhost-backend baluhost-scheduler baluhost-monitoring baluhost-webdav
 ```
 
-## Common Issues
+## Häufige Probleme
 
-### Backend won't start
+### Backend startet nicht
 
 ```bash
-# Check logs
+# Logs prüfen
 sudo journalctl -u baluhost-backend -n 50
 
-# Common causes:
-# - Port 8000 in use: sudo lsof -i :8000
-# - .env.production missing/broken: cat /opt/baluhost/.env.production
-# - Python venv broken: cd /opt/baluhost/backend && .venv/bin/python -c "import app"
-# - PostgreSQL down: pg_isready -h localhost
+# Häufige Ursachen:
+# - Port 8000 belegt: sudo lsof -i :8000
+# - .env.production fehlt/defekt: cat /opt/baluhost/.env.production
+# - Python venv defekt: cd /opt/baluhost/backend && .venv/bin/python -c "import app"
+# - PostgreSQL nicht verfügbar: pg_isready -h localhost
 ```
 
 ### Nginx 502 Bad Gateway
 
-Backend isn't responding on port 8000.
+Das Backend antwortet nicht auf Port 8000.
 
 ```bash
 sudo systemctl status baluhost-backend
 sudo systemctl restart baluhost-backend
-# Wait 5s, then:
+# 5 Sekunden warten, dann:
 curl localhost:8000/api/system/health
 ```
 
-### Database connection refused
+### Datenbankverbindung verweigert
 
 ```bash
-# Check PostgreSQL
+# PostgreSQL prüfen
 sudo systemctl status postgresql
 pg_isready -h localhost -p 5432
 
-# Check credentials
+# Zugangsdaten prüfen
 grep DATABASE_URL /opt/baluhost/.env.production
 
-# Restart PostgreSQL
+# PostgreSQL neu starten
 sudo systemctl restart postgresql
 ```
 
-### Disk full
+### Festplatte voll
 
 ```bash
 df -h
-# Clean up old backups if needed:
+# Bei Bedarf alte Backups bereinigen:
 ls -la /opt/baluhost/backups/deploys/
 ls -la /opt/baluhost/backups/daily/
-# Remove oldest backups carefully
+# Älteste Backups vorsichtig entfernen
 ```
 
-### Frontend shows blank page
+### Frontend zeigt leere Seite
 
 ```bash
-# Check if dist exists
+# Prüfen, ob dist existiert
 ls /opt/baluhost/client/dist/index.html
 
-# Rebuild if needed
+# Bei Bedarf neu bauen
 cd /opt/baluhost/client
 sudo -u sven npm run build
 sudo systemctl reload nginx
 ```
 
-## Useful Paths
+## Nützliche Pfade
 
-| Path | Purpose |
-|------|---------|
-| `/opt/baluhost/` | Production application |
-| `/opt/baluhost/.env.production` | Environment config (secrets) |
-| `/opt/baluhost/.deploy-state` | Last deploy metadata |
-| `/opt/baluhost/backups/deploys/` | Pre-deploy database backups |
-| `/opt/baluhost/backups/daily/` | Daily cron database backups |
-| `/var/log/baluhost/deploys/` | Deploy logs (JSON) |
-| `/var/log/baluhost/db-backup.log` | Daily backup cron log |
-| `/etc/nginx/sites-available/baluhost` | Nginx config |
-| `/etc/systemd/system/baluhost-*.service` | Systemd service files |
+| Pfad | Zweck |
+|------|-------|
+| `/opt/baluhost/` | Produktionsanwendung |
+| `/opt/baluhost/.env.production` | Umgebungskonfiguration (Geheimnisse) |
+| `/opt/baluhost/.deploy-state` | Letzte Deploy-Metadaten |
+| `/opt/baluhost/backups/deploys/` | Pre-Deploy-Datenbank-Backups |
+| `/opt/baluhost/backups/daily/` | Tägliche Cron-Datenbank-Backups |
+| `/var/log/baluhost/deploys/` | Deploy-Logs (JSON) |
+| `/var/log/baluhost/db-backup.log` | Tägliches Backup-Cron-Log |
+| `/etc/nginx/sites-available/baluhost` | Nginx-Konfiguration |
+| `/etc/systemd/system/baluhost-*.service` | Systemd-Service-Dateien |
 
-## Contacts
+## Kontakt
 
 - **Repository**: https://github.com/Xveyn/BaluHost
-- **Maintainer**: Xveyn
+- **Betreuer**: Xveyn

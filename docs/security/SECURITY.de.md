@@ -1,143 +1,143 @@
-# Security Policy
+# Sicherheitsrichtlinie
 
-## Supported Versions
+## Unterstützte Versionen
 
-| Version | Supported          |
+| Version | Unterstützt       |
 | ------- | ------------------ |
 | 1.23.x  | :white_check_mark: |
 | < 1.23  | :x:                |
 
-## Reporting a Vulnerability
+## Meldung einer Sicherheitslücke
 
-**Please do NOT report security vulnerabilities through public GitHub issues.**
+**Bitte melden Sie Sicherheitslücken NICHT über öffentliche GitHub-Issues.**
 
-Instead, please report them via email to: **security@baluhost.example**
+Senden Sie Ihre Meldung stattdessen per E-Mail an: **security@baluhost.example**
 
-### What to Include
+### Was Ihre Meldung enthalten sollte
 
-Please include the following information:
-- Type of vulnerability
-- Full paths of source file(s) related to the vulnerability
-- Location of the affected source code (tag/branch/commit or direct URL)
-- Step-by-step instructions to reproduce the issue
-- Proof-of-concept or exploit code (if available)
-- Impact of the issue, including how an attacker might exploit it
+Bitte geben Sie folgende Informationen an:
+- Art der Sicherheitslücke
+- Vollständige Pfade der betroffenen Quelldateien
+- Position des betroffenen Quellcodes (Tag/Branch/Commit oder direkte URL)
+- Schritt-für-Schritt-Anleitung zur Reproduktion des Problems
+- Proof-of-Concept oder Exploit-Code (falls vorhanden)
+- Auswirkung des Problems, einschließlich möglicher Angriffsszenarien
 
-### What to Expect
+### Was Sie erwarten können
 
-- You'll receive a confirmation within 48 hours
-- We'll investigate and provide an estimated timeline
-- We'll notify you when the issue is fixed
-- We'll credit you in the release notes (if you wish)
+- Sie erhalten innerhalb von 48 Stunden eine Bestätigung
+- Wir untersuchen das Problem und nennen Ihnen einen voraussichtlichen Zeitrahmen
+- Wir benachrichtigen Sie, sobald das Problem behoben ist
+- Wir erwähnen Sie in den Release Notes (falls gewuenscht)
 
-## Implemented Security Features
+## Implementierte Sicherheitsfunktionen
 
-### Authentication & Authorization
-- [x] JWT authentication with HS256 signing (access + refresh tokens)
-- [x] Access tokens: 15 min TTL, Refresh tokens: 7 days with JTI for revocation
-- [x] Two-Factor Authentication (TOTP) with authenticator apps
-- [x] Password policy: 8-128 chars, uppercase + lowercase + digit, blacklist
-- [x] Role-based access control (admin/user) with `is_privileged()` checks
-- [x] Rate limiting on all endpoints via slowapi (per-endpoint limits)
-- [x] Mobile device authentication with device-specific JWT + X-Device-ID
+### Authentifizierung und Autorisierung
+- [x] JWT-Authentifizierung mit HS256-Signierung (Access- + Refresh-Tokens)
+- [x] Access-Tokens: 15 Min. TTL, Refresh-Tokens: 7 Tage mit JTI zur Revocation
+- [x] Zwei-Faktor-Authentifizierung (TOTP) mit Authenticator-Apps
+- [x] Passwortrichtlinie: 8-128 Zeichen, Groß- + Kleinbuchstaben + Ziffer, Blacklist
+- [x] Rollenbasierte Zugriffskontrolle (Admin/User) mit `is_privileged()`-Prüfungen
+- [x] Rate Limiting auf allen Endpoints via slowapi (endpointspezifische Limits)
+- [x] Mobile Geräte-Authentifizierung mit gerätespezifischem JWT + X-Device-ID
 
-### Input Validation & Path Safety
-- [x] Pydantic schemas for all request validation
-- [x] Path jailing via `_jail_path()` — users restricted to own home, Shared/, or validated share paths
-- [x] Path traversal prevention (`..` rejection, PurePosixPath normalization)
-- [x] SQLAlchemy ORM-only queries (no raw SQL with user input)
-- [x] `subprocess.run()` with list arguments only (no `shell=True` in app code)
+### Eingabevalidierung und Pfadsicherheit
+- [x] Pydantic-Schemas für alle Request-Validierungen
+- [x] Path Jailing via `_jail_path()` — Benutzer auf eigenes Home-Verzeichnis, Shared/ oder validierte Share-Pfade beschränkt
+- [x] Path-Traversal-Schutz (`..`-Ablehnung, PurePosixPath-Normalisierung)
+- [x] Ausschließlich SQLAlchemy-ORM-Abfragen (kein Raw-SQL mit Benutzereingaben)
+- [x] `subprocess.run()` nur mit Listenargumenten (kein `shell=True` im App-Code)
 
-### Network & Headers
-- [x] Security headers middleware (CSP, X-Frame-Options, HSTS, X-Content-Type-Options)
-- [x] CORS scoped to configured origins list
-- [x] Rate limiting via Nginx reverse proxy (100 req/s API, 10 req/s auth)
-- [x] WireGuard VPN for encrypted remote access
+### Netzwerk und Header
+- [x] Security-Headers-Middleware (CSP, X-Frame-Options, HSTS, X-Content-Type-Options)
+- [x] CORS auf konfigurierte Origins-Liste beschränkt
+- [x] Rate Limiting via Nginx-Reverse-Proxy (100 Req/s API, 10 Req/s Auth)
+- [x] WireGuard-VPN für verschlüsselten Remote-Zugriff
 
-### Data Protection
-- [x] Encrypted VPN/SSH keys at rest (Fernet AES-128-CBC)
-- [x] Production secret validation (32+ chars, rejects defaults)
-- [x] Sensitive column redaction in admin-db API (`REDACT_PATTERN`)
-- [x] Audit logging for all security-relevant actions (login, password change, admin ops)
-- [x] Structured JSON logging (no secrets logged)
+### Datenschutz
+- [x] Verschlüsselte VPN-/SSH-Keys im Ruhezustand (Fernet AES-128-CBC)
+- [x] Produktions-Validierung für Secrets (mind. 32 Zeichen, Standardwerte werden abgelehnt)
+- [x] Schwärzung sensibler Spalten in der Admin-DB-API (`REDACT_PATTERN`)
+- [x] Audit-Logging für alle sicherheitsrelevanten Aktionen (Login, Passwortänderung, Admin-Operationen)
+- [x] Strukturiertes JSON-Logging (keine Secrets in den Logs)
 
-## Security Best Practices
+## Best Practices für die Sicherheit
 
-### For Developers
+### Für Entwickler
 
-**Authentication:**
-- Never commit tokens, passwords, or secrets to Git
-- Use environment variables for sensitive configuration
-- All new endpoints must use `Depends(get_current_user)` or `Depends(get_current_admin)`
-- Apply rate limiting via `@limiter.limit(get_limit("..."))` on new endpoints
+**Authentifizierung:**
+- Committen Sie niemals Tokens, Passwörter oder Secrets in Git
+- Verwenden Sie Umgebungsvariablen für sensible Konfigurationswerte
+- Alle neuen Endpoints muessen `Depends(get_current_user)` oder `Depends(get_current_admin)` verwenden
+- Wenden Sie Rate Limiting via `@limiter.limit(get_limit("..."))` auf neue Endpoints an
 
-**Authorization:**
-- Use `ensure_owner_or_privileged()` for ownership checks
-- Validate file paths through `_jail_path()`
-- Never trust client-side checks alone
+**Autorisierung:**
+- Verwenden Sie `ensure_owner_or_privileged()` für Ownership-Prüfungen
+- Validieren Sie Dateipfade durch `_jail_path()`
+- Vertrauen Sie niemals ausschließlich clientseitigen Prüfungen
 
-**Input Validation:**
-- Use Pydantic schemas for all request bodies (never raw `dict`)
-- Reject `..` in all user-supplied file paths
-- Use `subprocess.run()` with explicit argument lists (never string commands)
+**Eingabevalidierung:**
+- Verwenden Sie Pydantic-Schemas für alle Request-Bodies (niemals rohes `dict`)
+- Lehnen Sie `..` in allen benutzergelieferten Dateipfaden ab
+- Verwenden Sie `subprocess.run()` mit expliziten Argumentlisten (niemals String-Kommandos)
 
-**File Operations:**
-- All file operations go through `_jail_path()` sandbox
-- Check quota before uploads
-- Ownership tracked via database
+**Dateioperationen:**
+- Alle Dateioperationen durchlaufen die `_jail_path()`-Sandbox
+- Prüfen Sie Kontingente vor Uploads
+- Ownership wird über die Datenbank nachverfolgt
 
-### For Users
+### Für Benutzer
 
-**Passwords:**
-- Use strong, unique passwords (min 8 chars, uppercase + lowercase + digit)
-- Change default passwords immediately after setup
-- Enable 2FA in Settings for additional security
-- Never share passwords
+**Passwörter:**
+- Verwenden Sie starke, einzigartige Passwörter (mind. 8 Zeichen, Groß- + Kleinbuchstaben + Ziffer)
+- Ändern Sie Standardpasswörter sofort nach der Einrichtung
+- Aktivieren Sie 2FA in den Einstellungen für zusaetzliche Sicherheit
+- Teilen Sie niemals Ihre Passwörter
 
-**Access Control:**
-- Review user permissions regularly
-- Remove unused accounts
-- Use least privilege principle
-- Monitor audit logs (Logging page)
+**Zugriffskontrolle:**
+- Überprüfen Sie Benutzerberechtigungen regelmäßig
+- Entfernen Sie ungenutzte Konten
+- Wenden Sie das Prinzip der geringsten Rechte an
+- Überwachen Sie die Audit-Logs (Logging-Seite)
 
-**Network Security:**
-- Use WireGuard VPN for remote access
-- Don't expose directly to internet without VPN or reverse proxy
-- Keep firewall configured properly
+**Netzwerksicherheit:**
+- Verwenden Sie WireGuard-VPN für den Remote-Zugriff
+- Setzen Sie das System nicht ohne VPN oder Reverse-Proxy dem Internet aus
+- Konfigurieren Sie die Firewall ordnungsgemäß
 
-## Known Limitations & Accepted Trade-offs
+## Bekannte Einschränkungen und akzeptierte Kompromisse
 
-These are documented trade-offs — do not attempt to fix without discussion:
+Dies sind dokumentierte Kompromisse — versuchen Sie nicht, diese ohne Absprache zu beheben:
 
-1. **Tokens in localStorage** — XSS risk mitigated by CSP headers; HttpOnly cookies would require significant auth refactor
-2. **CSP `unsafe-inline`/`unsafe-eval`** — Required by Vite dev server; production could tighten
-3. **CORS `allow_methods=["*"]`/`allow_headers=["*"]`** — Scoped to configured `cors_origins` list
-4. **In-memory rate limiter** — Resets on restart; acceptable for single-instance deployment
-5. **No CSRF protection** — Mitigated by JWT Bearer auth (not cookie-based)
-6. **HTTPS not enforced** — External access via WireGuard VPN (encrypted tunnel); HTTP on trusted LAN
-7. **JTI without server-side revocation store** — Token rotation is the primary defense
+1. **Tokens in localStorage** — XSS-Risiko durch CSP-Header abgemildert; HttpOnly-Cookies würden einen umfangreichen Auth-Umbau erfordern
+2. **CSP `unsafe-inline`/`unsafe-eval`** — Vom Vite-Dev-Server benötigt; koennte in der Produktion verschärft werden
+3. **CORS `allow_methods=["*"]`/`allow_headers=["*"]`** — Auf die konfigurierte `cors_origins`-Liste beschränkt
+4. **In-Memory Rate Limiter** — Wird bei Neustart zurückgesetzt; akzeptabel für Single-Instance-Deployment
+5. **Kein CSRF-Schutz** — Durch JWT-Bearer-Authentifizierung abgemildert (nicht Cookie-basiert)
+6. **HTTPS nicht erzwungen** — Externer Zugriff über WireGuard-VPN (verschlüsselter Tunnel); HTTP im vertrauenswürdigen LAN
+7. **JTI ohne serverseitigen Revocation-Store** — Token-Rotation ist die primäre Schutzstrategie
 
-## Security Checklist for Production
+## Sicherheits-Checkliste für die Produktion
 
-Before deploying to production:
+Vor dem Produktions-Deployment:
 
-- [x] Change all default passwords
-- [x] Set strong `SECRET_KEY` (min 32 characters, validated at startup)
-- [x] Set strong `TOKEN_SECRET` (min 32 characters, validated at startup)
-- [x] Configure firewall rules
-- [x] Disable debug mode
-- [x] Review CORS settings (restrict to known origins)
-- [x] Enable audit logging
-- [x] Set up backups (pg_dump)
-- [x] Configure structured JSON logging
-- [x] Review user permissions
-- [ ] Use HTTPS with valid SSL certificate (optional, VPN provides encryption)
-- [ ] Set up log rotation
-- [ ] Run security audit tools
+- [x] Alle Standardpasswörter geändert
+- [x] Starken `SECRET_KEY` gesetzt (mind. 32 Zeichen, wird beim Start validiert)
+- [x] Starkes `TOKEN_SECRET` gesetzt (mind. 32 Zeichen, wird beim Start validiert)
+- [x] Firewall-Regeln konfiguriert
+- [x] Debug-Modus deaktiviert
+- [x] CORS-Einstellungen geprüft (auf bekannte Origins beschränkt)
+- [x] Audit-Logging aktiviert
+- [x] Backups eingerichtet (pg_dump)
+- [x] Strukturiertes JSON-Logging konfiguriert
+- [x] Benutzerberechtigungen geprüft
+- [ ] HTTPS mit gueltigem SSL-Zertifikat verwenden (optional, VPN bietet Verschlüsselung)
+- [ ] Log-Rotation einrichten
+- [ ] Sicherheits-Audit-Tools ausführen
 
-## Dependency Security
+## Abhängigkeitssicherheit
 
-We use automated tools to check for vulnerabilities:
+Wir verwenden automatisierte Tools zur Prüfung auf Schwachstellen:
 
 **Python (Backend):**
 ```bash
@@ -151,24 +151,24 @@ npm audit
 npm audit fix
 ```
 
-## Security Resources
+## Sicherheitsressourcen
 
 - [OWASP Top 10](https://owasp.org/www-project-top-ten/)
 - [FastAPI Security](https://fastapi.tiangolo.com/tutorial/security/)
 
-## Disclosure Policy
+## Offenlegungsrichtlinie
 
-- We follow responsible disclosure practices
-- We'll acknowledge security researchers in release notes
-- We aim to fix critical issues within 7 days
-- We'll notify affected users if needed
+- Wir folgen den Grundsätzen der verantwortungsvollen Offenlegung (Responsible Disclosure)
+- Wir erwähnen Sicherheitsforscher in den Release Notes
+- Wir streben an, kritische Probleme innerhalb von 7 Tagen zu beheben
+- Wir benachrichtigen betroffene Benutzer bei Bedarf
 
-## Contact
+## Kontakt
 
-For security-related questions or concerns:
-- **Email:** security@baluhost.example
+Für sicherheitsbezogene Fragen oder Anliegen:
+- **E-Mail:** security@baluhost.example
 
 ---
 
-**Last Updated:** April 2026
+**Zuletzt aktualisiert:** April 2026
 **Version:** 1.23.0
