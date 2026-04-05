@@ -51,8 +51,13 @@ class CloudService:
         return conn
 
     def delete_connection(self, connection_id: int, user_id: int) -> None:
-        """Delete a cloud connection."""
+        """Delete a cloud connection and its associated import jobs."""
         conn = self.get_connection(connection_id, user_id)
+        # Delete associated import jobs first (no CASCADE on FK)
+        from app.models.cloud import CloudImportJob
+        self.db.query(CloudImportJob).filter(
+            CloudImportJob.connection_id == connection_id
+        ).delete()
         self.db.delete(conn)
         self.db.commit()
         logger.info("Deleted cloud connection %d for user %d", connection_id, user_id)
