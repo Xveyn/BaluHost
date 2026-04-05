@@ -29,11 +29,11 @@ def get_docs_index(
     request: Request,
     response: Response,
     lang: str = "de",
-    user: UserPublic = Depends(deps.get_current_user),
+    user: UserPublic | None = Depends(deps.get_current_user_optional),
 ) -> DocsIndexResponse:
     """Return the documentation index, filtered by user role."""
     svc = _get_docs_service()
-    groups = svc.get_index(lang=lang, is_admin=is_privileged(user))
+    groups = svc.get_index(lang=lang, is_admin=is_privileged(user) if user else False)
     return DocsIndexResponse(groups=groups)
 
 
@@ -44,11 +44,11 @@ def get_docs_article(
     response: Response,
     slug: str,
     lang: str = "de",
-    user: UserPublic = Depends(deps.get_current_user),
+    user: UserPublic | None = Depends(deps.get_current_user_optional),
 ) -> DocsArticleResponse:
     """Return a single documentation article by slug."""
     svc = _get_docs_service()
-    admin = is_privileged(user)
+    admin = is_privileged(user) if user else False
     article = svc.get_article(slug=slug, lang=lang, is_admin=admin)
 
     if article is None:
