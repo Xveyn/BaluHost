@@ -231,6 +231,7 @@ function AppRoutes() {
         {isDesktop && <Route path="/mobile-devices" element={<Navigate to="/devices?tab=mobile" replace />} />}
         {isDesktop && <Route path="/admin/backup" element={<Navigate to="/admin/system-control?tab=backup" replace />} />}
         {isDesktop && <Route path="/admin/vpn" element={<Navigate to="/admin/system-control?tab=vpn" replace />} />}
+        {isDesktop && <Route path="/backups" element={<Navigate to="/admin/system-control?tab=backup" replace />} />}
       </Routes>
       </Suspense>
       </NotificationProvider>

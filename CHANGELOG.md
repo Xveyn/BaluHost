@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.6] - 2026-04-05
+
+### Added
+- Cloud export: scope upgrade endpoint — "Grant write access" now redirects to OAuth
+- Manual: cloud import setup guide (DE/EN) with DuckDNS and OAuth instructions
+
+### Fixed
+- Cloud: connection deletion failing when import jobs exist (ForeignKeyViolation)
+- Routing: /backups redirect for legacy notification URLs
+- Tests: docs route tests updated for unauthenticated access
+
+---
+
 ## [1.27.5] - 2026-04-05
 
 ### Added

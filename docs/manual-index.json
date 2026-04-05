@@ -44,7 +44,8 @@
       "articles": [
         { "slug": "sharing", "path": "features/SHARING_FEATURES_PHASE1", "titleDe": "Dateifreigaben", "titleEn": "File Sharing", "icon": "share-2", "order": 1 },
         { "slug": "upload-progress", "path": "features/UPLOAD_PROGRESS", "titleDe": "Upload-Fortschritt", "titleEn": "Upload Progress", "icon": "upload", "order": 2 },
-        { "slug": "user-management", "path": "features/USER_MANAGEMENT_FEATURES", "titleDe": "Benutzerverwaltung", "titleEn": "User Management", "icon": "users", "order": 3 }
+        { "slug": "user-management", "path": "features/USER_MANAGEMENT_FEATURES", "titleDe": "Benutzerverwaltung", "titleEn": "User Management", "icon": "users", "order": 3 },
+        { "slug": "cloud-import", "path": "features/CLOUD_IMPORT", "titleDe": "Cloud Import einrichten", "titleEn": "Cloud Import Setup", "icon": "cloud", "order": 4 }
       ]
     },
     {
