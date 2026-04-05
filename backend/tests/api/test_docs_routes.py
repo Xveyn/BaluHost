@@ -174,9 +174,12 @@ class TestDocsIndexEndpoint:
         assert resp.status_code == 200
         assert resp.json()["groups"][0]["label"] == "Guides"
 
-    def test_requires_auth(self, client, _docs_dir_with_articles):
-        resp = client.get("/api/docs/index")
-        assert resp.status_code == 401
+    def test_allows_unauthenticated_access(self, client, _docs_dir_with_articles):
+        resp = client.get("/api/docs/index?lang=de")
+        assert resp.status_code == 200
+        data = resp.json()
+        # Unauthenticated users see only non-admin groups
+        assert all(g["id"] != "admin-only" for g in data["groups"])
 
 
 class TestDocsArticleEndpoint:
@@ -206,6 +209,7 @@ class TestDocsArticleEndpoint:
         assert resp.status_code == 200
         assert "Admin only" in resp.json()["content"]
 
-    def test_requires_auth(self, client, _docs_dir_with_articles):
-        resp = client.get("/api/docs/article/intro")
-        assert resp.status_code == 401
+    def test_allows_unauthenticated_access(self, client, _docs_dir_with_articles):
+        resp = client.get("/api/docs/article/intro?lang=de")
+        assert resp.status_code == 200
+        assert "Einführung" in resp.json()["content"]
