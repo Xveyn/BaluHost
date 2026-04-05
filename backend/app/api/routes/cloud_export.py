@@ -171,6 +171,31 @@ async def check_scope(
     return CheckScopeResponse(**result)
 
 
+@router.post("/scope-upgrade")
+@user_limiter.limit(get_limit("admin_operations"))
+async def scope_upgrade(
+    request: Request,
+    response: Response,
+    body: CheckScopeRequest,
+    current_user: UserPublic = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Get OAuth URL for upgrading a connection to export-capable scope."""
+    from app.api.routes.cloud import _build_oauth_redirect_uri
+
+    service = CloudService(db)
+    conn = service.get_connection(body.connection_id, current_user.id)
+    redirect_uri = _build_oauth_redirect_uri(request)
+    try:
+        url = service.get_export_oauth_url(
+            conn.provider, current_user.id, body.connection_id,
+            redirect_uri=redirect_uri,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return {"oauth_url": url}
+
+
 # ─── Background task helper ──────────────────────────────────
 
 async def _run_export_async(job_id: int, db: Session) -> None:

@@ -3,7 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { X, Users, Cloud, Loader2, ExternalLink } from 'lucide-react';
 import toast from 'react-hot-toast';
 import { createFileShare, type CreateFileShareRequest } from '../api/shares';
-import { startCloudExport, checkConnectionScope } from '../api/cloud-export';
+import { startCloudExport, checkConnectionScope, getScopeUpgradeUrl } from '../api/cloud-export';
 import { getConnections, type CloudConnection } from '../api/cloud-import';
 
 interface ShareFileModalProps {
@@ -337,8 +337,13 @@ const ShareFileModal = ({ fileId, fileName, filePath, users, onClose, onSuccess 
                     </p>
                     <button
                       type="button"
-                      onClick={() => {
-                        window.open('/cloud-import', '_blank');
+                      onClick={async () => {
+                        try {
+                          const url = await getScopeUpgradeUrl(selectedConnectionId);
+                          window.location.href = url;
+                        } catch {
+                          toast.error(t('shares:cloudExport.retryFailed', 'Failed to start scope upgrade'));
+                        }
                       }}
                       className="inline-flex items-center gap-1.5 text-amber-400 hover:text-amber-300 text-sm font-medium transition-colors"
                     >

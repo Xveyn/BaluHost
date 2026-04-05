@@ -83,3 +83,10 @@ export async function checkConnectionScope(connectionId: number): Promise<CheckS
   });
   return resp.data;
 }
+
+export async function getScopeUpgradeUrl(connectionId: number): Promise<string> {
+  const resp = await apiClient.post('/api/cloud-export/scope-upgrade', {
+    connection_id: connectionId,
+  });
+  return resp.data.oauth_url;
+}
