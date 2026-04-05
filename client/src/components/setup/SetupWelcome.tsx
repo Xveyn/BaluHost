@@ -1,4 +1,4 @@
-import { ArrowRight, FolderOpen, HardDrive, Shield, Activity, Smartphone, Clock } from 'lucide-react';
+import { ArrowRight, FolderOpen, HardDrive, Shield, Activity, Smartphone, Clock, BookOpen } from 'lucide-react';
 import logoMark from '../../assets/baluhost-logo.png';
 import { Button } from '../ui/Button';
 
@@ -13,6 +13,7 @@ const FEATURES = [
   { icon: Activity, title: 'System-Monitoring', desc: 'CPU, RAM, Netzwerk & Festplatten live' },
   { icon: Smartphone, title: 'Mobile & Desktop', desc: 'BaluApp (Android) & BaluDesk (Windows/Linux)' },
   { icon: Clock, title: 'Backups & Versionen', desc: 'Automatische Sicherung & Dateiverlauf' },
+  { icon: BookOpen, title: 'Benutzerhandbuch', desc: 'Schritt-für-Schritt Anleitungen & Hilfe' },
 ];
 
 export function SetupWelcome({ onStart }: SetupWelcomeProps) {
