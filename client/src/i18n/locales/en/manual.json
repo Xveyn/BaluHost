@@ -4,8 +4,39 @@
   "tabs": {
     "api": "API Reference"
   },
+  "navigation": "Navigation",
   "backToOverview": "Back to overview",
   "noArticles": "No articles yet",
+  "noSearchResults": "No articles found",
   "errorLoading": "Failed to load article",
-  "searchPlaceholder": "Search articles..."
+  "searchPlaceholder": "Search articles...",
+  "overview": {
+    "subtitle": "Your personal NAS system — fully self-hosted.",
+    "infrastructure": "Infrastructure",
+    "server": {
+      "title": "BaluHost Server",
+      "description": "The core — backend (Python/FastAPI) and web frontend (React). Manages files, users, RAID, VPN, monitoring and more."
+    },
+    "app": {
+      "title": "BaluApp",
+      "description": "Native Android app with QR pairing, auto-upload, push notifications and VPN integration."
+    },
+    "desktop": {
+      "title": "BaluDesk",
+      "description": "Desktop sync client (Windows/Linux) for automatic folder synchronization with the NAS."
+    },
+    "docs": "Documentation",
+    "docsSubtitle": "Guides, references and configuration help.",
+    "articles_one": "{{count}} article",
+    "articles_other": "{{count}} articles",
+    "groupDescriptions": {
+      "getting-started": "Getting started and initial setup",
+      "setup": "Network, VPN and service configuration",
+      "features": "File sharing, uploads and user management",
+      "deployment": "Production deployment, SSL and reverse proxy",
+      "monitoring": "System monitoring and telemetry",
+      "security": "Security, audit logging and rate limiting",
+      "api-docs": "REST API endpoints and usage"
+    }
+  }
 }
