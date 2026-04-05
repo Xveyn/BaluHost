@@ -90,7 +90,7 @@ export default function DocsOverview({ groups, version, onSelectGroup }: DocsOve
           {infraCards.map(({ key, icon: Icon, gradient, border, glow }) => (
             <div
               key={key}
-              className={`group relative overflow-hidden rounded-2xl border ${border} bg-slate-900/55 p-5 shadow-[0_8px_24px_rgba(2,6,23,0.4)] backdrop-blur-xl transition-all duration-300 hover:shadow-lg ${glow}`}
+              className={`group relative overflow-hidden rounded-2xl border ${border} bg-slate-900/55 p-5 shadow-[0_8px_24px_rgba(2,6,23,0.4)] backdrop-blur-xl transition-all duration-300 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] hover:border-slate-700/60 ${glow}`}
             >
               <div className={`flex h-10 w-10 items-center justify-center rounded-xl bg-gradient-to-br ${gradient} text-white shadow-lg mb-3`}>
                 <Icon className="h-5 w-5" />
@@ -124,7 +124,7 @@ export default function DocsOverview({ groups, version, onSelectGroup }: DocsOve
             <button
               key={group.id}
               onClick={() => onSelectGroup(group.id)}
-              className="group w-full text-left relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-4 sm:p-5 shadow-[0_8px_24px_rgba(2,6,23,0.4)] backdrop-blur-xl hover:border-slate-700/80 transition-all duration-200 touch-manipulation active:scale-[0.99]"
+              className="group w-full text-left relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/55 p-4 sm:p-5 shadow-[0_8px_24px_rgba(2,6,23,0.4)] backdrop-blur-xl hover:border-slate-700/60 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] transition-all duration-200 touch-manipulation active:scale-[0.99]"
             >
               <div className="flex items-start gap-3">
                 <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-800 bg-slate-950/60 text-sky-400 group-hover:border-sky-500/40 transition-colors flex-shrink-0">
