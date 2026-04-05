@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.5] - 2026-04-05
+
+### Added
+- Manual: overview landing page with card-based navigation (replaces flat grid)
+- Manual: complete bilingual DE/EN translations for all user manual articles
+- Setup: user manual feature card on welcome screen
+- Setup: user manual drawer in setup wizard
+- Docs: allow unauthenticated access to docs endpoints
+
+### Changed
+- Style: refined hover effects on docs overview cards
+
+### Fixed
+- Notifications: correct backup notification `action_url` to valid route
+
+---
+
 ## [1.27.4] - 2026-04-05
 
 ### Added
@@ -14,8 +31,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 - Notifications: use optimistic updates and sync context on dismiss
-- Notifications: normalize timezone-naive `expires_at` from PostgreSQL to
-  UTC-aware before datetime comparison in device expiration check
 - Schedulers: allow all authenticated users to view scheduler list
 
 ---
