@@ -1,105 +1,105 @@
-# User Management - Erweiterte Features
+# User Management - Extended Features
 
-## Übersicht
-Das User Management wurde um umfassende, professionelle Features erweitert, die eine moderne Benutzerverwaltung ermöglichen.
+## Overview
+The user management system has been extended with comprehensive, professional features that enable modern user administration.
 
-## Implementierte Features
+## Implemented Features
 
-### 1. **Dashboard mit Statistiken**
-- **Total Users**: Gesamtzahl aller Benutzer
-- **Active Users**: Anzahl aktiver Benutzer
-- **Inactive Users**: Anzahl inaktiver Benutzer
-- **Administrators**: Anzahl der Admin-Accounts
+### 1. **Dashboard with Statistics**
+- **Total Users**: Total number of all users
+- **Active Users**: Number of active users
+- **Inactive Users**: Number of inactive users
+- **Administrators**: Number of admin accounts
 
-Alle Statistiken werden live vom Backend berechnet und in visuellen Cards angezeigt.
+All statistics are calculated live by the backend and displayed in visual cards.
 
-### 2. **Erweiterte Such- und Filterfunktionen**
-- **Textsuche**: Suche nach Benutzername oder E-Mail (Case-insensitive)
-- **Rollenfilter**: Filter nach Admin oder User
-- **Statusfilter**: Filter nach Aktiv/Inaktiv
-- Alle Filter sind kombinierbar und werden im Backend verarbeitet
+### 2. **Advanced Search and Filter Functions**
+- **Text search**: Search by username or email (case-insensitive)
+- **Role filter**: Filter by admin or user
+- **Status filter**: Filter by active/inactive
+- All filters can be combined and are processed on the backend
 
-### 3. **Sortierung**
-- Sortierbar nach:
+### 3. **Sorting**
+- Sortable by:
   - Username
   - Role
-  - Created At (Erstellungsdatum)
-- Aufsteigend/Absteigend Toggle
-- Visueller Indikator für aktive Sortierung
+  - Created At
+- Ascending/descending toggle
+- Visual indicator for active sorting
 
-### 4. **Benutzerstatus Management**
-- **Aktiv/Inaktiv Toggle**: Direktes Ein-/Ausschalten von Benutzern
-- Visuelles Feedback (grün = aktiv, grau = inaktiv)
-- Status ist klickbar für schnelle Änderungen
-- Backend-Route: `PATCH /api/users/{user_id}/toggle-active`
+### 4. **User Status Management**
+- **Active/Inactive toggle**: Directly enable/disable users
+- Visual feedback (green = active, gray = inactive)
+- Status is clickable for quick changes
+- Backend route: `PATCH /api/users/{user_id}/toggle-active`
 
-### 5. **Bulk-Aktionen**
-- **Mehrfachauswahl**: Checkbox für jeden Benutzer
-- **Select All**: Alle Benutzer auf einmal auswählen/abwählen
-- **Bulk Delete**: Mehrere Benutzer gleichzeitig löschen
-- Visuelles Feedback für Anzahl ausgewählter Benutzer
-- Backend-Route: `POST /api/users/bulk-delete`
+### 5. **Bulk Actions**
+- **Multi-select**: Checkbox for each user
+- **Select All**: Select/deselect all users at once
+- **Bulk Delete**: Delete multiple users simultaneously
+- Visual feedback for the number of selected users
+- Backend route: `POST /api/users/bulk-delete`
 
-### 6. **CRUD-Operationen mit Modals**
+### 6. **CRUD Operations with Modals**
 
 #### Create User Modal
 - Username
-- E-Mail
-- Passwort
-- Rolle (User/Admin)
-- Aktiv-Status Checkbox
+- Email
+- Password
+- Role (User/Admin)
+- Active status checkbox
 
 #### Edit User Modal
-- Alle Felder editierbar
-- Passwort optional (leer lassen = behalten)
-- Vorausgefüllte Werte
-- Visueller Unterschied: "Create" vs "Update" Button
+- All fields editable
+- Password optional (leave empty to keep current)
+- Pre-filled values
+- Visual distinction: "Create" vs "Update" button
 
 #### Delete Confirmation Modal
-- Sicherheitsabfrage vor Löschen
-- Visueller Warn-Indikator
-- Zwei-Schritt Prozess (Auswählen → Bestätigen)
+- Confirmation prompt before deletion
+- Visual warning indicator
+- Two-step process (select -> confirm)
 
-### 7. **Zeitstempel-Anzeige**
-- **Created At**: Erstellungsdatum angezeigt
-- **Updated At**: Verfügbar im Backend (für zukünftige Features)
-- Formatierung: Lokales Datumsformat
+### 7. **Timestamp Display**
+- **Created At**: Creation date displayed
+- **Updated At**: Available in the backend (for future features)
+- Formatting: Local date format
 
 ### 8. **CSV Export**
-- Export aller aktuell angezeigten Benutzer
-- Spalten: Username, Email, Role, Status, Created At
-- Automatischer Download
-- Dateiname: `users-YYYY-MM-DD.csv`
+- Export of all currently displayed users
+- Columns: Username, Email, Role, Status, Created At
+- Automatic download
+- Filename: `users-YYYY-MM-DD.csv`
 
 ### 9. **Responsive Design**
-- Mobile-optimiert
-- Flexibles Grid für Statistiken (1-4 Spalten je nach Bildschirmgröße)
-- Scrollbare Tabelle auf kleinen Bildschirmen
-- Touch-freundliche Buttons
+- Mobile-optimized
+- Flexible grid for statistics (1-4 columns depending on screen size)
+- Scrollable table on small screens
+- Touch-friendly buttons
 
-### 10. **Visuelle Verbesserungen**
-- **Avatar-Kreise**: Erste Buchstabe des Usernamens
-- **Rollen-Badges**: Admin (blau), User (grau)
-- **Status-Badges**: Aktiv (grün), Inaktiv (grau)
-- **Hover-Effekte**: Subtile Highlights beim Überfahren
-- **Icons**: Lucide-React Icons für intuitive Bedienung
+### 10. **Visual Improvements**
+- **Avatar circles**: First letter of the username
+- **Role badges**: Admin (blue), User (gray)
+- **Status badges**: Active (green), Inactive (gray)
+- **Hover effects**: Subtle highlights on hover
+- **Icons**: Lucide-React icons for intuitive operation
 
-## Backend-Erweiterungen
+## Backend Extensions
 
-### Neue Datenbank-Felder
+### New Database Fields
 ```python
-is_active: bool = True  # Benutzer-Status
+is_active: bool = True  # User status
 ```
 
-### Erweiterte API-Endpoints
+### Extended API Endpoints
 
 #### GET /api/users/
 **Query Parameters:**
-- `search`: Textsuche (username, email)
-- `role`: Filter nach Rolle
-- `is_active`: Filter nach Status
-- `sort_by`: Sortierfeld (username, role, created_at)
-- `sort_order`: Sortierrichtung (asc, desc)
+- `search`: Text search (username, email)
+- `role`: Filter by role
+- `is_active`: Filter by status
+- `sort_by`: Sort field (username, role, created_at)
+- `sort_order`: Sort direction (asc, desc)
 
 **Response:**
 ```json
@@ -128,60 +128,60 @@ is_active: bool = True  # Benutzer-Status
 ```
 
 #### PATCH /api/users/{user_id}/toggle-active
-Toggled den `is_active` Status eines Benutzers.
+Toggles the `is_active` status of a user.
 
-### Schema-Erweiterungen
-- `UserPublic`: Jetzt mit `is_active`, `created_at`, `updated_at`
-- `UserUpdate`: Jetzt mit `is_active`
-- `UsersResponse`: Jetzt mit Statistiken (total, active, inactive, admins)
+### Schema Extensions
+- `UserPublic`: Now includes `is_active`, `created_at`, `updated_at`
+- `UserUpdate`: Now includes `is_active`
+- `UsersResponse`: Now includes statistics (total, active, inactive, admins)
 
 ## Migration
 
-Die Datenbank-Migration wurde automatisch durchgeführt:
+The database migration was performed automatically:
 ```bash
 alembic revision -m "add_is_active_to_users"
 alembic upgrade head
 ```
 
-**Migration-Datei:** `152e33e84ff7_add_is_active_to_users.py`
+**Migration file:** `152e33e84ff7_add_is_active_to_users.py`
 
-## Technologie-Stack
+## Technology Stack
 
 ### Frontend
-- **React 18** mit TypeScript
-- **Lucide-React** für Icons
-- **Tailwind CSS** für Styling
-- **React Hot Toast** für Notifications
+- **React 18** with TypeScript
+- **Lucide-React** for icons
+- **Tailwind CSS** for styling
+- **React Hot Toast** for notifications
 
 ### Backend
-- **FastAPI** mit SQLAlchemy
-- **SQLite** (Dev) / **PostgreSQL** (Prod)
-- **Alembic** für Migrationen
-- **Pydantic** für Validierung
+- **FastAPI** with SQLAlchemy
+- **SQLite** (dev) / **PostgreSQL** (prod)
+- **Alembic** for migrations
+- **Pydantic** for validation
 
 ## Best Practices
 
 ### Performance
-- Backend-seitige Filterung und Sortierung
-- Effiziente Datenbankabfragen mit SQLAlchemy
-- Minimale Re-Renders durch gezieltes State Management
+- Server-side filtering and sorting
+- Efficient database queries with SQLAlchemy
+- Minimal re-renders through targeted state management
 
 ### UX
-- Sofortiges visuelles Feedback bei allen Aktionen
-- Toast-Notifications für Erfolg/Fehler
-- Confirmation-Dialoge für destruktive Aktionen
-- Loading-States während API-Calls
+- Immediate visual feedback for all actions
+- Toast notifications for success/error
+- Confirmation dialogs for destructive actions
+- Loading states during API calls
 
 ### Security
-- Admin-only Endpoints (via JWT)
-- Input-Validierung auf Backend
-- Passwort-Hashing mit bcrypt
-- CORS-konforme API-Requests
+- Admin-only endpoints (via JWT)
+- Input validation on the backend
+- Password hashing with bcrypt
+- CORS-compliant API requests
 
 ## Testing
 
 The system can be tested in dev mode:
-1. `python start_dev.py` — Starts backend + frontend
+1. `python start_dev.py` -- Starts backend + frontend
 2. Login as admin (`admin` / `DevMode2024`)
 3. Navigate to "User Management"
 

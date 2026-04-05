@@ -1,6 +1,6 @@
-# Telemetrie-Konfiguration Empfehlungen
+# Telemetry Configuration Recommendations
 
-## Benchmark-Ergebnisse (Dein System - Windows)
+## Benchmark Results (Your System - Windows)
 
 ```
 Average Sample Time: 3.80ms
@@ -8,99 +8,99 @@ CPU Impact @ 1s:     0.38%
 CPU Impact @ 3s:     0.13%
 ```
 
-## Empfohlene Konfiguration
+## Recommended Configuration
 
-### Für Development (Windows)
+### For Development (Windows)
 ```env
 # backend/.env
 TELEMETRY_INTERVAL_SECONDS=2.0
 TELEMETRY_HISTORY_SIZE=90
 ```
 
-**Begründung:**
-- 2s Intervall = 30 samples/min = 0.19% CPU
-- 90 Samples = 3 Minuten History
-- Guter Kompromiss zwischen Auflösung und Performance
-- Charts sind flüssig genug für Dev-Zwecke
+**Rationale:**
+- 2s interval = 30 samples/min = 0.19% CPU
+- 90 samples = 3 minutes history
+- Good balance between resolution and performance
+- Charts are smooth enough for development purposes
 
-### Für Production (Linux/NAS)
+### For Production (Linux/NAS)
 ```env
 # backend/.env
 TELEMETRY_INTERVAL_SECONDS=3.0
 TELEMETRY_HISTORY_SIZE=60
 ```
 
-**Begründung:**
-- Linux ist ~10x schneller bei psutil (~0.3ms statt 3.8ms)
-- NAS-Hardware ist oft schwächer
-- 20 samples/min reichen für Production-Monitoring
-- 60 Samples = 3 Minuten History
+**Rationale:**
+- Linux is ~10x faster with psutil (~0.3ms instead of 3.8ms)
+- NAS hardware is often less powerful
+- 20 samples/min is sufficient for production monitoring
+- 60 samples = 3 minutes history
 
-## Frontend-Polling
+## Frontend Polling
 
-**Aktuell:** 5 Sekunden (optimal)
+**Current:** 5 seconds (optimal)
 
 ```typescript
 // client/src/hooks/useSystemTelemetry.ts
-const pollInterval = 5000; // 5s - NICHT ändern
+const pollInterval = 5000; // 5s - DO NOT change
 ```
 
-**Warum 5s beibehalten:**
-- Bei 2s Backend + 5s Frontend: Frontend holt 10 neue Samples pro Request
-- Reduziert API-Calls drastisch
-- Browser-Performance bleibt optimal
-- Netzwerk-Traffic minimiert
+**Why keep 5s:**
+- With 2s backend + 5s frontend: frontend fetches 10 new samples per request
+- Drastically reduces API calls
+- Browser performance remains optimal
+- Network traffic minimized
 
-## Wenn du flüssigere Charts willst
+## If You Want Smoother Charts
 
-Option 1: **Backend-Intervall reduzieren** (Empfohlen)
+Option 1: **Reduce backend interval** (Recommended)
 ```env
 TELEMETRY_INTERVAL_SECONDS=1.5  # 40 samples/min
-TELEMETRY_HISTORY_SIZE=120      # 3 Minuten
+TELEMETRY_HISTORY_SIZE=120      # 3 minutes
 ```
-→ CPU Impact: 0.25% (völlig egal)
-→ Charts werden flüssiger
-→ Frontend unverändert
+→ CPU impact: 0.25% (negligible)
+→ Charts become smoother
+→ Frontend unchanged
 
-Option 2: **Frontend-Polling erhöhen** (NICHT empfohlen)
+Option 2: **Increase frontend polling** (NOT recommended)
 ```typescript
 const pollInterval = 2000; // 2s
 ```
-→ 5x mehr API-Requests
-→ 5x mehr Re-Renders
-→ Höherer Batterieverbrauch
-→ Mehr Netzwerk-Traffic
+→ 5x more API requests
+→ 5x more re-renders
+→ Higher battery consumption
+→ More network traffic
 
-## Praktischer Test
+## Practical Test
 
-Starte den Backend mit:
+Start the backend with:
 ```bash
-# Temporär testen
+# Temporary test
 TELEMETRY_INTERVAL_SECONDS=1.5 python -m uvicorn app.main:app --reload
 ```
 
-Dann im Dashboard beobachten:
-- CPU-Sparklines sollten flüssiger sein
-- Netzwerk-Charts zeigen mehr Detail
-- Keine spürbare Performance-Verschlechterung
+Then observe in the dashboard:
+- CPU sparklines should be smoother
+- Network charts show more detail
+- No noticeable performance degradation
 
-## Finale Empfehlung für dein Setup
+## Final Recommendation for Your Setup
 
 **Backend (Windows Dev):**
 ```python
 # backend/app/core/config.py
-telemetry_interval_seconds: float = 2.0  # Ausgewogen
-telemetry_history_size: int = 90         # 3 Min History
+telemetry_interval_seconds: float = 2.0  # Balanced
+telemetry_history_size: int = 90         # 3 min history
 ```
 
 **Frontend:**
 ```typescript
-// UNCHANGED - 5s ist optimal
+// UNCHANGED - 5s is optimal
 const pollInterval = 5000;
 ```
 
-**Resultat:**
-- 30 Samples/Minute → 6 neue Samples pro Frontend-Request
-- 0.19% CPU (vernachlässigbar)
-- Flüssige Charts
-- Minimaler Netzwerk-Traffic
+**Result:**
+- 30 samples/minute → 6 new samples per frontend request
+- 0.19% CPU (negligible)
+- Smooth charts
+- Minimal network traffic

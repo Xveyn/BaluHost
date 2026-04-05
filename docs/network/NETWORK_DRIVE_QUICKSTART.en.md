@@ -1,163 +1,163 @@
-# 🗂️ Netzlaufwerk-Zugriff - Quick Start
+# Network Drive Access - Quick Start
 
-Schnellanleitung zum Einbinden des BaluHost Storage als Netzlaufwerk in Windows.
+Quick guide for mounting BaluHost storage as a network drive on Windows.
 
 ---
 
-## 🚀 Dev-Mode (Lokale Entwicklung)
+## Dev Mode (Local Development)
 
-### Automatisch (Empfohlen)
+### Automatic (Recommended)
 
 ```powershell
-# Netzlaufwerk Z: erstellen (SUBST-Methode)
+# Create network drive Z: (SUBST method)
 .\scripts\mount-dev-storage.ps1
 
-# Oder mit SMB (wie in Produktion)
+# Or with SMB (like production)
 .\scripts\mount-dev-storage.ps1 -UseSMB
 
-# Netzlaufwerk wieder trennen
+# Disconnect network drive
 .\scripts\unmount-dev-storage.ps1
 ```
 
-### Manuell (Windows Explorer)
+### Manual (Windows Explorer)
 
-1. **Explorer öffnen**
-2. **Pfad eingeben:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
-3. **Als Favorit speichern**
+1. **Open Explorer**
+2. **Enter path:** `D:\Programme (x86)\Baluhost\backend\dev-storage`
+3. **Save as favorite**
 
-### Manuell (PowerShell)
+### Manual (PowerShell)
 
 ```powershell
-# Einfaches virtuelles Laufwerk erstellen
+# Create simple virtual drive
 subst Z: "D:\Programme (x86)\Baluhost\backend\dev-storage"
 
-# Entfernen
+# Remove
 subst Z: /d
 ```
 
 ---
 
-## 🐧 Produktion (Linux NAS mit RAID)
+## Production (Linux NAS with RAID)
 
 ### Windows Client
 
 #### Option 1: Windows Explorer
 
-1. **Rechtsklick auf "Dieser PC"**
-2. **"Netzlaufwerk verbinden"**
-3. **Laufwerk:** `Z:`
-4. **Ordner:** `\\192.168.1.100\BaluHostStorage` (ersetze IP)
-5. **Anmeldedaten:** 
-   - Benutzername: `baluhost`
-   - Passwort: `<dein-passwort>`
-6. **"Anmeldedaten speichern"** aktivieren
+1. **Right-click "This PC"**
+2. **"Map network drive"**
+3. **Drive:** `Z:`
+4. **Folder:** `\\192.168.1.100\BaluHostStorage` (replace IP)
+5. **Credentials:**
+   - Username: `baluhost`
+   - Password: `<your-password>`
+6. **Check "Remember my credentials"**
 
 #### Option 2: PowerShell
 
 ```powershell
-# Mit interaktiver Passwort-Abfrage
+# With interactive password prompt
 net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost /persistent:yes
 
-# Trennen
+# Disconnect
 net use Z: /delete
 ```
 
-### Linux Server Setup (einmalig)
+### Linux Server Setup (One-Time)
 
 ```bash
-# 1. Samba installieren
+# 1. Install Samba
 sudo apt install samba -y
 
-# 2. Konfiguration bearbeiten
+# 2. Edit configuration
 sudo nano /etc/samba/smb.conf
 
-# 3. Freigabe hinzufügen (siehe docs/NETWORK_DRIVE_SETUP.md)
+# 3. Add share (see docs/NETWORK_DRIVE_SETUP.md)
 
-# 4. Benutzer erstellen
+# 4. Create user
 sudo useradd baluhost
 sudo smbpasswd -a baluhost
 
-# 5. Samba starten
+# 5. Start Samba
 sudo systemctl restart smbd
 ```
 
 ---
 
-## 📋 Verfügbare Scripts
+## Available Scripts
 
-| Script | Beschreibung |
-|--------|--------------|
-| `mount-dev-storage.ps1` | Dev-Storage als Z: mounten |
-| `unmount-dev-storage.ps1` | Netzlaufwerk Z: trennen |
+| Script | Description |
+|--------|-------------|
+| `mount-dev-storage.ps1` | Mount dev storage as Z: |
+| `unmount-dev-storage.ps1` | Disconnect network drive Z: |
 
-### Script-Optionen
+### Script Options
 
 ```powershell
-# Anderen Laufwerksbuchstaben verwenden
+# Use a different drive letter
 .\scripts\mount-dev-storage.ps1 -DriveLetter "Y:"
 
-# SMB-Modus (wie in Produktion)
+# SMB mode (like production)
 .\scripts\mount-dev-storage.ps1 -UseSMB
 
-# Ohne automatisches Öffnen des Explorers
+# Without automatically opening Explorer
 .\scripts\mount-dev-storage.ps1 -OpenExplorer:$false
 ```
 
 ---
 
-## 🔍 Troubleshooting
+## Troubleshooting
 
-### "Zugriff verweigert"
+### "Access denied"
 ```powershell
-# Als Administrator ausführen
+# Run as administrator
 ```
 
-### "Laufwerk bereits belegt"
+### "Drive already in use"
 ```powershell
-# Zuerst trennen
+# Disconnect first
 .\scripts\unmount-dev-storage.ps1
 
-# Oder anderen Buchstaben verwenden
+# Or use a different letter
 .\scripts\mount-dev-storage.ps1 -DriveLetter "Y:"
 ```
 
-### SMB funktioniert nicht
+### SMB not working
 ```powershell
-# Prüfe Windows-Dienste
+# Check Windows services
 Get-Service LanmanWorkstation, LanmanServer | Start-Service
 
-# Verwende SUBST-Methode
+# Use SUBST method instead
 .\scripts\mount-dev-storage.ps1
 ```
 
 ---
 
-## 📚 Vollständige Dokumentation
+## Full Documentation
 
-Siehe [`docs/NETWORK_DRIVE_SETUP.md`](../docs/NETWORK_DRIVE_SETUP.md) für:
-- Detaillierte Samba-Konfiguration
-- Linux RAID-Setup
-- Firewall-Einstellungen
-- Performance-Optimierung
-- Erweiterte Troubleshooting-Tipps
+See [`docs/NETWORK_DRIVE_SETUP.md`](../docs/NETWORK_DRIVE_SETUP.md) for:
+- Detailed Samba configuration
+- Linux RAID setup
+- Firewall settings
+- Performance optimization
+- Advanced troubleshooting tips
 
 ---
 
-## ⚡ Quick Commands
+## Quick Commands
 
 ```powershell
-# Dev-Mode: Mount
+# Dev Mode: Mount
 .\scripts\mount-dev-storage.ps1
 
-# Dev-Mode: Unmount
+# Dev Mode: Unmount
 .\scripts\unmount-dev-storage.ps1
 
-# Produktion: Mount
+# Production: Mount
 net use Z: \\192.168.1.100\BaluHostStorage /user:baluhost
 
-# Status anzeigen
+# Show status
 net use
 
-# Alle Netzlaufwerke anzeigen
+# Show all network drives
 Get-PSDrive -PSProvider FileSystem
 ```

@@ -1,38 +1,38 @@
-# Frontend Deployment Checkliste
+# Frontend Deployment Checklist
 
-Nach Änderungen am Frontend (`client/`) folgende Schritte ausführen:
+After making changes to the frontend (`client/`), follow these steps:
 
 ## Quick Deploy
 
 ```bash
-# 1. Build erstellen
+# 1. Create build
 cd /home/sven/projects/BaluHost/client
 npm run build
 
-bzw.: cd client && npm run build && sudo systemctl reload nginx 
+# or: cd client && npm run build && sudo systemctl reload nginx 
 
-# 2. nginx neuladen (falls config geändert)
+# 2. Reload nginx (if config changed)
 sudo nginx -t && sudo systemctl reload nginx
 ```
 
-Fertig. Änderungen sind sofort unter http://localhost bzw. http://baluhost.local sichtbar.
+Done. Changes are immediately visible at http://localhost or http://baluhost.local.
 
 ---
 
-## Ersteinrichtung (einmalig)
+## Initial Setup (one-time)
 
 ```bash
-# 1. Frontend bauen
+# 1. Build frontend
 cd /home/sven/projects/BaluHost/client
 npm install
 npm run build
 
-# 2. nginx Config verlinken
+# 2. Link nginx config
 sudo ln -sf /home/sven/projects/BaluHost/deploy/nginx/baluhost-http.conf /etc/nginx/sites-available/baluhost
 sudo ln -sf /etc/nginx/sites-available/baluhost /etc/nginx/sites-enabled/baluhost
 sudo rm -f /etc/nginx/sites-enabled/default  # optional
 
-# 3. Config testen & starten
+# 3. Test config and start
 sudo nginx -t
 sudo systemctl restart nginx
 sudo systemctl enable nginx  # Autostart
@@ -42,14 +42,14 @@ sudo systemctl enable nginx  # Autostart
 
 ## Troubleshooting
 
-| Problem | Lösung |
-|---------|--------|
-| 502 Bad Gateway | Backend läuft nicht → `python start_prod.py` |
-| 404 auf Unterseiten | `try_files` fehlt in nginx config |
-| Alte Version sichtbar | Browser-Cache leeren (Ctrl+Shift+R) |
-| Build schlägt fehl | `npm install` nochmal ausführen |
+| Problem | Solution |
+|---------|----------|
+| 502 Bad Gateway | Backend is not running -> `python start_prod.py` |
+| 404 on subpages | `try_files` missing in nginx config |
+| Old version visible | Clear browser cache (Ctrl+Shift+R) |
+| Build fails | Run `npm install` again |
 
-## Dateien
+## Files
 
 - **Build Output:** `client/dist/`
 - **nginx Config:** `deploy/nginx/baluhost-http.conf`

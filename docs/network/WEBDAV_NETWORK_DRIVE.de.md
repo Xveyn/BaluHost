@@ -1,10 +1,10 @@
-# WebDAV Network Drive
+# WebDAV-Netzlaufwerk
 
-Mount your BaluHost storage as a network drive on Windows, macOS, and Linux.
+Binden Sie Ihren BaluHost-Speicher als Netzlaufwerk unter Windows, macOS und Linux ein.
 
-## Architecture
+## Architektur
 
-The WebDAV server runs as a **separate worker process** alongside the main backend:
+Der WebDAV-Server laeuft als **separater Worker-Prozess** neben dem Haupt-Backend:
 
 ```
 ┌─────────────────────┐     ┌─────────────────────────┐
@@ -17,108 +17,108 @@ The WebDAV server runs as a **separate worker process** alongside the main backe
 └─────────────────────┘     └─────────────────────────┘
 ```
 
-- **Server**: cheroot WSGI hosting a WsgiDAV application
-- **Authentication**: HTTP Basic Auth verified against the BaluHost user database (bcrypt)
-- **User Isolation**: Admin sees entire storage, regular users see only `<storage>/<username>/`
-- **IPC**: Worker writes heartbeat to `webdav_state` table every 10s; web API reads it for status
-- **SSL**: Self-signed certificate auto-generated on first start (enabled by default)
+- **Server**: cheroot WSGI mit einer WsgiDAV-Anwendung
+- **Authentifizierung**: HTTP Basic Auth, validiert gegen die BaluHost-Benutzerdatenbank (bcrypt)
+- **Benutzerisolierung**: Administratoren sehen den gesamten Speicher, normale Benutzer nur `<storage>/<benutzername>/`
+- **IPC**: Der Worker schreibt alle 10 Sekunden einen Heartbeat in die Tabelle `webdav_state`; die Web-API liest diesen fuer den Status
+- **SSL**: Selbstsigniertes Zertifikat wird beim ersten Start automatisch generiert (standardmaessig aktiviert)
 
-## Configuration
+## Konfiguration
 
-Environment variables (or `Settings` in `backend/app/core/config.py`):
+Umgebungsvariablen (oder `Settings` in `backend/app/core/config.py`):
 
-| Variable | Default | Description |
+| Variable | Standard | Beschreibung |
 |---|---|---|
-| `WEBDAV_ENABLED` | `true` | Enable/disable the WebDAV server |
-| `WEBDAV_PORT` | `8080` | Listening port |
-| `WEBDAV_SSL_ENABLED` | `true` | HTTPS with self-signed certificate |
-| `WEBDAV_VERBOSE_LOGGING` | `false` | Log every request (method, path, auth) |
+| `WEBDAV_ENABLED` | `true` | WebDAV-Server aktivieren/deaktivieren |
+| `WEBDAV_PORT` | `8080` | Listening-Port |
+| `WEBDAV_SSL_ENABLED` | `true` | HTTPS mit selbstsigniertem Zertifikat |
+| `WEBDAV_VERBOSE_LOGGING` | `false` | Jeden Request protokollieren (Methode, Pfad, Auth) |
 
-## Starting the Server
+## Server starten
 
-### Development
+### Entwicklung
 
 ```bash
 python start_dev.py
-# Starts backend, scheduler, webdav worker, and frontend
+# Startet Backend, Scheduler, WebDAV-Worker und Frontend
 ```
 
-The WebDAV worker is launched automatically as a subprocess.
+Der WebDAV-Worker wird automatisch als Unterprozess gestartet.
 
-### Production
+### Produktion
 
-**Systemd service** (`deploy/systemd/baluhost-webdav.service`):
+**Systemd-Service** (`deploy/systemd/baluhost-webdav.service`):
 
 ```bash
 sudo systemctl enable baluhost-webdav
 sudo systemctl start baluhost-webdav
 
-# Check status
+# Status pruefen
 sudo systemctl status baluhost-webdav
 sudo journalctl -u baluhost-webdav -f
 ```
 
-Or via the launcher:
+Oder ueber den Launcher:
 
 ```bash
-python start_prod.py    # Starts backend + scheduler + webdav
-python kill_prod.py     # Stops all
+python start_prod.py    # Startet Backend + Scheduler + WebDAV
+python kill_prod.py     # Stoppt alles
 ```
 
-## Connecting from Clients
+## Verbindung von Clients
 
-Use your **BaluHost login credentials** (username + password). The WebDAV tab in the BaluHost UI (System Control Page) shows the exact commands for your username.
+Verwenden Sie Ihre **BaluHost-Anmeldedaten** (Benutzername + Passwort). Der WebDAV-Tab in der BaluHost-Oberflaeche (System Control Page) zeigt die genauen Befehle fuer Ihren Benutzernamen an.
 
-Default connection URL: `https://<NAS-IP>:8080/`
+Standard-Verbindungs-URL: `https://<NAS-IP>:8080/`
 
 ### Windows
 
-#### Method 1: Command Line
+#### Methode 1: Kommandozeile
 
 ```cmd
 net use Z: https://192.168.178.53:8080/ /user:admin *
 ```
 
-#### Method 2: File Explorer (GUI)
+#### Methode 2: Datei-Explorer (GUI)
 
-1. Open File Explorer (Win+E) → "This PC"
-2. Click "Map network drive" in toolbar
-3. Drive letter: `Z:` (or any available)
-4. Folder: `https://192.168.178.53:8080/`
-5. Check "Connect using different credentials" → Finish
-6. Enter BaluHost username and password
+1. Datei-Explorer oeffnen (Win+E) -> "Dieser PC"
+2. "Netzlaufwerk verbinden" in der Symbolleiste anklicken
+3. Laufwerksbuchstabe: `Z:` (oder ein anderer verfuegbarer)
+4. Ordner: `https://192.168.178.53:8080/`
+5. "Verbindung mit anderen Anmeldeinformationen herstellen" aktivieren -> Fertig stellen
+6. BaluHost-Benutzername und -Passwort eingeben
 
-#### Windows: SSL Certificate Trust
+#### Windows: SSL-Zertifikat importieren
 
-With self-signed certificates, Windows requires you to import the cert:
+Bei selbstsignierten Zertifikaten muss das Zertifikat unter Windows importiert werden:
 
-1. Copy `backend/webdav-certs/webdav.crt` from the NAS to your Windows PC
-2. Double-click the `.crt` file → "Install Certificate"
-3. Store Location: **Local Machine**
-4. Place in: **Trusted Root Certification Authorities**
-5. Finish → restart `WebClient` service:
+1. `backend/webdav-certs/webdav.crt` vom NAS auf Ihren Windows-PC kopieren
+2. Die `.crt`-Datei doppelklicken -> "Zertifikat installieren"
+3. Speicherort: **Lokaler Computer**
+4. Ablegen in: **Vertrauenswuerdige Stammzertifizierungsstellen**
+5. Fertig stellen -> `WebClient`-Dienst neu starten:
 
 ```powershell
 Restart-Service WebClient
 ```
 
-#### Windows: WebClient Service
+#### Windows: WebClient-Dienst
 
-The `WebClient` service must be running:
+Der `WebClient`-Dienst muss aktiv sein:
 
 ```powershell
-# Check status
+# Status pruefen
 Get-Service WebClient
 
-# Start and set to auto-start
+# Starten und Autostart einrichten
 Start-Service WebClient
 Set-Service WebClient -StartupType Automatic
 ```
 
-#### Windows: Performance Tuning
+#### Windows: Performance-Optimierung
 
 ```powershell
-# Increase file size limit (default 50 MB → 4 GB)
+# Dateigroessenlimit erhoehen (Standard 50 MB -> 4 GB)
 Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" `
   -Name "FileSizeLimitInBytes" -Value 4294967295
 
@@ -129,20 +129,20 @@ Restart-Service WebClient
 
 #### Finder (GUI)
 
-1. Finder → Go → Connect to Server (Cmd+K)
-2. Enter: `https://192.168.178.53:8080/`
-3. Click "Connect"
-4. Choose "Registered User" → enter BaluHost credentials
-5. Volume mounts at `/Volumes/<hostname>`
+1. Finder -> Gehe zu -> Mit Server verbinden (Cmd+K)
+2. Eingeben: `https://192.168.178.53:8080/`
+3. "Verbinden" klicken
+4. "Registrierter Benutzer" waehlen -> BaluHost-Anmeldedaten eingeben
+5. Volume wird unter `/Volumes/<hostname>` eingebunden
 
-#### Command Line
+#### Kommandozeile
 
 ```bash
 sudo mkdir -p /Volumes/baluhost
 mount -t webdav https://192.168.178.53:8080/ /Volumes/baluhost
 ```
 
-#### Disable .DS_Store on Network Volumes
+#### .DS_Store auf Netzwerk-Volumes deaktivieren
 
 ```bash
 defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
@@ -150,7 +150,7 @@ defaults write com.apple.desktopservices DSDontWriteNetworkStores -bool TRUE
 
 ### Linux
 
-#### Install davfs2
+#### davfs2 installieren
 
 ```bash
 # Debian/Ubuntu
@@ -163,83 +163,83 @@ sudo dnf install davfs2
 sudo pacman -S davfs2
 ```
 
-#### Mount
+#### Einbinden
 
 ```bash
 sudo mkdir -p /mnt/baluhost
 sudo mount -t davfs https://192.168.178.53:8080/ /mnt/baluhost
-# Enter username + password when prompted
+# Benutzername + Passwort bei Aufforderung eingeben
 ```
 
-#### Self-Signed Certificate Trust
+#### Selbstsigniertes Zertifikat vertrauen
 
-Add to `/etc/davfs2/davfs2.conf`:
+Folgendes in `/etc/davfs2/davfs2.conf` eintragen:
 
 ```
 trust_server_cert /path/to/webdav.crt
 ```
 
-Or copy the cert to the system trust store:
+Oder das Zertifikat in den System-Zertifikatsspeicher kopieren:
 
 ```bash
 sudo cp webdav.crt /usr/local/share/ca-certificates/baluhost-webdav.crt
 sudo update-ca-certificates
 ```
 
-#### Permanent Mount (fstab)
+#### Permanentes Einbinden (fstab)
 
 ```bash
-# Add credentials
+# Anmeldedaten hinterlegen
 echo "https://192.168.178.53:8080/ admin yourpassword" | sudo tee -a /etc/davfs2/secrets
 sudo chmod 600 /etc/davfs2/secrets
 
-# Add to fstab
+# In fstab eintragen
 echo "https://192.168.178.53:8080/ /mnt/baluhost davfs user,noauto,uid=1000,gid=1000 0 0" | sudo tee -a /etc/fstab
 
-# Mount (no sudo needed after fstab entry)
+# Einbinden (nach fstab-Eintrag kein sudo noetig)
 mount /mnt/baluhost
 ```
 
 ## SSL / HTTPS
 
-SSL is **enabled by default**. On first start, the WebDAV worker auto-generates a self-signed certificate:
+SSL ist **standardmaessig aktiviert**. Beim ersten Start generiert der WebDAV-Worker automatisch ein selbstsigniertes Zertifikat:
 
-- **Location**: `backend/webdav-certs/webdav.crt` + `webdav.key`
-- **Validity**: 10 years
-- **SAN**: `localhost`, `127.0.0.1`, and the server's detected LAN IP
-- **Algorithm**: RSA 2048-bit, SHA256
+- **Speicherort**: `backend/webdav-certs/webdav.crt` + `webdav.key`
+- **Gueltigkeit**: 10 Jahre
+- **SAN**: `localhost`, `127.0.0.1` und die erkannte LAN-IP des Servers
+- **Algorithmus**: RSA 2048-Bit, SHA256
 
-To regenerate the certificate (e.g., after IP change):
+Um das Zertifikat neu zu generieren (z. B. nach IP-Aenderung):
 
 ```bash
 rm -rf backend/webdav-certs/
 sudo systemctl restart baluhost-webdav
 ```
 
-To disable SSL:
+Um SSL zu deaktivieren:
 
 ```bash
 export WEBDAV_SSL_ENABLED=false
 ```
 
-## User Isolation
+## Benutzerisolierung
 
-Storage access is enforced per-request in `BaluHostDAVProvider`:
+Die Zugriffskontrolle wird pro Anfrage im `BaluHostDAVProvider` durchgesetzt:
 
-| Role | Sees | Path |
+| Rolle | Sichtbar | Pfad |
 |---|---|---|
-| `admin` | Entire storage | `<NAS_STORAGE_PATH>/` |
-| `user` | Home directory only | `<NAS_STORAGE_PATH>/<username>/` |
+| `admin` | Gesamter Speicher | `<NAS_STORAGE_PATH>/` |
+| `user` | Nur eigenes Home-Verzeichnis | `<NAS_STORAGE_PATH>/<benutzername>/` |
 
-- Home directories are created automatically on first WebDAV access
-- Path traversal is prevented via `os.path.normpath()` validation
-- Thread-safe: user context is read from the WSGI environ per request
+- Home-Verzeichnisse werden beim ersten WebDAV-Zugriff automatisch erstellt
+- Path-Traversal wird durch `os.path.normpath()`-Validierung verhindert
+- Thread-sicher: Der Benutzerkontext wird pro Anfrage aus der WSGI-Umgebung gelesen
 
-## API Endpoints
+## API-Endpunkte
 
-### `GET /api/webdav/status` (Admin only)
+### `GET /api/webdav/status` (Nur Administratoren)
 
-Returns detailed server status including heartbeat and PID.
+Gibt detaillierten Serverstatus inklusive Heartbeat und PID zurueck.
 
 ```json
 {
@@ -254,9 +254,9 @@ Returns detailed server status including heartbeat and PID.
 }
 ```
 
-### `GET /api/webdav/connection-info` (Authenticated users)
+### `GET /api/webdav/connection-info` (Authentifizierte Benutzer)
 
-Returns OS-specific mount instructions with the current user's username.
+Gibt betriebssystemspezifische Mount-Anleitungen mit dem Benutzernamen des aktuellen Benutzers zurueck.
 
 ```json
 {
@@ -276,89 +276,89 @@ Returns OS-specific mount instructions with the current user's username.
 }
 ```
 
-## Health Monitoring
+## Zustandsueberwachung
 
-The WebDAV server registers with BaluHost's service status system:
+Der WebDAV-Server registriert sich im Service-Status-System von BaluHost:
 
-- Heartbeat interval: **10 seconds**
-- Staleness threshold: **30 seconds** (no heartbeat = considered offline)
-- Visible in: Admin Dashboard → Services tab
-- Systemd: auto-restart on crash (`Restart=always`, `RestartSec=10s`)
+- Heartbeat-Intervall: **10 Sekunden**
+- Veraltungsschwelle: **30 Sekunden** (kein Heartbeat = gilt als offline)
+- Sichtbar in: Admin-Dashboard -> Services-Tab
+- Systemd: Automatischer Neustart bei Absturz (`Restart=always`, `RestartSec=10s`)
 
-## Frontend UI
+## Frontend-Oberflaeche
 
-The WebDAV tab is part of the **System Control Page** (`client/src/pages/SystemControlPage.tsx`):
+Der WebDAV-Tab ist Teil der **System Control Page** (`client/src/pages/SystemControlPage.tsx`):
 
-- `WebdavConnectionCard` — shows status, connection URL, and OS-specific mount instructions with copy buttons
-- Fetches data from `/api/webdav/connection-info`
-- i18n keys: `system.webdav.*` (English + German)
+- `WebdavConnectionCard` -- zeigt Status, Verbindungs-URL und betriebssystemspezifische Mount-Anleitungen mit Kopier-Buttons
+- Bezieht Daten von `/api/webdav/connection-info`
+- i18n-Schluessel: `system.webdav.*` (Englisch + Deutsch)
 
-## Key Files
+## Wichtige Dateien
 
-| File | Purpose |
+| Datei | Zweck |
 |---|---|
-| `backend/app/core/config.py` | Configuration (port, SSL, enabled) |
-| `backend/scripts/webdav_worker.py` | Worker entry point |
-| `backend/app/services/webdav_service.py` | cheroot server, SSL cert generation, heartbeat |
-| `backend/app/compat/webdav_asgi.py` | WsgiDAV app, auth controller |
-| `backend/app/compat/webdav_provider.py` | Storage provider with user isolation |
-| `backend/app/api/routes/webdav.py` | REST API endpoints |
-| `backend/app/schemas/webdav.py` | Pydantic response models |
-| `backend/app/models/webdav_state.py` | Database model |
-| `deploy/systemd/baluhost-webdav.service` | Systemd unit file |
-| `client/src/components/webdav/WebdavConnectionCard.tsx` | Frontend component |
-| `client/src/api/webdav.ts` | Frontend API client |
+| `backend/app/core/config.py` | Konfiguration (Port, SSL, aktiviert) |
+| `backend/scripts/webdav_worker.py` | Worker-Einstiegspunkt |
+| `backend/app/services/webdav_service.py` | cheroot-Server, SSL-Zertifikatsgenerierung, Heartbeat |
+| `backend/app/compat/webdav_asgi.py` | WsgiDAV-App, Auth-Controller |
+| `backend/app/compat/webdav_provider.py` | Storage-Provider mit Benutzerisolierung |
+| `backend/app/api/routes/webdav.py` | REST-API-Endpunkte |
+| `backend/app/schemas/webdav.py` | Pydantic-Antwortmodelle |
+| `backend/app/models/webdav_state.py` | Datenbankmodell |
+| `deploy/systemd/baluhost-webdav.service` | Systemd-Unit-Datei |
+| `client/src/components/webdav/WebdavConnectionCard.tsx` | Frontend-Komponente |
+| `client/src/api/webdav.ts` | Frontend-API-Client |
 
-## Troubleshooting
+## Fehlerbehebung
 
-### Server won't start
+### Server startet nicht
 
 ```bash
-# Check if port 8080 is already in use
+# Pruefen, ob Port 8080 bereits belegt ist
 ss -tlnp | grep 8080
 
-# Check worker logs
+# Worker-Logs pruefen
 journalctl -u baluhost-webdav --no-pager -n 50
 ```
 
-### Windows Error 67: "The network name was not found"
+### Windows Fehler 67: "Der Netzwerkname wurde nicht gefunden"
 
-1. Ensure the WebDAV worker is running on the NAS
-2. Ensure the `WebClient` service is running on Windows
-3. If using HTTP (not HTTPS): set `BasicAuthLevel` to `2`:
+1. Stellen Sie sicher, dass der WebDAV-Worker auf dem NAS laeuft
+2. Stellen Sie sicher, dass der `WebClient`-Dienst unter Windows aktiv ist
+3. Bei Verwendung von HTTP (nicht HTTPS): `BasicAuthLevel` auf `2` setzen:
    ```powershell
    Set-ItemProperty -Path "HKLM:\SYSTEM\CurrentControlSet\Services\WebClient\Parameters" -Name "BasicAuthLevel" -Value 2
    Restart-Service WebClient
    ```
 
-### Windows: Certificate error with self-signed cert
+### Windows: Zertifikatsfehler bei selbstsigniertem Zertifikat
 
-Import `webdav.crt` into Trusted Root Certification Authorities (see [SSL Certificate Trust](#windows-ssl-certificate-trust) above).
+Importieren Sie `webdav.crt` in die vertrauenswuerdigen Stammzertifizierungsstellen (siehe [SSL-Zertifikat importieren](#windows-ssl-zertifikat-importieren) oben).
 
-### macOS: "Connection failed"
+### macOS: "Verbindung fehlgeschlagen"
 
-Try IP address instead of hostname. Check the server is reachable:
+Versuchen Sie die IP-Adresse anstelle des Hostnamens. Pruefen Sie, ob der Server erreichbar ist:
 
 ```bash
 curl -k https://192.168.178.53:8080/
 ```
 
-### Linux: mount.davfs fails with SSL error
+### Linux: mount.davfs schlaegt mit SSL-Fehler fehl
 
-Add `trust_server_cert` directive to davfs2.conf or install the cert system-wide (see [Linux SSL section](#self-signed-certificate-trust) above).
+Fuegen Sie die `trust_server_cert`-Direktive in davfs2.conf hinzu oder installieren Sie das Zertifikat systemweit (siehe [Linux-SSL-Abschnitt](#selbstsigniertes-zertifikat-vertrauen) oben).
 
-### Stale status in UI (shows "Not Running" even though worker runs)
+### Veralteter Status in der Oberflaeche (zeigt "Nicht aktiv" obwohl der Worker laeuft)
 
-The heartbeat may be stale. Restart the worker:
+Der Heartbeat ist moeglicherweise veraltet. Starten Sie den Worker neu:
 
 ```bash
 sudo systemctl restart baluhost-webdav
 ```
 
-### Regenerate SSL certificate
+### SSL-Zertifikat neu generieren
 
 ```bash
 rm -rf backend/webdav-certs/
 sudo systemctl restart baluhost-webdav
-# New cert generated with current LAN IP in SAN
+# Neues Zertifikat wird mit aktueller LAN-IP im SAN generiert
 ```

@@ -1,51 +1,51 @@
-# Upload Progress Tracking (SSE)
+# Upload-Fortschrittsverfolgung (SSE)
 
-## Overview
+## Übersicht
 
-Real-time upload progress tracking using Server-Sent Events (SSE) to provide live feedback during file uploads.
+Echtzeit-Upload-Fortschrittsverfolgung mittels Server-Sent Events (SSE) für Live-Feedback während Datei-Uploads.
 
-## Architecture
+## Architektur
 
-### Backend Components
+### Backend-Komponenten
 
 1. **Upload Progress Manager** (`backend/app/services/upload_progress.py`)
-   - Manages upload sessions and progress state
-   - Handles SSE subscriptions and notifications
-   - Thread-safe with asyncio locks
+   - Verwaltet Upload-Sitzungen und Fortschrittsstatus
+   - Handhabt SSE-Abonnements und Benachrichtigungen
+   - Thread-sicher durch asyncio-Locks
 
-2. **SSE Endpoint** (`backend/app/api/routes/upload_progress.py`)
-   - `/api/files/progress/{upload_id}` - SSE stream endpoint
-   - Streams progress updates to connected clients
-   - Auto-closes on upload completion/failure
+2. **SSE-Endpoint** (`backend/app/api/routes/upload_progress.py`)
+   - `/api/files/progress/{upload_id}` - SSE-Stream-Endpoint
+   - Streamt Fortschrittsaktualisierungen an verbundene Clients
+   - Schließt automatisch bei Abschluss/Fehler des Uploads
 
-3. **Upload Integration** (`backend/app/api/routes/files.py`)
-   - Modified `/api/files/upload` to return `upload_ids`
-   - Creates upload sessions before processing files
-   - Updates progress during upload processing
+3. **Upload-Integration** (`backend/app/api/routes/files.py`)
+   - Modifizierter `/api/files/upload`-Endpoint gibt `upload_ids` zurück
+   - Erstellt Upload-Sitzungen vor der Dateiverarbeitung
+   - Aktualisiert den Fortschritt während der Upload-Verarbeitung
 
-### Frontend Components
+### Frontend-Komponenten
 
 1. **Upload Progress Library** (`client/src/lib/uploadProgress.ts`)
-   - `UploadProgressStream` - Single file SSE connection
-   - `UploadProgressManager` - Multi-file progress management
-   - Type-safe interfaces for progress data
+   - `UploadProgressStream` - SSE-Verbindung für einzelne Dateien
+   - `UploadProgressManager` - Fortschrittsverwaltung für mehrere Dateien
+   - Typsichere Interfaces für Fortschrittsdaten
 
 2. **React Hooks** (`client/src/hooks/useUploadProgress.ts`)
-   - `useUploadProgress` - Single file progress tracking
-   - `useMultiUploadProgress` - Multiple files with aggregate progress
-   - Automatic subscription cleanup
+   - `useUploadProgress` - Fortschrittsverfolgung für einzelne Dateien
+   - `useMultiUploadProgress` - Mehrere Dateien mit aggregiertem Fortschritt
+   - Automatische Bereinigung von Abonnements
 
-3. **UI Component** (`client/src/components/UploadProgressModal.tsx`)
-   - Modal displaying real-time upload progress
-   - Individual file progress bars
-   - Overall progress indicator
-   - Auto-closes on completion
+3. **UI-Komponente** (`client/src/components/UploadProgressModal.tsx`)
+   - Modal zur Anzeige des Echtzeit-Upload-Fortschritts
+   - Individuelle Fortschrittsbalken pro Datei
+   - Gesamtfortschrittsanzeige
+   - Schließt automatisch bei Abschluss
 
-## Usage
+## Verwendung
 
-### Backend API
+### Backend-API
 
-#### Upload Files with Progress Tracking
+#### Dateien mit Fortschrittsverfolgung hochladen
 
 ```http
 POST /api/files/upload
@@ -57,7 +57,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-**Response:**
+**Antwort:**
 ```json
 {
   "message": "Files uploaded",
@@ -66,7 +66,7 @@ Content-Type: multipart/form-data
 }
 ```
 
-#### Subscribe to Upload Progress
+#### Upload-Fortschritt abonnieren
 
 ```javascript
 const eventSource = new EventSource('/api/files/progress/{upload_id}');
@@ -82,9 +82,9 @@ eventSource.onerror = () => {
 };
 ```
 
-### Frontend Integration
+### Frontend-Integration
 
-#### Using the Hook
+#### Verwendung des Hooks
 
 ```typescript
 import { useMultiUploadProgress } from '../hooks/useUploadProgress';
@@ -126,7 +126,7 @@ function MyComponent() {
 }
 ```
 
-#### Using the Modal Component
+#### Verwendung der Modal-Komponente
 
 ```typescript
 import { UploadProgressModal } from '../components/UploadProgressModal';
@@ -149,26 +149,26 @@ function FileManager() {
 }
 ```
 
-## Data Flow
+## Datenfluss
 
 ```
-1. Client uploads files → POST /api/files/upload
-2. Backend creates upload session for each file
-3. Backend returns upload_ids to client
-4. Client connects to SSE endpoint for each upload_id
-5. Backend streams progress updates as files are processed
-6. Client displays real-time progress in UI
-7. SSE connection closes on completion/failure
-8. Upload session cleaned up after 60s
+1. Client laedt Dateien hoch → POST /api/files/upload
+2. Backend erstellt eine Upload-Sitzung pro Datei
+3. Backend gibt upload_ids an den Client zurück
+4. Client verbindet sich mit dem SSE-Endpoint für jede upload_id
+5. Backend streamt Fortschrittsaktualisierungen während der Dateiverarbeitung
+6. Client zeigt den Echtzeit-Fortschritt in der Benutzeroberfläche an
+7. SSE-Verbindung wird bei Abschluss/Fehler geschlossen
+8. Upload-Sitzung wird nach 60 Sekunden bereinigt
 ```
 
-## Progress States
+## Fortschrittsstatus
 
-- **uploading**: File is currently being processed
-- **completed**: File uploaded successfully
-- **failed**: Upload failed (includes error message)
+- **uploading**: Die Datei wird derzeit verarbeitet
+- **completed**: Die Datei wurde erfolgreich hochgeladen
+- **failed**: Der Upload ist fehlgeschlagen (inkl. Fehlermeldung)
 
-## Progress Data Structure
+## Fortschrittsdatenstruktur
 
 ```typescript
 interface UploadProgress {
@@ -186,56 +186,56 @@ interface UploadProgress {
 
 ## Features
 
-✅ **Real-time Updates**: Live progress using Server-Sent Events  
-✅ **Multi-file Support**: Track multiple uploads simultaneously  
-✅ **Aggregate Progress**: Overall progress across all files  
-✅ **Error Handling**: Failed uploads reported with error messages  
-✅ **Auto-cleanup**: Upload sessions expire after 60 seconds  
-✅ **Type-safe**: Full TypeScript support on frontend  
-✅ **Responsive UI**: Mobile-friendly progress modal  
+- **Echtzeit-Updates**: Live-Fortschritt mittels Server-Sent Events
+- **Mehrere Dateien**: Gleichzeitige Verfolgung mehrerer Uploads
+- **Aggregierter Fortschritt**: Gesamtfortschritt über alle Dateien
+- **Fehlerbehandlung**: Fehlgeschlagene Uploads werden mit Fehlermeldungen gemeldet
+- **Automatische Bereinigung**: Upload-Sitzungen laufen nach 60 Sekunden ab
+- **Typsicher**: Vollständige TypeScript-Unterstützung im Frontend
+- **Responsives UI**: Mobilfreundliches Fortschritts-Modal
 
-## Testing
+## Tests
 
-Run backend tests:
+Backend-Tests ausführen:
 ```bash
 cd backend
 python -m pytest tests/test_upload_progress.py -v
 ```
 
-## Configuration
+## Konfiguration
 
-### Cleanup Delay
+### Bereinigungsverzögerung
 
-Modify the cleanup delay in `upload_progress.py`:
+Die Bereinigungsverzögerung kann in `upload_progress.py` angepasst werden:
 
 ```python
 await self._cleanup_upload(upload_id, delay=60.0)  # 60 seconds default
 ```
 
-### SSE Keep-alive
+### SSE-Keep-alive
 
-The SSE connection is kept alive until upload completion or failure. No manual keep-alive configuration needed.
+Die SSE-Verbindung bleibt bestehen, bis der Upload abgeschlossen ist oder fehlschlaegt. Eine manuelle Keep-alive-Konfiguration ist nicht erforderlich.
 
-## Browser Compatibility
+## Browser-Kompatibilitaet
 
-✅ Chrome/Edge 85+  
-✅ Firefox 80+  
-✅ Safari 14+  
-⚠️ IE Not supported (use EventSource polyfill if needed)
+- Chrome/Edge 85+
+- Firefox 80+
+- Safari 14+
+- IE wird nicht unterstützt (bei Bedarf EventSource-Polyfill verwenden)
 
-## Performance Considerations
+## Hinweise zur Leistung
 
-- SSE connections are lightweight (one-way HTTP)
-- Each upload creates one SSE connection
-- Connections auto-close on completion
-- Upload sessions are cleaned up after 60s
-- Memory footprint: ~1KB per active upload
+- SSE-Verbindungen sind leichtgewichtig (unidirektionales HTTP)
+- Jeder Upload erstellt eine SSE-Verbindung
+- Verbindungen werden bei Abschluss automatisch geschlossen
+- Upload-Sitzungen werden nach 60 Sekunden bereinigt
+- Speicherbedarf: ca. 1 KB pro aktivem Upload
 
-## Troubleshooting
+## Fehlerbehebung
 
-### SSE Connection Fails
+### SSE-Verbindung schlaegt fehl
 
-Check CORS configuration in `backend/app/main.py`:
+Prüfen Sie die CORS-Konfiguration in `backend/app/main.py`:
 ```python
 app.add_middleware(
     CORSMiddleware,
@@ -246,15 +246,15 @@ app.add_middleware(
 )
 ```
 
-### Progress Not Updating
+### Fortschritt wird nicht aktualisiert
 
-1. Verify `upload_ids` are returned from `/api/files/upload`
-2. Check browser console for SSE connection errors
-3. Verify backend logs for progress updates
+1. Überprüfen Sie, ob `upload_ids` von `/api/files/upload` zurückgegeben werden
+2. Prüfen Sie die Browser-Konsole auf SSE-Verbindungsfehler
+3. Überprüfen Sie die Backend-Logs auf Fortschrittsaktualisierungen
 
-### Memory Leaks
+### Speicherlecks
 
-Upload sessions are automatically cleaned up after 60 seconds. If needed, manually clear:
+Upload-Sitzungen werden nach 60 Sekunden automatisch bereinigt. Bei Bedarf können Sie manuell aufraumen:
 
 ```typescript
 import { getUploadProgressManager } from '../lib/uploadProgress';

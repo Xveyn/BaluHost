@@ -1,31 +1,31 @@
-# Monitoring Guide for BaluHost
+# Monitoring-Anleitung für BaluHost
 
-Complete guide for setting up production-grade monitoring with Prometheus and Grafana.
+Vollständige Anleitung zur Einrichtung von produktionsreifem Monitoring mit Prometheus und Grafana.
 
-## Table of Contents
+## Inhaltsverzeichnis
 
-1. [Overview](#overview)
-2. [Quick Start](#quick-start)
-3. [Metrics](#metrics)
+1. [Überblick](#überblick)
+2. [Schnellstart](#schnellstart)
+3. [Metriken](#metriken)
 4. [Dashboards](#dashboards)
-5. [Alerts](#alerts)
-6. [Configuration](#configuration)
+5. [Alarme](#alarme)
+6. [Konfiguration](#konfiguration)
 7. [Best Practices](#best-practices)
-8. [Troubleshooting](#troubleshooting)
+8. [Fehlerbehebung](#fehlerbehebung)
 
 ---
 
-## Overview
+## Überblick
 
-BaluHost includes comprehensive monitoring infrastructure:
+BaluHost bietet eine umfassende Monitoring-Infrastruktur:
 
-- **Prometheus**: Metrics collection and alerting
-- **Grafana**: Visualization dashboards
-- **Custom Metrics Endpoint**: `/api/metrics` with 40+ metrics
-- **Pre-configured Dashboards**: System overview, RAID, Application
-- **Alert Rules**: 20+ alert rules for critical events
+- **Prometheus**: Metrik-Erfassung und Alarmierung
+- **Grafana**: Visualisierungs-Dashboards
+- **Benutzerdefinierter Metriken-Endpunkt**: `/api/metrics` mit über 40 Metriken
+- **Vorkonfigurierte Dashboards**: Systemübersicht, RAID, Anwendung
+- **Alarmregeln**: Über 20 Alarmregeln für kritische Ereignisse
 
-### Architecture
+### Architektur
 
 ```
 ┌──────────────────┐
@@ -34,15 +34,15 @@ BaluHost includes comprehensive monitoring infrastructure:
 │  Port 3001       │
 └────────┬─────────┘
          │
-         │ Queries
+         │ Abfragen
          ▼
 ┌──────────────────┐
 │  Prometheus      │
-│  (Metrics DB)    │
+│  (Metriken-DB)   │
 │  Port 9090       │
 └────────┬─────────┘
          │
-         │ Scrapes (every 15s)
+         │ Scraping (alle 15s)
          ▼
 ┌──────────────────┐
 │  BaluHost        │
@@ -53,67 +53,67 @@ BaluHost includes comprehensive monitoring infrastructure:
 
 ---
 
-## Quick Start
+## Schnellstart
 
-### Step 1: Enable Monitoring
+### Schritt 1: Monitoring aktivieren
 
-Update your `.env` file:
+Aktualisieren Sie Ihre `.env`-Datei:
 
 ```bash
-# Monitoring ports
+# Monitoring-Ports
 PROMETHEUS_PORT=9090
 GRAFANA_PORT=3001
 
-# Grafana credentials
+# Grafana-Zugangsdaten
 GRAFANA_ADMIN_USER=admin
-GRAFANA_ADMIN_PASSWORD=changeme  # Change this!
+GRAFANA_ADMIN_PASSWORD=changeme  # Ändern Sie dies!
 GRAFANA_ROOT_URL=http://localhost:3001
 ```
 
-### Step 2: Start Monitoring Stack
+### Schritt 2: Monitoring-Stack starten
 
 ```bash
-# Start BaluHost with monitoring
+# BaluHost mit Monitoring starten
 docker-compose --profile monitoring up -d
 
-# Or update existing deployment
+# Oder bestehende Bereitstellung aktualisieren
 docker-compose up -d prometheus grafana
 ```
 
-### Step 3: Access Dashboards
+### Schritt 3: Dashboards aufrufen
 
 **Grafana** (Dashboards):
 - URL: http://localhost:3001
-- Login: `admin` / `admin` (or your configured password)
-- Pre-loaded dashboard: "BaluHost - System Overview"
+- Anmeldung: `admin` / `admin` (oder Ihr konfiguriertes Passwort)
+- Vorgeladenes Dashboard: "BaluHost - System Overview"
 
-**Prometheus** (Raw Metrics):
+**Prometheus** (Rohe Metriken):
 - URL: http://localhost:9090
-- No authentication required
-- Query interface: http://localhost:9090/graph
+- Keine Authentifizierung erforderlich
+- Abfrage-Oberfläche: http://localhost:9090/graph
 
-**Raw Metrics Endpoint**:
+**Roher Metriken-Endpunkt**:
 - URL: http://localhost:8000/api/metrics
-- Prometheus format
-- No authentication required (can be restricted in Nginx)
+- Prometheus-Format
+- Keine Authentifizierung erforderlich (kann in Nginx eingeschraenkt werden)
 
-### Step 4: Verify Metrics Collection
+### Schritt 4: Metrik-Erfassung überprüfen
 
-**Check Prometheus is scraping**:
+**Überprüfen Sie, ob Prometheus Daten sammelt**:
 ```bash
-# Open in browser
+# Im Browser oeffnen
 http://localhost:9090/targets
 
-# Should show:
+# Sollte anzeigen:
 # - prometheus: UP
 # - baluhost-backend: UP
 ```
 
-**Test metrics endpoint**:
+**Metriken-Endpunkt testen**:
 ```bash
 curl http://localhost:8000/api/metrics
 
-# Should return Prometheus-format metrics like:
+# Sollte Metriken im Prometheus-Format zurückgeben wie:
 # baluhost_cpu_usage_percent 15.3
 # baluhost_memory_usage_percent 45.2
 # ...
@@ -121,239 +121,239 @@ curl http://localhost:8000/api/metrics
 
 ---
 
-## Metrics
+## Metriken
 
-BaluHost exposes 40+ custom metrics at `/api/metrics`.
+BaluHost stellt über 40 benutzerdefinierte Metriken unter `/api/metrics` bereit.
 
-### System Metrics
+### System-Metriken
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `baluhost_cpu_usage_percent` | Gauge | Current CPU usage (0-100%) |
-| `baluhost_cpu_count` | Gauge | Number of CPU cores |
-| `baluhost_memory_total_bytes` | Gauge | Total system memory |
-| `baluhost_memory_used_bytes` | Gauge | Used system memory |
-| `baluhost_memory_available_bytes` | Gauge | Available system memory |
-| `baluhost_memory_usage_percent` | Gauge | Memory usage percentage |
+| Metrik | Typ | Beschreibung |
+|--------|-----|-------------|
+| `baluhost_cpu_usage_percent` | Gauge | Aktuelle CPU-Auslastung (0-100%) |
+| `baluhost_cpu_count` | Gauge | Anzahl der CPU-Kerne |
+| `baluhost_memory_total_bytes` | Gauge | Gesamter Systemspeicher |
+| `baluhost_memory_used_bytes` | Gauge | Belegter Systemspeicher |
+| `baluhost_memory_available_bytes` | Gauge | Verfügbarer Systemspeicher |
+| `baluhost_memory_usage_percent` | Gauge | Speicherauslastung in Prozent |
 
-### Disk Metrics
+### Festplatten-Metriken
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_disk_total_bytes` | Gauge | `path` | Total disk space |
-| `baluhost_disk_used_bytes` | Gauge | `path` | Used disk space |
-| `baluhost_disk_free_bytes` | Gauge | `path` | Free disk space |
-| `baluhost_disk_usage_percent` | Gauge | `path` | Disk usage percentage |
-| `baluhost_disk_read_bytes_total` | Counter | `device` | Total bytes read |
-| `baluhost_disk_write_bytes_total` | Counter | `device` | Total bytes written |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_disk_total_bytes` | Gauge | `path` | Gesamter Festplattenplatz |
+| `baluhost_disk_used_bytes` | Gauge | `path` | Belegter Festplattenplatz |
+| `baluhost_disk_free_bytes` | Gauge | `path` | Freier Festplattenplatz |
+| `baluhost_disk_usage_percent` | Gauge | `path` | Festplattenauslastung in Prozent |
+| `baluhost_disk_read_bytes_total` | Counter | `device` | Gesamte gelesene Bytes |
+| `baluhost_disk_write_bytes_total` | Counter | `device` | Gesamte geschriebene Bytes |
 
-### RAID Metrics
+### RAID-Metriken
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_raid_array_status` | Gauge | `device, level, status` | RAID array status (1=active, 0=degraded) |
-| `baluhost_raid_disk_count` | Gauge | `device, type` | Number of disks (total/active) |
-| `baluhost_raid_sync_progress_percent` | Gauge | `device` | Resync/recovery progress |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_raid_array_status` | Gauge | `device, level, status` | RAID-Array-Status (1=aktiv, 0=degradiert) |
+| `baluhost_raid_disk_count` | Gauge | `device, type` | Anzahl der Festplatten (gesamt/aktiv) |
+| `baluhost_raid_sync_progress_percent` | Gauge | `device` | Resync-/Wiederherstellungsfortschritt |
 
-### SMART Disk Health
+### SMART-Festplattengesundheit
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_disk_smart_health` | Gauge | `device, serial` | SMART health (1=healthy, 0=failing) |
-| `baluhost_disk_temperature_celsius` | Gauge | `device` | Disk temperature |
-| `baluhost_disk_power_on_hours` | Gauge | `device` | Power-on hours |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_disk_smart_health` | Gauge | `device, serial` | SMART-Gesundheit (1=gesund, 0=fehlerhaft) |
+| `baluhost_disk_temperature_celsius` | Gauge | `device` | Festplattentemperatur |
+| `baluhost_disk_power_on_hours` | Gauge | `device` | Betriebsstunden |
 
-### Network Metrics
+### Netzwerk-Metriken
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_network_received_bytes_total` | Counter | `interface` | Total bytes received |
-| `baluhost_network_sent_bytes_total` | Counter | `interface` | Total bytes sent |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_network_received_bytes_total` | Counter | `interface` | Gesamte empfangene Bytes |
+| `baluhost_network_sent_bytes_total` | Counter | `interface` | Gesamte gesendete Bytes |
 
-### Application Metrics
+### Anwendungs-Metriken
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_http_requests_total` | Counter | `method, endpoint, status` | Total HTTP requests |
-| `baluhost_http_request_duration_seconds` | Histogram | `method, endpoint` | Request duration |
-| `baluhost_file_uploads_total` | Counter | `status` | Total file uploads |
-| `baluhost_file_downloads_total` | Counter | `status` | Total file downloads |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_http_requests_total` | Counter | `method, endpoint, status` | Gesamte HTTP-Anfragen |
+| `baluhost_http_request_duration_seconds` | Histogram | `method, endpoint` | Anfragedauer |
+| `baluhost_file_uploads_total` | Counter | `status` | Gesamte Datei-Uploads |
+| `baluhost_file_downloads_total` | Counter | `status` | Gesamte Datei-Downloads |
 
-### Database Metrics
+### Datenbank-Metriken
 
-| Metric | Type | Description |
-|--------|------|-------------|
-| `baluhost_database_connections` | Gauge | Active DB connections |
-| `baluhost_database_query_duration_seconds` | Histogram | Query duration |
+| Metrik | Typ | Beschreibung |
+|--------|-----|-------------|
+| `baluhost_database_connections` | Gauge | Aktive DB-Verbindungen |
+| `baluhost_database_query_duration_seconds` | Histogram | Abfragedauer |
 
-### User Metrics
+### Benutzer-Metriken
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_users_total` | Gauge | `role` | Total users by role |
-| `baluhost_users_active_sessions` | Gauge | - | Active user sessions |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_users_total` | Gauge | `role` | Gesamte Benutzer nach Rolle |
+| `baluhost_users_active_sessions` | Gauge | - | Aktive Benutzersitzungen |
 
-### Application Info
+### Anwendungsinformationen
 
-| Metric | Type | Labels | Description |
-|--------|------|--------|-------------|
-| `baluhost_app_info` | Gauge | `version, mode, python_version` | Application information |
-| `baluhost_app_uptime_seconds` | Gauge | - | Application uptime |
+| Metrik | Typ | Labels | Beschreibung |
+|--------|-----|--------|-------------|
+| `baluhost_app_info` | Gauge | `version, mode, python_version` | Anwendungsinformationen |
+| `baluhost_app_uptime_seconds` | Gauge | - | Anwendungs-Laufzeit |
 
 ---
 
 ## Dashboards
 
-### Pre-configured Dashboards
+### Vorkonfigurierte Dashboards
 
-#### 1. System Overview
-**File**: `deploy/grafana/dashboards/system-overview.json`
+#### 1. Systemübersicht
+**Datei**: `deploy/grafana/dashboards/system-overview.json`
 
 **Panels**:
-- CPU Usage (Gauge)
-- Memory Usage (Gauge)
-- Disk Usage (Gauge)
-- CPU & Memory Over Time (Time Series)
-- Disk Space Over Time (Time Series)
-- Disk I/O (Time Series)
-- Network Traffic (Time Series)
+- CPU-Auslastung (Gauge)
+- Speicherauslastung (Gauge)
+- Festplattenauslastung (Gauge)
+- CPU und Speicher im Zeitverlauf (Time Series)
+- Festplattenplatz im Zeitverlauf (Time Series)
+- Festplatten-I/O (Time Series)
+- Netzwerk-Traffic (Time Series)
 
-**Refresh**: 10 seconds
-**Time Range**: Last 1 hour
+**Aktualisierung**: 10 Sekunden
+**Zeitbereich**: Letzte Stunde
 
-### Creating Custom Dashboards
+### Benutzerdefinierte Dashboards erstellen
 
-**Example: RAID Health Dashboard**
+**Beispiel: RAID-Gesundheits-Dashboard**
 
-1. Login to Grafana
-2. Create new dashboard
-3. Add panel with query:
+1. Bei Grafana anmelden
+2. Neues Dashboard erstellen
+3. Panel mit Abfrage hinzufügen:
 
 ```promql
 baluhost_raid_array_status{device="md0"}
 ```
 
-4. Configure panel:
-   - Type: Stat
-   - Thresholds: 0 = Red (degraded), 1 = Green (healthy)
-   - Value mappings: 0 = "Degraded", 1 = "Active"
+4. Panel konfigurieren:
+   - Typ: Stat
+   - Schwellenwerte: 0 = Rot (degradiert), 1 = Grün (gesund)
+   - Wertezuordnung: 0 = "Degradiert", 1 = "Aktiv"
 
-5. Add more panels:
-   - Disk count: `baluhost_raid_disk_count`
-   - Sync progress: `baluhost_raid_sync_progress_percent`
-   - Disk temperature: `baluhost_disk_temperature_celsius`
+5. Weitere Panels hinzufügen:
+   - Festplattenanzahl: `baluhost_raid_disk_count`
+   - Sync-Fortschritt: `baluhost_raid_sync_progress_percent`
+   - Festplattentemperatur: `baluhost_disk_temperature_celsius`
 
-6. Save dashboard
-7. Export JSON: Settings → JSON Model
-8. Save to `deploy/grafana/dashboards/raid.json`
+6. Dashboard speichern
+7. JSON exportieren: Einstellungen → JSON Model
+8. Speichern unter `deploy/grafana/dashboards/raid.json`
 
-**Example Queries**:
+**Beispiel-Abfragen**:
 
 ```promql
-# CPU usage over time
+# CPU-Auslastung im Zeitverlauf
 baluhost_cpu_usage_percent
 
-# Memory usage trend
+# Speicherauslastungs-Trend
 baluhost_memory_usage_percent
 
-# Disk I/O rate (bytes/sec)
+# Festplatten-I/O-Rate (Bytes/s)
 rate(baluhost_disk_read_bytes_total[5m])
 rate(baluhost_disk_write_bytes_total[5m])
 
-# Network traffic (bytes/sec)
+# Netzwerk-Traffic (Bytes/s)
 rate(baluhost_network_received_bytes_total[5m])
 rate(baluhost_network_sent_bytes_total[5m])
 
-# HTTP request rate by status
+# HTTP-Anfragerate nach Status
 sum(rate(baluhost_http_requests_total[5m])) by (status)
 
-# Failed disk count
+# Anzahl fehlerhafter Festplatten
 count(baluhost_disk_smart_health == 0)
 
-# Average disk temperature
+# Durchschnittliche Festplattentemperatur
 avg(baluhost_disk_temperature_celsius)
 
-# Storage usage percentage
+# Speicherplatzauslastung in Prozent
 (baluhost_storage_used_bytes / baluhost_storage_quota_bytes) * 100
 ```
 
 ---
 
-## Alerts
+## Alarme
 
-BaluHost includes 20+ pre-configured alert rules.
+BaluHost enthält über 20 vorkonfigurierte Alarmregeln.
 
-### Alert Severities
+### Alarm-Schweregrade
 
-- **Critical**: Immediate action required (red)
-- **Warning**: Requires attention (yellow)
-- **Info**: Informational only (blue)
+- **Critical**: Sofortiges Handeln erforderlich (rot)
+- **Warning**: Erfordert Aufmerksamkeit (gelb)
+- **Info**: Nur informativ (blau)
 
-### Key Alerts
+### Wichtige Alarme
 
-#### System Resources
+#### Systemressourcen
 
-| Alert | Condition | For | Severity |
-|-------|-----------|-----|----------|
-| HighCPUUsage | CPU > 85% | 5m | Warning |
-| CriticalCPUUsage | CPU > 95% | 2m | Critical |
-| HighMemoryUsage | Memory > 80% | 5m | Warning |
-| CriticalMemoryUsage | Memory > 95% | 2m | Critical |
+| Alarm | Bedingung | Dauer | Schweregrad |
+|-------|-----------|-------|-------------|
+| HighCPUUsage | CPU > 85% | 5 Min. | Warning |
+| CriticalCPUUsage | CPU > 95% | 2 Min. | Critical |
+| HighMemoryUsage | Speicher > 80% | 5 Min. | Warning |
+| CriticalMemoryUsage | Speicher > 95% | 2 Min. | Critical |
 
-#### Disk Space
+#### Festplattenplatz
 
-| Alert | Condition | For | Severity |
-|-------|-----------|-----|----------|
-| LowDiskSpace | Disk > 75% | 10m | Warning |
-| CriticalDiskSpace | Disk > 90% | 5m | Critical |
-| DiskWillBeFull | Will be full in 4h | 10m | Warning |
+| Alarm | Bedingung | Dauer | Schweregrad |
+|-------|-----------|-------|-------------|
+| LowDiskSpace | Festplatte > 75% | 10 Min. | Warning |
+| CriticalDiskSpace | Festplatte > 90% | 5 Min. | Critical |
+| DiskWillBeFull | Wird in 4 Std. voll sein | 10 Min. | Warning |
 
 #### RAID
 
-| Alert | Condition | For | Severity |
-|-------|-----------|-----|----------|
-| RAIDArrayDegraded | Status != active | 1m | Critical |
-| RAIDDiskMissing | Active < Total disks | 2m | Critical |
-| RAIDResyncInProgress | 0% < Progress < 100% | 5m | Info |
+| Alarm | Bedingung | Dauer | Schweregrad |
+|-------|-----------|-------|-------------|
+| RAIDArrayDegraded | Status != aktiv | 1 Min. | Critical |
+| RAIDDiskMissing | Aktiv < Gesamt-Festplatten | 2 Min. | Critical |
+| RAIDResyncInProgress | 0% < Fortschritt < 100% | 5 Min. | Info |
 
-#### SMART Disk Health
+#### SMART-Festplattengesundheit
 
-| Alert | Condition | For | Severity |
-|-------|-----------|-----|----------|
-| DiskFailing | Health == 0 | 1m | Critical |
-| DiskTemperatureHigh | Temp > 55°C | 10m | Warning |
-| DiskTemperatureCritical | Temp > 65°C | 5m | Critical |
+| Alarm | Bedingung | Dauer | Schweregrad |
+|-------|-----------|-------|-------------|
+| DiskFailing | Gesundheit == 0 | 1 Min. | Critical |
+| DiskTemperatureHigh | Temp > 55°C | 10 Min. | Warning |
+| DiskTemperatureCritical | Temp > 65°C | 5 Min. | Critical |
 
-#### Application
+#### Anwendung
 
-| Alert | Condition | For | Severity |
-|-------|-----------|-----|----------|
-| BackendDown | up == 0 | 1m | Critical |
-| HighErrorRate | 5xx errors > 5% | 5m | Warning |
-| ApplicationRestarted | Uptime < 5m | 1m | Info |
+| Alarm | Bedingung | Dauer | Schweregrad |
+|-------|-----------|-------|-------------|
+| BackendDown | up == 0 | 1 Min. | Critical |
+| HighErrorRate | 5xx-Fehler > 5% | 5 Min. | Warning |
+| ApplicationRestarted | Laufzeit < 5 Min. | 1 Min. | Info |
 
-### Viewing Active Alerts
+### Aktive Alarme anzeigen
 
 **Prometheus**:
 ```bash
-# Open in browser
+# Im Browser oeffnen
 http://localhost:9090/alerts
 ```
 
 **Grafana**:
-- Navigate to **Alerting** → **Alert Rules**
-- View alert history and current state
+- Navigieren Sie zu **Alerting** → **Alert Rules**
+- Alarmverlauf und aktuellen Status einsehen
 
-### Alert Notifications (Optional)
+### Alarm-Benachrichtigungen (optional)
 
-To receive alert notifications, configure Alertmanager:
+Um Alarm-Benachrichtigungen zu erhalten, konfigurieren Sie den Alertmanager:
 
-1. Create `deploy/prometheus/alertmanager.yml`
-2. Configure notification channels (email, Slack, PagerDuty, etc.)
-3. Add Alertmanager to docker-compose.yml
-4. Update Prometheus config to point to Alertmanager
+1. Erstellen Sie `deploy/prometheus/alertmanager.yml`
+2. Konfigurieren Sie Benachrichtigungskanäle (E-Mail, Slack, PagerDuty, etc.)
+3. Fuegen Sie den Alertmanager zur docker-compose.yml hinzu
+4. Aktualisieren Sie die Prometheus-Konfiguration mit dem Verweis auf den Alertmanager
 
-**Example Alertmanager config**:
+**Beispiel-Alertmanager-Konfiguration**:
 ```yaml
 global:
   resolve_timeout: 5m
@@ -377,17 +377,17 @@ receivers:
 
 ---
 
-## Configuration
+## Konfiguration
 
-### Prometheus Configuration
+### Prometheus-Konfiguration
 
-**File**: `deploy/prometheus/prometheus.yml`
+**Datei**: `deploy/prometheus/prometheus.yml`
 
-**Key settings**:
+**Wichtige Einstellungen**:
 ```yaml
 global:
-  scrape_interval: 15s      # How often to scrape metrics
-  evaluation_interval: 15s  # How often to evaluate rules
+  scrape_interval: 15s      # Wie oft Metriken abgerufen werden
+  evaluation_interval: 15s  # Wie oft Regeln ausgewertet werden
 
 scrape_configs:
   - job_name: 'baluhost-backend'
@@ -398,168 +398,168 @@ scrape_configs:
       - targets: ['backend:8000']
 ```
 
-**Tuning**:
-- Increase `scrape_interval` to reduce load (e.g., 30s)
-- Decrease for more granular metrics (e.g., 10s)
-- Adjust `storage.tsdb.retention.time` for data retention (default: 15d)
+**Optimierung**:
+- Erhöhen Sie `scrape_interval` zur Lastreduzierung (z.B. 30s)
+- Verringern Sie es für granularere Metriken (z.B. 10s)
+- Passen Sie `storage.tsdb.retention.time` für die Datenaufbewahrung an (Standard: 15d)
 
-### Grafana Configuration
+### Grafana-Konfiguration
 
-**Environment variables** (`.env`):
+**Umgebungsvariablen** (`.env`):
 ```bash
 GRAFANA_ADMIN_USER=admin
 GRAFANA_ADMIN_PASSWORD=changeme
 GRAFANA_ROOT_URL=http://localhost:3001
 ```
 
-**Data source**: Auto-configured via provisioning
-**Dashboards**: Auto-loaded from `deploy/grafana/dashboards/`
+**Datenquelle**: Automatisch konfiguriert über Provisioning
+**Dashboards**: Automatisch geladen aus `deploy/grafana/dashboards/`
 
 ---
 
 ## Best Practices
 
-### 1. Secure Grafana
+### 1. Grafana absichern
 
-**Change default password**:
+**Standardpasswort ändern**:
 ```bash
-# Update in .env
-GRAFANA_ADMIN_PASSWORD=strong-random-password
+# In .env aktualisieren
+GRAFANA_ADMIN_PASSWORD=starkes-zufälliges-passwort
 ```
 
-**Restrict access** (in Nginx):
+**Zugriff einschränken** (in Nginx):
 ```nginx
 location /grafana/ {
-    allow 192.168.1.0/24;  # Local network only
+    allow 192.168.1.0/24;  # Nur lokales Netzwerk
     deny all;
     proxy_pass http://grafana:3000/;
 }
 ```
 
-### 2. Manage Data Retention
+### 2. Datenaufbewahrung verwalten
 
-**Prometheus** (default: 15 days):
+**Prometheus** (Standard: 15 Tage):
 ```yaml
 # In docker-compose.yml
 command:
-  - '--storage.tsdb.retention.time=30d'  # Keep 30 days
-  - '--storage.tsdb.retention.size=10GB'  # Or limit by size
+  - '--storage.tsdb.retention.time=30d'  # 30 Tage aufbewahren
+  - '--storage.tsdb.retention.size=10GB'  # Oder nach Größe begrenzen
 ```
 
-### 3. Set Meaningful Alert Thresholds
+### 3. Sinnvolle Alarm-Schwellenwerte setzen
 
-Adjust based on your hardware and usage:
-- CPU: 85% warning, 95% critical
-- Memory: 80% warning, 95% critical
-- Disk: 75% warning, 90% critical
-- Disk temp: 55°C warning, 65°C critical
+Passen Sie die Werte an Ihre Hardware und Nutzung an:
+- CPU: 85% Warnung, 95% kritisch
+- Speicher: 80% Warnung, 95% kritisch
+- Festplatte: 75% Warnung, 90% kritisch
+- Festplattentemperatur: 55°C Warnung, 65°C kritisch
 
-### 4. Monitor the Monitors
+### 4. Die Überwachung überwachen
 
-- Prometheus self-monitoring: http://localhost:9090/metrics
-- Grafana health: http://localhost:3001/api/health
-- Set up alerts for monitoring stack itself
+- Prometheus-Selbstüberwachung: http://localhost:9090/metrics
+- Grafana-Gesundheit: http://localhost:3001/api/health
+- Richten Sie Alarme für den Monitoring-Stack selbst ein
 
-### 5. Regular Backups
+### 5. Regelmaessige Backups
 
-Backup Grafana dashboards and Prometheus data:
+Sichern Sie Grafana-Dashboards und Prometheus-Daten:
 ```bash
-# Backup Grafana
+# Grafana sichern
 docker run --rm -v baluhost_grafana_data:/data -v $(pwd)/backups:/backup \
   alpine tar czf /backup/grafana_$(date +%Y%m%d).tar.gz -C /data .
 
-# Backup Prometheus
+# Prometheus sichern
 docker run --rm -v baluhost_prometheus_data:/data -v $(pwd)/backups:/backup \
   alpine tar czf /backup/prometheus_$(date +%Y%m%d).tar.gz -C /data .
 ```
 
 ---
 
-## Troubleshooting
+## Fehlerbehebung
 
-### Metrics Not Appearing
+### Metriken werden nicht angezeigt
 
-**Check backend metrics endpoint**:
+**Backend-Metriken-Endpunkt prüfen**:
 ```bash
 curl http://localhost:8000/api/metrics
 
-# Should return Prometheus-format text
+# Sollte Text im Prometheus-Format zurückgeben
 ```
 
-**Check Prometheus is scraping**:
+**Überprüfen, ob Prometheus Daten sammelt**:
 ```bash
-# Open in browser
+# Im Browser oeffnen
 http://localhost:9090/targets
 
-# baluhost-backend should be UP
+# baluhost-backend sollte UP sein
 ```
 
-**Check Prometheus logs**:
+**Prometheus-Logs prüfen**:
 ```bash
 docker-compose logs prometheus | grep -i error
 ```
 
-### Dashboards Show "No Data"
+### Dashboards zeigen "No Data"
 
-**Verify Prometheus datasource**:
+**Prometheus-Datenquelle überprüfen**:
 - Grafana → Configuration → Data Sources
-- Should show "Prometheus" as default
-- Test connection
+- Sollte "Prometheus" als Standard anzeigen
+- Verbindung testen
 
-**Check time range**:
-- Ensure dashboard time range includes recent data
-- Try "Last 5 minutes"
+**Zeitbereich prüfen**:
+- Stellen Sie sicher, dass der Dashboard-Zeitbereich aktuelle Daten enthält
+- Versuchen Sie "Letzte 5 Minuten"
 
-**Test query in Prometheus**:
+**Abfrage in Prometheus testen**:
 ```bash
-# Open http://localhost:9090/graph
-# Enter query: baluhost_cpu_usage_percent
-# Should show data
+# http://localhost:9090/graph oeffnen
+# Abfrage eingeben: baluhost_cpu_usage_percent
+# Sollte Daten anzeigen
 ```
 
-### High Memory Usage (Prometheus)
+### Hoher Speicherverbrauch (Prometheus)
 
-**Reduce retention**:
+**Aufbewahrung reduzieren**:
 ```yaml
 command:
-  - '--storage.tsdb.retention.time=7d'  # Reduce to 7 days
+  - '--storage.tsdb.retention.time=7d'  # Auf 7 Tage reduzieren
 ```
 
-**Reduce scrape frequency**:
+**Scrape-Häufigkeit reduzieren**:
 ```yaml
-scrape_interval: 30s  # Increase to 30s
+scrape_interval: 30s  # Auf 30s erhöhen
 ```
 
-### Alerts Not Firing
+### Alarme werden nicht ausgelöst
 
-**Check alert rules syntax**:
+**Alarmregel-Syntax prüfen**:
 ```bash
 docker-compose exec prometheus promtool check rules /etc/prometheus/alerts.yml
 ```
 
-**Check alert state**:
+**Alarm-Status prüfen**:
 ```bash
-# Open http://localhost:9090/alerts
-# Shows: Inactive, Pending, or Firing
+# http://localhost:9090/alerts oeffnen
+# Zeigt: Inactive, Pending oder Firing
 ```
 
-**Check evaluation logs**:
+**Auswertungs-Logs prüfen**:
 ```bash
 docker-compose logs prometheus | grep -i alert
 ```
 
-### Grafana Cannot Connect to Prometheus
+### Grafana kann keine Verbindung zu Prometheus herstellen
 
-**Check network**:
+**Netzwerk prüfen**:
 ```bash
 docker-compose exec grafana ping prometheus
 ```
 
-**Check datasource URL**:
-- Should be: `http://prometheus:9090`
-- NOT: `http://localhost:9090`
+**Datenquellen-URL prüfen**:
+- Sollte sein: `http://prometheus:9090`
+- NICHT: `http://localhost:9090`
 
-**Recreate stack**:
+**Stack neu erstellen**:
 ```bash
 docker-compose down
 docker-compose --profile monitoring up -d
@@ -567,16 +567,16 @@ docker-compose --profile monitoring up -d
 
 ---
 
-## Advanced Topics
+## Erweiterte Themen
 
-### Custom Metrics
+### Benutzerdefinierte Metriken
 
-Add your own metrics in `backend/app/api/routes/metrics.py`:
+Fuegen Sie eigene Metriken in `backend/app/api/routes/metrics.py` hinzu:
 
 ```python
 from prometheus_client import Counter
 
-# Define metric
+# Metrik definieren
 my_custom_counter = Counter(
     'baluhost_my_custom_total',
     'Description of my custom metric',
@@ -584,13 +584,13 @@ my_custom_counter = Counter(
     registry=registry
 )
 
-# Increment in code
+# Im Code inkrementieren
 my_custom_counter.labels(label1='value1', label2='value2').inc()
 ```
 
 ### Recording Rules
 
-Create pre-computed metrics in `deploy/prometheus/recording_rules.yml`:
+Erstellen Sie vorberechnete Metriken in `deploy/prometheus/recording_rules.yml`:
 
 ```yaml
 groups:
@@ -601,9 +601,9 @@ groups:
         expr: avg(baluhost_disk_usage_percent)
 ```
 
-### External Prometheus
+### Externer Prometheus
 
-Send metrics to external Prometheus:
+Metriken an einen externen Prometheus senden:
 
 ```yaml
 # In prometheus.yml
@@ -616,14 +616,14 @@ remote_write:
 
 ---
 
-## Resources
+## Ressourcen
 
-- **Prometheus Documentation**: https://prometheus.io/docs/
-- **Grafana Documentation**: https://grafana.com/docs/
-- **PromQL Tutorial**: https://prometheus.io/docs/prometheus/latest/querying/basics/
-- **Alert Rule Examples**: https://awesome-prometheus-alerts.grep.to/
+- **Prometheus-Dokumentation**: https://prometheus.io/docs/
+- **Grafana-Dokumentation**: https://grafana.com/docs/
+- **PromQL-Tutorial**: https://prometheus.io/docs/prometheus/latest/querying/basics/
+- **Alarmregel-Beispiele**: https://awesome-prometheus-alerts.grep.to/
 
 ---
 
-**Last Updated**: January 13, 2026
+**Zuletzt aktualisiert**: 13. Januar 2026
 **BaluHost Monitoring Version**: 1.0

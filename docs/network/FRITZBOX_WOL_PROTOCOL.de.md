@@ -1,16 +1,16 @@
-# Fritz!Box TR-064 Wake-on-LAN Protocol
+# Fritz!Box TR-064 Wake-on-LAN-Protokoll
 
-This document describes how to send Wake-on-LAN via a Fritz!Box router's TR-064 SOAP API.
-The BaluApp can use this to wake the NAS directly when the NAS backend is unreachable.
+Dieses Dokument beschreibt, wie Wake-on-LAN über die TR-064-SOAP-API einer Fritz!Box gesendet wird.
+Die BaluApp kann damit das NAS direkt aufwecken, wenn das NAS-Backend nicht erreichbar ist.
 
-## Endpoint
+## Endpunkt
 
 - **URL**: `http://<fritzbox-ip>:49000/upnp/control/hosts`
-- **Method**: POST
+- **Methode**: POST
 - **Auth**: HTTP Digest Authentication
 - **Content-Type**: `text/xml; charset="utf-8"`
 
-Port 49000 is the default TR-064 HTTP port. Some Fritz!Box models support HTTPS on port 49443.
+Port 49000 ist der Standard-TR-064-HTTP-Port. Einige Fritz!Box-Modelle unterstützen HTTPS auf Port 49443.
 
 ## SOAP Envelope
 
@@ -26,21 +26,21 @@ Port 49000 is the default TR-064 HTTP port. Some Fritz!Box models support HTTPS 
 </s:Envelope>
 ```
 
-## Required Header
+## Erforderlicher Header
 
 ```
 SOAPAction: "urn:dslforum-org:service:Hosts:1#X_AVM-DE_WakeOnLANByMACAddress"
 ```
 
-## Authentication
+## Authentifizierung
 
-Fritz!Box uses HTTP Digest Authentication (RFC 7616).
+Die Fritz!Box verwendet HTTP Digest Authentication (RFC 7616).
 
-- **Username**: Often empty on Fritz!Box (just `""`)
-- **Password**: The Fritz!Box admin password or a dedicated TR-064 user password
-- Empty username is valid and common — the auth library must support this
+- **Benutzername**: Oft leer bei der Fritz!Box (einfach `""`)
+- **Passwort**: Das Fritz!Box-Admin-Passwort oder ein dediziertes TR-064-Benutzerpasswort
+- Ein leerer Benutzername ist gültig und üblich -- die Auth-Bibliothek muss dies unterstützen
 
-## Example: cURL
+## Beispiel: cURL
 
 ```bash
 curl -s --digest --user ":MyPassword" \
@@ -57,9 +57,9 @@ curl -s --digest --user ":MyPassword" \
   http://192.168.178.1:49000/upnp/control/hosts
 ```
 
-Note: `--user ":MyPassword"` — the colon before the password means empty username.
+Hinweis: `--user ":MyPassword"` -- der Doppelpunkt vor dem Passwort bedeutet leerer Benutzername.
 
-## Example: Kotlin (BaluApp)
+## Beispiel: Kotlin (BaluApp)
 
 ```kotlin
 import okhttp3.Credentials
@@ -89,7 +89,7 @@ suspend fun sendFritzBoxWol(
         </s:Envelope>
     """.trimIndent()
 
-    // OkHttp handles Digest Auth via Authenticator
+    // OkHttp verarbeitet Digest Auth über den Authenticator
     val client = OkHttpClient.Builder()
         .authenticator { _, response ->
             val credential = Credentials.basic(username, password)
@@ -113,33 +113,33 @@ suspend fun sendFritzBoxWol(
 }
 ```
 
-**Note for BaluApp implementation**: Use OkHttp's `DigestAuthenticator` or a dedicated Digest Auth library instead of Basic Auth — the example above is simplified. Fritz!Box requires Digest Auth.
+**Hinweis zur BaluApp-Implementierung**: Verwenden Sie OkHttps `DigestAuthenticator` oder eine dedizierte Digest-Auth-Bibliothek anstelle von Basic Auth -- das obige Beispiel ist vereinfacht. Die Fritz!Box erfordert Digest Auth.
 
-## Credential Storage
+## Speicherung der Zugangsdaten
 
-The BaluApp should:
-1. Prompt the user once for Fritz!Box credentials (host, port, username, password)
-2. Store them encrypted locally (Android Keystore / EncryptedSharedPreferences)
-3. Reuse for subsequent WoL calls without re-prompting
-4. Allow the user to update credentials in settings
+Die BaluApp sollte:
+1. Den Benutzer einmalig nach den Fritz!Box-Zugangsdaten fragen (Host, Port, Benutzername, Passwort)
+2. Diese verschlüsselt lokal speichern (Android Keystore / EncryptedSharedPreferences)
+3. Bei nachfolgenden WoL-Aufrufen wiederverwenden, ohne erneut nachzufragen
+4. Dem Benutzer ermöglichen, die Zugangsdaten in den Einstellungen zu aktualisieren
 
-## Connection Test
+## Verbindungstest
 
-To verify connectivity, fetch the service description:
+Um die Konnektivität zu prüfen, kann die Service-Beschreibung abgerufen werden:
 
 ```
 GET http://<host>:<port>/hostsSCPD.xml
 ```
 
-A 200 response confirms the TR-064 service is available. A 401 means credentials are wrong.
+Eine 200-Antwort bestätigt, dass der TR-064-Dienst verfügbar ist. Ein 401 bedeutet, dass die Zugangsdaten falsch sind.
 
-## Error Handling
+## Fehlerbehandlung
 
-| HTTP Code | Meaning |
-|-----------|---------|
-| 200 | Success (check body for SOAP fault) |
-| 401 | Authentication failed |
-| Connection refused | Fritz!Box not reachable on this host:port |
-| Timeout | Fritz!Box not responding |
+| HTTP-Code | Bedeutung |
+|-----------|-----------|
+| 200 | Erfolg (Body auf SOAP-Fault prüfen) |
+| 401 | Authentifizierung fehlgeschlagen |
+| Connection refused | Fritz!Box unter diesem Host:Port nicht erreichbar |
+| Timeout | Fritz!Box antwortet nicht |
 
-SOAP faults appear inside the 200 response body as `<s:Fault>` elements. Parse the `<faultstring>` for the error message.
+SOAP-Faults erscheinen innerhalb der 200-Antwort als `<s:Fault>`-Elemente. Parsen Sie den `<faultstring>` für die Fehlermeldung.
