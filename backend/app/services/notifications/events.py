@@ -187,7 +187,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         notification_type="info",
         title_template="Backup erfolgreich",
         message_template="Das {backup_type} Backup wurde erfolgreich erstellt. Größe: {size}",
-        action_url="/backups",
+        action_url="/admin/system-control?tab=backup",
     ),
     EventType.BACKUP_FAILED: EventConfig(
         priority=2,
@@ -195,7 +195,7 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         notification_type="warning",
         title_template="Backup fehlgeschlagen",
         message_template="Das {backup_type} Backup ist fehlgeschlagen: {error}",
-        action_url="/backups",
+        action_url="/admin/system-control?tab=backup",
     ),
 
     # Scheduler events
