@@ -11,9 +11,6 @@ import {
 import toast from 'react-hot-toast';
 import {
   getNotifications,
-  markAllAsRead,
-  markAsRead,
-  dismissNotification,
   snoozeNotification,
   getTypeStyle,
   getCategoryIcon,
@@ -24,6 +21,7 @@ import {
   type NotificationType,
   type NotificationListResponse,
 } from '../api/notifications';
+import { useNotifications } from '../contexts/NotificationContext';
 
 const CATEGORIES: NotificationCategory[] = [
   'raid', 'smart', 'backup', 'scheduler', 'system', 'security', 'sync', 'vpn',
@@ -35,6 +33,11 @@ const PAGE_SIZE = 50;
 
 export default function NotificationsArchivePage() {
   const navigate = useNavigate();
+  const {
+    markAsRead: ctxMarkAsRead,
+    markAllAsRead: ctxMarkAllAsRead,
+    dismiss: ctxDismiss,
+  } = useNotifications();
   const [data, setData] = useState<NotificationListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
@@ -69,8 +72,9 @@ export default function NotificationsArchivePage() {
 
   const handleMarkAllRead = async () => {
     try {
-      await markAllAsRead(categoryFilter || undefined);
+      await ctxMarkAllAsRead();
       toast.success('Alle als gelesen markiert');
+      // Refetch archive list to reflect server state (pagination, filters)
       fetchNotifications();
     } catch {
       toast.error('Fehler');
@@ -79,17 +83,33 @@ export default function NotificationsArchivePage() {
 
   const handleMarkRead = async (n: Notification) => {
     if (n.is_read) return;
+    // Optimistic update in local archive state
+    setData((prev) => prev && ({
+      ...prev,
+      notifications: prev.notifications.map((x) =>
+        x.id === n.id ? { ...x, is_read: true } : x
+      ),
+      unread_count: Math.max(0, prev.unread_count - 1),
+    }));
     try {
-      await markAsRead(n.id);
-      fetchNotifications();
+      await ctxMarkAsRead(n.id);
     } catch { /* non-critical */ }
   };
 
   const handleDismiss = async (n: Notification) => {
+    // Optimistic update: remove from local archive list immediately
+    setData((prev) => prev && ({
+      ...prev,
+      notifications: prev.notifications.filter((x) => x.id !== n.id),
+      total: prev.total - 1,
+      unread_count: !n.is_read ? Math.max(0, prev.unread_count - 1) : prev.unread_count,
+    }));
     try {
-      await dismissNotification(n.id);
+      await ctxDismiss(n.id);
+    } catch {
+      // Rollback: refetch on failure
       fetchNotifications();
-    } catch { /* non-critical */ }
+    }
   };
 
   const handleSnooze = async (n: Notification, hours: number) => {
