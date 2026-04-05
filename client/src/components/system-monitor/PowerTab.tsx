@@ -36,6 +36,7 @@ import { formatNumber } from '../../lib/formatters';
 import { usePlugins } from '../../contexts/PluginContext';
 
 type CumulativePeriod = 'today' | 'week' | 'month';
+type ChartMode = 'cumulative' | 'instant';
 
 export function PowerTab() {
   const { t, i18n } = useTranslation(['system', 'common']);
@@ -56,6 +57,7 @@ export function PowerTab() {
   const [cumulativeData, setCumulativeData] = useState<CumulativeEnergyResponse | null>(null);
   const [cumulativeLoading, setCumulativeLoading] = useState(false);
   const [selectedDeviceId, setSelectedDeviceId] = useState<number | null>(null);
+  const [chartMode, setChartMode] = useState<ChartMode>('cumulative');
 
   const fetchPower = useCallback(async () => {
     try {
@@ -300,9 +302,11 @@ export function PowerTab() {
 
         {/* Header with Price Config */}
         <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-3 flex-wrap">
             <h3 className="text-base sm:text-lg font-semibold text-white flex items-center">
-              {t('monitor.power.cumulativeConsumptionCosts')}
+              {chartMode === 'cumulative'
+                ? t('monitor.power.cumulativeConsumptionCosts')
+                : t('monitor.power.instantPowerConsumption')}
               <PluginBadge pluginName={powerPluginName} size="sm" className="ml-2" />
             </h3>
             {priceConfig && (
@@ -353,8 +357,26 @@ export function PowerTab() {
             )}
           </div>
 
-          {/* Period Selector */}
-          <div className="flex gap-1 sm:gap-2">
+          {/* Mode Toggle + Period Selector */}
+          <div className="flex gap-1 sm:gap-2 flex-wrap">
+            {/* Chart Mode Toggle */}
+            {(['cumulative', 'instant'] as ChartMode[]).map((mode) => (
+              <button
+                key={mode}
+                onClick={() => setChartMode(mode)}
+                className={`px-3 py-1.5 text-xs sm:text-sm rounded-md transition-colors ${
+                  chartMode === mode
+                    ? 'bg-amber-500/20 text-amber-400 border border-amber-500/40'
+                    : 'bg-slate-800 text-slate-400 hover:bg-slate-700 border border-transparent'
+                }`}
+              >
+                {mode === 'cumulative' ? t('monitor.power.modeCumulative') : t('monitor.power.modeInstant')}
+              </button>
+            ))}
+
+            <div className="w-px bg-slate-700 mx-1 self-stretch" />
+
+            {/* Period Selector */}
             {(['today', 'week', 'month'] as CumulativePeriod[]).map((period) => (
               <button
                 key={period}
@@ -372,34 +394,70 @@ export function PowerTab() {
         </div>
 
         {/* Summary Stats */}
-        {cumulativeData && (
-          <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">{t('monitor.power.totalConsumption')}</p>
-              <p className="text-lg font-semibold text-emerald-400">
-                {formatNumber(cumulativeData.total_kwh, 3)} <span className="text-sm text-slate-400">kWh</span>
-              </p>
+        {cumulativeData && (() => {
+          if (chartMode === 'instant') {
+            const wattsValues = cumulativeData.data_points.map(dp => dp.instant_watts);
+            const avgWatts = wattsValues.length > 0 ? wattsValues.reduce((a, b) => a + b, 0) / wattsValues.length : 0;
+            const maxWatts = wattsValues.length > 0 ? Math.max(...wattsValues) : 0;
+            const minWatts = wattsValues.length > 0 ? Math.min(...wattsValues) : 0;
+            return (
+              <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <p className="text-xs text-slate-400">{t('monitor.power.avgPower')}</p>
+                  <p className="text-lg font-semibold text-amber-400">
+                    {formatNumber(avgWatts, 1)} <span className="text-sm text-slate-400">W</span>
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <p className="text-xs text-slate-400">{t('monitor.power.maxPower')}</p>
+                  <p className="text-lg font-semibold text-red-400">
+                    {formatNumber(maxWatts, 1)} <span className="text-sm text-slate-400">W</span>
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <p className="text-xs text-slate-400">{t('monitor.power.minPower')}</p>
+                  <p className="text-lg font-semibold text-emerald-400">
+                    {formatNumber(minWatts, 1)} <span className="text-sm text-slate-400">W</span>
+                  </p>
+                </div>
+                <div className="bg-slate-800/50 rounded-lg p-3">
+                  <p className="text-xs text-slate-400">{t('monitor.power.dataPoints')}</p>
+                  <p className="text-lg font-semibold text-slate-300">
+                    {cumulativeData.data_points.length}
+                  </p>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div className="grid grid-cols-1 min-[400px]:grid-cols-2 sm:grid-cols-4 gap-3 mb-4">
+              <div className="bg-slate-800/50 rounded-lg p-3">
+                <p className="text-xs text-slate-400">{t('monitor.power.totalConsumption')}</p>
+                <p className="text-lg font-semibold text-emerald-400">
+                  {formatNumber(cumulativeData.total_kwh, 3)} <span className="text-sm text-slate-400">kWh</span>
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-3">
+                <p className="text-xs text-slate-400">{t('monitor.power.totalCosts')}</p>
+                <p className="text-lg font-semibold text-orange-400">
+                  {formatNumber(cumulativeData.total_cost, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-3">
+                <p className="text-xs text-slate-400">{t('monitor.power.electricityPrice')}</p>
+                <p className="text-lg font-semibold text-slate-300">
+                  {formatNumber(cumulativeData.cost_per_kwh, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
+                </p>
+              </div>
+              <div className="bg-slate-800/50 rounded-lg p-3">
+                <p className="text-xs text-slate-400">{t('monitor.power.dataPoints')}</p>
+                <p className="text-lg font-semibold text-slate-300">
+                  {cumulativeData.data_points.length}
+                </p>
+              </div>
             </div>
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">{t('monitor.power.totalCosts')}</p>
-              <p className="text-lg font-semibold text-orange-400">
-                {formatNumber(cumulativeData.total_cost, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}</span>
-              </p>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">{t('monitor.power.electricityPrice')}</p>
-              <p className="text-lg font-semibold text-slate-300">
-                {formatNumber(cumulativeData.cost_per_kwh, 2)} <span className="text-sm text-slate-400">{cumulativeData.currency}/kWh</span>
-              </p>
-            </div>
-            <div className="bg-slate-800/50 rounded-lg p-3">
-              <p className="text-xs text-slate-400">{t('monitor.power.dataPoints')}</p>
-              <p className="text-lg font-semibold text-slate-300">
-                {cumulativeData.data_points.length}
-              </p>
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {/* Chart */}
         {cumulativeLoading ? (
@@ -409,98 +467,161 @@ export function PowerTab() {
         ) : cumulativeData && cumulativeData.data_points.length > 0 ? (
           <div className="h-[300px] sm:h-[350px]">
             <ResponsiveContainer width="100%" height="100%">
-              <ComposedChart
-                data={cumulativeData.data_points.map((dp) => ({
-                  time: formatTimeForRange(dp.timestamp, cumulativePeriod as ChartTimeRange, i18n.language),
-                  fullTime: parseUtcTimestamp(dp.timestamp).toLocaleString(i18n.language),
-                  kwh: dp.cumulative_kwh,
-                  cost: dp.cumulative_cost,
-                  watts: dp.instant_watts,
-                }))}
-                margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
-              >
-                <defs>
-                  <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                  </linearGradient>
-                </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-                <XAxis
-                  dataKey="time"
-                  stroke="#64748b"
-                  fontSize={11}
-                  tickLine={false}
-                  interval="preserveStartEnd"
-                  minTickGap={cumulativePeriod === 'week' ? 70 : 40}
-                />
-                <YAxis
-                  yAxisId="left"
-                  stroke="#10b981"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => formatNumber(v, 2)}
-                  label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: '#10b981', fontSize: 11 }}
-                />
-                <YAxis
-                  yAxisId="right"
-                  orientation="right"
-                  stroke="#f97316"
-                  fontSize={11}
-                  tickLine={false}
-                  axisLine={false}
-                  tickFormatter={(v) => formatNumber(v, 2)}
-                  label={{ value: cumulativeData.currency, angle: 90, position: 'insideRight', fill: '#f97316', fontSize: 11 }}
-                />
-                <Tooltip
-                  contentStyle={{
-                    backgroundColor: '#1e293b',
-                    border: '1px solid #334155',
-                    borderRadius: '8px',
-                    fontSize: '12px',
-                  }}
-                  labelStyle={{ color: '#94a3b8' }}
-                  formatter={(value: number, name: string) => {
-                    if (name === 'kwh') return [`${formatNumber(value, 4)} kWh`, t('monitor.power.consumption')];
-                    if (name === 'cost') return [`${formatNumber(value, 4)} ${cumulativeData.currency}`, t('monitor.power.costsLabel')];
-                    if (name === 'watts') return [`${formatNumber(value, 1)} W`, t('monitor.power.powerLabel')];
-                    return [value, name];
-                  }}
-                  labelFormatter={(label, payload) => {
-                    if (payload && payload[0]) {
-                      return payload[0].payload.fullTime;
-                    }
-                    return label;
-                  }}
-                />
-                <Legend
-                  wrapperStyle={{ fontSize: '12px' }}
-                  formatter={(value) => {
-                    if (value === 'kwh') return t('monitor.power.consumptionKwh');
-                    if (value === 'cost') return `${t('monitor.power.costsLabel')} (${cumulativeData.currency})`;
-                    return value;
-                  }}
-                />
-                <Area
-                  yAxisId="left"
-                  type="monotone"
-                  dataKey="kwh"
-                  stroke="#10b981"
-                  strokeWidth={2}
-                  fill="url(#colorKwh)"
-                  name="kwh"
-                />
-                <Line
-                  yAxisId="right"
-                  type="monotone"
-                  dataKey="cost"
-                  stroke="#f97316"
-                  strokeWidth={2}
-                  dot={false}
-                  name="cost"
-                />
-              </ComposedChart>
+              {chartMode === 'cumulative' ? (
+                <ComposedChart
+                  data={cumulativeData.data_points.map((dp) => ({
+                    time: formatTimeForRange(dp.timestamp, cumulativePeriod as ChartTimeRange, i18n.language),
+                    fullTime: parseUtcTimestamp(dp.timestamp).toLocaleString(i18n.language),
+                    kwh: dp.cumulative_kwh,
+                    cost: dp.cumulative_cost,
+                    watts: dp.instant_watts,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorKwh" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#10b981" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="#64748b"
+                    fontSize={11}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={cumulativePeriod === 'week' ? 70 : 40}
+                  />
+                  <YAxis
+                    yAxisId="left"
+                    stroke="#10b981"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => formatNumber(v, 2)}
+                    label={{ value: 'kWh', angle: -90, position: 'insideLeft', fill: '#10b981', fontSize: 11 }}
+                  />
+                  <YAxis
+                    yAxisId="right"
+                    orientation="right"
+                    stroke="#f97316"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => formatNumber(v, 2)}
+                    label={{ value: cumulativeData.currency, angle: 90, position: 'insideRight', fill: '#f97316', fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    labelStyle={{ color: '#94a3b8' }}
+                    formatter={(value: number, name: string) => {
+                      if (name === 'kwh') return [`${formatNumber(value, 4)} kWh`, t('monitor.power.consumption')];
+                      if (name === 'cost') return [`${formatNumber(value, 4)} ${cumulativeData.currency}`, t('monitor.power.costsLabel')];
+                      if (name === 'watts') return [`${formatNumber(value, 1)} W`, t('monitor.power.powerLabel')];
+                      return [value, name];
+                    }}
+                    labelFormatter={(label, payload) => {
+                      if (payload && payload[0]) {
+                        return payload[0].payload.fullTime;
+                      }
+                      return label;
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: '12px' }}
+                    formatter={(value) => {
+                      if (value === 'kwh') return t('monitor.power.consumptionKwh');
+                      if (value === 'cost') return `${t('monitor.power.costsLabel')} (${cumulativeData.currency})`;
+                      return value;
+                    }}
+                  />
+                  <Area
+                    yAxisId="left"
+                    type="monotone"
+                    dataKey="kwh"
+                    stroke="#10b981"
+                    strokeWidth={2}
+                    fill="url(#colorKwh)"
+                    name="kwh"
+                  />
+                  <Line
+                    yAxisId="right"
+                    type="monotone"
+                    dataKey="cost"
+                    stroke="#f97316"
+                    strokeWidth={2}
+                    dot={false}
+                    name="cost"
+                  />
+                </ComposedChart>
+              ) : (
+                <ComposedChart
+                  data={cumulativeData.data_points.map((dp) => ({
+                    time: formatTimeForRange(dp.timestamp, cumulativePeriod as ChartTimeRange, i18n.language),
+                    fullTime: parseUtcTimestamp(dp.timestamp).toLocaleString(i18n.language),
+                    watts: dp.instant_watts,
+                  }))}
+                  margin={{ top: 10, right: 10, left: 0, bottom: 0 }}
+                >
+                  <defs>
+                    <linearGradient id="colorWatts" x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
+                      <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                    </linearGradient>
+                  </defs>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
+                  <XAxis
+                    dataKey="time"
+                    stroke="#64748b"
+                    fontSize={11}
+                    tickLine={false}
+                    interval="preserveStartEnd"
+                    minTickGap={cumulativePeriod === 'week' ? 70 : 40}
+                  />
+                  <YAxis
+                    stroke="#f59e0b"
+                    fontSize={11}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(v) => formatNumber(v, 1)}
+                    label={{ value: 'W', angle: -90, position: 'insideLeft', fill: '#f59e0b', fontSize: 11 }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1e293b',
+                      border: '1px solid #334155',
+                      borderRadius: '8px',
+                      fontSize: '12px',
+                    }}
+                    labelStyle={{ color: '#94a3b8' }}
+                    formatter={(value: number) => [`${formatNumber(value, 1)} W`, t('monitor.power.powerLabel')]}
+                    labelFormatter={(label, payload) => {
+                      if (payload && payload[0]) {
+                        return payload[0].payload.fullTime;
+                      }
+                      return label;
+                    }}
+                  />
+                  <Legend
+                    wrapperStyle={{ fontSize: '12px' }}
+                    formatter={() => t('monitor.power.powerWatts')}
+                  />
+                  <Area
+                    type="monotone"
+                    dataKey="watts"
+                    stroke="#f59e0b"
+                    strokeWidth={2}
+                    fill="url(#colorWatts)"
+                    name="watts"
+                  />
+                </ComposedChart>
+              )}
             </ResponsiveContainer>
           </div>
         ) : (

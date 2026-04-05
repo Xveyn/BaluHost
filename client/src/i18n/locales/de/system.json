@@ -160,7 +160,13 @@
       "priceMustBeBetween": "Preis muss zwischen 0.01 und 10.00 liegen",
       "priceUpdated": "Strompreis aktualisiert",
       "saveError": "Fehler beim Speichern",
-      "total": "Gesamt"
+      "total": "Gesamt",
+      "modeCumulative": "Kumuliert",
+      "modeInstant": "Momentan",
+      "instantPowerConsumption": "Momentanverbrauch",
+      "avgPower": "Durchschn. Leistung",
+      "maxPower": "Max. Leistung",
+      "minPower": "Min. Leistung"
     }
   },
   "logging": {
