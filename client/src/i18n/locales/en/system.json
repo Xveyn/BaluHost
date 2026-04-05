@@ -165,7 +165,13 @@
       "priceMustBeBetween": "Price must be between 0.01 and 10.00",
       "priceUpdated": "Electricity price updated",
       "saveError": "Failed to save",
-      "total": "Total"
+      "total": "Total",
+      "modeCumulative": "Cumulative",
+      "modeInstant": "Instant",
+      "instantPowerConsumption": "Instant Power Consumption",
+      "avgPower": "Avg. Power",
+      "maxPower": "Max. Power",
+      "minPower": "Min. Power"
     }
   },
   "logging": {

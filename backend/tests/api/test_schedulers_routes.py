@@ -15,10 +15,19 @@ from fastapi.testclient import TestClient
 class TestListSchedulers:
     """Tests for GET /api/schedulers/."""
 
-    def test_list_requires_admin(self, client: TestClient, user_headers: dict):
-        """Test that listing schedulers requires admin."""
+    def test_list_requires_auth(self, client: TestClient):
+        """Test that listing schedulers requires authentication."""
+        response = client.get("/api/schedulers/")
+        assert response.status_code == 401
+
+    def test_list_accessible_by_user(self, client: TestClient, user_headers: dict):
+        """Test that regular users can list schedulers."""
         response = client.get("/api/schedulers/", headers=user_headers)
-        assert response.status_code == 403
+        assert response.status_code == 200
+
+        data = response.json()
+        assert "schedulers" in data
+        assert isinstance(data["schedulers"], list)
 
     def test_list_returns_schedulers(self, client: TestClient, admin_headers: dict):
         """Test that admin can list all schedulers."""

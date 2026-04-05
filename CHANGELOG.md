@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.4] - 2026-04-05
+
+### Added
+- Power: cumulative/instant chart mode toggle for energy chart
+
+### Fixed
+- Notifications: use optimistic updates and sync context on dismiss
+- Notifications: normalize timezone-naive `expires_at` from PostgreSQL to
+  UTC-aware before datetime comparison in device expiration check
+- Schedulers: allow all authenticated users to view scheduler list
+
+---
+
 ## [1.27.3] - 2026-04-03
 
 ### Fixed

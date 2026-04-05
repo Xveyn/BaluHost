@@ -2,7 +2,7 @@
  * NotificationContext — holds WS connection + notification state above route level,
  * so route navigation does not tear down the WebSocket.
  */
-import { createContext, useContext, useState, useCallback, useEffect } from 'react';
+import { createContext, useContext, useState, useCallback, useEffect, useRef } from 'react';
 import toast from 'react-hot-toast';
 import {
   getNotifications,
@@ -34,6 +34,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);
   const [loading, setLoading] = useState(false);
+  const notificationsRef = useRef(notifications);
+  notificationsRef.current = notifications;
 
   const { isConnected } = useNotificationSocket({
     enabled: !!token && !isPi,
@@ -99,15 +101,21 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   }, []);
 
   const dismiss = useCallback(async (id: number) => {
-    await apiDismiss(id);
-    setNotifications((prev) => {
-      const target = prev.find((n) => n.id === id);
-      if (target && !target.is_read) {
-        setUnreadCount((c) => Math.max(0, c - 1));
-      }
-      return prev.filter((n) => n.id !== id);
-    });
-  }, []);
+    // Optimistic update: remove from UI immediately
+    const target = notificationsRef.current.find((n) => n.id === id);
+    setNotifications((prev) => prev.filter((n) => n.id !== id));
+    if (target && !target.is_read) {
+      setUnreadCount((c) => Math.max(0, c - 1));
+    }
+
+    try {
+      await apiDismiss(id);
+    } catch (err) {
+      // Rollback: re-fetch on failure
+      fetchNotifications();
+      throw err;
+    }
+  }, [fetchNotifications]);
 
   return (
     <NotificationContext.Provider
