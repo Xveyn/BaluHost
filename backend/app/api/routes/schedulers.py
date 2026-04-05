@@ -27,13 +27,13 @@ router = APIRouter()
 @user_limiter.limit(get_limit("admin_operations"))
 async def list_schedulers(
     request: Request, response: Response,
-    _: UserPublic = Depends(deps.get_current_admin),
+    _: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ):
     """
-    List all system schedulers with their status (Admin only).
+    List all system schedulers with their status.
 
-    Returns information about all 6 system schedulers:
+    Returns information about all system schedulers:
     - RAID Scrub: Periodic data integrity check
     - SMART Scan: Disk health monitoring
     - Backup: Automated system backups

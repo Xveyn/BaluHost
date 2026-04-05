@@ -87,7 +87,7 @@ export default function Dashboard() {
   const [smartModeLoading, setSmartModeLoading] = useState(false);
 
   // Hooks for alert generation
-  const { allSchedulers } = useNextMaintenance({ enabled: isAdmin });
+  const { allSchedulers } = useNextMaintenance();
   const { services } = useServicesSummary({ enabled: isAdmin });
   const { activities } = useLiveActivities({ raidData, schedulers: allSchedulers, isAdmin });
 
