@@ -152,7 +152,9 @@ class CloudService:
         if upgrade_connection_id is not None:
             existing = self.get_connection(upgrade_connection_id, user_id)
             from app.services.cloud.adapters.rclone import RcloneAdapter
-            _remote_name, config_content = RcloneAdapter.generate_config(provider, token_json)
+            _remote_name, config_content = RcloneAdapter.generate_config(
+                provider, token_json, client_id, client_secret,
+            )
             existing.encrypted_config = encrypt_credentials(config_content)
             existing.rclone_remote_name = _remote_name
             self.db.commit()
@@ -162,7 +164,9 @@ class CloudService:
 
         # Generate rclone config
         from app.services.cloud.adapters.rclone import RcloneAdapter
-        remote_name, config_content = RcloneAdapter.generate_config(provider, token_json)
+        remote_name, config_content = RcloneAdapter.generate_config(
+            provider, token_json, client_id, client_secret,
+        )
 
         # Determine display name
         display_name = "Google Drive" if provider == "google_drive" else "OneDrive"

@@ -413,13 +413,20 @@ class RcloneAdapter(CloudAdapter):
         await self._run_rclone("delete", remote, timeout=60)
 
     @staticmethod
-    def generate_config(provider: str, token_json: str) -> tuple[str, str]:
+    def generate_config(
+        provider: str,
+        token_json: str,
+        client_id: str = "",
+        client_secret: str = "",
+    ) -> tuple[str, str]:
         """
         Generate rclone config content from OAuth token.
 
         Args:
             provider: "google_drive" or "onedrive"
             token_json: JSON string of the OAuth token
+            client_id: OAuth client ID (required for token refresh)
+            client_secret: OAuth client secret (required for token refresh)
 
         Returns:
             Tuple of (remote_name, config_content)
@@ -432,6 +439,8 @@ class RcloneAdapter(CloudAdapter):
             config = (
                 f"[{remote_name}]\n"
                 f"type = drive\n"
+                f"client_id = {client_id}\n"
+                f"client_secret = {client_secret}\n"
                 f"scope = drive.readonly\n"
                 f"token = {token_json}\n"
             )
@@ -439,6 +448,8 @@ class RcloneAdapter(CloudAdapter):
             config = (
                 f"[{remote_name}]\n"
                 f"type = onedrive\n"
+                f"client_id = {client_id}\n"
+                f"client_secret = {client_secret}\n"
                 f"token = {token_json}\n"
                 f"drive_type = personal\n"
             )
