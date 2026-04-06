@@ -25,7 +25,7 @@ from app.schemas.mobile import (
     SyncFolderUpdate,
     UploadQueueListResponse,
 )
-from app.models.mobile import MobileRegistrationToken as MobileRegistrationTokenModel
+from app.models.mobile import MobileRegistrationToken as MobileRegistrationTokenModel, MobileDevice
 from app.services.mobile import MobileService
 
 logger = logging.getLogger(__name__)
@@ -483,11 +483,34 @@ async def update_sync_folder(
     """
     Update a sync folder configuration. Also refreshes last_sync timestamp.
     """
-    return MobileService.update_sync_folder(
+    # Capture previous status to detect sync completion
+    from app.models.mobile import SyncFolder as SyncFolderModel
+    folder_before = db.query(SyncFolderModel).filter(SyncFolderModel.id == folder_id).first()
+    previous_status = folder_before.status if folder_before else None
+
+    result = MobileService.update_sync_folder(
         db=db,
         folder_id=folder_id,
         update_data=update_data
     )
+
+    # Emit notification when sync completes (status changes to "idle" from "syncing")
+    if update_data.status == "idle" and previous_status == "syncing":
+        try:
+            from app.services.notifications.events import get_event_emitter, EventType
+            device = db.query(MobileDevice).filter(MobileDevice.id == result.device_id).first()
+            device_name = device.device_name if device else result.device_id
+            folder_name = result.remote_path or folder_id
+            get_event_emitter().emit_sync(
+                EventType.SYNC_COMPLETED,
+                user_id=current_user.id,
+                folder_name=folder_name,
+                device_name=device_name,
+            )
+        except Exception:
+            logging.getLogger(__name__).warning("Failed to emit sync completed notification", exc_info=True)
+
+    return result
 
 
 @router.delete("/sync/folders/{folder_id}", status_code=204)

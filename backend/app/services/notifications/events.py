@@ -313,6 +313,14 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         message_template="Ein Datei-Konflikt wurde bei '{file_path}' erkannt. Manuelle Lösung erforderlich.",
         action_url="/sync",
     ),
+    EventType.SYNC_COMPLETED: EventConfig(
+        priority=0,
+        category="sync",
+        notification_type="info",
+        title_template="Synchronisation abgeschlossen: {folder_name}",
+        message_template="Die Synchronisation für '{folder_name}' ({device_name}) wurde erfolgreich abgeschlossen.",
+        action_url="/settings?tab=sync",
+    ),
     EventType.SYNC_FAILED: EventConfig(
         priority=2,
         category="sync",
