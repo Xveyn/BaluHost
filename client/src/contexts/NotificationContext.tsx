@@ -40,7 +40,15 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
   const { isConnected } = useNotificationSocket({
     enabled: !!token && !isPi,
     onNotification: (notification) => {
-      setNotifications((prev) => [notification, ...prev.slice(0, 49)]);
+      // Skip notifications with empty or missing title
+      if (!notification.title?.trim()) return;
+
+      // Compute time_ago for WebSocket-delivered notifications (not included in to_dict())
+      const enriched = notification.time_ago
+        ? notification
+        : { ...notification, time_ago: 'just now' };
+
+      setNotifications((prev) => [enriched, ...prev.slice(0, 49)]);
       if (notification.notification_type === 'critical') {
         toast.error(notification.title, { duration: 5000 });
       } else if (notification.notification_type === 'warning') {
@@ -60,7 +68,8 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         getNotifications({ page_size: 20 }),
         getUnreadCount(),
       ]);
-      setNotifications(notifResponse.notifications);
+      // Filter out notifications with empty or missing title
+      setNotifications(notifResponse.notifications.filter((n) => n.title?.trim()));
       setUnreadCount(countResponse.count);
     } catch {
       // Non-critical
