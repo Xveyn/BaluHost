@@ -242,7 +242,17 @@
     "shutdownEta": "Shutdown scheduled — stopping in ~{{eta}}s",
     "restarting": "Restarting...",
     "restartStarted": "Restart initiated...",
-    "restartingWait": "Restarting — waiting for server..."
+    "restartingWait": "Restarting — waiting for server...",
+    "sleep": "Sleep",
+    "sleepDesc": "Enter sleep mode",
+    "sleepConfirm": "Enter sleep mode? Services will be paused, but the server remains reachable.",
+    "sleepActivated": "Sleep mode activated",
+    "sleepFailed": "Failed to enter sleep mode",
+    "suspend": "Standby",
+    "suspendDesc": "Suspend system",
+    "suspendConfirm": "Suspend the system? The server will be unreachable until woken up.",
+    "suspendActivated": "System suspended",
+    "suspendFailed": "Failed to suspend system"
   },
   "adminOnly": "Admin only",
   "ssdCache": {
