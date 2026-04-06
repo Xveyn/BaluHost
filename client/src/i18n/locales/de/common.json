@@ -242,7 +242,17 @@
     "shutdownEta": "Shutdown geplant — beendet in ~{{eta}}s",
     "restarting": "Wird neu gestartet...",
     "restartStarted": "Neustart gestartet...",
-    "restartingWait": "Neustart — warte auf Server..."
+    "restartingWait": "Neustart — warte auf Server...",
+    "sleep": "Schlafmodus",
+    "sleepDesc": "Dienste pausieren",
+    "sleepConfirm": "Schlafmodus aktivieren? Dienste werden pausiert, der Server bleibt erreichbar.",
+    "sleepActivated": "Schlafmodus aktiviert",
+    "sleepFailed": "Schlafmodus konnte nicht aktiviert werden",
+    "suspend": "Standby",
+    "suspendDesc": "System in Standby versetzen",
+    "suspendConfirm": "System in Standby versetzen? Der Server ist nicht erreichbar, bis er aufgeweckt wird.",
+    "suspendActivated": "System wird in Standby versetzt",
+    "suspendFailed": "Standby konnte nicht aktiviert werden"
   },
   "adminOnly": "Nur für Admins",
   "ssdCache": {

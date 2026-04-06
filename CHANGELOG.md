@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.27.7] - 2026-04-06
+
+### Added
+- Power menu: sleep and suspend options for admins
+- Notifications: emit sync-completed event when mobile folder sync finishes
+
+### Fixed
+- Notifications: filter out empty notifications and add time_ago for WebSocket-delivered items
+- Cloud: include OAuth credentials in rclone config for token refresh
+
+---
+
 ## [1.27.6] - 2026-04-05
 
 ### Added
