@@ -690,7 +690,7 @@ class EventEmitter:
 
             for device in devices:
                 # Check mobile preference for admin users
-                if user_id is None:
+                if user_id is None and device.user_id in admin_ids:
                     from app.services.notifications.service import get_notification_service
                     svc = get_notification_service()
                     device_prefs = svc.get_user_preferences(db, device.user_id)
