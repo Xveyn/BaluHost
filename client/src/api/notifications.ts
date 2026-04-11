@@ -43,8 +43,15 @@ export interface MarkReadResponse {
 }
 
 export interface CategoryPreference {
-  push: boolean;
-  in_app: boolean;
+  error: boolean;
+  success: boolean;
+  mobile: boolean;
+  desktop: boolean;
+}
+
+export interface DeliveryStatus {
+  has_mobile_devices: boolean;
+  has_desktop_clients: boolean;
 }
 
 export interface NotificationPreferences {
@@ -67,6 +74,14 @@ export interface NotificationPreferencesUpdate {
   quiet_hours_end?: string | null;
   min_priority?: number;
   category_preferences?: Record<string, CategoryPreference>;
+}
+
+/**
+ * Get device availability for notification delivery channels
+ */
+export async function getDeliveryStatus(): Promise<DeliveryStatus> {
+  const response = await apiClient.get<DeliveryStatus>('/api/notifications/delivery-status');
+  return response.data;
 }
 
 // API Functions

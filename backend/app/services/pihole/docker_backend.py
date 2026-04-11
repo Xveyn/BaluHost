@@ -19,6 +19,23 @@ DEFAULT_TAG = "latest"
 DNS_PORT = 53
 DEFAULT_WEB_PORT = 8053
 
+# Pi-hole v6 status strings that indicate a blocked query
+_PIHOLE_BLOCKED_STATUSES = frozenset({
+    "GRAVITY", "REGEX_DENY", "EXACT_DENY",
+    "EXTERNAL_BLOCKED_IP", "EXTERNAL_BLOCKED_NULL", "EXTERNAL_BLOCKED_NXRA",
+    "GRAVITY_CNAME", "REGEX_DENY_CNAME", "EXACT_DENY_CNAME",
+})
+
+
+def _normalize_status(raw: str) -> str:
+    """Normalize Pi-hole v6 status strings to collector categories."""
+    upper = raw.upper()
+    if upper in _PIHOLE_BLOCKED_STATUSES:
+        return "BLOCKED"
+    if upper in ("CACHE", "CACHE_STALE"):
+        return "CACHED"
+    return upper
+
 
 class ContainerManager:
     """Manages the Pi-hole Docker container lifecycle via docker-py.
@@ -332,14 +349,18 @@ class LocalDockerPiholeBackend:
         data = await self._api.get_queries(limit, offset)
         queries = []
         for q in data.get("queries", []):
+            reply = q.get("reply") or {}
+            if not isinstance(reply, dict):
+                reply = {}
+            response_time = reply.get("time")
             queries.append({
                 "timestamp": q.get("time", 0),
                 "domain": q.get("domain", ""),
                 "client": q.get("client", {}).get("ip", q.get("client", "")),
                 "query_type": q.get("type", ""),
-                "status": q.get("status", ""),
-                "reply_type": q.get("reply", {}).get("type", ""),
-                "response_time": q.get("reply", {}).get("time", 0),
+                "status": _normalize_status(q.get("status", "")),
+                "reply_type": reply.get("type", ""),
+                "response_time": response_time,
             })
         return {"queries": queries, "total": data.get("recordsTotal", len(queries))}
 

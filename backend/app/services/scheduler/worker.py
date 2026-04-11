@@ -273,6 +273,13 @@ class SchedulerWorker:
 
             logger.info("Scheduler job completed: %s", name)
 
+            # Emit notification for scheduler success
+            try:
+                from app.services.notifications.events import emit_scheduler_completed_sync
+                emit_scheduler_completed_sync(name)
+            except Exception:
+                pass
+
         except Exception as e:
             logger.exception("Scheduler job failed: %s", name)
 

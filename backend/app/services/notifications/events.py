@@ -153,6 +153,22 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         message_template="Der RAID Scrub für {array_name} wurde abgeschlossen. {details}",
         action_url="/schedulers",
     ),
+    EventType.RAID_SYNC_STARTED: EventConfig(
+        priority=0,
+        category="raid",
+        notification_type="info",
+        title_template="RAID Synchronisation gestartet: {array_name}",
+        message_template="Die RAID-Synchronisation für {array_name} wurde gestartet.",
+        action_url="/admin/system-control?tab=raid",
+    ),
+    EventType.RAID_SYNC_COMPLETE: EventConfig(
+        priority=0,
+        category="raid",
+        notification_type="info",
+        title_template="RAID Synchronisation abgeschlossen: {array_name}",
+        message_template="Die RAID-Synchronisation für {array_name} wurde erfolgreich abgeschlossen.",
+        action_url="/admin/system-control?tab=raid",
+    ),
 
     # SMART events
     EventType.SMART_WARNING: EventConfig(
@@ -488,9 +504,47 @@ class EventEmitter:
             title = config.title_template
             message = config.message_template
 
+        # Determine event classification for gate logic
+        is_success_event = config.priority == 0 and config.notification_type == "info"
+        is_error_event = config.notification_type in ("warning", "critical")
+
         if self._db_session_factory:
             db = self._db_session_factory()
             try:
+                # Gate: check if any admin wants this event type
+                if user_id is None:
+                    from app.services.notifications.service import get_notification_service
+                    svc = get_notification_service()
+                    from app.models.user import User
+
+                    admin_ids = [
+                        uid for (uid,) in db.query(User.id).filter(
+                            User.role == "admin",
+                            User.is_active == True,
+                        ).all()
+                    ]
+
+                    any_admin_wants_it = False
+                    for admin_id in admin_ids:
+                        prefs = svc.get_user_preferences(db, admin_id)
+                        cat_pref = svc._get_category_pref(prefs, config.category)
+                        if is_success_event and cat_pref.get("success", False):
+                            any_admin_wants_it = True
+                            break
+                        elif is_error_event and cat_pref.get("error", True):
+                            any_admin_wants_it = True
+                            break
+                        elif not is_success_event and not is_error_event:
+                            any_admin_wants_it = True
+                            break
+
+                    if not any_admin_wants_it:
+                        logger.debug(
+                            f"Event {event_type} suppressed: no admin wants "
+                            f"{'success' if is_success_event else 'error'} for {config.category}"
+                        )
+                        return
+
                 from app.models.notification import Notification
 
                 notification = Notification(
@@ -635,6 +689,15 @@ class EventEmitter:
                 ).all()
 
             for device in devices:
+                # Check mobile preference for admin users
+                if user_id is None and device.user_id in admin_ids:
+                    from app.services.notifications.service import get_notification_service
+                    svc = get_notification_service()
+                    device_prefs = svc.get_user_preferences(db, device.user_id)
+                    cat_pref = svc._get_category_pref(device_prefs, category)
+                    if not cat_pref.get("mobile", True):
+                        continue
+
                 # For routed non-admin users, check their preferences
                 if user_id is None and device.user_id not in admin_ids:
                     from app.services.notifications.service import get_notification_service
@@ -1017,4 +1080,36 @@ def emit_storage_permission_error_sync(operation: str, path: str, username: str)
         operation=operation,
         path=path,
         username=username,
+    )
+
+
+def emit_scheduler_completed_sync(scheduler_name: str) -> None:
+    """Emit scheduler completed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SCHEDULER_COMPLETED,
+        scheduler_name=scheduler_name,
+    )
+
+
+def emit_raid_sync_started_sync(array_name: str) -> None:
+    """Emit RAID sync started event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_SYNC_STARTED,
+        array_name=array_name,
+    )
+
+
+def emit_raid_sync_complete_sync(array_name: str) -> None:
+    """Emit RAID sync complete event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_SYNC_COMPLETE,
+        array_name=array_name,
+    )
+
+
+def emit_service_restored_sync(service_name: str) -> None:
+    """Emit service restored event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SERVICE_RESTORED,
+        service_name=service_name,
     )

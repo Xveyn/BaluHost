@@ -357,6 +357,44 @@ class NotificationService:
 
         return prefs.is_channel_enabled_for_category(category, channel)
 
+    def _get_category_pref(self, prefs, category: str) -> dict:
+        """Get category preference with backwards compatibility.
+
+        Handles migration from old format (push/in_app) to new format
+        (error/success/mobile/desktop). Returns a dict with all four keys.
+
+        Args:
+            prefs: NotificationPreferences or None
+            category: Notification category name
+
+        Returns:
+            Dict with keys: error, success, mobile, desktop
+        """
+        defaults = {
+            "error": True,
+            "success": category == "backup",
+            "mobile": True,
+            "desktop": False,
+        }
+
+        if not prefs or not prefs.category_preferences:
+            return defaults
+
+        cat = prefs.category_preferences.get(category, {})
+        if not cat:
+            return defaults
+
+        # Old format detection: has "push" but no "error"
+        if "push" in cat and "error" not in cat:
+            return {
+                "error": cat.get("in_app", True),
+                "success": False,
+                "mobile": cat.get("push", True),
+                "desktop": False,
+            }
+
+        return {**defaults, **cat}
+
     def _is_quiet_hours(self, prefs: NotificationPreferences) -> bool:
         """Check if current time is within quiet hours.
 

@@ -55,6 +55,10 @@ from app.services.notifications.events import (
     emit_temperature_critical_sync,
     emit_login_failed_sync,
     emit_brute_force_detected_sync,
+    emit_scheduler_completed_sync,
+    emit_raid_sync_started_sync,
+    emit_raid_sync_complete_sync,
+    emit_service_restored_sync,
 )
 from app.services.notifications.firebase import FirebaseService
 
@@ -104,6 +108,10 @@ __all__ = [
     "emit_temperature_critical_sync",
     "emit_login_failed_sync",
     "emit_brute_force_detected_sync",
+    "emit_scheduler_completed_sync",
+    "emit_raid_sync_started_sync",
+    "emit_raid_sync_complete_sync",
+    "emit_service_restored_sync",
     # Firebase
     "FirebaseService",
 ]

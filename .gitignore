@@ -108,3 +108,4 @@ backend/benchmark_results/
 backend/dev-backups/
 backups/
 backend/data/
+scripts/fix_umlauts.py
