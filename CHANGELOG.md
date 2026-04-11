@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.28.0] - 2026-04-11
+
+### Added
+- Notifications: redesign category settings table with error/success/mobile/desktop columns
+- Notifications: delivery-status endpoint for device availability
+- Notifications: emit scheduler completed notifications
+- Notifications: per-admin mobile preference check in push delivery
+- Notifications: CategoryPreference type update and getDeliveryStatus API
+- System Monitor: click-to-expand for per-thread CPU charts
+
+### Fixed
+- UI: use logo image on loading screen
+- Notifications: scope mobile gate to admin devices only in _send_push_sync
+- Pi-hole: normalize Pi-hole v6 query statuses for analytics
+- Dependencies: update Vite to 7.3.2 to fix security vulnerabilities
+
+---
+
 ## [1.27.7] - 2026-04-06
 
 ### Added
