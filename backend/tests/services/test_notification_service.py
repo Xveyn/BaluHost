@@ -491,3 +491,27 @@ class TestGetCategoryPref:
         prefs.category_preferences = {"raid": {"error": True, "success": True}}
         result = svc._get_category_pref(prefs, "raid")
         assert result == {"error": True, "success": True, "mobile": True, "desktop": False}
+
+
+class TestDeliveryStatusEndpoint:
+    """Tests for GET /api/notifications/delivery-status."""
+
+    def test_returns_status_for_user(self, client, admin_headers):
+        """Endpoint returns device availability."""
+        from app.core.config import settings
+        resp = client.get(
+            f"{settings.api_prefix}/notifications/delivery-status",
+            headers=admin_headers,
+        )
+        assert resp.status_code == 200
+        data = resp.json()
+        assert "has_mobile_devices" in data
+        assert "has_desktop_clients" in data
+        assert isinstance(data["has_mobile_devices"], bool)
+        assert isinstance(data["has_desktop_clients"], bool)
+
+    def test_requires_authentication(self, client):
+        """Endpoint requires auth."""
+        from app.core.config import settings
+        resp = client.get(f"{settings.api_prefix}/notifications/delivery-status")
+        assert resp.status_code in (401, 403)

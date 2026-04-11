@@ -8,6 +8,8 @@ from sqlalchemy.orm import Session
 from app.api import deps
 from app.core.rate_limiter import user_limiter, get_limit
 from app.core.database import get_db
+from app.models.mobile import MobileDevice
+from app.models.sync_state import SyncState
 from app.schemas.user import UserPublic
 from app.schemas.notification import (
     NotificationCreate,
@@ -112,6 +114,34 @@ async def get_unread_count(
         count=total,
         by_category=counts if counts else None,
     )
+
+
+@router.get("/delivery-status")
+@user_limiter.limit(get_limit("read_operations"))
+async def get_delivery_status(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Get device availability for notification delivery channels.
+
+    Returns whether the current user has active mobile devices and desktop clients,
+    used by the frontend to dim unavailable delivery columns.
+    """
+    has_mobile = db.query(MobileDevice.id).filter(
+        MobileDevice.user_id == current_user.id,
+        MobileDevice.is_active == True,
+        MobileDevice.push_token.isnot(None),
+    ).first() is not None
+
+    has_desktop = db.query(SyncState.id).filter(
+        SyncState.user_id == current_user.id,
+    ).first() is not None
+
+    return {
+        "has_mobile_devices": has_mobile,
+        "has_desktop_clients": has_desktop,
+    }
 
 
 @router.post("/{notification_id}/read", response_model=NotificationResponse)
