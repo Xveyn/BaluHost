@@ -4,16 +4,115 @@
 
 import { useState, useMemo } from 'react';
 import { useTranslation } from 'react-i18next';
-import { MetricChart } from '../monitoring';
+import { MetricChart, TimeRangeSelector } from '../monitoring';
 import type { TimeRange } from '../../api/monitoring';
 import { useCpuMonitoring } from '../../hooks/useMonitoring';
 import { StatCard } from '../ui/StatCard';
+import { Modal } from '../ui/Modal';
 import { formatNumber } from '../../lib/formatters';
+
+/** Modal showing an expanded single-thread chart with its own time range */
+function ThreadDetailModal({
+  threadIndex,
+  onClose,
+  initialTimeRange,
+}: {
+  threadIndex: number;
+  onClose: () => void;
+  initialTimeRange: TimeRange;
+}) {
+  const { t } = useTranslation(['system', 'common']);
+  const [modalTimeRange, setModalTimeRange] = useState<TimeRange>(initialTimeRange);
+  const { current, history, loading } = useCpuMonitoring({ historyDuration: modalTimeRange });
+
+  const threadData = useMemo(() => {
+    if (!current?.thread_usages || threadIndex >= current.thread_usages.length) return null;
+
+    const pCores = current.p_core_count ?? 0;
+    const eCores = current.e_core_count ?? 0;
+    const totalThreads = current.thread_usages.length;
+    const pThreadCount = pCores * 2;
+
+    let threadType: 'P' | 'E' | 'normal' = 'normal';
+    let color = '#3b82f6';
+
+    if (pCores > 0 || eCores > 0) {
+      if (threadIndex < pThreadCount) {
+        threadType = 'P';
+        color = `hsl(${210 + (threadIndex % 4) * 10}, 75%, ${60 + (threadIndex % 3) * 8}%)`;
+      } else {
+        threadType = 'E';
+        color = `hsl(${140 + (threadIndex % 4) * 15}, 70%, ${55 + (threadIndex % 3) * 8}%)`;
+      }
+    } else {
+      const hue = (threadIndex / totalThreads) * 360;
+      color = `hsl(${hue}, 70%, 60%)`;
+    }
+
+    const chartData = history.map((sample) => ({
+      time: sample.timestamp,
+      usage: sample.thread_usages?.[threadIndex] ?? 0,
+    }));
+
+    const label = threadType === 'normal'
+      ? `CPU ${threadIndex}`
+      : `${threadType === 'P' ? 'P-Core' : 'E-Core'} ${threadIndex}`;
+
+    return {
+      label,
+      color,
+      currentUsage: current.thread_usages[threadIndex],
+      chartData,
+    };
+  }, [history, current, threadIndex]);
+
+  if (!threadData) return null;
+
+  return (
+    <Modal
+      isOpen
+      onClose={onClose}
+      title={`${threadData.label} — ${formatNumber(threadData.currentUsage, 1)}%`}
+      size="2xl"
+    >
+      <div className="space-y-3 sm:space-y-4">
+        <div className="flex justify-end overflow-x-auto scrollbar-none">
+          <TimeRangeSelector value={modalTimeRange} onChange={setModalTimeRange} />
+        </div>
+        <MetricChart
+          data={threadData.chartData}
+          lines={[{ dataKey: 'usage', name: t('monitor.usagePercent'), color: threadData.color }]}
+          yAxisLabel="%"
+          yAxisDomain={[0, 100]}
+          height={250}
+          loading={loading}
+          showArea
+          timeRange={modalTimeRange}
+        />
+        <div className="flex items-center gap-3">
+          <div className="h-2 w-full overflow-hidden rounded-full bg-slate-800">
+            <div
+              className="h-full rounded-full transition-all duration-300"
+              style={{
+                width: `${threadData.currentUsage}%`,
+                backgroundColor: threadData.color,
+              }}
+            />
+          </div>
+          <span className="text-sm font-semibold text-slate-300 whitespace-nowrap">
+            {formatNumber(threadData.currentUsage, 1)}%
+          </span>
+        </div>
+      </div>
+    </Modal>
+  );
+}
 
 export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
   const { t } = useTranslation(['system', 'common']);
   const { current, history, loading, error } = useCpuMonitoring({ historyDuration: timeRange });
   const [viewMode, setViewMode] = useState<'overall' | 'per-thread'>('overall');
+  const [expandedThread, setExpandedThread] = useState<number | null>(null);
 
   const usageChartData = useMemo(() => {
     return history
@@ -225,7 +324,8 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   .map((thread) => (
                     <div
                       key={thread.threadIndex}
-                      className="card border-slate-800/60 bg-gradient-to-br from-blue-500/5 to-transparent p-3"
+                      className="card border-slate-800/60 bg-gradient-to-br from-blue-500/5 to-transparent p-3 cursor-pointer hover:border-blue-500/40 transition-colors"
+                      onClick={() => setExpandedThread(thread.threadIndex)}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-300">{thread.label}</span>
@@ -273,7 +373,8 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                   .map((thread) => (
                     <div
                       key={thread.threadIndex}
-                      className="card border-slate-800/60 bg-gradient-to-br from-green-500/5 to-transparent p-3"
+                      className="card border-slate-800/60 bg-gradient-to-br from-green-500/5 to-transparent p-3 cursor-pointer hover:border-green-500/40 transition-colors"
+                      onClick={() => setExpandedThread(thread.threadIndex)}
                     >
                       <div className="flex items-center justify-between mb-2">
                         <span className="text-xs font-medium text-slate-300">{thread.label}</span>
@@ -316,10 +417,11 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
                 {individualThreadCharts.map((thread) => (
                   <div
                     key={thread.threadIndex}
-                    className="card border-slate-800/60 bg-slate-900/55 p-3"
+                    className="card border-slate-800/60 bg-slate-900/55 p-3 cursor-pointer hover:border-slate-600 transition-colors"
                     style={{
                       background: `linear-gradient(to bottom right, ${thread.color}08, transparent)`,
                     }}
+                    onClick={() => setExpandedThread(thread.threadIndex)}
                   >
                     <div className="flex items-center justify-between mb-2">
                       <span className="text-xs font-medium text-slate-300">{thread.label}</span>
@@ -355,6 +457,15 @@ export function CpuTab({ timeRange }: { timeRange: TimeRange }) {
             </div>
           )}
         </>
+      )}
+
+      {/* Expanded Thread Modal */}
+      {expandedThread !== null && (
+        <ThreadDetailModal
+          threadIndex={expandedThread}
+          onClose={() => setExpandedThread(null)}
+          initialTimeRange={timeRange}
+        />
       )}
 
       {/* Temperature Chart - only show if data available */}
