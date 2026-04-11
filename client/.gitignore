@@ -11,6 +11,7 @@ node_modules
 dist
 dist-ssr
 *.local
+/scripts/fix_umlauts.py
 
 # Editor directories and files
 .vscode/*

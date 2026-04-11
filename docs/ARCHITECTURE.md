@@ -9,68 +9,68 @@
 BaluHost is a modern, full-stack NAS management application designed for self-hosted file storage and system monitoring. The architecture follows a clear separation of concerns with a React frontend, FastAPI backend, and simulated/real hardware integration.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                         Client Layer                         │
-│  ┌─────────────────────────────────────────────────────┐   │
+┌───────────────────────────────────────────────────────────┐
+│                         Client Layer                      │
+│  ┌────────────────────────────────────────────────────┐   │
 │  │  React 18 + TypeScript + Vite + Tailwind CSS       │   │
-│  │  - Dashboard                                        │   │
-│  │  - File Manager (with Drag & Drop, Preview)       │   │
-│  │  - User Management                                  │   │
-│  │  - RAID Management                                  │   │
-│  │  - System Monitor                                   │   │
-│  │  - Audit Logging                                    │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                            ↕ HTTP/REST API                   │
-└─────────────────────────────────────────────────────────────┘
+│  │  - Dashboard                                       │   │
+│  │  - File Manager (with Drag & Drop, Preview)        │   │
+│  │  - User Management                                 │   │
+│  │  - RAID Management                                 │   │
+│  │  - System Monitor                                  │   │
+│  │  - Audit Logging                                   │   │
+│  └────────────────────────────────────────────────────┘   │
+│                            ↕ HTTP/REST API                │
+└───────────────────────────────────────────────────────────┘
                                ↕
-┌─────────────────────────────────────────────────────────────┐
-│                      Backend Layer (FastAPI)                 │
+┌────────────────────────────────────────────────────────────┐
+│                      Backend Layer (FastAPI)               │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  API Routes (JWT Auth, CORS, Error Handling)       │   │
+│  │  API Routes (JWT Auth, CORS, Error Handling)        │   │
 │  │  ├─ /auth      - Authentication                     │   │
 │  │  ├─ /files     - File Operations                    │   │
 │  │  ├─ /users     - User Management                    │   │
 │  │  ├─ /system    - System Info & Monitoring           │   │
 │  │  └─ /logging   - Audit Logs                         │   │
 │  └─────────────────────────────────────────────────────┘   │
-│                            ↕                                 │
+│                            ↕                               │
 │  ┌─────────────────────────────────────────────────────┐   │
 │  │  Service Layer (Business Logic)                     │   │
-│  │  ├─ Auth Service        (JWT, Roles)               │   │
-│  │  ├─ File Service        (CRUD, Quota, Ownership)   │   │
-│  │  ├─ User Service        (User Management)          │   │
-│  │  ├─ RAID Service        (Status, Management)       │   │
-│  │  ├─ SMART Service       (Disk Health)              │   │
-│  │  ├─ Telemetry Service   (System Metrics)           │   │
-│  │  ├─ Audit Logger        (Activity Tracking)        │   │
-│  │  ├─ Permissions Service (Access Control)           │   │
-│  │  ├─ Power Manager       (CPU Frequency Scaling)    │   │
-│  │  ├─ Fan Control         (PWM, Temperature Curves)  │   │
-│  │  ├─ Monitoring Orch.    (Unified Collectors)       │   │
-│  │  ├─ Service Status      (Health Monitoring)        │   │
-│  │  ├─ Admin DB            (Database Inspection)      │   │
-│  │  ├─ Network Discovery   (mDNS/Bonjour)             │   │
+│  │  ├─ Auth Service        (JWT, Roles)                │   │
+│  │  ├─ File Service        (CRUD, Quota, Ownership)    │   │
+│  │  ├─ User Service        (User Management)           │   │
+│  │  ├─ RAID Service        (Status, Management)        │   │
+│  │  ├─ SMART Service       (Disk Health)               │   │
+│  │  ├─ Telemetry Service   (System Metrics)            │   │
+│  │  ├─ Audit Logger        (Activity Tracking)         │   │
+│  │  ├─ Permissions Service (Access Control)            │   │
+│  │  ├─ Power Manager       (CPU Frequency Scaling)     │   │
+│  │  ├─ Fan Control         (PWM, Temperature Curves)   │   │
+│  │  ├─ Monitoring Orch.    (Unified Collectors)        │   │
+│  │  ├─ Service Status      (Health Monitoring)         │   │
+│  │  ├─ Admin DB            (Database Inspection)       │   │
+│  │  ├─ Network Discovery   (mDNS/Bonjour)              │   │
 │  │  └─ Plugin Manager      (Discovery, Lifecycle)      │   │
 │  └─────────────────────────────────────────────────────┘   │
-│                            ↕                                 │
+│                            ↕                               │
 │  ┌─────────────────────────────────────────────────────┐   │
-│  │  Plugin Layer                                        │   │
-│  │  ├─ Pluggy Hooks       (File, User, RAID events)   │   │
+│  │  Plugin Layer                                       │   │
+│  │  ├─ Pluggy Hooks       (File, User, RAID events)    │   │
 │  │  ├─ Async Events       (Queue-based, non-blocking)  │   │
-│  │  ├─ Smart Device Mgr   (CRUD, Commands, SHM State) │   │
+│  │  ├─ Smart Device Mgr   (CRUD, Commands, SHM State)  │   │
 │  │  └─ Installed Plugins  (Optical Drive, Storage      │   │
-│  │                          Analytics, Tapo Smart Plug) │   │
+│  │                          Analytics, Tapo Smart Plug)│   │
 │  └─────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
                                ↕
-┌─────────────────────────────────────────────────────────────┐
-│                    Storage & System Layer                    │
-│  ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐ │
-│  │  File System     │  │  RAID Arrays │  │  System APIs │ │
-│  │  (dev-storage/)  │  │  (mdadm)     │  │  (psutil)    │ │
-│  └──────────────────┘  └──────────────┘  └──────────────┘ │
-│           Dev Mode: Simulated    │    Prod Mode: Real       │
-└─────────────────────────────────────────────────────────────┘
+┌────────────────────────────────────────────────────────────┐
+│                    Storage & System Layer                  │
+│  ┌──────────────────┐  ┌──────────────┐  ┌──────────────┐  │
+│  │  File System     │  │  RAID Arrays │  │  System APIs │  │
+│  │  (dev-storage/)  │  │  (mdadm)     │  │  (psutil)    │  │
+│  └──────────────────┘  └──────────────┘  └──────────────┘  │
+│           Dev Mode: Simulated    │    Prod Mode: Real      │
+└────────────────────────────────────────────────────────────┘
 ```
 
 ## 🏗️ Technology Stack
@@ -465,23 +465,23 @@ class TelemetrySnapshot:
 ### Monitoring Orchestrator
 The unified monitoring system uses a collector pattern:
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                  Monitoring Orchestrator                     │
+┌────────────────────────────────────────────────────────────┐
+│                  Monitoring Orchestrator                   │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Collectors                                           │  │
+│  │  Collectors                                          │  │
 │  │  ├─ CPUCollector      (usage, freq, temp, threads)   │  │
 │  │  ├─ MemoryCollector   (RAM, swap, available)         │  │
 │  │  ├─ NetworkCollector  (throughput, packets)          │  │
 │  │  ├─ DiskIOCollector   (IOPS, throughput)             │  │
 │  │  └─ ProcessCollector  (BaluHost process tracking)    │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                            ↓                                 │
+│                            ↓                               │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Database Persistence (with retention policies)       │  │
-│  │  - cpu_samples, memory_samples, network_samples       │  │
-│  │  - disk_io_samples, process_samples                   │  │
+│  │  Database Persistence (with retention policies)      │  │
+│  │  - cpu_samples, memory_samples, network_samples      │  │
+│  │  - disk_io_samples, process_samples                  │  │
 │  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### Power & Hardware Monitoring
@@ -495,10 +495,10 @@ The unified monitoring system uses a collector pattern:
 The Scheduler Service provides unified management for all background jobs with execution tracking:
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                    Scheduler Service                         │
+┌────────────────────────────────────────────────────────────┐
+│                    Scheduler Service                       │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Managed Schedulers (6)                               │  │
+│  │  Managed Schedulers (6)                              │  │
 │  │  ├─ raid_scrub       (RAID integrity, weekly)        │  │
 │  │  ├─ smart_scan       (Disk health, hourly)           │  │
 │  │  ├─ backup           (Auto backup, daily)            │  │
@@ -506,31 +506,31 @@ The Scheduler Service provides unified management for all background jobs with e
 │  │  ├─ notification_check (Device warnings, hourly)     │  │
 │  │  └─ upload_cleanup   (Chunked uploads, daily)        │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                            ↓                                 │
+│                            ↓                               │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Execution Flow                                       │  │
-│  │  1. APScheduler triggers job at interval              │  │
-│  │  2. SchedulerService creates SchedulerExecution       │  │
-│  │  3. Job runs with status tracking (running→complete)  │  │
-│  │  4. Result/error logged to database                   │  │
-│  │  5. Service status integration (RAID/SMART)           │  │
+│  │  Execution Flow                                      │  │
+│  │  1. APScheduler triggers job at interval             │  │
+│  │  2. SchedulerService creates SchedulerExecution      │  │
+│  │  3. Job runs with status tracking (running→complete) │  │
+│  │  4. Result/error logged to database                  │  │
+│  │  5. Service status integration (RAID/SMART)          │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                            ↓                                 │
+│                            ↓                               │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Database Tables                                      │  │
+│  │  Database Tables                                     │  │
 │  │  - scheduler_executions (history, timing, errors)    │  │
-│  │  - scheduler_configs (intervals, enabled state)       │  │
+│  │  - scheduler_configs (intervals, enabled state)      │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                            ↓                                 │
+│                            ↓                               │
 │  ┌──────────────────────────────────────────────────────┐  │
 │  │  Frontend Dashboard (SchedulerDashboard.tsx)         │  │
-│  │  - Overview tab: Status cards for all schedulers      │  │
-│  │  - Table tab: Run-now, toggle enable/disable          │  │
-│  │  - History tab: Per-scheduler execution logs          │  │
-│  │  - Timeline tab: Visual execution timeline            │  │
-│  │  - Settings tab: Interval configuration               │  │
+│  │  - Overview tab: Status cards for all schedulers     │  │
+│  │  - Table tab: Run-now, toggle enable/disable         │  │
+│  │  - History tab: Per-scheduler execution logs         │  │
+│  │  - Timeline tab: Visual execution timeline           │  │
+│  │  - Settings tab: Interval configuration              │  │
 │  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 **Key Features:**
@@ -595,23 +595,23 @@ If you have questions about the architecture:
 BaluHost uses a modular plugin architecture for extensibility. Plugins can provide API routes, background tasks, event handlers, dashboard panels, and frontend UI — all managed through a central `PluginManager`.
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                      Plugin Manager                          │
+┌────────────────────────────────────────────────────────────┐
+│                      Plugin Manager                        │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Discovery → Loading → Permission Check → Activation  │  │
+│  │  Discovery → Loading → Permission Check → Activatio  │  │
 │  └──────────────────────────────────────────────────────┘  │
-│                            ↓                                 │
-│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐   │
-│  │ Pluggy Hooks │ │ Async Events │ │ Background Tasks │   │
-│  │ (30+ specs)  │ │ (Queue-based)│ │ (Periodic)       │   │
-│  └──────────────┘ └──────────────┘ └──────────────────┘   │
-│                            ↓                                 │
+│                            ↓                               │
+│  ┌──────────────┐ ┌──────────────┐ ┌──────────────────┐    │
+│  │ Pluggy Hooks │ │ Async Events │ │ Background Tasks │    │
+│  │ (30+ specs)  │ │ (Queue-based)│ │ (Periodic)       │    │
+│  └──────────────┘ └──────────────┘ └──────────────────┘    │ja 
+│                            ↓                               │
 │  ┌──────────────────────────────────────────────────────┐  │
-│  │  Route Mounting: /api/plugins/{name}/...              │  │
-│  │  Dashboard Panels: gauge, stat, status, chart         │  │
-│  │  Frontend UI: nav items, bundles, widgets             │  │
+│  │  Route Mounting: /api/plugins/{name}/...             │  │
+│  │  Dashboard Panels: gauge, stat, status, chart        │  │
+│  │  Frontend UI: nav items, bundles, widgets            │  │
 │  └──────────────────────────────────────────────────────┘  │
-└─────────────────────────────────────────────────────────────┘
+└────────────────────────────────────────────────────────────┘
 ```
 
 ### Two Event Systems
@@ -651,12 +651,12 @@ For detailed documentation see [`backend/app/plugins/README.md`](../backend/app/
 ### Current Production Setup (ACTIVE)
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Nginx Reverse Proxy                       │
-│                    (Port 80, HTTP)                           │
+│                    Nginx Reverse Proxy                      │
+│                    (Port 80, HTTP)                          │
 │  - Rate limiting (100 req/s API, 10 req/s auth)             │
 │  - Security headers (CSP, X-Frame-Options, HSTS)            │
 │  - Static file serving (/var/www/baluhost/)                 │
-│  - WebSocket/SSE support                                     │
+│  - WebSocket/SSE support                                    │
 └───────────────────────┬─────────────────────────────────────┘
                         │
           ┌─────────────┴─────────────┐
