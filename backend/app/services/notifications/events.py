@@ -488,9 +488,47 @@ class EventEmitter:
             title = config.title_template
             message = config.message_template
 
+        # Determine event classification for gate logic
+        is_success_event = config.priority == 0 and config.notification_type == "info"
+        is_error_event = config.notification_type in ("warning", "critical")
+
         if self._db_session_factory:
             db = self._db_session_factory()
             try:
+                # Gate: check if any admin wants this event type
+                if user_id is None:
+                    from app.services.notifications.service import get_notification_service
+                    svc = get_notification_service()
+                    from app.models.user import User
+
+                    admin_ids = [
+                        uid for (uid,) in db.query(User.id).filter(
+                            User.role == "admin",
+                            User.is_active == True,
+                        ).all()
+                    ]
+
+                    any_admin_wants_it = False
+                    for admin_id in admin_ids:
+                        prefs = svc.get_user_preferences(db, admin_id)
+                        cat_pref = svc._get_category_pref(prefs, config.category)
+                        if is_success_event and cat_pref.get("success", False):
+                            any_admin_wants_it = True
+                            break
+                        elif is_error_event and cat_pref.get("error", True):
+                            any_admin_wants_it = True
+                            break
+                        elif not is_success_event and not is_error_event:
+                            any_admin_wants_it = True
+                            break
+
+                    if not any_admin_wants_it:
+                        logger.debug(
+                            f"Event {event_type} suppressed: no admin wants "
+                            f"{'success' if is_success_event else 'error'} for {config.category}"
+                        )
+                        return
+
                 from app.models.notification import Notification
 
                 notification = Notification(
