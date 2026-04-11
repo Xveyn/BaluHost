@@ -1,13 +1,6 @@
 {
   "title": "Notifications",
   "description": "Configure how and when you get notified",
-  "channels": {
-    "title": "Notification Channels",
-    "push": "Push",
-    "pushDesc": "Mobile app notifications",
-    "inApp": "In-App",
-    "inAppDesc": "Notifications in browser"
-  },
   "priority": {
     "title": "Priority Filter",
     "description": "Choose the minimum priority for notifications",
@@ -29,7 +22,15 @@
   "categories": {
     "title": "Category Settings",
     "description": "Configure notifications for individual categories",
-    "category": "Category"
+    "type": "Type",
+    "error": "Error",
+    "errorDesc": "Notify on errors and warnings",
+    "success": "Success",
+    "successDesc": "Notify on successful operations",
+    "mobileApp": "Mobile App",
+    "mobileAppDimmed": "No mobile app connected",
+    "desktopClient": "Desktop Client",
+    "desktopClientDimmed": "No desktop client connected"
   },
   "buttons": {
     "save": "Save",

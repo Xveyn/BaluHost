@@ -1,13 +1,6 @@
 {
   "title": "Benachrichtigungen",
   "description": "Konfiguriere wie und wann du benachrichtigt wirst",
-  "channels": {
-    "title": "Benachrichtigungskanäle",
-    "push": "Push",
-    "pushDesc": "Mobile App Benachrichtigungen",
-    "inApp": "In-App",
-    "inAppDesc": "Benachrichtigungen im Browser"
-  },
   "priority": {
     "title": "Prioritätsfilter",
     "description": "Wähle die minimale Priorität für Benachrichtigungen",
@@ -29,7 +22,15 @@
   "categories": {
     "title": "Kategorie-Einstellungen",
     "description": "Konfiguriere Benachrichtigungen für einzelne Kategorien",
-    "category": "Kategorie"
+    "type": "Typ",
+    "error": "Fehler",
+    "errorDesc": "Bei Fehlern und Warnungen benachrichtigen",
+    "success": "Erfolg",
+    "successDesc": "Bei erfolgreichen Vorgängen benachrichtigen",
+    "mobileApp": "Mobile App",
+    "mobileAppDimmed": "Keine Mobile App verbunden",
+    "desktopClient": "Desktop Client",
+    "desktopClientDimmed": "Kein Desktop Client verbunden"
   },
   "buttons": {
     "save": "Speichern",
