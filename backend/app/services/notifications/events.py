@@ -153,6 +153,22 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         message_template="Der RAID Scrub für {array_name} wurde abgeschlossen. {details}",
         action_url="/schedulers",
     ),
+    EventType.RAID_SYNC_STARTED: EventConfig(
+        priority=0,
+        category="raid",
+        notification_type="info",
+        title_template="RAID Synchronisation gestartet: {array_name}",
+        message_template="Die RAID-Synchronisation für {array_name} wurde gestartet.",
+        action_url="/admin/system-control?tab=raid",
+    ),
+    EventType.RAID_SYNC_COMPLETE: EventConfig(
+        priority=0,
+        category="raid",
+        notification_type="info",
+        title_template="RAID Synchronisation abgeschlossen: {array_name}",
+        message_template="Die RAID-Synchronisation für {array_name} wurde erfolgreich abgeschlossen.",
+        action_url="/admin/system-control?tab=raid",
+    ),
 
     # SMART events
     EventType.SMART_WARNING: EventConfig(
@@ -1064,4 +1080,36 @@ def emit_storage_permission_error_sync(operation: str, path: str, username: str)
         operation=operation,
         path=path,
         username=username,
+    )
+
+
+def emit_scheduler_completed_sync(scheduler_name: str) -> None:
+    """Emit scheduler completed event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SCHEDULER_COMPLETED,
+        scheduler_name=scheduler_name,
+    )
+
+
+def emit_raid_sync_started_sync(array_name: str) -> None:
+    """Emit RAID sync started event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_SYNC_STARTED,
+        array_name=array_name,
+    )
+
+
+def emit_raid_sync_complete_sync(array_name: str) -> None:
+    """Emit RAID sync complete event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.RAID_SYNC_COMPLETE,
+        array_name=array_name,
+    )
+
+
+def emit_service_restored_sync(service_name: str) -> None:
+    """Emit service restored event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SERVICE_RESTORED,
+        service_name=service_name,
     )
