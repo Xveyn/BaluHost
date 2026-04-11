@@ -438,3 +438,56 @@ class TestNotificationFiltering:
 
         assert len(unread) == 1
         assert unread[0].title == "Notification 2"
+
+
+class TestGetCategoryPref:
+    """Tests for _get_category_pref helper with backwards compatibility."""
+
+    def test_no_prefs_returns_defaults(self):
+        from app.services.notifications.service import NotificationService
+        svc = NotificationService()
+        result = svc._get_category_pref(None, "raid")
+        assert result == {"error": True, "success": False, "mobile": True, "desktop": False}
+
+    def test_no_prefs_backup_defaults_success_true(self):
+        from app.services.notifications.service import NotificationService
+        svc = NotificationService()
+        result = svc._get_category_pref(None, "backup")
+        assert result["success"] is True
+
+    def test_old_format_migrated(self):
+        """Old push/in_app format is auto-mapped to new fields."""
+        from app.services.notifications.service import NotificationService
+        from unittest.mock import MagicMock
+        svc = NotificationService()
+        prefs = MagicMock()
+        prefs.category_preferences = {"raid": {"push": True, "in_app": False}}
+        result = svc._get_category_pref(prefs, "raid")
+        assert result == {"error": False, "success": False, "mobile": True, "desktop": False}
+
+    def test_new_format_used_directly(self):
+        from app.services.notifications.service import NotificationService
+        from unittest.mock import MagicMock
+        svc = NotificationService()
+        prefs = MagicMock()
+        prefs.category_preferences = {"raid": {"error": True, "success": True, "mobile": False, "desktop": True}}
+        result = svc._get_category_pref(prefs, "raid")
+        assert result == {"error": True, "success": True, "mobile": False, "desktop": True}
+
+    def test_missing_category_returns_defaults(self):
+        from app.services.notifications.service import NotificationService
+        from unittest.mock import MagicMock
+        svc = NotificationService()
+        prefs = MagicMock()
+        prefs.category_preferences = {"raid": {"error": True, "success": False, "mobile": True, "desktop": False}}
+        result = svc._get_category_pref(prefs, "smart")
+        assert result == {"error": True, "success": False, "mobile": True, "desktop": False}
+
+    def test_partial_new_format_fills_defaults(self):
+        from app.services.notifications.service import NotificationService
+        from unittest.mock import MagicMock
+        svc = NotificationService()
+        prefs = MagicMock()
+        prefs.category_preferences = {"raid": {"error": True, "success": True}}
+        result = svc._get_category_pref(prefs, "raid")
+        assert result == {"error": True, "success": True, "mobile": True, "desktop": False}
