@@ -11,6 +11,7 @@ import { buildApiUrl } from './lib/api';
 import { useIdleTimeout } from './hooks/useIdleTimeout';
 import { IdleWarningDialog } from './components/ui/IdleWarningDialog';
 import { FEATURES, isDesktop } from './lib/features';
+import logoMark from './assets/baluhost-logo.png';
 import './App.css';
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -103,9 +104,9 @@ function LoadingScreen({ backendReady, backendCheckAttempts }: { backendReady: b
         <div className="absolute -left-24 -top-24 h-80 w-80 rounded-full bg-[radial-gradient(circle_at_center,_rgba(56,189,248,0.25),_rgba(2,6,23,0)_60%)] blur-3xl" />
         <div className="absolute right-[-120px] top-1/3 h-96 w-96 rounded-full bg-[radial-gradient(circle_at_center,_rgba(124,58,237,0.22),_rgba(2,6,23,0)_60%)] blur-[130px]" />
       </div>
-      <div className="relative z-10 flex flex-col items-center gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-10 py-8 shadow-[0_18px_55px_rgba(2,6,23,0.55)] backdrop-blur-xl">
-        <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-gradient-to-br from-sky-500 via-indigo-500 to-violet-600 text-xl font-semibold">
-          BH
+      <div className="relative z-10 flex w-80 flex-col items-center gap-4 rounded-2xl border border-slate-800/60 bg-slate-900/70 px-10 py-8 shadow-[0_18px_55px_rgba(2,6,23,0.55)] backdrop-blur-xl">
+        <div className="flex h-12 w-12 items-center justify-center rounded-full bg-slate-950 p-[2px] shadow-xl">
+          <img src={logoMark} alt="BalùHost logo" className="h-full w-full rounded-full" />
         </div>
         <p className="text-sm uppercase tracking-[0.35em] text-slate-500">BaluHost</p>
         <p className="text-lg font-medium text-white">{getMessage()}{dots}</p>
