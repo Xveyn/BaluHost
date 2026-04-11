@@ -2,14 +2,18 @@
  * Notification Preferences Page
  *
  * Allows users to configure their notification settings including
- * channel preferences, category filters, and quiet hours.
+ * category filters, quiet hours, and per-category error/success/mobile/desktop toggles.
  */
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
 import {
+  AlertTriangle,
+  CircleCheck,
   Smartphone,
   Monitor,
+  Check,
+  X,
   Moon,
   ChevronLeft,
   Save,
@@ -20,11 +24,13 @@ import { Spinner } from '../components/ui/Spinner';
 import {
   getPreferences,
   updatePreferences,
+  getDeliveryStatus,
   getCategoryIcon,
   getCategoryName,
   type NotificationPreferences,
   type NotificationCategory,
   type CategoryPreference,
+  type DeliveryStatus,
 } from '../api/notifications';
 import { getMyNotificationRouting, type MyNotificationRouting } from '../api/notificationRouting';
 
@@ -54,14 +60,13 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const [_preferences, setPreferences] = useState<NotificationPreferences | null>(null);
 
   // Local state for form
-  const [pushEnabled, setPushEnabled] = useState(true);
-  const [inAppEnabled, setInAppEnabled] = useState(true);
   const [quietHoursEnabled, setQuietHoursEnabled] = useState(false);
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [minPriority, setMinPriority] = useState(0);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, CategoryPreference>>({});
   const [routing, setRouting] = useState<MyNotificationRouting | null>(null);
+  const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>({ has_mobile_devices: false, has_desktop_clients: false });
 
   useEffect(() => {
     loadPreferences();
@@ -73,6 +78,12 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       .catch(() => setRouting(null));
   }, []);
 
+  useEffect(() => {
+    getDeliveryStatus()
+      .then(setDeliveryStatus)
+      .catch(() => {});
+  }, []);
+
   const loadPreferences = async () => {
     try {
       setLoading(true);
@@ -80,13 +91,37 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       setPreferences(prefs);
 
       // Populate form
-      setPushEnabled(prefs.push_enabled);
-      setInAppEnabled(prefs.in_app_enabled);
       setQuietHoursEnabled(prefs.quiet_hours_enabled);
       setQuietHoursStart(prefs.quiet_hours_start || '22:00');
       setQuietHoursEnd(prefs.quiet_hours_end || '07:00');
       setMinPriority(prefs.min_priority);
-      setCategoryPrefs(prefs.category_preferences || {});
+
+      // Migrate old format if needed
+      const rawPrefs = prefs.category_preferences || {};
+      const migrated: Record<string, CategoryPreference> = {};
+      for (const cat of ALL_CATEGORIES) {
+        const pref = rawPrefs[cat];
+        if (pref) {
+          const p = pref as any;
+          if ('push' in p && !('error' in p)) {
+            // Old format: migrate
+            migrated[cat] = {
+              error: p.in_app ?? true,
+              success: cat === 'backup',
+              mobile: p.push ?? true,
+              desktop: false,
+            };
+          } else {
+            migrated[cat] = {
+              error: p.error ?? true,
+              success: p.success ?? (cat === 'backup'),
+              mobile: p.mobile ?? true,
+              desktop: p.desktop ?? false,
+            };
+          }
+        }
+      }
+      setCategoryPrefs(migrated);
     } catch {
       toast.error(t('common:toast.loadFailed'));
     } finally {
@@ -98,8 +133,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     try {
       setSaving(true);
       await updatePreferences({
-        push_enabled: pushEnabled,
-        in_app_enabled: inAppEnabled,
         quiet_hours_enabled: quietHoursEnabled,
         quiet_hours_start: quietHoursEnabled ? quietHoursStart : null,
         quiet_hours_end: quietHoursEnabled ? quietHoursEnd : null,
@@ -120,7 +153,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     value: boolean
   ) => {
     setCategoryPrefs((prev) => {
-      const existing = prev[category] || { push: true, in_app: true };
+      const existing = prev[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
       return {
         ...prev,
         [category]: {
@@ -132,7 +165,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   };
 
   const getCategoryPref = (category: NotificationCategory): CategoryPreference => {
-    return categoryPrefs[category] || { push: true, in_app: true };
+    return categoryPrefs[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
   };
 
   if (loading) {
@@ -196,46 +229,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
           </button>
         </div>
       )}
-
-      {/* Global Channel Settings */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('channels.title')}</h2>
-        <div className="grid gap-4 sm:grid-cols-2">
-          {/* Push */}
-          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-800 p-4 transition hover:border-slate-700">
-            <input
-              type="checkbox"
-              checked={pushEnabled}
-              onChange={(e) => setPushEnabled(e.target.checked)}
-              className="h-5 w-5 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-            />
-            <div className="flex items-center gap-3">
-              <Smartphone className="h-5 w-5 text-slate-400" />
-              <div>
-                <p className="font-medium text-slate-100">{t('channels.push')}</p>
-                <p className="text-xs text-slate-400">{t('channels.pushDesc')}</p>
-              </div>
-            </div>
-          </label>
-
-          {/* In-App */}
-          <label className="flex cursor-pointer items-center gap-3 rounded-lg border border-slate-800 p-4 transition hover:border-slate-700">
-            <input
-              type="checkbox"
-              checked={inAppEnabled}
-              onChange={(e) => setInAppEnabled(e.target.checked)}
-              className="h-5 w-5 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-            />
-            <div className="flex items-center gap-3">
-              <Monitor className="h-5 w-5 text-slate-400" />
-              <div>
-                <p className="font-medium text-slate-100">{t('channels.inApp')}</p>
-                <p className="text-xs text-slate-400">{t('channels.inAppDesc')}</p>
-              </div>
-            </div>
-          </label>
-        </div>
-      </div>
 
       {/* Priority Filter */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
@@ -352,17 +345,29 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
           <table className="w-full">
             <thead>
               <tr className="border-b border-slate-800 text-left text-sm text-slate-400">
-                <th className="pb-3 pr-4">{t('categories.category')}</th>
+                <th className="pb-3 pr-4">{t('categories.type')}</th>
                 <th className="pb-3 px-4 text-center">
                   <div className="flex items-center justify-center gap-1">
-                    <Smartphone className="h-4 w-4" />
-                    <span>{t('channels.push')}</span>
+                    <AlertTriangle className="h-4 w-4 text-amber-400" />
+                    <span>{t('categories.error')}</span>
                   </div>
                 </th>
-                <th className="pb-3 pl-4 text-center">
+                <th className="pb-3 px-4 text-center">
+                  <div className="flex items-center justify-center gap-1">
+                    <CircleCheck className="h-4 w-4 text-emerald-400" />
+                    <span>{t('categories.success')}</span>
+                  </div>
+                </th>
+                <th className={`pb-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
+                  <div className="flex items-center justify-center gap-1">
+                    <Smartphone className="h-4 w-4" />
+                    <span>{t('categories.mobileApp')}</span>
+                  </div>
+                </th>
+                <th className={`pb-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
                   <div className="flex items-center justify-center gap-1">
                     <Monitor className="h-4 w-4" />
-                    <span>{t('channels.inApp')}</span>
+                    <span>{t('categories.desktopClient')}</span>
                   </div>
                 </th>
               </tr>
@@ -370,6 +375,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
             <tbody className="divide-y divide-slate-800">
               {ALL_CATEGORIES.map((category) => {
                 const pref = getCategoryPref(category);
+                const isActive = pref.error || pref.success;
                 return (
                   <tr key={category} className="text-sm">
                     <td className="py-3 pr-4">
@@ -378,28 +384,51 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
                         <span className="font-medium text-slate-100">
                           {getCategoryName(category)}
                         </span>
+                        {isActive ? (
+                          <Check className="h-4 w-4 text-emerald-400" />
+                        ) : (
+                          <X className="h-4 w-4 text-rose-400" />
+                        )}
                       </div>
                     </td>
                     <td className="py-3 px-4 text-center">
                       <input
                         type="checkbox"
-                        checked={pref.push && pushEnabled}
-                        disabled={!pushEnabled}
+                        checked={pref.error}
                         onChange={(e) =>
-                          handleCategoryChange(category, 'push', e.target.checked)
+                          handleCategoryChange(category, 'error', e.target.checked)
                         }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50 disabled:opacity-50"
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
                       />
                     </td>
-                    <td className="py-3 pl-4 text-center">
+                    <td className="py-3 px-4 text-center">
                       <input
                         type="checkbox"
-                        checked={pref.in_app && inAppEnabled}
-                        disabled={!inAppEnabled}
+                        checked={pref.success}
                         onChange={(e) =>
-                          handleCategoryChange(category, 'in_app', e.target.checked)
+                          handleCategoryChange(category, 'success', e.target.checked)
                         }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50 disabled:opacity-50"
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                      />
+                    </td>
+                    <td className={`py-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={pref.mobile}
+                        onChange={(e) =>
+                          handleCategoryChange(category, 'mobile', e.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                      />
+                    </td>
+                    <td className={`py-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
+                      <input
+                        type="checkbox"
+                        checked={pref.desktop}
+                        onChange={(e) =>
+                          handleCategoryChange(category, 'desktop', e.target.checked)
+                        }
+                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
                       />
                     </td>
                   </tr>
