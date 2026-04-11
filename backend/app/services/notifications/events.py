@@ -673,6 +673,15 @@ class EventEmitter:
                 ).all()
 
             for device in devices:
+                # Check mobile preference for admin users
+                if user_id is None:
+                    from app.services.notifications.service import get_notification_service
+                    svc = get_notification_service()
+                    device_prefs = svc.get_user_preferences(db, device.user_id)
+                    cat_pref = svc._get_category_pref(device_prefs, category)
+                    if not cat_pref.get("mobile", True):
+                        continue
+
                 # For routed non-admin users, check their preferences
                 if user_id is None and device.user_id not in admin_ids:
                     from app.services.notifications.service import get_notification_service
