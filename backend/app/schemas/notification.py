@@ -152,10 +152,16 @@ class MarkReadResponse(BaseModel):
 
 # Preference schemas
 class CategoryPreference(BaseModel):
-    """Preferences for a single notification category."""
+    """Preferences for a single notification category.
 
-    push: bool = True
-    in_app: bool = True
+    Controls what events generate notifications and where they are delivered.
+    Supports old format (push/in_app) for backwards compatibility on read.
+    """
+
+    error: bool = True
+    success: bool = False
+    mobile: bool = True
+    desktop: bool = False
 
 
 class NotificationPreferencesBase(BaseModel):
