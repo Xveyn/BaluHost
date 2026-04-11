@@ -1,0 +1,61 @@
+{
+  "welcome": {
+    "title": "Willkommen bei BaluHost",
+    "description": "Ihr persönliches NAS-System — sicher, schnell und vollständig selbstgehostet. In wenigen Schritten ist Ihr System einsatzbereit.",
+    "startButton": "Einrichtung starten"
+  },
+  "features": {
+    "fileManagement": { "title": "Dateiverwaltung", "desc": "Upload, Ordner, Freigaben & Versionierung" },
+    "raidStorage": { "title": "RAID & Speicher", "desc": "Redundante Datensicherung mit RAID-Arrays" },
+    "vpnAccess": { "title": "VPN-Fernzugriff", "desc": "WireGuard-Tunnel — überall sicher erreichbar" },
+    "systemMonitoring": { "title": "System-Monitoring", "desc": "CPU, RAM, Netzwerk & Festplatten live" },
+    "mobileDesktop": { "title": "Mobile & Desktop", "desc": "BaluApp (Android) & BaluDesk (Windows/Linux)" },
+    "backupVersions": { "title": "Backups & Versionen", "desc": "Automatische Sicherung & Dateiverlauf" },
+    "userManual": { "title": "Benutzerhandbuch", "desc": "Schritt-für-Schritt Anleitungen & Hilfe" }
+  },
+  "header": {
+    "subtitle": "Ersteinrichtung",
+    "manualButton": "Handbuch",
+    "manualTooltip": "Benutzerhandbuch öffnen"
+  },
+  "steps": {
+    "admin": "Administrator",
+    "users": "Benutzer",
+    "raid": "RAID",
+    "fileAccess": "Dateizugriff",
+    "optional": "Optional",
+    "sharing": "Freigabe",
+    "vpn": "VPN",
+    "notifications": "Benachrichtigungen",
+    "cloud": "Cloud",
+    "pihole": "Pi-hole",
+    "desktop": "Desktop",
+    "mobile": "Mobile",
+    "complete": "Fertig"
+  },
+  "featureLabels": {
+    "admin": "Administrator-Konto",
+    "users": "Benutzer-Konten",
+    "raid": "RAID-Konfiguration",
+    "file-access": "Dateizugriff (Samba/WebDAV)",
+    "sharing": "Dateifreigabe",
+    "vpn": "VPN-Konfiguration",
+    "notifications": "Benachrichtigungen",
+    "cloud": "Cloud-Import",
+    "pihole": "Pi-hole DNS",
+    "desktop": "Desktop-Sync",
+    "mobile": "Mobile App"
+  },
+  "complete": {
+    "title": "Setup abgeschlossen!",
+    "description": "Ihr BaluHost NAS-System ist bereit. Hier eine Übersicht der Konfiguration:",
+    "configured": "Konfiguriert",
+    "skipped": "Übersprungen (später konfigurierbar)",
+    "toDashboard": "Zum Dashboard"
+  },
+  "errors": {
+    "noToken": "Kein Setup-Token vorhanden. Bitte starten Sie das Setup neu.",
+    "finishError": "Fehler beim Abschließen des Setups"
+  },
+  "initializing": "Setup wird initialisiert..."
+}

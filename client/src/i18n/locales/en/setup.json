@@ -1,0 +1,61 @@
+{
+  "welcome": {
+    "title": "Welcome to BaluHost",
+    "description": "Your personal NAS system — secure, fast, and fully self-hosted. Your system will be ready in just a few steps.",
+    "startButton": "Start setup"
+  },
+  "features": {
+    "fileManagement": { "title": "File Management", "desc": "Upload, folders, shares & versioning" },
+    "raidStorage": { "title": "RAID & Storage", "desc": "Redundant data protection with RAID arrays" },
+    "vpnAccess": { "title": "VPN Remote Access", "desc": "WireGuard tunnel — securely reachable from anywhere" },
+    "systemMonitoring": { "title": "System Monitoring", "desc": "CPU, RAM, network & disk monitoring live" },
+    "mobileDesktop": { "title": "Mobile & Desktop", "desc": "BaluApp (Android) & BaluDesk (Windows/Linux)" },
+    "backupVersions": { "title": "Backups & Versions", "desc": "Automatic backup & file history" },
+    "userManual": { "title": "User Manual", "desc": "Step-by-step guides & help" }
+  },
+  "header": {
+    "subtitle": "Initial Setup",
+    "manualButton": "Manual",
+    "manualTooltip": "Open user manual"
+  },
+  "steps": {
+    "admin": "Administrator",
+    "users": "Users",
+    "raid": "RAID",
+    "fileAccess": "File Access",
+    "optional": "Optional",
+    "sharing": "Sharing",
+    "vpn": "VPN",
+    "notifications": "Notifications",
+    "cloud": "Cloud",
+    "pihole": "Pi-hole",
+    "desktop": "Desktop",
+    "mobile": "Mobile",
+    "complete": "Done"
+  },
+  "featureLabels": {
+    "admin": "Administrator Account",
+    "users": "User Accounts",
+    "raid": "RAID Configuration",
+    "file-access": "File Access (Samba/WebDAV)",
+    "sharing": "File Sharing",
+    "vpn": "VPN Configuration",
+    "notifications": "Notifications",
+    "cloud": "Cloud Import",
+    "pihole": "Pi-hole DNS",
+    "desktop": "Desktop Sync",
+    "mobile": "Mobile App"
+  },
+  "complete": {
+    "title": "Setup complete!",
+    "description": "Your BaluHost NAS system is ready. Here is an overview of the configuration:",
+    "configured": "Configured",
+    "skipped": "Skipped (configurable later)",
+    "toDashboard": "Go to Dashboard"
+  },
+  "errors": {
+    "noToken": "No setup token available. Please restart the setup.",
+    "finishError": "Error completing the setup"
+  },
+  "initializing": "Initializing setup..."
+}
