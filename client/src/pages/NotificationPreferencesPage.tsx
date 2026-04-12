@@ -170,7 +170,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     return categoryPrefs[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
   };
 
-  const _visibleCategories: NotificationCategory[] = isAdmin
+  const visibleCategories: NotificationCategory[] = isAdmin
     ? ALL_CATEGORIES
     : ALL_CATEGORIES.filter(
         (cat) => routing?.[`receive_${cat}` as keyof MyNotificationRouting] === true
@@ -316,109 +316,116 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       </div>
 
       {/* Category Settings */}
-      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
-        <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('categories.title')}</h2>
-        <p className="mb-4 text-sm text-slate-400">
-          {t('categories.description')}
-        </p>
-
-        <div className="overflow-x-auto">
-          <table className="w-full">
-            <thead>
-              <tr className="border-b border-slate-800 text-left text-sm text-slate-400">
-                <th className="pb-3 pr-4">{t('categories.type')}</th>
-                <th className="pb-3 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <AlertTriangle className="h-4 w-4 text-amber-400" />
-                    <span>{t('categories.error')}</span>
-                  </div>
-                </th>
-                <th className="pb-3 px-4 text-center">
-                  <div className="flex items-center justify-center gap-1">
-                    <CircleCheck className="h-4 w-4 text-emerald-400" />
-                    <span>{t('categories.success')}</span>
-                  </div>
-                </th>
-                <th className={`pb-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
-                  <div className="flex items-center justify-center gap-1">
-                    <Smartphone className="h-4 w-4" />
-                    <span>{t('categories.mobileApp')}</span>
-                  </div>
-                </th>
-                <th className={`pb-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
-                  <div className="flex items-center justify-center gap-1">
-                    <Monitor className="h-4 w-4" />
-                    <span>{t('categories.desktopClient')}</span>
-                  </div>
-                </th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-slate-800">
-              {ALL_CATEGORIES.map((category) => {
-                const pref = getCategoryPref(category);
-                const isActive = pref.error || pref.success;
-                return (
-                  <tr key={category} className="text-sm">
-                    <td className="py-3 pr-4">
-                      <div className="flex items-center gap-2">
-                        <span className="text-lg">{getCategoryIcon(category)}</span>
-                        <span className="font-medium text-slate-100">
-                          {getCategoryName(category)}
-                        </span>
-                        {isActive ? (
-                          <Check className="h-4 w-4 text-emerald-400" />
-                        ) : (
-                          <X className="h-4 w-4 text-rose-400" />
-                        )}
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={pref.error}
-                        onChange={(e) =>
-                          handleCategoryChange(category, 'error', e.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-                      />
-                    </td>
-                    <td className="py-3 px-4 text-center">
-                      <input
-                        type="checkbox"
-                        checked={pref.success}
-                        onChange={(e) =>
-                          handleCategoryChange(category, 'success', e.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-                      />
-                    </td>
-                    <td className={`py-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={pref.mobile}
-                        onChange={(e) =>
-                          handleCategoryChange(category, 'mobile', e.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-                      />
-                    </td>
-                    <td className={`py-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={pref.desktop}
-                        onChange={(e) =>
-                          handleCategoryChange(category, 'desktop', e.target.checked)
-                        }
-                        className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
-                      />
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+      {!isAdmin && visibleCategories.length === 0 ? (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <h2 className="mb-2 text-lg font-semibold text-slate-100">{t('categories.title')}</h2>
+          <p className="text-sm text-slate-400">{t('categories.noneAssigned')}</p>
         </div>
-      </div>
+      ) : (
+        <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+          <h2 className="mb-4 text-lg font-semibold text-slate-100">{t('categories.title')}</h2>
+          <p className="mb-4 text-sm text-slate-400">
+            {t('categories.description')}
+          </p>
+
+          <div className="overflow-x-auto">
+            <table className="w-full">
+              <thead>
+                <tr className="border-b border-slate-800 text-left text-sm text-slate-400">
+                  <th className="pb-3 pr-4">{t('categories.type')}</th>
+                  <th className="pb-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <AlertTriangle className="h-4 w-4 text-amber-400" />
+                      <span>{t('categories.error')}</span>
+                    </div>
+                  </th>
+                  <th className="pb-3 px-4 text-center">
+                    <div className="flex items-center justify-center gap-1">
+                      <CircleCheck className="h-4 w-4 text-emerald-400" />
+                      <span>{t('categories.success')}</span>
+                    </div>
+                  </th>
+                  <th className={`pb-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <Smartphone className="h-4 w-4" />
+                      <span>{t('categories.mobileApp')}</span>
+                    </div>
+                  </th>
+                  <th className={`pb-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
+                    <div className="flex items-center justify-center gap-1">
+                      <Monitor className="h-4 w-4" />
+                      <span>{t('categories.desktopClient')}</span>
+                    </div>
+                  </th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-800">
+                {visibleCategories.map((category) => {
+                  const pref = getCategoryPref(category);
+                  const isActive = pref.error || pref.success;
+                  return (
+                    <tr key={category} className="text-sm">
+                      <td className="py-3 pr-4">
+                        <div className="flex items-center gap-2">
+                          <span className="text-lg">{getCategoryIcon(category)}</span>
+                          <span className="font-medium text-slate-100">
+                            {getCategoryName(category)}
+                          </span>
+                          {isActive ? (
+                            <Check className="h-4 w-4 text-emerald-400" />
+                          ) : (
+                            <X className="h-4 w-4 text-rose-400" />
+                          )}
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={pref.error}
+                          onChange={(e) =>
+                            handleCategoryChange(category, 'error', e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                        />
+                      </td>
+                      <td className="py-3 px-4 text-center">
+                        <input
+                          type="checkbox"
+                          checked={pref.success}
+                          onChange={(e) =>
+                            handleCategoryChange(category, 'success', e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                        />
+                      </td>
+                      <td className={`py-3 px-4 text-center${!deliveryStatus.has_mobile_devices ? ' opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={pref.mobile}
+                          onChange={(e) =>
+                            handleCategoryChange(category, 'mobile', e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                        />
+                      </td>
+                      <td className={`py-3 pl-4 text-center${!deliveryStatus.has_desktop_clients ? ' opacity-50' : ''}`}>
+                        <input
+                          type="checkbox"
+                          checked={pref.desktop}
+                          onChange={(e) =>
+                            handleCategoryChange(category, 'desktop', e.target.checked)
+                          }
+                          className="h-4 w-4 rounded border-slate-600 bg-slate-800 text-sky-500 focus:ring-sky-500/50"
+                        />
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
