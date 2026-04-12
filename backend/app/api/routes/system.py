@@ -31,10 +31,21 @@ router = APIRouter()
 
 @router.get("/mode")
 @limiter.limit(get_limit("system_monitor"))
-async def get_system_mode(request: Request, response: Response) -> dict[str, bool]:
-    """Get system mode (dev/prod). Public endpoint for login page."""
+async def get_system_mode(request: Request, response: Response) -> dict:
+    """Get system mode (dev/prod). Public endpoint for login page.
+
+    In dev mode, includes the seeded admin credentials so the Login page
+    can display an accurate default-credentials hint. In prod mode the
+    credentials field is omitted entirely.
+    """
     from app.core.config import settings
-    return {"dev_mode": settings.is_dev_mode}
+    payload: dict = {"dev_mode": settings.is_dev_mode}
+    if settings.is_dev_mode:
+        payload["dev_credentials"] = {
+            "username": settings.admin_username,
+            "password": settings.admin_password,
+        }
+    return payload
 
 
 @router.get("/info", response_model=SystemInfo)
