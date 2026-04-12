@@ -56,7 +56,7 @@ const PRIORITY_LABELS = [
 export default function NotificationPreferencesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
-  const { isAdmin: _isAdmin } = useAuth();
+  const { isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [_preferences, setPreferences] = useState<NotificationPreferences | null>(null);
@@ -169,6 +169,12 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const getCategoryPref = (category: NotificationCategory): CategoryPreference => {
     return categoryPrefs[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
   };
+
+  const _visibleCategories: NotificationCategory[] = isAdmin
+    ? ALL_CATEGORIES
+    : ALL_CATEGORIES.filter(
+        (cat) => routing?.[`receive_${cat}` as keyof MyNotificationRouting] === true
+      );
 
   if (loading) {
     return (
@@ -308,33 +314,6 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
           </div>
         )}
       </div>
-
-      {/* Admin-assigned routing (read-only) */}
-      {routing && Object.values(routing).some((v) => v === true) && (
-        <div className="border border-slate-700 rounded-lg p-4 mb-6">
-          <h3 className="text-sm font-medium text-slate-300 mb-2">
-            Zugewiesene System-Benachrichtigungen
-          </h3>
-          <p className="text-xs text-slate-500 mb-3">
-            Diese Kategorien wurden dir von einem Administrator zugewiesen.
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {(Object.entries(routing) as [string, boolean][])
-              .filter(([_, enabled]) => enabled)
-              .map(([key]) => {
-                const category = key.replace('receive_', '') as NotificationCategory;
-                return (
-                  <span
-                    key={key}
-                    className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium bg-sky-500/10 text-sky-400 border border-sky-500/20"
-                  >
-                    {getCategoryName(category)}
-                  </span>
-                );
-              })}
-          </div>
-        </div>
-      )}
 
       {/* Category Settings */}
       <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
