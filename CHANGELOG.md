@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.29.0] - 2026-04-12
+
+### Added
+- Auth: dev-mode admin→user impersonation with banner, user-menu switcher, audit logging, and e2e happy-path test
+- Auth: optional `impersonated_by` claim on access tokens, dev impersonation route handler with startup warning
+- Login: dynamic admin credentials hint on dev login page, served via `/api/system/mode` `dev_credentials` field
+- Setup: language selector on the welcome page
+- Manual: redesigned chapter landing page with intro and "Start" CTA
+- Notifications: filter category preferences in user view to only show admin-routed categories
+
+### Fixed
+- Security: update axios to 1.15.0 to resolve critical vulnerabilities
+
+### Removed
+- Unused `theme.png` asset
+
+---
+
 ## [1.28.0] - 2026-04-11
 
 ### Added
