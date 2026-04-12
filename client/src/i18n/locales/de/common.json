@@ -332,5 +332,18 @@
     "rateLimitQueriesPer": "Anfragen pro",
     "rateLimitSeconds": "Sekunden",
     "rateLimitDisableHint": "Anzahl auf 0 setzen um Rate-Limiting zu deaktivieren"
+  },
+  "impersonation": {
+    "switchToUser": "Als Benutzer anzeigen",
+    "banner": {
+      "viewingAs": "Angemeldet als {{username}} ({{role}})",
+      "backToAdmin": "Zurück zu {{admin}}"
+    },
+    "role": {
+      "admin": "Admin",
+      "user": "Benutzer"
+    },
+    "loading": "Benutzer laden…",
+    "empty": "Keine weiteren Benutzer"
   }
 }
