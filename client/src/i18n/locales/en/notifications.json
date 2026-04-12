@@ -30,7 +30,8 @@
     "mobileApp": "Mobile App",
     "mobileAppDimmed": "No mobile app connected",
     "desktopClient": "Desktop Client",
-    "desktopClientDimmed": "No desktop client connected"
+    "desktopClientDimmed": "No desktop client connected",
+    "noneAssigned": "No system notifications have been assigned to you yet. Please contact an administrator."
   },
   "buttons": {
     "save": "Save",
