@@ -54,8 +54,14 @@ export async function getSystemInfo(): Promise<SystemInfoResponse> {
 /**
  * Get system mode (dev/prod). Public endpoint, no auth required.
  */
-export async function getSystemMode(): Promise<{ dev_mode: boolean }> {
-  const { data } = await apiClient.get<{ dev_mode: boolean }>('/api/system/mode');
+export async function getSystemMode(): Promise<{
+  dev_mode: boolean;
+  dev_credentials?: { username: string; password: string };
+}> {
+  const { data } = await apiClient.get<{
+    dev_mode: boolean;
+    dev_credentials?: { username: string; password: string };
+  }>('/api/system/mode');
   return data;
 }
 
