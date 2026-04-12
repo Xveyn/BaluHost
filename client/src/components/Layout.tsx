@@ -15,6 +15,8 @@ import NotificationCenter from './NotificationCenter';
 import PowerMenu from './PowerMenu';
 import { UploadProgressBar } from './UploadProgressBar';
 import { isPi } from '../lib/features';
+import UserMenu from './UserMenu';
+import ImpersonationBanner from './ImpersonationBanner';
 
 interface LayoutProps {
   children: ReactNode;
@@ -486,6 +488,7 @@ export default function Layout({ children }: LayoutProps) {
               </div>
             </div>
           )}
+          <ImpersonationBanner />
           <header className="fixed top-0 right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10">
             <div className="flex items-center justify-between">
               {/* Mobile Header Left */}
@@ -516,12 +519,7 @@ export default function Layout({ children }: LayoutProps) {
               {/* Header Right */}
               <div className="flex items-center gap-3">
                 {!isPi && <NotificationCenter />}
-                <div className="hidden md:flex items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/40 px-3 py-1.5 transition hover:border-sky-500/50 hover:shadow-[0_0_12px_rgba(56,189,248,0.15)]">
-                  <div className="flex flex-col">
-                    <span className="text-sm font-medium text-slate-100">{user?.username}</span>
-                    <span className="text-[11px] text-slate-100-tertiary">{isAdmin ? 'Admin' : 'User'}</span>
-                  </div>
-                </div>
+                <UserMenu />
                 {isPi ? (
                   <button
                     onClick={logout}
