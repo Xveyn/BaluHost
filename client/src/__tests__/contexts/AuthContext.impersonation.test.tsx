@@ -28,7 +28,7 @@ describe('AuthContext impersonation', () => {
     sessionStorage.clear();
     vi.clearAllMocks();
     localStorage.setItem('token', 'admin-token');
-    global.fetch = vi.fn(() =>
+    globalThis.fetch = vi.fn(() =>
       Promise.resolve(
         new Response(JSON.stringify({ user: adminUser }), { status: 200 }),
       ),
@@ -82,7 +82,7 @@ describe('AuthContext impersonation', () => {
     });
     expect(ctx.isImpersonating).toBe(true);
 
-    (global.fetch as any).mockImplementationOnce(() =>
+    (globalThis.fetch as any).mockImplementationOnce(() =>
       Promise.resolve(new Response(JSON.stringify({ user: adminUser }), { status: 200 })),
     );
 
