@@ -7,6 +7,7 @@
   "navigation": "Navigation",
   "backToOverview": "Zurück zur Übersicht",
   "noArticles": "Noch keine Artikel vorhanden",
+  "startReading": "Kapitel starten",
   "noSearchResults": "Keine Artikel gefunden",
   "errorLoading": "Artikel konnte nicht geladen werden",
   "searchPlaceholder": "Artikel suchen...",
@@ -38,5 +39,14 @@
       "security": "Sicherheit, Audit-Logging und Rate Limiting",
       "api-docs": "REST-API-Endpunkte und Nutzung"
     }
+  },
+  "groupIntros": {
+    "getting-started": "Dieses Kapitel führt Sie durch die ersten Schritte mit BaluHost. Sie erfahren, wie Sie das System einrichten, sich zum ersten Mal anmelden und die grundlegenden Funktionen kennenlernen. Ideal für neue Benutzer, die schnell produktiv werden möchten.",
+    "setup": "Hier finden Sie ausführliche Anleitungen zur Konfiguration Ihres BaluHost-Systems. Von der Netzwerkkonfiguration über die VPN-Einrichtung mit WireGuard bis hin zur Dienstverwaltung — dieses Kapitel deckt alle Einstellungen ab, die für einen reibungslosen Betrieb wichtig sind.",
+    "features": "BaluHost bietet eine Vielzahl von Funktionen für die Dateiverwaltung und Zusammenarbeit. In diesem Kapitel lernen Sie die Dateifreigabe, den Upload-Prozess, die Benutzerverwaltung und weitere Kernfunktionen kennen, die den täglichen Umgang mit Ihrem NAS erleichtern.",
+    "deployment": "Dieses Kapitel behandelt die produktive Bereitstellung von BaluHost. Sie finden Anleitungen für das Deployment auf einem Linux-Server, die Einrichtung von SSL-Zertifikaten, die Konfiguration von Nginx als Reverse Proxy und Best Practices für einen stabilen Betrieb.",
+    "monitoring": "Behalten Sie die Leistung und den Zustand Ihres Systems im Blick. Dieses Kapitel erklärt die integrierten Monitoring-Funktionen, darunter CPU-, Speicher- und Netzwerküberwachung, Disk-I/O-Analyse sowie die Telemetrie-Konfiguration.",
+    "security": "Sicherheit hat bei BaluHost höchste Priorität. Dieses Kapitel behandelt die Authentifizierung, Audit-Logging, Rate Limiting und Sicherheitsrichtlinien und gibt einen Überblick über die implementierten Schutzmaßnahmen gemäß OWASP-Standards.",
+    "api-docs": "Die BaluHost REST-API ermöglicht die programmatische Steuerung aller Funktionen. Dieses Kapitel bietet eine Übersicht der verfügbaren Endpunkte, Authentifizierungsmethoden und Beispiele für die Integration mit externen Anwendungen."
   }
 }
