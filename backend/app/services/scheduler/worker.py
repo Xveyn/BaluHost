@@ -273,7 +273,9 @@ class SchedulerWorker:
 
             logger.info("Scheduler job completed: %s", name)
 
-            # Emit notification for scheduler success
+            # Emit notification for scheduler success. The notification service
+            # applies per-user category preferences (scheduler.success) so users
+            # can opt in or out individually — the worker always emits.
             try:
                 from app.services.notifications.events import emit_scheduler_completed_sync
                 emit_scheduler_completed_sync(name)
@@ -347,8 +349,7 @@ class SchedulerWorker:
             try:
                 from app.services.sync.background import get_scheduler
                 scheduler = get_scheduler()
-                loop.run_until_complete(scheduler.check_and_run_due_syncs())
-                return {"checked": True}
+                return loop.run_until_complete(scheduler.check_and_run_due_syncs())
             finally:
                 loop.close()
 
@@ -362,8 +363,7 @@ class SchedulerWorker:
             try:
                 from app.services.sync.background import get_scheduler
                 scheduler = get_scheduler()
-                loop.run_until_complete(scheduler.cleanup_expired_uploads())
-                return {"cleaned": True}
+                return loop.run_until_complete(scheduler.cleanup_expired_uploads())
             finally:
                 loop.close()
 
@@ -409,6 +409,14 @@ class SchedulerWorker:
                     execution_id, success=True, result=result
                 )
                 logger.info("Scheduled job completed: %s", scheduler_name)
+
+                # Emit notification for scheduler success. Per-user category
+                # preferences (scheduler.success) gate actual delivery.
+                try:
+                    from app.services.notifications.events import emit_scheduler_completed_sync
+                    emit_scheduler_completed_sync(scheduler_name)
+                except Exception:
+                    pass
             except Exception as e:
                 logger.exception("Scheduled job failed: %s", scheduler_name)
                 complete_scheduler_execution(

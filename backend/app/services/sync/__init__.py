@@ -13,8 +13,6 @@ from app.services.sync.progressive import ProgressiveSyncService
 from app.services.sync.background import (
     SyncBackgroundScheduler,
     get_scheduler,
-    start_sync_scheduler,
-    stop_sync_scheduler,
     get_status as get_background_status,
 )
 from app.services.sync.scheduler import SyncSchedulerService
@@ -24,8 +22,6 @@ __all__ = [
     "ProgressiveSyncService",
     "SyncBackgroundScheduler",
     "get_scheduler",
-    "start_sync_scheduler",
-    "stop_sync_scheduler",
     "get_background_status",
     "SyncSchedulerService",
 ]
