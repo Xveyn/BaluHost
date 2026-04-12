@@ -152,7 +152,8 @@ def test_impersonation_token_works_for_user_endpoints(
         headers={"Authorization": f"Bearer {imp_token}"},
     )
     assert me.status_code == 200
-    assert me.json()["user"]["username"] == target_user.username
+    # /auth/me returns UserPublic directly (not wrapped in {"user": ...})
+    assert me.json()["username"] == target_user.username
 
 
 def test_impersonate_writes_audit_log(
