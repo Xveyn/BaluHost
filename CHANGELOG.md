@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.29.1] - 2026-04-12
+
+### Fixed
+- Scheduler: dedupe sync_check history entries and emit push notification on scheduled sync success
+
+---
+
 ## [1.29.0] - 2026-04-12
 
 ### Added

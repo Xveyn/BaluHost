@@ -185,6 +185,41 @@ class TestGetSchedulerInterval:
         assert result == 300  # 5 minutes
 
 
+class TestSyncBackgroundDispatch:
+    """Tests for the sync.background coroutines invoked by the scheduler worker."""
+
+    def test_check_and_run_due_syncs_returns_result_dict(self, db_session: Session):
+        """check_and_run_due_syncs must return a result dict without logging its own execution row."""
+        import asyncio
+        from app.services.sync.background import SyncBackgroundScheduler
+
+        scheduler = SyncBackgroundScheduler()
+        result = asyncio.new_event_loop().run_until_complete(
+            scheduler.check_and_run_due_syncs()
+        )
+
+        assert isinstance(result, dict)
+        assert set(result.keys()) == {"due_syncs", "executed", "errors"}
+        assert result["due_syncs"] >= 0
+
+    def test_background_module_has_no_apscheduler(self):
+        """The legacy APScheduler-based SyncBackgroundScheduler must be gone."""
+        from app.services.sync import background
+
+        # AsyncIOScheduler / IntervalTrigger imports must have been removed.
+        assert not hasattr(background, "AsyncIOScheduler")
+        assert not hasattr(background, "IntervalTrigger")
+        assert not hasattr(background, "CronTrigger")
+
+        # start/stop helpers that ran a parallel scheduler must be removed.
+        assert not hasattr(background, "start_sync_scheduler")
+        assert not hasattr(background, "stop_sync_scheduler")
+
+        # The class itself survives as a stateless container.
+        scheduler = background.SyncBackgroundScheduler()
+        assert not hasattr(scheduler, "scheduler")
+
+
 class TestSchedulerExecution:
     """Tests for execution history tracking."""
 
@@ -257,5 +292,6 @@ class TestSchedulerConfig:
             SchedulerConfig.scheduler_name == "default_test"
         ).first()
 
+        assert saved is not None
         # is_enabled defaults to True
         assert saved.is_enabled is True
