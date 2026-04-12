@@ -30,7 +30,8 @@
     "mobileApp": "Mobile App",
     "mobileAppDimmed": "Keine Mobile App verbunden",
     "desktopClient": "Desktop Client",
-    "desktopClientDimmed": "Kein Desktop Client verbunden"
+    "desktopClientDimmed": "Kein Desktop Client verbunden",
+    "noneAssigned": "Dir wurden noch keine System-Benachrichtigungen zugewiesen. Wende dich an einen Administrator."
   },
   "buttons": {
     "save": "Speichern",

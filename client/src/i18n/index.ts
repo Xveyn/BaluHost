@@ -35,6 +35,8 @@ import apiDocsDe from './locales/de/apiDocs.json';
 import apiDocsEn from './locales/en/apiDocs.json';
 import manualDe from './locales/de/manual.json';
 import manualEn from './locales/en/manual.json';
+import setupDe from './locales/de/setup.json';
+import setupEn from './locales/en/setup.json';
 
 const resources = {
   de: {
@@ -54,6 +56,7 @@ const resources = {
     remoteServers: remoteServersDe,
     apiDocs: apiDocsDe,
     manual: manualDe,
+    setup: setupDe,
   },
   en: {
     common: commonEn,
@@ -72,6 +75,7 @@ const resources = {
     remoteServers: remoteServersEn,
     apiDocs: apiDocsEn,
     manual: manualEn,
+    setup: setupEn,
   },
 };
 
@@ -82,7 +86,7 @@ i18n
     resources,
     fallbackLng: 'de',
     defaultNS: 'common',
-    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual'],
+    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup'],
     
     detection: {
       // Order of language detection methods

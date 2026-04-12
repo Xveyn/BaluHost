@@ -230,3 +230,32 @@ def test_raid_configuration_options(client: TestClient) -> None:
     limits = data.get("speed_limits")
     assert limits["minimum"] == 1500
     assert limits["maximum"] == 6000
+
+
+def test_system_mode_returns_dev_credentials(client: TestClient) -> None:
+    """In dev mode, /api/system/mode must include the admin credentials."""
+    response = client.get(f"{settings.api_prefix}/system/mode")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dev_mode"] is True
+    assert "dev_credentials" in data
+    assert data["dev_credentials"]["username"] == settings.admin_username
+    assert data["dev_credentials"]["password"] == settings.admin_password
+
+
+def test_system_mode_prod_omits_credentials(client: TestClient) -> None:
+    """In prod mode, /api/system/mode must NOT leak credentials."""
+    from unittest.mock import patch
+
+    # The handler imports `settings` inside the function body via
+    # `from app.core.config import settings`, so patching the module
+    # attribute replaces what the handler sees on the next request.
+    # See backend/tests/test_fritzbox_wol.py:51-56 for the same pattern.
+    with patch("app.core.config.settings") as mock_settings:
+        mock_settings.is_dev_mode = False
+        response = client.get(f"{settings.api_prefix}/system/mode")
+
+    assert response.status_code == 200
+    data = response.json()
+    assert data["dev_mode"] is False
+    assert "dev_credentials" not in data

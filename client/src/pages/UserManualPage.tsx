@@ -1,16 +1,27 @@
 import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
-import { BookOpen, FileText, Loader2, Menu, X, ArrowLeft } from 'lucide-react';
+import { BookOpen, FileText, Loader2, Menu, X, ArrowLeft, ChevronRight } from 'lucide-react';
+import * as Icons from 'lucide-react';
 import { useVersion } from '../contexts/VersionContext';
 import { useAuth } from '../contexts/AuthContext';
 import { useDocsIndex } from '../hooks/useDocsIndex';
 import { useDocsArticle } from '../hooks/useDocsArticle';
 import DocsSidebar from '../components/manual/DocsSidebar';
 import ArticleView from '../components/manual/ArticleView';
-import ArticleCard from '../components/manual/ArticleCard';
 import DocsOverview from '../components/manual/DocsOverview';
 import { ApiReferenceTab } from '../components/manual/ApiReferenceTab';
+
+function getLucideIcon(name: string, className = 'h-4 w-4'): React.ReactNode {
+  const pascal = name
+    .split('-')
+    .map((s) => s.charAt(0).toUpperCase() + s.slice(1))
+    .join('');
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const IconComp = (Icons as Record<string, any>)[pascal];
+  if (IconComp) return <IconComp className={className} />;
+  return <FileText className={className} />;
+}
 
 const API_REF_TAB_ID = '__api-reference__';
 
@@ -198,8 +209,8 @@ export default function UserManualPage() {
                 />
               )
             ) : activeGroup ? (
-              /* Group view — show articles of selected group */
-              <div className="space-y-4">
+              /* Chapter landing page */
+              <div className="space-y-6">
                 <button
                   onClick={handleBackToOverview}
                   className="flex items-center gap-2 text-sm text-slate-400 hover:text-sky-400 transition-colors touch-manipulation"
@@ -207,22 +218,40 @@ export default function UserManualPage() {
                   <ArrowLeft className="h-4 w-4" />
                   {t('manual:backToOverview')}
                 </button>
-                <h2 className="text-xl font-semibold text-white">
-                  {activeGroup.label}
-                </h2>
-                {activeGroup.articles.length === 0 ? (
-                  <p className="text-slate-500 text-sm">{t('manual:noArticles')}</p>
-                ) : (
-                  <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-                    {activeGroup.articles.map((a) => (
-                      <ArticleCard
-                        key={a.slug}
-                        title={a.title}
-                        icon={a.icon}
-                        onClick={() => handleSelectArticle(activeGroup.id, a.slug)}
-                      />
-                    ))}
+
+                <div className="flex items-start gap-4">
+                  <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-slate-800 bg-slate-950/60 text-sky-400 flex-shrink-0">
+                    {getLucideIcon(activeGroup.icon, 'h-6 w-6')}
                   </div>
+                  <div>
+                    <h2 className="text-xl font-semibold text-white">
+                      {activeGroup.label}
+                    </h2>
+                    <p className="text-sm text-slate-400 mt-1">
+                      {t(`manual:overview.groupDescriptions.${activeGroup.id}`, '')}
+                    </p>
+                    <span className="inline-block mt-2 text-xs text-slate-600 tabular-nums">
+                      {t('manual:overview.articles', { count: activeGroup.articles.length })}
+                    </span>
+                  </div>
+                </div>
+
+                {t(`manual:groupIntros.${activeGroup.id}`, '') && (
+                  <div className="rounded-2xl border border-slate-800/60 bg-slate-900/40 p-5 sm:p-6">
+                    <p className="text-sm sm:text-base text-slate-300 leading-relaxed whitespace-pre-line">
+                      {t(`manual:groupIntros.${activeGroup.id}`)}
+                    </p>
+                  </div>
+                )}
+
+                {activeGroup.articles.length > 0 && (
+                  <button
+                    onClick={() => handleSelectArticle(activeGroup.id, activeGroup.articles[0].slug)}
+                    className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-sky-500/10 text-sky-400 border border-sky-500/30 hover:bg-sky-500/20 hover:border-sky-500/50 transition-all text-sm font-medium touch-manipulation active:scale-[0.98]"
+                  >
+                    {t('manual:startReading')}
+                    <ChevronRight className="h-4 w-4" />
+                  </button>
                 )}
               </div>
             ) : null}

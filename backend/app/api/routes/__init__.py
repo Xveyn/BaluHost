@@ -74,4 +74,13 @@ api_router.include_router(dashboard.router, tags=["dashboard"])
 api_router.include_router(docs.router, tags=["docs"])
 api_router.include_router(setup.router, tags=["setup"])
 
+# Dev-only: admin → user impersonation.
+# Registered only when NAS_MODE=dev. Runtime check in the route is redundant-by-design.
+from app.core.config import settings as _settings
+if _settings.is_dev_mode:
+    from app.api.routes import auth_dev
+    api_router.include_router(
+        auth_dev.router, prefix="/auth/dev", tags=["auth-dev"]
+    )
+
 __all__ = ["api_router"]

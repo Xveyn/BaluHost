@@ -17,13 +17,18 @@ from app.core.config import settings
 from app.models.user import User
 
 
-def create_access_token(user: User | dict, expires_delta: timedelta | None = None) -> str:
+def create_access_token(
+    user: User | dict,
+    expires_delta: timedelta | None = None,
+    impersonated_by: int | None = None,
+) -> str:
     """
     Create a JWT access token with short TTL (15 minutes default).
 
     Args:
         user: User object or dict with user data (must have 'id' field)
         expires_delta: Optional custom expiration time
+        impersonated_by: Optional admin user id (dev-only impersonation audit marker)
 
     Returns:
         Encoded JWT token string
@@ -51,6 +56,8 @@ def create_access_token(user: User | dict, expires_delta: timedelta | None = Non
         "exp": expire,
         "iat": now,
     }
+    if impersonated_by is not None:
+        payload["impersonated_by"] = impersonated_by
 
     encoded_jwt = jwt.encode(
         payload,

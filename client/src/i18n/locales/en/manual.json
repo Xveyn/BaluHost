@@ -7,6 +7,7 @@
   "navigation": "Navigation",
   "backToOverview": "Back to overview",
   "noArticles": "No articles yet",
+  "startReading": "Start reading",
   "noSearchResults": "No articles found",
   "errorLoading": "Failed to load article",
   "searchPlaceholder": "Search articles...",
@@ -38,5 +39,14 @@
       "security": "Security, audit logging and rate limiting",
       "api-docs": "REST API endpoints and usage"
     }
+  },
+  "groupIntros": {
+    "getting-started": "This chapter guides you through your first steps with BaluHost. Learn how to set up the system, log in for the first time, and explore the basic features. Ideal for new users who want to get up and running quickly.",
+    "setup": "Find detailed guides for configuring your BaluHost system here. From network configuration and WireGuard VPN setup to service management — this chapter covers all the settings important for smooth operation.",
+    "features": "BaluHost offers a wide range of features for file management and collaboration. In this chapter, you'll learn about file sharing, the upload process, user management, and other core features that make daily NAS usage easier.",
+    "deployment": "This chapter covers the production deployment of BaluHost. Find guides for deploying on a Linux server, setting up SSL certificates, configuring Nginx as a reverse proxy, and best practices for stable operation.",
+    "monitoring": "Keep track of your system's performance and health. This chapter explains the built-in monitoring features, including CPU, memory, and network monitoring, disk I/O analysis, and telemetry configuration.",
+    "security": "Security is a top priority in BaluHost. This chapter covers authentication, audit logging, rate limiting, and security policies, providing an overview of the implemented protection measures following OWASP standards.",
+    "api-docs": "The BaluHost REST API enables programmatic control of all features. This chapter provides an overview of available endpoints, authentication methods, and examples for integration with external applications."
   }
 }

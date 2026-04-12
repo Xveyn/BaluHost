@@ -391,6 +391,14 @@ async def _startup(app: FastAPI) -> None:
 
     _log_dev_mode_summary()
 
+    # Dev-only impersonation warning
+    if settings.is_dev_mode:
+        logger.warning(
+            "DEV IMPERSONATION ENDPOINT ENABLED at "
+            "%s/auth/dev/impersonate/{user_id} — do not run this in production",
+            settings.api_prefix,
+        )
+
     # Start heartbeat writer and background loops on primary worker
     if IS_PRIMARY_WORKER:
         asyncio.create_task(_write_service_heartbeats())

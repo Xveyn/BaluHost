@@ -44,18 +44,21 @@ export default function DocsSidebar({
     return initial;
   });
 
-  // Auto-expand group containing the active article
+  // Auto-expand group containing the active article or matching the active tab
   useEffect(() => {
-    if (activeArticle) {
-      const group = groups.find((g) => g.articles.some((a) => a.slug === activeArticle));
-      if (group) {
-        setExpandedGroups((prev) => {
-          if (prev.has(group.id)) return prev;
-          return new Set([...prev, group.id]);
-        });
-      }
+    const targetGroupId = activeArticle
+      ? groups.find((g) => g.articles.some((a) => a.slug === activeArticle))?.id
+      : activeTab && activeTab !== apiRefTabId
+        ? activeTab
+        : null;
+
+    if (targetGroupId) {
+      setExpandedGroups((prev) => {
+        if (prev.has(targetGroupId)) return prev;
+        return new Set([...prev, targetGroupId]);
+      });
     }
-  }, [activeArticle, groups]);
+  }, [activeArticle, activeTab, apiRefTabId, groups]);
 
   const toggleGroup = (groupId: string) => {
     setExpandedGroups((prev) => {

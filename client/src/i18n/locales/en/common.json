@@ -332,5 +332,18 @@
     "rateLimitQueriesPer": "queries per",
     "rateLimitSeconds": "seconds",
     "rateLimitDisableHint": "Set count to 0 to disable rate limiting"
+  },
+  "impersonation": {
+    "switchToUser": "Switch to user",
+    "banner": {
+      "viewingAs": "Viewing as {{username}} ({{role}})",
+      "backToAdmin": "Back to {{admin}}"
+    },
+    "role": {
+      "admin": "admin",
+      "user": "user"
+    },
+    "loading": "Loading users…",
+    "empty": "No other users"
   }
 }

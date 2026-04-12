@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { BookOpen } from 'lucide-react';
 import logoMark from '../assets/baluhost-logo.png';
@@ -43,31 +44,30 @@ const STEP_COMPLETE = 12;
 
 const REQUIRED_STEPS = 4; // Steps 0–3 are required
 
-const STEP_LABELS = [
-  'Administrator',
-  'Benutzer',
-  'RAID',
-  'Dateizugriff',
-  'Optional',
-  'Freigabe',
-  'VPN',
-  'Benachrichtigungen',
-  'Cloud',
-  'Pi-hole',
-  'Desktop',
-  'Mobile',
-  'Fertig',
+const STEP_LABEL_KEYS = [
+  'steps.admin',
+  'steps.users',
+  'steps.raid',
+  'steps.fileAccess',
+  'steps.optional',
+  'steps.sharing',
+  'steps.vpn',
+  'steps.notifications',
+  'steps.cloud',
+  'steps.pihole',
+  'steps.desktop',
+  'steps.mobile',
+  'steps.complete',
 ];
 
-// Human-readable feature names for summary
-const FEATURE_LABELS: Record<string, string> = {
-  admin: 'Administrator-Konto',
-  users: 'Benutzer-Konten',
-  raid: 'RAID-Konfiguration',
-  'file-access': 'Dateizugriff (Samba/WebDAV)',
-};
+// Keys for all features that appear in the completion summary
+const ALL_FEATURE_KEYS = new Set([
+  'admin', 'users', 'raid', 'file-access',
+  'sharing', 'vpn', 'notifications', 'cloud', 'pihole', 'desktop', 'mobile',
+]);
 
 export default function SetupWizard({ onComplete }: SetupWizardProps) {
+  const { t } = useTranslation('setup');
   const [showWelcome, setShowWelcome] = useState(true);
   const [currentStep, setCurrentStep] = useState(STEP_ADMIN);
   const [setupToken, setSetupToken] = useState<string>('');
@@ -93,11 +93,11 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
         if (completed.includes('admin')) {
           setShowWelcome(false);
-          newConfigured.push(FEATURE_LABELS.admin);
+          newConfigured.push('admin');
           if (completed.includes('users')) {
-            newConfigured.push(FEATURE_LABELS.users);
+            newConfigured.push('users');
             if (completed.includes('file-access')) {
-              newConfigured.push(FEATURE_LABELS['file-access']);
+              newConfigured.push('file-access');
               setCurrentStep(STEP_OPTIONAL_GATE);
             } else {
               setCurrentStep(STEP_FILE_ACCESS);
@@ -118,20 +118,23 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
     checkStatus();
   }, [onComplete]);
 
+  const stepLabels = useMemo(
+    () => STEP_LABEL_KEYS.map((key) => t(key)),
+    [t]
+  );
+
   const addConfigured = (key: string) => {
-    const label = FEATURE_LABELS[key];
-    if (label) {
+    if (ALL_FEATURE_KEYS.has(key)) {
       setConfiguredFeatures((prev) =>
-        prev.includes(label) ? prev : [...prev, label]
+        prev.includes(key) ? prev : [...prev, key]
       );
     }
   };
 
   const addSkipped = (key: string) => {
-    const label = FEATURE_LABELS[key];
-    if (label) {
+    if (ALL_FEATURE_KEYS.has(key)) {
       setSkippedFeatures((prev) =>
-        prev.includes(label) ? prev : [...prev, label]
+        prev.includes(key) ? prev : [...prev, key]
       );
     }
   };
@@ -208,7 +211,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
 
   const handleFinish = async () => {
     if (!setupToken) {
-      toast.error('Kein Setup-Token vorhanden. Bitte starten Sie das Setup neu.');
+      toast.error(t('errors.noToken'));
       return;
     }
 
@@ -217,7 +220,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
       await completeSetup(setupToken);
       onComplete();
     } catch (err) {
-      handleApiError(err, 'Fehler beim Abschließen des Setups');
+      handleApiError(err, t('errors.finishError'));
     } finally {
       setFinishing(false);
     }
@@ -226,7 +229,7 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
   if (initializing) {
     return (
       <div className="relative flex min-h-screen items-center justify-center overflow-hidden text-slate-100">
-        <Spinner size="xl" label="Setup wird initialisiert..." />
+        <Spinner size="xl" label={t('initializing')} />
       </div>
     );
   }
@@ -255,14 +258,14 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
             <h1 className="text-2xl font-semibold tracking-wide text-slate-100">BaluHost</h1>
           </div>
           <div className="flex items-center justify-center gap-3">
-            <p className="text-sm text-slate-400">Ersteinrichtung</p>
+            <p className="text-sm text-slate-400">{t('header.subtitle')}</p>
             <button
               onClick={() => setManualOpen(true)}
               className="inline-flex items-center gap-1.5 rounded-lg border border-slate-700/60 bg-slate-800/50 px-2.5 py-1 text-xs text-slate-400 transition-colors hover:border-sky-500/40 hover:text-sky-400 hover:bg-slate-800/80"
-              title="Benutzerhandbuch öffnen"
+              title={t('header.manualTooltip')}
             >
               <BookOpen className="h-3.5 w-3.5" />
-              Handbuch
+              {t('header.manualButton')}
             </button>
           </div>
         </div>
@@ -277,9 +280,9 @@ export default function SetupWizard({ onComplete }: SetupWizardProps) {
           {showProgress && (
             <SetupProgress
               currentStep={currentStep}
-              totalSteps={STEP_LABELS.length}
+              totalSteps={stepLabels.length}
               requiredSteps={REQUIRED_STEPS}
-              stepLabels={STEP_LABELS}
+              stepLabels={stepLabels}
             />
           )}
 
