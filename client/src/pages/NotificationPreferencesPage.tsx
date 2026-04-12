@@ -7,6 +7,7 @@
 import { useState, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
+import { useAuth } from '../contexts/AuthContext';
 import {
   AlertTriangle,
   CircleCheck,
@@ -55,6 +56,7 @@ const PRIORITY_LABELS = [
 export default function NotificationPreferencesPage({ embedded = false }: { embedded?: boolean } = {}) {
   const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
+  const { isAdmin: _isAdmin } = useAuth();
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [_preferences, setPreferences] = useState<NotificationPreferences | null>(null);
