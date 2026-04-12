@@ -18,7 +18,9 @@ export default function Login() {
   const [loading, setLoading] = useState(false);
   const [localBackendAvailable, setLocalBackendAvailable] = useState(false);
   const [connectionMode, setConnectionMode] = useState<'checking' | 'local' | 'ipc' | 'fallback'>('checking');
-  const [isDevMode, setIsDevMode] = useState(false);
+  const [devCredentials, setDevCredentials] = useState<
+    { username: string; password: string } | null
+  >(null);
 
   // 2FA state
   const [twoFactorRequired, setTwoFactorRequired] = useState(false);
@@ -41,8 +43,17 @@ export default function Login() {
   useEffect(() => {
     fetch('/api/system/mode')
       .then(res => res.json())
-      .then(data => setIsDevMode(data.dev_mode === true))
-      .catch(() => setIsDevMode(false));
+      .then(data => {
+        if (data.dev_mode === true && data.dev_credentials) {
+          setDevCredentials({
+            username: String(data.dev_credentials.username ?? ''),
+            password: String(data.dev_credentials.password ?? ''),
+          });
+        } else {
+          setDevCredentials(null);
+        }
+      })
+      .catch(() => setDevCredentials(null));
   }, []);
 
   // Focus TOTP input when 2FA step is shown
@@ -319,9 +330,9 @@ export default function Login() {
                 </button>
               </form>
 
-              {isDevMode && (
+              {devCredentials && (
                 <div className="mt-6 sm:mt-8 rounded-xl border border-slate-800 bg-slate-950-secondary p-3 sm:p-4 text-center text-xs text-slate-100-tertiary">
-                  {t('defaultCredentials')} - <span className="text-slate-100-secondary">admin</span> / <span className="text-slate-100-secondary">changeme</span>
+                  {t('defaultCredentials')} - <span className="text-slate-100-secondary">{devCredentials.username}</span> / <span className="text-slate-100-secondary">{devCredentials.password}</span>
                 </div>
               )}
             </>
