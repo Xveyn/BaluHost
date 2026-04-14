@@ -84,8 +84,10 @@ class PluginGateMiddleware(BaseHTTPMiddleware):
     details, uninstall) are always allowed through.
     """
 
-    # Paths under /api/plugins/ that are NOT plugin-name segments
-    _LIST_PATHS = {"", "permissions", "ui"}
+    # Paths under /api/plugins/ that are NOT plugin-name segments.
+    # "marketplace" covers the marketplace API (list/install/uninstall) which
+    # is managed by plugins_marketplace.router, not a plugin called "marketplace".
+    _LIST_PATHS = {"", "permissions", "ui", "marketplace"}
 
     async def dispatch(self, request: Request, call_next):  # noqa: ANN201
         path = request.url.path
