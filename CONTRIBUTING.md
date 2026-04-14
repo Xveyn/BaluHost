@@ -197,6 +197,13 @@ npm run test
 
 ## 🔀 Git Workflow
 
+> **Important:** All contributions must go through Pull Requests targeting the `development` branch. Direct pushes to `main` or `development` are not accepted — `main` is updated exclusively by the release workflow (PR from `development` → `main` with a `release:*` label). PRs opened against `main` will be closed with a request to re-open them against `development`.
+
+**Branch hierarchy:**
+- `main` — Production. Read-only for contributors. Updated automatically by the release workflow.
+- `development` — Integration branch. **Target for all PRs.**
+- `feature/*`, `fix/*`, etc. — Working branches, created from `development`.
+
 ### Branch Naming
 - `feature/description` - New features
 - `fix/description` - Bug fixes
@@ -252,8 +259,10 @@ Fixes #456
 
 ### Pull Request Process
 
-1. **Create a feature branch**
+1. **Create a feature branch from `development`**
    ```bash
+   git checkout development
+   git pull origin development
    git checkout -b feature/my-feature
    ```
 
@@ -282,11 +291,13 @@ Fixes #456
    git push origin feature/my-feature
    ```
 
-6. **Open a Pull Request**
-   - Use a clear, descriptive title
-   - Reference related issues
+6. **Open a Pull Request against `development`**
+   - **Base branch: `development`** (not `main`!)
+   - Use a clear, descriptive title following Conventional Commits
+   - Reference related issues (`Closes #123`)
    - Describe what changed and why
    - Include screenshots for UI changes
+   - Wait for CI to pass — auto-merge runs only on green CI
 
 ### PR Template
 
@@ -514,7 +525,7 @@ Any other relevant information.
 
 ### Reporting Security Issues
 **DO NOT** open public issues for security vulnerabilities.
-Email security concerns to: [security@baluhost.example] (TODO)
+See [SECURITY.md](SECURITY.md) for the private reporting process (GitHub Security Advisories preferred).
 
 ## 📜 Code of Conduct
 
