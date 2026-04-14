@@ -1,0 +1,113 @@
+name: 🐛 Bug Report
+description: Report a reproducible bug in BaluHost
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report! Please fill out the fields below so we can reproduce and fix the issue quickly.
+
+        **Security issues:** Do not report vulnerabilities here. See [SECURITY.md](../blob/main/SECURITY.md).
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched existing issues and did not find a duplicate
+          required: true
+        - label: I can reproduce this on the latest version
+          required: true
+        - label: This is not a security vulnerability (those go via SECURITY.md)
+          required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: BaluHost version
+      description: Output of the About page or `backend/pyproject.toml` version
+      placeholder: "1.30.0"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - Backend (FastAPI)
+        - Frontend (Web UI)
+        - TUI (Terminal UI)
+        - RAID / Disk management
+        - Authentication
+        - File operations
+        - Monitoring / Telemetry
+        - Power / Fan control
+        - VPN / Networking
+        - Plugin system
+        - Scheduler
+        - Setup / Installation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Runtime mode
+      options:
+        - Production (NAS_MODE=prod)
+        - Development (NAS_MODE=dev)
+        - Not sure
+    validations:
+      required: true
+
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: "Debian 13 / Windows 11 / Ubuntu 24.04"
+    validations:
+      required: true
+
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Numbered steps so we can replicate the issue.
+      placeholder: |
+        1. Log in as admin
+        2. Navigate to …
+        3. Click …
+        4. Observe …
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs
+      description: Backend log output (`journalctl -u baluhost-backend` or terminal), browser console, or stack traces. Redact any secrets.
+      render: shell
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Screenshots, configuration snippets, anything else that might help.

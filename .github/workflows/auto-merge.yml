@@ -99,5 +99,8 @@ jobs:
         run: |
           git fetch origin main development
           git checkout development
-          git merge origin/main --no-edit
-          git push origin development
+          if git merge origin/main --ff-only; then
+            git push origin development
+          else
+            echo "::warning::development has diverged from main — skipping sync to avoid merge commit. Next release will reconcile."
+          fi

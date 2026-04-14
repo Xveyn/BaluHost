@@ -16,6 +16,7 @@ things together.
 from __future__ import annotations
 
 import json
+import logging
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -23,7 +24,7 @@ from typing import Callable, Optional, Sequence
 
 from pydantic import ValidationError
 
-from app.plugins.core_versions import CoreVersions, load_core_versions
+from app.plugins.core_versions import CoreVersions, CoreVersionsError, load_core_versions
 from app.plugins.installer import (
     InstalledArtifact,
     PluginInstaller,
@@ -35,6 +36,8 @@ from app.plugins.marketplace import (
     MarketplaceVersionEntry,
 )
 from app.plugins.resolver import InstalledPluginRequirement
+
+logger = logging.getLogger(__name__)
 
 IndexFetcher = Callable[[str], bytes]
 
@@ -207,23 +210,57 @@ def get_marketplace_service() -> MarketplaceService:
     Uses ``settings.plugins_marketplace_index_url`` and the configured
     external plugins directory. Tests should override this via
     ``app.dependency_overrides``.
-    """
-    global _instance
-    if _instance is None:
-        from app.core.config import settings
 
-        plugins_dir = Path(settings.plugins_external_dir)
+    Raises a 503 ``HTTPException`` if the plugins directory cannot be
+    created (permission denied, read-only FS, …) or the Core versions
+    snapshot cannot be loaded — so operators see a clear reason instead
+    of a bare 500 traceback.
+    """
+    from fastapi import HTTPException, status
+
+    global _instance
+    if _instance is not None:
+        return _instance
+
+    from app.core.config import settings
+
+    plugins_dir = Path(settings.plugins_external_dir)
+    try:
         plugins_dir.mkdir(parents=True, exist_ok=True)
+    except OSError as exc:
+        logger.error(
+            "plugin marketplace disabled: cannot create plugins dir %s: %s",
+            plugins_dir,
+            exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                f"plugin marketplace unavailable: plugins directory "
+                f"{plugins_dir} is not writable by the backend service user "
+                f"({exc.strerror or exc}). Create the directory and chown it "
+                f"to the service user."
+            ),
+        ) from exc
+
+    try:
         core_versions = load_core_versions()
-        installer = PluginInstaller(
-            plugins_dir=plugins_dir,
-            core_versions=core_versions,
-        )
-        _instance = MarketplaceService(
-            index_url=settings.plugins_marketplace_index_url,
-            installer=installer,
-            cache_ttl=settings.plugins_marketplace_cache_ttl,
-        )
+    except CoreVersionsError as exc:
+        logger.error("plugin marketplace disabled: cannot load core_versions.json: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"plugin marketplace unavailable: core_versions.json could not be loaded ({exc})",
+        ) from exc
+
+    installer = PluginInstaller(
+        plugins_dir=plugins_dir,
+        core_versions=core_versions,
+    )
+    _instance = MarketplaceService(
+        index_url=settings.plugins_marketplace_index_url,
+        installer=installer,
+        cache_ttl=settings.plugins_marketplace_cache_ttl,
+    )
     return _instance
 
 
