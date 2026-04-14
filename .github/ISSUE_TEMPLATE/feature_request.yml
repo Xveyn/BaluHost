@@ -1,0 +1,81 @@
+name: ✨ Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for suggesting an improvement! Before submitting, please check existing issues and discussions to avoid duplicates.
+
+  - type: checkboxes
+    id: preflight
+    attributes:
+      label: Preflight checks
+      options:
+        - label: I searched existing issues and discussions for similar requests
+          required: true
+        - label: This is a feature request, not a bug report
+          required: true
+
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem / motivation
+      description: What problem does this solve? What is the current workflow or limitation?
+      placeholder: "Today I have to … which is painful because …"
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: Describe how you imagine the feature working. Include API shape, UI mockups, or CLI examples if helpful.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you thought about and why they are less ideal.
+
+  - type: dropdown
+    id: component
+    attributes:
+      label: Affected component
+      multiple: true
+      options:
+        - Backend (FastAPI)
+        - Frontend (Web UI)
+        - TUI (Terminal UI)
+        - RAID / Disk management
+        - Authentication
+        - File operations
+        - Monitoring / Telemetry
+        - Power / Fan control
+        - VPN / Networking
+        - Plugin system
+        - Scheduler
+        - Documentation
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: willingness
+    attributes:
+      label: Would you be willing to implement this?
+      options:
+        - "Yes, I can open a PR"
+        - "Yes, with guidance"
+        - "No, just suggesting"
+    validations:
+      required: true
+
+  - type: textarea
+    id: additional
+    attributes:
+      label: Additional context
+      description: Links, screenshots, related issues, anything else.
