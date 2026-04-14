@@ -27,6 +27,8 @@ _COOLDOWN_SECONDS: dict[str, int] = {
     "system.temperature_high": 1800,    # 30min
     "system.temperature_critical": 1800, # 30min
     "system.storage_permission": 300,  # 5min per path
+    "plugin.update_available": 86400,  # 24h per plugin+version
+    "plugin.incompatible": 21600,      # 6h per plugin
 }
 
 
@@ -105,6 +107,10 @@ class EventType(str, Enum):
     # VPN events
     VPN_CLIENT_EXPIRED = "vpn.client_expired"
     VPN_CONNECTION_FAILED = "vpn.connection_failed"
+
+    # Plugin marketplace events
+    PLUGIN_UPDATE_AVAILABLE = "plugin.update_available"
+    PLUGIN_INCOMPATIBLE = "plugin.incompatible"
 
 
 @dataclass
@@ -354,6 +360,24 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="VPN-Client abgelaufen: {client_name}",
         message_template="Die Konfiguration für VPN-Client '{client_name}' ist abgelaufen.",
         action_url="/vpn",
+    ),
+
+    # Plugin marketplace events
+    EventType.PLUGIN_UPDATE_AVAILABLE: EventConfig(
+        priority=0,
+        category="system",
+        notification_type="info",
+        title_template="Plugin-Update verfügbar: {plugin_name}",
+        message_template="Für das Plugin '{plugin_name}' ist Version {new_version} verfügbar (installiert: {current_version}).",
+        action_url="/plugins?tab=marketplace",
+    ),
+    EventType.PLUGIN_INCOMPATIBLE: EventConfig(
+        priority=2,
+        category="system",
+        notification_type="warning",
+        title_template="Plugin inkompatibel: {plugin_name}",
+        message_template="Das installierte Plugin '{plugin_name}' (v{current_version}) ist mit dem aktuellen BaluHost-Core nicht mehr kompatibel: {reason}",
+        action_url="/plugins",
     ),
 }
 
@@ -1069,6 +1093,32 @@ def emit_brute_force_detected_sync(ip_address: str) -> None:
     get_event_emitter().emit_for_admins_sync(
         EventType.BRUTE_FORCE_DETECTED,
         ip_address=ip_address,
+    )
+
+
+def emit_plugin_update_available_sync(
+    plugin_name: str, current_version: str, new_version: str
+) -> None:
+    """Emit plugin update available event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.PLUGIN_UPDATE_AVAILABLE,
+        cooldown_entity=f"{plugin_name}:{new_version}",
+        plugin_name=plugin_name,
+        current_version=current_version,
+        new_version=new_version,
+    )
+
+
+def emit_plugin_incompatible_sync(
+    plugin_name: str, current_version: str, reason: str
+) -> None:
+    """Emit plugin incompatible-with-core event (sync)."""
+    get_event_emitter().emit_for_admins_sync(
+        EventType.PLUGIN_INCOMPATIBLE,
+        cooldown_entity=plugin_name,
+        plugin_name=plugin_name,
+        current_version=current_version,
+        reason=reason,
     )
 
 

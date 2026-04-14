@@ -246,4 +246,11 @@ SCHEDULER_REGISTRY: dict[str, dict[str, Any]] = {
         "default_interval": 86400,  # 24 hours
         "can_run_manually": True,
     },
+    "plugin_update_check": {
+        "display_name": "Plugin Update Check",
+        "description": "Checks the marketplace for plugin updates and flags plugins broken by a Core update",
+        "config_key": None,
+        "default_interval": 21600,  # 6 hours
+        "can_run_manually": True,
+    },
 }

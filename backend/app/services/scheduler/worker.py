@@ -50,6 +50,7 @@ SCHEDULER_POWER_LEVELS: dict[str, str] = {
     "auto_update": "low",
     "cloud_sync": "medium",
     "file_activity_cleanup": "low",
+    "plugin_update_check": "low",
 }
 
 # How often to poll for requested executions (seconds)
@@ -389,6 +390,20 @@ class SchedulerWorker:
             finally:
                 db.close()
 
+        elif name == "plugin_update_check":
+            from app.services.plugin_update_check import run_plugin_update_check_default
+            db = SessionLocal()
+            try:
+                result = run_plugin_update_check_default(db)
+                return {
+                    "checked": len(result.checked),
+                    "updates_available": len(result.updates_available),
+                    "incompatible": len(result.incompatible),
+                    "index_fetched": result.index_fetched,
+                }
+            finally:
+                db.close()
+
         return None
 
     # --- APScheduler Job Callbacks -----------------------------------------
@@ -504,6 +519,8 @@ class SchedulerWorker:
             return getattr(settings, "backup_auto_enabled", False)
         elif name in ("sync_check", "upload_cleanup", "notification_check"):
             return True
+        elif name == "plugin_update_check":
+            return True
         elif name == "auto_update":
             return getattr(settings, "auto_update_check_enabled", True)
         elif name == "cloud_sync":
@@ -542,6 +559,8 @@ class SchedulerWorker:
             return 86400
         elif name == "cloud_sync":
             return 3600
+        elif name == "plugin_update_check":
+            return 21600
 
         return info.get("default_interval", 3600)
 
