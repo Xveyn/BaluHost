@@ -109,6 +109,7 @@
     "systemOverview": "How Plugins Work",
     "installation": "Installing a Plugin",
     "installationDesc": "Drop your plugin folder into {{path}} and restart BaluHost. Each plugin needs a {{manifest}} file that declares its name, version, and required permissions.",
+    "marketplaceHint": "The Marketplace tab is the easier route: plugins are downloaded, checksum-verified, and installed automatically. BaluHost periodically checks whether updates are available for installed plugins.",
     "lifecycle": "What Happens on Startup",
     "discovery": "Scan",
     "discoveryDesc": "BaluHost finds all plugin folders automatically",
@@ -138,6 +139,7 @@
     "network": "Network",
     "database": "Database",
     "user": "User",
+    "device": "Devices",
     "events": "Events & Tasks"
   },
   "hookCategories": {
@@ -149,6 +151,7 @@
     "raid": "RAID Events",
     "smart": "SMART Events",
     "device": "Device Events",
+    "smart_device": "Smart Device Events",
     "vpn": "VPN Events"
   },
   "hooks": {
@@ -173,6 +176,9 @@
     "on_disk_health_warning": "Triggered on disk health warning",
     "on_device_registered": "Triggered when a device is registered",
     "on_device_removed": "Triggered when a device is removed",
+    "on_smart_device_added": "Triggered when a smart device is added",
+    "on_smart_device_state_changed": "Triggered when a smart device's state changes",
+    "on_smart_device_removed": "Triggered when a smart device is removed",
     "on_vpn_client_created": "Triggered when a VPN client is created",
     "on_vpn_client_revoked": "Triggered when a VPN client is revoked"
   },
@@ -196,6 +202,7 @@
     "notification:send": "Send push notifications",
     "task:background": "Run background tasks",
     "event:subscribe": "Subscribe to system events",
-    "event:emit": "Emit custom events"
+    "event:emit": "Emit custom events",
+    "device:control": "Control smart home devices (on/off, brightness, etc.)"
   }
 }

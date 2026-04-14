@@ -109,6 +109,7 @@
     "systemOverview": "So funktionieren Plugins",
     "installation": "Ein Plugin installieren",
     "installationDesc": "Plugin-Ordner in {{path}} ablegen und BaluHost neustarten. Jedes Plugin braucht eine {{manifest}} Datei mit Name, Version und benötigten Berechtigungen.",
+    "marketplaceHint": "Einfacher geht's über den Marketplace-Tab: Plugins werden heruntergeladen, ihre Checksummen geprüft und automatisch installiert. BaluHost prüft regelmäßig, ob für installierte Plugins Updates verfügbar sind.",
     "lifecycle": "Was beim Start passiert",
     "discovery": "Scan",
     "discoveryDesc": "BaluHost findet alle Plugin-Ordner automatisch",
@@ -138,6 +139,7 @@
     "network": "Netzwerk",
     "database": "Datenbank",
     "user": "Benutzer",
+    "device": "Geräte",
     "events": "Events & Tasks"
   },
   "hookCategories": {
@@ -149,6 +151,7 @@
     "raid": "RAID-Events",
     "smart": "SMART-Events",
     "device": "Geräte-Events",
+    "smart_device": "Smart-Device-Events",
     "vpn": "VPN-Events"
   },
   "hooks": {
@@ -173,6 +176,9 @@
     "on_disk_health_warning": "Wird ausgelöst bei Disk-Health-Warnung",
     "on_device_registered": "Wird ausgelöst wenn ein Gerät registriert wird",
     "on_device_removed": "Wird ausgelöst wenn ein Gerät entfernt wird",
+    "on_smart_device_added": "Wird ausgelöst wenn ein Smart-Device hinzugefügt wird",
+    "on_smart_device_state_changed": "Wird ausgelöst wenn sich der Zustand eines Smart-Devices ändert",
+    "on_smart_device_removed": "Wird ausgelöst wenn ein Smart-Device entfernt wird",
     "on_vpn_client_created": "Wird ausgelöst wenn ein VPN-Client erstellt wird",
     "on_vpn_client_revoked": "Wird ausgelöst wenn ein VPN-Client widerrufen wird"
   },
@@ -196,6 +202,7 @@
     "notification:send": "Push-Benachrichtigungen senden",
     "task:background": "Hintergrundaufgaben ausführen",
     "event:subscribe": "System-Events abonnieren",
-    "event:emit": "Eigene Events senden"
+    "event:emit": "Eigene Events senden",
+    "device:control": "Smart-Home-Geräte steuern (ein/aus, Helligkeit usw.)"
   }
 }
