@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.30.1] - 2026-04-15
+
+### Fixed
+- Plugins: return 503 instead of 500 when marketplace setup fails
+- CI: use fast-forward-only merge when syncing main → development to avoid merge commits
+
+### Added
+- Security policy (SECURITY.md) with private reporting channels and coordinated disclosure process
+- GitHub issue templates (bug report, feature request) with structured forms
+
+### Changed
+- Contributing guide: clarify that all PRs must target `development`; `main` is release-only
+
+---
+
 ## [1.30.0] - 2026-04-14
 
 ### Added
