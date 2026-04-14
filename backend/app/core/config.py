@@ -196,6 +196,15 @@ class Settings(BaseSettings):
     # Notification configuration
     notification_retention_days: int = 90  # Days to retain old notifications
 
+    # Plugin marketplace — directory for externally installed plugins.
+    # Empty default is resolved in _apply_dev_defaults: dev → ./dev-plugins,
+    # prod → /var/lib/baluhost/plugins. Override via PLUGINS_EXTERNAL_DIR env var.
+    plugins_external_dir: str = ""
+    # Plugin marketplace — upstream index.json URL (single official index in v1).
+    plugins_marketplace_index_url: str = "https://xveyn.github.io/BaluHost-Plugin-Market/index.json"
+    # Cache TTL for the fetched marketplace index (seconds).
+    plugins_marketplace_cache_ttl: int = 300
+
     model_config = SettingsConfigDict(
         env_file=(".env", "../.env", "../../.env"),
         env_file_encoding="utf-8",
@@ -239,12 +248,16 @@ class Settings(BaseSettings):
             if not self.vpn_encryption_key:
                 from cryptography.fernet import Fernet
                 self.vpn_encryption_key = Fernet.generate_key().decode()
+            if not self.plugins_external_dir:
+                self.plugins_external_dir = "./dev-plugins"
         else:
             # Production mode: enable audit logging by default
             if not self.audit_logging_enabled:
                 self.audit_logging_enabled = True
             if self.nas_quota_bytes == 5 * 1024 * 1024 * 1024:
                 self.nas_quota_bytes = None
+            if not self.plugins_external_dir:
+                self.plugins_external_dir = "/var/lib/baluhost/plugins"
 
         # Auto-generate scheduler service token if not set
         if not self.scheduler_service_token:

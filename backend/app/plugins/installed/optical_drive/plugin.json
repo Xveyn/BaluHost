@@ -1,0 +1,17 @@
+{
+  "manifest_version": 1,
+  "name": "optical_drive",
+  "version": "1.0.0",
+  "display_name": "Optical Drive",
+  "description": "Read, rip, and burn CDs/DVDs with full disc management",
+  "author": "BaluHost Team",
+  "category": "storage",
+  "homepage": "https://github.com/Xveyn/BaluHost-Plugin-Market/tree/main/plugins/optical_drive",
+  "min_baluhost_version": "1.29.0",
+  "max_baluhost_version": null,
+  "required_permissions": ["system:execute", "system:info", "file:write"],
+  "plugin_dependencies": [],
+  "python_requirements": [],
+  "entrypoint": "__init__.py",
+  "ui": {"bundle": "ui/bundle.js", "styles": null}
+}
