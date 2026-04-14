@@ -16,13 +16,15 @@ from typing import Dict
 
 import pytest
 
-from app.plugins.core_versions import CoreVersions
+from app.plugins.core_versions import CoreVersions, CoreVersionsError
 from app.plugins.installer import PluginInstaller
 from app.services.plugin_marketplace import (
     IndexFetchError,
     IndexParseError,
     MarketplaceService,
     PluginNotFoundError,
+    get_marketplace_service,
+    reset_marketplace_service,
 )
 
 
@@ -326,3 +328,64 @@ class TestInstallDelegate:
         svc.install("demo")
         # Same cached index used for lookup on both installs.
         assert fake.index_calls == 1
+
+
+class TestGetMarketplaceServiceDependency:
+    """The FastAPI dependency must degrade gracefully on setup failures.
+
+    In production the plugins directory is ``/var/lib/baluhost/plugins`` and
+    the service user may not have write access to it. The dependency used
+    to raise a bare ``PermissionError`` which bubbled up as an unhandled
+    500; it should now raise a 503 ``HTTPException`` with a diagnostic
+    message instead.
+    """
+
+    def setup_method(self) -> None:
+        reset_marketplace_service()
+
+    def teardown_method(self) -> None:
+        reset_marketplace_service()
+
+    def test_permission_error_on_mkdir_becomes_503(self, monkeypatch, tmp_path):
+        from app.core.config import settings
+        from fastapi import HTTPException
+
+        monkeypatch.setattr(settings, "plugins_external_dir", str(tmp_path / "nope"))
+
+        def _deny(self, *args, **kwargs):
+            raise PermissionError(13, "Permission denied")
+
+        monkeypatch.setattr(Path, "mkdir", _deny)
+
+        with pytest.raises(HTTPException) as excinfo:
+            get_marketplace_service()
+        assert excinfo.value.status_code == 503
+        assert "plugin marketplace unavailable" in excinfo.value.detail.lower()
+        assert "not writable" in excinfo.value.detail
+
+    def test_core_versions_error_becomes_503(self, monkeypatch, tmp_path):
+        from app.core.config import settings
+        from app.services import plugin_marketplace as svc_mod
+        from fastapi import HTTPException
+
+        monkeypatch.setattr(settings, "plugins_external_dir", str(tmp_path / "plugins"))
+
+        def _boom(path=None):
+            raise CoreVersionsError("missing file")
+
+        monkeypatch.setattr(svc_mod, "load_core_versions", _boom)
+
+        with pytest.raises(HTTPException) as excinfo:
+            get_marketplace_service()
+        assert excinfo.value.status_code == 503
+        assert "core_versions.json" in excinfo.value.detail
+
+    def test_successful_build_caches_singleton(self, monkeypatch, tmp_path):
+        from app.core.config import settings
+
+        monkeypatch.setattr(settings, "plugins_external_dir", str(tmp_path / "plugins"))
+
+        svc = get_marketplace_service()
+        svc2 = get_marketplace_service()
+        assert svc is svc2
+        assert (tmp_path / "plugins").is_dir()
