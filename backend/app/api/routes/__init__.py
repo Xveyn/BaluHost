@@ -4,7 +4,8 @@ from app.api.routes import (
     auth, files, logging, system, users, upload_progress, shares, backup, sync,
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
     vcl, server_profiles, vpn_profiles, metrics, energy, devices, monitoring,
-    power, power_presets, fans, service_status, schedulers, plugins, benchmark,
+    power, power_presets, fans, service_status, schedulers, plugins,
+    plugins_marketplace, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, cloud_export,
     sleep,
     api_keys, desktop_pairing, ssd_file_cache, migration, pihole, env_config,
@@ -49,6 +50,10 @@ api_router.include_router(power_presets.router, tags=["power-presets"])
 api_router.include_router(fans.router, prefix="/fans", tags=["fan-control"])
 api_router.include_router(service_status.router, tags=["admin"])
 api_router.include_router(schedulers.router, prefix="/schedulers", tags=["schedulers"])
+# NOTE: marketplace MUST be registered before `plugins.router`, otherwise
+# `GET /plugins/{name}` in plugins.router eats `GET /plugins/marketplace`
+# as a lookup for a plugin literally called "marketplace".
+api_router.include_router(plugins_marketplace.router, tags=["plugins-marketplace"])
 api_router.include_router(plugins.router, tags=["plugins"])
 api_router.include_router(benchmark.router, tags=["benchmark"])
 api_router.include_router(notifications.router, tags=["notifications"])

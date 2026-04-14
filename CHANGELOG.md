@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.30.0] - 2026-04-14
+
+### Added
+- Plugins: manifest model and multi-path plugin manager
+- Plugins: dependency resolver with core-version gating
+- Plugins: installer pipeline with download, checksum verification, pip-install, and atomic swap
+- Plugins: plugin SDK with `validate`/`pack` CLI, registered as `baluhost-sdk` entry point
+- Plugins: marketplace service with index fetching and conflict detection
+- Plugins: marketplace API routes with permission gating
+- Plugins: Marketplace tab on the Plugins page with search, install and conflict dialog
+- Plugins: update-check service with scheduler integration and push events
+- Docs: plugin marketplace design spec; Plugins page documentation updated with `device:control` permission, smart-device hooks, and marketplace hint
+
+### Changed
+- Dependencies: bump pytest to 9.x
+- Plugins: in-repo `baluhost-plugins/` prototype imported and marked as deprecated in favor of the external marketplace repo
+
+---
+
 ## [1.29.1] - 2026-04-12
 
 ### Fixed

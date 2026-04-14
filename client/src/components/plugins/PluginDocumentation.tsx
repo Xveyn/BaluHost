@@ -21,6 +21,8 @@ import {
   Smartphone,
   Key,
   Info,
+  Plug,
+  Store,
 } from 'lucide-react';
 import type { PermissionInfo } from '../../api/plugins';
 import { useFormattedVersion } from '../../contexts/VersionContext';
@@ -30,7 +32,7 @@ interface PluginDocumentationProps {
 }
 
 // Hook category keys for iteration
-const HOOK_CATEGORY_KEYS = ['file', 'user', 'backup', 'share', 'system', 'raid', 'smart', 'device', 'vpn'] as const;
+const HOOK_CATEGORY_KEYS = ['file', 'user', 'backup', 'share', 'system', 'raid', 'smart', 'device', 'smart_device', 'vpn'] as const;
 
 // Hook names organized by category key
 const HOOKS_BY_CATEGORY_KEY: Record<string, string[]> = {
@@ -42,11 +44,12 @@ const HOOKS_BY_CATEGORY_KEY: Record<string, string[]> = {
   raid: ['on_raid_degraded', 'on_raid_rebuild_started', 'on_raid_rebuild_completed'],
   smart: ['on_disk_health_warning'],
   device: ['on_device_registered', 'on_device_removed'],
+  smart_device: ['on_smart_device_added', 'on_smart_device_state_changed', 'on_smart_device_removed'],
   vpn: ['on_vpn_client_created', 'on_vpn_client_revoked'],
 };
 
 // Permission category keys and their permissions
-const PERMISSION_CATEGORY_KEYS = ['file', 'system', 'network', 'database', 'user', 'events'] as const;
+const PERMISSION_CATEGORY_KEYS = ['file', 'system', 'network', 'database', 'user', 'device', 'events'] as const;
 
 const PERMISSION_CATEGORY_DATA: Record<string, { icon: React.ElementType; permissions: string[] }> = {
   file: {
@@ -69,6 +72,10 @@ const PERMISSION_CATEGORY_DATA: Record<string, { icon: React.ElementType; permis
     icon: Users,
     permissions: ['user:read', 'user:write'],
   },
+  device: {
+    icon: Plug,
+    permissions: ['device:control'],
+  },
   events: {
     icon: Zap,
     permissions: ['notification:send', 'task:background', 'event:subscribe', 'event:emit'],
@@ -85,6 +92,7 @@ const HOOK_CATEGORY_ICONS: Record<string, React.ElementType> = {
   raid: Activity,
   smart: HardDrive,
   device: Smartphone,
+  smart_device: Plug,
   vpn: Key,
 };
 
@@ -180,6 +188,10 @@ export default function PluginDocumentation({ permissions }: PluginDocumentation
                   </span>
                 ))}
             </p>
+            <div className="mt-3 flex items-start gap-2 rounded-lg border border-sky-500/30 bg-sky-500/5 p-3">
+              <Store className="h-4 w-4 text-sky-400 flex-shrink-0 mt-0.5" />
+              <p className="text-xs text-sky-200/90">{t('docs.marketplaceHint')}</p>
+            </div>
           </div>
           <div>
             <h3 className="font-medium text-white mb-2">{t('docs.lifecycle')}</h3>

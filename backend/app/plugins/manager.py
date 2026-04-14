@@ -2,28 +2,58 @@
 
 Handles plugin discovery, loading, lifecycle management,
 and hook dispatching.
+
+Supports two plugin sources:
+- **Bundled** plugins shipped in the BaluHost release at
+  ``backend/app/plugins/installed/`` — loaded under the
+  ``app.plugins.installed.{name}`` module namespace.
+- **External** plugins installed via the marketplace into a
+  separate directory (``settings.plugins_external_dir``,
+  e.g. ``/var/lib/baluhost/plugins/``) — loaded under the
+  ``baluhost_plugins.{name}`` namespace and may have their own
+  isolated ``site-packages/`` directory that is prepended to
+  ``sys.path`` at load time.
 """
 import asyncio
 import importlib
 import importlib.util
-import json
 import logging
+import sys
+import types
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Callable, Dict, List, Optional, Set
+from typing import Any, Callable, Dict, List, Literal, Optional, Sequence, Set
 
 from fastapi import APIRouter
 from sqlalchemy.orm import Session
 
 from app.plugins.base import BackgroundTaskSpec, PluginBase, PluginMetadata, PluginUIManifest
-from app.plugins.hooks import create_plugin_manager
 from app.plugins.events import EventManager, get_event_manager, start_event_manager, stop_event_manager
-from app.plugins.permissions import PermissionManager, DANGEROUS_PERMISSIONS
+from app.plugins.hooks import create_plugin_manager
+from app.plugins.manifest import ManifestError, PluginManifest, load_manifest
+from app.plugins.permissions import DANGEROUS_PERMISSIONS, PermissionManager
 
 
 logger = logging.getLogger(__name__)
 
-# Default plugins directory
-PLUGINS_DIR = Path(__file__).parent / "installed"
+# Canonical bundled plugins directory — plugins shipped with BaluHost.
+BUNDLED_PLUGINS_DIR = Path(__file__).parent / "installed"
+
+# Backward-compat alias for code that still imports PLUGINS_DIR.
+PLUGINS_DIR = BUNDLED_PLUGINS_DIR
+
+
+PluginSource = Literal["bundled", "external"]
+
+
+@dataclass
+class DiscoveredPlugin:
+    """A plugin found on disk, with everything we know about it before loading."""
+
+    name: str
+    path: Path
+    source: PluginSource
+    manifest: Optional[PluginManifest]  # None if the plugin has no plugin.json (legacy)
 
 
 class PluginLoadError(Exception):
@@ -52,28 +82,60 @@ class PluginManager:
 
     _instance: Optional["PluginManager"] = None
 
-    def __init__(self, plugins_dir: Optional[Path] = None):
-        self._plugins_dir = plugins_dir or PLUGINS_DIR
+    def __init__(
+        self,
+        plugins_dir: Optional[Path] = None,
+        plugins_dirs: Optional[Sequence[Path]] = None,
+    ):
+        """Construct a PluginManager.
+
+        Args:
+            plugins_dir: Legacy single-directory mode. When set (and
+                ``plugins_dirs`` is not), only this directory is scanned —
+                used by existing tests and by callers that want explicit
+                isolation.
+            plugins_dirs: New multi-directory mode. Pass an explicit list
+                of directories to scan, in order. Plugins discovered in a
+                directory whose resolved path equals
+                ``BUNDLED_PLUGINS_DIR`` are treated as ``"bundled"``;
+                everything else is ``"external"``.
+
+        If neither argument is given, the default is
+        ``[BUNDLED_PLUGINS_DIR, settings.plugins_external_dir]``.
+        """
+        if plugins_dirs is not None:
+            dirs = [Path(p) for p in plugins_dirs]
+        elif plugins_dir is not None:
+            dirs = [Path(plugins_dir)]
+        else:
+            # Lazy import to avoid pulling settings during early bootstrap.
+            from app.core.config import settings
+            dirs = [BUNDLED_PLUGINS_DIR]
+            ext = settings.plugins_external_dir
+            if ext:
+                dirs.append(Path(ext))
+
+        self._plugins_dirs: List[Path] = dirs
         self._plugins: Dict[str, PluginBase] = {}
         self._enabled: Set[str] = set()
         self._hook_manager = create_plugin_manager()
         self._event_manager: Optional[EventManager] = None
         self._background_tasks: Dict[str, List[asyncio.Task]] = {}
         self._routers_mounted = False
-        self._discovered_names: Optional[List[str]] = None
+        self._discovered: Optional[Dict[str, DiscoveredPlugin]] = None
 
     @classmethod
-    def get_instance(cls, plugins_dir: Optional[Path] = None) -> "PluginManager":
+    def get_instance(
+        cls,
+        plugins_dir: Optional[Path] = None,
+        plugins_dirs: Optional[Sequence[Path]] = None,
+    ) -> "PluginManager":
         """Get the singleton PluginManager instance.
 
-        Args:
-            plugins_dir: Optional custom plugins directory
-
-        Returns:
-            The PluginManager singleton
+        Args mirror ``__init__`` and only take effect on first construction.
         """
         if cls._instance is None:
-            cls._instance = cls(plugins_dir)
+            cls._instance = cls(plugins_dir=plugins_dir, plugins_dirs=plugins_dirs)
         return cls._instance
 
     @classmethod
@@ -83,35 +145,137 @@ class PluginManager:
 
     @property
     def plugins_dir(self) -> Path:
-        """Get the plugins directory."""
-        return self._plugins_dir
+        """Get the *first* configured plugins directory.
+
+        Backward-compat property: pre-multi-dir callers and tests assume
+        a single dir. Returns the first entry of ``plugins_dirs``.
+        """
+        return self._plugins_dirs[0]
+
+    @property
+    def plugins_dirs(self) -> List[Path]:
+        """Get all configured plugin directories, in scan order."""
+        return list(self._plugins_dirs)
+
+    def _classify_source(self, parent_dir: Path) -> PluginSource:
+        """Decide if a plugin discovered in ``parent_dir`` is bundled or external."""
+        try:
+            return "bundled" if parent_dir.resolve() == BUNDLED_PLUGINS_DIR.resolve() else "external"
+        except OSError:
+            return "external"
+
+    def _scan_directory(self, scan_dir: Path) -> List[DiscoveredPlugin]:
+        """Scan a single directory for plugin candidates.
+
+        A directory is considered a plugin if it contains either
+        ``plugin.json`` (manifest-first, preferred) or, as a legacy fallback,
+        an ``__init__.py``.
+        """
+        results: List[DiscoveredPlugin] = []
+        if not scan_dir.exists():
+            logger.debug("Plugins directory does not exist: %s", scan_dir)
+            return results
+
+        source = self._classify_source(scan_dir)
+
+        for path in scan_dir.iterdir():
+            if not path.is_dir():
+                continue
+            has_manifest = (path / "plugin.json").exists()
+            has_init = (path / "__init__.py").exists()
+            if not (has_manifest or has_init):
+                continue
+
+            manifest: Optional[PluginManifest] = None
+            if has_manifest:
+                try:
+                    manifest = load_manifest(path)
+                except ManifestError as exc:
+                    logger.warning(
+                        "Skipping plugin %s — invalid plugin.json: %s",
+                        path.name,
+                        exc,
+                    )
+                    continue
+
+            results.append(
+                DiscoveredPlugin(
+                    name=path.name,
+                    path=path,
+                    source=source,
+                    manifest=manifest,
+                )
+            )
+            logger.debug("Discovered plugin: %s (%s)", path.name, source)
+
+        return results
 
     def discover_plugins(self, force: bool = False) -> List[str]:
-        """Discover available plugins in the plugins directory.
+        """Discover available plugins across all configured directories.
 
         Results are cached after the first scan.  Pass ``force=True``
         to rescan (e.g. after installing a new plugin).
 
         Returns:
-            List of discovered plugin names
+            List of discovered plugin names. If a name appears in multiple
+            directories, the first one wins (so bundled plugins shadow
+            external plugins of the same name).
         """
-        if self._discovered_names is not None and not force:
-            return list(self._discovered_names)
+        if self._discovered is not None and not force:
+            return list(self._discovered.keys())
 
-        discovered = []
+        discovered: Dict[str, DiscoveredPlugin] = {}
 
-        if not self._plugins_dir.exists():
-            logger.warning(f"Plugins directory does not exist: {self._plugins_dir}")
-            return discovered
+        for scan_dir in self._plugins_dirs:
+            for found in self._scan_directory(scan_dir):
+                if found.name in discovered:
+                    logger.warning(
+                        "Plugin %s already discovered in %s — ignoring duplicate at %s",
+                        found.name,
+                        discovered[found.name].path,
+                        found.path,
+                    )
+                    continue
+                discovered[found.name] = found
 
-        for path in self._plugins_dir.iterdir():
-            if path.is_dir() and (path / "__init__.py").exists():
-                discovered.append(path.name)
-                logger.debug(f"Discovered plugin: {path.name}")
+        self._discovered = discovered
+        logger.info("Discovered %d plugins", len(discovered))
+        return list(discovered.keys())
 
-        self._discovered_names = discovered
-        logger.info(f"Discovered {len(discovered)} plugins")
-        return list(discovered)
+    def get_discovered(self, name: str) -> Optional[DiscoveredPlugin]:
+        """Return discovery info for ``name`` (or None if not discovered)."""
+        if self._discovered is None:
+            self.discover_plugins()
+        return (self._discovered or {}).get(name)
+
+    def _ensure_external_namespace(self) -> None:
+        """Make sure ``baluhost_plugins`` is registered as a parent package.
+
+        External plugins live under the ``baluhost_plugins.{name}`` namespace,
+        which doesn't physically exist anywhere on disk — we synthesize a
+        package entry in ``sys.modules`` once so relative imports inside the
+        plugin work.
+        """
+        if "baluhost_plugins" not in sys.modules:
+            pkg = types.ModuleType("baluhost_plugins")
+            pkg.__path__ = []  # marks it as a namespace package
+            sys.modules["baluhost_plugins"] = pkg
+
+    def _ensure_bundled_namespace(self, scan_dir: Path) -> None:
+        """Synthesize ``app.plugins.installed`` for legacy/test scan dirs.
+
+        When a single non-canonical directory is used (e.g. tests passing a
+        tmp_path), we still want plugins to load under
+        ``app.plugins.installed.{name}`` for relative-import compatibility.
+        """
+        if "app.plugins.installed" not in sys.modules:
+            if "app" not in sys.modules:
+                sys.modules["app"] = types.ModuleType("app")
+            if "app.plugins" not in sys.modules:
+                sys.modules["app.plugins"] = types.ModuleType("app.plugins")
+            installed_module = types.ModuleType("app.plugins.installed")
+            installed_module.__path__ = [str(scan_dir)]
+            sys.modules["app.plugins.installed"] = installed_module
 
     def load_plugin(self, name: str) -> PluginBase:
         """Load a plugin by name.
@@ -128,31 +292,41 @@ class PluginManager:
         if name in self._plugins:
             return self._plugins[name]
 
-        plugin_path = self._plugins_dir / name
-        if not plugin_path.exists():
-            raise PluginLoadError(f"Plugin directory not found: {plugin_path}")
+        # Resolve which directory this plugin lives in.
+        discovered = self.get_discovered(name)
+        if discovered is None:
+            # Fall back to scanning the first dir directly — this preserves
+            # the legacy contract "load_plugin works even if discover_plugins
+            # was never called explicitly with a fresh single-dir manager".
+            plugin_path = self._plugins_dirs[0] / name
+            if not plugin_path.exists():
+                raise PluginLoadError(f"Plugin directory not found: {plugin_path}")
+            scan_dir = self._plugins_dirs[0]
+            source: PluginSource = self._classify_source(scan_dir)
+        else:
+            plugin_path = discovered.path
+            scan_dir = plugin_path.parent
+            source = discovered.source
 
         init_file = plugin_path / "__init__.py"
         if not init_file.exists():
             raise PluginLoadError(f"Plugin __init__.py not found: {init_file}")
 
-        try:
-            # Load the plugin module
-            # Use full module path to enable relative imports within the plugin
-            import sys
-            module_name = f"app.plugins.installed.{name}"
+        # External plugins may ship isolated Python deps in site-packages/.
+        # Prepend it to sys.path *before* importing the plugin module so the
+        # plugin's imports resolve against its private deps first.
+        site_packages = plugin_path / "site-packages"
+        if site_packages.exists() and str(site_packages) not in sys.path:
+            sys.path.insert(0, str(site_packages))
+            logger.debug("Added %s to sys.path for plugin %s", site_packages, name)
 
-            # Ensure parent packages are in sys.modules for relative imports
-            if "app.plugins.installed" not in sys.modules:
-                import types
-                # Create parent package entries if they don't exist
-                if "app" not in sys.modules:
-                    sys.modules["app"] = types.ModuleType("app")
-                if "app.plugins" not in sys.modules:
-                    sys.modules["app.plugins"] = types.ModuleType("app.plugins")
-                installed_module = types.ModuleType("app.plugins.installed")
-                installed_module.__path__ = [str(self._plugins_dir)]
-                sys.modules["app.plugins.installed"] = installed_module
+        try:
+            if source == "external":
+                self._ensure_external_namespace()
+                module_name = f"baluhost_plugins.{name}"
+            else:
+                self._ensure_bundled_namespace(scan_dir)
+                module_name = f"app.plugins.installed.{name}"
 
             spec = importlib.util.spec_from_file_location(
                 module_name,

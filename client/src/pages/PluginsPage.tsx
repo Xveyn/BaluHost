@@ -18,16 +18,18 @@ import {
   toggleDashboardPanel,
   uninstallPlugin,
 } from '../api/plugins';
-import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen, LayoutDashboard } from 'lucide-react';
+import { AlertTriangle, Check, X, Plug, Shield, Settings, Trash2, ExternalLink, BookOpen, LayoutDashboard, Store } from 'lucide-react';
 import { resolvePluginString } from '../lib/pluginI18n';
 import PluginDocumentation from '../components/plugins/PluginDocumentation';
 import { PluginSettingsSection } from '../components/plugins/PluginSettingsSection';
+import MarketplaceTab from '../components/plugins/MarketplaceTab';
 import { useConfirmDialog } from '../hooks/useConfirmDialog';
 
-type TabType = 'plugins' | 'documentation';
+type TabType = 'plugins' | 'marketplace' | 'documentation';
 
 const TABS = [
   { id: 'plugins' as TabType, labelKey: 'tabs.installed', icon: Plug },
+  { id: 'marketplace' as TabType, labelKey: 'tabs.marketplace', icon: Store },
   { id: 'documentation' as TabType, labelKey: 'tabs.documentation', icon: BookOpen },
 ];
 
@@ -196,6 +198,9 @@ export default function PluginsPage() {
           {actionError}
         </div>
       )}
+
+      {/* Marketplace Tab */}
+      {activeTab === 'marketplace' && <MarketplaceTab />}
 
       {/* Documentation Tab */}
       {activeTab === 'documentation' && (

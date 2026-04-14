@@ -1,0 +1,17 @@
+{
+  "manifest_version": 1,
+  "name": "storage_analytics",
+  "version": "1.0.0",
+  "display_name": "Storage Analytics",
+  "description": "Provides storage usage analytics and insights",
+  "author": "BaluHost Team",
+  "category": "storage",
+  "homepage": "https://github.com/Xveyn/BaluHost-Plugin-Market/tree/main/plugins/storage_analytics",
+  "min_baluhost_version": "1.29.0",
+  "max_baluhost_version": null,
+  "required_permissions": ["file:read", "system:info"],
+  "plugin_dependencies": [],
+  "python_requirements": [],
+  "entrypoint": "__init__.py",
+  "ui": {"bundle": "ui/bundle.js", "styles": null}
+}

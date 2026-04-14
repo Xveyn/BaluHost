@@ -48,6 +48,15 @@ class InstalledPlugin(Base):
     installed_by: Mapped[Optional[str]] = mapped_column(
         String(100), nullable=True
     )
+    available_update: Mapped[Optional[str]] = mapped_column(
+        String(50),
+        nullable=True,
+        default=None,
+    )
+    last_update_check_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True),
+        nullable=True,
+    )
 
     def __repr__(self) -> str:
         status = "enabled" if self.is_enabled else "disabled"

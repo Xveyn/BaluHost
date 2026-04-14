@@ -72,6 +72,8 @@ class InstalledPluginSchema(BaseModel):
     enabled_at: Optional[datetime] = None
     disabled_at: Optional[datetime] = None
     installed_by: Optional[str] = None
+    available_update: Optional[str] = None
+    last_update_check_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
