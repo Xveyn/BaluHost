@@ -29,6 +29,9 @@ _COOLDOWN_SECONDS: dict[str, int] = {
     "system.storage_permission": 300,  # 5min per path
     "plugin.update_available": 86400,  # 24h per plugin+version
     "plugin.incompatible": 21600,      # 6h per plugin
+    "lifecycle.suspend": 60,           # 1min — guard against rapid retries
+    "lifecycle.resume": 60,            # 1min
+    # No cooldown for shutdown/startup — legitimate reboots must always notify
 }
 
 
@@ -111,6 +114,12 @@ class EventType(str, Enum):
     # Plugin marketplace events
     PLUGIN_UPDATE_AVAILABLE = "plugin.update_available"
     PLUGIN_INCOMPATIBLE = "plugin.incompatible"
+
+    # System lifecycle events
+    SYSTEM_SUSPEND = "lifecycle.suspend"
+    SYSTEM_RESUME = "lifecycle.resume"
+    SYSTEM_SHUTDOWN = "lifecycle.shutdown"
+    SYSTEM_STARTUP = "lifecycle.startup"
 
 
 @dataclass
@@ -378,6 +387,40 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="Plugin inkompatibel: {plugin_name}",
         message_template="Das installierte Plugin '{plugin_name}' (v{current_version}) ist mit dem aktuellen BaluHost-Core nicht mehr kompatibel: {reason}",
         action_url="/plugins",
+    ),
+
+    # System lifecycle events
+    EventType.SYSTEM_SUSPEND: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wird suspended",
+        message_template="NAS geht in Suspend-Modus ({trigger_label}). Verbindung wird kurz unterbrochen.",
+        action_url="/admin/system-control?tab=sleep",
+    ),
+    EventType.SYSTEM_RESUME: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wieder online",
+        message_template="NAS aufgewacht nach {duration_human} Suspend ({trigger_label}).",
+        action_url="/admin/system-control?tab=sleep",
+    ),
+    EventType.SYSTEM_SHUTDOWN: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wird heruntergefahren",
+        message_template="NAS fährt herunter ({trigger_label}).",
+        action_url="/admin/system-control",
+    ),
+    EventType.SYSTEM_STARTUP: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS hochgefahren",
+        message_template="NAS ist wieder einsatzbereit. Letzter Shutdown vor {downtime_human}.",
+        action_url="/",
     ),
 }
 
