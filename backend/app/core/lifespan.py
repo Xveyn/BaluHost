@@ -255,6 +255,45 @@ def _log_dev_mode_summary() -> None:
 # Startup / shutdown steps
 # ---------------------------------------------------------------------------
 
+async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
+    """Emit the lifecycle.shutdown notification and persist a 'shutdown' row.
+
+    Run as the very first step of `_shutdown()`. Best-effort: row insert
+    happens before the FCM emit so the next startup can compute downtime
+    even when FCM hangs. Emit is bounded to 3s. No-op on secondary workers.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+
+    try:
+        from app.core.database import SessionLocal
+        from app.models.system_lifecycle import SystemLifecycleEvent
+        from app.services.notifications.events import emit_system_shutdown
+
+        # 1. Persist the shutdown row FIRST.
+        with SessionLocal() as db:
+            ev = SystemLifecycleEvent(
+                event_type="shutdown",
+                trigger=trigger,
+                details_json=None,
+            )
+            db.add(ev)
+            db.commit()
+
+        # 2. Emit the push (best-effort, 3s max).
+        try:
+            await asyncio.wait_for(
+                emit_system_shutdown(trigger=trigger),
+                timeout=3.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Lifecycle shutdown push timed out after 3s — continuing shutdown")
+        except Exception as exc:
+            logger.warning("Lifecycle shutdown push failed: %s — continuing shutdown", exc)
+    except Exception as exc:
+        logger.warning("Lifecycle shutdown step failed (non-fatal): %s", exc)
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
@@ -487,6 +526,9 @@ async def _startup(app: FastAPI) -> None:
 
 async def _shutdown() -> None:
     """Run all graceful shutdown steps."""
+    # ---- Lifecycle notification (best-effort, must run BEFORE app dies) ----
+    await _emit_lifecycle_shutdown()
+
     from app.services import jobs
     from app.services.power import manager as power_manager
     from app.services.power import fan_control

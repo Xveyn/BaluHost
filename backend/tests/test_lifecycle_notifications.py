@@ -173,3 +173,74 @@ def test_suspend_emit_respects_3s_timeout():
 
         result = asyncio.run(run())
         assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Lifespan: shutdown hook
+# ---------------------------------------------------------------------------
+
+
+def test_shutdown_persists_event_before_emit(monkeypatch):
+    """_emit_lifecycle_shutdown writes system_lifecycle_events row BEFORE emit."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    row_count_at_emit: list[int] = []
+
+    async def tracked_emit(*args, **kwargs):
+        with SessionLocal() as db:
+            row_count_at_emit.append(
+                db.query(SystemLifecycleEvent).filter_by(event_type="shutdown").count()
+            )
+
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(side_effect=tracked_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+
+    assert row_count_at_emit and row_count_at_emit[0] == 1, (
+        f"Shutdown row must exist when emit is called; got count={row_count_at_emit}"
+    )
+
+
+def test_shutdown_emit_respects_3s_timeout(monkeypatch):
+    """If emit_system_shutdown hangs > 3s, _emit_lifecycle_shutdown returns anyway."""
+    import time as _time
+    from app.core import lifespan
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    async def slow_emit(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    start = _time.monotonic()
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(side_effect=slow_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+    elapsed = _time.monotonic() - start
+    assert elapsed < 5.0, f"Lifecycle shutdown took {elapsed}s — 3s timeout did not fire"
+
+
+def test_shutdown_secondary_worker_does_not_emit(monkeypatch):
+    """Non-primary worker must not emit lifecycle.shutdown."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", False)
+
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(),
+    ) as mock_emit:
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+        mock_emit.assert_not_called()
+
+    with SessionLocal() as db:
+        assert db.query(SystemLifecycleEvent).count() == 0
