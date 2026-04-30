@@ -29,6 +29,7 @@ class MetricType(str, enum.Enum):
     PROCESS = "process"
     POWER = "power"
     UPTIME = "uptime"
+    GPU = "gpu"
 
 
 class CpuSample(Base):
@@ -184,6 +185,52 @@ class UptimeSample(Base):
 
     def __repr__(self) -> str:
         return f"<UptimeSample(server={self.server_uptime_seconds}s, system={self.system_uptime_seconds}s, timestamp={self.timestamp})>"
+
+
+class GpuSample(Base):
+    """
+    GPU metrics sample (dedicated GPU only).
+
+    Identity columns (vendor, device_name, pci_slot) are denormalized per sample
+    so history stays correctly attributed after a hardware swap.
+    """
+
+    __tablename__ = "gpu_samples"
+
+    id: Mapped[int] = Column(Integer, primary_key=True, index=True)
+    timestamp: Mapped[datetime] = Column(DateTime, nullable=False, index=True, default=datetime.utcnow)
+
+    # Device identity
+    vendor: Mapped[str] = Column(String(16), nullable=False)
+    device_name: Mapped[str] = Column(String(128), nullable=False)
+    pci_slot: Mapped[Optional[str]] = Column(String(32), nullable=True)
+
+    # Usage
+    usage_percent: Mapped[Optional[float]] = Column(Float, nullable=True)
+    engine_gfx_percent: Mapped[Optional[float]] = Column(Float, nullable=True)
+    engine_compute_percent: Mapped[Optional[float]] = Column(Float, nullable=True)
+    engine_decode_percent: Mapped[Optional[float]] = Column(Float, nullable=True)
+    engine_encode_percent: Mapped[Optional[float]] = Column(Float, nullable=True)
+
+    # VRAM (BigInteger — can exceed 2 GB)
+    vram_used_bytes: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+    vram_total_bytes: Mapped[Optional[int]] = Column(BigInteger, nullable=True)
+
+    # Clocks
+    core_clock_mhz: Mapped[Optional[float]] = Column(Float, nullable=True)
+    memory_clock_mhz: Mapped[Optional[float]] = Column(Float, nullable=True)
+
+    # Temperatures
+    temperature_edge_celsius: Mapped[Optional[float]] = Column(Float, nullable=True)
+    temperature_junction_celsius: Mapped[Optional[float]] = Column(Float, nullable=True)
+    temperature_memory_celsius: Mapped[Optional[float]] = Column(Float, nullable=True)
+
+    # Fan / Power
+    fan_rpm: Mapped[Optional[int]] = Column(Integer, nullable=True)
+    power_watts: Mapped[Optional[float]] = Column(Float, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<GpuSample(device={self.device_name}, usage={self.usage_percent}%, ts={self.timestamp})>"
 
 
 class MonitoringConfig(Base):
