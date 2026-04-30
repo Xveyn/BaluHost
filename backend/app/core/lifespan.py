@@ -355,6 +355,7 @@ async def _startup(app: FastAPI) -> None:
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
+    from app.services.power.gpu import manager as gpu_power_manager
     from app.services.network_discovery import NetworkDiscoveryService
     from app.services.notifications.firebase import FirebaseService
     from app.services.websocket_manager import init_websocket_manager
@@ -418,6 +419,13 @@ async def _startup(app: FastAPI) -> None:
                 logger.info("CPU power management started")
             except Exception as e:
                 logger.warning(f"CPU power management could not start: {e}")
+
+        if settings.gpu_power_management_enabled:
+            try:
+                await gpu_power_manager.start_gpu_power_manager()
+                logger.info("GPU power management started")
+            except Exception as e:
+                logger.warning(f"GPU power management could not start: {e}")
 
         if settings.fan_control_enabled:
             try:
@@ -583,6 +591,7 @@ async def _shutdown() -> None:
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
+    from app.services.power.gpu import manager as gpu_power_manager
 
     # Notify BaluPi companion device that NAS is going offline
     if IS_PRIMARY_WORKER and settings.balupi_enabled:
@@ -616,6 +625,11 @@ async def _shutdown() -> None:
                 logger.info("CPU power management stopped")
             except Exception:
                 logger.debug("Error stopping CPU power management")
+            try:
+                await gpu_power_manager.stop_gpu_power_manager()
+                logger.info("GPU power management stopped")
+            except Exception as e:
+                logger.warning(f"GPU power manager shutdown failed: {e}")
             try:
                 await fan_control.stop_fan_control()
                 logger.info("Fan control stopped")
