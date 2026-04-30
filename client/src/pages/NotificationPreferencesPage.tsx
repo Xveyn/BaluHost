@@ -44,6 +44,7 @@ const ALL_CATEGORIES: NotificationCategory[] = [
   'security',
   'sync',
   'vpn',
+  'lifecycle',
 ];
 
 const PRIORITY_LABELS = [

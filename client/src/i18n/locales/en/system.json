@@ -111,7 +111,7 @@
     "overall": "Overall",
     "perThread": "Per Thread",
     "cpuTemperature": "CPU Temperature",
-    "temperatureUnit": "Temperature (°C)",
+    "temperatureUnit": "Temperature (Â°C)",
     "usagePercent": "Usage (%)",
     "memoryUsage": "Memory Usage",
     "used": "Used",
@@ -374,7 +374,7 @@
       },
       "modeInfo": {
         "writethroughBenefit": "Read cache: frequently accessed data served from SSD. No data loss risk.",
-        "writethroughRisk": "No write acceleration — writes go directly to HDD.",
+        "writethroughRisk": "No write acceleration â€” writes go directly to HDD.",
         "writebackBenefit": "Full read+write cache: significantly faster random writes.",
         "writebackRisk": "Warning: SSD failure may cause data loss of unflushed writes.",
         "writearoundBenefit": "Only reads are cached, writes bypass SSD entirely.",
@@ -564,6 +564,59 @@
     "errors": {
       "loadingTitle": "Loading Error",
       "retryButton": "Try Again"
+    },
+    "gpu": {
+      "title": "GPU Power Management",
+      "noGpu": "No discrete GPU detected.",
+      "states": {
+        "active": "Active",
+        "standby": "Standby",
+        "deep_idle": "Deep idle"
+      },
+      "stats": {
+        "displays": "Displays connected",
+        "usage": "Usage",
+        "demands": "Active demands",
+        "permission": "Write permission"
+      },
+      "permission": {
+        "ok": "ok",
+        "missing": "missing"
+      },
+      "enableLabel": "Enable GPU power management",
+      "thresholds": {
+        "title": "Thresholds",
+        "idleWindow": "Idle window",
+        "deepIdleExtra": "Grace before deep idle",
+        "deepIdleGrace": "Plugin unload grace",
+        "monitorInterval": "Monitor interval",
+        "usageThreshold": "Usage threshold"
+      },
+      "hardware": {
+        "title": "Hardware overrides",
+        "noVendor": "No GPU detected — hardware overrides unavailable.",
+        "amdHeading": "AMD per-state",
+        "nvidiaHeading": "NVIDIA per-state",
+        "unset": "(unset)",
+        "minMhz": "min MHz",
+        "maxMhz": "max MHz",
+        "powerW": "power W",
+        "columns": {
+          "state": "State",
+          "performance": "Performance",
+          "profile": "Profile mode"
+        }
+      },
+      "buttons": {
+        "save": "Save",
+        "reset": "Reset",
+        "saving": "Saving…"
+      },
+      "messages": {
+        "saved": "GPU config saved",
+        "saveFailed": "Save failed",
+        "loadFailed": "GPU power management could not load"
+      }
     }
   },
   "fanControl": {
@@ -607,7 +660,7 @@
       "curveFailed": "Failed to update curve",
       "backendSwitched": "Backend switched",
       "backendFailed": "Failed to switch backend",
-      "hysteresisSet": "Hysteresis set to {{value}}°C",
+      "hysteresisSet": "Hysteresis set to {{value}}Â°C",
       "hysteresisFailed": "Failed to update hysteresis"
     },
     "curve": {
@@ -641,7 +694,7 @@
       "manualPwm": "Manual PWM"
     },
     "details": {
-      "temperatureCol": "Temperature (°C)",
+      "temperatureCol": "Temperature (Â°C)",
       "pwmCol": "PWM (%)",
       "actionsCol": "Actions",
       "minPwm": "Min PWM",
@@ -661,7 +714,7 @@
     },
     "schedule": {
       "title": "Fan Schedule",
-      "description": "Time-based fan curves — different cooling profiles for different times of day",
+      "description": "Time-based fan curves â€” different cooling profiles for different times of day",
       "noEntries": "No schedule entries yet",
       "noEntriesHint": "Add a schedule entry to use different fan curves at different times",
       "addEntry": "Add Entry",
@@ -878,7 +931,7 @@
     "noChartData": "No chart data available yet",
     "noChartDataHint": "Data will appear after the first hour of monitoring",
     "costSettings": "Cost Settings",
-    "costPerKwh": "Cost per kWh (€)",
+    "costPerKwh": "Cost per kWh (â‚¬)",
     "current": "Current"
   },
   "powerWidget": {
