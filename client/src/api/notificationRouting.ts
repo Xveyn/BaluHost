@@ -14,6 +14,7 @@ export interface UserNotificationRouting {
   receive_security: boolean;
   receive_sync: boolean;
   receive_vpn: boolean;
+  receive_lifecycle: boolean;
   granted_by: number | null;
   granted_by_username: string | null;
   granted_at: string | null;
@@ -28,6 +29,7 @@ export interface UserNotificationRoutingUpdate {
   receive_security?: boolean;
   receive_sync?: boolean;
   receive_vpn?: boolean;
+  receive_lifecycle?: boolean;
 }
 
 export interface MyNotificationRouting {
@@ -39,6 +41,7 @@ export interface MyNotificationRouting {
   receive_security: boolean;
   receive_sync: boolean;
   receive_vpn: boolean;
+  receive_lifecycle: boolean;
 }
 
 /**

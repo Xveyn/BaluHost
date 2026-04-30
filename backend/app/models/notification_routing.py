@@ -28,6 +28,7 @@ class UserNotificationRouting(Base):
     receive_security: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     receive_sync: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
     receive_vpn: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
+    receive_lifecycle: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default="0")
 
     granted_by: Mapped[Optional[int]] = mapped_column(
         Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True

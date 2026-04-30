@@ -24,7 +24,7 @@ import {
 import { useNotifications } from '../contexts/NotificationContext';
 
 const CATEGORIES: NotificationCategory[] = [
-  'raid', 'smart', 'backup', 'scheduler', 'system', 'security', 'sync', 'vpn',
+  'raid', 'smart', 'backup', 'scheduler', 'system', 'security', 'sync', 'vpn', 'lifecycle',
 ];
 
 const TYPES: NotificationType[] = ['info', 'warning', 'critical'];

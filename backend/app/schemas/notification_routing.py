@@ -18,6 +18,7 @@ class NotificationRoutingResponse(BaseModel):
     receive_security: bool = False
     receive_sync: bool = False
     receive_vpn: bool = False
+    receive_lifecycle: bool = False
     granted_by: Optional[int] = None
     granted_by_username: Optional[str] = None
     granted_at: Optional[datetime] = None
@@ -36,6 +37,7 @@ class NotificationRoutingUpdate(BaseModel):
     receive_security: Optional[bool] = Field(default=None, description="Receive Security notifications")
     receive_sync: Optional[bool] = Field(default=None, description="Receive Sync notifications")
     receive_vpn: Optional[bool] = Field(default=None, description="Receive VPN notifications")
+    receive_lifecycle: Optional[bool] = Field(default=None, description="Receive Lifecycle notifications")
 
 
 class MyNotificationRoutingResponse(BaseModel):
@@ -49,3 +51,4 @@ class MyNotificationRoutingResponse(BaseModel):
     receive_security: bool = False
     receive_sync: bool = False
     receive_vpn: bool = False
+    receive_lifecycle: bool = False

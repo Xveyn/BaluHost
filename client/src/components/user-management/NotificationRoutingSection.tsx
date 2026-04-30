@@ -10,6 +10,7 @@ import {
   Globe,
   Bell,
   Loader2,
+  Power,
 } from 'lucide-react';
 import {
   getUserNotificationRouting,
@@ -80,6 +81,12 @@ const ROUTING_TOGGLES: RoutingToggle[] = [
     label: 'VPN',
     description: 'VPN-Client-Ablaufwarnungen',
     icon: <Globe className="h-4 w-4" />,
+  },
+  {
+    key: 'receive_lifecycle',
+    label: 'Lifecycle',
+    description: 'NAS Suspend/Resume/Shutdown/Startup',
+    icon: <Power className="h-4 w-4" />,
   },
 ];
 

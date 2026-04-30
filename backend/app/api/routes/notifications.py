@@ -349,6 +349,7 @@ async def get_my_notification_routing(
         receive_security=routing.receive_security,
         receive_sync=routing.receive_sync,
         receive_vpn=routing.receive_vpn,
+        receive_lifecycle=routing.receive_lifecycle,
     )
 
 
