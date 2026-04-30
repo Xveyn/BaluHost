@@ -252,13 +252,22 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
   const cpuColor = VENDOR_COLORS[cpu.vendor];
   const gpuColor = VENDOR_COLORS[gpu.vendor];
 
-  // Outer glow shadow on hover — matches the sibling card pattern
-  // (hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)]) but uses the two
-  // vendor colors: CPU glow above (top of panel), GPU glow below.
-  const cardStyle = useMemo(() => ({
-    ['--hover-shadow' as string]:
-      `0 -14px 44px rgba(${cpuColor.rgb},0.18), 0 14px 44px rgba(${gpuColor.rgb},0.18)`,
-  }), [cpuColor.rgb, gpuColor.rgb]);
+  // Match the sibling card hover recipe exactly:
+  //   hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)]
+  // …but use a color blended from the two vendor RGBs so the glow tint
+  // reflects the actual hardware (red/blue/green or a mix).
+  const blendedRgb = useMemo(() => {
+    const a = cpuColor.rgb.split(',').map(Number);
+    const b = gpuColor.rgb.split(',').map(Number);
+    return [0, 1, 2].map((i) => Math.round((a[i] + b[i]) / 2)).join(',');
+  }, [cpuColor.rgb, gpuColor.rgb]);
+
+  const [hovered, setHovered] = useState(false);
+  const cardBoxShadow = expanded
+    ? '0 24px 60px rgba(0,0,0,0.55)'
+    : hovered
+      ? `0 14px 44px rgba(${blendedRgb},0.20)`
+      : '0 20px 60px rgba(2,6,23,0.55)';
 
   const goCpu = () => navigate('/system?tab=cpu');
   const goGpu = () => navigate('/system?tab=gpu');
@@ -283,9 +292,11 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
 
       {/* Real card — absolute over the spacer */}
       <div
-        style={cardStyle}
-        className={`absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[var(--hover-shadow)] ${
-          expanded ? 'z-20 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur' : ''
+        onMouseEnter={() => setHovered(true)}
+        onMouseLeave={() => setHovered(false)}
+        style={{ boxShadow: cardBoxShadow }}
+        className={`absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 ${
+          expanded ? 'z-20 backdrop-blur' : ''
         }`}
       >
         <div className="relative">
