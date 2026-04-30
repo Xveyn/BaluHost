@@ -6,7 +6,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
-  Bell, CheckCheck, Settings, Filter, ChevronLeft, ChevronRight, Clock, X,
+  Bell, CheckCheck, Settings, Filter, ChevronLeft, ChevronRight, Clock, X, Trash2,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
@@ -37,6 +37,7 @@ export default function NotificationsArchivePage() {
     markAsRead: ctxMarkAsRead,
     markAllAsRead: ctxMarkAllAsRead,
     dismiss: ctxDismiss,
+    dismissAll: ctxDismissAll,
   } = useNotifications();
   const [data, setData] = useState<NotificationListResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -78,6 +79,18 @@ export default function NotificationsArchivePage() {
       fetchNotifications();
     } catch {
       toast.error('Fehler');
+    }
+  };
+
+  const handleClearAll = async () => {
+    if (!data || data.total === 0) return;
+    if (!window.confirm(`Alle ${data.total} Benachrichtigungen löschen?`)) return;
+    try {
+      await ctxDismissAll();
+      toast.success('Alle Benachrichtigungen gelöscht');
+      fetchNotifications();
+    } catch {
+      toast.error('Fehler beim Löschen');
     }
   };
 
@@ -141,6 +154,14 @@ export default function NotificationsArchivePage() {
           >
             <CheckCheck className="h-4 w-4" />
             Alle gelesen
+          </button>
+          <button
+            onClick={handleClearAll}
+            disabled={!data || data.total === 0}
+            className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-rose-500/50 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
+          >
+            <Trash2 className="h-4 w-4" />
+            Alle löschen
           </button>
           <button
             onClick={() => navigate('/settings?tab=notifications')}
