@@ -111,7 +111,7 @@
     "overall": "Overall",
     "perThread": "Per Thread",
     "cpuTemperature": "CPU Temperature",
-    "temperatureUnit": "Temperature (Â°C)",
+    "temperatureUnit": "Temperature (°C)",
     "usagePercent": "Usage (%)",
     "memoryUsage": "Memory Usage",
     "used": "Used",
@@ -374,7 +374,7 @@
       },
       "modeInfo": {
         "writethroughBenefit": "Read cache: frequently accessed data served from SSD. No data loss risk.",
-        "writethroughRisk": "No write acceleration â€” writes go directly to HDD.",
+        "writethroughRisk": "No write acceleration — writes go directly to HDD.",
         "writebackBenefit": "Full read+write cache: significantly faster random writes.",
         "writebackRisk": "Warning: SSD failure may cause data loss of unflushed writes.",
         "writearoundBenefit": "Only reads are cached, writes bypass SSD entirely.",
@@ -660,7 +660,7 @@
       "curveFailed": "Failed to update curve",
       "backendSwitched": "Backend switched",
       "backendFailed": "Failed to switch backend",
-      "hysteresisSet": "Hysteresis set to {{value}}Â°C",
+      "hysteresisSet": "Hysteresis set to {{value}}°C",
       "hysteresisFailed": "Failed to update hysteresis"
     },
     "curve": {
@@ -694,7 +694,7 @@
       "manualPwm": "Manual PWM"
     },
     "details": {
-      "temperatureCol": "Temperature (Â°C)",
+      "temperatureCol": "Temperature (°C)",
       "pwmCol": "PWM (%)",
       "actionsCol": "Actions",
       "minPwm": "Min PWM",
@@ -714,7 +714,7 @@
     },
     "schedule": {
       "title": "Fan Schedule",
-      "description": "Time-based fan curves â€” different cooling profiles for different times of day",
+      "description": "Time-based fan curves — different cooling profiles for different times of day",
       "noEntries": "No schedule entries yet",
       "noEntriesHint": "Add a schedule entry to use different fan curves at different times",
       "addEntry": "Add Entry",
@@ -931,7 +931,7 @@
     "noChartData": "No chart data available yet",
     "noChartDataHint": "Data will appear after the first hour of monitoring",
     "costSettings": "Cost Settings",
-    "costPerKwh": "Cost per kWh (â‚¬)",
+    "costPerKwh": "Cost per kWh (€)",
     "current": "Current"
   },
   "powerWidget": {
