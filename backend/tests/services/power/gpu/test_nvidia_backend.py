@@ -19,6 +19,14 @@ def _mock_run(stdout: str = "", returncode: int = 0):
     return result
 
 
+@pytest.fixture(autouse=True)
+def _stub_nvidia_smi_on_path():
+    # Ensure detection logic proceeds past `shutil.which` even on CI runners
+    # where nvidia-smi is not installed. Tests drive behavior via subprocess.run patches.
+    with patch("app.services.power.gpu.nvidia_backend.shutil.which", return_value="/usr/bin/nvidia-smi"):
+        yield
+
+
 def test_not_detected_when_nvidia_smi_missing():
     with patch("subprocess.run", side_effect=FileNotFoundError):
         backend = NvidiaGpuPowerBackend()
