@@ -28,6 +28,35 @@ export interface CpuSample {
   thread_usages?: number[];  // Per-thread CPU usage percentages
 }
 
+export interface GpuSample {
+  timestamp: string;
+  vendor: string;
+  device_name: string;
+  pci_slot: string | null;
+  usage_percent: number | null;
+  engine_gfx_percent: number | null;
+  engine_compute_percent: number | null;
+  engine_decode_percent: number | null;
+  engine_encode_percent: number | null;
+  vram_used_bytes: number | null;
+  vram_total_bytes: number | null;
+  core_clock_mhz: number | null;
+  memory_clock_mhz: number | null;
+  temperature_edge_celsius: number | null;
+  temperature_junction_celsius: number | null;
+  temperature_memory_celsius: number | null;
+  fan_rpm: number | null;
+  power_watts: number | null;
+}
+
+export interface GpuDeviceInfo {
+  vendor: string;
+  device_name: string;
+  pci_slot: string | null;
+  vram_total_bytes: number | null;
+  driver_version: string | null;
+}
+
 export interface MemorySample {
   timestamp: string;
   used_bytes: number;
@@ -139,6 +168,12 @@ export interface CpuHistoryResponse {
   source: string;
 }
 
+export interface GpuHistoryResponse {
+  samples: GpuSample[];
+  sample_count: number;
+  source: string;
+}
+
 export interface MemoryHistoryResponse {
   samples: MemorySample[];
   sample_count: number;
@@ -232,6 +267,39 @@ export async function getCpuHistory(
   limit: number = 1000
 ): Promise<CpuHistoryResponse> {
   const response = await apiClient.get<CpuHistoryResponse>('/api/monitoring/cpu/history', {
+    params: { time_range: timeRange, source, limit },
+  });
+  return response.data;
+}
+
+// GPU
+export async function getGpuInfo(): Promise<GpuDeviceInfo | null> {
+  try {
+    const response = await apiClient.get<GpuDeviceInfo>('/api/monitoring/gpu/info');
+    return response.data;
+  } catch (err: any) {
+    if (err?.response?.status === 404) return null;
+    throw err;
+  }
+}
+
+export async function getGpuCurrent(): Promise<GpuSample | null> {
+  try {
+    const response = await apiClient.get<GpuSample>('/api/monitoring/gpu/current');
+    return response.data;
+  } catch (err: any) {
+    const status = err?.response?.status;
+    if (status === 404 || status === 503) return null;
+    throw err;
+  }
+}
+
+export async function getGpuHistory(
+  timeRange: TimeRange = '1h',
+  source: DataSource = 'auto',
+  limit: number = 1000
+): Promise<GpuHistoryResponse> {
+  const response = await apiClient.get<GpuHistoryResponse>('/api/monitoring/gpu/history', {
     params: { time_range: timeRange, source, limit },
   });
   return response.data;
