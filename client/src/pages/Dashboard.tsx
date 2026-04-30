@@ -24,6 +24,7 @@ import {
   CpuGpuPanel,
   type Alert,
 } from '../components/dashboard';
+import { detectCpuVendor, detectGpuVendor } from '../components/dashboard/CpuGpuPanel';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
 
 interface SystemStats {
@@ -348,6 +349,7 @@ export default function Dashboard() {
   }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
   const cpuStatBase = useMemo(() => ({
+    vendor: detectCpuVendor(cpuModel),
     usagePercent: systemStats.cpuUsage,
     meta: cpuModel
       ? cpuModel
@@ -455,7 +457,7 @@ export default function Dashboard() {
             {hasGpu && gpuInfo && (
               <CpuGpuPanel
                 cpu={cpuStatBase}
-                gpu={{ info: gpuInfo, sample: gpuSample }}
+                gpu={{ vendor: detectGpuVendor(gpuInfo.vendor), info: gpuInfo, sample: gpuSample }}
               />
             )}
             {quickStats.map((stat) => {
