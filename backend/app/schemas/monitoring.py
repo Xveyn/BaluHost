@@ -24,6 +24,7 @@ class MetricTypeEnum(str, Enum):
     DISK_IO = "disk_io"
     PROCESS = "process"
     UPTIME = "uptime"
+    GPU = "gpu"
 
 
 class DataSource(str, Enum):
@@ -49,6 +50,52 @@ class CpuSampleSchema(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class GpuSampleSchema(BaseModel):
+    """GPU metrics sample (all sensor columns nullable — backends may omit)."""
+    timestamp: datetime
+
+    # Identity
+    vendor: str
+    device_name: str
+    pci_slot: Optional[str] = None
+
+    # Usage
+    usage_percent: Optional[float] = None
+    engine_gfx_percent: Optional[float] = None
+    engine_compute_percent: Optional[float] = None
+    engine_decode_percent: Optional[float] = None
+    engine_encode_percent: Optional[float] = None
+
+    # VRAM
+    vram_used_bytes: Optional[int] = None
+    vram_total_bytes: Optional[int] = None
+
+    # Clocks
+    core_clock_mhz: Optional[float] = None
+    memory_clock_mhz: Optional[float] = None
+
+    # Temperatures
+    temperature_edge_celsius: Optional[float] = None
+    temperature_junction_celsius: Optional[float] = None
+    temperature_memory_celsius: Optional[float] = None
+
+    # Fan / Power
+    fan_rpm: Optional[int] = None
+    power_watts: Optional[float] = None
+
+    class Config:
+        from_attributes = True
+
+
+class GpuDeviceInfo(BaseModel):
+    """Immutable device metadata — exposed via /gpu/info."""
+    vendor: str
+    device_name: str
+    pci_slot: Optional[str] = None
+    vram_total_bytes: Optional[int] = None
+    driver_version: Optional[str] = None
 
 
 class MemorySampleSchema(BaseModel):
@@ -199,6 +246,18 @@ class MetricHistoryResponse(BaseModel):
 class CpuHistoryResponse(BaseModel):
     """CPU history response."""
     samples: List[CpuSampleSchema]
+    sample_count: int
+    source: str
+
+
+class CurrentGpuResponse(GpuSampleSchema):
+    """Current GPU sample — same shape as GpuSampleSchema."""
+    pass
+
+
+class GpuHistoryResponse(BaseModel):
+    """GPU history response."""
+    samples: List[GpuSampleSchema]
     sample_count: int
     source: str
 

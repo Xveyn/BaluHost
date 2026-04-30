@@ -7,6 +7,34 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.31.0] - 2026-04-30
+
+### Added
+- GPU Monitoring: backend protocol with AMD sysfs and dev mock backends, `GpuMetricCollector` with orchestrator hookup, `GpuSample` model and migration
+- GPU Monitoring: NVIDIA backend via `nvidia-smi`, prefer real GPU over mock when available
+- GPU Monitoring: API routes (`/api/monitoring/gpu/{info,current,history}`), frontend API client, `useGpuPresence` hook
+- Dashboard: GPU quick-stat card with presence gating, combined CPU+GPU dashboard panel with split vendor-colored glow, temperature display, GPU usage chart, and chevron-toggled expand
+- System Monitor: `GpuTab` with presence-gated registration, click-to-expand details
+- GPU Power Management: Pydantic schemas, database models and migration, backend protocol with dev mock, AMD sysfs backend, NVIDIA `nvidia-smi` backend, DRM display connector detector
+- GPU Power Management: plugin event hook registry, JSON config persistence, three-state machine manager, FastAPI lifespan wiring, capability-validated API routes, admin status dashboard registration, typed frontend API client, admin UI card on Power Management page
+- Notifications: lifecycle category — startup, shutdown, suspend, and resume push notifications with cooldowns and downtime context
+- Notifications: `SystemLifecycleEvent` model, migration, sync+async helpers (`format_duration_human`, `german_trigger_label`), routing config, "Alle löschen" archive action, "clear all" dismiss button
+- Monitoring: `NvidiaSmiBackend` for monitoring stack
+- UI: themed thin scrollbar for sidebar navigation
+- Docs: GPU monitoring design spec and implementation plan, GPU power management design and implementation plans, lifecycle push notifications spec and plan, service-layer structural code-quality audit, TUI feature audit, refreshed README LOC stats
+
+### Fixed
+- Notifications: include `lifecycle` in `NotificationCategoryEnum`
+- Dashboard: redirect plugin panel placeholder to `/plugins`, apply hover glow via inline style
+- i18n: repair UTF-8 mojibake in `system.json` (de/en)
+- CI: patch `shutil.which` in NVIDIA backend tests so detection logic proceeds on runners without `nvidia-smi`
+
+### Changed
+- GPU Power: card styling matches existing app conventions
+- Dashboard: `CpuGpuPanel` aligned with sibling card design and hover effect
+
+---
+
 ## [1.30.1] - 2026-04-15
 
 ### Fixed

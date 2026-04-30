@@ -76,6 +76,30 @@
 .scrollbar-none::-webkit-scrollbar { display: none; }
 .scrollbar-none { -ms-overflow-style: none; scrollbar-width: none; }
 
+/* Themed thin scrollbar — matches dark/glassmorphic design (sky/slate palette) */
+.scrollbar-thin::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+.scrollbar-thin::-webkit-scrollbar-track {
+  background: transparent;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.18); /* slate-400 / 18% */
+  border-radius: 9999px;
+  transition: background-color 0.2s ease;
+}
+.scrollbar-thin::-webkit-scrollbar-thumb:hover {
+  background: rgba(56, 189, 248, 0.45); /* sky-400 / 45% */
+}
+.scrollbar-thin::-webkit-scrollbar-corner {
+  background: transparent;
+}
+.scrollbar-thin {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.25) transparent;
+}
+
 /* Prevent flex/grid children from overflowing on mobile */
 @media (max-width: 639px) {
   .card { min-width: 0; }

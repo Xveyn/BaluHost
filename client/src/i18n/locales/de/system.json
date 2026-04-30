@@ -12,6 +12,7 @@
     },
     "tabs": {
       "cpu": "CPU",
+      "gpu": "GPU",
       "memory": "Arbeitsspeicher",
       "network": "Netzwerk",
       "diskIo": "Disk I/O",
@@ -22,6 +23,28 @@
       "activity": "Aktivität",
       "backendLogs": "Backend-Logs",
       "uptime": "Betriebszeit"
+    },
+    "gpu": {
+      "usage": "Auslastung",
+      "vram": "VRAM",
+      "coreClock": "Kern-Takt",
+      "memoryClock": "Speicher-Takt",
+      "power": "Leistung",
+      "fanRpm": "Lüfter",
+      "tempEdge": "Edge-Temp.",
+      "tempJunction": "Junction-Temp.",
+      "tempMemory": "Speicher-Temp.",
+      "engines": "Engine-Aktivität",
+      "overview": "Übersicht",
+      "perEngine": "Pro Engine",
+      "overviewHint": "Engine-Aktivität über den gewählten Zeitraum.",
+      "samplesLoaded": "Geladene Samples",
+      "engineGfx": "Grafik",
+      "engineCompute": "Compute",
+      "engineDecode": "Decode",
+      "engineEncode": "Encode",
+      "usageChart": "GPU-Auslastung",
+      "gpuUsage": "GPU-Auslastung"
     },
     "uptime": {
       "serverUptime": "Server-Betriebszeit",
@@ -536,6 +559,59 @@
     "errors": {
       "loadingTitle": "Fehler beim Laden",
       "retryButton": "Erneut versuchen"
+    },
+    "gpu": {
+      "title": "GPU-Powermanagement",
+      "noGpu": "Keine dedizierte GPU erkannt.",
+      "states": {
+        "active": "Aktiv",
+        "standby": "Standby",
+        "deep_idle": "Tiefschlaf"
+      },
+      "stats": {
+        "displays": "Verbundene Displays",
+        "usage": "Auslastung",
+        "demands": "Aktive Anforderungen",
+        "permission": "Schreibzugriff"
+      },
+      "permission": {
+        "ok": "OK",
+        "missing": "Fehlt"
+      },
+      "enableLabel": "GPU-Powermanagement aktivieren",
+      "thresholds": {
+        "title": "Schwellwerte",
+        "idleWindow": "Idle-Fenster",
+        "deepIdleExtra": "Wartezeit bis Tiefschlaf",
+        "deepIdleGrace": "Plugin-Unload-Grace",
+        "monitorInterval": "Polling-Intervall",
+        "usageThreshold": "Auslastungs-Schwelle"
+      },
+      "hardware": {
+        "title": "Hardware-Overrides",
+        "noVendor": "Keine GPU erkannt — Hardware-Overrides nicht verfügbar.",
+        "amdHeading": "AMD pro Zustand",
+        "nvidiaHeading": "NVIDIA pro Zustand",
+        "unset": "(nicht gesetzt)",
+        "minMhz": "min MHz",
+        "maxMhz": "max MHz",
+        "powerW": "Power W",
+        "columns": {
+          "state": "Zustand",
+          "performance": "Leistung",
+          "profile": "Profilmodus"
+        }
+      },
+      "buttons": {
+        "save": "Speichern",
+        "reset": "Zurücksetzen",
+        "saving": "Speichere…"
+      },
+      "messages": {
+        "saved": "GPU-Konfiguration gespeichert",
+        "saveFailed": "Speichern fehlgeschlagen",
+        "loadFailed": "GPU-Powermanagement konnte nicht geladen werden"
+      }
     }
   },
   "fanControl": {

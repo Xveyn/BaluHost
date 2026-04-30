@@ -54,19 +54,18 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🔴 High | Frontend | Drag & Drop für Upload | ✅ Done | Completed |
 | 🔴 High | Frontend | Mobile-Optimierung (Responsive Design verbessern) | ⏳ Pending | Responsive |
 | 🟡 Medium | Backend | Scheduled Health Checks Background Jobs erweitern | ✅ Done | Monitoring |
-| 🟡 Medium | Backend | Email-Benachrichtigungen bei kritischen Ereignissen | ⏳ Pending | Notifications |
-| 🟡 Medium | Backend | In-App Notification System (WebSocket/SSE) | 🟡 Partial | notification_scheduler.py implemented for mobile device expiration warnings |
+| 🟡 Medium | Backend | In-App Notification System (WebSocket/SSE) | ✅ Done | services/notifications/{events,scheduler,service,firebase}.py + routes + schemas + DB-Modell |
 | 🟡 Medium | Backend | VPN-Integration (WireGuard/OpenVPN) für Remote Access | ✅ Done | WireGuard implemented |
 | 🟡 Medium | Backend | Mobile Apps (iOS + Android) | ✅ Done | Android: Full app (175+ Kotlin files), iOS: Complete implementation guide (1059 lines) |
-| 🟡 Medium | Backend | Netzlaufwerk-Management Backend (SMB/CIFS, NFS Shares) | ⏳ Pending | Network Shares |
+| 🟡 Medium | Backend | Netzlaufwerk-Management Backend (SMB/CIFS, NFS Shares) | 🟡 Partial | SMB/CIFS done (api/routes/samba.py + schemas/samba.py + deploy/samba/), NFS pending |
 | 🟡 Medium | Backend | API-Rate-Limiting implementieren | ✅ Done | slowapi integrated with per-endpoint limits (auth, files, shares) |
 | 🟡 Medium | Backend | Backup von Audit Logs | ⏳ Pending | Data Protection |
 | 🟡 Medium | Backend | SMART-Warnungen automatisiert verarbeiten | ⏳ Pending | Disk Health |
 | 🟡 Medium | Backend | Disk-Scrubbing initiieren/überwachen | ✅ Implemented (trigger via RAID options) | Data Integrity |
 | 🟡 Medium | Backend | Datei-Versionierung Backend (Snapshots, Rollback) | ✅ Done | VCL implemented (Phases 1-7) |
 | 🟡 Medium | Frontend | Dark Mode implementieren | ✅ Done | 6 Themes implemented (light, dark, ocean, forest, sunset, midnight) |
-| 🟡 Medium | Frontend | Notifications-Seite mit Notification Center & Badge | ⏳ Pending | Notifications UI |
-| 🟡 Medium | Frontend | NetworkShares-Seite: SMB/CIFS/NFS Shares verwalten | ⏳ Pending | Network Shares UI |
+| 🟡 Medium | Frontend | Notifications-Seite mit Notification Center & Badge | ✅ Done | NotificationCenter.tsx + NotificationsArchivePage.tsx + NotificationPreferencesPage.tsx |
+| 🟡 Medium | Frontend | NetworkShares-Seite: SMB/CIFS/NFS Shares verwalten | 🟡 Partial | SambaManagementCard.tsx + api/samba.ts vorhanden, NFS UI fehlt |
 | 🟡 Medium | Frontend | Erweiterte Suchfunktion (Volltext, Filter) | ⏳ Pending | Search |
 | 🟡 Medium | Frontend | Tag-System für Dateien (Tags hinzufügen, filtern) | ⏳ Pending | Organization |
 | 🟡 Medium | Frontend | Sortierung und Filteroptionen | ✅ Done | Logging-Seite |
@@ -85,10 +84,10 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🟢 Low | Frontend | Media-Seite: Musik/Video-Bibliothek mit Player | ⏳ Pending | Media Library |
 | 🟢 Low | Frontend | Mobile App (React Native/Flutter) für iOS/Android | ⏳ Pending | Mobile Platform |
 | 🟢 Low | Frontend | Mobile App (React Native) oder Progressive Web App | ⏳ Pending | Mobile |
-| � Medium | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ⏳ Pending | Remote Access UI (Backend ready, frontend pending) |
+| 🟡 Medium | Frontend | VPN-Konfiguration UI (WireGuard/OpenVPN Setup) | ✅ Done | pages/VpnPage.tsx (Route /vpn) + RemoteServersPage.tsx mit VPN-Tab |
 | 🟢 Low | Frontend | Datei-Versionierung UI (History, Rollback, Diff) | 🟡 Partial | Version History Modal done, FileManager integration pending |
 | 🟢 Low | Frontend | Keyboard-Shortcuts (Vim-Mode im FileManager) | ⏳ Pending | Power User |
-| 🟢 Low | Frontend | Mehrsprachigkeit (i18n - EN/DE) | ⏳ Pending | Localization |
+| 🟢 Low | Frontend | Mehrsprachigkeit (i18n - EN/DE) | ✅ Done | i18next mit locales/en + locales/de (setup, settings, system, remoteServers, ...) |
 | 🟢 Low | Frontend | Accessibility (ARIA, Screen-Reader) | ⏳ Pending | A11y |
 | 🟢 Low | Frontend | Offline-Modus (Service Worker) | ⏳ Pending | PWA |
 | 🟢 Low | Frontend | PWA-Support (installierbar) | ⏳ Pending | Progressive Web App |
@@ -109,8 +108,8 @@ BaluHost ist **LIVE IN PRODUCTION**:
 | 🧪 Test | Backend Testing | Unit Tests für alle Services erweitern | ✅ Done | Excellent test coverage across all services |
 | 🧪 Test | Backend Testing | Load Testing (Performance unter Last) | ⏳ Pending | Performance |
 | 🧪 Test | Backend Testing | Security Testing (Penetration Tests) | ⏳ Pending | Security |
-| 🧪 Test | Frontend Testing | Unit Tests mit Vitest | ⏳ Pending | Component Testing |
-| 🧪 Test | Frontend Testing | E2E-Tests mit Playwright/Cypress | ⏳ Pending | E2E Testing |
+| 🧪 Test | Frontend Testing | Unit Tests mit Vitest | 🟡 Partial | Vitest konfiguriert (__tests__/setup.ts), Coverage ausbaufähig |
+| 🧪 Test | Frontend Testing | E2E-Tests mit Playwright/Cypress | ✅ Done | tests/e2e/*.spec.ts (login, dashboard, file-manager, schedulers, auth-guards, ...) |
 | 🧪 Test | Frontend Testing | Visual Regression Tests | ⏳ Pending | Visual Testing |
 | 🧪 Test | Frontend Testing | Accessibility Testing | ⏳ Pending | A11y Testing |
 | 🔧 Tech Debt | Backend Refactoring | Express-Backend komplett entfernen (legacy) | ⏳ Pending | Cleanup |
@@ -190,7 +189,7 @@ Note: I scanned the repository for remaining in-code `TODO` markers. Several imp
 
 Below are the most relevant, actionable TODOs found in the repository (excluded virtualenv / third-party packages). These are recommended to be tracked in the global roadmap or converted into GitHub Issues.
 
-- **High**: `backend/app/services/sync_scheduler.py` — Implement scheduled sync trigger and `_execute_sync` (critical for scheduled syncs / background sync worker).
+- ~~**High**: `backend/app/services/sync_scheduler.py` — Implement scheduled sync trigger and `_execute_sync`~~ — ✅ Refactored into `backend/app/services/sync/{scheduler,background,progressive}.py`
 - **Medium**: `backend/app/services/backup.py` — Add config files to backup and implement restore flow for full-system restores.
 - **Medium**: `backend/app/api/routes/files.py` — Implement accurate per-file/per-array usage tracking (replace placeholder `used_bytes = 0`).
 - **Low**: `client/src/pages/PublicSharePage.tsx` — Implement preview functionality for shared files.

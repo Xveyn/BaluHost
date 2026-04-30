@@ -726,6 +726,36 @@ class NotificationService:
 
         return notification
 
+    def dismiss_all(
+        self,
+        db: Session,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> int:
+        """Dismiss all non-dismissed notifications for a user.
+
+        Args:
+            db: Database session
+            user_id: User ID
+            is_admin: Whether the user is an admin (includes system notifications)
+
+        Returns:
+            Number of notifications dismissed
+        """
+        query = db.query(Notification).filter(
+            self._user_filter(user_id, is_admin),
+            Notification.is_dismissed == False,
+        )
+
+        count = query.update({
+            Notification.is_dismissed: True,
+            Notification.is_read: True,
+        })
+        db.commit()
+
+        logger.info(f"Dismissed {count} notifications for user {user_id}")
+        return count
+
     def snooze(
         self,
         db: Session,

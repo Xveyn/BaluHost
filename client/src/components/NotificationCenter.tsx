@@ -8,7 +8,7 @@
 import { useState, useRef, useEffect } from 'react';
 import { useTranslation } from 'react-i18next';
 import { useNavigate } from 'react-router-dom';
-import { Bell, CheckCheck, X, Settings, ChevronRight, ChevronDown, Clock } from 'lucide-react';
+import { Bell, CheckCheck, X, Settings, ChevronRight, ChevronDown, Clock, Trash2 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getTypeStyle,
@@ -40,6 +40,7 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
     markAsRead,
     markAllAsRead,
     dismiss,
+    dismissAll,
     refresh,
   } = useNotifications();
 
@@ -89,6 +90,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
       toast.success(t('markedAllRead'));
     } catch {
       toast.error(t('markError'));
+    }
+  };
+
+  // Handle clear all (dismiss all)
+  const handleClearAll = async () => {
+    try {
+      await dismissAll();
+      toast.success(t('clearedAll'));
+    } catch {
+      toast.error(t('clearError'));
     }
   };
 
@@ -148,6 +159,16 @@ export const NotificationCenter: React.FC<NotificationCenterProps> = ({ classNam
                 >
                   <CheckCheck className="h-3.5 w-3.5" />
                   {t('allRead')}
+                </button>
+              )}
+              {notifications.length > 0 && (
+                <button
+                  onClick={handleClearAll}
+                  className="flex items-center gap-1 rounded-lg px-2 py-1 text-xs text-slate-400 transition hover:bg-rose-500/20 hover:text-rose-400"
+                  title={t('clearAll')}
+                >
+                  <Trash2 className="h-3.5 w-3.5" />
+                  {t('clearAll')}
                 </button>
               )}
               <button

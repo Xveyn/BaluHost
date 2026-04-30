@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
+import { useGpuPresence } from '../hooks/useGpuPresence';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
 import { getSystemMode } from '../api/system';
+import { getGpuCurrent, type GpuSample } from '../api/monitoring';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
@@ -19,8 +21,10 @@ import {
   AlertBanner,
   LiveActivities,
   PluginDashboardPanel,
+  CpuGpuPanel,
   type Alert,
 } from '../components/dashboard';
+import { detectCpuVendor, detectGpuVendor } from '../components/dashboard/CpuGpuPanel';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
 
 interface SystemStats {
@@ -85,6 +89,25 @@ export default function Dashboard() {
   const [raidLoading, setRaidLoading] = useState(!cachedRaid);
   const [smartMode, setSmartMode] = useState<string | null>(null);
   const [smartModeLoading, setSmartModeLoading] = useState(false);
+
+  // GPU presence + polling
+  const { present: hasGpu, info: gpuInfo } = useGpuPresence();
+  const [gpuSample, setGpuSample] = useState<GpuSample | null>(null);
+  useEffect(() => {
+    if (!hasGpu) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const s = await getGpuCurrent();
+        if (!cancelled) setGpuSample(s);
+      } catch {
+        /* keep last value on transient failure */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [hasGpu]);
 
   // Hooks for alert generation
   const { allSchedulers } = useNextMaintenance();
@@ -325,28 +348,40 @@ export default function Dashboard() {
     return result;
   }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
+  const cpuTempC = systemInfo?.cpu?.temperature_celsius ?? null;
+  const cpuStatBase = useMemo(() => ({
+    vendor: detectCpuVendor(cpuModel),
+    usagePercent: systemStats.cpuUsage,
+    meta: cpuModel
+      ? cpuModel
+      : (cpuFrequency
+        ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
+        : t('stats.coresActive', { count: systemStats.cpuCores || 0 }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')),
+    submeta: cpuModel && cpuFrequency
+      ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
+      : undefined,
+    delta: formatDelta(cpuDelta),
+    tempC: cpuTempC,
+  }), [systemStats.cpuUsage, systemStats.cpuCores, cpuModel, cpuFrequency, cpuTemperature, cpuTempC, cpuDelta, t]);
+
   const quickStats = [
-    {
+    // When a dedicated GPU is detected, the CPU card is replaced by the
+    // combined CpuGpuPanel rendered alongside this list. Otherwise show CPU here.
+    ...(hasGpu ? [] : [{
       id: 'cpu',
       title: t('stats.cpu'),
-      value: `${formatNumber(systemStats.cpuUsage, 1)}%`,
-      meta: cpuModel
-        ? cpuModel
-        : (cpuFrequency
-          ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
-          : t('stats.coresActive', { count: systemStats.cpuCores || 0 }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')),
-      submeta: cpuModel && cpuFrequency
-        ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
-        : undefined,
-      delta: formatDelta(cpuDelta),
+      value: `${formatNumber(cpuStatBase.usagePercent, 1)}%`,
+      meta: cpuStatBase.meta,
+      submeta: cpuStatBase.submeta,
+      delta: cpuStatBase.delta,
       accent: 'from-violet-500 to-fuchsia-500',
-      progress: systemStats.cpuUsage,
+      progress: cpuStatBase.usagePercent,
       icon: (
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H6.75A1.5 1.5 0 005.25 6v12a1.5 1.5 0 001.5 1.5z" />
         </svg>
       )
-    },
+    }]),
     {
       id: 'memory',
       title: t('stats.memory'),
@@ -421,6 +456,12 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {hasGpu && gpuInfo && (
+              <CpuGpuPanel
+                cpu={cpuStatBase}
+                gpu={{ vendor: detectGpuVendor(gpuInfo.vendor), info: gpuInfo, sample: gpuSample }}
+              />
+            )}
             {quickStats.map((stat) => {
               const deltaToneClass = stat.delta.tone === 'decrease'
                 ? 'text-emerald-400'

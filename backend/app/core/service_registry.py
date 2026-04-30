@@ -23,6 +23,7 @@ PRIMARY_ONLY_SERVICES = [
     "smart_device_poller",
     "monitoring_orchestrator",
     "power_manager",
+    "gpu_power_manager",
     "fan_control",
     "sleep_mode",
     "network_discovery",
@@ -166,6 +167,22 @@ def register_all_services(
         stop_fn=power_manager.stop_power_manager,
         start_fn=power_manager.start_power_manager,
         config_enabled_fn=lambda: settings.power_management_enabled,
+    )
+
+    # GPU Power Manager
+    from app.services.power.gpu.manager import get_status as gpu_power_get_status
+    from app.services.power.gpu.manager import (
+        start_gpu_power_manager,
+        stop_gpu_power_manager,
+    )
+
+    register_service(
+        name="gpu_power_manager",
+        display_name="GPU Power Management",
+        get_status_fn=gpu_power_get_status,
+        start_fn=start_gpu_power_manager,
+        stop_fn=stop_gpu_power_manager,
+        config_enabled_fn=lambda: settings.gpu_power_management_enabled,
     )
 
     # Fan Control

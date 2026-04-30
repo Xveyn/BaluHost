@@ -1,0 +1,356 @@
+"""Integration tests for lifecycle notifications."""
+import asyncio
+from datetime import datetime, timedelta, timezone
+from unittest.mock import AsyncMock, patch
+
+import pytest
+
+from app.services.notifications.events import (
+    EventType,
+    emit_system_resume_sync,
+    emit_system_shutdown_sync,
+    emit_system_startup_sync,
+    emit_system_suspend_sync,
+    get_event_emitter,
+)
+
+
+@pytest.fixture(autouse=True)
+def reset_cooldowns():
+    """Clear cooldown cache between tests."""
+    from app.services.notifications import events as events_mod
+    events_mod._cooldown_cache.clear()
+    yield
+    events_mod._cooldown_cache.clear()
+
+
+@pytest.fixture(autouse=True)
+def ensure_lifecycle_table():
+    """Ensure system_lifecycle_events table exists in the production engine.
+
+    Tests that exercise SessionLocal() directly (sleep.py and lifespan.py
+    write through it) need the table to exist on the production engine,
+    not the in-memory test DB. SKIP_APP_INIT=1 disables init_db, so we
+    create the schema manually here and clean up after.
+    """
+    from app.core.database import engine
+    from app.models.base import Base
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    Base.metadata.create_all(bind=engine, tables=[SystemLifecycleEvent.__table__])
+    # Clear any rows from prior tests
+    from app.core.database import SessionLocal
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+    yield
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+
+
+def test_emit_system_suspend_sync_calls_emitter():
+    """emit_system_suspend_sync calls EventEmitter with SYSTEM_SUSPEND event."""
+    emitter = get_event_emitter()
+    with patch.object(emitter, "emit_for_admins_sync") as mock_emit:
+        emit_system_suspend_sync(trigger="manual")
+        mock_emit.assert_called_once()
+        args, kwargs = mock_emit.call_args
+        assert args[0] == EventType.SYSTEM_SUSPEND
+        assert kwargs.get("trigger_label") == "manuell"
+
+
+def test_emit_system_resume_sync_includes_duration_and_trigger():
+    """emit_system_resume_sync passes duration_human and trigger_label."""
+    emitter = get_event_emitter()
+    with patch.object(emitter, "emit_for_admins_sync") as mock_emit:
+        emit_system_resume_sync(trigger="schedule", duration_seconds=4 * 3600 + 32 * 60)
+        args, kwargs = mock_emit.call_args
+        assert args[0] == EventType.SYSTEM_RESUME
+        assert kwargs.get("duration_human") == "4h 32min"
+        assert kwargs.get("trigger_label") == "geplant"
+
+
+def test_emit_system_shutdown_sync_with_api_trigger():
+    emitter = get_event_emitter()
+    with patch.object(emitter, "emit_for_admins_sync") as mock_emit:
+        emit_system_shutdown_sync(trigger="api")
+        args, kwargs = mock_emit.call_args
+        assert args[0] == EventType.SYSTEM_SHUTDOWN
+        assert kwargs.get("trigger_label") == "API"
+
+
+def test_emit_system_startup_sync_with_known_downtime():
+    emitter = get_event_emitter()
+    with patch.object(emitter, "emit_for_admins_sync") as mock_emit:
+        emit_system_startup_sync(downtime_seconds=125)
+        args, kwargs = mock_emit.call_args
+        assert args[0] == EventType.SYSTEM_STARTUP
+        assert kwargs.get("downtime_human") == "2min 5s"
+
+
+def test_emit_system_startup_sync_with_unknown_downtime():
+    emitter = get_event_emitter()
+    with patch.object(emitter, "emit_for_admins_sync") as mock_emit:
+        emit_system_startup_sync(downtime_seconds=None)
+        args, kwargs = mock_emit.call_args
+        assert kwargs.get("downtime_human") == "unbekannt"
+
+
+# ---------------------------------------------------------------------------
+# Sleep.py: suspend + resume hooks
+# ---------------------------------------------------------------------------
+
+
+def test_suspend_persists_event_and_emits_before_kernel_suspend():
+    """Order check: row inserted in system_lifecycle_events AND emit_system_suspend
+    are both called BEFORE _backend.suspend_system()."""
+    from app.schemas.sleep import SleepTrigger
+    from app.services.power.sleep import SleepManagerService
+    from app.services.power.sleep_backend_dev import DevSleepBackend
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    backend = DevSleepBackend()
+    svc = SleepManagerService(backend)
+
+    call_order: list[str] = []
+
+    original_suspend = backend.suspend_system
+
+    async def tracked_suspend(*args, **kwargs):
+        call_order.append("kernel_suspend")
+        return await original_suspend(*args, **kwargs)
+
+    backend.suspend_system = tracked_suspend  # type: ignore[method-assign]
+
+    with patch(
+        "app.services.notifications.events.emit_system_suspend",
+        new=AsyncMock(side_effect=lambda *a, **kw: call_order.append("emit_suspend")),
+    ), patch(
+        "app.services.notifications.events.emit_system_resume",
+        new=AsyncMock(),
+    ):
+        asyncio.run(svc.enter_true_suspend("test", SleepTrigger.MANUAL))
+
+    # emit must come BEFORE kernel_suspend
+    assert call_order.index("emit_suspend") < call_order.index("kernel_suspend"), call_order
+
+    # DB row must exist for the suspend event
+    with SessionLocal() as db:
+        suspend_rows = db.query(SystemLifecycleEvent).filter_by(event_type="suspend").all()
+        assert len(suspend_rows) >= 1
+        assert suspend_rows[-1].trigger == "manual"
+
+
+def test_suspend_emit_respects_3s_timeout():
+    """If emit_system_suspend hangs > 3s, suspend continues anyway."""
+    from app.schemas.sleep import SleepTrigger
+    from app.services.power.sleep import SleepManagerService
+    from app.services.power.sleep_backend_dev import DevSleepBackend
+
+    backend = DevSleepBackend()
+    svc = SleepManagerService(backend)
+
+    async def slow_emit(*args, **kwargs):
+        await asyncio.sleep(10)  # would hang for 10s
+
+    with patch(
+        "app.services.notifications.events.emit_system_suspend",
+        new=AsyncMock(side_effect=slow_emit),
+    ), patch(
+        "app.services.notifications.events.emit_system_resume",
+        new=AsyncMock(),
+    ):
+        # 3s inner timeout + 2s DevBackend suspend simulation + overhead — give 10s outer.
+        # The point: the slow emit (10s) must NOT stall the suspend; inner 3s timeout
+        # must fire so the whole flow completes well before 10s.
+        async def run():
+            return await asyncio.wait_for(
+                svc.enter_true_suspend("test", SleepTrigger.MANUAL),
+                timeout=10.0,
+            )
+
+        result = asyncio.run(run())
+        assert result is True
+
+
+# ---------------------------------------------------------------------------
+# Lifespan: shutdown hook
+# ---------------------------------------------------------------------------
+
+
+def test_shutdown_persists_event_before_emit(monkeypatch):
+    """_emit_lifecycle_shutdown writes system_lifecycle_events row BEFORE emit."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    row_count_at_emit: list[int] = []
+
+    async def tracked_emit(*args, **kwargs):
+        with SessionLocal() as db:
+            row_count_at_emit.append(
+                db.query(SystemLifecycleEvent).filter_by(event_type="shutdown").count()
+            )
+
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(side_effect=tracked_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+
+    assert row_count_at_emit and row_count_at_emit[0] == 1, (
+        f"Shutdown row must exist when emit is called; got count={row_count_at_emit}"
+    )
+
+
+def test_shutdown_emit_respects_3s_timeout(monkeypatch):
+    """If emit_system_shutdown hangs > 3s, _emit_lifecycle_shutdown returns anyway."""
+    import time as _time
+    from app.core import lifespan
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    async def slow_emit(*args, **kwargs):
+        await asyncio.sleep(10)
+
+    start = _time.monotonic()
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(side_effect=slow_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+    elapsed = _time.monotonic() - start
+    assert elapsed < 5.0, f"Lifecycle shutdown took {elapsed}s — 3s timeout did not fire"
+
+
+def test_shutdown_secondary_worker_does_not_emit(monkeypatch):
+    """Non-primary worker must not emit lifecycle.shutdown."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", False)
+
+    with patch(
+        "app.services.notifications.events.emit_system_shutdown",
+        new=AsyncMock(),
+    ) as mock_emit:
+        asyncio.run(lifespan._emit_lifecycle_shutdown())
+        mock_emit.assert_not_called()
+
+    with SessionLocal() as db:
+        assert db.query(SystemLifecycleEvent).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Lifespan: startup hook
+# ---------------------------------------------------------------------------
+
+
+def test_startup_calculates_downtime_from_last_shutdown(monkeypatch):
+    """Given a 'shutdown' row 5min in the past, startup emit gets downtime ~300s."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    # Seed a shutdown 5min ago
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+        old = SystemLifecycleEvent(
+            event_type="shutdown",
+            trigger="signal",
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
+        )
+        db.add(old)
+        db.commit()
+
+    captured: dict = {}
+
+    async def capture_emit(downtime_seconds=None, **kwargs):
+        captured["downtime_seconds"] = downtime_seconds
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(side_effect=capture_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_startup())
+
+    assert captured["downtime_seconds"] is not None
+    assert 290 < captured["downtime_seconds"] < 310, captured
+
+
+def test_startup_handles_missing_last_shutdown(monkeypatch):
+    """Empty DB -> downtime_seconds=None, no crash."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+
+    captured: dict = {}
+
+    async def capture_emit(downtime_seconds=None, **kwargs):
+        captured["downtime_seconds"] = downtime_seconds
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(side_effect=capture_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_startup())
+
+    assert captured.get("downtime_seconds") is None
+
+
+def test_startup_secondary_worker_does_not_emit(monkeypatch):
+    """Non-primary worker must not emit lifecycle.startup."""
+    from app.core import lifespan
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", False)
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(),
+    ) as mock_emit:
+        asyncio.run(lifespan._emit_lifecycle_startup())
+        mock_emit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Cooldown configuration
+# ---------------------------------------------------------------------------
+
+
+def test_cooldown_60s_for_suspend():
+    """Two suspend cooldown checks within 60s — second is in cooldown."""
+    from app.services.notifications import events as events_mod
+    events_mod._cooldown_cache.clear()
+
+    # First call should not be in cooldown
+    assert events_mod._check_cooldown("lifecycle.suspend", "suspend") is False
+    events_mod._set_cooldown("lifecycle.suspend", "suspend")
+    # Second call within 60s should be in cooldown
+    assert events_mod._check_cooldown("lifecycle.suspend", "suspend") is True
+
+
+def test_no_cooldown_for_shutdown_startup():
+    """Shutdown / startup have NO cooldown — legitimate reboot loops always notify."""
+    from app.services.notifications import events as events_mod
+    events_mod._cooldown_cache.clear()
+
+    # Even after _set_cooldown, _check_cooldown returns False because there's
+    # no entry in _COOLDOWN_SECONDS for these types.
+    events_mod._set_cooldown("lifecycle.shutdown")
+    events_mod._set_cooldown("lifecycle.startup")
+    assert events_mod._check_cooldown("lifecycle.shutdown") is False
+    assert events_mod._check_cooldown("lifecycle.startup") is False

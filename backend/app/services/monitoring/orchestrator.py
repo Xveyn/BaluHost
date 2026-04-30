@@ -20,6 +20,7 @@ from app.schemas.monitoring import (
     NetworkSampleSchema,
     DiskIoSampleSchema,
     UptimeSampleSchema,
+    GpuSampleSchema,
 )
 from app.services.monitoring.cpu_collector import CpuMetricCollector
 from app.services.monitoring.memory_collector import MemoryMetricCollector
@@ -27,6 +28,7 @@ from app.services.monitoring.network_collector import NetworkMetricCollector
 from app.services.monitoring.disk_io_collector import DiskIoMetricCollector
 from app.services.monitoring.process_tracker import ProcessTracker
 from app.services.monitoring.uptime_collector import UptimeCollector
+from app.services.monitoring.gpu_collector import GpuMetricCollector
 from app.services.monitoring.retention_manager import RetentionManager
 
 logger = logging.getLogger(__name__)
@@ -88,6 +90,10 @@ class MonitoringOrchestrator:
         )
         self.process_tracker = ProcessTracker(buffer_size=60)
         self.uptime_collector = UptimeCollector(
+            buffer_size=buffer_size,
+            persist_interval=persist_interval,
+        )
+        self.gpu_collector = GpuMetricCollector(
             buffer_size=buffer_size,
             persist_interval=persist_interval,
         )
@@ -206,6 +212,8 @@ class MonitoringOrchestrator:
             self.memory_collector.process_sample(db)
             self.network_collector.process_sample(db)
             self.uptime_collector.process_sample(db)
+            # GPU (no-op when no dedicated GPU detected)
+            self.gpu_collector.process_sample(db)
 
             # Disk I/O collects multiple samples (one per disk)
             disk_samples = self.disk_io_collector.collect_all_samples()
@@ -384,6 +392,31 @@ class MonitoringOrchestrator:
         if db_record:
             return self.cpu_collector.db_to_sample(db_record)
         return None
+
+    def get_gpu_current(self) -> Optional[GpuSampleSchema]:
+        """Get current GPU sample (in-memory only)."""
+        return self.gpu_collector.get_current()
+
+    def get_gpu_current_with_db_fallback(self, db: Session) -> Optional[GpuSampleSchema]:
+        """Get current GPU sample (in-memory → DB fallback).
+
+        Returns None if no GPU is detected OR if no samples exist anywhere.
+        Callers distinguish 'no GPU' via gpu_collector.detected.
+        """
+        if not self.gpu_collector.detected:
+            return None
+        sample = self.gpu_collector.get_current()
+        if sample is not None:
+            return sample
+        from app.models.monitoring import GpuSample
+        db_record = db.query(GpuSample).order_by(GpuSample.timestamp.desc()).first()
+        if db_record:
+            return self.gpu_collector.db_to_sample(db_record)
+        return None
+
+    def get_gpu_history(self, limit: Optional[int] = None) -> List:
+        """Get GPU history from memory buffer."""
+        return self.gpu_collector.get_history_memory(limit)
 
     def get_memory_current_with_db_fallback(self, db: Session) -> Optional[MemorySampleSchema]:
         """Get current memory sample (in-memory → SHM → DB fallback)."""

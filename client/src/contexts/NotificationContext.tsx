@@ -10,6 +10,7 @@ import {
   markAsRead as apiMarkAsRead,
   markAllAsRead as apiMarkAllAsRead,
   dismissNotification as apiDismiss,
+  dismissAllNotifications as apiDismissAll,
   type Notification,
 } from '../api/notifications';
 import { useNotificationSocket } from '../hooks/useNotificationSocket';
@@ -24,6 +25,7 @@ interface NotificationContextValue {
   markAsRead: (id: number) => Promise<void>;
   markAllAsRead: () => Promise<void>;
   dismiss: (id: number) => Promise<void>;
+  dismissAll: () => Promise<void>;
   refresh: () => Promise<void>;
 }
 
@@ -126,6 +128,20 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     }
   }, [fetchNotifications]);
 
+  const dismissAll = useCallback(async () => {
+    const previous = notificationsRef.current;
+    setNotifications([]);
+    setUnreadCount(0);
+
+    try {
+      await apiDismissAll();
+    } catch (err) {
+      setNotifications(previous);
+      fetchNotifications();
+      throw err;
+    }
+  }, [fetchNotifications]);
+
   return (
     <NotificationContext.Provider
       value={{
@@ -136,6 +152,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
         markAsRead,
         markAllAsRead,
         dismiss,
+        dismissAll,
         refresh: fetchNotifications,
       }}
     >

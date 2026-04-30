@@ -25,6 +25,7 @@ import { ServiceIntensityList } from '../components/power/ServiceIntensityList';
 import { DemandList } from '../components/power/DemandList';
 import { HistoryTable } from '../components/power/HistoryTable';
 import { DynamicModeSection } from '../components/power/DynamicModeSection';
+import { GpuPowerCard } from '../components/power/GpuPowerCard';
 import { getPresetIcon } from '../components/power/utils';
 import {
   getPowerStatus,
@@ -478,6 +479,9 @@ export default function PowerManagement({ isAdmin }: PowerManagementProps) {
         <h2 className="mb-3 sm:mb-4 text-base sm:text-lg font-medium text-white">{t('system:power.history.title')}</h2>
         <HistoryTable entries={history} t={t} />
       </div>
+
+      {/* GPU Power Management */}
+      <GpuPowerCard isAdmin={isAdmin} />
 
       {/* Auto-Scaling Config (Admin only) */}
       {isAdmin && autoScaling && (

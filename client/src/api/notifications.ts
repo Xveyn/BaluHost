@@ -5,7 +5,7 @@ import { apiClient } from '../lib/api';
 
 // Notification types
 export type NotificationType = 'info' | 'warning' | 'critical';
-export type NotificationCategory = 'raid' | 'smart' | 'backup' | 'scheduler' | 'system' | 'security' | 'sync' | 'vpn';
+export type NotificationCategory = 'raid' | 'smart' | 'backup' | 'scheduler' | 'system' | 'security' | 'sync' | 'vpn' | 'lifecycle';
 
 export interface Notification {
   id: number;
@@ -151,6 +151,14 @@ export async function dismissNotification(notificationId: number): Promise<Notif
 }
 
 /**
+ * Dismiss all notifications for the current user
+ */
+export async function dismissAllNotifications(): Promise<MarkReadResponse> {
+  const response = await apiClient.post<MarkReadResponse>('/api/notifications/dismiss-all');
+  return response.data;
+}
+
+/**
  * Get notification preferences for the current user
  */
 export async function getPreferences(): Promise<NotificationPreferences> {
@@ -221,6 +229,8 @@ export function getCategoryIcon(category: NotificationCategory): string {
       return '🔄';
     case 'vpn':
       return '🔐';
+    case 'lifecycle':
+      return '⏻';
     default:
       return '🔔';
   }
@@ -239,6 +249,7 @@ export function getCategoryName(category: NotificationCategory): string {
     security: 'Security',
     sync: 'Sync',
     vpn: 'VPN',
+    lifecycle: 'Lifecycle',
   };
   return names[category] || category;
 }
@@ -271,6 +282,7 @@ export function getActionLabel(category: NotificationCategory): string {
     security: 'Logs anzeigen',
     sync: 'Sync anzeigen',
     vpn: 'VPN anzeigen',
+    lifecycle: 'System anzeigen',
   };
   return labels[category] || 'Anzeigen';
 }

@@ -23,6 +23,7 @@ _CATEGORY_FIELD_MAP = {
     "security": "receive_security",
     "sync": "receive_sync",
     "vpn": "receive_vpn",
+    "lifecycle": "receive_lifecycle",
 }
 
 
@@ -52,6 +53,7 @@ def get_routing(db: Session, user_id: int) -> NotificationRoutingResponse:
         receive_security=routing.receive_security,
         receive_sync=routing.receive_sync,
         receive_vpn=routing.receive_vpn,
+        receive_lifecycle=routing.receive_lifecycle,
         granted_by=routing.granted_by,
         granted_by_username=granted_by_username,
         granted_at=routing.granted_at,

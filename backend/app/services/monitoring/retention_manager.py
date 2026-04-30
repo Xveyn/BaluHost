@@ -21,6 +21,7 @@ from app.models.monitoring import (
     DiskIoSample,
     ProcessSample,
     UptimeSample,
+    GpuSample,
 )
 from app.models.smart_device import SmartDeviceSample
 
@@ -35,6 +36,7 @@ DEFAULT_RETENTION = {
     MetricType.PROCESS: 72,    # 3 days
     MetricType.POWER: 720,     # 30 days
     MetricType.UPTIME: 720,    # 30 days
+    MetricType.GPU: 168,       # 7 days (matches CPU)
 }
 
 # Mapping of metric types to their database models
@@ -46,6 +48,7 @@ METRIC_MODELS = {
     MetricType.PROCESS: ProcessSample,
     MetricType.POWER: SmartDeviceSample,
     MetricType.UPTIME: UptimeSample,
+    MetricType.GPU: GpuSample,
 }
 
 
@@ -242,6 +245,7 @@ class RetentionManager:
             MetricType.PROCESS: 120,
             MetricType.POWER: 60,
             MetricType.UPTIME: 40,
+            MetricType.GPU: 140,
         }
 
         sizes = {}

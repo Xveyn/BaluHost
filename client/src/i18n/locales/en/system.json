@@ -12,6 +12,7 @@
     },
     "tabs": {
       "cpu": "CPU",
+      "gpu": "GPU",
       "memory": "Memory",
       "network": "Network",
       "diskIo": "Disk I/O",
@@ -22,6 +23,28 @@
       "activity": "Activity",
       "backendLogs": "Backend Logs",
       "uptime": "Uptime"
+    },
+    "gpu": {
+      "usage": "Usage",
+      "vram": "VRAM",
+      "coreClock": "Core Clock",
+      "memoryClock": "Memory Clock",
+      "power": "Power",
+      "fanRpm": "Fan",
+      "tempEdge": "Edge Temp",
+      "tempJunction": "Junction Temp",
+      "tempMemory": "Memory Temp",
+      "engines": "Engine activity",
+      "overview": "Overview",
+      "perEngine": "Per-Engine",
+      "overviewHint": "Stacked engine activity over the selected time range.",
+      "samplesLoaded": "Samples loaded",
+      "engineGfx": "Graphics",
+      "engineCompute": "Compute",
+      "engineDecode": "Decode",
+      "engineEncode": "Encode",
+      "usageChart": "GPU Usage",
+      "gpuUsage": "GPU Usage"
     },
     "uptime": {
       "serverUptime": "Server Uptime",
@@ -541,6 +564,59 @@
     "errors": {
       "loadingTitle": "Loading Error",
       "retryButton": "Try Again"
+    },
+    "gpu": {
+      "title": "GPU Power Management",
+      "noGpu": "No discrete GPU detected.",
+      "states": {
+        "active": "Active",
+        "standby": "Standby",
+        "deep_idle": "Deep idle"
+      },
+      "stats": {
+        "displays": "Displays connected",
+        "usage": "Usage",
+        "demands": "Active demands",
+        "permission": "Write permission"
+      },
+      "permission": {
+        "ok": "ok",
+        "missing": "missing"
+      },
+      "enableLabel": "Enable GPU power management",
+      "thresholds": {
+        "title": "Thresholds",
+        "idleWindow": "Idle window",
+        "deepIdleExtra": "Grace before deep idle",
+        "deepIdleGrace": "Plugin unload grace",
+        "monitorInterval": "Monitor interval",
+        "usageThreshold": "Usage threshold"
+      },
+      "hardware": {
+        "title": "Hardware overrides",
+        "noVendor": "No GPU detected — hardware overrides unavailable.",
+        "amdHeading": "AMD per-state",
+        "nvidiaHeading": "NVIDIA per-state",
+        "unset": "(unset)",
+        "minMhz": "min MHz",
+        "maxMhz": "max MHz",
+        "powerW": "power W",
+        "columns": {
+          "state": "State",
+          "performance": "Performance",
+          "profile": "Profile mode"
+        }
+      },
+      "buttons": {
+        "save": "Save",
+        "reset": "Reset",
+        "saving": "Saving…"
+      },
+      "messages": {
+        "saved": "GPU config saved",
+        "saveFailed": "Save failed",
+        "loadFailed": "GPU power management could not load"
+      }
     }
   },
   "fanControl": {

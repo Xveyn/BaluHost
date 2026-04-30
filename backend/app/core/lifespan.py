@@ -255,6 +255,92 @@ def _log_dev_mode_summary() -> None:
 # Startup / shutdown steps
 # ---------------------------------------------------------------------------
 
+async def _emit_lifecycle_startup() -> None:
+    """Emit the lifecycle.startup notification with downtime context.
+
+    Reads the most recent 'shutdown' row from system_lifecycle_events to
+    compute downtime. Inserts a 'startup' row. No-op on secondary workers.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+
+    try:
+        from app.core.database import SessionLocal
+        from app.models.system_lifecycle import SystemLifecycleEvent
+        from app.services.notifications.events import emit_system_startup
+        from sqlalchemy import desc
+
+        downtime_seconds: float | None = None
+        with SessionLocal() as db:
+            last_shutdown = (
+                db.query(SystemLifecycleEvent)
+                .filter(SystemLifecycleEvent.event_type == "shutdown")
+                .order_by(desc(SystemLifecycleEvent.timestamp))
+                .first()
+            )
+            if last_shutdown and last_shutdown.timestamp:
+                ts = last_shutdown.timestamp
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                downtime_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
+                if downtime_seconds < 0:
+                    downtime_seconds = None
+
+            ev = SystemLifecycleEvent(
+                event_type="startup",
+                trigger=None,
+                details_json=None,
+            )
+            db.add(ev)
+            db.commit()
+
+        try:
+            await emit_system_startup(downtime_seconds=downtime_seconds)
+        except Exception as exc:
+            logger.warning("Lifecycle startup push failed: %s", exc)
+    except Exception as exc:
+        logger.warning("Lifecycle startup step failed (non-fatal): %s", exc)
+
+
+async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
+    """Emit the lifecycle.shutdown notification and persist a 'shutdown' row.
+
+    Run as the very first step of `_shutdown()`. Best-effort: row insert
+    happens before the FCM emit so the next startup can compute downtime
+    even when FCM hangs. Emit is bounded to 3s. No-op on secondary workers.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+
+    try:
+        from app.core.database import SessionLocal
+        from app.models.system_lifecycle import SystemLifecycleEvent
+        from app.services.notifications.events import emit_system_shutdown
+
+        # 1. Persist the shutdown row FIRST.
+        with SessionLocal() as db:
+            ev = SystemLifecycleEvent(
+                event_type="shutdown",
+                trigger=trigger,
+                details_json=None,
+            )
+            db.add(ev)
+            db.commit()
+
+        # 2. Emit the push (best-effort, 3s max).
+        try:
+            await asyncio.wait_for(
+                emit_system_shutdown(trigger=trigger),
+                timeout=3.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Lifecycle shutdown push timed out after 3s — continuing shutdown")
+        except Exception as exc:
+            logger.warning("Lifecycle shutdown push failed: %s — continuing shutdown", exc)
+    except Exception as exc:
+        logger.warning("Lifecycle shutdown step failed (non-fatal): %s", exc)
+
+
 async def _startup(app: FastAPI) -> None:
     """Run all startup initialization steps."""
     global _discovery_service, _websocket_manager, _plugin_manager, IS_PRIMARY_WORKER, _smart_device_manager
@@ -269,6 +355,7 @@ async def _startup(app: FastAPI) -> None:
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
+    from app.services.power.gpu import manager as gpu_power_manager
     from app.services.network_discovery import NetworkDiscoveryService
     from app.services.notifications.firebase import FirebaseService
     from app.services.websocket_manager import init_websocket_manager
@@ -318,6 +405,9 @@ async def _startup(app: FastAPI) -> None:
     IS_PRIMARY_WORKER = _try_become_primary()
     logger.info("Primary worker: %s (PID %d)", IS_PRIMARY_WORKER, os.getpid())
 
+    # Lifecycle notification: emit startup with downtime context
+    await _emit_lifecycle_startup()
+
     # Hardware-controlling background tasks only run on the primary worker.
     if IS_PRIMARY_WORKER:
         logger.info("Monitoring managed by monitoring_worker process")
@@ -329,6 +419,13 @@ async def _startup(app: FastAPI) -> None:
                 logger.info("CPU power management started")
             except Exception as e:
                 logger.warning(f"CPU power management could not start: {e}")
+
+        if settings.gpu_power_management_enabled:
+            try:
+                await gpu_power_manager.start_gpu_power_manager()
+                logger.info("GPU power management started")
+            except Exception as e:
+                logger.warning(f"GPU power management could not start: {e}")
 
         if settings.fan_control_enabled:
             try:
@@ -487,10 +584,14 @@ async def _startup(app: FastAPI) -> None:
 
 async def _shutdown() -> None:
     """Run all graceful shutdown steps."""
+    # ---- Lifecycle notification (best-effort, must run BEFORE app dies) ----
+    await _emit_lifecycle_shutdown()
+
     from app.services import jobs
     from app.services.power import manager as power_manager
     from app.services.power import fan_control
     from app.services.power import sleep as sleep_mode
+    from app.services.power.gpu import manager as gpu_power_manager
 
     # Notify BaluPi companion device that NAS is going offline
     if IS_PRIMARY_WORKER and settings.balupi_enabled:
@@ -524,6 +625,11 @@ async def _shutdown() -> None:
                 logger.info("CPU power management stopped")
             except Exception:
                 logger.debug("Error stopping CPU power management")
+            try:
+                await gpu_power_manager.stop_gpu_power_manager()
+                logger.info("GPU power management stopped")
+            except Exception as e:
+                logger.warning(f"GPU power manager shutdown failed: {e}")
             try:
                 await fan_control.stop_fan_control()
                 logger.info("Fan control stopped")

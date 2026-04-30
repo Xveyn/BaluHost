@@ -44,6 +44,7 @@ const ALL_CATEGORIES: NotificationCategory[] = [
   'security',
   'sync',
   'vpn',
+  'lifecycle',
 ];
 
 const PRIORITY_LABELS = [
@@ -103,20 +104,21 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       const migrated: Record<string, CategoryPreference> = {};
       for (const cat of ALL_CATEGORIES) {
         const pref = rawPrefs[cat];
+        const successDefault = cat === 'backup' || cat === 'lifecycle';
         if (pref) {
           const p = pref as any;
           if ('push' in p && !('error' in p)) {
             // Old format: migrate
             migrated[cat] = {
               error: p.in_app ?? true,
-              success: cat === 'backup',
+              success: successDefault,
               mobile: p.push ?? true,
               desktop: false,
             };
           } else {
             migrated[cat] = {
               error: p.error ?? true,
-              success: p.success ?? (cat === 'backup'),
+              success: p.success ?? successDefault,
               mobile: p.mobile ?? true,
               desktop: p.desktop ?? false,
             };
@@ -155,7 +157,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
     value: boolean
   ) => {
     setCategoryPrefs((prev) => {
-      const existing = prev[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
+      const existing = prev[category] || { error: true, success: category === 'backup' || category === 'lifecycle', mobile: true, desktop: false };
       return {
         ...prev,
         [category]: {
@@ -167,7 +169,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   };
 
   const getCategoryPref = (category: NotificationCategory): CategoryPreference => {
-    return categoryPrefs[category] || { error: true, success: category === 'backup', mobile: true, desktop: false };
+    return categoryPrefs[category] || { error: true, success: category === 'backup' || category === 'lifecycle', mobile: true, desktop: false };
   };
 
   const visibleCategories: NotificationCategory[] = isAdmin

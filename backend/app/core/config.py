@@ -1,6 +1,6 @@
 from functools import lru_cache
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from pydantic import AnyHttpUrl, field_validator, model_validator
+from pydantic import AnyHttpUrl, Field, field_validator, model_validator
 import logging
 
 class Settings(BaseSettings):
@@ -140,6 +140,12 @@ class Settings(BaseSettings):
     power_cpu_surge_threshold: float = 80.0  # CPU % to trigger SURGE
     power_cpu_medium_threshold: float = 50.0  # CPU % to trigger MEDIUM
     power_cpu_low_threshold: float = 20.0  # CPU % to trigger LOW
+
+    # GPU power management configuration
+    gpu_power_management_enabled: bool = Field(
+        default=True,
+        description="Whether to start the GPU power manager service on primary worker",
+    )
 
     # SSD cache (bcache) configuration
     ssd_cache_enabled: bool = True  # Enable/disable SSD cache management

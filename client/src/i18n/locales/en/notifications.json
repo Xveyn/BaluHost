@@ -49,5 +49,8 @@
   "allRead": "All read",
   "settings": "Settings",
   "viewAll": "View all",
-  "markAllRead": "Mark all as read"
+  "markAllRead": "Mark all as read",
+  "clearAll": "Clear all",
+  "clearedAll": "All notifications cleared",
+  "clearError": "Failed to clear notifications"
 }

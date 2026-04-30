@@ -28,6 +28,7 @@ from app.models.power import (
     PowerAutoScalingConfig,
     PowerDynamicModeConfig,
 )
+from app.models.gpu_power import GpuPowerLog, GpuPowerConfigDb
 from app.models.fans import FanConfig, FanSample, FanScheduleEntry, FanCurveProfile
 from app.models.scheduler_history import (
     SchedulerExecution,
@@ -64,6 +65,7 @@ from app.models.ssd_file_cache import SSDCacheConfig
 from app.models.cloud import CloudOAuthConfig, CloudConnection, CloudImportJob
 from app.models.cloud_export import CloudExportJob
 from app.models.sleep import SleepConfig, SleepStateLog
+from app.models.system_lifecycle import SystemLifecycleEvent
 from app.models.api_key import ApiKey
 from app.models.desktop_pairing import DesktopPairingCode
 from app.models.desktop_sync_folder import DesktopSyncFolder
@@ -118,6 +120,8 @@ __all__ = [
     "PowerProfileConfigModel",
     "PowerAutoScalingConfig",
     "PowerDynamicModeConfig",
+    "GpuPowerLog",
+    "GpuPowerConfigDb",
     "FanConfig",
     "FanSample",
     "FanScheduleEntry",
@@ -153,6 +157,7 @@ __all__ = [
     "CloudExportJob",
     "SleepConfig",
     "SleepStateLog",
+    "SystemLifecycleEvent",
     "ApiKey",
     "DesktopPairingCode",
     "DesktopSyncFolder",

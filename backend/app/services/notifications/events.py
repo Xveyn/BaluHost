@@ -29,6 +29,9 @@ _COOLDOWN_SECONDS: dict[str, int] = {
     "system.storage_permission": 300,  # 5min per path
     "plugin.update_available": 86400,  # 24h per plugin+version
     "plugin.incompatible": 21600,      # 6h per plugin
+    "lifecycle.suspend": 60,           # 1min — guard against rapid retries
+    "lifecycle.resume": 60,            # 1min
+    # No cooldown for shutdown/startup — legitimate reboots must always notify
 }
 
 
@@ -111,6 +114,12 @@ class EventType(str, Enum):
     # Plugin marketplace events
     PLUGIN_UPDATE_AVAILABLE = "plugin.update_available"
     PLUGIN_INCOMPATIBLE = "plugin.incompatible"
+
+    # System lifecycle events
+    SYSTEM_SUSPEND = "lifecycle.suspend"
+    SYSTEM_RESUME = "lifecycle.resume"
+    SYSTEM_SHUTDOWN = "lifecycle.shutdown"
+    SYSTEM_STARTUP = "lifecycle.startup"
 
 
 @dataclass
@@ -378,6 +387,40 @@ EVENT_CONFIGS: dict[str, EventConfig] = {
         title_template="Plugin inkompatibel: {plugin_name}",
         message_template="Das installierte Plugin '{plugin_name}' (v{current_version}) ist mit dem aktuellen BaluHost-Core nicht mehr kompatibel: {reason}",
         action_url="/plugins",
+    ),
+
+    # System lifecycle events
+    EventType.SYSTEM_SUSPEND: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wird suspended",
+        message_template="NAS geht in Suspend-Modus ({trigger_label}). Verbindung wird kurz unterbrochen.",
+        action_url="/admin/system-control?tab=sleep",
+    ),
+    EventType.SYSTEM_RESUME: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wieder online",
+        message_template="NAS aufgewacht nach {duration_human} Suspend ({trigger_label}).",
+        action_url="/admin/system-control?tab=sleep",
+    ),
+    EventType.SYSTEM_SHUTDOWN: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS wird heruntergefahren",
+        message_template="NAS fährt herunter ({trigger_label}).",
+        action_url="/admin/system-control",
+    ),
+    EventType.SYSTEM_STARTUP: EventConfig(
+        priority=1,
+        category="lifecycle",
+        notification_type="info",
+        title_template="NAS hochgefahren",
+        message_template="NAS ist wieder einsatzbereit. Letzter Shutdown vor {downtime_human}.",
+        action_url="/",
     ),
 }
 
@@ -1163,3 +1206,75 @@ def emit_service_restored_sync(service_name: str) -> None:
         EventType.SERVICE_RESTORED,
         service_name=service_name,
     )
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle event helpers
+# ---------------------------------------------------------------------------
+
+
+def emit_system_suspend_sync(trigger: str) -> None:
+    """Emit lifecycle.suspend event (sync) — fired BEFORE kernel suspend."""
+    from app.services.notifications.lifecycle_helpers import german_trigger_label
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_SUSPEND,
+        cooldown_entity="suspend",
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+    )
+
+
+def emit_system_resume_sync(trigger: str, duration_seconds: Optional[float]) -> None:
+    """Emit lifecycle.resume event (sync) — fired after wake from suspend."""
+    from app.services.notifications.lifecycle_helpers import (
+        format_duration_human,
+        german_trigger_label,
+    )
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_RESUME,
+        cooldown_entity="resume",
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+        duration_seconds=duration_seconds,
+        duration_human=format_duration_human(duration_seconds),
+    )
+
+
+def emit_system_shutdown_sync(trigger: str) -> None:
+    """Emit lifecycle.shutdown event (sync) — fired early in _shutdown()."""
+    from app.services.notifications.lifecycle_helpers import german_trigger_label
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_SHUTDOWN,
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+    )
+
+
+def emit_system_startup_sync(downtime_seconds: Optional[float]) -> None:
+    """Emit lifecycle.startup event (sync) — fired at end of _startup()."""
+    from app.services.notifications.lifecycle_helpers import format_duration_human
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_STARTUP,
+        downtime_seconds=downtime_seconds,
+        downtime_human=format_duration_human(downtime_seconds),
+    )
+
+
+async def emit_system_suspend(trigger: str) -> None:
+    """Async wrapper — used in `enter_true_suspend()`."""
+    emit_system_suspend_sync(trigger)
+
+
+async def emit_system_resume(trigger: str, duration_seconds: Optional[float]) -> None:
+    """Async wrapper — used in `enter_true_suspend()` after resume."""
+    emit_system_resume_sync(trigger, duration_seconds)
+
+
+async def emit_system_shutdown(trigger: str) -> None:
+    """Async wrapper — used in `_shutdown()`."""
+    emit_system_shutdown_sync(trigger)
+
+
+async def emit_system_startup(downtime_seconds: Optional[float]) -> None:
+    """Async wrapper — used in `_startup()`."""
+    emit_system_startup_sync(downtime_seconds)
