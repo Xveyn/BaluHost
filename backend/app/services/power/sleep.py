@@ -727,6 +727,38 @@ class SleepManagerService:
 
         self._current_state = SleepState.ENTERING_SUSPEND
 
+        # 1. Persist the suspend event so cold-boot scenarios can compute downtime,
+        #    AND so resume can read the trigger back from the DB.
+        suspend_event_id: Optional[int] = None
+        try:
+            db = SessionLocal()
+            try:
+                from app.models.system_lifecycle import SystemLifecycleEvent
+                ev = SystemLifecycleEvent(
+                    event_type="suspend",
+                    trigger=trigger.value,
+                    details_json=json.dumps({"reason": reason}) if reason else None,
+                )
+                db.add(ev)
+                db.commit()
+                suspend_event_id = ev.id
+            finally:
+                db.close()
+        except Exception as exc:
+            logger.warning("Could not persist lifecycle suspend event: %s", exc)
+
+        # 2. Emit push notification BEFORE kernel suspend (best-effort, 3s timeout).
+        try:
+            from app.services.notifications.events import emit_system_suspend
+            await asyncio.wait_for(
+                emit_system_suspend(trigger=trigger.value),
+                timeout=3.0,
+            )
+        except asyncio.TimeoutError:
+            logger.warning("Lifecycle suspend push timed out after 3s — proceeding with suspend anyway")
+        except Exception as exc:
+            logger.warning("Lifecycle suspend push failed: %s — proceeding", exc)
+
         self._log_state_change(
             SleepState.SOFT_SLEEP, SleepState.TRUE_SUSPEND, reason, trigger,
             details={"wake_at": wake_at.isoformat() if wake_at else None},
@@ -734,9 +766,10 @@ class SleepManagerService:
 
         self._current_state = SleepState.TRUE_SUSPEND
         self._state_since = datetime.now(timezone.utc)
+        suspend_started_at = datetime.now(timezone.utc)
 
-        # Suspend the system.  When *wake_at* is given the backend uses
-        # ``rtcwake -m mem`` which sets the RTC alarm and suspends atomically.
+        # 3. Suspend the system.  When *wake_at* is given the backend uses
+        #    ``rtcwake -m mem`` which sets the RTC alarm and suspends atomically.
         ok = await self._backend.suspend_system(wake_at=wake_at)
 
         # When system resumes (or suspend failed), we'll be back here.
@@ -744,7 +777,37 @@ class SleepManagerService:
         self._current_state = SleepState.SOFT_SLEEP
         self._state_since = datetime.now(timezone.utc)
 
+        # 4. Persist resume event + emit resume notification (only on successful suspend).
         if ok:
+            duration_seconds = (datetime.now(timezone.utc) - suspend_started_at).total_seconds()
+            try:
+                db = SessionLocal()
+                try:
+                    from app.models.system_lifecycle import SystemLifecycleEvent
+                    resume_ev = SystemLifecycleEvent(
+                        event_type="resume",
+                        trigger=trigger.value,
+                        details_json=json.dumps({
+                            "duration_seconds": duration_seconds,
+                            "suspend_event_id": suspend_event_id,
+                        }),
+                    )
+                    db.add(resume_ev)
+                    db.commit()
+                finally:
+                    db.close()
+            except Exception as exc:
+                logger.warning("Could not persist lifecycle resume event: %s", exc)
+
+            try:
+                from app.services.notifications.events import emit_system_resume
+                await emit_system_resume(
+                    trigger=trigger.value,
+                    duration_seconds=duration_seconds,
+                )
+            except Exception as exc:
+                logger.warning("Lifecycle resume push failed: %s", exc)
+
             logger.info("System resumed from suspend")
             await self._exit_soft_sleep("resume_from_suspend")
         else:
