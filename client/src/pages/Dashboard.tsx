@@ -4,8 +4,10 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemTelemetry } from '../hooks/useSystemTelemetry';
 import { useSmartData } from '../hooks/useSmartData';
+import { useGpuPresence } from '../hooks/useGpuPresence';
 import { getRaidStatus, type RaidStatusResponse } from '../api/raid';
 import { getSystemMode } from '../api/system';
+import { getGpuCurrent, type GpuSample } from '../api/monitoring';
 import { useNextMaintenance } from '../hooks/useNextMaintenance';
 import { useServicesSummary } from '../hooks/useServicesSummary';
 import { useLiveActivities } from '../hooks/useLiveActivities';
@@ -85,6 +87,25 @@ export default function Dashboard() {
   const [raidLoading, setRaidLoading] = useState(!cachedRaid);
   const [smartMode, setSmartMode] = useState<string | null>(null);
   const [smartModeLoading, setSmartModeLoading] = useState(false);
+
+  // GPU presence + polling
+  const { present: hasGpu, info: gpuInfo } = useGpuPresence();
+  const [gpuSample, setGpuSample] = useState<GpuSample | null>(null);
+  useEffect(() => {
+    if (!hasGpu) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const s = await getGpuCurrent();
+        if (!cancelled) setGpuSample(s);
+      } catch {
+        /* keep last value on transient failure */
+      }
+    };
+    tick();
+    const id = setInterval(tick, 3000);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [hasGpu]);
 
   // Hooks for alert generation
   const { allSchedulers } = useNextMaintenance();
@@ -325,6 +346,32 @@ export default function Dashboard() {
     return result;
   }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
+  const gpuStat = useMemo(() => {
+    if (!hasGpu || !gpuInfo) return null;
+    const usage = gpuSample?.usage_percent ?? 0;
+    const tempC = gpuSample?.temperature_edge_celsius;
+    const power = gpuSample?.power_watts;
+    return {
+      id: 'gpu',
+      title: t('stats.gpu', 'GPU'),
+      value: `${formatNumber(usage, 1)}%`,
+      meta: gpuInfo.device_name +
+        (tempC != null ? ` • ${formatNumber(tempC, 1)}°C` : '') +
+        (power != null ? ` • ${formatNumber(power, 0)} W` : ''),
+      submeta: gpuSample?.vram_used_bytes != null && gpuSample?.vram_total_bytes != null
+        ? `VRAM ${formatBytes(gpuSample.vram_used_bytes)} / ${formatBytes(gpuSample.vram_total_bytes)}`
+        : undefined,
+      delta: { label: 'Live' as const, tone: 'live' as const },
+      accent: 'from-emerald-500 to-teal-500',
+      progress: usage,
+      icon: (
+        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5h16.5v9H3.75v-9zm3 3h2.25v3H6.75v-3zm5.25 0h5.25v3H12v-3z" />
+        </svg>
+      ),
+    };
+  }, [hasGpu, gpuInfo, gpuSample, t]);
+
   const quickStats = [
     {
       id: 'cpu',
@@ -376,6 +423,7 @@ export default function Dashboard() {
         </svg>
       )
     },
+    ...(gpuStat ? [gpuStat] : []),
     {
       id: 'uptime',
       title: t('stats.serverUptime'),
@@ -434,6 +482,7 @@ export default function Dashboard() {
               const handleClick = stat.id === 'cpu' ? handleCpuClick
                 : stat.id === 'memory' ? handleMemoryClick
                 : stat.id === 'storage' ? handleStorageClick
+                : stat.id === 'gpu' ? () => navigate('/system?tab=gpu')
                 : stat.id === 'uptime' ? () => navigate('/system?tab=uptime')
                 : undefined;
 
