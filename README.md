@@ -311,8 +311,13 @@ docs/
 | Metric | Count |
 |--------|-------|
 | **Version** | ![Latest Release](https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |
-| **Backend code** | ~120,000 lines |
-| **Frontend code** | ~67,000 lines |
+| **Backend code** | 150,685 lines across 735 Python files |
+| &nbsp;&nbsp;↳ Application (`app/`) | 97,186 lines / 411 files |
+| &nbsp;&nbsp;↳ Tests (`tests/`) | 38,309 lines / 166 files |
+| &nbsp;&nbsp;↳ Scripts (`scripts/`) | 6,291 lines / 48 files |
+| &nbsp;&nbsp;↳ Alembic migrations | 5,989 lines / 92 files |
+| &nbsp;&nbsp;↳ Terminal UI (`baluhost_tui/`) | 2,910 lines / 18 files |
+| **Frontend code** | 78,107 lines across 427 source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |
 | **Test functions** | 1465 |
 | **API route modules** | 51 |
 | **Service modules** | 143 |
@@ -320,6 +325,8 @@ docs/
 | **Database migrations** | 74 |
 | **Frontend pages** | 31 |
 | **CI/CD workflows** | 7 |
+
+<sub>LOC counted via `git ls-files` (respects `.gitignore`, excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). Last measured 2026-04-30.</sub>
 
 ---
 
