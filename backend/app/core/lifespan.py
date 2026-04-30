@@ -255,6 +255,53 @@ def _log_dev_mode_summary() -> None:
 # Startup / shutdown steps
 # ---------------------------------------------------------------------------
 
+async def _emit_lifecycle_startup() -> None:
+    """Emit the lifecycle.startup notification with downtime context.
+
+    Reads the most recent 'shutdown' row from system_lifecycle_events to
+    compute downtime. Inserts a 'startup' row. No-op on secondary workers.
+    """
+    if not IS_PRIMARY_WORKER:
+        return
+
+    try:
+        from app.core.database import SessionLocal
+        from app.models.system_lifecycle import SystemLifecycleEvent
+        from app.services.notifications.events import emit_system_startup
+        from sqlalchemy import desc
+
+        downtime_seconds: float | None = None
+        with SessionLocal() as db:
+            last_shutdown = (
+                db.query(SystemLifecycleEvent)
+                .filter(SystemLifecycleEvent.event_type == "shutdown")
+                .order_by(desc(SystemLifecycleEvent.timestamp))
+                .first()
+            )
+            if last_shutdown and last_shutdown.timestamp:
+                ts = last_shutdown.timestamp
+                if ts.tzinfo is None:
+                    ts = ts.replace(tzinfo=timezone.utc)
+                downtime_seconds = (datetime.now(timezone.utc) - ts).total_seconds()
+                if downtime_seconds < 0:
+                    downtime_seconds = None
+
+            ev = SystemLifecycleEvent(
+                event_type="startup",
+                trigger=None,
+                details_json=None,
+            )
+            db.add(ev)
+            db.commit()
+
+        try:
+            await emit_system_startup(downtime_seconds=downtime_seconds)
+        except Exception as exc:
+            logger.warning("Lifecycle startup push failed: %s", exc)
+    except Exception as exc:
+        logger.warning("Lifecycle startup step failed (non-fatal): %s", exc)
+
+
 async def _emit_lifecycle_shutdown(trigger: str = "signal") -> None:
     """Emit the lifecycle.shutdown notification and persist a 'shutdown' row.
 
@@ -356,6 +403,9 @@ async def _startup(app: FastAPI) -> None:
     # Acquire primary-worker lock *after* fork (lifespan runs per-worker).
     IS_PRIMARY_WORKER = _try_become_primary()
     logger.info("Primary worker: %s (PID %d)", IS_PRIMARY_WORKER, os.getpid())
+
+    # Lifecycle notification: emit startup with downtime context
+    await _emit_lifecycle_startup()
 
     # Hardware-controlling background tasks only run on the primary worker.
     if IS_PRIMARY_WORKER:

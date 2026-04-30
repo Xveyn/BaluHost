@@ -244,3 +244,83 @@ def test_shutdown_secondary_worker_does_not_emit(monkeypatch):
 
     with SessionLocal() as db:
         assert db.query(SystemLifecycleEvent).count() == 0
+
+
+# ---------------------------------------------------------------------------
+# Lifespan: startup hook
+# ---------------------------------------------------------------------------
+
+
+def test_startup_calculates_downtime_from_last_shutdown(monkeypatch):
+    """Given a 'shutdown' row 5min in the past, startup emit gets downtime ~300s."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    # Seed a shutdown 5min ago
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+        old = SystemLifecycleEvent(
+            event_type="shutdown",
+            trigger="signal",
+            timestamp=datetime.now(timezone.utc) - timedelta(minutes=5),
+        )
+        db.add(old)
+        db.commit()
+
+    captured: dict = {}
+
+    async def capture_emit(downtime_seconds=None, **kwargs):
+        captured["downtime_seconds"] = downtime_seconds
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(side_effect=capture_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_startup())
+
+    assert captured["downtime_seconds"] is not None
+    assert 290 < captured["downtime_seconds"] < 310, captured
+
+
+def test_startup_handles_missing_last_shutdown(monkeypatch):
+    """Empty DB -> downtime_seconds=None, no crash."""
+    from app.core import lifespan
+    from app.core.database import SessionLocal
+    from app.models.system_lifecycle import SystemLifecycleEvent
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", True)
+
+    with SessionLocal() as db:
+        db.query(SystemLifecycleEvent).delete()
+        db.commit()
+
+    captured: dict = {}
+
+    async def capture_emit(downtime_seconds=None, **kwargs):
+        captured["downtime_seconds"] = downtime_seconds
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(side_effect=capture_emit),
+    ):
+        asyncio.run(lifespan._emit_lifecycle_startup())
+
+    assert captured.get("downtime_seconds") is None
+
+
+def test_startup_secondary_worker_does_not_emit(monkeypatch):
+    """Non-primary worker must not emit lifecycle.startup."""
+    from app.core import lifespan
+
+    monkeypatch.setattr(lifespan, "IS_PRIMARY_WORKER", False)
+
+    with patch(
+        "app.services.notifications.events.emit_system_startup",
+        new=AsyncMock(),
+    ) as mock_emit:
+        asyncio.run(lifespan._emit_lifecycle_startup())
+        mock_emit.assert_not_called()
