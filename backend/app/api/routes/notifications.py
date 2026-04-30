@@ -185,6 +185,23 @@ async def mark_all_as_read(
     return MarkReadResponse(success=True, count=count)
 
 
+@router.post("/dismiss-all", response_model=MarkReadResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def dismiss_all_notifications(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> MarkReadResponse:
+    """Dismiss all notifications for the current user.
+
+    Sets is_dismissed=True and is_read=True on all non-dismissed notifications.
+    Notifications remain in the DB and can be retrieved with include_dismissed=true.
+    """
+    service = get_notification_service()
+    count = service.dismiss_all(db, current_user.id, is_admin=is_privileged(current_user))
+    return MarkReadResponse(success=True, count=count)
+
+
 @router.post("/{notification_id}/dismiss", response_model=NotificationResponse)
 @user_limiter.limit(get_limit("admin_operations"))
 async def dismiss_notification(

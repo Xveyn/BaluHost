@@ -49,5 +49,8 @@
   "allRead": "Alle gelesen",
   "settings": "Einstellungen",
   "viewAll": "Alle anzeigen",
-  "markAllRead": "Alle als gelesen markieren"
+  "markAllRead": "Alle als gelesen markieren",
+  "clearAll": "Alle löschen",
+  "clearedAll": "Alle Benachrichtigungen gelöscht",
+  "clearError": "Fehler beim Löschen"
 }

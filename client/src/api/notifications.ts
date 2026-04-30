@@ -151,6 +151,14 @@ export async function dismissNotification(notificationId: number): Promise<Notif
 }
 
 /**
+ * Dismiss all notifications for the current user
+ */
+export async function dismissAllNotifications(): Promise<MarkReadResponse> {
+  const response = await apiClient.post<MarkReadResponse>('/api/notifications/dismiss-all');
+  return response.data;
+}
+
+/**
  * Get notification preferences for the current user
  */
 export async function getPreferences(): Promise<NotificationPreferences> {
