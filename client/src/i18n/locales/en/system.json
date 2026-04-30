@@ -12,6 +12,7 @@
     },
     "tabs": {
       "cpu": "CPU",
+      "gpu": "GPU",
       "memory": "Memory",
       "network": "Network",
       "diskIo": "Disk I/O",
@@ -22,6 +23,26 @@
       "activity": "Activity",
       "backendLogs": "Backend Logs",
       "uptime": "Uptime"
+    },
+    "gpu": {
+      "usage": "Usage",
+      "vram": "VRAM",
+      "coreClock": "Core Clock",
+      "memoryClock": "Memory Clock",
+      "power": "Power",
+      "fanRpm": "Fan",
+      "tempEdge": "Edge Temp",
+      "tempJunction": "Junction Temp",
+      "tempMemory": "Memory Temp",
+      "engines": "Engine activity",
+      "overview": "Overview",
+      "perEngine": "Per-Engine",
+      "overviewHint": "Stacked engine activity over the selected time range.",
+      "samplesLoaded": "Samples loaded",
+      "engineGfx": "Graphics",
+      "engineCompute": "Compute",
+      "engineDecode": "Decode",
+      "engineEncode": "Encode"
     },
     "uptime": {
       "serverUptime": "Server Uptime",

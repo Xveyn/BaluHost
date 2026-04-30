@@ -12,6 +12,7 @@
     },
     "tabs": {
       "cpu": "CPU",
+      "gpu": "GPU",
       "memory": "Arbeitsspeicher",
       "network": "Netzwerk",
       "diskIo": "Disk I/O",
@@ -22,6 +23,26 @@
       "activity": "Aktivität",
       "backendLogs": "Backend-Logs",
       "uptime": "Betriebszeit"
+    },
+    "gpu": {
+      "usage": "Auslastung",
+      "vram": "VRAM",
+      "coreClock": "Kern-Takt",
+      "memoryClock": "Speicher-Takt",
+      "power": "Leistung",
+      "fanRpm": "Lüfter",
+      "tempEdge": "Edge-Temp.",
+      "tempJunction": "Junction-Temp.",
+      "tempMemory": "Speicher-Temp.",
+      "engines": "Engine-Aktivität",
+      "overview": "Übersicht",
+      "perEngine": "Pro Engine",
+      "overviewHint": "Engine-Aktivität über den gewählten Zeitraum.",
+      "samplesLoaded": "Geladene Samples",
+      "engineGfx": "Grafik",
+      "engineCompute": "Compute",
+      "engineDecode": "Decode",
+      "engineEncode": "Encode"
     },
     "uptime": {
       "serverUptime": "Server-Betriebszeit",

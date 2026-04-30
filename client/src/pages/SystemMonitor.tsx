@@ -19,15 +19,17 @@ import { LogsTab } from '../components/monitoring/LogsTab';
 import { ActivityTab } from '../components/monitoring/ActivityTab';
 import { BackendLogsTab } from '../components/monitoring/BackendLogsTab';
 import { CpuTab } from '../components/system-monitor/CpuTab';
+import { GpuTab } from '../components/system-monitor/GpuTab';
 import { MemoryTab } from '../components/system-monitor/MemoryTab';
 import { NetworkTab } from '../components/system-monitor/NetworkTab';
 import { DiskIoTab } from '../components/system-monitor/DiskIoTab';
 import { PowerTab } from '../components/system-monitor/PowerTab';
 import { UptimeTab } from '../components/system-monitor/UptimeTab';
 import { useAuth } from '../contexts/AuthContext';
+import { useGpuPresence } from '../hooks/useGpuPresence';
 import { smartDevicesApi } from '../api/smart-devices';
 
-type TabType = 'cpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'uptime' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
+type TabType = 'cpu' | 'gpu' | 'memory' | 'network' | 'disk-io' | 'power' | 'uptime' | 'services' | 'health' | 'backend-logs' | 'logs' | 'activity';
 type CategoryType = 'hardware' | 'io' | 'system' | 'logs';
 
 interface TabConfig {
@@ -58,6 +60,18 @@ const BASE_CATEGORIES: CategoryConfig[] = [
             <rect x="4" y="4" width="16" height="16" rx="2" />
             <path d="M9 9h6v6H9z" />
             <path d="M9 1v3M15 1v3M9 20v3M15 20v3M1 9h3M1 15h3M20 9h3M20 15h3" strokeLinecap="round" />
+          </svg>
+        ),
+      },
+      {
+        id: 'gpu',
+        labelKey: 'monitor.tabs.gpu',
+        icon: (
+          <svg className="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}>
+            <rect x="3" y="6" width="18" height="12" rx="2" />
+            <path d="M7 10h2M11 10h2M15 10h2" strokeLinecap="round" />
+            <circle cx="8" cy="14" r="1.5" />
+            <circle cx="13" cy="14" r="1.5" />
           </svg>
         ),
       },
@@ -177,7 +191,7 @@ const BASE_CATEGORIES: CategoryConfig[] = [
 ];
 
 // Tabs that show the TimeRangeSelector
-const METRIC_TABS = new Set<TabType>(['cpu', 'memory', 'network', 'disk-io', 'uptime']);
+const METRIC_TABS = new Set<TabType>(['cpu', 'gpu', 'memory', 'network', 'disk-io', 'uptime']);
 
 // Main Component
 export default function SystemMonitor() {
@@ -186,6 +200,7 @@ export default function SystemMonitor() {
   const [searchParams, setSearchParams] = useSearchParams();
   const [timeRange, setTimeRange] = useState<TimeRange>('1h');
   const [hasPowerMonitoring, setHasPowerMonitoring] = useState(false);
+  const { present: hasGpu } = useGpuPresence();
 
   // Check if any active smart device has power_monitor capability
   useEffect(() => {
@@ -210,13 +225,14 @@ export default function SystemMonitor() {
           ...cat,
           tabs: cat.tabs.filter(tab => {
             if (tab.id === 'power') return hasPowerMonitoring;
+            if (tab.id === 'gpu') return hasGpu;
             return true;
           }),
         };
       }
       return cat;
     });
-  }, [hasPowerMonitoring]);
+  }, [hasPowerMonitoring, hasGpu]);
 
   // Dynamic valid tabs set
   const validTabs = useMemo(
@@ -336,6 +352,7 @@ export default function SystemMonitor() {
       {/* Tab Content */}
       <div className="min-w-0">
         {activeTab === 'cpu' && <CpuTab timeRange={timeRange} />}
+        {activeTab === 'gpu' && <GpuTab timeRange={timeRange} />}
         {activeTab === 'memory' && <MemoryTab timeRange={timeRange} />}
         {activeTab === 'network' && <NetworkTab timeRange={timeRange} />}
         {activeTab === 'disk-io' && <DiskIoTab timeRange={timeRange} />}

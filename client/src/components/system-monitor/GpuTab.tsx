@@ -1,0 +1,165 @@
+import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
+import {
+  getGpuCurrent,
+  getGpuHistory,
+  type GpuSample,
+  type TimeRange,
+} from '../../api/monitoring';
+import { useGpuPresence } from '../../hooks/useGpuPresence';
+
+interface Props {
+  timeRange: TimeRange;
+}
+
+const POLL_MS = 3000;
+
+function formatBytes(n: number | null): string {
+  if (n == null) return '—';
+  if (n >= 1 << 30) return `${(n / (1 << 30)).toFixed(1)} GB`;
+  if (n >= 1 << 20) return `${(n / (1 << 20)).toFixed(1)} MB`;
+  return `${n} B`;
+}
+
+function fmtTemp(v?: number | null): string {
+  return v != null ? `${v.toFixed(0)}°C` : '—';
+}
+
+function fmtPct(v?: number | null): string {
+  return v != null ? `${v.toFixed(0)}%` : '—';
+}
+
+function Kpi({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-lg border border-slate-800/60 bg-slate-900/40 p-3">
+      <div className="text-xs text-slate-500">{label}</div>
+      <div className="text-lg font-semibold tabular-nums text-slate-100 mt-1">{value}</div>
+    </div>
+  );
+}
+
+export function GpuTab({ timeRange }: Props) {
+  const { t } = useTranslation('system');
+  const { info } = useGpuPresence();
+
+  const [current, setCurrent] = useState<GpuSample | null>(null);
+  const [history, setHistory] = useState<GpuSample[]>([]);
+  const [engineView, setEngineView] = useState<'overview' | 'per-engine'>('overview');
+
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const c = await getGpuCurrent();
+        if (!cancelled) setCurrent(c);
+      } catch { /* ignore transient errors */ }
+    };
+    tick();
+    const id = setInterval(tick, POLL_MS);
+    return () => { cancelled = true; clearInterval(id); };
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const res = await getGpuHistory(timeRange);
+        if (!cancelled) setHistory(res.samples);
+      } catch { /* ignore */ }
+    })();
+    return () => { cancelled = true; };
+  }, [timeRange]);
+
+  if (!info) return null;
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4 flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-2">
+            <span className="text-xs uppercase text-slate-500">{info.vendor}</span>
+            <h2 className="text-xl font-semibold text-slate-100">{info.device_name}</h2>
+          </div>
+          <div className="text-xs text-slate-500 mt-1">
+            {info.pci_slot ?? ''}
+            {info.driver_version ? ` · ${info.driver_version}` : ''}
+          </div>
+        </div>
+        <div className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" aria-label="live" />
+      </div>
+
+      <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <Kpi
+          label={t('monitor.gpu.usage', 'Usage')}
+          value={current?.usage_percent != null ? `${Math.round(current.usage_percent)}%` : '—'}
+        />
+        <Kpi
+          label={t('monitor.gpu.vram', 'VRAM')}
+          value={`${formatBytes(current?.vram_used_bytes ?? null)} / ${formatBytes(current?.vram_total_bytes ?? null)}`}
+        />
+        <Kpi
+          label={t('monitor.gpu.coreClock', 'Core Clock')}
+          value={current?.core_clock_mhz != null ? `${current.core_clock_mhz.toFixed(0)} MHz` : '—'}
+        />
+        <Kpi
+          label={t('monitor.gpu.power', 'Power')}
+          value={current?.power_watts != null ? `${current.power_watts.toFixed(0)} W` : '—'}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+        <Kpi label={t('monitor.gpu.tempEdge', 'Edge Temp')} value={fmtTemp(current?.temperature_edge_celsius)} />
+        <Kpi label={t('monitor.gpu.tempJunction', 'Junction Temp')} value={fmtTemp(current?.temperature_junction_celsius)} />
+        <Kpi label={t('monitor.gpu.tempMemory', 'Memory Temp')} value={fmtTemp(current?.temperature_memory_celsius)} />
+      </div>
+
+      <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
+        <div className="flex items-center justify-between mb-3">
+          <h3 className="text-sm font-medium text-slate-200">{t('monitor.gpu.engines', 'Engine activity')}</h3>
+          <div className="flex gap-1 text-xs bg-slate-800 rounded p-0.5">
+            <button
+              type="button"
+              className={`px-2 py-0.5 rounded ${engineView === 'overview' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'}`}
+              onClick={() => setEngineView('overview')}
+            >
+              {t('monitor.gpu.overview', 'Overview')}
+            </button>
+            <button
+              type="button"
+              className={`px-2 py-0.5 rounded ${engineView === 'per-engine' ? 'bg-slate-700 text-slate-100' : 'text-slate-400'}`}
+              onClick={() => setEngineView('per-engine')}
+            >
+              {t('monitor.gpu.perEngine', 'Per-Engine')}
+            </button>
+          </div>
+        </div>
+        {engineView === 'per-engine' ? (
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <Kpi label={t('monitor.gpu.engineGfx', 'Graphics')} value={fmtPct(current?.engine_gfx_percent)} />
+            <Kpi label={t('monitor.gpu.engineCompute', 'Compute')} value={fmtPct(current?.engine_compute_percent)} />
+            <Kpi label={t('monitor.gpu.engineDecode', 'Decode')} value={fmtPct(current?.engine_decode_percent)} />
+            <Kpi label={t('monitor.gpu.engineEncode', 'Encode')} value={fmtPct(current?.engine_encode_percent)} />
+          </div>
+        ) : (
+          <div className="text-xs text-slate-500">
+            {t('monitor.gpu.overviewHint', 'Stacked engine activity over the selected time range.')}
+            <div className="text-slate-300 mt-2">
+              {t('monitor.gpu.samplesLoaded', 'Samples loaded')}: {history.length}
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+        <Kpi
+          label={t('monitor.gpu.fanRpm', 'Fan')}
+          value={current?.fan_rpm != null ? `${current.fan_rpm} RPM` : '—'}
+        />
+        <Kpi
+          label={t('monitor.gpu.memoryClock', 'Memory Clock')}
+          value={current?.memory_clock_mhz != null ? `${current.memory_clock_mhz.toFixed(0)} MHz` : '—'}
+        />
+      </div>
+    </div>
+  );
+}
