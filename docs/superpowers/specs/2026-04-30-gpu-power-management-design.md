@@ -140,29 +140,39 @@ class GpuPowerBackend(ABC):
 
 ### AMD Backend (`amd_backend.py`)
 
-Reuses device detection from `services/monitoring/gpu/amd_backend.py` (find first dGPU with `pp_dpm_sclk`). Writes:
+Reuses device detection from `services/monitoring/gpu/amd_backend.py` (find first dGPU with `pp_dpm_sclk`). Per-state behavior is driven by `GpuPowerConfig.amd_active / amd_standby / amd_deep_idle`. Built-in defaults:
 
 | State | `power_dpm_force_performance_level` | `pp_power_profile_mode` |
 |---|---|---|
-| `active` | `auto` | (don't touch — keep current) |
-| `standby` | `auto` | `5` (POWER_SAVING) |
-| `deep_idle` | `low` | `5` (POWER_SAVING) |
+| `active` | `auto` | (don't touch) |
+| `standby` | `auto` | `POWER_SAVING` |
+| `deep_idle` | `low` | `POWER_SAVING` |
 
-`pp_power_profile_mode` index varies slightly by driver; we parse the file header on startup to find the `POWER_SAVING` index and fall back to a safe default (`0` = BOOTUP_DEFAULT) if not present.
+The user can override either field per state via the UI. Available `performance_level` values are read from `power_dpm_force_performance_level`'s sysfs sibling enumerations (kernel exposes the set in the file's documentation); we conservatively present `auto`, `low`, `high`, `manual`, `profile_standard`, `profile_min_sclk`, `profile_min_mclk`, `profile_peak`. Available `profile_mode` indexes are parsed from `pp_power_profile_mode` on startup (the file lists each mode by name); the user picks by name and we resolve to the index at apply time. Falls back to `BOOTUP_DEFAULT` if the named mode is not exposed by the driver.
 
 Writes go through `subprocess.run(["sudo", "tee", path], ...)` only if needed; if user has direct write permission (group `video`) we write directly. Same `has_write_permission()` pattern as `cpu_linux_backend.py`.
 
 ### NVIDIA Backend (`nvidia_backend.py`)
 
-Detection: `nvidia-smi -L` returns ≥1 GPU. Operations:
+Detection: `nvidia-smi -L` returns ≥1 GPU. Per-state behavior driven by `GpuPowerConfig.nvidia_*`. On first detection, the backend queries the card's reported range:
 
-| State | Command |
-|---|---|
-| `active` | `nvidia-smi -rgc` (reset clocks) |
-| `standby` | `nvidia-smi -lgc 210,1500` (cap mid-range) — defaults configurable per-card |
-| `deep_idle` | `nvidia-smi -lgc 210,210` (lock to base clock) + `nvidia-smi -pl <min_power>` if persistence-mode supports it |
+```
+nvidia-smi --query-gpu=clocks.gr.min,clocks.gr.max,power.min_limit,power.max_limit,power.default_limit --format=csv,noheader,nounits
+```
 
-Min/max clock and power limits are read from the card's reported range on startup. Persistence mode (`nvidia-smi -pm 1`) is enabled once on service start.
+and seeds defaults if the user hasn't set values:
+
+| State | Default `min_clock_mhz` | Default `max_clock_mhz` | Default `power_limit_watts` |
+|---|---|---|---|
+| `active` | None (reset) | None (reset) | default_limit |
+| `standby` | min_clock | mid = (min+max)/2 | default_limit |
+| `deep_idle` | min_clock | min_clock | power.min_limit |
+
+Apply at runtime:
+- If `min_clock_mhz` and `max_clock_mhz` are both set: `nvidia-smi -lgc <min>,<max>`. Either being None means "use the value from active state on reset" — i.e. `active` calls `nvidia-smi -rgc` if both are None.
+- If `power_limit_watts` is set: `nvidia-smi -pl <watts>`. Reset on `active` via the default_limit.
+
+Persistence mode (`nvidia-smi -pm 1`) is enabled once on service start. The seeded defaults are also exposed via `GET /api/gpu-power/capabilities` so the UI can pre-populate the form and validate min/max bounds.
 
 ### Dev Backend (`dev_backend.py`)
 
@@ -227,7 +237,7 @@ async def _monitor_loop(self):
             await self._tick()
         except Exception as e:
             logger.error(f"GPU power monitor error: {e}")
-        await asyncio.sleep(5)
+        await asyncio.sleep(self._config.monitor_interval_seconds)
 
 async def _tick(self):
     if not self._config.enabled or not self._backend.detected:
@@ -290,13 +300,47 @@ class GpuPowerState(str, Enum):
     STANDBY = "standby"
     DEEP_IDLE = "deep_idle"
 
+class AmdProfileMode(str, Enum):
+    """Index into pp_power_profile_mode. Detected at runtime; constants here are
+    the canonical names used by the kernel driver."""
+    BOOTUP_DEFAULT = "BOOTUP_DEFAULT"
+    POWER_SAVING = "POWER_SAVING"
+    VIDEO = "VIDEO"
+    VR = "VR"
+    COMPUTE = "COMPUTE"
+    CUSTOM = "CUSTOM"
+    FULL_SCREEN_3D = "3D_FULL_SCREEN"
+
+class AmdStateConfig(BaseModel):
+    """Per-state AMD overrides. None = use default for that state."""
+    performance_level: Optional[str] = Field(None, description="auto | low | high | manual | profile_*")
+    profile_mode: Optional[AmdProfileMode] = Field(None, description="pp_power_profile_mode name")
+
+class NvidiaStateConfig(BaseModel):
+    """Per-state NVIDIA overrides."""
+    min_clock_mhz: Optional[int] = Field(None, ge=0, description="--lock-gpu-clocks min")
+    max_clock_mhz: Optional[int] = Field(None, ge=0, description="--lock-gpu-clocks max; None = no upper lock")
+    power_limit_watts: Optional[int] = Field(None, ge=0, description="-pl in watts; None = card default")
+
 class GpuPowerConfig(BaseModel):
     enabled: bool = False
+
+    # Thresholds (all editable via UI)
     idle_window_seconds: int = Field(30, ge=10, le=600)
     deep_idle_extra_seconds: int = Field(120, ge=30, le=3600)
     deep_idle_grace_seconds: int = Field(5, ge=0, le=30)
     usage_threshold_percent: float = Field(5.0, ge=0.0, le=50.0)
-    standby_max_clock_mhz: Optional[int] = Field(None, description="NVIDIA only; AMD ignores")
+    monitor_interval_seconds: int = Field(5, ge=1, le=60, description="How often the monitor loop ticks")
+
+    # Per-state, per-vendor clock/profile overrides. Defaults are filled at
+    # startup from the detected card's reported range; user overrides win.
+    amd_active: AmdStateConfig = Field(default_factory=lambda: AmdStateConfig(performance_level="auto"))
+    amd_standby: AmdStateConfig = Field(default_factory=lambda: AmdStateConfig(performance_level="auto", profile_mode=AmdProfileMode.POWER_SAVING))
+    amd_deep_idle: AmdStateConfig = Field(default_factory=lambda: AmdStateConfig(performance_level="low", profile_mode=AmdProfileMode.POWER_SAVING))
+
+    nvidia_active: NvidiaStateConfig = Field(default_factory=NvidiaStateConfig)  # all None → reset clocks
+    nvidia_standby: NvidiaStateConfig = Field(default_factory=NvidiaStateConfig)  # filled from card range at startup
+    nvidia_deep_idle: NvidiaStateConfig = Field(default_factory=NvidiaStateConfig)  # filled from card range at startup
 
 class GpuPowerDemandInfo(BaseModel):
     source: str
@@ -314,7 +358,22 @@ class GpuPowerStatus(BaseModel):
     active_demands: list[GpuPowerDemandInfo]
     has_write_permission: bool
     estimated_power_watts: Optional[float] = None  # from monitoring sample
+
+class GpuPowerCapabilities(BaseModel):
+    """What the detected card supports — feeds the UI form."""
+    vendor: Optional[str]
+    # AMD
+    amd_performance_levels: list[str] = Field(default_factory=list)
+    amd_profile_modes: list[str] = Field(default_factory=list, description="Names parsed from pp_power_profile_mode")
+    # NVIDIA
+    nvidia_min_clock_mhz: Optional[int] = None
+    nvidia_max_clock_mhz: Optional[int] = None
+    nvidia_min_power_watts: Optional[int] = None
+    nvidia_max_power_watts: Optional[int] = None
+    nvidia_default_power_watts: Optional[int] = None
 ```
+
+The `PUT /api/gpu-power/config` handler validates submitted clocks against the card's reported range from `GpuPowerCapabilities` and rejects out-of-range values with HTTP 422 (matching FastAPI/Pydantic validation patterns elsewhere in the codebase).
 
 ### Database Model (`backend/app/models/gpu_power.py`)
 
@@ -339,8 +398,9 @@ All routes require `Depends(deps.get_current_user)`. Config write requires `get_
 | Method | Path | Auth | Purpose |
 |---|---|---|---|
 | GET | `/api/gpu-power/status` | user | Current state, demands, vendor, hw permission |
-| GET | `/api/gpu-power/config` | user | Read config (enabled, thresholds) |
-| PUT | `/api/gpu-power/config` | admin | Update config |
+| GET | `/api/gpu-power/config` | user | Read config (enabled, thresholds, per-state clocks) |
+| PUT | `/api/gpu-power/config` | admin | Update config (validated against capabilities) |
+| GET | `/api/gpu-power/capabilities` | user | Card's reported clock/power range, available AMD profile modes & performance levels — used to populate UI selects and enforce bounds |
 | POST | `/api/gpu-power/demand` | user | Register demand (body: `source, timeout_seconds, description`) |
 | DELETE | `/api/gpu-power/demand/{source}` | user | Unregister |
 | GET | `/api/gpu-power/history?limit=100` | user | State transition log |
@@ -360,11 +420,31 @@ New card on `pages/PowerManagement.tsx`:
 │ Estimated draw: 32 W                 │
 │ Active demands: 1 (ollama_inference) │
 │                                      │
-│ ▾ Advanced thresholds                │
+│ ▾ Thresholds                         │
 │   Idle window:        [30] s         │
 │   Grace before deep:  [120] s        │
 │   Deep-idle grace:    [5] s          │
 │   Usage threshold:    [5] %          │
+│   Monitor interval:   [5] s          │
+│                                      │
+│ ▾ Per-state hardware (AMD)           │
+│   Active:    perf=[auto▾]            │
+│              profile=[(unset)▾]      │
+│   Standby:   perf=[auto▾]            │
+│              profile=[POWER_SAVING▾] │
+│   Deep idle: perf=[low▾]             │
+│              profile=[POWER_SAVING▾] │
+│                                      │
+│ ▾ Per-state hardware (NVIDIA)        │
+│   (only shown if vendor=nvidia)      │
+│   Active:    [reset]                 │
+│   Standby:   min=[___] max=[___] MHz │
+│              power=[___] W           │
+│   Deep idle: min=[___] max=[___] MHz │
+│              power=[___] W           │
+│                                      │
+│ Bounds: min/max enforced against     │
+│ `/api/gpu-power/capabilities`.       │
 │                                      │
 │ [view history]                       │
 └──────────────────────────────────────┘
