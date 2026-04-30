@@ -5,7 +5,7 @@ from app.api.routes import (
     sync_advanced, mobile, vpn, health, admin_db, sync_compat, rate_limit_config,
     vcl, server_profiles, vpn_profiles, metrics, energy, devices, monitoring,
     monitoring_gpu,
-    power, power_presets, fans, service_status, schedulers, plugins,
+    power, power_presets, gpu_power, fans, service_status, schedulers, plugins,
     plugins_marketplace, benchmark,
     notifications, updates, chunked_upload, webdav, samba, cloud, cloud_export,
     sleep,
@@ -49,6 +49,7 @@ api_router.include_router(monitoring.router, tags=["system-monitoring"])
 api_router.include_router(monitoring_gpu.router, tags=["system-monitoring"])
 api_router.include_router(power.router, tags=["power-management"])
 api_router.include_router(power_presets.router, tags=["power-presets"])
+api_router.include_router(gpu_power.router, tags=["gpu-power-management"])
 api_router.include_router(fans.router, prefix="/fans", tags=["fan-control"])
 api_router.include_router(service_status.router, tags=["admin"])
 api_router.include_router(schedulers.router, prefix="/schedulers", tags=["schedulers"])

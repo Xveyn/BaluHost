@@ -134,6 +134,9 @@ RATE_LIMITS = {
 
     # Setup wizard - strict limit to prevent brute force against admin creation
     "setup_admin": "3/minute",
+
+    # GPU power management - moderate limits (status, config, demands, history)
+    "gpu_power": "60/minute",
 }
 
 
