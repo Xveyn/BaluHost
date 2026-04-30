@@ -67,7 +67,7 @@ const cpuIconLg = (
 );
 
 const cpuIconSm = (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path
       strokeLinecap="round"
       strokeLinejoin="round"
@@ -83,7 +83,7 @@ const gpuIconLg = (
 );
 
 const gpuIconSm = (
-  <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
     <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5h16.5v9H3.75v-9zm3 3h2.25v3H6.75v-3zm5.25 0h5.25v3H12v-3z" />
   </svg>
 );
@@ -111,13 +111,20 @@ function Section({
   if (!expanded) {
     return (
       <button type="button" onClick={onClick} className="block w-full text-left">
-        <div className="flex items-center justify-between gap-2">
-          <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{title}</p>
-          <span className={vendor.text}>{iconSm}</span>
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{title}</p>
+            <p className="mt-1 text-2xl font-semibold text-white tabular-nums">
+              {formatNumber(percent, 1)}%
+            </p>
+          </div>
+          <div
+            className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl bg-gradient-to-br ${vendor.gradient} text-white`}
+            style={{ boxShadow: vendor.shadow }}
+          >
+            {iconSm}
+          </div>
         </div>
-        <p className="mt-1 text-2xl font-semibold text-white tabular-nums">
-          {formatNumber(percent, 1)}%
-        </p>
         <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-slate-800">
           <div
             className={`h-full rounded-full bg-gradient-to-r ${vendor.gradient} transition-all duration-500`}
@@ -207,12 +214,7 @@ function PanelBody({ cpu, gpu, cpuColor, gpuColor, expanded, onCpuClick, onGpuCl
         expanded={expanded}
         onClick={onCpuClick}
       />
-      <div
-        className={`${expanded ? 'my-4' : 'my-3'} h-px`}
-        style={{
-          background: `linear-gradient(to right, rgba(${cpuColor.rgb},0.35), rgba(${gpuColor.rgb},0.35))`,
-        }}
-      />
+      <div className={`${expanded ? 'my-4' : 'my-3'} h-px bg-slate-800/70`} />
       <Section
         title="GPU"
         percent={gpuUsage}
@@ -250,12 +252,11 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
   const cpuColor = VENDOR_COLORS[cpu.vendor];
   const gpuColor = VENDOR_COLORS[gpu.vendor];
 
-  const baseTintStyle = useMemo(() => ({
-    background: `linear-gradient(to bottom, rgba(${cpuColor.rgb},0.08) 0%, rgba(${cpuColor.rgb},0.03) 40%, rgba(${gpuColor.rgb},0.03) 60%, rgba(${gpuColor.rgb},0.08) 100%)`,
-  }), [cpuColor.rgb, gpuColor.rgb]);
-
+  // Subtle vendor tint — only visible on hover so the compact card blends
+  // with the rest of the dashboard at rest. Both vendor colors meet softly
+  // in the middle of the panel.
   const hoverTintStyle = useMemo(() => ({
-    background: `linear-gradient(to bottom, rgba(${cpuColor.rgb},0.18) 0%, rgba(${cpuColor.rgb},0.08) 40%, rgba(${gpuColor.rgb},0.08) 60%, rgba(${gpuColor.rgb},0.18) 100%)`,
+    background: `linear-gradient(to bottom, rgba(${cpuColor.rgb},0.10) 0%, rgba(${cpuColor.rgb},0.03) 45%, rgba(${gpuColor.rgb},0.03) 55%, rgba(${gpuColor.rgb},0.10) 100%)`,
   }), [cpuColor.rgb, gpuColor.rgb]);
 
   const goCpu = () => navigate('/system?tab=cpu');
@@ -281,16 +282,11 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
 
       {/* Real card — absolute over the spacer */}
       <div
-        className={`group absolute inset-x-0 top-0 card border-slate-800/40 transition-all duration-200 hover:border-slate-700/60 ${
+        className={`group absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/55 transition-all duration-200 hover:border-slate-700/60 ${
           expanded ? 'z-20 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur' : ''
         }`}
       >
-        {/* Vendor-blended tint (always visible, intensifies on hover) */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none transition-opacity duration-200"
-          style={baseTintStyle}
-        />
+        {/* Vendor-blended tint — appears on hover, blends in the middle */}
         <div
           aria-hidden
           className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
