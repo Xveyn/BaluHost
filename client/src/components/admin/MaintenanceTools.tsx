@@ -18,6 +18,7 @@ import {
 
 const METRIC_COLORS: Record<string, { bg: string; text: string; border: string }> = {
   cpu: { bg: 'from-blue-500/20 to-blue-600/10', text: 'text-blue-400', border: 'border-blue-500/30' },
+  gpu: { bg: 'from-teal-500/20 to-teal-600/10', text: 'text-teal-400', border: 'border-teal-500/30' },
   memory: { bg: 'from-emerald-500/20 to-emerald-600/10', text: 'text-emerald-400', border: 'border-emerald-500/30' },
   network: { bg: 'from-purple-500/20 to-purple-600/10', text: 'text-purple-400', border: 'border-purple-500/30' },
   disk_io: { bg: 'from-amber-500/20 to-amber-600/10', text: 'text-amber-400', border: 'border-amber-500/30' },
