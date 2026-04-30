@@ -11,8 +11,8 @@ export const PanelPlaceholder: React.FC = () => {
 
   return (
     <div
-      onClick={isAdmin ? () => navigate('/settings') : undefined}
-      className={`card border-slate-800/40 bg-slate-900/60 ${isAdmin ? 'cursor-pointer hover:border-slate-700/60' : ''}`}
+      onClick={isAdmin ? () => navigate('/plugins') : undefined}
+      className={`card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)] ${isAdmin ? 'cursor-pointer active:scale-[0.98] touch-manipulation' : ''}`}
     >
       <div className="flex items-center justify-between gap-3">
         <div className="min-w-0 flex-1">
@@ -29,7 +29,7 @@ export const PanelPlaceholder: React.FC = () => {
       </div>
       {isAdmin && (
         <div className="mt-3 text-xs text-slate-500">
-          {t('pluginPanel.configureHint', 'Enable a plugin\'s Dashboard panel in Settings → Plugins')}
+          {t('pluginPanel.configureHint', 'Enable a plugin\'s Dashboard panel on the Plugins page')}
         </div>
       )}
     </div>

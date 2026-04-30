@@ -213,6 +213,6 @@
   "pluginPanel": {
     "title": "Plugin Panel",
     "noPlugin": "No plugin configured",
-    "configureHint": "Enable a plugin's Dashboard panel in Settings → Plugins"
+    "configureHint": "Enable a plugin's Dashboard panel on the Plugins page"
   }
 }
