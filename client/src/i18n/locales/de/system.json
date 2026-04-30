@@ -42,7 +42,9 @@
       "engineGfx": "Grafik",
       "engineCompute": "Compute",
       "engineDecode": "Decode",
-      "engineEncode": "Encode"
+      "engineEncode": "Encode",
+      "usageChart": "GPU-Auslastung",
+      "gpuUsage": "GPU-Auslastung"
     },
     "uptime": {
       "serverUptime": "Server-Betriebszeit",

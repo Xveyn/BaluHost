@@ -21,6 +21,7 @@ import {
   AlertBanner,
   LiveActivities,
   PluginDashboardPanel,
+  CpuGpuPanel,
   type Alert,
 } from '../components/dashboard';
 import { formatBytes, formatUptime, formatNumber } from '../lib/formatters';
@@ -346,54 +347,37 @@ export default function Dashboard() {
     return result;
   }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
-  const gpuStat = useMemo(() => {
-    if (!hasGpu || !gpuInfo) return null;
-    const usage = gpuSample?.usage_percent ?? 0;
-    const tempC = gpuSample?.temperature_edge_celsius;
-    const power = gpuSample?.power_watts;
-    return {
-      id: 'gpu',
-      title: t('stats.gpu', 'GPU'),
-      value: `${formatNumber(usage, 1)}%`,
-      meta: gpuInfo.device_name +
-        (tempC != null ? ` • ${formatNumber(tempC, 1)}°C` : '') +
-        (power != null ? ` • ${formatNumber(power, 0)} W` : ''),
-      submeta: gpuSample?.vram_used_bytes != null && gpuSample?.vram_total_bytes != null
-        ? `VRAM ${formatBytes(gpuSample.vram_used_bytes)} / ${formatBytes(gpuSample.vram_total_bytes)}`
-        : undefined,
-      delta: { label: 'Live' as const, tone: 'live' as const },
-      accent: 'from-emerald-500 to-teal-500',
-      progress: usage,
-      icon: (
-        <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-          <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 7.5h16.5v9H3.75v-9zm3 3h2.25v3H6.75v-3zm5.25 0h5.25v3H12v-3z" />
-        </svg>
-      ),
-    };
-  }, [hasGpu, gpuInfo, gpuSample, t]);
+  const cpuStatBase = useMemo(() => ({
+    usagePercent: systemStats.cpuUsage,
+    meta: cpuModel
+      ? cpuModel
+      : (cpuFrequency
+        ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
+        : t('stats.coresActive', { count: systemStats.cpuCores || 0 }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')),
+    submeta: cpuModel && cpuFrequency
+      ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
+      : undefined,
+    delta: formatDelta(cpuDelta),
+  }), [systemStats.cpuUsage, systemStats.cpuCores, cpuModel, cpuFrequency, cpuTemperature, cpuDelta, t]);
 
   const quickStats = [
-    {
+    // When a dedicated GPU is detected, the CPU card is replaced by the
+    // combined CpuGpuPanel rendered alongside this list. Otherwise show CPU here.
+    ...(hasGpu ? [] : [{
       id: 'cpu',
       title: t('stats.cpu'),
-      value: `${formatNumber(systemStats.cpuUsage, 1)}%`,
-      meta: cpuModel
-        ? cpuModel
-        : (cpuFrequency
-          ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
-          : t('stats.coresActive', { count: systemStats.cpuCores || 0 }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')),
-      submeta: cpuModel && cpuFrequency
-        ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
-        : undefined,
-      delta: formatDelta(cpuDelta),
+      value: `${formatNumber(cpuStatBase.usagePercent, 1)}%`,
+      meta: cpuStatBase.meta,
+      submeta: cpuStatBase.submeta,
+      delta: cpuStatBase.delta,
       accent: 'from-violet-500 to-fuchsia-500',
-      progress: systemStats.cpuUsage,
+      progress: cpuStatBase.usagePercent,
       icon: (
         <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
           <path strokeLinecap="round" strokeLinejoin="round" d="M8.25 3v1.5M4.5 8.25H3m18 0h-1.5M4.5 12H3m18 0h-1.5m-15 3.75H3m18 0h-1.5M8.25 19.5V21M12 3v1.5m0 15V21m3.75-18v1.5m0 15V21m-9-1.5h10.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H6.75A1.5 1.5 0 005.25 6v12a1.5 1.5 0 001.5 1.5z" />
         </svg>
       )
-    },
+    }]),
     {
       id: 'memory',
       title: t('stats.memory'),
@@ -423,7 +407,6 @@ export default function Dashboard() {
         </svg>
       )
     },
-    ...(gpuStat ? [gpuStat] : []),
     {
       id: 'uptime',
       title: t('stats.serverUptime'),
@@ -469,6 +452,12 @@ export default function Dashboard() {
       ) : (
         <>
           <div className="grid grid-cols-1 gap-5 md:grid-cols-2 xl:grid-cols-4">
+            {hasGpu && gpuInfo && (
+              <CpuGpuPanel
+                cpu={cpuStatBase}
+                gpu={{ info: gpuInfo, sample: gpuSample }}
+              />
+            )}
             {quickStats.map((stat) => {
               const deltaToneClass = stat.delta.tone === 'decrease'
                 ? 'text-emerald-400'
@@ -482,7 +471,6 @@ export default function Dashboard() {
               const handleClick = stat.id === 'cpu' ? handleCpuClick
                 : stat.id === 'memory' ? handleMemoryClick
                 : stat.id === 'storage' ? handleStorageClick
-                : stat.id === 'gpu' ? () => navigate('/system?tab=gpu')
                 : stat.id === 'uptime' ? () => navigate('/system?tab=uptime')
                 : undefined;
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import {
   getGpuCurrent,
@@ -7,6 +7,7 @@ import {
   type TimeRange,
 } from '../../api/monitoring';
 import { useGpuPresence } from '../../hooks/useGpuPresence';
+import { MetricChart } from '../monitoring';
 
 interface Props {
   timeRange: TimeRange;
@@ -44,7 +45,17 @@ export function GpuTab({ timeRange }: Props) {
 
   const [current, setCurrent] = useState<GpuSample | null>(null);
   const [history, setHistory] = useState<GpuSample[]>([]);
+  const [historyLoading, setHistoryLoading] = useState(true);
   const [engineView, setEngineView] = useState<'overview' | 'per-engine'>('overview');
+
+  const usageChartData = useMemo(() => {
+    return history
+      .filter((s) => s.usage_percent != null && s.usage_percent >= 0)
+      .map((s) => ({
+        time: s.timestamp,
+        usage: s.usage_percent ?? 0,
+      }));
+  }, [history]);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,11 +72,15 @@ export function GpuTab({ timeRange }: Props) {
 
   useEffect(() => {
     let cancelled = false;
+    setHistoryLoading(true);
     (async () => {
       try {
         const res = await getGpuHistory(timeRange);
         if (!cancelled) setHistory(res.samples);
       } catch { /* ignore */ }
+      finally {
+        if (!cancelled) setHistoryLoading(false);
+      }
     })();
     return () => { cancelled = true; };
   }, [timeRange]);
@@ -111,6 +126,22 @@ export function GpuTab({ timeRange }: Props) {
         <Kpi label={t('monitor.gpu.tempEdge', 'Edge Temp')} value={fmtTemp(current?.temperature_edge_celsius)} />
         <Kpi label={t('monitor.gpu.tempJunction', 'Junction Temp')} value={fmtTemp(current?.temperature_junction_celsius)} />
         <Kpi label={t('monitor.gpu.tempMemory', 'Memory Temp')} value={fmtTemp(current?.temperature_memory_celsius)} />
+      </div>
+
+      <div className="card border-slate-800/60 bg-slate-900/55 p-4 sm:p-6">
+        <h3 className="mb-3 sm:mb-4 text-base sm:text-lg font-semibold text-white">
+          {t('monitor.gpu.usageChart', 'GPU Usage')}
+        </h3>
+        <MetricChart
+          data={usageChartData}
+          lines={[{ dataKey: 'usage', name: t('monitor.usagePercent', '%'), color: '#10b981' }]}
+          yAxisLabel="%"
+          yAxisDomain={[0, 100]}
+          height={250}
+          loading={historyLoading}
+          showArea
+          timeRange={timeRange}
+        />
       </div>
 
       <div className="rounded-xl border border-slate-800/60 bg-slate-900/40 p-4">
