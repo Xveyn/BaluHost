@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { getGpuInfo, GpuDeviceInfo } from '../api/monitoring';
+import { getGpuInfo } from '../api/monitoring';
+import type { GpuDeviceInfo } from '../api/monitoring';
 
 interface GpuPresence {
   present: boolean;
