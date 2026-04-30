@@ -348,6 +348,7 @@ export default function Dashboard() {
     return result;
   }, [smartData, raidData, allSchedulers, services, isAdmin, t]);
 
+  const cpuTempC = systemInfo?.cpu?.temperature_celsius ?? null;
   const cpuStatBase = useMemo(() => ({
     vendor: detectCpuVendor(cpuModel),
     usagePercent: systemStats.cpuUsage,
@@ -360,7 +361,8 @@ export default function Dashboard() {
       ? t('stats.coresAt', { count: systemStats.cpuCores || 0, frequency: cpuFrequency }) + (cpuTemperature ? ` • ${cpuTemperature}` : '')
       : undefined,
     delta: formatDelta(cpuDelta),
-  }), [systemStats.cpuUsage, systemStats.cpuCores, cpuModel, cpuFrequency, cpuTemperature, cpuDelta, t]);
+    tempC: cpuTempC,
+  }), [systemStats.cpuUsage, systemStats.cpuCores, cpuModel, cpuFrequency, cpuTemperature, cpuTempC, cpuDelta, t]);
 
   const quickStats = [
     // When a dedicated GPU is detected, the CPU card is replaced by the

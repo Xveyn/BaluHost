@@ -13,7 +13,7 @@
  * green) — both halves can be different and blend in the middle.
  */
 
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { ChevronDown } from 'lucide-react';
@@ -29,6 +29,7 @@ interface CpuPart {
   meta: string;
   submeta?: string;
   delta: { label: string; tone: DeltaTone };
+  tempC?: number | null;
 }
 
 interface GpuPart {
@@ -100,13 +101,15 @@ interface SectionProps {
   iconLg: React.ReactNode;
   expanded: boolean;
   onClick?: () => void;
+  tempC?: number | null;
 }
 
 function Section({
   title, percent, meta, submeta, deltaLabel, deltaToneClass,
-  vendor, iconSm, iconLg, expanded, onClick,
+  vendor, iconSm, iconLg, expanded, onClick, tempC,
 }: SectionProps) {
   const clamped = Math.min(Math.max(percent, 0), 100);
+  const tempLabel = typeof tempC === 'number' ? `${formatNumber(tempC, 1)}°C` : null;
 
   if (!expanded) {
     return (
@@ -114,8 +117,11 @@ function Section({
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <p className="text-xs uppercase tracking-[0.28em] text-slate-500">{title}</p>
-            <p className="mt-1 text-2xl font-semibold text-white tabular-nums">
-              {formatNumber(percent, 1)}%
+            <p className="mt-1 flex items-baseline gap-2 text-2xl font-semibold text-white tabular-nums">
+              <span>{formatNumber(percent, 1)}%</span>
+              {tempLabel && (
+                <span className="text-xs font-normal text-slate-400">{tempLabel}</span>
+              )}
             </p>
           </div>
           <div
@@ -213,6 +219,7 @@ function PanelBody({ cpu, gpu, cpuColor, gpuColor, expanded, onCpuClick, onGpuCl
         iconLg={cpuIconLg}
         expanded={expanded}
         onClick={onCpuClick}
+        tempC={cpu.tempC}
       />
       <div className={`${expanded ? 'my-4' : 'my-3'} h-px bg-slate-800/70`} />
       <Section
@@ -227,6 +234,7 @@ function PanelBody({ cpu, gpu, cpuColor, gpuColor, expanded, onCpuClick, onGpuCl
         iconLg={gpuIconLg}
         expanded={expanded}
         onClick={onGpuClick}
+        tempC={gpuTempC}
       />
     </>
   );
@@ -252,22 +260,23 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
   const cpuColor = VENDOR_COLORS[cpu.vendor];
   const gpuColor = VENDOR_COLORS[gpu.vendor];
 
-  // Match the sibling card hover recipe exactly:
-  //   hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)]
-  // …but use a color blended from the two vendor RGBs so the glow tint
-  // reflects the actual hardware (red/blue/green or a mix).
-  const blendedRgb = useMemo(() => {
-    const a = cpuColor.rgb.split(',').map(Number);
-    const b = gpuColor.rgb.split(',').map(Number);
-    return [0, 1, 2].map((i) => Math.round((a[i] + b[i]) / 2)).join(',');
-  }, [cpuColor.rgb, gpuColor.rgb]);
-
+  // Vendor-colored glow shows only on hover (or while expanded). When CPU
+  // and GPU come from the same vendor we use a single unified glow; when
+  // they differ we split it so the top of the card glows in the CPU color
+  // and the bottom in the GPU color (mirroring the layout).
+  const sameVendor = cpu.vendor === gpu.vendor;
   const [hovered, setHovered] = useState(false);
-  const cardBoxShadow = expanded
-    ? '0 24px 60px rgba(0,0,0,0.55)'
-    : hovered
-      ? `0 14px 44px rgba(${blendedRgb},0.20)`
-      : '0 20px 60px rgba(2,6,23,0.55)';
+  const showGlow = hovered || expanded;
+  const baseAlpha = showGlow ? 0.32 : 0;
+  const depthShadow = '0 20px 60px rgba(2,6,23,0.45)';
+  const expandedDepth = '0 24px 60px rgba(0,0,0,0.55)';
+  const baseDepth = expanded ? expandedDepth : depthShadow;
+
+  const cardBoxShadow = !showGlow
+    ? baseDepth
+    : sameVendor
+      ? `0 14px 44px rgba(${cpuColor.rgb},${baseAlpha}), ${baseDepth}`
+      : `0 -14px 36px -6px rgba(${cpuColor.rgb},${baseAlpha}), 0 14px 36px -6px rgba(${gpuColor.rgb},${baseAlpha}), ${baseDepth}`;
 
   const goCpu = () => navigate('/system?tab=cpu');
   const goGpu = () => navigate('/system?tab=gpu');
