@@ -324,3 +324,33 @@ def test_startup_secondary_worker_does_not_emit(monkeypatch):
     ) as mock_emit:
         asyncio.run(lifespan._emit_lifecycle_startup())
         mock_emit.assert_not_called()
+
+
+# ---------------------------------------------------------------------------
+# Cooldown configuration
+# ---------------------------------------------------------------------------
+
+
+def test_cooldown_60s_for_suspend():
+    """Two suspend cooldown checks within 60s — second is in cooldown."""
+    from app.services.notifications import events as events_mod
+    events_mod._cooldown_cache.clear()
+
+    # First call should not be in cooldown
+    assert events_mod._check_cooldown("lifecycle.suspend", "suspend") is False
+    events_mod._set_cooldown("lifecycle.suspend", "suspend")
+    # Second call within 60s should be in cooldown
+    assert events_mod._check_cooldown("lifecycle.suspend", "suspend") is True
+
+
+def test_no_cooldown_for_shutdown_startup():
+    """Shutdown / startup have NO cooldown — legitimate reboot loops always notify."""
+    from app.services.notifications import events as events_mod
+    events_mod._cooldown_cache.clear()
+
+    # Even after _set_cooldown, _check_cooldown returns False because there's
+    # no entry in _COOLDOWN_SECONDS for these types.
+    events_mod._set_cooldown("lifecycle.shutdown")
+    events_mod._set_cooldown("lifecycle.startup")
+    assert events_mod._check_cooldown("lifecycle.shutdown") is False
+    assert events_mod._check_cooldown("lifecycle.startup") is False
