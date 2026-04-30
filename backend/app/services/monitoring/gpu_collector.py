@@ -49,8 +49,16 @@ class GpuMetricCollector(MetricCollector[GpuSampleSchema]):
 
     @staticmethod
     def _select_backend() -> GpuBackend:
-        if getattr(settings, "is_dev_mode", False):
-            return DevGpuBackend()
+        # Try real backends first on every platform; fall back to mock only
+        # in dev mode when nothing real is detected.
+        try:
+            from app.services.monitoring.gpu.nvidia_backend import NvidiaSmiBackend
+            nv = NvidiaSmiBackend()
+            if nv.detected:
+                return nv
+        except Exception as exc:
+            logger.debug(f"NVIDIA backend detection failed: {exc}")
+
         try:
             from app.services.monitoring.gpu.amd_backend import AmdGpuBackend
             amd = AmdGpuBackend()
@@ -58,6 +66,10 @@ class GpuMetricCollector(MetricCollector[GpuSampleSchema]):
                 return amd
         except Exception as exc:
             logger.debug(f"AMD GPU detection failed: {exc}")
+
+        if getattr(settings, "is_dev_mode", False):
+            logger.info("No real GPU detected — using DevGpuBackend mock (dev mode)")
+            return DevGpuBackend()
         return _NoGpuBackend()
 
     @property

@@ -1,5 +1,25 @@
 """GPU monitoring API routes."""
+import pytest
 from fastapi.testclient import TestClient
+
+
+@pytest.fixture(autouse=True)
+def force_dev_gpu_backend():
+    """Pin the GPU backend to DevGpuBackend so tests don't depend on host hardware.
+
+    The collector picks a real backend (NVIDIA/AMD) when one is present, which
+    breaks vendor-specific assertions on machines that aren't headless.
+    """
+    from app.services.monitoring.orchestrator import get_monitoring_orchestrator
+    from app.services.monitoring.gpu.dev_backend import DevGpuBackend
+
+    orch = get_monitoring_orchestrator()
+    original = orch.gpu_collector.backend
+    orch.gpu_collector.backend = DevGpuBackend()
+    try:
+        yield
+    finally:
+        orch.gpu_collector.backend = original
 
 
 def test_gpu_info_requires_auth(client: TestClient):
