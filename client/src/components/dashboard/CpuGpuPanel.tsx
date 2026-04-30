@@ -252,11 +252,12 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
   const cpuColor = VENDOR_COLORS[cpu.vendor];
   const gpuColor = VENDOR_COLORS[gpu.vendor];
 
-  // Subtle vendor tint — only visible on hover so the compact card blends
-  // with the rest of the dashboard at rest. Both vendor colors meet softly
-  // in the middle of the panel.
-  const hoverTintStyle = useMemo(() => ({
-    background: `linear-gradient(to bottom, rgba(${cpuColor.rgb},0.10) 0%, rgba(${cpuColor.rgb},0.03) 45%, rgba(${gpuColor.rgb},0.03) 55%, rgba(${gpuColor.rgb},0.10) 100%)`,
+  // Outer glow shadow on hover — matches the sibling card pattern
+  // (hover:shadow-[0_14px_44px_rgba(56,189,248,0.15)]) but uses the two
+  // vendor colors: CPU glow above (top of panel), GPU glow below.
+  const cardStyle = useMemo(() => ({
+    ['--hover-shadow' as string]:
+      `0 -14px 44px rgba(${cpuColor.rgb},0.18), 0 14px 44px rgba(${gpuColor.rgb},0.18)`,
   }), [cpuColor.rgb, gpuColor.rgb]);
 
   const goCpu = () => navigate('/system?tab=cpu');
@@ -282,17 +283,11 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
 
       {/* Real card — absolute over the spacer */}
       <div
-        className={`group absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/55 transition-all duration-200 hover:border-slate-700/60 ${
+        style={cardStyle}
+        className={`absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 hover:shadow-[var(--hover-shadow)] ${
           expanded ? 'z-20 shadow-[0_24px_60px_rgba(0,0,0,0.55)] backdrop-blur' : ''
         }`}
       >
-        {/* Vendor-blended tint — appears on hover, blends in the middle */}
-        <div
-          aria-hidden
-          className="absolute inset-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-200"
-          style={hoverTintStyle}
-        />
-
         <div className="relative">
           <PanelBody
             cpu={cpu}
