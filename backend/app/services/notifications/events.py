@@ -1206,3 +1206,75 @@ def emit_service_restored_sync(service_name: str) -> None:
         EventType.SERVICE_RESTORED,
         service_name=service_name,
     )
+
+
+# ---------------------------------------------------------------------------
+# Lifecycle event helpers
+# ---------------------------------------------------------------------------
+
+
+def emit_system_suspend_sync(trigger: str) -> None:
+    """Emit lifecycle.suspend event (sync) — fired BEFORE kernel suspend."""
+    from app.services.notifications.lifecycle_helpers import german_trigger_label
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_SUSPEND,
+        cooldown_entity="suspend",
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+    )
+
+
+def emit_system_resume_sync(trigger: str, duration_seconds: Optional[float]) -> None:
+    """Emit lifecycle.resume event (sync) — fired after wake from suspend."""
+    from app.services.notifications.lifecycle_helpers import (
+        format_duration_human,
+        german_trigger_label,
+    )
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_RESUME,
+        cooldown_entity="resume",
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+        duration_seconds=duration_seconds,
+        duration_human=format_duration_human(duration_seconds),
+    )
+
+
+def emit_system_shutdown_sync(trigger: str) -> None:
+    """Emit lifecycle.shutdown event (sync) — fired early in _shutdown()."""
+    from app.services.notifications.lifecycle_helpers import german_trigger_label
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_SHUTDOWN,
+        trigger=trigger,
+        trigger_label=german_trigger_label(trigger),
+    )
+
+
+def emit_system_startup_sync(downtime_seconds: Optional[float]) -> None:
+    """Emit lifecycle.startup event (sync) — fired at end of _startup()."""
+    from app.services.notifications.lifecycle_helpers import format_duration_human
+    get_event_emitter().emit_for_admins_sync(
+        EventType.SYSTEM_STARTUP,
+        downtime_seconds=downtime_seconds,
+        downtime_human=format_duration_human(downtime_seconds),
+    )
+
+
+async def emit_system_suspend(trigger: str) -> None:
+    """Async wrapper — used in `enter_true_suspend()`."""
+    emit_system_suspend_sync(trigger)
+
+
+async def emit_system_resume(trigger: str, duration_seconds: Optional[float]) -> None:
+    """Async wrapper — used in `enter_true_suspend()` after resume."""
+    emit_system_resume_sync(trigger, duration_seconds)
+
+
+async def emit_system_shutdown(trigger: str) -> None:
+    """Async wrapper — used in `_shutdown()`."""
+    emit_system_shutdown_sync(trigger)
+
+
+async def emit_system_startup(downtime_seconds: Optional[float]) -> None:
+    """Async wrapper — used in `_startup()`."""
+    emit_system_startup_sync(downtime_seconds)
