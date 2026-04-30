@@ -321,7 +321,7 @@ export default function Layout({ children }: LayoutProps) {
             </div>
           </div>
 
-          <nav className="flex-1 px-4 overflow-y-auto pb-4">
+          <nav className="flex-1 px-4 overflow-y-auto scrollbar-thin pb-4">
             <div className="space-y-1">
               {allNavItems.map((item, index) => {
                 const active = renderLink(item.path);
@@ -408,7 +408,7 @@ export default function Layout({ children }: LayoutProps) {
             </button>
           </div>
 
-          <nav className="flex-1 px-4 overflow-y-auto pb-4">
+          <nav className="flex-1 px-4 overflow-y-auto scrollbar-thin pb-4">
             <div className="space-y-1">
               {allNavItems.map((item, index) => {
                 const active = renderLink(item.path);
