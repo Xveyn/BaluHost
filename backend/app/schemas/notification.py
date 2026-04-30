@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 # Literal types for validation
 NotificationTypeEnum = Literal["info", "warning", "critical"]
 NotificationCategoryEnum = Literal[
-    "raid", "smart", "backup", "scheduler", "system", "security", "sync", "vpn"
+    "raid", "smart", "backup", "scheduler", "system", "security", "sync", "vpn", "lifecycle"
 ]
 
 

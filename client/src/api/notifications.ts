@@ -5,7 +5,7 @@ import { apiClient } from '../lib/api';
 
 // Notification types
 export type NotificationType = 'info' | 'warning' | 'critical';
-export type NotificationCategory = 'raid' | 'smart' | 'backup' | 'scheduler' | 'system' | 'security' | 'sync' | 'vpn';
+export type NotificationCategory = 'raid' | 'smart' | 'backup' | 'scheduler' | 'system' | 'security' | 'sync' | 'vpn' | 'lifecycle';
 
 export interface Notification {
   id: number;
@@ -229,6 +229,8 @@ export function getCategoryIcon(category: NotificationCategory): string {
       return '🔄';
     case 'vpn':
       return '🔐';
+    case 'lifecycle':
+      return '⏻';
     default:
       return '🔔';
   }
@@ -247,6 +249,7 @@ export function getCategoryName(category: NotificationCategory): string {
     security: 'Security',
     sync: 'Sync',
     vpn: 'VPN',
+    lifecycle: 'Lifecycle',
   };
   return names[category] || category;
 }
@@ -279,6 +282,7 @@ export function getActionLabel(category: NotificationCategory): string {
     security: 'Logs anzeigen',
     sync: 'Sync anzeigen',
     vpn: 'VPN anzeigen',
+    lifecycle: 'System anzeigen',
   };
   return labels[category] || 'Anzeigen';
 }
