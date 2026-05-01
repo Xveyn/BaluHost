@@ -66,6 +66,15 @@ class ActivityMetrics(BaseModel):
 # Status / Response
 # ---------------------------------------------------------------------------
 
+class CoreUptimeStatus(BaseModel):
+    """Snapshot of core-uptime master toggle and active-window state."""
+    enabled: bool = Field(default=False, description="Master toggle state")
+    active: bool = Field(default=False, description="Whether some enabled window is currently active")
+    current_window_label: Optional[str] = Field(default=None)
+    current_window_ends_at: Optional[datetime] = Field(default=None)
+    next_start: Optional[datetime] = Field(default=None)
+
+
 class SleepStatusResponse(BaseModel):
     """Current sleep mode status."""
     current_state: SleepState = Field(..., description="Current sleep state")
@@ -78,7 +87,7 @@ class SleepStatusResponse(BaseModel):
     auto_idle_enabled: bool = Field(default=False, description="Whether auto-idle detection is active")
     schedule_enabled: bool = Field(default=False, description="Whether sleep schedule is active")
     escalation_enabled: bool = Field(default=False, description="Whether auto-escalation to suspend is enabled")
-    core_uptime: "CoreUptimeStatus" = Field(default_factory=lambda: CoreUptimeStatus())
+    core_uptime: CoreUptimeStatus = Field(default_factory=CoreUptimeStatus)
 
 
 # ---------------------------------------------------------------------------
@@ -210,6 +219,7 @@ class SleepHistoryResponse(BaseModel):
 # ---------------------------------------------------------------------------
 
 class CoreUptimeWindowBase(BaseModel):
+    """Shared base for core-uptime window schemas. Enforces validation rules."""
     enabled: bool = True
     label: Optional[str] = Field(default=None, max_length=50)
     start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM, server-local")
@@ -241,6 +251,7 @@ class CoreUptimeWindowBase(BaseModel):
 
 
 class CoreUptimeWindowCreate(CoreUptimeWindowBase):
+    """Request body for creating a new core-uptime window."""
     pass
 
 
@@ -263,6 +274,16 @@ class CoreUptimeWindowUpdate(BaseModel):
             raise ValueError("weekdays must be in range 0..6")
         return sorted(set(v))
 
+    @model_validator(mode="after")
+    def _validate_distinct_if_both(self) -> "CoreUptimeWindowUpdate":
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.start_time == self.end_time
+        ):
+            raise ValueError("start_time and end_time must differ")
+        return self
+
 
 class CoreUptimeWindowResponse(CoreUptimeWindowBase):
     id: int
@@ -270,13 +291,4 @@ class CoreUptimeWindowResponse(CoreUptimeWindowBase):
     updated_at: datetime
 
 
-class CoreUptimeStatus(BaseModel):
-    enabled: bool = Field(default=False, description="Master toggle state")
-    active: bool = Field(default=False, description="Whether some enabled window is currently active")
-    current_window_label: Optional[str] = Field(default=None)
-    current_window_ends_at: Optional[datetime] = Field(default=None)
-    next_start: Optional[datetime] = Field(default=None)
 
-
-# Resolve forward reference used in SleepStatusResponse.core_uptime
-SleepStatusResponse.model_rebuild()
