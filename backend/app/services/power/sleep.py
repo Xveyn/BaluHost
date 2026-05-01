@@ -381,7 +381,7 @@ class SleepManagerService:
                 logger.warning("Error in idle detection loop: %s", e)
 
     async def _schedule_check_loop(self) -> None:
-        """Background loop that checks sleep schedule every 60 seconds."""
+        """Check sleep schedule and core-uptime auto-wake every 60 seconds."""
         while self._is_running:
             try:
                 await asyncio.sleep(60)
@@ -389,18 +389,38 @@ class SleepManagerService:
                     break
 
                 config = self._load_config()
+                master, windows = self._load_core_uptime()
+                in_core, _matched = (
+                    core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                    if master else (False, None)
+                )
+
+                # Auto-wake edge: AWAY -> IN, while in soft sleep
+                if master and in_core and not self._was_in_core_uptime \
+                        and self._current_state == SleepState.SOFT_SLEEP:
+                    logger.info("Core uptime started while in soft sleep — auto-waking")
+                    await self.exit_soft_sleep("core_uptime_started")
+                # Track edge state regardless
+                if master:
+                    self._was_in_core_uptime = in_core
+                else:
+                    self._was_in_core_uptime = False
+
                 if not config or not config.schedule_enabled:
                     continue
 
                 now = datetime.now()
                 current_time = now.strftime("%H:%M")
 
-                # Check if it's time to sleep
                 if self._current_state == SleepState.AWAKE:
                     if self._time_matches(current_time, config.schedule_sleep_time):
+                        if in_core:
+                            logger.info(
+                                "Schedule sleep trigger suppressed by active core uptime window",
+                            )
+                            continue
                         mode = config.schedule_mode
                         if mode == "suspend":
-                            # Schedule RTC wake first
                             wake_dt = self._next_occurrence(config.schedule_wake_time)
                             await self.enter_true_suspend(
                                 "scheduled_suspend",
@@ -409,8 +429,6 @@ class SleepManagerService:
                             )
                         else:
                             await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
-
-                # Check if it's time to wake
                 elif self._current_state == SleepState.SOFT_SLEEP:
                     if self._time_matches(current_time, config.schedule_wake_time):
                         await self.exit_soft_sleep("scheduled_wake")
