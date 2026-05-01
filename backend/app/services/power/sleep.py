@@ -388,10 +388,11 @@ class SleepManagerService:
                 if not self._is_running:
                     break
 
+                now = datetime.now()
                 config = self._load_config()
                 master, windows = self._load_core_uptime()
                 in_core, _matched = (
-                    core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                    core_uptime_helpers.is_in_core_uptime(now, windows)
                     if master else (False, None)
                 )
 
@@ -400,7 +401,9 @@ class SleepManagerService:
                         and self._current_state == SleepState.SOFT_SLEEP:
                     logger.info("Core uptime started while in soft sleep — auto-waking")
                     await self.exit_soft_sleep("core_uptime_started")
-                # Track edge state regardless
+                # Track edge state regardless. When master is off we force False so
+                # that re-enabling the toggle while inside an active window registers
+                # as a fresh rising edge on the next tick and triggers auto-wake.
                 if master:
                     self._was_in_core_uptime = in_core
                 else:
@@ -409,7 +412,6 @@ class SleepManagerService:
                 if not config or not config.schedule_enabled:
                     continue
 
-                now = datetime.now()
                 current_time = now.strftime("%H:%M")
 
                 if self._current_state == SleepState.AWAKE:
