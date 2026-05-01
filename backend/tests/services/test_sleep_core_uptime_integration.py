@@ -191,3 +191,94 @@ async def test_schedule_loop_auto_wake_on_core_uptime_start():
 
     assert exit_called == ["core_uptime_started"]
     assert svc._was_in_core_uptime is True
+
+
+@pytest.mark.asyncio
+async def test_escalation_aborts_during_core_uptime():
+    """_escalation_monitor must return without escalating if in core uptime when timer fires."""
+    svc = _build_service()
+    cfg = SleepConfig(
+        id=1,
+        auto_idle_enabled=False, idle_timeout_minutes=15, idle_cpu_threshold=5,
+        idle_disk_io_threshold=0.5, idle_http_threshold=5,
+        auto_escalation_enabled=True, escalation_after_minutes=1,
+        schedule_enabled=False, schedule_sleep_time="23:00", schedule_wake_time="06:00",
+        schedule_mode="soft",
+        wol_mac_address=None, wol_broadcast_address=None,
+        pause_monitoring=False, pause_disk_io=False, reduced_telemetry_interval=30.0,
+        disk_spindown_enabled=False,
+        core_uptime_enabled=True,
+    )
+
+    suspend_called = []
+
+    async def fake_suspend(reason, trigger=None, wake_at=None):
+        suspend_called.append((reason, trigger))
+        return True
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               return_value=(True, _window_workdays_8_22())):
+        svc.enter_true_suspend = fake_suspend
+        svc._is_running = True
+        svc._current_state = SleepState.SOFT_SLEEP
+
+        async def fast_sleep(*_a, **_k):
+            return None
+        with patch("app.services.power.sleep.asyncio.sleep", side_effect=fast_sleep):
+            await svc._escalation_monitor()
+
+    assert suspend_called == []
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_clamps_wake_at_to_next_core_start():
+    """If wake_at is after next core uptime start, it is clamped to that start."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    next_start = datetime(2026, 5, 7, 8, 0)
+    user_wake = datetime(2026, 5, 7, 23, 0)  # later than next_start
+
+    captured_wake_at = []
+
+    async def fake_suspend_system(wake_at=None):
+        captured_wake_at.append(wake_at)
+        return True
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.next_core_uptime_start",
+               return_value=next_start), \
+         patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
+         patch("app.services.power.sleep.SessionLocal"), \
+         patch("app.services.notifications.events.emit_system_suspend", new=lambda **k: None):
+        svc._current_state = SleepState.SOFT_SLEEP  # skip implicit enter_soft_sleep
+        await svc.enter_true_suspend("manual", SleepTrigger.MANUAL, wake_at=user_wake)
+
+    assert captured_wake_at == [next_start]
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_uses_next_core_start_when_no_wake_at_given():
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    next_start = datetime(2026, 5, 7, 8, 0)
+
+    captured_wake_at = []
+
+    async def fake_suspend_system(wake_at=None):
+        captured_wake_at.append(wake_at)
+        return True
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.next_core_uptime_start",
+               return_value=next_start), \
+         patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
+         patch("app.services.power.sleep.SessionLocal"), \
+         patch("app.services.notifications.events.emit_system_suspend", new=lambda **k: None):
+        svc._current_state = SleepState.SOFT_SLEEP
+        await svc.enter_true_suspend("manual", SleepTrigger.MANUAL, wake_at=None)
+
+    assert captured_wake_at == [next_start]

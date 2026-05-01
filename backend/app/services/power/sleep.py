@@ -453,13 +453,23 @@ class SleepManagerService:
             wait_seconds = config.escalation_after_minutes * 60
             await asyncio.sleep(wait_seconds)
 
-            if self._current_state == SleepState.SOFT_SLEEP and self._is_running:
-                logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
-                            config.escalation_after_minutes)
-                await self.enter_true_suspend(
-                    "auto_escalation",
-                    SleepTrigger.AUTO_ESCALATION,
-                )
+            if self._current_state != SleepState.SOFT_SLEEP or not self._is_running:
+                return
+
+            # Skip escalation if currently in a core-uptime window
+            master, windows = self._load_core_uptime()
+            if master:
+                in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                if in_core:
+                    logger.info("Auto-escalation skipped: currently in core uptime window")
+                    return
+
+            logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
+                        config.escalation_after_minutes)
+            await self.enter_true_suspend(
+                "auto_escalation",
+                SleepTrigger.AUTO_ESCALATION,
+            )
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -768,6 +778,17 @@ class SleepManagerService:
         Then suspends the system.
         """
         prev_state = self._current_state
+
+        # Clamp wake_at to next core-uptime start, if any
+        master, windows = self._load_core_uptime()
+        if master:
+            next_core = core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
+            if next_core is not None and (wake_at is None or next_core < wake_at):
+                logger.info(
+                    "wake_at clamped to next core uptime start: %s (was %s)",
+                    next_core, wake_at,
+                )
+                wake_at = next_core
 
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
