@@ -10,7 +10,7 @@ Conventions:
 from __future__ import annotations
 
 from datetime import datetime, timedelta
-from typing import Iterable, Optional, Sequence
+from typing import Optional, Sequence
 
 
 def _parse_hhmm(s: str) -> tuple[int, int]:
@@ -67,7 +67,12 @@ def is_in_core_uptime(now: datetime, windows: Sequence) -> tuple[bool, Optional[
 
 
 def next_core_uptime_start(now: datetime, windows: Sequence) -> Optional[datetime]:
-    """Return the earliest start datetime within the next 7 days, or None."""
+    """Return the earliest start datetime within the next 8 calendar days, or None.
+
+    Iterates day_offset 0..7 (inclusive) so that single-weekday windows still
+    produce a candidate when ``now`` is already past today's start time
+    (the next match is exactly 7 days later — needs day_offset=7, not 6).
+    """
     enabled = [w for w in windows if w.enabled]
     if not enabled:
         return None
@@ -76,7 +81,7 @@ def next_core_uptime_start(now: datetime, windows: Sequence) -> Optional[datetim
     for w in enabled:
         sh, sm = _parse_hhmm(w.start_time)
         weekdays = _parse_weekdays(w.weekdays)
-        for day_offset in range(0, 8):
+        for day_offset in range(0, 8):  # 0..7 inclusive — see docstring
             candidate_date = now + timedelta(days=day_offset)
             if candidate_date.weekday() not in weekdays:
                 continue

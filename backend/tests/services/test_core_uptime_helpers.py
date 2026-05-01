@@ -72,6 +72,13 @@ def test_empty_windows_list():
     assert is_in_core_uptime(now, []) == (False, None)
 
 
+def test_empty_weekdays_csv_never_active():
+    """A window with empty weekdays string is treated as never active."""
+    now = datetime(2026, 5, 6, 12, 0)
+    windows = [_w("08:00", "22:00", weekdays="")]
+    assert is_in_core_uptime(now, windows)[0] is False
+
+
 # ---- cross-midnight ----
 
 def test_cross_midnight_active_late():
