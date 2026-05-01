@@ -282,3 +282,48 @@ async def test_enter_true_suspend_uses_next_core_start_when_no_wake_at_given():
         await svc.enter_true_suspend("manual", SleepTrigger.MANUAL, wake_at=None)
 
     assert captured_wake_at == [next_start]
+
+
+def test_get_status_returns_core_uptime_block_when_active():
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    win = _window_workdays_8_22()
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [win])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               return_value=(True, win)), \
+         patch("app.services.power.sleep.core_uptime_helpers.current_window_end",
+               return_value=datetime(2026, 5, 6, 22, 0)), \
+         patch("app.services.power.sleep.core_uptime_helpers.next_core_uptime_start",
+               return_value=datetime(2026, 5, 7, 8, 0)):
+        status = svc.get_status()
+
+    assert status.core_uptime.enabled is True
+    assert status.core_uptime.active is True
+    assert status.core_uptime.current_window_label == "Werktage"
+    assert status.core_uptime.current_window_ends_at == datetime(2026, 5, 6, 22, 0)
+    assert status.core_uptime.next_start == datetime(2026, 5, 7, 8, 0)
+
+
+def test_get_status_returns_empty_core_uptime_when_master_off():
+    svc = _build_service()
+    cfg = _config(core_enabled=False)
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])):
+        status = svc.get_status()
+
+    assert status.core_uptime.enabled is False
+    assert status.core_uptime.active is False
+    assert status.core_uptime.next_start is None
+
+
+def test_get_config_returns_core_uptime_enabled_field():
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+
+    with patch.object(svc, "_load_config", return_value=cfg):
+        result = svc.get_config()
+
+    assert result.core_uptime_enabled is True

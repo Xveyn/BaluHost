@@ -918,6 +918,19 @@ class SleepManagerService:
         if config:
             idle_threshold = config.idle_timeout_minutes * 60
 
+        # Core uptime status
+        from app.schemas.sleep import CoreUptimeStatus
+        master, windows = self._load_core_uptime()
+        core_status = CoreUptimeStatus(enabled=master)
+        if master:
+            now = datetime.now()
+            in_core, matched = core_uptime_helpers.is_in_core_uptime(now, windows)
+            core_status.active = in_core
+            if in_core and matched is not None:
+                core_status.current_window_label = matched.label
+                core_status.current_window_ends_at = core_uptime_helpers.current_window_end(now, matched)
+            core_status.next_start = core_uptime_helpers.next_core_uptime_start(now, windows)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -929,6 +942,7 @@ class SleepManagerService:
             auto_idle_enabled=config.auto_idle_enabled if config else False,
             schedule_enabled=config.schedule_enabled if config else False,
             escalation_enabled=config.auto_escalation_enabled if config else False,
+            core_uptime=core_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -955,6 +969,7 @@ class SleepManagerService:
             pause_disk_io=config.pause_disk_io,
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
+            core_uptime_enabled=config.core_uptime_enabled,
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:
