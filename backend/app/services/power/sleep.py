@@ -26,7 +26,8 @@ from sqlalchemy import select, func as sa_func, desc
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog
+from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
+from app.services.power import core_uptime as core_uptime_helpers
 from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
@@ -136,6 +137,7 @@ class SleepManagerService:
         self._spun_down_disks: list[str] = []
         self._original_fan_modes: dict[str, str] = {}
         self._is_running = False
+        self._was_in_core_uptime: bool = False
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
@@ -221,6 +223,27 @@ class SleepManagerService:
         except Exception as e:
             logger.warning("Failed to load sleep config: %s", e)
             return None
+
+    def _load_core_uptime(self) -> tuple[bool, list]:
+        """Return (master_enabled, list_of_enabled_windows). Empty list if master off."""
+        config = self._load_config()
+        if not config or not config.core_uptime_enabled:
+            return False, []
+        try:
+            db = SessionLocal()
+            try:
+                rows = db.execute(
+                    select(CoreUptimeWindowModel).where(CoreUptimeWindowModel.enabled.is_(True))
+                ).scalars().all()
+                # Detach from session so callers can read attributes after close
+                for r in rows:
+                    db.expunge(r)
+                return True, list(rows)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("Failed to load core uptime windows: %s", e)
+            return False, []
 
     def _log_state_change(
         self,
@@ -323,6 +346,14 @@ class SleepManagerService:
                 # Only detect idle when AWAKE
                 if self._current_state != SleepState.AWAKE:
                     continue
+
+                master, windows = self._load_core_uptime()
+                if master:
+                    in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                    if in_core:
+                        self._consecutive_idle_checks = 0
+                        self._idle_seconds = 0.0
+                        continue
 
                 metrics = self._get_activity_metrics()
 
