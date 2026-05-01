@@ -1,6 +1,6 @@
 """Integration tests: SleepManagerService respects core uptime windows."""
 from datetime import datetime
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, AsyncMock
 
 import pytest
 
@@ -252,7 +252,7 @@ async def test_enter_true_suspend_clamps_wake_at_to_next_core_start():
                return_value=next_start), \
          patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
          patch("app.services.power.sleep.SessionLocal"), \
-         patch("app.services.notifications.events.emit_system_suspend", new=lambda **k: None):
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock(return_value=None)):
         svc._current_state = SleepState.SOFT_SLEEP  # skip implicit enter_soft_sleep
         await svc.enter_true_suspend("manual", SleepTrigger.MANUAL, wake_at=user_wake)
 
@@ -277,7 +277,7 @@ async def test_enter_true_suspend_uses_next_core_start_when_no_wake_at_given():
                return_value=next_start), \
          patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
          patch("app.services.power.sleep.SessionLocal"), \
-         patch("app.services.notifications.events.emit_system_suspend", new=lambda **k: None):
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock(return_value=None)):
         svc._current_state = SleepState.SOFT_SLEEP
         await svc.enter_true_suspend("manual", SleepTrigger.MANUAL, wake_at=None)
 
