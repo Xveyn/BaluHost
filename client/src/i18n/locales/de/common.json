@@ -345,5 +345,22 @@
     },
     "loading": "Benutzer laden…",
     "empty": "Keine weiteren Benutzer"
+  },
+  "sleep": {
+    "coreUptime": {
+      "title": "Kernbetriebszeit",
+      "description": "Während dieser Zeitfenster bleibt der Server erreichbar; Auto-Sleep ist blockiert.",
+      "bannerActive": "Kernbetriebszeit aktiv",
+      "bannerEndsAt": "endet um {{time}}",
+      "addWindow": "Neues Zeitfenster hinzufügen",
+      "crossMidnightBadge": "bis nächsten Tag",
+      "warningInfo": "Während aktiver Fenster werden Auto-Idle-Sleep, Schedule-Sleep und Auto-Escalation blockiert. Manueller Suspend durch Admins bleibt möglich (mit Warnung).",
+      "scheduleOverridden": "Kernbetriebszeit hat Vorrang. Sleep-Schedule-Trigger werden während Kernzeit-Fenstern ignoriert.",
+      "suspendWarning": "Kernbetriebszeit ist aktiv (bis {{time}}). Suspend macht den Server für andere Nutzer unerreichbar.",
+      "triggerLabel": "Kernzeit-Wake",
+      "weekdays": {
+        "0": "Mo", "1": "Di", "2": "Mi", "3": "Do", "4": "Fr", "5": "Sa", "6": "So"
+      }
+    }
   }
 }

@@ -10,6 +10,7 @@ import toast from 'react-hot-toast';
 import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal, Router } from 'lucide-react';
 import {
   getSleepConfig,
+  getSleepStatus,
   updateSleepConfig,
   getSleepCapabilities,
   type SleepConfigResponse,
@@ -28,6 +29,7 @@ export function SleepConfigPanel() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
+  const [coreUptimeMasterOn, setCoreUptimeMasterOn] = useState(false);
 
   // Form state
   const [autoIdleEnabled, setAutoIdleEnabled] = useState(false);
@@ -83,6 +85,12 @@ export function SleepConfigPanel() {
         setFbEnabled(fb.enabled);
       } catch {
         // Fritz!Box config not available yet — ignore
+      }
+      try {
+        const st = await getSleepStatus();
+        setCoreUptimeMasterOn(st.core_uptime?.enabled ?? false);
+      } catch {
+        // ignore — status is best-effort here
       }
     } catch {
       toast.error('Failed to load sleep config');
@@ -285,6 +293,11 @@ export function SleepConfigPanel() {
                 <option value="suspend">True Suspend</option>
               </select>
             </div>
+            {coreUptimeMasterOn && (
+              <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
+                ℹ Kernbetriebszeit hat Vorrang. Sleep-Schedule-Trigger werden während Kernzeit-Fenstern ignoriert.
+              </div>
+            )}
           </div>
         )}
       </div>
