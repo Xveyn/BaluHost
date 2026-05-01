@@ -137,7 +137,7 @@ class SleepManagerService:
         self._spun_down_disks: list[str] = []
         self._original_fan_modes: dict[str, str] = {}
         self._is_running = False
-        self._was_in_core_uptime: bool = False
+        self._was_in_core_uptime: bool = False  # edge-detection state; written by _schedule_check_loop (Task 6)
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
@@ -235,9 +235,8 @@ class SleepManagerService:
                 rows = db.execute(
                     select(CoreUptimeWindowModel).where(CoreUptimeWindowModel.enabled.is_(True))
                 ).scalars().all()
-                # Detach from session so callers can read attributes after close
-                for r in rows:
-                    db.expunge(r)
+                # Detach so callers can read attributes after session close
+                db.expunge_all()
                 return True, list(rows)
             finally:
                 db.close()

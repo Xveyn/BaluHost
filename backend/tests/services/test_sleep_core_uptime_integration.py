@@ -66,8 +66,6 @@ def test_load_core_uptime_returns_enabled_windows():
     fake_query = MagicMock()
     fake_query.scalars.return_value.all.return_value = [_window_workdays_8_22()]
     fake_session.execute.return_value = fake_query
-    fake_session.__enter__ = lambda s: s
-    fake_session.__exit__ = lambda *a: None
     with patch.object(svc, "_load_config", return_value=cfg), \
          patch("app.services.power.sleep.SessionLocal", return_value=fake_session):
         master, windows = svc._load_core_uptime()
