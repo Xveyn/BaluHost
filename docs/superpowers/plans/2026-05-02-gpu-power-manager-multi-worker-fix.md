@@ -1,7 +1,7 @@
 # GPU Power Manager Multi-Worker State Sync
 
 **Date:** 2026-05-02
-**Status:** Draft (not started)
+**Status:** Implementation complete — pending manual 2-worker verification
 **Branch:** `fix/gpu-power-manager-multi-worker` (created from `origin/main` 2026-05-02)
 **Sibling plan:** `2026-05-01-power-manager-multi-worker-fix.md` (CPU manager — already shipped in v1.31.3)
 
@@ -243,3 +243,43 @@ No changes expected. The routes call `manager.get_status()`, `manager.set_config
 ## Estimated Scope
 
 ~3–4 h implementation + ~1 h tests. Patch release. Branch `fix/gpu-power-manager-multi-worker` opens against `main`, label `release:patch`.
+
+---
+
+## Status-Update 2026-05-02 (Implementierung)
+
+Steps 1–7 abgeschlossen. Lokale Tests:
+
+- `tests/services/test_gpu_command_queue.py`: 7 neue Tests (enqueue, dispatch happy/sad path, unknown command, caller timeout) — alle grün
+- `tests/services/power/gpu/test_manager_multi_worker.py`: 5 neue Tests (follower-Routing für register_demand & set_config, follower-`get_status` aus DB, primary DB-roundtrip) — alle grün
+- `tests/services/power/gpu/test_state_machine.py::test_demand_expiration`: angepasst (DB-Row jetzt im Setup), grün
+- Komplette `tests/services/` + `tests/api/`: **954/954 grün** (~9 min)
+
+Nicht-triviale Anpassung gegenüber dem Original-Plan:
+
+- **`unregister_demand` Dispatch-Logik**: Original-Sketch hatte `return True, None if removed else "no demand..."` — aufgrund Operator-Präzedenz ergab das `(True, fehlertext)` statt `(False, fehlertext)`. Korrigiert.
+- **Bestehender `test_demand_expiration` Test** musste die DB-Row backdaten, nicht nur den Cache, weil `_purge_expired_demands` nun aus `gpu_power_demands` liest.
+- **`detected`/`vendor`/`has_write_permission`** werden synchron in `start()` (vor dem ersten Tick) in `gpu_power_runtime_state` geschrieben, damit Followers ab Sekunde 1 die richtige Antwort liefern.
+
+Offen: Step 8 — Push, PR, manuelle 2-Worker-Verifikation.
+
+## Manueller Verifikationsplan
+
+Nach Merge auf main + Auto-Deploy:
+
+```bash
+# Im Browser DevTools-Console, gleicher Test wie zur Bug-Bestätigung:
+(async () => {
+  const results = [];
+  for (let i = 0; i < 10; i++) {
+    const r = await fetch('/api/gpu-power/status', {
+      headers: { Authorization: 'Bearer ' + localStorage.getItem('token') }
+    });
+    const d = await r.json();
+    results.push({ i, detected: d.detected, vendor: d.vendor, has_write: d.has_write_permission });
+  }
+  console.table(results);
+})();
+```
+
+Erwartung: alle 10 Zeilen identisch, `detected=true`, `vendor=amd`, `has_write=true`.
