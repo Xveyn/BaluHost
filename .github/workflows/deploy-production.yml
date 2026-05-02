@@ -4,6 +4,12 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+    inputs:
+      sync_permissions:
+        description: "Re-apply OS-level permission grants (udev / polkit / sudoers). Leave off for routine deploys."
+        type: boolean
+        required: false
+        default: false
 
 concurrency:
   group: production-deploy
@@ -26,6 +32,8 @@ jobs:
         env:
           INSTALL_DIR: /opt/baluhost
           DEPLOY_ACTOR: ${{ github.actor }}
+          # Push-triggered deploys default to off; workflow_dispatch can opt-in.
+          SYNC_PERMISSIONS: ${{ inputs.sync_permissions == true && '1' || '0' }}
         run: |
           export GITHUB_ACTOR="$DEPLOY_ACTOR"
           /opt/baluhost/deploy/scripts/ci-deploy.sh

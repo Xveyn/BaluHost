@@ -27,6 +27,14 @@ DB_NAME="baluhost"
 DB_USER="baluhost"
 BACKUP_RETENTION=10
 
+# Re-apply OS-level permission grants (udev rules, polkit, sudoers) on every
+# deploy. Off by default so a normal deploy never touches /etc/udev or
+# /etc/polkit-1. Enable via:
+#   - GitHub: workflow_dispatch input "sync_permissions" = true
+#   - Manual: SYNC_PERMISSIONS=1 ./ci-deploy.sh
+# Database handling is unaffected — alembic still runs, no schema reset.
+SYNC_PERMISSIONS="${SYNC_PERMISSIONS:-0}"
+
 # Load .env.production into environment (needed by Alembic/Pydantic)
 load_env_production() {
     local env_file="$INSTALL_DIR/.env.production"
@@ -329,6 +337,41 @@ log_step "Backend Update"
 cd "$INSTALL_DIR/backend"
 "$VENV_BIN/pip" install -q -e ".[scheduler]"
 log_info "Backend dependencies updated."
+
+# ─── 4b. OS Permission Grants (opt-in) ───────────────────────────────
+#
+# Idempotent re-install of OS-level permission rules that ship with the
+# repo (udev / polkit / sudoers). Skipped by default so a routine deploy
+# does not touch /etc files. The database is never re-initialised here —
+# this block is independent of the alembic step that follows.
+#
+# Enable via:
+#   - GitHub: workflow_dispatch input "sync_permissions" = true
+#   - Manual: SYNC_PERMISSIONS=1 ./ci-deploy.sh
+
+if [[ "${SYNC_PERMISSIONS:-0}" == "1" || "${SYNC_PERMISSIONS,,}" == "true" ]]; then
+    log_step "OS Permission Grants (sync requested)"
+
+    # AMD GPU sysfs power nodes: chgrp video + g+w via udev rule.
+    # The script defaults BALUHOST_USER=sven internally; sudoers rule
+    # whitelists this exact bash invocation, so no env vars are passed.
+    AMD_GPU_SCRIPT="$INSTALL_DIR/deploy/scripts/install-amd-gpu-permissions.sh"
+    if [[ -f "$AMD_GPU_SCRIPT" ]]; then
+        log_info "Re-applying AMD GPU sysfs permissions..."
+        if sudo bash "$AMD_GPU_SCRIPT"; then
+            log_info "AMD GPU permission sync OK."
+        else
+            log_warn "AMD GPU permission sync failed (non-fatal — deploy continues)."
+        fi
+    else
+        log_warn "AMD GPU permission script not found at $AMD_GPU_SCRIPT (skipping)."
+    fi
+
+    # Future permission scripts go here following the same pattern:
+    # if [[ -f "$INSTALL_DIR/deploy/scripts/install-<thing>-permissions.sh" ]]; then ...
+else
+    log_info "OS permission sync skipped (set SYNC_PERMISSIONS=1 to enable)."
+fi
 
 # ─── 5. Database Migration ───────────────────────────────────────────
 
