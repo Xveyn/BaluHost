@@ -26,7 +26,8 @@ from sqlalchemy import select, func as sa_func, desc
 
 from app.core.config import settings
 from app.core.database import SessionLocal
-from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog
+from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
+from app.services.power import core_uptime as core_uptime_helpers
 from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
@@ -136,6 +137,7 @@ class SleepManagerService:
         self._spun_down_disks: list[str] = []
         self._original_fan_modes: dict[str, str] = {}
         self._is_running = False
+        self._was_in_core_uptime: bool = False  # edge-detection state; written by _schedule_check_loop (Task 6)
         self._idle_task: Optional[asyncio.Task] = None
         self._schedule_task: Optional[asyncio.Task] = None
         self._escalation_task: Optional[asyncio.Task] = None
@@ -221,6 +223,26 @@ class SleepManagerService:
         except Exception as e:
             logger.warning("Failed to load sleep config: %s", e)
             return None
+
+    def _load_core_uptime(self) -> tuple[bool, list]:
+        """Return (master_enabled, list_of_enabled_windows). Empty list if master off."""
+        config = self._load_config()
+        if not config or not config.core_uptime_enabled:
+            return False, []
+        try:
+            db = SessionLocal()
+            try:
+                rows = db.execute(
+                    select(CoreUptimeWindowModel).where(CoreUptimeWindowModel.enabled.is_(True))
+                ).scalars().all()
+                # Detach so callers can read attributes after session close
+                db.expunge_all()
+                return True, list(rows)
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("Failed to load core uptime windows: %s", e)
+            return False, []
 
     def _log_state_change(
         self,
@@ -324,6 +346,14 @@ class SleepManagerService:
                 if self._current_state != SleepState.AWAKE:
                     continue
 
+                master, windows = self._load_core_uptime()
+                if master:
+                    in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                    if in_core:
+                        self._consecutive_idle_checks = 0
+                        self._idle_seconds = 0.0
+                        continue
+
                 metrics = self._get_activity_metrics()
 
                 if self._is_system_idle(config, metrics):
@@ -351,26 +381,48 @@ class SleepManagerService:
                 logger.warning("Error in idle detection loop: %s", e)
 
     async def _schedule_check_loop(self) -> None:
-        """Background loop that checks sleep schedule every 60 seconds."""
+        """Check sleep schedule and core-uptime auto-wake every 60 seconds."""
         while self._is_running:
             try:
                 await asyncio.sleep(60)
                 if not self._is_running:
                     break
 
+                now = datetime.now()
                 config = self._load_config()
+                master, windows = self._load_core_uptime()
+                in_core, _matched = (
+                    core_uptime_helpers.is_in_core_uptime(now, windows)
+                    if master else (False, None)
+                )
+
+                # Auto-wake edge: AWAY -> IN, while in soft sleep
+                if master and in_core and not self._was_in_core_uptime \
+                        and self._current_state == SleepState.SOFT_SLEEP:
+                    logger.info("Core uptime started while in soft sleep — auto-waking")
+                    await self.exit_soft_sleep("core_uptime_started")
+                # Track edge state regardless. When master is off we force False so
+                # that re-enabling the toggle while inside an active window registers
+                # as a fresh rising edge on the next tick and triggers auto-wake.
+                if master:
+                    self._was_in_core_uptime = in_core
+                else:
+                    self._was_in_core_uptime = False
+
                 if not config or not config.schedule_enabled:
                     continue
 
-                now = datetime.now()
                 current_time = now.strftime("%H:%M")
 
-                # Check if it's time to sleep
                 if self._current_state == SleepState.AWAKE:
                     if self._time_matches(current_time, config.schedule_sleep_time):
+                        if in_core:
+                            logger.info(
+                                "Schedule sleep trigger suppressed by active core uptime window",
+                            )
+                            continue
                         mode = config.schedule_mode
                         if mode == "suspend":
-                            # Schedule RTC wake first
                             wake_dt = self._next_occurrence(config.schedule_wake_time)
                             await self.enter_true_suspend(
                                 "scheduled_suspend",
@@ -379,8 +431,6 @@ class SleepManagerService:
                             )
                         else:
                             await self.enter_soft_sleep("scheduled_sleep", SleepTrigger.SCHEDULE)
-
-                # Check if it's time to wake
                 elif self._current_state == SleepState.SOFT_SLEEP:
                     if self._time_matches(current_time, config.schedule_wake_time):
                         await self.exit_soft_sleep("scheduled_wake")
@@ -403,13 +453,23 @@ class SleepManagerService:
             wait_seconds = config.escalation_after_minutes * 60
             await asyncio.sleep(wait_seconds)
 
-            if self._current_state == SleepState.SOFT_SLEEP and self._is_running:
-                logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
-                            config.escalation_after_minutes)
-                await self.enter_true_suspend(
-                    "auto_escalation",
-                    SleepTrigger.AUTO_ESCALATION,
-                )
+            if self._current_state != SleepState.SOFT_SLEEP or not self._is_running:
+                return
+
+            # Skip escalation if currently in a core-uptime window
+            master, windows = self._load_core_uptime()
+            if master:
+                in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                if in_core:
+                    logger.info("Auto-escalation skipped: currently in core uptime window")
+                    return
+
+            logger.info("Auto-escalation: soft sleep -> true suspend after %d minutes",
+                        config.escalation_after_minutes)
+            await self.enter_true_suspend(
+                "auto_escalation",
+                SleepTrigger.AUTO_ESCALATION,
+            )
         except asyncio.CancelledError:
             pass
         except Exception as e:
@@ -719,6 +779,17 @@ class SleepManagerService:
         """
         prev_state = self._current_state
 
+        # Clamp wake_at to next core-uptime start, if any
+        master, windows = self._load_core_uptime()
+        if master:
+            next_core = core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
+            if next_core is not None and (wake_at is None or next_core < wake_at):
+                logger.info(
+                    "wake_at clamped to next core uptime start: %s (was %s)",
+                    next_core, wake_at,
+                )
+                wake_at = next_core
+
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:
             ok = await self.enter_soft_sleep(reason, trigger)
@@ -847,6 +918,19 @@ class SleepManagerService:
         if config:
             idle_threshold = config.idle_timeout_minutes * 60
 
+        # Core uptime status
+        from app.schemas.sleep import CoreUptimeStatus
+        master, windows = self._load_core_uptime()
+        core_status = CoreUptimeStatus(enabled=master)
+        if master:
+            now = datetime.now()
+            in_core, matched = core_uptime_helpers.is_in_core_uptime(now, windows)
+            core_status.active = in_core
+            if in_core and matched is not None:
+                core_status.current_window_label = matched.label
+                core_status.current_window_ends_at = core_uptime_helpers.current_window_end(now, matched)
+            core_status.next_start = core_uptime_helpers.next_core_uptime_start(now, windows)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -858,6 +942,7 @@ class SleepManagerService:
             auto_idle_enabled=config.auto_idle_enabled if config else False,
             schedule_enabled=config.schedule_enabled if config else False,
             escalation_enabled=config.auto_escalation_enabled if config else False,
+            core_uptime=core_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -884,6 +969,7 @@ class SleepManagerService:
             pause_disk_io=config.pause_disk_io,
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
+            core_uptime_enabled=config.core_uptime_enabled,
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:

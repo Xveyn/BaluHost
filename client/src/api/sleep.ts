@@ -26,7 +26,8 @@ export type SleepTrigger =
   | 'auto_wake'
   | 'auto_escalation'
   | 'wol'
-  | 'rtc_wake';
+  | 'rtc_wake'
+  | 'core_uptime_wake';
 
 export type ScheduleMode = 'soft' | 'suspend';
 
@@ -36,6 +37,14 @@ export interface ActivityMetrics {
   active_uploads: number;
   active_downloads: number;
   http_requests_per_minute: number;
+}
+
+export interface CoreUptimeStatus {
+  enabled: boolean;
+  active: boolean;
+  current_window_label: string | null;
+  current_window_ends_at: string | null;
+  next_start: string | null;
 }
 
 export interface SleepStatusResponse {
@@ -49,6 +58,7 @@ export interface SleepStatusResponse {
   auto_idle_enabled: boolean;
   schedule_enabled: boolean;
   escalation_enabled: boolean;
+  core_uptime: CoreUptimeStatus;
 }
 
 export interface SleepConfigResponse {
@@ -69,6 +79,7 @@ export interface SleepConfigResponse {
   pause_disk_io: boolean;
   reduced_telemetry_interval: number;
   disk_spindown_enabled: boolean;
+  core_uptime_enabled: boolean;
 }
 
 export interface SleepConfigUpdate {
@@ -89,6 +100,7 @@ export interface SleepConfigUpdate {
   pause_disk_io?: boolean;
   reduced_telemetry_interval?: number;
   disk_spindown_enabled?: boolean;
+  core_uptime_enabled?: boolean;
 }
 
 export interface SleepCapabilities {
@@ -138,6 +150,7 @@ export const TRIGGER_LABELS: Record<SleepTrigger, string> = {
   auto_escalation: 'Auto Escalation',
   wol: 'Wake-on-LAN',
   rtc_wake: 'RTC Wake',
+  core_uptime_wake: 'Kernzeit-Wake',
 };
 
 // ============================================================================

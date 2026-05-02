@@ -1,16 +1,20 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Dict, List, Optional
 
 from app.schemas.system import RaidDevice
+
+
+_MEMBER_RE = re.compile(r"([A-Za-z0-9_]+)\[\d+\](?:\([A-Z]\))?")
 
 
 @dataclass
 class MdstatInfo:
     blocks: Optional[int] = None
     resync_progress: Optional[float] = None
+    members: List[str] = field(default_factory=list)
 
 
 def _parse_mdstat(content: str) -> Dict[str, MdstatInfo]:
@@ -29,7 +33,8 @@ def _parse_mdstat(content: str) -> Dict[str, MdstatInfo]:
             if not parts:
                 continue
             name = parts[0].rstrip(":")
-            arrays[name] = MdstatInfo()
+            members = _MEMBER_RE.findall(line)
+            arrays[name] = MdstatInfo(members=members)
             current = name
             continue
 
