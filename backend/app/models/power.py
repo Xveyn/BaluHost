@@ -191,3 +191,102 @@ class PowerDynamicModeConfig(Base):
 
     def __repr__(self) -> str:
         return f"<PowerDynamicModeConfig(enabled={self.enabled}, governor='{self.governor}')>"
+
+
+class PowerRuntimeState(Base):
+    """
+    Live runtime state of the power manager, shared across Uvicorn workers.
+
+    Singleton row (id=1). The primary worker writes; secondary workers read
+    to answer status queries without holding their own divergent in-memory copy.
+    """
+
+    __tablename__ = "power_runtime_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    current_profile: Mapped[str] = mapped_column(String(20), nullable=False, default="idle")
+    current_property: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    manual_override_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    cooldown_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    dynamic_mode_enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    last_profile_change: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    backend_kind: Mapped[Optional[str]] = mapped_column(String(20), nullable=True)
+    # "linux" | "dev" — informational, primary worker writes on backend select/switch
+
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+    updated_by_pid: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+
+    def __repr__(self) -> str:
+        return f"<PowerRuntimeState(profile='{self.current_profile}', dynamic={self.dynamic_mode_enabled})>"
+
+
+class PowerDemand(Base):
+    """
+    Active power demand entry, shared across workers.
+
+    Replaces the per-process ``PowerManagerService._demands`` dict so any
+    Uvicorn worker can register/inspect demands and the primary worker's
+    monitor loop sees them.
+    """
+
+    __tablename__ = "power_demands"
+
+    source: Mapped[str] = mapped_column(String(100), primary_key=True)
+    level: Mapped[str] = mapped_column(String(20), nullable=False)
+    power_property: Mapped[str] = mapped_column(String(20), nullable=False)
+    description: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
+    registered_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), nullable=False
+    )
+    expires_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, index=True
+    )
+
+    def __repr__(self) -> str:
+        return f"<PowerDemand(source='{self.source}', level='{self.level}')>"
+
+
+class PowerCommand(Base):
+    """
+    Cross-worker command queue for hardware operations.
+
+    Secondary workers cannot drive the CPU backend directly; they enqueue
+    a row here and poll for ``status != 'pending'``. The primary worker's
+    command-poll loop picks up rows, executes them, and writes the result.
+    """
+
+    __tablename__ = "power_commands"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    command: Mapped[str] = mapped_column(String(40), nullable=False)
+    # "apply_profile" | "enable_dynamic_mode" | "disable_dynamic_mode" | "switch_backend"
+
+    payload_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    requested_by: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)
+    requested_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default="pending")
+    # pending | applied | failed
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    completed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("idx_power_commands_status_requested", "status", "requested_at"),
+    )
+
+    def __repr__(self) -> str:
+        return f"<PowerCommand(id={self.id}, command='{self.command}', status='{self.status}')>"

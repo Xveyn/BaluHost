@@ -27,6 +27,9 @@ from app.models.power import (
     PowerProfileConfig as PowerProfileConfigModel,
     PowerAutoScalingConfig,
     PowerDynamicModeConfig,
+    PowerRuntimeState,
+    PowerDemand,
+    PowerCommand,
 )
 from app.models.gpu_power import GpuPowerLog, GpuPowerConfigDb
 from app.models.fans import FanConfig, FanSample, FanScheduleEntry, FanCurveProfile
@@ -120,6 +123,9 @@ __all__ = [
     "PowerProfileConfigModel",
     "PowerAutoScalingConfig",
     "PowerDynamicModeConfig",
+    "PowerRuntimeState",
+    "PowerDemand",
+    "PowerCommand",
     "GpuPowerLog",
     "GpuPowerConfigDb",
     "FanConfig",
