@@ -28,6 +28,56 @@ from app.services.power.manager import (
 )
 
 
+@pytest.fixture(autouse=True)
+def _power_tables_in_global_db():
+    """
+    Ensure the multi-worker power tables exist in the global SessionLocal-backed DB.
+
+    Tests in this module construct ``PowerManagerService`` directly and bypass
+    ``conftest.db_session``; the manager calls ``SessionLocal()`` for DB-backed
+    helpers (runtime state, demands), so we need the schema available there.
+    Cleans up after each test so state does not leak between cases.
+    """
+    from sqlalchemy import inspect
+
+    from app.core.database import engine
+    from app.models.power import PowerCommand, PowerDemand, PowerRuntimeState
+
+    tables = [PowerRuntimeState.__table__, PowerDemand.__table__, PowerCommand.__table__]
+
+    inspector = inspect(engine)
+    created = [t for t in tables if not inspector.has_table(t.name)]
+    for table in created:
+        table.create(bind=engine, checkfirst=True)
+
+    # Seed singleton runtime-state row
+    from sqlalchemy.orm import sessionmaker
+
+    Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+    db = Session()
+    try:
+        existing = db.query(PowerRuntimeState).filter(PowerRuntimeState.id == 1).first()
+        if existing is None:
+            db.add(PowerRuntimeState(id=1, current_profile="idle"))
+            db.commit()
+    finally:
+        db.close()
+
+    yield
+
+    db = Session()
+    try:
+        db.query(PowerDemand).delete()
+        db.query(PowerCommand).delete()
+        db.query(PowerRuntimeState).delete()
+        db.add(PowerRuntimeState(id=1, current_profile="idle"))
+        db.commit()
+    except Exception:
+        db.rollback()
+    finally:
+        db.close()
+
+
 class TestDevCpuPowerBackend:
     """Tests for DevCpuPowerBackend (simulation backend)."""
 
@@ -499,6 +549,83 @@ class TestPowerManagerServiceStatus:
         assert status.current_profile == PowerProfile.MEDIUM
         assert status.current_frequency_mhz is not None
         # is_running is an internal field, not exposed in PowerStatusResponse
+
+    @pytest.mark.asyncio
+    async def test_follower_apply_profile_routes_through_command_queue(self):
+        """A follower-mode manager must enqueue a command instead of touching the backend."""
+        from app.models.power import PowerCommand
+        from sqlalchemy.orm import sessionmaker
+
+        from app.core.database import engine
+        from app.services.power import command_queue as cq
+
+        # Build a follower manager: no backend, _primary=False
+        follower = PowerManagerService()
+        follower._is_running = True
+        follower._primary = False
+        follower._backend = None  # follower must not touch hardware
+
+        # Race: kick off apply_profile, then resolve the command via a
+        # tiny one-shot worker that mimics the primary's poll loop.
+        async def fake_primary_worker():
+            # Wait briefly for the row to appear, then mark applied.
+            for _ in range(20):
+                Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
+                db = Session()
+                try:
+                    row = (
+                        db.query(PowerCommand)
+                        .filter(PowerCommand.status == "pending")
+                        .order_by(PowerCommand.id.asc())
+                        .first()
+                    )
+                    if row is not None:
+                        row.status = "applied"
+                        db.commit()
+                        return row.id, row.command, row.payload_json
+                finally:
+                    db.close()
+                await asyncio.sleep(0.05)
+            return None
+
+        worker_task = asyncio.create_task(fake_primary_worker())
+        success, error = await follower.apply_profile(
+            PowerProfile.SURGE, reason="follower_test"
+        )
+        result = await worker_task
+
+        assert success is True
+        assert error is None
+        assert result is not None
+        cmd_id, command, payload_json = result
+        assert command == "apply_profile"
+        assert "surge" in payload_json
+
+    @pytest.mark.asyncio
+    async def test_active_demands_are_db_backed(self, service):
+        """register_demand should write to power_demands; get_active_demands reads from it."""
+        await service.register_demand(
+            source="db_backed_source",
+            level=PowerProfile.MEDIUM,
+            description="db round-trip",
+        )
+
+        # Drop in-memory cache to prove the read path is DB-backed
+        service._demands.clear()
+
+        demands = service.get_active_demands()
+        sources = {d.source for d in demands}
+        assert "db_backed_source" in sources
+
+    @pytest.mark.asyncio
+    async def test_runtime_state_persisted_after_profile_change(self, service):
+        """An applied profile must update power_runtime_state for cross-worker reads."""
+        from app.services.power.config_store import load_runtime_state
+
+        await service.apply_profile(PowerProfile.LOW, reason="state_persist_test")
+
+        state = load_runtime_state()
+        assert state["current_profile"] == "low"
 
     @pytest.mark.asyncio
     async def test_get_history(self, service):
