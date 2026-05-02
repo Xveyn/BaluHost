@@ -28,6 +28,7 @@ from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power import core_uptime as core_uptime_helpers
+from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
@@ -146,6 +147,10 @@ class SleepManagerService:
         self._error_count: int = 0
         self._last_error: Optional[str] = None
         self._last_error_at: Optional[datetime] = None
+        # Logind block-sleep inhibitor — held while inside an active core-uptime
+        # window so third-party suspend (mate-screensaver, gnome-power-manager,
+        # logind idle, manual `systemctl suspend`) is refused by logind.
+        self._core_uptime_inhibitor = CoreUptimeInhibitor()
 
     @classmethod
     async def get_instance(cls, backend: Optional[SleepBackend] = None) -> "SleepManagerService":
@@ -182,6 +187,19 @@ class SleepManagerService:
             # Start schedule check loop
             self._schedule_task = asyncio.create_task(self._schedule_check_loop())
 
+            # If service starts INSIDE a core-uptime window, immediately acquire
+            # the logind inhibitor — the schedule loop only fires in 60s and an
+            # idle desktop daemon could suspend us before the first tick.
+            try:
+                master, windows = self._load_core_uptime()
+                if master:
+                    in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                    if in_core:
+                        self._core_uptime_inhibitor.acquire("startup_in_core_uptime")
+                        self._was_in_core_uptime = True
+            except Exception as exc:
+                logger.warning("Initial core-uptime inhibitor check failed: %s", exc)
+
         logger.info("Sleep manager started (monitoring=%s, auto_idle=%s, schedule=%s)",
                      monitoring,
                      config.auto_idle_enabled if config else False,
@@ -203,6 +221,10 @@ class SleepManagerService:
         # If in soft sleep, wake up before stopping
         if self._current_state == SleepState.SOFT_SLEEP:
             await self._exit_soft_sleep("service_shutdown")
+
+        # Always release the logind inhibitor on shutdown so suspend works
+        # again after BaluHost goes down (e.g. system shutdown / reboot).
+        self._core_uptime_inhibitor.release()
 
         self._idle_task = None
         self._schedule_task = None
@@ -401,6 +423,16 @@ class SleepManagerService:
                         and self._current_state == SleepState.SOFT_SLEEP:
                     logger.info("Core uptime started while in soft sleep — auto-waking")
                     await self.exit_soft_sleep("core_uptime_started")
+
+                # Logind inhibitor management — converged to the desired state
+                # every tick so a crashed inhibitor subprocess gets re-acquired
+                # and a master-toggle-off promptly releases.
+                should_hold = master and in_core
+                if should_hold and not self._core_uptime_inhibitor.is_held():
+                    self._core_uptime_inhibitor.acquire("core_uptime_active")
+                elif not should_hold and self._core_uptime_inhibitor.is_held():
+                    self._core_uptime_inhibitor.release()
+
                 # Track edge state regardless. When master is off we force False so
                 # that re-enabling the toggle while inside an active window registers
                 # as a fresh rising edge on the next tick and triggers auto-wake.
@@ -779,9 +811,22 @@ class SleepManagerService:
         """
         prev_state = self._current_state
 
-        # Clamp wake_at to next core-uptime start, if any
+        # Defense-in-depth: block all non-MANUAL suspend paths during an active
+        # core-uptime window. Per-loop guards (idle/schedule/escalation) already
+        # check this, but they can race or fail open on a transient DB error
+        # (_load_core_uptime returns (False, []) on exception). This guard
+        # ensures no automatic path can suspend regardless of caller. Manual
+        # admin trigger (spec F8) remains allowed; wake_at is still clamped.
         master, windows = self._load_core_uptime()
         if master:
+            in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+            if in_core and trigger != SleepTrigger.MANUAL:
+                logger.info(
+                    "enter_true_suspend blocked: inside active core uptime window "
+                    "(trigger=%s, reason=%s)",
+                    trigger.value, reason,
+                )
+                return False
             next_core = core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
             if next_core is not None and (wake_at is None or next_core < wake_at):
                 logger.info(

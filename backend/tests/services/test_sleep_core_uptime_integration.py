@@ -233,6 +233,174 @@ async def test_escalation_aborts_during_core_uptime():
 
 
 @pytest.mark.asyncio
+async def test_schedule_loop_acquires_inhibitor_when_entering_window():
+    """Edge OFF→ON in the schedule loop must acquire the logind inhibitor."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    in_core_sequence = iter([(False, None), (True, _window_workdays_8_22())])
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               side_effect=lambda *a, **k: next(in_core_sequence)), \
+         patch.object(svc._core_uptime_inhibitor, "acquire") as mock_acquire, \
+         patch.object(svc._core_uptime_inhibitor, "release") as mock_release, \
+         patch.object(svc._core_uptime_inhibitor, "is_held", side_effect=[False, False, True, True]):
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = False
+
+        ticks = [0]
+
+        async def two_ticks(*_a, **_k):
+            ticks[0] += 1
+            if ticks[0] >= 3:
+                svc._is_running = False
+
+        with patch("app.services.power.sleep.asyncio.sleep", side_effect=two_ticks):
+            await svc._schedule_check_loop()
+
+    mock_acquire.assert_called_once_with("core_uptime_active")
+    mock_release.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_releases_inhibitor_when_leaving_window():
+    """Edge ON→OFF must release the logind inhibitor."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    in_core_sequence = iter([(True, _window_workdays_8_22()), (False, None)])
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               side_effect=lambda *a, **k: next(in_core_sequence)), \
+         patch.object(svc._core_uptime_inhibitor, "acquire") as mock_acquire, \
+         patch.object(svc._core_uptime_inhibitor, "release") as mock_release, \
+         patch.object(svc._core_uptime_inhibitor, "is_held", side_effect=[True, True, False, False]):
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        ticks = [0]
+
+        async def two_ticks(*_a, **_k):
+            ticks[0] += 1
+            if ticks[0] >= 3:
+                svc._is_running = False
+
+        with patch("app.services.power.sleep.asyncio.sleep", side_effect=two_ticks):
+            await svc._schedule_check_loop()
+
+    mock_release.assert_called_once_with()
+    mock_acquire.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_releases_inhibitor_when_master_toggle_off():
+    """Master toggle off mid-flight must release the inhibitor even if windows match."""
+    svc = _build_service()
+    cfg_off = _config(core_enabled=False)
+
+    with patch.object(svc, "_load_config", return_value=cfg_off), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc._core_uptime_inhibitor, "acquire") as mock_acquire, \
+         patch.object(svc._core_uptime_inhibitor, "release") as mock_release, \
+         patch.object(svc._core_uptime_inhibitor, "is_held", return_value=True):
+        svc._is_running = True
+        svc._current_state = SleepState.AWAKE
+        svc._was_in_core_uptime = True
+
+        ticks = [0]
+
+        async def one_tick(*_a, **_k):
+            ticks[0] += 1
+            if ticks[0] >= 2:
+                svc._is_running = False
+
+        with patch("app.services.power.sleep.asyncio.sleep", side_effect=one_tick):
+            await svc._schedule_check_loop()
+
+    mock_release.assert_called()
+    mock_acquire.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_stop_releases_inhibitor():
+    """SleepManagerService.stop() must release the logind inhibitor."""
+    svc = _build_service()
+
+    with patch.object(svc._core_uptime_inhibitor, "release") as mock_release:
+        svc._is_running = True
+        await svc.stop()
+
+    mock_release.assert_called_once()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", [
+    SleepTrigger.SCHEDULE,
+    SleepTrigger.AUTO_IDLE,
+    SleepTrigger.AUTO_ESCALATION,
+    SleepTrigger.RTC_WAKE,
+])
+async def test_enter_true_suspend_blocks_non_manual_during_active_window(trigger):
+    """Defense-in-depth: any automatic trigger must be blocked while in a
+    core-uptime window, even if a per-loop guard somehow let it through."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+
+    suspend_called = []
+
+    async def fake_suspend_system(wake_at=None):
+        suspend_called.append(wake_at)
+        return True
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               return_value=(True, _window_workdays_8_22())), \
+         patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
+         patch("app.services.power.sleep.SessionLocal"), \
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock(return_value=None)):
+        svc._current_state = SleepState.SOFT_SLEEP
+        ok = await svc.enter_true_suspend("auto", trigger)
+
+    assert ok is False
+    assert suspend_called == []
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_allows_manual_during_active_window():
+    """Manual admin trigger must still suspend during core uptime (spec F8) —
+    the only exception to the defense-in-depth block."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+    next_start = datetime(2026, 5, 7, 8, 0)
+
+    suspend_called = []
+
+    async def fake_suspend_system(wake_at=None):
+        suspend_called.append(wake_at)
+        return True
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(True, [_window_workdays_8_22()])), \
+         patch("app.services.power.sleep.core_uptime_helpers.is_in_core_uptime",
+               return_value=(True, _window_workdays_8_22())), \
+         patch("app.services.power.sleep.core_uptime_helpers.next_core_uptime_start",
+               return_value=next_start), \
+         patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
+         patch("app.services.power.sleep.SessionLocal"), \
+         patch("app.services.notifications.events.emit_system_suspend", new=AsyncMock(return_value=None)):
+        svc._current_state = SleepState.SOFT_SLEEP
+        ok = await svc.enter_true_suspend("manual", SleepTrigger.MANUAL)
+
+    assert ok is True
+    assert suspend_called == [next_start]  # wake_at clamped to next_start
+
+
+@pytest.mark.asyncio
 async def test_enter_true_suspend_clamps_wake_at_to_next_core_start():
     """If wake_at is after next core uptime start, it is clamped to that start."""
     svc = _build_service()
