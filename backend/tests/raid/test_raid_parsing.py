@@ -10,6 +10,7 @@ def test_parse_mdstat_with_progress() -> None:
     entry = info["md0"]
     assert entry.blocks == 976630336
     assert entry.resync_progress == 8.4
+    assert entry.members == ["sda1", "sdb1"]
 
 
 def test_parse_mdstat_without_progress() -> None:
@@ -19,6 +20,29 @@ def test_parse_mdstat_without_progress() -> None:
     entry = info["md1"]
     assert entry.blocks == 488378368
     assert entry.resync_progress is None
+    assert entry.members == ["sdc1", "sdd1"]
+
+
+def test_parse_mdstat_with_spare_and_failed_markers() -> None:
+    # mdstat suffixes member entries with (S) for spare and (F) for failed.
+    sample = (
+        "md2 : active raid1 sda1[0] sdb1[1](F) sdc1[2](S)\n"
+        "      488378368 blocks super 1.2 [2/2] [UU]\n"
+    )
+    info = _parse_mdstat(sample)
+
+    entry = info["md2"]
+    assert entry.members == ["sda1", "sdb1", "sdc1"]
+
+
+def test_parse_mdstat_nvme_partitions() -> None:
+    sample = (
+        "md0 : active raid1 nvme0n1p1[0] nvme1n1p1[1]\n"
+        "      488378368 blocks super 1.2 [2/2] [UU]\n"
+    )
+    info = _parse_mdstat(sample)
+
+    assert info["md0"].members == ["nvme0n1p1", "nvme1n1p1"]
 
 
 def test_map_device_state() -> None:

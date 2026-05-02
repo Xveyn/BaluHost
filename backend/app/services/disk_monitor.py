@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import time
 from collections import defaultdict
+from pathlib import Path
 from threading import Lock
 from typing import Dict, List, Optional
 
@@ -172,33 +174,47 @@ def _sample_disk_io() -> None:
         )
 
 
-def _refresh_raid_members() -> None:
-    """Refresh the set of RAID member disk names (cached for 60s)."""
-    import re
+_MDSTAT_PATH = Path("/proc/mdstat")
 
+
+def _refresh_raid_members() -> None:
+    """Refresh the set of RAID member disk names (cached for 60s).
+
+    Reads /proc/mdstat directly — no mdadm/sudo required. The throttle
+    timestamp is advanced unconditionally so a transient read failure does
+    not turn into a per-second retry storm.
+    """
     global _raid_member_names, _raid_members_last_refresh
 
     now = time.time()
     if now - _raid_members_last_refresh < 60.0:
         return
 
+    # Advance the throttle BEFORE the work so failures don't cause a retry
+    # storm (1 attempt per sample tick at 1 Hz).
+    _raid_members_last_refresh = now
+
     try:
-        from app.services.hardware import raid as raid_service
+        if not _MDSTAT_PATH.exists():
+            return
 
-        raid_data = raid_service.get_status()
+        from app.services.hardware.raid.parsing import _parse_mdstat
+
+        content = _MDSTAT_PATH.read_text(encoding="utf-8")
+        info = _parse_mdstat(content)
+
         new_members: set[str] = set()
-        if raid_data and raid_data.arrays:
-            for array in raid_data.arrays:
-                for member_dev in array.devices:
-                    base_name = re.sub(r"p?\d+$", "", member_dev.name)
-                    new_members.add(base_name)
+        for entry in info.values():
+            for member in entry.members:
+                # Strip partition suffix to map sda1 -> sda, nvme0n1p1 -> nvme0n1.
+                base_name = re.sub(r"p?\d+$", "", member)
+                new_members.add(base_name)
 
-        # Remove stale history entries for newly detected RAID members
+        # Remove stale history entries for newly detected RAID members.
         for name in new_members - _raid_member_names:
             _disk_io_history.pop(name, None)
 
         _raid_member_names = new_members
-        _raid_members_last_refresh = now
     except Exception as e:
         logger.debug("Failed to refresh RAID members: %s", e)
 
