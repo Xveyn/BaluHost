@@ -31,7 +31,13 @@ from app.models.power import (
     PowerDemand,
     PowerCommand,
 )
-from app.models.gpu_power import GpuPowerLog, GpuPowerConfigDb
+from app.models.gpu_power import (
+    GpuPowerLog,
+    GpuPowerConfigDb,
+    GpuPowerRuntimeState,
+    GpuPowerDemand,
+    GpuPowerCommand,
+)
 from app.models.fans import FanConfig, FanSample, FanScheduleEntry, FanCurveProfile
 from app.models.scheduler_history import (
     SchedulerExecution,
@@ -128,6 +134,9 @@ __all__ = [
     "PowerCommand",
     "GpuPowerLog",
     "GpuPowerConfigDb",
+    "GpuPowerRuntimeState",
+    "GpuPowerDemand",
+    "GpuPowerCommand",
     "FanConfig",
     "FanSample",
     "FanScheduleEntry",
