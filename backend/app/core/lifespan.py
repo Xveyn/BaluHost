@@ -422,7 +422,7 @@ async def _startup(app: FastAPI) -> None:
 
         if settings.gpu_power_management_enabled:
             try:
-                await gpu_power_manager.start_gpu_power_manager()
+                await gpu_power_manager.start_gpu_power_manager(primary=True)
                 logger.info("GPU power management started")
             except Exception as e:
                 logger.warning(f"GPU power management could not start: {e}")
@@ -459,6 +459,12 @@ async def _startup(app: FastAPI) -> None:
                 logger.info("Power manager initialized (follower, secondary worker)")
             except Exception as e:
                 logger.warning("Power manager init failed on secondary worker: %s", e)
+        if settings.gpu_power_management_enabled:
+            try:
+                await gpu_power_manager.start_gpu_power_manager(primary=False)
+                logger.info("GPU power manager initialized (follower, secondary worker)")
+            except Exception as e:
+                logger.warning("GPU power manager init failed on secondary worker: %s", e)
         if settings.fan_control_enabled:
             try:
                 await fan_control.start_fan_control(monitoring=False)
