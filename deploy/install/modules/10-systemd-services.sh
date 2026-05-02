@@ -91,6 +91,24 @@ else
     log_warn "Deploy sudoers template not found: $DEPLOY_SUDOERS_TEMPLATE (skipping)"
 fi
 
+# --- Install polkit rule for core-uptime sleep inhibitor ---
+log_step "Polkit Rule (Core Uptime Inhibitor)"
+
+POLKIT_TEMPLATE="$TEMPLATE_DIR/50-baluhost-inhibit-sleep.rules"
+POLKIT_OUTPUT="/etc/polkit-1/rules.d/50-baluhost-inhibit-sleep.rules"
+
+if [[ -f "$POLKIT_TEMPLATE" ]]; then
+    process_template "$POLKIT_TEMPLATE" "$POLKIT_OUTPUT" \
+        "BALUHOST_USER=$BALUHOST_USER"
+    chmod 644 "$POLKIT_OUTPUT"
+    log_info "Installed polkit rule: $POLKIT_OUTPUT"
+
+    # polkit reloads rules.d files on next request — no daemon-reload needed.
+else
+    log_warn "Polkit rule template not found: $POLKIT_TEMPLATE (skipping)"
+    log_warn "Core uptime inhibitor will degrade to BaluHost-internal guards only."
+fi
+
 # --- Reload systemd ---
 log_step "Reloading Systemd"
 
