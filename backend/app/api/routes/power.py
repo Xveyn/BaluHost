@@ -338,8 +338,9 @@ async def update_auto_scaling_config(
     """
     Update auto-scaling configuration (admin only).
 
-    Note: Changes are not persisted and will reset on restart.
-    Use environment variables for permanent configuration.
+    Persists to ``power_auto_scaling_config``. The primary worker reloads
+    the config on every monitor tick, so changes propagate within ~5s
+    without restart.
     """
     manager = get_power_manager()
     manager.set_auto_scaling_config(config)

@@ -5,6 +5,13 @@
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-backend
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-scheduler
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-monitoring
-@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-webdav
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl reload nginx
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl restart baluhost-webdav
 @@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/systemctl status baluhost-*
+
+# Idempotent permission-grant scripts shipped with the repo.
+# Only invoked when SYNC_PERMISSIONS=1 in ci-deploy.sh; off by default.
+# Pinning the absolute path means the deploy user cannot run *any* shell
+# script as root — only this specific, version-controlled file.
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /bin/bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh
+@@BALUHOST_USER@@ ALL=(root) NOPASSWD: /usr/bin/bash /opt/baluhost/deploy/scripts/install-amd-gpu-permissions.sh

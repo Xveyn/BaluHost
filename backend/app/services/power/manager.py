@@ -47,13 +47,21 @@ from app.services.power.cpu_protocol import (
 from app.services.power.cpu_dev_backend import DevCpuPowerBackend
 from app.services.power.cpu_linux_backend import LinuxCpuPowerBackend
 from app.services.power.config_store import (
+    delete_demand,
+    delete_expired_demands,
+    list_active_demands,
     load_auto_scaling_config,
-    save_auto_scaling_config,
     load_dynamic_mode_config,
-    save_dynamic_mode_config,
-    persist_profile_change,
+    load_runtime_state,
     persist_demand_log,
+    persist_profile_change,
+    save_auto_scaling_config,
+    save_dynamic_mode_config,
+    update_runtime_state,
+    upsert_demand,
 )
+from app.services.power import command_queue
+from app.services.monitoring import shm
 from app.services.power.intensity import (
     get_service_intensities as _get_service_intensities,
 )
@@ -86,6 +94,8 @@ class PowerManagerService:
             return
 
         self._initialized = True
+        # ``_demands`` is a primary-only cache; secondary workers must
+        # call list_active_demands() to read fresh DB rows.
         self._demands: Dict[str, PowerDemandInfo] = {}
         self._current_profile = PowerProfile.IDLE
         self._current_property: Optional[ServicePowerProperty] = ServicePowerProperty.IDLE
@@ -98,7 +108,9 @@ class PowerManagerService:
         self._cpu_usage_callback: Optional[Callable[[], Optional[float]]] = None
         self._backend: Optional[CpuPowerBackend] = None
         self._monitor_task: Optional[asyncio.Task] = None
+        self._command_poll_task: Optional[asyncio.Task] = None
         self._is_running = False
+        self._primary: bool = True  # set in start()
         self._profiles = DEFAULT_PROFILES.copy()
         self._state_lock = asyncio.Lock()
         self._dynamic_mode_enabled: bool = False
@@ -108,11 +120,25 @@ class PowerManagerService:
 
     async def enable_dynamic_mode(self, config: DynamicModeConfig) -> Tuple[bool, Optional[str]]:
         """
-        Enable dynamic mode with kernel governor-based scaling.
+        Enable dynamic mode (kernel-governor scaling).
 
-        Validates the governor and freq bounds, applies settings directly,
-        and pauses profile-based/auto-scaling.
+        On the primary worker this dispatches directly to the hardware path.
+        On a secondary worker the call is enqueued via the command queue so
+        the primary worker performs the actual change.
         """
+        if self._primary:
+            return await self._primary_enable_dynamic_mode(config)
+
+        cmd_id = command_queue.enqueue_command(
+            "enable_dynamic_mode",
+            payload=config.model_dump() if hasattr(config, "model_dump") else config.dict(),
+        )
+        if cmd_id is None:
+            return False, "Failed to enqueue command"
+        return await command_queue.wait_for_completion(cmd_id)
+
+    async def _primary_enable_dynamic_mode(self, config: DynamicModeConfig) -> Tuple[bool, Optional[str]]:
+        """Primary-worker hardware path for ``enable_dynamic_mode``."""
         if self._backend is None:
             return False, "Power backend not initialized"
 
@@ -159,6 +185,7 @@ class PowerManagerService:
             min_freq_mhz=config.min_freq_mhz,
             max_freq_mhz=config.max_freq_mhz,
         ))
+        update_runtime_state(dynamic_mode_enabled=True)
 
         # Record in history
         freq = await self._backend.get_current_frequency_mhz()
@@ -175,7 +202,16 @@ class PowerManagerService:
         return True, None
 
     async def disable_dynamic_mode(self) -> Tuple[bool, Optional[str]]:
-        """Disable dynamic mode and return to profile-based scaling."""
+        """Disable dynamic mode (routes through command queue on followers)."""
+        if self._primary:
+            return await self._primary_disable_dynamic_mode()
+
+        cmd_id = command_queue.enqueue_command("disable_dynamic_mode")
+        if cmd_id is None:
+            return False, "Failed to enqueue command"
+        return await command_queue.wait_for_completion(cmd_id)
+
+    async def _primary_disable_dynamic_mode(self) -> Tuple[bool, Optional[str]]:
         async with self._state_lock:
             self._dynamic_mode_enabled = False
             self._dynamic_mode_config = None
@@ -185,6 +221,7 @@ class PowerManagerService:
         if saved_config:
             saved_config.enabled = False
             save_dynamic_mode_config(saved_config)
+        update_runtime_state(dynamic_mode_enabled=False)
 
         # Recalculate and apply the appropriate profile
         async with self._state_lock:
@@ -263,12 +300,27 @@ class PowerManagerService:
         """
         Switch between dev and Linux backends at runtime.
 
-        Args:
-            use_linux: True to use Linux cpufreq, False for dev simulation
-
-        Returns:
-            Tuple of (success, previous_backend_name, new_backend_name)
+        On followers the command queue dispatches the change to the primary
+        worker, which actually owns the backend instance.
         """
+        if self._primary:
+            return await self._primary_switch_backend(use_linux)
+
+        previous_backend = (load_runtime_state().get("backend_kind") or "unknown").capitalize()
+        cmd_id = command_queue.enqueue_command(
+            "switch_backend", payload={"use_linux_backend": use_linux}
+        )
+        if cmd_id is None:
+            return False, previous_backend, "unknown"
+        success, _err = await command_queue.wait_for_completion(
+            cmd_id, timeout_s=command_queue.BACKEND_SWITCH_TIMEOUT_S
+        )
+        if not success:
+            return False, previous_backend, "unknown"
+        new_backend = (load_runtime_state().get("backend_kind") or "unknown").capitalize()
+        return True, previous_backend, new_backend
+
+    async def _primary_switch_backend(self, use_linux: bool) -> Tuple[bool, str, str]:
         async with self._state_lock:
             # Determine previous backend name
             if self._backend is None:
@@ -287,6 +339,7 @@ class PowerManagerService:
                 return True, previous_backend, new_backend_name
 
             self._backend = new_backend
+            update_runtime_state(backend_kind=new_backend_name.lower())
 
             # Re-apply current profile to new backend
             config = self._profiles.get(self._current_profile)
@@ -313,36 +366,78 @@ class PowerManagerService:
 
             return True, previous_backend, new_backend_name
 
-    async def start(self) -> None:
-        """Start the power management service."""
+    async def start(self, primary: bool = True) -> None:
+        """
+        Start the power management service.
+
+        Args:
+            primary: When True, this worker owns the CPU backend, runs the
+                monitor loop, and processes the command queue. When False,
+                the worker only loads runtime state into local fields so
+                read endpoints work, and routes hardware-mutating calls
+                through the command queue.
+        """
         if self._is_running:
             logger.warning("PowerManagerService already running")
             return
 
-        # Load configs from database
+        self._primary = primary
+
+        # Always load shared runtime state so secondary workers also have
+        # something useful for in-process reads/fallbacks.
+        self._hydrate_from_runtime_state()
         self._auto_scaling_config = load_auto_scaling_config()
         dynamic_config = load_dynamic_mode_config()
 
-        self._backend = self._select_backend()
         self._is_running = True
+
+        if not primary:
+            self._backend = None
+            logger.info("PowerManagerService started (follower mode)")
+            return
+
+        self._backend = self._select_backend()
+        backend_kind = "linux" if isinstance(self._backend, LinuxCpuPowerBackend) else "dev"
+        update_runtime_state(backend_kind=backend_kind)
 
         # Apply initial state: dynamic mode or IDLE profile
         if dynamic_config and dynamic_config.enabled:
-            success, error = await self.enable_dynamic_mode(dynamic_config)
+            success, error = await self._primary_enable_dynamic_mode(dynamic_config)
             if not success:
                 logger.warning(f"Failed to restore dynamic mode on start: {error}, falling back to IDLE")
-                await self.apply_profile(PowerProfile.IDLE, reason="service_start")
+                await self._primary_apply_profile(PowerProfile.IDLE, reason="service_start")
         else:
-            await self.apply_profile(PowerProfile.IDLE, reason="service_start")
+            await self._primary_apply_profile(PowerProfile.IDLE, reason="service_start")
 
         # Recalculate profile based on any demands registered before start()
-        if self._demands:
-            logger.info(f"Applying {len(self._demands)} pre-registered demand(s)")
+        active_demands = list_active_demands()
+        if active_demands:
+            self._demands = {d.source: d for d in active_demands}
+            logger.info(f"Applying {len(active_demands)} pre-existing demand(s) from DB")
             await self._recalculate_profile("service_start_catchup")
 
         # Start background monitor for demand expiration
         self._monitor_task = asyncio.create_task(self._monitor_loop())
-        logger.info("PowerManagerService started")
+        # Start command queue poll loop for cross-worker mutations
+        self._command_poll_task = asyncio.create_task(command_queue.run_poll_loop(self))
+        logger.info("PowerManagerService started (primary mode)")
+
+    def _hydrate_from_runtime_state(self) -> None:
+        """Load shared mutable state from ``power_runtime_state`` into local fields."""
+        state = load_runtime_state()
+        try:
+            self._current_profile = PowerProfile(state["current_profile"])
+        except ValueError:
+            self._current_profile = PowerProfile.IDLE
+        prop = state.get("current_property")
+        try:
+            self._current_property = ServicePowerProperty(prop) if prop else ServicePowerProperty(self._current_profile.value)
+        except ValueError:
+            self._current_property = ServicePowerProperty.IDLE
+        self._manual_override_until = state.get("manual_override_until")
+        self._cooldown_until = state.get("cooldown_until")
+        self._dynamic_mode_enabled = bool(state.get("dynamic_mode_enabled"))
+        self._last_profile_change = state.get("last_profile_change")
 
     async def stop(self) -> None:
         """Stop the power management service."""
@@ -359,41 +454,93 @@ class PowerManagerService:
                 pass
             self._monitor_task = None
 
+        if self._command_poll_task:
+            self._command_poll_task.cancel()
+            try:
+                await self._command_poll_task
+            except asyncio.CancelledError:
+                pass
+            self._command_poll_task = None
+
         logger.info("PowerManagerService stopped")
 
     async def _monitor_loop(self) -> None:
         """Background loop to handle demand expiration and auto-scaling."""
         while self._is_running:
             try:
+                # Refresh per-tick: auto-scaling thresholds may have been
+                # updated by another worker via PUT /api/power/auto-scaling.
+                self._auto_scaling_config = load_auto_scaling_config()
+
+                # Refresh demand cache from DB so demands registered on
+                # other workers are visible to recalculation.
+                self._refresh_demand_cache()
+
                 await self._check_expired_demands()
                 await self._check_auto_scaling()
+                self._write_status_shm()
             except Exception as e:
                 logger.error(f"Error in power monitor loop: {e}")
 
             await asyncio.sleep(5)  # Check every 5 seconds
 
+    def _refresh_demand_cache(self) -> None:
+        """Reload the in-memory demand cache from the DB (primary worker only)."""
+        try:
+            self._demands = {d.source: d for d in list_active_demands()}
+        except Exception as exc:
+            logger.debug(f"Demand cache refresh failed: {exc}")
+
+    def _write_status_shm(self) -> None:
+        """
+        Write a snapshot of live status to shared memory so secondary workers
+        can answer ``GET /api/power/status`` without holding their own state.
+        """
+        try:
+            backend_kind = (
+                "linux" if isinstance(self._backend, LinuxCpuPowerBackend) else "dev"
+                if self._backend is not None else None
+            )
+            permission_status = None
+            if isinstance(self._backend, LinuxCpuPowerBackend):
+                perm_info = self._backend.get_permission_status()
+                permission_status = {
+                    "user": perm_info.get("user", "unknown"),
+                    "groups": perm_info.get("groups", []),
+                    "in_cpufreq_group": perm_info.get("in_cpufreq_group", False),
+                    "sudo_available": perm_info.get("sudo_available", False),
+                    "files": perm_info.get("files", {}),
+                    "errors": perm_info.get("errors", []),
+                    "has_write_access": self._backend.has_write_permission(),
+                }
+            shm.write_shm(
+                "power_status.json",
+                {
+                    "timestamp": datetime.now(timezone.utc).isoformat(),
+                    "backend_kind": backend_kind,
+                    "linux_backend_available": LinuxCpuPowerBackend._is_available_static(),
+                    "permission_status": permission_status,
+                },
+            )
+        except Exception as exc:
+            logger.debug(f"Power status SHM write failed: {exc}")
+
     async def _check_expired_demands(self) -> None:
-        """Remove expired demands and recalculate profile."""
+        """Remove expired demands (DB-backed) and recalculate profile."""
         async with self._state_lock:
-            now = datetime.now(timezone.utc)
-            expired = [
-                source for source, demand in self._demands.items()
-                if demand.expires_at and demand.expires_at <= now
-            ]
+            expired = delete_expired_demands()
 
             if expired:
-                expired_demands = {source: self._demands[source] for source in expired}
-                for source in expired:
-                    logger.info(f"Power demand '{source}' expired")
-                    del self._demands[source]
+                for demand in expired:
+                    logger.info(f"Power demand '{demand.source}' expired")
+                    self._demands.pop(demand.source, None)
 
                 await self._recalculate_profile("demand_expired")
 
-                # Persist expired demands to DB
-                for source, demand in expired_demands.items():
+                for demand in expired:
                     persist_demand_log(
                         action="expired",
-                        source=source,
+                        source=demand.source,
                         level=demand.level.value,
                         description=demand.description,
                         resulting_profile=self._current_profile.value,
@@ -521,6 +668,15 @@ class PowerManagerService:
                     seconds=self._auto_scaling_config.cooldown_seconds
                 )
 
+            # Persist new state so other workers see the change
+            update_runtime_state(
+                current_profile=profile.value,
+                current_property=power_property.value,
+                last_profile_change=self._last_profile_change,
+                cooldown_until=self._cooldown_until,
+                manual_override_until=self._manual_override_until,
+            )
+
             # Record history
             freq = await self._backend.get_current_frequency_mhz()
             entry = PowerHistoryEntry(
@@ -612,14 +768,34 @@ class PowerManagerService:
         """
         Manually apply a power profile.
 
-        Args:
-            profile: The profile to apply
-            reason: Reason for the change
-            duration_seconds: How long to hold this profile (None = until changed)
-
-        Returns:
-            Tuple of (success, error_message). error_message is None on success.
+        On followers the call is enqueued via the command queue so the
+        primary worker performs the hardware change. The early-return on
+        ``profile == self._current_profile`` is intentionally evaluated on
+        the primary side only — secondary workers may have a stale local
+        cache. This is what eliminated the duplicate Surge-log symptom.
         """
+        if self._primary:
+            return await self._primary_apply_profile(profile, reason=reason, duration_seconds=duration_seconds)
+
+        cmd_id = command_queue.enqueue_command(
+            "apply_profile",
+            payload={
+                "profile": profile.value,
+                "reason": reason,
+                "duration_seconds": duration_seconds,
+            },
+        )
+        if cmd_id is None:
+            return False, "Failed to enqueue command"
+        return await command_queue.wait_for_completion(cmd_id)
+
+    async def _primary_apply_profile(
+        self,
+        profile: PowerProfile,
+        reason: str = "manual",
+        duration_seconds: Optional[int] = None,
+    ) -> Tuple[bool, Optional[str]]:
+        """Primary-worker hardware path for ``apply_profile``."""
         async with self._state_lock:
             if duration_seconds:
                 self._manual_override_until = datetime.now(timezone.utc) + timedelta(seconds=duration_seconds)
@@ -639,42 +815,44 @@ class PowerManagerService:
         """
         Register a power demand from a source.
 
-        The highest demand across all sources determines the active profile.
-
-        Args:
-            source: Unique identifier for this demand (e.g., "backup_create")
-            level: Required power level
-            power_property: Optional service power property (if using preset system)
-            timeout_seconds: Auto-expire after this duration
-            description: Human-readable description
-
-        Returns:
-            The demand ID (same as source)
+        Writes to the shared ``power_demands`` table so any worker (and the
+        primary's monitor loop) can see the demand. On the primary worker
+        the in-memory cache is updated and the profile recalculated
+        immediately; on followers the next monitor tick on the primary
+        picks up the new row.
         """
+        registered_at = datetime.now(timezone.utc)
+        expires_at = None
+        if timeout_seconds:
+            expires_at = registered_at + timedelta(seconds=timeout_seconds)
+        if power_property is None:
+            power_property = ServicePowerProperty(level.value)
+
+        demand = PowerDemandInfo(
+            source=source,
+            level=level,
+            power_property=power_property,
+            registered_at=registered_at,
+            expires_at=expires_at,
+            description=description,
+        )
+
+        upsert_demand(
+            source=source,
+            level=level,
+            power_property=power_property,
+            registered_at=registered_at,
+            expires_at=expires_at,
+            description=description,
+        )
+
         async with self._state_lock:
-            expires_at = None
-            if timeout_seconds:
-                expires_at = datetime.now(timezone.utc) + timedelta(seconds=timeout_seconds)
-
-            # If power_property not provided, derive from level
-            if power_property is None:
-                power_property = ServicePowerProperty(level.value)
-
-            demand = PowerDemandInfo(
-                source=source,
-                level=level,
-                power_property=power_property,
-                registered_at=datetime.now(timezone.utc),
-                expires_at=expires_at,
-                description=description
-            )
-
             self._demands[source] = demand
             logger.info(f"Registered power demand: {source} -> {level.value} (property: {power_property.value})")
 
-            await self._recalculate_profile(f"demand_registered:{source}")
+            if self._primary:
+                await self._recalculate_profile(f"demand_registered:{source}")
 
-            # Persist to DB
             persist_demand_log(
                 action="registered",
                 source=source,
@@ -688,37 +866,46 @@ class PowerManagerService:
 
     async def unregister_demand(self, source: str) -> bool:
         """
-        Remove a power demand.
+        Remove a power demand from the shared DB and the local cache.
 
-        Args:
-            source: The demand source to remove
-
-        Returns:
-            True if demand was found and removed
+        Returns True if a row was actually removed, False if the source was
+        not registered. Followers do not trigger recalculation locally; the
+        primary worker's monitor loop will pick up the change on the next
+        tick.
         """
         async with self._state_lock:
-            if source not in self._demands:
+            removed_db = delete_demand(source)
+            cached = self._demands.pop(source, None)
+
+            if not removed_db and cached is None:
                 return False
 
-            demand = self._demands[source]
-            del self._demands[source]
             logger.info(f"Unregistered power demand: {source}")
 
-            await self._recalculate_profile(f"demand_unregistered:{source}")
+            if self._primary:
+                await self._recalculate_profile(f"demand_unregistered:{source}")
 
-            # Persist to DB
+            level_value = cached.level.value if cached is not None else "unknown"
+            description = cached.description if cached is not None else None
             persist_demand_log(
                 action="unregistered",
                 source=source,
-                level=demand.level.value,
-                description=demand.description,
+                level=level_value,
+                description=description,
                 resulting_profile=self._current_profile.value,
             )
 
         return True
 
     async def get_power_status(self) -> PowerStatusResponse:
-        """Get current power status."""
+        """Get current power status (read-only, safe on follower workers)."""
+        # Hydrate from shared state so a follower returns the same answer
+        # as the primary, regardless of which worker handles the request.
+        if not self._primary:
+            self._hydrate_from_runtime_state()
+            self._auto_scaling_config = load_auto_scaling_config()
+            self._demands = {d.source: d for d in list_active_demands()}
+
         freq = None
         if self._backend:
             freq = await self._backend.get_current_frequency_mhz()
@@ -736,12 +923,25 @@ class PowerManagerService:
             if remaining > 0:
                 cooldown_remaining = int(remaining)
 
+        # Read backend metadata: prefer local on primary, fall back to SHM
+        # snapshot on followers (written by the primary's monitor loop).
+        shm_status = None
+        if not self._primary:
+            try:
+                shm_status = shm.read_shm("power_status.json", max_age_seconds=15.0)
+            except Exception:
+                shm_status = None
+
         is_linux = isinstance(self._backend, LinuxCpuPowerBackend)
+        if not self._primary and shm_status:
+            is_linux = shm_status.get("backend_kind") == "linux"
         linux_available = self.is_linux_backend_available()
+        if not self._primary and shm_status and "linux_backend_available" in shm_status:
+            linux_available = bool(shm_status["linux_backend_available"])
 
         # Get permission status for Linux backend
         permission_status = None
-        if is_linux and isinstance(self._backend, LinuxCpuPowerBackend):
+        if isinstance(self._backend, LinuxCpuPowerBackend):
             perm_info = self._backend.get_permission_status()
             permission_status = PermissionStatus(
                 user=perm_info.get("user", "unknown"),
@@ -751,6 +951,17 @@ class PowerManagerService:
                 files=perm_info.get("files", {}),
                 errors=perm_info.get("errors", []),
                 has_write_access=self._backend.has_write_permission()
+            )
+        elif not self._primary and shm_status and shm_status.get("permission_status"):
+            ps = shm_status["permission_status"]
+            permission_status = PermissionStatus(
+                user=ps.get("user", "unknown"),
+                groups=ps.get("groups", []),
+                in_cpufreq_group=ps.get("in_cpufreq_group", False),
+                sudo_available=ps.get("sudo_available", False),
+                files=ps.get("files", {}),
+                errors=ps.get("errors", []),
+                has_write_access=ps.get("has_write_access", False),
             )
 
         # Get active preset info
@@ -782,6 +993,10 @@ class PowerManagerService:
             dm = self._dynamic_mode_config
             freq_range = f"{dm.min_freq_mhz}-{dm.max_freq_mhz} MHz"
 
+        is_dev_mode = isinstance(self._backend, DevCpuPowerBackend)
+        if not self._primary and shm_status:
+            is_dev_mode = shm_status.get("backend_kind") == "dev"
+
         return PowerStatusResponse(
             current_profile=self._current_profile,
             current_property=self._current_property,
@@ -789,7 +1004,7 @@ class PowerManagerService:
             target_frequency_range=freq_range,
             active_demands=list(self._demands.values()),
             auto_scaling_enabled=self._auto_scaling_config.enabled,
-            is_dev_mode=isinstance(self._backend, DevCpuPowerBackend),
+            is_dev_mode=is_dev_mode,
             is_using_linux_backend=is_linux,
             linux_backend_available=linux_available,
             can_switch_backend=linux_available or is_linux,
@@ -854,8 +1069,8 @@ class PowerManagerService:
             return entries, total
 
     def get_active_demands(self) -> List[PowerDemandInfo]:
-        """Get all active power demands."""
-        return list(self._demands.values())
+        """Get all active power demands (DB-backed, fresh on every call)."""
+        return list_active_demands()
 
     async def get_service_intensities(self) -> ServiceIntensityResponse:
         """
@@ -863,7 +1078,8 @@ class PowerManagerService:
 
         Delegates to the intensity module.
         """
-        return await _get_service_intensities(self._demands, self._current_profile)
+        demands = {d.source: d for d in list_active_demands()}
+        return await _get_service_intensities(demands, self._current_profile)
 
     def set_cpu_usage_callback(self, callback: Callable[[], Optional[float]]) -> None:
         """Set callback to get current CPU usage for auto-scaling."""
@@ -892,10 +1108,17 @@ def get_power_manager() -> PowerManagerService:
     return _power_manager
 
 
-async def start_power_manager() -> None:
-    """Start the power management service."""
+async def start_power_manager(primary: bool = True) -> None:
+    """Start the power management service.
+
+    Args:
+        primary: When True (default), this worker owns the CPU backend.
+            Pass False on secondary Uvicorn workers — the manager will
+            run in follower mode and route hardware mutations through
+            the DB-backed command queue.
+    """
     manager = get_power_manager()
-    await manager.start()
+    await manager.start(primary=primary)
 
 
 async def stop_power_manager() -> None:
