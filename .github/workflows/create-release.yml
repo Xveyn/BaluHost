@@ -19,12 +19,22 @@ jobs:
         run: echo "version=${GITHUB_REF_NAME#v}" >> "$GITHUB_OUTPUT"
 
       - name: Extract release notes from CHANGELOG
+        id: notes
         env:
           VERSION: ${{ steps.version.outputs.version }}
         run: |
           # Extract section for this version (between ## [version] and next ---)
           notes=$(awk -v ver="$VERSION" '$0 ~ "^## \\[" ver "\\]" {found=1; next} /^---$/{if(found) exit} found' CHANGELOG.md)
-          echo "$notes" > /tmp/release-notes.md
+          # Treat whitespace-only output as "not found" so we trigger the fallback
+          trimmed=$(printf '%s' "$notes" | tr -d '[:space:]')
+          if [ -z "$trimmed" ]; then
+            echo "::warning::No CHANGELOG section found for version $VERSION — falling back to auto-generated notes"
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            : > /tmp/release-notes.md
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            printf '%s\n' "$notes" > /tmp/release-notes.md
+          fi
 
       - name: Determine pre-release
         id: prerelease
@@ -36,6 +46,22 @@ jobs:
           else
             echo "flag=" >> "$GITHUB_OUTPUT"
           fi
+
+      - name: Generate fallback notes from GitHub API
+        if: steps.notes.outputs.found != 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG: ${{ github.ref_name }}
+          REPO: ${{ github.repository }}
+        run: |
+          # `gh release edit` does not support --generate-notes, so call the API directly
+          # and write the generated body into the same notes file used by the next step.
+          gh api \
+            --method POST \
+            "repos/${REPO}/releases/generate-notes" \
+            -f tag_name="$TAG" \
+            --jq '.body' > /tmp/release-notes.md
+          echo "Fallback notes generated for $TAG ($(wc -c < /tmp/release-notes.md) bytes)"
 
       - name: Create or update GitHub Release
         env:
