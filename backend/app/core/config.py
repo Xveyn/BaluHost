@@ -34,7 +34,6 @@ class Settings(BaseSettings):
     SECRET_KEY: str = "change-me-in-prod"  # Used by security.py
     token_secret: str = "change-me-in-prod"  # Legacy: still used by auth_service
     token_algorithm: str = "HS256"
-    token_expire_minutes: int = 60 * 12
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15  # Access token TTL (short)
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7  # Refresh token TTL (long)
     privileged_roles: list[str] = ["admin"]
