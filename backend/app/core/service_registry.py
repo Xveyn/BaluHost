@@ -159,28 +159,42 @@ def register_all_services(
         start_fn=lambda: start_monitoring(get_db),
     )
 
-    # Power Manager
+    # Power Manager — start_fn closes over is_primary_worker so a service
+    # restart triggered via the admin UI keeps the worker's primary/follower
+    # role intact.
+    _is_primary_worker_for_power = is_primary_worker
+
+    async def _start_power_manager_for_worker():
+        await power_manager.start_power_manager(primary=_is_primary_worker_for_power)
+
     register_service(
         name="power_manager",
         display_name="CPU Power Manager",
         get_status_fn=power_manager.get_status,
         stop_fn=power_manager.stop_power_manager,
-        start_fn=power_manager.start_power_manager,
+        start_fn=_start_power_manager_for_worker,
         config_enabled_fn=lambda: settings.power_management_enabled,
     )
 
-    # GPU Power Manager
+    # GPU Power Manager — start_fn closes over is_primary_worker so a
+    # service restart triggered via the admin UI keeps the worker's
+    # primary/follower role intact, mirroring the CPU power manager.
     from app.services.power.gpu.manager import get_status as gpu_power_get_status
     from app.services.power.gpu.manager import (
         start_gpu_power_manager,
         stop_gpu_power_manager,
     )
 
+    _is_primary_worker_for_gpu_power = is_primary_worker
+
+    async def _start_gpu_power_manager_for_worker():
+        await start_gpu_power_manager(primary=_is_primary_worker_for_gpu_power)
+
     register_service(
         name="gpu_power_manager",
         display_name="GPU Power Management",
         get_status_fn=gpu_power_get_status,
-        start_fn=start_gpu_power_manager,
+        start_fn=_start_gpu_power_manager_for_worker,
         stop_fn=stop_gpu_power_manager,
         config_enabled_fn=lambda: settings.gpu_power_management_enabled,
     )

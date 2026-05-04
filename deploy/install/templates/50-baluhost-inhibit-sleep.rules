@@ -1,0 +1,20 @@
+// BaluHost — allow the service user to acquire logind block-sleep inhibitors.
+//
+// Background: BaluHost's "Core Operating Hours" feature holds a logind
+// `Inhibit(what=sleep, mode=block)` lock during active windows so third-party
+// suspend (mate-screensaver, gnome-power-manager, KDE, manual `systemctl
+// suspend`) is refused while the window is open.
+//
+// The default polkit policy on Debian 13 for
+// `org.freedesktop.login1.inhibit-block-sleep` is `allow_active=yes` only.
+// A systemd service running as ${BALUHOST_USER} has no active session, so
+// without this rule polkit asks for admin auth and the service silently fails
+// to acquire the inhibitor.
+//
+// This rule grants the BaluHost service user permission for that single action.
+polkit.addRule(function(action, subject) {
+    if (action.id == "org.freedesktop.login1.inhibit-block-sleep" &&
+        subject.user == "@@BALUHOST_USER@@") {
+        return polkit.Result.YES;
+    }
+});

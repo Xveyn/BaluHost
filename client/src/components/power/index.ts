@@ -9,3 +9,5 @@ export { ServiceIntensityList } from './ServiceIntensityList';
 export { SleepModePanel } from './SleepModePanel';
 export { SleepConfigPanel } from './SleepConfigPanel';
 export { SleepHistoryTable } from './SleepHistoryTable';
+export { CoreUptimePanel } from './CoreUptimePanel';
+export { CoreUptimeWindowCard } from './CoreUptimeWindowCard';

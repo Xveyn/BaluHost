@@ -345,5 +345,22 @@
     },
     "loading": "Loading users…",
     "empty": "No other users"
+  },
+  "sleep": {
+    "coreUptime": {
+      "title": "Core Operating Hours",
+      "description": "While these windows are active, the server stays reachable and auto-sleep is blocked.",
+      "bannerActive": "Core operating hours active",
+      "bannerEndsAt": "ends at {{time}}",
+      "addWindow": "Add new time window",
+      "crossMidnightBadge": "until next day",
+      "warningInfo": "While an active window is in effect, auto-idle sleep, schedule sleep, and auto-escalation are blocked. Manual admin suspend remains possible (with warning).",
+      "scheduleOverridden": "Core operating hours take precedence. Schedule sleep triggers are ignored during active windows.",
+      "suspendWarning": "Core operating hours are active (until {{time}}). Suspend will make the server unreachable to other users.",
+      "triggerLabel": "Core-uptime wake",
+      "weekdays": {
+        "0": "Mon", "1": "Tue", "2": "Wed", "3": "Thu", "4": "Fri", "5": "Sat", "6": "Sun"
+      }
+    }
   }
 }

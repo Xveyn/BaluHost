@@ -1,0 +1,20 @@
+# BaluHost — grant the service user write access to AMD GPU sysfs power
+# control nodes so the GPU power manager can apply performance levels and
+# profile modes without needing root.
+#
+# Background: AMDGPU exposes power control via two sysfs files:
+#   /sys/class/drm/card*/device/power_dpm_force_performance_level
+#   /sys/class/drm/card*/device/pp_power_profile_mode
+# Both are owned root:root with mode 0644 by default. A systemd service
+# running as ${BALUHOST_USER} therefore hits PermissionError ([Errno 13])
+# when the GPU power manager tries to switch states.
+#
+# This udev rule re-chowns the relevant sysfs nodes to the "video" group
+# and adds the group-write bit. ${BALUHOST_USER} must be a member of
+# "video" — the install script ensures this via `usermod -aG video`.
+#
+# Re-runs on every boot (and on hot card add / suspend resume), so the
+# permissions stay correct across reboots.
+#
+ACTION=="add|change", SUBSYSTEM=="drm", KERNEL=="card[0-9]*", \
+    RUN+="/bin/sh -c 'for f in /sys/class/drm/%k/device/power_dpm_force_performance_level /sys/class/drm/%k/device/pp_power_profile_mode; do [ -e \"$f\" ] && chgrp video \"$f\" && chmod g+w \"$f\"; done'"

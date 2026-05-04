@@ -8,14 +8,23 @@ as well as persisting profile change and demand logs.
 from __future__ import annotations
 
 import logging
-from typing import Optional
+import os
+from datetime import datetime, timezone
+from typing import Any, List, Optional
 
 from app.core.database import SessionLocal
-from app.models.power import PowerProfileLog, PowerDemandLog
+from app.models.power import (
+    PowerDemand,
+    PowerDemandLog,
+    PowerProfileLog,
+    PowerRuntimeState,
+)
 from app.schemas.power import (
     AutoScalingConfig,
     DynamicModeConfig,
+    PowerDemandInfo,
     PowerProfile,
+    ServicePowerProperty,
 )
 
 logger = logging.getLogger(__name__)
@@ -228,3 +237,228 @@ def persist_demand_log(
             db.close()
     except Exception as db_err:
         logger.warning(f"Failed to create DB session for demand log: {db_err}")
+
+
+# ---------------------------------------------------------------------------
+# Runtime state (singleton row id=1) — replaces in-memory PowerManager state
+# ---------------------------------------------------------------------------
+
+
+def load_runtime_state() -> dict[str, Any]:
+    """
+    Load the singleton power_runtime_state row.
+
+    Returns a dict with keys: current_profile, current_property,
+    manual_override_until, cooldown_until, dynamic_mode_enabled,
+    last_profile_change, backend_kind. Falls back to safe defaults
+    if the row is missing.
+    """
+    defaults: dict[str, Any] = {
+        "current_profile": "idle",
+        "current_property": None,
+        "manual_override_until": None,
+        "cooldown_until": None,
+        "dynamic_mode_enabled": False,
+        "last_profile_change": None,
+        "backend_kind": None,
+    }
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerRuntimeState).filter(PowerRuntimeState.id == 1).first()
+            if row is None:
+                return defaults
+            return {
+                "current_profile": row.current_profile or "idle",
+                "current_property": row.current_property,
+                "manual_override_until": row.manual_override_until,
+                "cooldown_until": row.cooldown_until,
+                "dynamic_mode_enabled": bool(row.dynamic_mode_enabled),
+                "last_profile_change": row.last_profile_change,
+                "backend_kind": row.backend_kind,
+            }
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to load power_runtime_state: {exc}")
+        return defaults
+
+
+def update_runtime_state(**fields: Any) -> bool:
+    """
+    Update fields on the singleton power_runtime_state row.
+
+    Always stamps ``updated_at`` and ``updated_by_pid``. Creates the row if
+    it does not exist (defensive — migration seeds it).
+
+    Returns True on success, False on DB error.
+    """
+    if not fields:
+        return True
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerRuntimeState).filter(PowerRuntimeState.id == 1).first()
+            if row is None:
+                row = PowerRuntimeState(id=1, current_profile="idle")
+                db.add(row)
+            for key, value in fields.items():
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            row.updated_at = datetime.now(timezone.utc)
+            row.updated_by_pid = os.getpid()
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            logger.warning(f"Failed to update power_runtime_state: {exc}")
+            return False
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to open session for power_runtime_state: {exc}")
+        return False
+
+
+# ---------------------------------------------------------------------------
+# Active demands (DB-backed, replaces in-memory _demands dict)
+# ---------------------------------------------------------------------------
+
+
+def upsert_demand(
+    source: str,
+    level: PowerProfile,
+    power_property: ServicePowerProperty,
+    registered_at: datetime,
+    expires_at: Optional[datetime],
+    description: Optional[str],
+) -> bool:
+    """
+    Insert or update a power_demands row keyed by source.
+
+    Returns True on success, False on DB error.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerDemand).filter(PowerDemand.source == source).first()
+            if row is None:
+                row = PowerDemand(
+                    source=source,
+                    level=level.value,
+                    power_property=power_property.value,
+                    description=description,
+                    registered_at=registered_at,
+                    expires_at=expires_at,
+                )
+                db.add(row)
+            else:
+                row.level = level.value
+                row.power_property = power_property.value
+                row.description = description
+                row.registered_at = registered_at
+                row.expires_at = expires_at
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            logger.warning(f"Failed to upsert power demand '{source}': {exc}")
+            return False
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to open session for power demand upsert: {exc}")
+        return False
+
+
+def delete_demand(source: str) -> bool:
+    """
+    Remove a power_demands row.
+
+    Returns True if a row was deleted, False if no row matched or on DB error.
+    """
+    try:
+        db = SessionLocal()
+        try:
+            row = db.query(PowerDemand).filter(PowerDemand.source == source).first()
+            if row is None:
+                return False
+            db.delete(row)
+            db.commit()
+            return True
+        except Exception as exc:
+            db.rollback()
+            logger.warning(f"Failed to delete power demand '{source}': {exc}")
+            return False
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to open session for power demand delete: {exc}")
+        return False
+
+
+def list_active_demands() -> List[PowerDemandInfo]:
+    """Return all power_demands rows as PowerDemandInfo objects."""
+    try:
+        db = SessionLocal()
+        try:
+            rows = db.query(PowerDemand).all()
+            return [
+                PowerDemandInfo(
+                    source=row.source,
+                    level=PowerProfile(row.level),
+                    power_property=ServicePowerProperty(row.power_property),
+                    registered_at=row.registered_at,
+                    expires_at=row.expires_at,
+                    description=row.description,
+                )
+                for row in rows
+            ]
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to list power demands: {exc}")
+        return []
+
+
+def delete_expired_demands(now: Optional[datetime] = None) -> List[PowerDemandInfo]:
+    """
+    Remove power_demands rows whose ``expires_at`` is in the past.
+
+    Returns the list of removed demands so callers can persist audit logs
+    and trigger profile recalculation.
+    """
+    cutoff = now or datetime.now(timezone.utc)
+    try:
+        db = SessionLocal()
+        try:
+            rows = (
+                db.query(PowerDemand)
+                .filter(PowerDemand.expires_at.isnot(None))
+                .filter(PowerDemand.expires_at <= cutoff)
+                .all()
+            )
+            expired = [
+                PowerDemandInfo(
+                    source=row.source,
+                    level=PowerProfile(row.level),
+                    power_property=ServicePowerProperty(row.power_property),
+                    registered_at=row.registered_at,
+                    expires_at=row.expires_at,
+                    description=row.description,
+                )
+                for row in rows
+            ]
+            for row in rows:
+                db.delete(row)
+            db.commit()
+            return expired
+        except Exception as exc:
+            db.rollback()
+            logger.warning(f"Failed to delete expired power demands: {exc}")
+            return []
+        finally:
+            db.close()
+    except Exception as exc:
+        logger.warning(f"Failed to open session for expired-demand cleanup: {exc}")
+        return []

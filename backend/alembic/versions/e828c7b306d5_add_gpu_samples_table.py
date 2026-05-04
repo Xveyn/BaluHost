@@ -51,6 +51,14 @@ def upgrade() -> None:
     # NOTE: SQLAlchemy's SQLEnum stores by enum NAME, not value, so we use "GPU"
     # (uppercase) to match how MonitoringConfig(metric_type=MetricType.GPU) serializes.
     conn = op.get_bind()
+
+    # On PostgreSQL the metrictype enum type pre-exists from earlier migrations
+    # and does not yet contain 'GPU'. ALTER TYPE ... ADD VALUE must run outside
+    # a transaction block, so commit first and use AUTOCOMMIT for the DDL.
+    if conn.dialect.name == "postgresql":
+        with op.get_context().autocommit_block():
+            conn.execute(sa.text("ALTER TYPE metrictype ADD VALUE IF NOT EXISTS 'GPU'"))
+
     existing = conn.execute(
         sa.text("SELECT 1 FROM monitoring_config WHERE metric_type = :mt"),
         {"mt": "GPU"},

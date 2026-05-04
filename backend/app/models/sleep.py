@@ -46,6 +46,9 @@ class SleepConfig(Base):
     # Disk spindown
     disk_spindown_enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
+    # Core Operating Hours (Kernbetriebszeit)
+    core_uptime_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -77,3 +80,24 @@ class SleepStateLog(Base):
 
     def __repr__(self) -> str:
         return f"<SleepStateLog({self.previous_state} -> {self.new_state}, {self.reason})>"
+
+
+class CoreUptimeWindow(Base):
+    """A recurring time window during which auto-sleep must NOT trigger."""
+    __tablename__ = "core_uptime_windows"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(50), nullable=True)
+    start_time: Mapped[str] = mapped_column(String(5), nullable=False)  # "HH:MM"
+    end_time: Mapped[str] = mapped_column(String(5), nullable=False)    # "HH:MM"
+    weekdays: Mapped[str] = mapped_column(String(15), nullable=False)   # CSV "0,1,2,3,4" (0=Mon..6=Sun)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False,
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False,
+    )
+
+    def __repr__(self) -> str:
+        return f"<CoreUptimeWindow(id={self.id}, {self.start_time}-{self.end_time}, weekdays={self.weekdays})>"

@@ -7,7 +7,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
-import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe } from 'lucide-react';
+import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe, Shield } from 'lucide-react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import {
   getSleepStatus,
@@ -19,6 +19,28 @@ import {
   type SleepStatusResponse,
 } from '../../api/sleep';
 import { getFritzBoxConfig, type FritzBoxConfig } from '../../api/fritzbox';
+
+function formatTime(iso: string): string {
+  return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+}
+
+function isWithinNextHours(iso: string, hours: number): boolean {
+  const ms = new Date(iso).getTime() - Date.now();
+  return ms > 0 && ms <= hours * 3600 * 1000;
+}
+
+function formatRelative(iso: string): string {
+  const d = new Date(iso);
+  const now = new Date();
+  const sameDay = d.toDateString() === now.toDateString();
+  const tomorrow = new Date(now);
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const isTomorrow = d.toDateString() === tomorrow.toDateString();
+  const time = formatTime(iso);
+  if (sameDay) return `heute ${time}`;
+  if (isTomorrow) return `morgen ${time}`;
+  return `${d.toLocaleDateString()} ${time}`;
+}
 
 interface SleepModePanelProps {
   onRefresh?: () => void;
@@ -98,12 +120,19 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
 
   const handleSuspend = async () => {
     if (busy) return;
+    const inCore = status?.core_uptime?.active;
     const ok = await confirm(
-      'Suspend the system? The server will become unreachable. Wake via WoL or RTC alarm.',
+      inCore
+        ? `⚠ Kernbetriebszeit ist aktiv${
+            status?.core_uptime?.current_window_ends_at
+              ? ` (bis ${formatTime(status.core_uptime.current_window_ends_at)})`
+              : ''
+          }.\nSuspend macht den Server für andere Nutzer unerreichbar.\nTrotzdem fortfahren?`
+        : 'Suspend the system? The server will become unreachable. Wake via WoL or RTC alarm.',
       {
         title: 'True Suspend',
         variant: 'danger',
-        confirmLabel: 'Suspend Now',
+        confirmLabel: inCore ? 'Trotzdem suspenden' : 'Suspend Now',
       },
     );
     if (!ok) return;
@@ -260,6 +289,29 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
               )}
             </div>
           )}
+          {status.core_uptime?.active && (
+            <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
+              <Shield className="h-4 w-4 text-emerald-300 mt-0.5 shrink-0" />
+              <div className="text-xs text-emerald-200">
+                <strong>Kernbetriebszeit aktiv</strong>
+                {status.core_uptime.current_window_label
+                  ? ` — „${status.core_uptime.current_window_label}"`
+                  : ''}
+                {status.core_uptime.current_window_ends_at
+                  ? ` — endet um ${formatTime(status.core_uptime.current_window_ends_at)}.`
+                  : '.'}{' '}
+                Auto-Sleep blockiert.
+              </div>
+            </div>
+          )}
+          {!status.core_uptime?.active &&
+            status.core_uptime?.enabled &&
+            status.core_uptime?.next_start &&
+            isWithinNextHours(status.core_uptime.next_start, 12) && (
+              <div className="mt-3 rounded-lg bg-slate-800/40 text-slate-400 p-2 text-xs">
+                Nächste Kernzeit: {formatRelative(status.core_uptime.next_start)}
+              </div>
+            )}
         </div>
 
         {/* Activity Metrics */}

@@ -102,8 +102,17 @@ async def test_disabled_config_does_nothing(manager):
 async def test_demand_expiration(manager):
     # Register with already-expired timeout
     await manager.register_demand("expired", timeout_seconds=1)
-    # Manually backdate
-    manager._demands["expired"].expires_at = datetime.now(timezone.utc) - timedelta(seconds=10)
+    # Backdate in both the in-memory cache *and* the shared DB row, since
+    # _purge_expired_demands reads from gpu_power_demands.
+    backdated = datetime.now(timezone.utc) - timedelta(seconds=10)
+    manager._demands["expired"].expires_at = backdated
+    from app.services.power.gpu.runtime_state_store import upsert_demand
+    upsert_demand(
+        source="expired",
+        registered_at=manager._demands["expired"].registered_at,
+        expires_at=backdated,
+        description=None,
+    )
     await manager._purge_expired_demands()
     assert "expired" not in manager._demands
 

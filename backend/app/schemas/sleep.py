@@ -8,7 +8,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Literal, Optional
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from app.schemas.validators import validate_mac_address
 
 
@@ -40,6 +40,7 @@ class SleepTrigger(str, Enum):
     AUTO_ESCALATION = "auto_escalation"
     WOL = "wol"
     RTC_WAKE = "rtc_wake"
+    CORE_UPTIME_WAKE = "core_uptime_wake"
 
 
 class ScheduleMode(str, Enum):
@@ -65,6 +66,15 @@ class ActivityMetrics(BaseModel):
 # Status / Response
 # ---------------------------------------------------------------------------
 
+class CoreUptimeStatus(BaseModel):
+    """Snapshot of core-uptime master toggle and active-window state."""
+    enabled: bool = Field(default=False, description="Master toggle state")
+    active: bool = Field(default=False, description="Whether some enabled window is currently active")
+    current_window_label: Optional[str] = Field(default=None)
+    current_window_ends_at: Optional[datetime] = Field(default=None)
+    next_start: Optional[datetime] = Field(default=None)
+
+
 class SleepStatusResponse(BaseModel):
     """Current sleep mode status."""
     current_state: SleepState = Field(..., description="Current sleep state")
@@ -77,6 +87,7 @@ class SleepStatusResponse(BaseModel):
     auto_idle_enabled: bool = Field(default=False, description="Whether auto-idle detection is active")
     schedule_enabled: bool = Field(default=False, description="Whether sleep schedule is active")
     escalation_enabled: bool = Field(default=False, description="Whether auto-escalation to suspend is enabled")
+    core_uptime: CoreUptimeStatus = Field(default_factory=CoreUptimeStatus)
 
 
 # ---------------------------------------------------------------------------
@@ -135,6 +146,8 @@ class SleepConfigResponse(BaseModel):
     reduced_telemetry_interval: float = Field(default=30.0, description="Telemetry interval during sleep (seconds)")
     # Disk spindown
     disk_spindown_enabled: bool = Field(default=True, description="Spin down data disks during sleep")
+    # Core operating hours
+    core_uptime_enabled: bool = Field(default=False, description="Master toggle for core operating hours")
 
 
 class SleepConfigUpdate(BaseModel):
@@ -156,6 +169,7 @@ class SleepConfigUpdate(BaseModel):
     pause_disk_io: Optional[bool] = None
     reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
     disk_spindown_enabled: Optional[bool] = None
+    core_uptime_enabled: Optional[bool] = None
 
     @field_validator("wol_mac_address", mode="before")
     @classmethod
@@ -198,3 +212,83 @@ class SleepHistoryResponse(BaseModel):
     """Paginated sleep state history."""
     entries: list[SleepHistoryEntry] = Field(default_factory=list)
     total: int = Field(default=0)
+
+
+# ---------------------------------------------------------------------------
+# Core Operating Hours (Kernbetriebszeit)
+# ---------------------------------------------------------------------------
+
+class CoreUptimeWindowBase(BaseModel):
+    """Shared base for core-uptime window schemas. Enforces validation rules."""
+    enabled: bool = True
+    label: Optional[str] = Field(default=None, max_length=50)
+    start_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM, server-local")
+    end_time: str = Field(..., pattern=r"^\d{2}:\d{2}$", description="HH:MM, exclusive")
+    weekdays: list[int] = Field(..., description="Start days, 0=Mon..6=Sun, deduplicated, sorted")
+
+    @field_validator("weekdays")
+    @classmethod
+    def _validate_weekdays(cls, v: list[int]) -> list[int]:
+        if not v:
+            raise ValueError("at least one weekday required")
+        if any(d < 0 or d > 6 for d in v):
+            raise ValueError("weekdays must be in range 0..6")
+        return sorted(set(v))
+
+    @field_validator("start_time", "end_time")
+    @classmethod
+    def _validate_hhmm(cls, v: str) -> str:
+        h, m = map(int, v.split(":"))
+        if not (0 <= h <= 23 and 0 <= m <= 59):
+            raise ValueError("invalid HH:MM time")
+        return v
+
+    @model_validator(mode="after")
+    def _validate_distinct(self) -> "CoreUptimeWindowBase":
+        if self.start_time == self.end_time:
+            raise ValueError("start_time and end_time must differ")
+        return self
+
+
+class CoreUptimeWindowCreate(CoreUptimeWindowBase):
+    """Request body for creating a new core-uptime window."""
+    pass
+
+
+class CoreUptimeWindowUpdate(BaseModel):
+    """Partial update — every field optional."""
+    enabled: Optional[bool] = None
+    label: Optional[str] = Field(default=None, max_length=50)
+    start_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    end_time: Optional[str] = Field(default=None, pattern=r"^\d{2}:\d{2}$")
+    weekdays: Optional[list[int]] = None
+
+    @field_validator("weekdays")
+    @classmethod
+    def _validate_weekdays(cls, v: Optional[list[int]]) -> Optional[list[int]]:
+        if v is None:
+            return v
+        if not v:
+            raise ValueError("at least one weekday required")
+        if any(d < 0 or d > 6 for d in v):
+            raise ValueError("weekdays must be in range 0..6")
+        return sorted(set(v))
+
+    @model_validator(mode="after")
+    def _validate_distinct_if_both(self) -> "CoreUptimeWindowUpdate":
+        if (
+            self.start_time is not None
+            and self.end_time is not None
+            and self.start_time == self.end_time
+        ):
+            raise ValueError("start_time and end_time must differ")
+        return self
+
+
+class CoreUptimeWindowResponse(CoreUptimeWindowBase):
+    id: int
+    created_at: datetime
+    updated_at: datetime
+
+
+
