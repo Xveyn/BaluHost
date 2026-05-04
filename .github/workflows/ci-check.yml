@@ -53,3 +53,48 @@ jobs:
       - name: Run unit tests
         working-directory: client
         run: npx vitest run
+
+  changelog-guard:
+    # Enforce: PRs carrying a release:* label must add a new version section to CHANGELOG.md
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check for release label
+        id: label
+        env:
+          LABELS: ${{ toJSON(github.event.pull_request.labels.*.name) }}
+        run: |
+          if echo "$LABELS" | grep -q '"release:'; then
+            echo "is_release=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "is_release=false" >> "$GITHUB_OUTPUT"
+            echo "Not a release PR (no release:* label) — skipping CHANGELOG guard"
+          fi
+
+      - name: Verify CHANGELOG was updated with a new version section
+        if: steps.label.outputs.is_release == 'true'
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          # Diff against the base branch tip to see what this PR adds.
+          if ! git diff --name-only "$BASE_SHA" "$HEAD_SHA" | grep -qx 'CHANGELOG.md'; then
+            echo "::error::PR has a release:* label but does not modify CHANGELOG.md"
+            echo "::error::Add a Keep-a-Changelog section for the new version (## [X.Y.Z] - YYYY-MM-DD)"
+            exit 1
+          fi
+
+          # The diff must add at least one new version heading (## [X.Y.Z]).
+          added_versions=$(git diff "$BASE_SHA" "$HEAD_SHA" -- CHANGELOG.md \
+            | grep -E '^\+## \[[0-9]+\.[0-9]+\.[0-9]+\]' || true)
+          if [ -z "$added_versions" ]; then
+            echo "::error::PR modifies CHANGELOG.md but adds no new '## [X.Y.Z]' version section"
+            exit 1
+          fi
+
+          echo "CHANGELOG guard passed. New version section(s) added:"
+          printf '%s\n' "$added_versions"

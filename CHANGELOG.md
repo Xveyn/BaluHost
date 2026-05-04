@@ -7,6 +7,84 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.31.7] - 2026-05-04
+
+### Fixed
+- Sleep: capability badges correctly detect Suspend and Wake-on-LAN — `systemctl can-suspend` and `ethtool` now run via sudo so polkit/CAP_NET_ADMIN restrictions don't make working features look unavailable (#70)
+
+---
+
+## [1.31.6] - 2026-05-04
+
+### Fixed
+- Deploy: use `@@`-token in polkit inhibit-sleep rule template so `pkla-check-authorization` parses the user list correctly (#69)
+
+---
+
+## [1.31.5] - 2026-05-02
+
+### Fixed
+- Alembic: shorten `gpu_power_multi_worker` revision id to fit `alembic_version.version_num` `varchar(32)` column (#68)
+
+---
+
+## [1.31.4] - 2026-05-02
+
+### Added
+- GPU Power: multi-worker DB schema for runtime state, power demands, and command queue
+- GPU Power: cross-worker command queue with DB-backed runtime state
+- GPU Power: primary/follower role wiring into GPU manager startup
+- GPU Power: tests covering follower routing, command queue, and DB-backed demands (#67)
+
+### Fixed
+- GPU Power: GPU power manager is now safe across multiple Uvicorn workers — followers no longer race the primary on sysfs/`nvidia-smi` writes
+
+---
+
+## [1.31.3] - 2026-05-02
+
+### Added
+- Power: multi-worker DB schema for runtime state, demands, and command queue
+- Power: cross-worker command queue with DB-backed runtime state
+- Power: primary/follower role wiring into worker startup
+- Power: tests covering follower routing, command queue, and DB-backed demands (#66)
+- Deploy: grant AMD GPU sysfs write access to the service user
+
+### Fixed
+- Power: CPU power manager is now safe across multiple Uvicorn workers
+
+---
+
+## [1.31.2] - 2026-05-02
+
+### Added
+- Sleep: `logind` block-sleep inhibitor that holds an inhibitor lock while a core-uptime window is active
+- Deploy: install polkit rule allowing the service user to take sleep inhibitors
+
+---
+
+## [1.31.1] - 2026-05-02
+
+### Added
+- Sleep: Core operating hours — define windows during which the system must stay awake
+- Sleep: `CoreUptimeWindow` model, `core_uptime_enabled` config column, and Alembic migration
+- Sleep: pure helpers for window matching, Pydantic schemas for windows
+- Sleep: REST endpoints for core uptime windows + frontend API client
+- Sleep: core uptime panel with per-window edit card, banner, and suspend warning (i18n)
+- Sleep: clamp suspend `wake_at` and skip auto-escalation during core uptime
+- Sleep: suppress scheduled sleep, auto-wake on core uptime start, block auto-idle during windows
+- Sleep: expose core uptime block in status + config responses
+
+### Fixed
+- Migration: extend `metrictype` enum with `POWER` and `UPTIME` before seeding the GPU row
+
+### Changed
+- Disk Monitor: read `/proc/mdstat` directly instead of spawning an `mdadm` subprocess
+- Sleep: tighten schemas, drop forward references and unused imports, single `now()` per schedule tick
+- Dependencies: bump `postcss` to 8.5.10 in `client/`
+
+---
+
 ## [1.31.0] - 2026-04-30
 
 ### Added
