@@ -86,6 +86,63 @@ def _schedule_cache_file(
         pass
 
 
+async def _handle_delete(
+    resource_path: str,
+    user: UserPublic,
+    db: Session,
+) -> FileOperationResponse:
+    """Shared body for the delete handlers: path is already jailed by caller."""
+    audit_logger = get_audit_logger_db()
+    try:
+        file_service.delete_path(resource_path, user=user, db=db)
+    except PermissionDeniedError as exc:
+        audit_logger.log_authorization_failure(
+            user=user.username,
+            action="delete_file",
+            resource=resource_path,
+            required_permission="delete",
+            db=db,
+        )
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
+    except file_service.FileAccessError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from exc
+
+    emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
+    track_activity(user.id, "file.delete", resource_path)
+
+    return FileOperationResponse(message="Deleted")
+
+
+_MIN_CACHEABLE_SIZE = 1024 * 1024  # files smaller than this skip the SSD cache
+
+
+def _try_serve_from_cache(
+    db: Session,
+    resource_path: str,
+    file_path: Path,
+    response_filename: str,
+    file_id: Optional[int] = None,
+) -> Optional[FileResponse]:
+    """Return a FileResponse from SSD cache if available; otherwise schedule
+    background caching for eligible files. Cache failures never block delivery.
+    """
+    try:
+        cache_svc = SSDFileCacheService(db)
+        if not cache_svc.is_cache_enabled():
+            return None
+        source_mtime = file_path.stat().st_mtime
+        cached = cache_svc.get_cached_path(resource_path, source_mtime)
+        if cached and cached.exists():
+            db.commit()
+            return FileResponse(path=cached, filename=response_filename)
+        if file_path.stat().st_size >= _MIN_CACHEABLE_SIZE:
+            _schedule_cache_file(db, resource_path, file_path, file_id=file_id)
+        db.commit()
+    except Exception:
+        pass
+    return None
+
+
 def _enrich_with_sync_info(
     entries: list[FileItem],
     user_id: int,
@@ -179,11 +236,6 @@ def _jail_path(path: str, user: UserPublic, db: Session | None = None) -> str:
 
     # Root or other paths: block (root listing handled separately in list_files)
     raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Access denied")
-
-
-def _unjail_path(path: str, user: UserPublic) -> str:
-    """No-op — paths are real storage-relative paths for all users."""
-    return path
 
 
 router = APIRouter()
@@ -583,21 +635,9 @@ async def download_file(
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found")
 
-    # Try SSD cache for faster reads
-    try:
-        cache_svc = SSDFileCacheService(db)
-        if cache_svc.is_cache_enabled():
-            source_mtime = file_path.stat().st_mtime
-            cached = cache_svc.get_cached_path(resource_path, source_mtime)
-            if cached and cached.exists():
-                db.commit()
-                return FileResponse(path=cached, filename=file_path.name)
-            # Schedule background caching for eligible files
-            if file_path.stat().st_size >= 1024 * 1024:  # min 1MB
-                _schedule_cache_file(db, resource_path, file_path)
-            db.commit()
-    except Exception:
-        pass  # Cache failures never block delivery
+    cached_response = _try_serve_from_cache(db, resource_path, file_path, file_path.name)
+    if cached_response is not None:
+        return cached_response
 
     track_activity(user.id, "file.download", resource_path)
     return FileResponse(path=file_path, filename=file_path.name)
@@ -640,20 +680,11 @@ async def download_file_by_id(
     if not file_path.exists() or not file_path.is_file():
         raise HTTPException(status_code=404, detail="File not found on disk")
 
-    # Try SSD cache for faster reads
-    try:
-        cache_svc = SSDFileCacheService(db)
-        if cache_svc.is_cache_enabled():
-            source_mtime = file_path.stat().st_mtime
-            cached = cache_svc.get_cached_path(file_metadata.path, source_mtime)
-            if cached and cached.exists():
-                db.commit()
-                return FileResponse(path=cached, filename=file_metadata.name)
-            if file_path.stat().st_size >= 1024 * 1024:
-                _schedule_cache_file(db, file_metadata.path, file_path, file_id=file_metadata.id)
-            db.commit()
-    except Exception:
-        pass
+    cached_response = _try_serve_from_cache(
+        db, file_metadata.path, file_path, file_metadata.name, file_id=file_metadata.id
+    )
+    if cached_response is not None:
+        return cached_response
 
     track_activity(user.id, "file.download", file_metadata.path, file_name=file_metadata.name)
     return FileResponse(path=file_path, filename=file_metadata.name)
@@ -754,27 +785,7 @@ async def delete_path_raw(
     Use the parameterized delete handler defined later which is registered after
     the `/delete` static route so that `DELETE /delete` can accept a JSON body.
     """
-    resource_path = _jail_path(resource_path, user, db)
-    audit_logger = get_audit_logger_db()
-    try:
-        file_service.delete_path(resource_path, user=user, db=db)
-    except PermissionDeniedError as exc:
-        audit_logger.log_authorization_failure(
-            user=user.username,
-            action="delete_file",
-            resource=resource_path,
-            required_permission="delete",
-            db=db
-        )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except file_service.FileAccessError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    # Emit plugin hook for file deletion
-    emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
-    track_activity(user.id, "file.delete", resource_path)
-
-    return FileOperationResponse(message="Deleted")
+    return await _handle_delete(_jail_path(resource_path, user, db), user, db)
 
 
 @router.delete("/delete", response_model=FileOperationResponse)
@@ -786,27 +797,7 @@ async def delete_path_body(
     user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> FileOperationResponse:
-    path = _jail_path(payload.path, user, db)
-    audit_logger = get_audit_logger_db()
-    try:
-        file_service.delete_path(path, user=user, db=db)
-    except PermissionDeniedError as exc:
-        audit_logger.log_authorization_failure(
-            user=user.username,
-            action="delete_file",
-            resource=path,
-            required_permission="delete",
-            db=db
-        )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except file_service.FileAccessError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    # Emit plugin hook for file deletion
-    emit_hook("on_file_deleted", path=path, user_id=user.id)
-    track_activity(user.id, "file.delete", path)
-
-    return FileOperationResponse(message="Deleted")
+    return await _handle_delete(_jail_path(payload.path, user, db), user, db)
 
 
 @router.post("/delete", response_model=FileOperationResponse)
@@ -968,27 +959,7 @@ async def delete_path_param(
     """Delete a file or directory by path (registered after `/delete` routes).
     This ensures the static `/delete` endpoint can accept a JSON body without
     being captured by the parameterized route."""
-    resource_path = _jail_path(resource_path, user, db)
-    audit_logger = get_audit_logger_db()
-    try:
-        file_service.delete_path(resource_path, user=user, db=db)
-    except PermissionDeniedError as exc:
-        audit_logger.log_authorization_failure(
-            user=user.username,
-            action="delete_file",
-            resource=resource_path,
-            required_permission="delete",
-            db=db
-        )
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc)) from exc
-    except file_service.FileAccessError as exc:
-        raise HTTPException(status_code=403, detail=str(exc)) from exc
-
-    # Emit plugin hook for file deletion
-    emit_hook("on_file_deleted", path=resource_path, user_id=user.id)
-    track_activity(user.id, "file.delete", resource_path)
-
-    return FileOperationResponse(message="Deleted")
+    return await _handle_delete(_jail_path(resource_path, user, db), user, db)
 
 
 # ============================================================================

@@ -15,15 +15,9 @@ import psutil
 from app.models.monitoring import MemorySample
 from app.schemas.monitoring import MemorySampleSchema
 from app.services.monitoring.base import MetricCollector
+from app.services.monitoring.process_tracker import BALUHOST_PROCESS_PATTERNS
 
 logger = logging.getLogger(__name__)
-
-# Process patterns to track (same as process_tracker)
-BALUHOST_PROCESS_PATTERNS = [
-    ["uvicorn", "app.main"],  # Backend
-    ["node", "vite"],  # Frontend
-    ["baluhost-tui", "baluhost_tui"],  # TUI
-]
 
 
 def get_baluhost_memory_bytes() -> int:
@@ -43,8 +37,8 @@ def get_baluhost_memory_bytes() -> int:
                 cmdline = " ".join(proc_info.get("cmdline") or []).lower()
 
                 # Check if any pattern matches
-                for patterns in BALUHOST_PROCESS_PATTERNS:
-                    if any(p.lower() in name or p.lower() in cmdline for p in patterns):
+                for entry in BALUHOST_PROCESS_PATTERNS:
+                    if any(p.lower() in name or p.lower() in cmdline for p in entry["patterns"]):
                         if proc_info.get("memory_info"):
                             total_memory += proc_info["memory_info"].rss
                         break  # Don't count same process twice
