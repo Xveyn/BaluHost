@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.31.7] - 2026-05-04
+
+### Fixed
+- Sleep: capability badges correctly detect Suspend and Wake-on-LAN — `systemctl can-suspend` and `ethtool` now run via sudo so polkit/CAP_NET_ADMIN restrictions don't make working features look unavailable (#70)
+
+---
+
 ## [1.31.6] - 2026-05-04
 
 ### Fixed
