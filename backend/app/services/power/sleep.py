@@ -1102,11 +1102,14 @@ class SleepManagerService:
 
         can_suspend = systemctl
         if not settings.is_dev_mode:
-            # Check if suspend is actually supported
+            # The service user has no active logind session, so polkit returns
+            # "challenge" without sudo even though `sudo systemctl suspend`
+            # itself is allowed via NOPASSWD. Run the check via sudo too so the
+            # capability badge reflects reality.
             try:
                 import subprocess
                 result = subprocess.run(
-                    ["systemctl", "can-suspend"],
+                    ["sudo", "systemctl", "can-suspend"],
                     capture_output=True, text=True, timeout=5,
                 )
                 can_suspend = result.returncode == 0 and "yes" in result.stdout.lower()

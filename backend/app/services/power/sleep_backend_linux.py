@@ -112,9 +112,11 @@ class LinuxSleepBackend(SleepBackend):
                     if len(parts) >= 2:
                         iface = parts[1].strip()
                         if iface != "lo":
-                            # Check WoL support
+                            # Check WoL support. Reading WoL settings via
+                            # ethtool requires CAP_NET_ADMIN, so use sudo
+                            # (NOPASSWD via baluhost-hardware-sudoers).
                             wol_result = subprocess.run(
-                                ["ethtool", iface],
+                                ["sudo", "ethtool", iface],
                                 capture_output=True, text=True, timeout=5,
                             )
                             if wol_result.returncode == 0 and "Wake-on:" in wol_result.stdout:
