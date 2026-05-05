@@ -31,6 +31,7 @@ import logging
 import shutil
 import subprocess
 import time
+from datetime import datetime
 from typing import Callable, Optional
 
 logger = logging.getLogger(__name__)
@@ -194,7 +195,7 @@ class CoreUptimeRtcGuard:
 
     # --- rtcwake invocation ---
 
-    def _set_rtc_alarm(self, wake_at) -> None:
+    def _set_rtc_alarm(self, wake_at: datetime) -> None:
         """Run `sudo rtcwake -m no -t <unix_ts>` to set the RTC alarm without suspending."""
         timestamp = str(int(wake_at.timestamp()))
         cmd = ["sudo", "rtcwake", "-m", "no", "-t", timestamp]
