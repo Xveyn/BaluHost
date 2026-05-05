@@ -495,3 +495,77 @@ def test_get_config_returns_core_uptime_enabled_field():
         result = svc.get_config()
 
     assert result.core_uptime_enabled is True
+
+
+@pytest.mark.asyncio
+async def test_rtc_guard_started_with_sleep_service(monkeypatch):
+    """SleepManagerService.start() must call CoreUptimeRtcGuard.start()."""
+    from app.services.power.sleep import SleepManagerService
+    from app.services.power.sleep_backend_dev import DevSleepBackend
+    from unittest.mock import AsyncMock, patch as _patch
+
+    backend = DevSleepBackend()
+    svc = SleepManagerService(backend)
+
+    with _patch.object(svc._core_uptime_rtc_guard, "start",
+                       new=AsyncMock()) as mock_start, \
+         _patch.object(svc, "_idle_detection_loop", new=AsyncMock()), \
+         _patch.object(svc, "_schedule_check_loop", new=AsyncMock()):
+        await svc.start(monitoring=True)
+        await svc.stop()
+
+    mock_start.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_rtc_guard_stopped_with_sleep_service(monkeypatch):
+    """SleepManagerService.stop() must call CoreUptimeRtcGuard.stop()."""
+    from app.services.power.sleep import SleepManagerService
+    from app.services.power.sleep_backend_dev import DevSleepBackend
+    from unittest.mock import AsyncMock, patch as _patch
+
+    backend = DevSleepBackend()
+    svc = SleepManagerService(backend)
+
+    with _patch.object(svc._core_uptime_rtc_guard, "start", new=AsyncMock()), \
+         _patch.object(svc._core_uptime_rtc_guard, "stop",
+                       new=AsyncMock()) as mock_stop, \
+         _patch.object(svc, "_idle_detection_loop", new=AsyncMock()), \
+         _patch.object(svc, "_schedule_check_loop", new=AsyncMock()):
+        await svc.start(monitoring=True)
+        await svc.stop()
+
+    mock_stop.assert_called_once()
+
+
+@pytest.mark.asyncio
+async def test_baluhost_initiated_suspend_sets_flag_around_backend_call():
+    """During the rtcwake -m mem call, the in-progress flag must be True so
+    the RTC guard skips its own rtcwake call and doesn't clobber wake_at."""
+    from app.services.power.sleep import SleepManagerService
+    from app.services.power.sleep_backend_dev import DevSleepBackend
+    from app.schemas.sleep import SleepTrigger, SleepState
+    from unittest.mock import AsyncMock, patch as _patch
+
+    backend = DevSleepBackend()
+    svc = SleepManagerService(backend)
+
+    flag_during_backend = []
+
+    async def fake_suspend_system(wake_at=None):
+        flag_during_backend.append(svc.is_baluhost_suspend_in_progress())
+        return True
+
+    with _patch.object(svc, "_load_config", return_value=None), \
+         _patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         _patch.object(backend, "suspend_system", side_effect=fake_suspend_system), \
+         _patch("app.services.power.sleep.SessionLocal"), \
+         _patch("app.services.notifications.events.emit_system_suspend",
+                new=AsyncMock(return_value=None)):
+        svc._current_state = SleepState.SOFT_SLEEP
+        assert svc.is_baluhost_suspend_in_progress() is False
+        await svc.enter_true_suspend("test", SleepTrigger.MANUAL, wake_at=None)
+        # Flag back to False after suspend returns.
+        assert svc.is_baluhost_suspend_in_progress() is False
+
+    assert flag_during_backend == [True]

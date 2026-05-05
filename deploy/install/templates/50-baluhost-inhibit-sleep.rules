@@ -1,19 +1,28 @@
-// BaluHost — allow the service user to acquire logind block-sleep inhibitors.
+// BaluHost — allow the service user to acquire logind sleep inhibitors.
 //
-// Background: BaluHost's "Core Operating Hours" feature holds a logind
-// `Inhibit(what=sleep, mode=block)` lock during active windows so third-party
-// suspend (mate-screensaver, gnome-power-manager, KDE, manual `systemctl
-// suspend`) is refused while the window is open.
+// Two inhibitor types are needed:
 //
-// The default polkit policy on Debian 13 for
-// `org.freedesktop.login1.inhibit-block-sleep` is `allow_active=yes` only.
+//   inhibit-block-sleep  — held during active "Core Operating Hours" windows
+//                           so third-party daemons (mate-screensaver, KDE,
+//                           manual `systemctl suspend`) cannot suspend.
+//
+//   inhibit-delay-sleep  — held permanently by CoreUptimeRtcGuard. When ANY
+//                           suspend is about to happen, logind fires
+//                           PrepareForSleep(start=true), the guard sets an RTC
+//                           alarm (`rtcwake -m no -t <next_core_start>`) and
+//                           releases the delay lock so logind can proceed.
+//
+// The default polkit policy on Debian 13 for both
+// `org.freedesktop.login1.inhibit-block-sleep` and
+// `org.freedesktop.login1.inhibit-delay-sleep` is `allow_active=yes` only.
 // A systemd service running as ${BALUHOST_USER} has no active session, so
 // without this rule polkit asks for admin auth and the service silently fails
 // to acquire the inhibitor.
 //
-// This rule grants the BaluHost service user permission for that single action.
+// This rule grants the BaluHost service user permission for both actions.
 polkit.addRule(function(action, subject) {
-    if (action.id == "org.freedesktop.login1.inhibit-block-sleep" &&
+    if ((action.id == "org.freedesktop.login1.inhibit-block-sleep" ||
+         action.id == "org.freedesktop.login1.inhibit-delay-sleep") &&
         subject.user == "@@BALUHOST_USER@@") {
         return polkit.Result.YES;
     }

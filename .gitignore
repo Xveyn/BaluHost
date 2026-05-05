@@ -102,6 +102,9 @@ tools/
 /backend/env.production
 balupi-deploy*
 
+# Git worktrees (isolated workspaces for feature development)
+.worktrees/
+
 # Data artifacts
 backend/baluhost.db.backup-*
 backend/benchmark_results/
