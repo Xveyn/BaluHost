@@ -34,6 +34,15 @@ import time
 from datetime import datetime
 from typing import Callable, Optional
 
+try:
+    from dbus_next.aio import MessageBus
+    from dbus_next import BusType
+    _DBUS_AVAILABLE = True
+except ImportError:  # pragma: no cover — dev/Windows fallback
+    MessageBus = None  # type: ignore[assignment]
+    BusType = None  # type: ignore[assignment]
+    _DBUS_AVAILABLE = False
+
 logger = logging.getLogger(__name__)
 
 _SYSTEMD_INHIBIT = "systemd-inhibit"
@@ -59,6 +68,8 @@ class CoreUptimeRtcGuard:
         self._baluhost_in_progress = is_baluhost_suspend_in_progress
         self._delay_proc: Optional[subprocess.Popen] = None
         self._binary_missing_logged = False
+        self._dbus_bus: Optional["MessageBus"] = None
+        self._dbus_iface = None
 
     # --- delay-mode inhibitor lifecycle ---
 
@@ -212,3 +223,59 @@ class CoreUptimeRtcGuard:
                 "rtcwake failed (rc=%s): stdout=%r stderr=%r",
                 result.returncode, result.stdout.strip(), result.stderr.strip(),
             )
+
+    # --- lifecycle ---
+
+    async def start(self) -> None:
+        """Acquire the delay inhibitor and subscribe to logind PrepareForSleep.
+
+        Failures (no D-Bus, no systemd-inhibit, polkit denial) are logged but
+        do not raise — the guard simply degrades to no-op.
+        """
+        self._acquire_delay_inhibitor()
+
+        if not _DBUS_AVAILABLE:
+            logger.info("dbus-next not available — RTC guard signal listener disabled")
+            return
+
+        try:
+            self._dbus_bus = await MessageBus(bus_type=BusType.SYSTEM).connect()
+            introspection = await self._dbus_bus.introspect(
+                "org.freedesktop.login1", "/org/freedesktop/login1",
+            )
+            proxy = self._dbus_bus.get_proxy_object(
+                "org.freedesktop.login1", "/org/freedesktop/login1", introspection,
+            )
+            self._dbus_iface = proxy.get_interface("org.freedesktop.login1.Manager")
+
+            def _on_signal(start: bool) -> None:
+                # dbus-next dispatches signals as sync callbacks; bridge to async.
+                import asyncio
+                asyncio.create_task(self.on_prepare_for_sleep(start))
+
+            self._dbus_iface.on_prepare_for_sleep(_on_signal)
+            logger.info("Core uptime RTC guard: subscribed to logind PrepareForSleep signal")
+        except Exception as exc:
+            logger.warning(
+                "Could not subscribe to logind PrepareForSleep — RTC guard listener "
+                "disabled. External suspends will not get an auto-wake alarm. "
+                "(%s)", exc,
+            )
+            self._dbus_iface = None
+            if self._dbus_bus is not None:
+                try:
+                    self._dbus_bus.disconnect()
+                except Exception:
+                    pass
+                self._dbus_bus = None
+
+    async def stop(self) -> None:
+        """Release the delay inhibitor and disconnect from D-Bus."""
+        self._release_delay_inhibitor()
+        if self._dbus_bus is not None:
+            try:
+                self._dbus_bus.disconnect()
+            except Exception as exc:
+                logger.warning("Error disconnecting from system bus: %s", exc)
+        self._dbus_bus = None
+        self._dbus_iface = None

@@ -192,3 +192,72 @@ class TestSetRtcAlarm:
             mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="permission denied")
             # Must not raise.
             guard._set_rtc_alarm(wake_at)
+
+
+class TestStartStop:
+    """Lifecycle: start subscribes to D-Bus + acquires inhibitor; stop releases."""
+
+    @pytest.mark.asyncio
+    async def test_start_acquires_inhibitor_and_subscribes(self):
+        guard = _build_guard()
+
+        # Mock the dbus-next bus + introspection chain.
+        fake_introspection = MagicMock()
+        fake_proxy = MagicMock()
+        fake_iface = MagicMock()
+        fake_proxy.get_interface.return_value = fake_iface
+
+        fake_bus = MagicMock()
+        fake_bus.introspect = MagicMock(return_value=_async_value(fake_introspection))
+        fake_bus.get_proxy_object.return_value = fake_proxy
+
+        async def fake_connect():
+            return fake_bus
+
+        with patch("app.services.power.core_uptime_rtc_guard.MessageBus") as mock_bus_class, \
+             patch.object(guard, "_acquire_delay_inhibitor", return_value=True) as mock_acquire:
+            mock_bus_class.return_value.connect = fake_connect
+            await guard.start()
+
+        mock_acquire.assert_called_once()
+        # Signal handler registered:
+        fake_iface.on_prepare_for_sleep.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_continues_when_dbus_unavailable(self):
+        """If dbus-next can't connect (dev mode, Windows, no system bus),
+        the guard logs and returns without crashing."""
+        guard = _build_guard()
+        with patch("app.services.power.core_uptime_rtc_guard.MessageBus") as mock_bus_class, \
+             patch.object(guard, "_acquire_delay_inhibitor", return_value=False):
+            mock_bus_class.return_value.connect = _failing_async("no bus")
+            # Must not raise.
+            await guard.start()
+        assert guard._dbus_iface is None
+
+    @pytest.mark.asyncio
+    async def test_stop_releases_inhibitor_and_disconnects(self):
+        guard = _build_guard()
+        mock_bus = MagicMock()
+        mock_bus.disconnect = MagicMock()
+        guard._dbus_bus = mock_bus
+        guard._dbus_iface = MagicMock()
+        with patch.object(guard, "_release_delay_inhibitor") as mock_release:
+            await guard.stop()
+        mock_release.assert_called_once()
+        mock_bus.disconnect.assert_called_once()
+        assert guard._dbus_iface is None
+        assert guard._dbus_bus is None
+
+
+# Helpers for async mock awaitables.
+def _async_value(value):
+    async def _():
+        return value
+    return _()
+
+
+def _failing_async(msg: str):
+    async def _():
+        raise RuntimeError(msg)
+    return _
