@@ -27,6 +27,7 @@ Dev mode / Windows / missing binaries → no-op (returns False, logs once).
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import shutil
 import subprocess
@@ -250,7 +251,6 @@ class CoreUptimeRtcGuard:
 
             def _on_signal(start: bool) -> None:
                 # dbus-next dispatches signals as sync callbacks; bridge to async.
-                import asyncio
                 asyncio.create_task(self.on_prepare_for_sleep(start))
 
             self._dbus_iface.on_prepare_for_sleep(_on_signal)
