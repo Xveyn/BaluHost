@@ -150,3 +150,64 @@ class CoreUptimeRtcGuard:
                 logger.warning("Error releasing core uptime RTC guard delay inhibitor: %s", exc)
         logger.info("Core uptime RTC guard: delay inhibitor released")
         self._delay_proc = None
+
+    # --- signal handler ---
+
+    async def on_prepare_for_sleep(self, start: bool) -> None:
+        """Handle logind's PrepareForSleep signal.
+
+        start=True  → system is about to suspend. Pre-arm RTC alarm if applicable,
+                      then release the delay lock.
+        start=False → system has just resumed. Re-acquire the delay lock.
+        """
+        if not start:
+            self._acquire_delay_inhibitor()
+            return
+
+        # start=True: BaluHost-initiated suspends already wrote rtcwake themselves.
+        # Skip to avoid clobbering their wake_at value.
+        try:
+            if self._baluhost_in_progress():
+                logger.info(
+                    "PrepareForSleep(start=true) — skipping RTC arm: BaluHost-initiated suspend",
+                )
+                return
+
+            next_start = self._next_core_start()
+            if next_start is None:
+                logger.info(
+                    "PrepareForSleep(start=true) — no upcoming core uptime window, "
+                    "external suspend will not auto-wake",
+                )
+                return
+
+            try:
+                self._set_rtc_alarm(next_start)
+            except Exception as exc:
+                # Failure is non-fatal — system still suspends, but won't auto-wake.
+                logger.warning(
+                    "PrepareForSleep(start=true) — failed to set RTC alarm: %s", exc,
+                )
+        finally:
+            # Always release the delay lock so logind doesn't time out on us.
+            self._release_delay_inhibitor()
+
+    # --- rtcwake invocation ---
+
+    def _set_rtc_alarm(self, wake_at) -> None:
+        """Run `sudo rtcwake -m no -t <unix_ts>` to set the RTC alarm without suspending."""
+        timestamp = str(int(wake_at.timestamp()))
+        cmd = ["sudo", "rtcwake", "-m", "no", "-t", timestamp]
+        logger.info("Setting RTC alarm at %s (ts=%s) for next core uptime start",
+                    wake_at.isoformat(), timestamp)
+        result = subprocess.run(
+            cmd,
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            logger.warning(
+                "rtcwake failed (rc=%s): stdout=%r stderr=%r",
+                result.returncode, result.stdout.strip(), result.stderr.strip(),
+            )

@@ -86,3 +86,109 @@ class TestDelayInhibitor:
         guard = _build_guard()
         guard._release_delay_inhibitor()
         # No exception means pass.
+
+
+import datetime as _dt
+
+
+class TestOnPrepareForSleep:
+    """Logic for handling logind's PrepareForSleep(start=...) signal."""
+
+    @pytest.mark.asyncio
+    async def test_start_true_skips_when_baluhost_initiated(self):
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        ran_rtc = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: True,
+        )
+        # Spawn a fake delay proc so we can verify it gets released.
+        guard._delay_proc = MagicMock()
+        guard._delay_proc.poll.return_value = None
+        with patch.object(guard, "_set_rtc_alarm",
+                          side_effect=lambda ts: ran_rtc.append(ts)):
+            await guard.on_prepare_for_sleep(True)
+        assert ran_rtc == []  # rtcwake skipped — BaluHost set its own
+        # Delay inhibitor still released so logind can proceed.
+        guard._delay_proc = None  # _release sets this; mock didn't track
+
+    @pytest.mark.asyncio
+    async def test_start_true_skips_when_no_next_core(self):
+        ran_rtc = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: None,
+            is_baluhost_suspend_in_progress=lambda: False,
+        )
+        guard._delay_proc = MagicMock()
+        guard._delay_proc.poll.return_value = None
+        with patch.object(guard, "_set_rtc_alarm",
+                          side_effect=lambda ts: ran_rtc.append(ts)), \
+             patch.object(guard, "_release_delay_inhibitor") as mock_release:
+            await guard.on_prepare_for_sleep(True)
+        assert ran_rtc == []
+        mock_release.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_true_sets_rtc_alarm_to_next_core(self):
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        ran_rtc = []
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: False,
+        )
+        guard._delay_proc = MagicMock()
+        guard._delay_proc.poll.return_value = None
+        with patch.object(guard, "_set_rtc_alarm",
+                          side_effect=lambda ts: ran_rtc.append(ts)), \
+             patch.object(guard, "_release_delay_inhibitor"):
+            await guard.on_prepare_for_sleep(True)
+        assert ran_rtc == [next_start]
+
+    @pytest.mark.asyncio
+    async def test_start_false_reacquires_delay_inhibitor(self):
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: None,
+            is_baluhost_suspend_in_progress=lambda: False,
+        )
+        with patch.object(guard, "_acquire_delay_inhibitor",
+                          return_value=True) as mock_acquire:
+            await guard.on_prepare_for_sleep(False)
+        mock_acquire.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_start_true_releases_even_if_rtc_fails(self):
+        """If rtcwake raises, we MUST still release the delay lock so the
+        suspend isn't permanently stuck waiting on BaluHost."""
+        next_start = _dt.datetime(2026, 5, 6, 8, 0)
+        guard = CoreUptimeRtcGuard(
+            next_core_start_provider=lambda: next_start,
+            is_baluhost_suspend_in_progress=lambda: False,
+        )
+        with patch.object(guard, "_set_rtc_alarm",
+                          side_effect=RuntimeError("rtcwake failed")), \
+             patch.object(guard, "_release_delay_inhibitor") as mock_release:
+            await guard.on_prepare_for_sleep(True)
+        mock_release.assert_called_once()
+
+
+class TestSetRtcAlarm:
+    """Subprocess invocation for `sudo rtcwake -m no -t <ts>`."""
+
+    def test_set_rtc_alarm_calls_rtcwake_with_unix_timestamp(self):
+        guard = _build_guard()
+        wake_at = _dt.datetime(2026, 5, 6, 8, 0)
+        expected_ts = str(int(wake_at.timestamp()))
+        with patch("app.services.power.core_uptime_rtc_guard.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=0, stdout="", stderr="")
+            guard._set_rtc_alarm(wake_at)
+        args, kwargs = mock_run.call_args
+        cmd = args[0]
+        assert cmd == ["sudo", "rtcwake", "-m", "no", "-t", expected_ts]
+
+    def test_set_rtc_alarm_logs_on_failure_but_does_not_raise(self):
+        guard = _build_guard()
+        wake_at = _dt.datetime(2026, 5, 6, 8, 0)
+        with patch("app.services.power.core_uptime_rtc_guard.subprocess.run") as mock_run:
+            mock_run.return_value = MagicMock(returncode=1, stdout="", stderr="permission denied")
+            # Must not raise.
+            guard._set_rtc_alarm(wake_at)
