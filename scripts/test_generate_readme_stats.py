@@ -275,6 +275,9 @@ def test_render_project_stats_block_contains_all_rows():
     assert "150,685 lines across 735 Python files" in md
     assert "97,186 lines / 411 files" in md
     assert "38,309 lines / 166 files" in md
+    assert "6,291 lines / 48 files" in md
+    assert "5,989 lines / 92 files" in md
+    assert "2,910 lines / 18 files" in md
     assert "78,107 lines across 427 source files" in md
     assert "| **Test functions** | 1465 |" in md
     assert "| **API route modules** | 51 |" in md
