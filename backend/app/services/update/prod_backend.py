@@ -58,28 +58,31 @@ class ProdUpdateBackend(UpdateBackend):
             return False, "", str(e)
 
     async def get_current_version(self) -> VersionInfo:
-        """Get version from pyproject.toml, git for commit metadata."""
-        # Version from pyproject.toml (single source of truth)
-        version = version_to_string(get_installed_version())
+        """Get current version from git tag (preferred) or pyproject.toml (fallback)."""
+        # Try exact tag match first — succeeds for pre-release and stable tags
+        exact_ok, exact_tag, _ = self._run_git("describe", "--tags", "--exact-match")
+        if exact_ok and exact_tag.strip():
+            tag_name = exact_tag.strip()
+            version = tag_name.lstrip("v")
+            is_prerelease = any(
+                marker in tag_name for marker in ("-pre.", "-rc.", "-alpha", "-beta", "-unstable")
+            )
+            is_dev_build = False
+            tag = tag_name
+        else:
+            # Local build between tags — fall back to pyproject.toml
+            version = version_to_string(get_installed_version())
+            tag = None
+            is_prerelease = False
+            is_dev_build = True
 
-        # Git commit metadata
+        # Commit metadata
         success, commit, _ = self._run_git("rev-parse", "HEAD")
         if not success:
             commit = "unknown"
 
-        # Get matching tag for this version
-        tag = f"v{version}"
-        success, _, _ = self._run_git("tag", "-l", tag)
-        if not success or not _:
-            tag = None
-
-        # Get commit date
         success, date_str, _ = self._run_git("log", "-1", "--format=%cI")
         date = datetime.fromisoformat(date_str) if success and date_str else None
-
-        # Check if HEAD is exactly on a tag
-        exact_success, _, _ = self._run_git("describe", "--tags", "--exact-match")
-        is_dev_build = not exact_success
 
         return VersionInfo(
             version=version,
@@ -88,6 +91,7 @@ class ProdUpdateBackend(UpdateBackend):
             tag=tag,
             date=date,
             is_dev_build=is_dev_build,
+            is_prerelease=is_prerelease,
         )
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:
