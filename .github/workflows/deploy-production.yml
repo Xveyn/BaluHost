@@ -21,8 +21,9 @@ jobs:
 
   deploy:
     needs: ci-check
-    # Skip deploy for automated version bump commits
-    if: "!startsWith(github.event.head_commit.message, 'chore: bump version')"
+    # Skip deploy for automated version bump commits and stable-release commits
+    # (the code is already on production from the prior pre-release deploy).
+    if: "!startsWith(github.event.head_commit.message, 'chore: bump version') && !startsWith(github.event.head_commit.message, 'chore: release v')"
     runs-on: self-hosted
     environment: production
     timeout-minutes: 15
