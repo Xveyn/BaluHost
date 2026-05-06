@@ -58,5 +58,5 @@ python kill_prod.py     # Stop all BaluHost processes
 ## Git Workflow
 
 - **Main branch**: `main` (production deployments)
-- **Development branch**: `development` (active development)
-- Features branch off from `development`, PRs merge to `main`
+- Feature/fix branches branch off from `main` and PR directly back into `main`. Merging the PR creates a Pre-Release tag and deploys to production. Stable releases are cut by the manual `release-stable.yml` workflow_dispatch.
+- The `development` branch was retired 2026-05-06; do not push to it or target it as a PR base.
