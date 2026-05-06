@@ -81,11 +81,14 @@ jobs:
           BUMP_TYPE: ${{ inputs.bump_type }}
         run: python scripts/bump_version.py "$BUMP_TYPE"
 
+      - name: Regenerate README stats
+        run: python scripts/generate_readme_stats.py --write
+
       - name: Commit + push version bump
         env:
           NEW_VERSION: ${{ steps.version.outputs.new }}
         run: |
-          git add backend/pyproject.toml client/package.json CLAUDE.md CHANGELOG.md
+          git add backend/pyproject.toml client/package.json CLAUDE.md CHANGELOG.md README.md
           git commit -m "chore: release v${NEW_VERSION}"
           git push origin main
 
