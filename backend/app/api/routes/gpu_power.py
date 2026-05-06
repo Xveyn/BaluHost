@@ -1,6 +1,9 @@
 """GPU power management API routes."""
-from __future__ import annotations
-
+# NB: do not add ``from __future__ import annotations`` here. Combined with
+# Pydantic v2 + FastAPI's body detection through slowapi's ``@limiter.limit``
+# wrapper, deferred annotations turn body params into ForwardRefs that
+# FastAPI can no longer resolve as Pydantic models — the request body would
+# be misinterpreted as a query parameter and every PUT/POST returns 422.
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.api import deps

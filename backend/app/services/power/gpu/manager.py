@@ -145,11 +145,22 @@ class GpuPowerManagerService:
             has_write = await self._backend.has_write_permission() if self._backend else False
         except Exception:
             has_write = False
+
+        # Serialize hardware capabilities so followers can answer
+        # /api/gpu-power/capabilities without their own backend instance.
+        capabilities_json: Optional[str] = None
+        if self._backend is not None and self._backend.detected:
+            try:
+                capabilities_json = self._backend.capabilities().model_dump_json()
+            except Exception as exc:
+                logger.warning("Could not serialize GPU capabilities: %s", exc)
+
         update_runtime_state(
             current_state=self._state.value,
             detected=bool(self._backend.detected) if self._backend else False,
             vendor=self._backend.vendor if (self._backend and self._backend.detected) else None,
             has_write_permission=bool(has_write),
+            capabilities_json=capabilities_json,
         )
 
         self._monitor_task = asyncio.create_task(self._monitor_loop())
@@ -510,9 +521,20 @@ class GpuPowerManagerService:
         return True, None
 
     def get_capabilities(self) -> GpuPowerCapabilities:
-        if self._backend is None:
-            return GpuPowerCapabilities(vendor=None)
-        return self._backend.capabilities()
+        # Primary worker has the live backend; ask it directly.
+        if self._primary and self._backend is not None:
+            return self._backend.capabilities()
+        # Follower: read what the primary published to the runtime-state row.
+        # Without this, every request landing on a secondary worker reports
+        # vendor=None — and the UI's Hardware Overrides section flips between
+        # "AMD detected" and "no GPU detected" round-robin across workers.
+        raw = load_runtime_state().get("capabilities_json")
+        if raw:
+            try:
+                return GpuPowerCapabilities.model_validate_json(raw)
+            except Exception as exc:
+                logger.warning("Could not parse stored GPU capabilities: %s", exc)
+        return GpuPowerCapabilities(vendor=None)
 
     def get_history(self, limit: int = 100) -> Tuple[List[GpuPowerHistoryEntry], int]:
         try:
