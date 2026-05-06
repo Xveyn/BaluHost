@@ -184,6 +184,7 @@ def _make_repo(tmp_path: Path) -> Path:
         "backend/scripts/foo.py": "print('hi')\n",
         "backend/alembic/versions/0001_init.py": "# rev\n",
         "backend/alembic/versions/0002_add.py": "# rev\n",
+        "backend/alembic/env.py": "# alembic env\n",
         "backend/baluhost_tui/main.py": "pass\n",
         "client/src/App.tsx": "export const X = 1;\n",
         "client/src/pages/Dashboard.tsx": "export default 1;\n",
@@ -219,6 +220,7 @@ def test_compute_stats_counts_match_fixture(tmp_path, monkeypatch):
         "backend/scripts/foo.py",
         "backend/alembic/versions/0001_init.py",
         "backend/alembic/versions/0002_add.py",
+        "backend/alembic/env.py",
         "backend/baluhost_tui/main.py",
         "client/src/App.tsx",
         "client/src/pages/Dashboard.tsx",
@@ -234,7 +236,7 @@ def test_compute_stats_counts_match_fixture(tmp_path, monkeypatch):
     assert s.api_route_modules == 2  # __init__ excluded
     assert s.service_modules == 2    # __init__ excluded, both auth.py + upload.py
     assert s.db_models == 1          # __init__ excluded
-    assert s.db_migrations == 2
+    assert s.db_migrations == 2      # only versions/, env.py excluded
     assert s.frontend_pages == 2
     assert s.workflows == 2
     assert s.test_functions == 3     # 1 + 2
@@ -242,8 +244,8 @@ def test_compute_stats_counts_match_fixture(tmp_path, monkeypatch):
     assert s.backend_app.files == 10  # all .py under backend/app/
     assert s.backend_tests.files == 2
     assert s.backend_scripts.files == 1
-    assert s.backend_alembic.files == 2
+    assert s.backend_alembic.files == 3  # versions/ + env.py — broader than db_migrations
     assert s.backend_tui.files == 1
-    assert s.backend_total.files == 16  # sum of subdirs
+    assert s.backend_total.files == 17  # sum of subdirs
 
     assert s.frontend.files == 5  # .tsx, .ts, .css under client/src/

@@ -158,7 +158,7 @@ def compute_stats(files: list[Path]) -> Stats:
         api_route_modules=len(under(py, "backend/app/api/routes/", exclude_init=True)),
         service_modules=len(under(py, "backend/app/services/", exclude_init=True)),
         db_models=len(under(py, "backend/app/models/", exclude_init=True)),
-        db_migrations=len(under(py, "backend/alembic/versions/", exclude_init=True)),
+        db_migrations=len(under(py, "backend/alembic/versions/")),
         frontend_pages=len(under(with_ext(files, ".tsx"), "client/src/pages/")),
         workflows=len(under(
             with_ext(files, ".yml", ".yaml"),
