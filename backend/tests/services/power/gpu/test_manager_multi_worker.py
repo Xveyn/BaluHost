@@ -29,8 +29,15 @@ def _gpu_power_tables_in_global_db():
     ]
     inspector = inspect(engine)
     for table in tables:
-        if not inspector.has_table(table.name):
-            table.create(bind=engine, checkfirst=True)
+        # Drop tables whose schema is out of sync with the model so a stale
+        # dev DB (e.g. left over from before a column was added) is upgraded
+        # transparently for the test run.
+        if inspector.has_table(table.name):
+            existing_cols = {c["name"] for c in inspector.get_columns(table.name)}
+            expected_cols = {col.name for col in table.columns}
+            if expected_cols - existing_cols:
+                table.drop(bind=engine, checkfirst=True)
+        table.create(bind=engine, checkfirst=True)
 
     Session = sessionmaker(bind=engine, autoflush=False, autocommit=False)
     db = Session()
@@ -147,6 +154,37 @@ class TestFollowerRouting:
         assert status.vendor == "amd"
         assert status.has_write_permission is True
         assert status.current_state == GpuPowerState.ACTIVE
+
+    def test_follower_get_capabilities_reads_from_runtime_state(self):
+        """A follower's get_capabilities must reflect the primary's published caps.
+
+        Without this, the Hardware Overrides section in the UI flickers between
+        the primary's correct answer and the followers' "no GPU detected" empty
+        capabilities, depending on which Uvicorn worker handled the request.
+        """
+        from app.schemas.gpu_power import GpuPowerCapabilities
+        from app.services.power.gpu.runtime_state_store import update_runtime_state
+
+        published = GpuPowerCapabilities(
+            vendor="amd",
+            amd_performance_levels=["auto", "low", "high"],
+            amd_profile_modes=["BOOTUP_DEFAULT", "POWER_SAVING"],
+        )
+        update_runtime_state(
+            detected=True,
+            vendor="amd",
+            capabilities_json=published.model_dump_json(),
+        )
+
+        follower = GpuPowerManagerService()
+        follower._is_running = True
+        follower._primary = False
+        follower._backend = None
+
+        caps = follower.get_capabilities()
+        assert caps.vendor == "amd"
+        assert caps.amd_performance_levels == ["auto", "low", "high"]
+        assert caps.amd_profile_modes == ["BOOTUP_DEFAULT", "POWER_SAVING"]
 
 
 class TestPrimaryDemandPath:

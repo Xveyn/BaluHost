@@ -30,8 +30,8 @@ def load_runtime_state() -> dict[str, Any]:
     Load the singleton ``gpu_power_runtime_state`` row.
 
     Returns a dict with keys: current_state, detected, vendor,
-    has_write_permission, last_transition, last_reason. Falls back to
-    safe defaults if the row is missing.
+    has_write_permission, last_transition, last_reason, capabilities_json.
+    Falls back to safe defaults if the row is missing.
     """
     defaults: dict[str, Any] = {
         "current_state": "active",
@@ -40,6 +40,7 @@ def load_runtime_state() -> dict[str, Any]:
         "has_write_permission": False,
         "last_transition": None,
         "last_reason": None,
+        "capabilities_json": None,
     }
     try:
         db = SessionLocal()
@@ -54,6 +55,7 @@ def load_runtime_state() -> dict[str, Any]:
                 "has_write_permission": bool(row.has_write_permission),
                 "last_transition": row.last_transition,
                 "last_reason": row.last_reason,
+                "capabilities_json": row.capabilities_json,
             }
         finally:
             db.close()
