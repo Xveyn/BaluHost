@@ -591,3 +591,96 @@ class TestGetUpdateBackend:
 
         backend = update_api.get_update_backend()
         assert isinstance(backend, DevUpdateBackend)
+
+
+class TestProdBackendGetCurrentVersion:
+    """Tests for tag-based version detection in ProdUpdateBackend.get_current_version."""
+
+    @pytest.fixture
+    def backend(self):
+        from app.services.update.prod_backend import ProdUpdateBackend
+        return ProdUpdateBackend()
+
+    @pytest.mark.asyncio
+    async def test_head_on_prerelease_tag_uses_tag_as_version(self, backend):
+        """When HEAD is on a pre-release tag, version reflects the full tag name."""
+        def fake_run_git(*args):
+            cmd = args
+            if cmd[:3] == ("describe", "--tags", "--exact-match"):
+                return True, "v1.31.7-pre.42", ""
+            if cmd[:2] == ("rev-parse", "HEAD"):
+                return True, "abc1234567890abcdef1234567890abcdef12345678", ""
+            if cmd[:3] == ("log", "-1", "--format=%cI"):
+                return True, "2026-05-06T10:00:00+00:00", ""
+            return False, "", "unexpected"
+
+        backend._run_git = fake_run_git
+        info = await backend.get_current_version()
+        assert info.version == "1.31.7-pre.42"
+        assert info.tag == "v1.31.7-pre.42"
+        assert info.is_prerelease is True
+        assert info.is_dev_build is False
+        assert info.commit_short == "abc1234"
+
+    @pytest.mark.asyncio
+    async def test_head_on_stable_tag_marks_not_prerelease(self, backend):
+        """Stable tags have no -pre/-rc suffix and is_prerelease must be False."""
+        def fake_run_git(*args):
+            cmd = args
+            if cmd[:3] == ("describe", "--tags", "--exact-match"):
+                return True, "v1.32.0", ""
+            if cmd[:2] == ("rev-parse", "HEAD"):
+                return True, "deadbeefdeadbeefdeadbeefdeadbeefdeadbeef", ""
+            if cmd[:3] == ("log", "-1", "--format=%cI"):
+                return True, "2026-05-06T10:00:00+00:00", ""
+            return False, "", "unexpected"
+
+        backend._run_git = fake_run_git
+        info = await backend.get_current_version()
+        assert info.version == "1.32.0"
+        assert info.tag == "v1.32.0"
+        assert info.is_prerelease is False
+        assert info.is_dev_build is False
+
+    @pytest.mark.asyncio
+    async def test_head_between_tags_falls_back_to_pyproject(self, backend):
+        """When HEAD is not on a tag (local dev), falls back to pyproject + is_dev_build=True."""
+        def fake_run_git(*args):
+            cmd = args
+            if cmd[:3] == ("describe", "--tags", "--exact-match"):
+                return False, "", "fatal: no exact match"
+            if cmd[:2] == ("rev-parse", "HEAD"):
+                return True, "feedfacefeedfacefeedfacefeedfacefeedface", ""
+            if cmd[:3] == ("log", "-1", "--format=%cI"):
+                return True, "2026-05-06T10:00:00+00:00", ""
+            return False, "", "unexpected"
+
+        backend._run_git = fake_run_git
+        info = await backend.get_current_version()
+        assert info.is_prerelease is False
+        assert info.is_dev_build is True
+        assert info.tag is None
+
+    @pytest.mark.asyncio
+    @pytest.mark.parametrize("tag,expected", [
+        ("v1.0.0-pre.1", True),
+        ("v1.0.0-rc.1", True),
+        ("v1.0.0-alpha", True),
+        ("v1.0.0-beta", True),
+        ("v1.0.0-unstable", True),
+        ("v1.0.0", False),
+        ("v2.5.10", False),
+    ])
+    async def test_prerelease_detection_by_tag_suffix(self, backend, tag, expected):
+        def fake_run_git(*args):
+            cmd = args
+            if cmd[:3] == ("describe", "--tags", "--exact-match"):
+                return True, tag, ""
+            if cmd[:2] == ("rev-parse", "HEAD"):
+                return True, "0" * 40, ""
+            if cmd[:3] == ("log", "-1", "--format=%cI"):
+                return True, "2026-05-06T10:00:00+00:00", ""
+            return False, "", ""
+        backend._run_git = fake_run_git
+        info = await backend.get_current_version()
+        assert info.is_prerelease is expected

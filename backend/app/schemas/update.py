@@ -25,6 +25,7 @@ class VersionInfo(BaseModel):
     tag: Optional[str] = Field(default=None, description="Git tag if exists")
     date: Optional[datetime] = Field(default=None, description="Commit/tag date")
     is_dev_build: bool = Field(default=False, description="Whether this build is from a non-tagged commit")
+    is_prerelease: bool = Field(default=False, description="Whether this version is a prerelease (alpha, beta, rc)")
 
 
 class ChangelogEntry(BaseModel):

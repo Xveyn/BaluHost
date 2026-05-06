@@ -19,6 +19,9 @@
     "previous": "Zurück",
     "next": "Weiter"
   },
+  "preRelease": {
+    "badge": "Pre-Release"
+  },
   "version": {
     "current": "Aktuelle Version",
     "available": "Update verfügbar",
