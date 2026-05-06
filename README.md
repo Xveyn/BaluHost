@@ -29,7 +29,7 @@ Deployed since January 25, 2026 on Debian 13 (Ryzen 5 5600GT, 16GB RAM).
 | **Database** | PostgreSQL 17.7 | With Alembic migrations |
 | **Proxy** | Nginx | Port 80, rate limiting, security headers |
 | **Backend** | Systemd | 4 Uvicorn workers, auto-restart |
-| **Testing** | 1465 tests | 82 test files, CI/CD via GitHub Actions |
+| **Testing** | <!-- STATS:TEST_COUNT:START -->2578 tests<!-- STATS:TEST_COUNT:END --> | <!-- STATS:TEST_FILES:START -->181 test files<!-- STATS:TEST_FILES:END -->, CI/CD via GitHub Actions |
 | **Monitoring** | Prometheus/Grafana | Ready |
 
 ---
@@ -167,19 +167,19 @@ See [Infrastructure](docs/deployment/infrastructure.md) and [Emergency Runbook](
 BaluHost/
 ├── backend/                 # Python FastAPI
 │   ├── app/
-│   │   ├── api/routes/      # 51 API route modules
-│   │   ├── services/        # 143 service modules
-│   │   ├── models/          # 42 SQLAlchemy ORM models
-│   │   ├── schemas/         # 41 Pydantic schemas
+│   │   ├── api/routes/      # API route modules
+│   │   ├── services/        # Service modules
+│   │   ├── models/          # SQLAlchemy ORM models
+│   │   ├── schemas/         # Pydantic schemas
 │   │   ├── core/            # Config, security, database
 │   │   └── middleware/      # Security headers, rate limiting
 │   ├── baluhost_tui/        # Terminal UI (Textual)
-│   ├── tests/               # 82 test files
-│   └── alembic/             # 74 database migrations
+│   ├── tests/               # Pytest suite
+│   └── alembic/             # Database migrations
 ├── client/                  # React + TypeScript + Vite
 │   └── src/
-│       ├── pages/           # 31 page components
-│       ├── components/      # 30+ component directories
+│       ├── pages/           # Page components
+│       ├── components/      # Reusable components
 │       ├── api/             # Typed API clients
 │       ├── hooks/           # Custom React hooks
 │       ├── contexts/        # Auth context
@@ -308,25 +308,27 @@ docs/
 
 ## Project Stats
 
+<!-- STATS:PROJECT:START -->
 | Metric | Count |
 |--------|-------|
 | **Version** | ![Latest Release](https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |
-| **Backend code** | 150,685 lines across 735 Python files |
-| &nbsp;&nbsp;↳ Application (`app/`) | 97,186 lines / 411 files |
-| &nbsp;&nbsp;↳ Tests (`tests/`) | 38,309 lines / 166 files |
+| **Backend code** | 156,943 lines across 766 Python files |
+| &nbsp;&nbsp;↳ Application (`app/`) | 100,507 lines / 422 files |
+| &nbsp;&nbsp;↳ Tests (`tests/`) | 40,895 lines / 181 files |
 | &nbsp;&nbsp;↳ Scripts (`scripts/`) | 6,291 lines / 48 files |
-| &nbsp;&nbsp;↳ Alembic migrations | 5,989 lines / 92 files |
+| &nbsp;&nbsp;↳ Alembic migrations | 6,340 lines / 97 files |
 | &nbsp;&nbsp;↳ Terminal UI (`baluhost_tui/`) | 2,910 lines / 18 files |
-| **Frontend code** | 78,107 lines across 427 source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |
-| **Test functions** | 1465 |
-| **API route modules** | 51 |
-| **Service modules** | 143 |
-| **Database models** | 42 |
-| **Database migrations** | 74 |
-| **Frontend pages** | 31 |
+| **Frontend code** | 79,258 lines across 435 source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |
+| **Test functions** | 2578 |
+| **API route modules** | 61 |
+| **Service modules** | 178 |
+| **Database models** | 48 |
+| **Database migrations** | 96 |
+| **Frontend pages** | 33 |
 | **CI/CD workflows** | 7 |
 
-<sub>LOC counted via `git ls-files` (respects `.gitignore`, excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). Last measured 2026-04-30.</sub>
+<sub>LOC counted via `git ls-files` (respects `.gitignore`, excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). Last measured 2026-05-06.</sub>
+<!-- STATS:PROJECT:END -->
 
 ---
 
