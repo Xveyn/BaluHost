@@ -41,7 +41,7 @@ jobs:
         env:
           TAG: ${{ github.ref_name }}
         run: |
-          if [[ "$TAG" == *-alpha* ]] || [[ "$TAG" == *-beta* ]] || [[ "$TAG" == *-unstable* ]] || [[ "$TAG" == *-rc* ]]; then
+          if [[ "$TAG" == *-pre.* ]] || [[ "$TAG" == *-alpha* ]] || [[ "$TAG" == *-beta* ]] || [[ "$TAG" == *-unstable* ]] || [[ "$TAG" == *-rc* ]]; then
             echo "flag=--prerelease" >> "$GITHUB_OUTPUT"
           else
             echo "flag=" >> "$GITHUB_OUTPUT"
