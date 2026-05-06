@@ -25,13 +25,16 @@ README = ROOT / "README.md"
 def count_lines(files: Iterable[Path]) -> int:
     """Count newline bytes across files. Matches `wc -l` semantics.
 
-    Skips files that are unreadable (missing, permission error). We count
-    newlines rather than lines to keep behavior simple and binary-safe.
+    Relative paths are resolved against ROOT so the script works regardless
+    of the process's current working directory. Skips files that are
+    unreadable (missing, permission error). Counts newlines rather than
+    lines to keep behavior simple and binary-safe.
     """
     total = 0
     for f in files:
+        path = f if f.is_absolute() else ROOT / f
         try:
-            with open(f, "rb") as fh:
+            with open(path, "rb") as fh:
                 while chunk := fh.read(65536):
                     total += chunk.count(b"\n")
         except OSError:
@@ -42,13 +45,16 @@ def count_lines(files: Iterable[Path]) -> int:
 def count_test_functions(files: Iterable[Path]) -> int:
     """Count def/async def whose name starts with 'test_' across files.
 
-    Uses AST so it works without importing the project. Walks the whole
-    tree to catch class methods. Files that fail to parse are skipped.
+    Relative paths are resolved against ROOT so the script works regardless
+    of the process's current working directory. Uses AST so it works without
+    importing the project. Walks the whole tree to catch class methods.
+    Files that fail to parse are skipped.
     """
     total = 0
     for f in files:
+        path = f if f.is_absolute() else ROOT / f
         try:
-            tree = ast.parse(f.read_text(encoding="utf-8"))
+            tree = ast.parse(path.read_text(encoding="utf-8"))
         except (SyntaxError, OSError, UnicodeDecodeError):
             continue
         for node in ast.walk(tree):

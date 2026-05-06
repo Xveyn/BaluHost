@@ -140,3 +140,27 @@ def test_tracked_files_parses_git_output(monkeypatch):
     assert Path("backend/app/main.py") in files
     assert Path("README.md") in files
     assert len(files) == 2  # blank line dropped
+
+
+def test_count_lines_resolves_relative_against_ROOT(tmp_path, monkeypatch):
+    """count_lines should open relative paths against ROOT, not process cwd."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "file.py").write_text("a\nb\n", encoding="utf-8")
+    monkeypatch.setattr(grs, "ROOT", repo)
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    assert grs.count_lines([Path("file.py")]) == 2
+
+
+def test_count_test_functions_resolves_relative_against_ROOT(tmp_path, monkeypatch):
+    """count_test_functions should open relative paths against ROOT, not process cwd."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    (repo / "test_x.py").write_text("def test_a():\n    pass\n", encoding="utf-8")
+    monkeypatch.setattr(grs, "ROOT", repo)
+    other = tmp_path / "other"
+    other.mkdir()
+    monkeypatch.chdir(other)
+    assert grs.count_test_functions([Path("test_x.py")]) == 1
