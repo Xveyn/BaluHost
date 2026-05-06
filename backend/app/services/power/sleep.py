@@ -29,6 +29,7 @@ from app.core.database import SessionLocal
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
+from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
 from app.schemas.sleep import (
     SleepState,
     SleepTrigger,
@@ -151,6 +152,11 @@ class SleepManagerService:
         # window so third-party suspend (mate-screensaver, gnome-power-manager,
         # logind idle, manual `systemctl suspend`) is refused by logind.
         self._core_uptime_inhibitor = CoreUptimeInhibitor()
+        self._baluhost_suspend_in_progress: bool = False
+        self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
+            next_core_start_provider=self._next_core_start_for_guard,
+            is_baluhost_suspend_in_progress=lambda: self._baluhost_suspend_in_progress,
+        )
 
     @classmethod
     async def get_instance(cls, backend: Optional[SleepBackend] = None) -> "SleepManagerService":
@@ -181,6 +187,8 @@ class SleepManagerService:
         config = self._load_config()
 
         if monitoring:
+            await self._core_uptime_rtc_guard.start()
+
             # Start idle detection loop
             self._idle_task = asyncio.create_task(self._idle_detection_loop())
 
@@ -207,6 +215,7 @@ class SleepManagerService:
 
     async def stop(self) -> None:
         """Stop the sleep manager and restore system to awake state."""
+        await self._core_uptime_rtc_guard.stop()
         self._is_running = False
 
         # Cancel background tasks
@@ -265,6 +274,22 @@ class SleepManagerService:
         except Exception as e:
             logger.warning("Failed to load core uptime windows: %s", e)
             return False, []
+
+    def _next_core_start_for_guard(self) -> Optional[datetime]:
+        """Provider used by CoreUptimeRtcGuard. Returns None on any failure
+        so the guard cleanly skips arming the RTC."""
+        try:
+            master, windows = self._load_core_uptime()
+            if not master:
+                return None
+            return core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
+        except Exception as exc:
+            logger.warning("RTC guard provider failed: %s", exc)
+            return None
+
+    def is_baluhost_suspend_in_progress(self) -> bool:
+        """Public read-only accessor for the in-progress flag (for tests)."""
+        return self._baluhost_suspend_in_progress
 
     def _log_state_change(
         self,
@@ -886,7 +911,13 @@ class SleepManagerService:
 
         # 3. Suspend the system.  When *wake_at* is given the backend uses
         #    ``rtcwake -m mem`` which sets the RTC alarm and suspends atomically.
-        ok = await self._backend.suspend_system(wake_at=wake_at)
+        # The flag tells CoreUptimeRtcGuard to skip its own rtcwake on the
+        # PrepareForSleep signal (we already set wake_at via rtcwake -m mem).
+        self._baluhost_suspend_in_progress = True
+        try:
+            ok = await self._backend.suspend_system(wake_at=wake_at)
+        finally:
+            self._baluhost_suspend_in_progress = False
 
         # When system resumes (or suspend failed), we'll be back here.
         # Revert to SOFT_SLEEP so _exit_soft_sleep accepts the transition.

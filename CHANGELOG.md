@@ -7,6 +7,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.31.8] - 2026-05-06
+
+### Added
+- **Core Uptime RTC Guard**: New `CoreUptimeRtcGuard` listens to logind's
+  `PrepareForSleep` D-Bus signal and pre-arms an RTC wake alarm
+  (`rtcwake -m no -t <next_core_start>`) for any suspend that bypasses
+  BaluHost (e.g. `mate-screensaver`, KDE-Plasma, manual `systemctl suspend`).
+  Closes the gap where third-party suspends outside an active core-uptime
+  window left the server suspended past the next window start.
+
+### Changed
+- Polkit rule template now also grants
+  `org.freedesktop.login1.inhibit-delay-sleep` to the BaluHost service user
+  (re-run the install / update path or manually update
+  `/etc/polkit-1/rules.d/50-baluhost-inhibit-sleep.rules`).
+
+### Dependencies
+- Added `dbus-next>=0.2.3,<1.0.0` (pure-Python async D-Bus client).
+
+---
+
 ## [1.31.7] - 2026-05-04
 
 ### Fixed
