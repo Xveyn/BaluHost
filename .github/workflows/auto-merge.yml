@@ -32,11 +32,6 @@ jobs:
 
           echo "Auto-merging PR #$PR_NUMBER (branch: $HEAD_BRANCH)"
 
-          # Read release label before merging
-          RELEASE_LABEL=$(gh pr view "$PR_NUMBER" --repo "$REPO" --json labels --jq '[.labels[].name | select(startswith("release:"))] | first // empty')
-          echo "RELEASE_LABEL=$RELEASE_LABEL" >> "$GITHUB_ENV"
-          echo "PR_NUMBER=$PR_NUMBER" >> "$GITHUB_ENV"
-
           if [ "$HEAD_BRANCH" = "development" ]; then
             # Never delete the development branch
             gh pr merge "$PR_NUMBER" --repo "$REPO" --merge
@@ -54,40 +49,24 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Bump version from release label
-        if: env.RELEASE_LABEL != ''
+      - name: Auto-tag pre-release
         working-directory: /tmp/repo
-        run: |
-          BUMP_TYPE="${RELEASE_LABEL#release:}"
-          echo "Release label: $RELEASE_LABEL → bump type: $BUMP_TYPE"
-
-          CURRENT_VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
-          echo "Current version: $CURRENT_VERSION"
-
-          python3 scripts/bump_version.py "$BUMP_TYPE"
-
-          NEW_VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
-          echo "New version: $NEW_VERSION"
-          echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
-
-          git add backend/pyproject.toml client/package.json CLAUDE.md
-          git commit -m "chore: bump version to v${NEW_VERSION}"
-          git push origin main
-
-      - name: Auto-tag from pyproject.toml
-        working-directory: /tmp/repo
+        env:
+          RUN_NUMBER: ${{ github.event.workflow_run.run_number }}
         run: |
           VERSION=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml || true)
-          TAG="v${VERSION}"
           if [ -z "$VERSION" ]; then
-            echo "Could not read version from pyproject.toml — skipping auto-tag"
-          elif git tag -l "$TAG" | grep -q .; then
-            echo "Tag $TAG already exists — skipping"
+            echo "Could not read version from pyproject.toml -- skipping pre-release tag"
+            exit 0
+          fi
+          TAG="v${VERSION}-pre.${RUN_NUMBER}"
+          if git tag -l "$TAG" | grep -q .; then
+            echo "Tag $TAG already exists -- skipping"
           else
-            echo "Creating tag $TAG from pyproject.toml"
-            git tag -a "$TAG" -m "Release $TAG"
+            echo "Creating pre-release tag $TAG"
+            git tag -a "$TAG" -m "Pre-release $TAG"
             git push origin "$TAG"
-            echo "Tag $TAG pushed — release workflow will create GitHub Release"
+            echo "Tag $TAG pushed -- create-release.yml will create the GitHub pre-release"
           fi
 
       - name: Sync development with main
