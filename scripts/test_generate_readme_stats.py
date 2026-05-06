@@ -81,3 +81,10 @@ def test_count_test_functions_skips_syntax_errors(tmp_path):
 
 def test_count_test_functions_empty_list():
     assert grs.count_test_functions([]) == 0
+
+
+def test_count_test_functions_skips_missing_file(tmp_path):
+    missing = tmp_path / "does-not-exist.py"
+    good = tmp_path / "test_good.py"
+    good.write_text("def test_y():\n    pass\n", encoding="utf-8")
+    assert grs.count_test_functions([missing, good]) == 1
