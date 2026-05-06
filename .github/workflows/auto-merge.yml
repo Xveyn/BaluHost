@@ -70,7 +70,10 @@ jobs:
           echo "New version: $NEW_VERSION"
           echo "NEW_VERSION=$NEW_VERSION" >> "$GITHUB_ENV"
 
-          git add backend/pyproject.toml client/package.json CLAUDE.md
+          # Regenerate README stats (counts only tracked files via git ls-files)
+          python3 scripts/generate_readme_stats.py --write
+
+          git add backend/pyproject.toml client/package.json CLAUDE.md README.md
           git commit -m "chore: bump version to v${NEW_VERSION}"
           git push origin main
 
