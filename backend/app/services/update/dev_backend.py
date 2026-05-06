@@ -51,6 +51,7 @@ class DevUpdateBackend(UpdateBackend):
             tag=f"v{version_to_string(self._simulated_version)}",
             date=datetime.now(timezone.utc),
             is_dev_build=True,
+            is_prerelease=False,
         )
 
     async def check_for_updates(self, channel: str) -> tuple[bool, Optional[VersionInfo], list[ChangelogEntry]]:
