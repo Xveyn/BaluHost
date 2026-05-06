@@ -36,3 +36,48 @@ def test_count_lines_multiple_files(tmp_path):
     b = tmp_path / "b.py"
     b.write_text("p\nq\nr\n", encoding="utf-8")
     assert grs.count_lines([a, b]) == 5
+
+
+def test_count_test_functions_module_level(tmp_path):
+    f = tmp_path / "test_x.py"
+    f.write_text(
+        "def test_one():\n    pass\n\n"
+        "def test_two():\n    pass\n\n"
+        "def helper():\n    pass\n",
+        encoding="utf-8",
+    )
+    assert grs.count_test_functions([f]) == 2
+
+
+def test_count_test_functions_async(tmp_path):
+    f = tmp_path / "test_async.py"
+    f.write_text(
+        "async def test_a():\n    pass\n\n"
+        "def test_b():\n    pass\n",
+        encoding="utf-8",
+    )
+    assert grs.count_test_functions([f]) == 2
+
+
+def test_count_test_functions_in_class(tmp_path):
+    f = tmp_path / "test_class.py"
+    f.write_text(
+        "class TestThing:\n"
+        "    def test_inside(self):\n        pass\n"
+        "    def helper(self):\n        pass\n"
+        "    async def test_async_inside(self):\n        pass\n",
+        encoding="utf-8",
+    )
+    assert grs.count_test_functions([f]) == 2
+
+
+def test_count_test_functions_skips_syntax_errors(tmp_path):
+    bad = tmp_path / "test_bad.py"
+    bad.write_text("def test_x(:\n    broken syntax", encoding="utf-8")
+    good = tmp_path / "test_good.py"
+    good.write_text("def test_y():\n    pass\n", encoding="utf-8")
+    assert grs.count_test_functions([bad, good]) == 1
+
+
+def test_count_test_functions_empty_list():
+    assert grs.count_test_functions([]) == 0

@@ -12,6 +12,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import ast
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -34,6 +35,25 @@ def count_lines(files: Iterable[Path]) -> int:
                     total += chunk.count(b"\n")
         except OSError:
             continue
+    return total
+
+
+def count_test_functions(files: Iterable[Path]) -> int:
+    """Count def/async def whose name starts with 'test_' across files.
+
+    Uses AST so it works without importing the project. Walks the whole
+    tree to catch class methods. Files that fail to parse are skipped.
+    """
+    total = 0
+    for f in files:
+        try:
+            tree = ast.parse(f.read_text(encoding="utf-8"))
+        except (SyntaxError, OSError, UnicodeDecodeError):
+            continue
+        for node in ast.walk(tree):
+            if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                if node.name.startswith("test_"):
+                    total += 1
     return total
 
 
