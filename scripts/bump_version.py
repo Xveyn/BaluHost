@@ -108,9 +108,7 @@ def main() -> None:
         print(new_version)
         return
 
-    if args and args[0] in ("major", "minor", "patch"):
-        update_pyproject(new_version)
-    elif args:
+    if args:
         update_pyproject(new_version)
 
     update_package_json(new_version)

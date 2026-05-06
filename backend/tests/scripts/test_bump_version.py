@@ -1,21 +1,21 @@
 """Tests for scripts/bump_version.py --dry-run flag."""
 from __future__ import annotations
 
+import re
 import subprocess
 import sys
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[2]
+REPO_ROOT = Path(__file__).resolve().parents[3]
 SCRIPT = REPO_ROOT / "scripts" / "bump_version.py"
 
 
 def _read_pyproject_version() -> str:
     text = (REPO_ROOT / "backend" / "pyproject.toml").read_text(encoding="utf-8")
-    for line in text.splitlines():
-        s = line.strip()
-        if s.startswith("version") and "=" in s:
-            return s.split("=", 1)[1].strip().strip('"').strip("'")
-    raise RuntimeError("version not found")
+    m = re.search(r'^version\s*=\s*"([^"]+)"', text, re.MULTILINE)
+    if not m:
+        raise RuntimeError("version not found")
+    return m.group(1)
 
 
 def _run_bump(*args: str) -> subprocess.CompletedProcess:
