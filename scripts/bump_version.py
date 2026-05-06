@@ -79,22 +79,38 @@ def update_claude_md(version: str) -> None:
 
 
 def main() -> None:
+    args = sys.argv[1:]
+    dry_run = False
+    if "--dry-run" in args:
+        dry_run = True
+        args = [a for a in args if a != "--dry-run"]
+
     current = read_current_version()
 
-    if len(sys.argv) < 2:
-        # Sync-only mode: propagate current version to all targets
+    if not args:
         new_version = current
-        print(f"Syncing version {new_version} to all files...")
+        if not dry_run:
+            print(f"Syncing version {new_version} to all files...")
     else:
-        arg = sys.argv[1]
+        arg = args[0]
         if arg in ("major", "minor", "patch"):
             new_version = bump(current, arg)
         elif re.match(r"^\d+\.\d+\.\d+", arg):
             new_version = arg
         else:
-            print(f"Usage: {sys.argv[0]} [major|minor|patch|X.Y.Z]")
+            print(f"Usage: {sys.argv[0]} [major|minor|patch|X.Y.Z] [--dry-run]")
             sys.exit(1)
-        print(f"Bumping version: {current} -> {new_version}")
+        if not dry_run:
+            print(f"Bumping version: {current} -> {new_version}")
+
+    if dry_run:
+        # Emit only the computed version; CI captures stdout
+        print(new_version)
+        return
+
+    if args and args[0] in ("major", "minor", "patch"):
+        update_pyproject(new_version)
+    elif args:
         update_pyproject(new_version)
 
     update_package_json(new_version)
