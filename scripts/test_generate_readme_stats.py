@@ -358,3 +358,34 @@ def test_replace_between_markers_normalizes_crlf():
     assert "old" not in out
     # Output is normalized to LF
     assert "\r\n" not in out
+
+
+def test_apply_to_text_replaces_three_marker_pairs():
+    template = (
+        "before\n"
+        "<!-- STATS:PROJECT:START -->\n"
+        "OLD TABLE\n"
+        "<!-- STATS:PROJECT:END -->\n"
+        "row | <!-- STATS:TEST_COUNT:START -->old<!-- STATS:TEST_COUNT:END --> | "
+        "<!-- STATS:TEST_FILES:START -->old<!-- STATS:TEST_FILES:END -->,\n"
+        "after\n"
+    )
+    s = _stub_stats()
+    out = grs.apply_to_text(template, s, measured="2026-05-06")
+
+    assert "OLD TABLE" not in out
+    assert "150,685 lines across 735" in out
+    assert "1465 tests" in out
+    assert "166 test files" in out
+    assert "Last measured 2026-05-06" in out
+
+
+def test_apply_to_text_idempotent():
+    template = (
+        "<!-- STATS:PROJECT:START -->\nx\n<!-- STATS:PROJECT:END -->\n"
+        "<!-- STATS:TEST_COUNT:START -->x<!-- STATS:TEST_COUNT:END -->\n"
+        "<!-- STATS:TEST_FILES:START -->x<!-- STATS:TEST_FILES:END -->\n"
+    )
+    once = grs.apply_to_text(template, _stub_stats(), measured="2026-05-06")
+    twice = grs.apply_to_text(once, _stub_stats(), measured="2026-05-06")
+    assert once == twice

@@ -250,16 +250,47 @@ def replace_between_markers(
     return re.sub(pattern, f"{start}\n{content}\n{end}", text, count=1, flags=re.S)
 
 
+def apply_to_text(readme_text: str, stats: Stats, *, measured: str | None = None) -> str:
+    """Apply all three marker replacements to a README body."""
+    out = replace_between_markers(
+        readme_text, "PROJECT", render_project_stats_block(stats, measured=measured)
+    )
+    out = replace_between_markers(
+        out, "TEST_COUNT", render_test_count(stats), inline=True
+    )
+    out = replace_between_markers(
+        out, "TEST_FILES", render_test_files(stats), inline=True
+    )
+    return out
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--write", action="store_true", help="Rewrite README.md")
-    parser.add_argument("--check", action="store_true", help="Exit 1 if drift")
+    mode = parser.add_mutually_exclusive_group()
+    mode.add_argument("--write", action="store_true", help="Rewrite README.md in place")
+    mode.add_argument("--check", action="store_true", help="Exit 1 if README would change")
     args = parser.parse_args()
 
     if not args.write and not args.check:
         args.check = True
 
-    raise NotImplementedError("filled in by later tasks")
+    files = tracked_files()
+    stats = compute_stats(files)
+    current = README.read_text(encoding="utf-8")
+    new = apply_to_text(current, stats)
+
+    if new == current:
+        print("README stats up to date.")
+        return 0
+
+    if args.write:
+        README.write_text(new, encoding="utf-8")
+        print("README.md updated.")
+        return 0
+
+    # check mode
+    print("README stats are out of date. Run with --write to update.", file=sys.stderr)
+    return 1
 
 
 if __name__ == "__main__":
