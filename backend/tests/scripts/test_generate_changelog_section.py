@@ -17,6 +17,7 @@ def _run(*args: str, input_text: str | None = None) -> subprocess.CompletedProce
         input=input_text,
         cwd=str(REPO_ROOT),
         check=False,
+        encoding="utf-8",
     )
 
 
@@ -74,7 +75,7 @@ def test_breaking_change_in_subject_creates_breaking_section():
                   "--output", "-", input_text=commits)
     assert result.returncode == 0, result.stderr
     out = result.stdout
-    assert "### " in out and "BREAKING CHANGES" in out
+    assert "### ⚠ BREAKING CHANGES" in out
     assert "- rewrite auth flow" in out
 
 
@@ -87,8 +88,22 @@ def test_breaking_change_in_body_creates_breaking_section():
                   "--output", "-", input_text=commits)
     assert result.returncode == 0, result.stderr
     out = result.stdout
-    assert "### " in out and "BREAKING CHANGES" in out
+    assert "### ⚠ BREAKING CHANGES" in out
     assert "- rewrite auth flow" in out
+
+
+def test_breaking_chore_appears_in_breaking_section_only():
+    commits = "abc\x1fchore!: drop Python 3.9 support\x1f\x1e"
+    result = _run("--version", "2.0.0", "--date", "2026-05-06", "--stdin",
+                  "--output", "-", input_text=commits)
+    assert result.returncode == 0, result.stderr
+    out = result.stdout
+    assert "### ⚠ BREAKING CHANGES" in out
+    assert "- drop Python 3.9 support" in out
+    # Must NOT appear in any regular bucket
+    assert "### Added" not in out
+    assert "### Changed" not in out
+    assert "### Fixed" not in out
 
 
 def test_pr_number_extracted_from_subject_suffix():

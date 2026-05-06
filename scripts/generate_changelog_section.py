@@ -113,9 +113,8 @@ def classify(subject: str, body: str) -> tuple[str | None, str, bool]:
     if cc_type in IGNORED_TYPES and not is_breaking:
         return (None, "", False)
     group = GROUP_FOR_TYPE.get(cc_type)
-    if group is None and is_breaking:
-        # A breaking chore/etc. still counts under BREAKING CHANGES
-        group = None
+    # group stays None for ignored types even when breaking;
+    # render_section() handles is_breaking independently via its own list.
     formatted = f"**({scope})** {desc}" if scope else desc
     return (group, formatted, is_breaking)
 
@@ -161,9 +160,10 @@ def main() -> int:
     parser = argparse.ArgumentParser()
     parser.add_argument("--version", required=True)
     parser.add_argument("--date", default=date_cls.today().isoformat())
-    parser.add_argument("--since", help="Git ref. Required unless --stdin.")
-    parser.add_argument("--stdin", action="store_true",
-                        help="Read commits from stdin (test mode)")
+    mode_group = parser.add_mutually_exclusive_group(required=True)
+    mode_group.add_argument("--since", help="Git ref to read commits from.")
+    mode_group.add_argument("--stdin", action="store_true",
+                            help="Read commits from stdin (test mode)")
     parser.add_argument("--output", required=True,
                         help="Output file path or '-' for stdout")
     args = parser.parse_args()
@@ -171,9 +171,6 @@ def main() -> int:
     if args.stdin:
         commits = parse_commits_from_stdin()
     else:
-        if not args.since:
-            sys.stderr.write("--since is required (unless --stdin)\n")
-            return 2
         commits = parse_commits_from_git(args.since)
 
     section = render_section(args.version, args.date, commits)
