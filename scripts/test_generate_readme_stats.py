@@ -1,6 +1,8 @@
 """Tests for scripts/generate_readme_stats.py — stdlib + pytest only."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import generate_readme_stats as grs
 
 
@@ -88,3 +90,53 @@ def test_count_test_functions_skips_missing_file(tmp_path):
     good = tmp_path / "test_good.py"
     good.write_text("def test_y():\n    pass\n", encoding="utf-8")
     assert grs.count_test_functions([missing, good]) == 1
+
+
+def test_under_unix_paths():
+    files = [Path("backend/app/main.py"), Path("client/src/App.tsx"), Path("README.md")]
+    result = grs.under(files, "backend/app/")
+    assert result == [Path("backend/app/main.py")]
+
+
+def test_under_normalizes_windows_paths():
+    # git ls-files always emits forward slashes on Windows too — but defensively
+    # we normalize, so a Path with backslashes still matches.
+    files = [Path("backend\\app\\main.py")]
+    result = grs.under(files, "backend/app/")
+    assert result == files
+
+
+def test_under_multiple_prefixes():
+    files = [
+        Path("backend/app/main.py"),
+        Path("backend/tests/test_x.py"),
+        Path("client/src/App.tsx"),
+    ]
+    result = grs.under(files, "backend/app/", "backend/tests/")
+    assert len(result) == 2
+
+
+def test_under_excludes_init_when_requested():
+    files = [
+        Path("backend/app/models/user.py"),
+        Path("backend/app/models/__init__.py"),
+    ]
+    result = grs.under(files, "backend/app/models/", exclude_init=True)
+    assert result == [Path("backend/app/models/user.py")]
+
+
+def test_with_ext_filter():
+    files = [Path("a.py"), Path("a.tsx"), Path("a.md")]
+    assert grs.with_ext(files, ".py", ".tsx") == [Path("a.py"), Path("a.tsx")]
+
+
+def test_tracked_files_parses_git_output(monkeypatch):
+    def fake_check_output(cmd, **kw):
+        assert cmd[:2] == ["git", "ls-files"]
+        return "backend/app/main.py\nREADME.md\n\n"
+
+    monkeypatch.setattr(grs.subprocess, "check_output", fake_check_output)
+    files = grs.tracked_files()
+    assert Path("backend/app/main.py") in files
+    assert Path("README.md") in files
+    assert len(files) == 2  # blank line dropped

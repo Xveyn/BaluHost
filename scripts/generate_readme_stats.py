@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import subprocess
 import sys
 from pathlib import Path
 from typing import Iterable
@@ -55,6 +56,43 @@ def count_test_functions(files: Iterable[Path]) -> int:
                 if node.name.startswith("test_"):
                     total += 1
     return total
+
+
+def tracked_files(cwd: Path | None = None) -> list[Path]:
+    """List repo files tracked by git. Respects .gitignore by definition."""
+    out = subprocess.check_output(
+        ["git", "ls-files"],
+        cwd=cwd or ROOT,
+        text=True,
+        encoding="utf-8",
+    )
+    return [Path(line) for line in out.splitlines() if line.strip()]
+
+
+def _normalize(p: Path) -> str:
+    return str(p).replace("\\", "/")
+
+
+def under(
+    files: Iterable[Path],
+    *prefixes: str,
+    exclude_init: bool = False,
+) -> list[Path]:
+    """Return files whose normalized path starts with any of the prefixes."""
+    out: list[Path] = []
+    for f in files:
+        norm = _normalize(f)
+        if not any(norm.startswith(p) for p in prefixes):
+            continue
+        if exclude_init and f.name == "__init__.py":
+            continue
+        out.append(f)
+    return out
+
+
+def with_ext(files: Iterable[Path], *exts: str) -> list[Path]:
+    """Return files whose suffix is in exts (suffixes include the dot)."""
+    return [f for f in files if f.suffix in exts]
 
 
 def main() -> int:
