@@ -16,6 +16,7 @@ import ast
 import subprocess
 import sys
 from dataclasses import dataclass
+from datetime import date
 from pathlib import Path
 from typing import Iterable
 
@@ -165,6 +166,55 @@ def compute_stats(files: list[Path]) -> Stats:
             ".github/workflows/",
         )),
     )
+
+
+def _fmt(n: int) -> str:
+    return f"{n:,}"
+
+
+def render_project_stats_block(s: Stats, measured: str | None = None) -> str:
+    """Render the Project Stats markdown block (between STATS markers)."""
+    measured = measured or date.today().isoformat()
+    return (
+        "| Metric | Count |\n"
+        "|--------|-------|\n"
+        "| **Version** | "
+        "![Latest Release]"
+        "(https://img.shields.io/github/v/release/Xveyn/BaluHost?label=) |\n"
+        f"| **Backend code** | {_fmt(s.backend_total.lines)} lines across "
+        f"{_fmt(s.backend_total.files)} Python files |\n"
+        f"| &nbsp;&nbsp;↳ Application (`app/`) | {_fmt(s.backend_app.lines)} lines / "
+        f"{_fmt(s.backend_app.files)} files |\n"
+        f"| &nbsp;&nbsp;↳ Tests (`tests/`) | {_fmt(s.backend_tests.lines)} lines / "
+        f"{_fmt(s.backend_tests.files)} files |\n"
+        f"| &nbsp;&nbsp;↳ Scripts (`scripts/`) | {_fmt(s.backend_scripts.lines)} lines / "
+        f"{_fmt(s.backend_scripts.files)} files |\n"
+        f"| &nbsp;&nbsp;↳ Alembic migrations | {_fmt(s.backend_alembic.lines)} lines / "
+        f"{_fmt(s.backend_alembic.files)} files |\n"
+        f"| &nbsp;&nbsp;↳ Terminal UI (`baluhost_tui/`) | {_fmt(s.backend_tui.lines)} lines / "
+        f"{_fmt(s.backend_tui.files)} files |\n"
+        f"| **Frontend code** | {_fmt(s.frontend.lines)} lines across "
+        f"{_fmt(s.frontend.files)} source files (`client/src/`, .ts/.tsx/.js/.jsx/.css) |\n"
+        f"| **Test functions** | {s.test_functions} |\n"
+        f"| **API route modules** | {s.api_route_modules} |\n"
+        f"| **Service modules** | {s.service_modules} |\n"
+        f"| **Database models** | {s.db_models} |\n"
+        f"| **Database migrations** | {s.db_migrations} |\n"
+        f"| **Frontend pages** | {s.frontend_pages} |\n"
+        f"| **CI/CD workflows** | {s.workflows} |\n"
+        "\n"
+        "<sub>LOC counted via `git ls-files` (respects `.gitignore`, "
+        "excludes virtualenvs, `node_modules/`, `dist/`, caches, dev-storage). "
+        f"Last measured {measured}.</sub>"
+    )
+
+
+def render_test_count(s: Stats) -> str:
+    return f"{s.test_functions} tests"
+
+
+def render_test_files(s: Stats) -> str:
+    return f"{s.backend_tests.files} test files"
 
 
 def main() -> int:

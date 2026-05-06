@@ -249,3 +249,50 @@ def test_compute_stats_counts_match_fixture(tmp_path, monkeypatch):
     assert s.backend_total.files == 17  # sum of subdirs
 
     assert s.frontend.files == 5  # .tsx, .ts, .css under client/src/
+
+
+def _stub_stats() -> grs.Stats:
+    return grs.Stats(
+        backend_total=grs.Bucket(files=735, lines=150_685),
+        backend_app=grs.Bucket(files=411, lines=97_186),
+        backend_tests=grs.Bucket(files=166, lines=38_309),
+        backend_scripts=grs.Bucket(files=48, lines=6_291),
+        backend_alembic=grs.Bucket(files=92, lines=5_989),
+        backend_tui=grs.Bucket(files=18, lines=2_910),
+        frontend=grs.Bucket(files=427, lines=78_107),
+        test_functions=1465,
+        api_route_modules=51,
+        service_modules=143,
+        db_models=42,
+        db_migrations=74,
+        frontend_pages=31,
+        workflows=7,
+    )
+
+
+def test_render_project_stats_block_contains_all_rows():
+    md = grs.render_project_stats_block(_stub_stats())
+    assert "150,685 lines across 735 Python files" in md
+    assert "97,186 lines / 411 files" in md
+    assert "38,309 lines / 166 files" in md
+    assert "78,107 lines across 427 source files" in md
+    assert "| **Test functions** | 1465 |" in md
+    assert "| **API route modules** | 51 |" in md
+    assert "| **Service modules** | 143 |" in md
+    assert "| **Database models** | 42 |" in md
+    assert "| **Database migrations** | 74 |" in md
+    assert "| **Frontend pages** | 31 |" in md
+    assert "| **CI/CD workflows** | 7 |" in md
+
+
+def test_render_project_stats_block_includes_measured_date():
+    md = grs.render_project_stats_block(_stub_stats(), measured="2026-05-06")
+    assert "Last measured 2026-05-06" in md
+
+
+def test_render_test_count():
+    assert grs.render_test_count(_stub_stats()) == "1465 tests"
+
+
+def test_render_test_files():
+    assert grs.render_test_files(_stub_stats()) == "166 test files"
