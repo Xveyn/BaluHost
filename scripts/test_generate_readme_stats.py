@@ -299,3 +299,46 @@ def test_render_test_count():
 
 def test_render_test_files():
     assert grs.render_test_files(_stub_stats()) == "166 test files"
+
+
+def test_replace_between_markers_block():
+    text = (
+        "intro\n"
+        "<!-- STATS:PROJECT:START -->\n"
+        "old content here\n"
+        "more old\n"
+        "<!-- STATS:PROJECT:END -->\n"
+        "outro\n"
+    )
+    out = grs.replace_between_markers(text, "PROJECT", "NEW BLOCK")
+    assert (
+        "<!-- STATS:PROJECT:START -->\nNEW BLOCK\n<!-- STATS:PROJECT:END -->" in out
+    )
+    assert "old content" not in out
+    assert "intro\n" in out and "outro\n" in out
+
+
+def test_replace_between_markers_inline():
+    text = "Row | <!-- STATS:TC:START -->old<!-- STATS:TC:END --> | rest"
+    out = grs.replace_between_markers(text, "TC", "new", inline=True)
+    assert "<!-- STATS:TC:START -->new<!-- STATS:TC:END -->" in out
+    assert "old" not in out
+
+
+def test_replace_between_markers_idempotent():
+    text = (
+        "<!-- STATS:X:START -->\nfoo\n<!-- STATS:X:END -->"
+    )
+    once = grs.replace_between_markers(text, "X", "bar")
+    twice = grs.replace_between_markers(once, "X", "bar")
+    assert once == twice
+
+
+def test_replace_between_markers_missing_raises():
+    text = "no markers here"
+    try:
+        grs.replace_between_markers(text, "MISSING", "x")
+    except ValueError as e:
+        assert "MISSING" in str(e)
+    else:
+        raise AssertionError("expected ValueError")

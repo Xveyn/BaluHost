@@ -13,6 +13,7 @@ from __future__ import annotations
 
 import argparse
 import ast
+import re
 import subprocess
 import sys
 from dataclasses import dataclass
@@ -215,6 +216,33 @@ def render_test_count(s: Stats) -> str:
 
 def render_test_files(s: Stats) -> str:
     return f"{s.backend_tests.files} test files"
+
+
+def replace_between_markers(
+    text: str, name: str, content: str, *, inline: bool = False
+) -> str:
+    """Replace the content between <!-- STATS:NAME:START --> and ...:END -->.
+
+    Block mode (default): expects markers on their own lines, replaces the
+    lines in between. Inline mode: marker pair appears on a single line and
+    only the inner span is replaced.
+
+    Raises ValueError if either marker is missing.
+    """
+    start = f"<!-- STATS:{name}:START -->"
+    end = f"<!-- STATS:{name}:END -->"
+    if start not in text or end not in text:
+        raise ValueError(f"Marker pair STATS:{name} not found in text")
+
+    if inline:
+        pattern = re.escape(start) + r".*?" + re.escape(end)
+        return re.sub(pattern, f"{start}{content}{end}", text, count=1, flags=re.S)
+
+    # Block mode: keep marker lines, replace everything strictly between.
+    pattern = (
+        re.escape(start) + r"\n.*?\n" + re.escape(end)
+    )
+    return re.sub(pattern, f"{start}\n{content}\n{end}", text, count=1, flags=re.S)
 
 
 def main() -> int:
