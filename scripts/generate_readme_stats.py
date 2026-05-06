@@ -15,6 +15,7 @@ import argparse
 import ast
 import subprocess
 import sys
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Iterable
 
@@ -99,6 +100,71 @@ def under(
 def with_ext(files: Iterable[Path], *exts: str) -> list[Path]:
     """Return files whose suffix is in exts (suffixes include the dot)."""
     return [f for f in files if f.suffix in exts]
+
+
+@dataclass(frozen=True)
+class Bucket:
+    files: int
+    lines: int
+
+
+@dataclass(frozen=True)
+class Stats:
+    backend_total: Bucket
+    backend_app: Bucket
+    backend_tests: Bucket
+    backend_scripts: Bucket
+    backend_alembic: Bucket
+    backend_tui: Bucket
+    frontend: Bucket
+    test_functions: int
+    api_route_modules: int
+    service_modules: int
+    db_models: int
+    db_migrations: int
+    frontend_pages: int
+    workflows: int
+
+
+def _bucket(files: list[Path]) -> Bucket:
+    return Bucket(files=len(files), lines=count_lines(files))
+
+
+def compute_stats(files: list[Path]) -> Stats:
+    """Compute the full stats payload from a list of tracked file paths."""
+    py = with_ext(files, ".py")
+
+    app = under(py, "backend/app/")
+    tests = under(py, "backend/tests/")
+    scripts = under(py, "backend/scripts/")
+    alembic = under(py, "backend/alembic/")
+    tui = under(py, "backend/baluhost_tui/")
+
+    backend_total_files = app + tests + scripts + alembic + tui
+    frontend = under(
+        with_ext(files, ".ts", ".tsx", ".js", ".jsx", ".css"),
+        "client/src/",
+    )
+
+    return Stats(
+        backend_total=_bucket(backend_total_files),
+        backend_app=_bucket(app),
+        backend_tests=_bucket(tests),
+        backend_scripts=_bucket(scripts),
+        backend_alembic=_bucket(alembic),
+        backend_tui=_bucket(tui),
+        frontend=_bucket(frontend),
+        test_functions=count_test_functions(tests),
+        api_route_modules=len(under(py, "backend/app/api/routes/", exclude_init=True)),
+        service_modules=len(under(py, "backend/app/services/", exclude_init=True)),
+        db_models=len(under(py, "backend/app/models/", exclude_init=True)),
+        db_migrations=len(under(py, "backend/alembic/versions/", exclude_init=True)),
+        frontend_pages=len(under(with_ext(files, ".tsx"), "client/src/pages/")),
+        workflows=len(under(
+            with_ext(files, ".yml", ".yaml"),
+            ".github/workflows/",
+        )),
+    )
 
 
 def main() -> int:

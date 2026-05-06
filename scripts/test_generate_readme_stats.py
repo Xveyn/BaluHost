@@ -164,3 +164,86 @@ def test_count_test_functions_resolves_relative_against_ROOT(tmp_path, monkeypat
     other.mkdir()
     monkeypatch.chdir(other)
     assert grs.count_test_functions([Path("test_x.py")]) == 1
+
+
+def _make_repo(tmp_path: Path) -> Path:
+    """Create a fixture file tree mimicking BaluHost layout."""
+    tree = {
+        "backend/app/main.py": "x = 1\n",
+        "backend/app/api/routes/auth.py": "def f():\n    pass\n",
+        "backend/app/api/routes/files.py": "def g():\n    pass\n",
+        "backend/app/api/routes/__init__.py": "",
+        "backend/app/services/auth.py": "def h():\n    pass\n",
+        "backend/app/services/files/upload.py": "def i():\n    pass\n",
+        "backend/app/services/__init__.py": "",
+        "backend/app/services/files/__init__.py": "",
+        "backend/app/models/user.py": "class User: ...\n",
+        "backend/app/models/__init__.py": "",
+        "backend/tests/test_one.py": "def test_a():\n    pass\n",
+        "backend/tests/test_two.py": "def test_b():\n    pass\n\ndef test_c():\n    pass\n",
+        "backend/scripts/foo.py": "print('hi')\n",
+        "backend/alembic/versions/0001_init.py": "# rev\n",
+        "backend/alembic/versions/0002_add.py": "# rev\n",
+        "backend/baluhost_tui/main.py": "pass\n",
+        "client/src/App.tsx": "export const X = 1;\n",
+        "client/src/pages/Dashboard.tsx": "export default 1;\n",
+        "client/src/pages/Settings.tsx": "export default 2;\n",
+        "client/src/lib/api.ts": "export {};\n",
+        "client/src/styles.css": "body{}\n",
+        ".github/workflows/ci.yml": "name: ci\n",
+        ".github/workflows/release.yml": "name: rel\n",
+    }
+    for rel, content in tree.items():
+        p = tmp_path / rel
+        p.parent.mkdir(parents=True, exist_ok=True)
+        p.write_text(content, encoding="utf-8")
+    return tmp_path
+
+
+def test_compute_stats_counts_match_fixture(tmp_path, monkeypatch):
+    repo = _make_repo(tmp_path)
+    monkeypatch.setattr(grs, "ROOT", repo)
+    files = [Path(rel) for rel in [
+        "backend/app/main.py",
+        "backend/app/api/routes/auth.py",
+        "backend/app/api/routes/files.py",
+        "backend/app/api/routes/__init__.py",
+        "backend/app/services/auth.py",
+        "backend/app/services/files/upload.py",
+        "backend/app/services/__init__.py",
+        "backend/app/services/files/__init__.py",
+        "backend/app/models/user.py",
+        "backend/app/models/__init__.py",
+        "backend/tests/test_one.py",
+        "backend/tests/test_two.py",
+        "backend/scripts/foo.py",
+        "backend/alembic/versions/0001_init.py",
+        "backend/alembic/versions/0002_add.py",
+        "backend/baluhost_tui/main.py",
+        "client/src/App.tsx",
+        "client/src/pages/Dashboard.tsx",
+        "client/src/pages/Settings.tsx",
+        "client/src/lib/api.ts",
+        "client/src/styles.css",
+        ".github/workflows/ci.yml",
+        ".github/workflows/release.yml",
+    ]]
+
+    s = grs.compute_stats(files)
+
+    assert s.api_route_modules == 2  # __init__ excluded
+    assert s.service_modules == 2    # __init__ excluded, both auth.py + upload.py
+    assert s.db_models == 1          # __init__ excluded
+    assert s.db_migrations == 2
+    assert s.frontend_pages == 2
+    assert s.workflows == 2
+    assert s.test_functions == 3     # 1 + 2
+
+    assert s.backend_app.files == 10  # all .py under backend/app/
+    assert s.backend_tests.files == 2
+    assert s.backend_scripts.files == 1
+    assert s.backend_alembic.files == 2
+    assert s.backend_tui.files == 1
+    assert s.backend_total.files == 16  # sum of subdirs
+
+    assert s.frontend.files == 5  # .tsx, .ts, .css under client/src/
