@@ -1,6 +1,7 @@
 """Tests for scripts/generate_readme_stats.py — stdlib + pytest only."""
 from __future__ import annotations
 
+import sys
 from pathlib import Path
 
 import generate_readme_stats as grs
@@ -389,3 +390,41 @@ def test_apply_to_text_idempotent():
     once = grs.apply_to_text(template, _stub_stats(), measured="2026-05-06")
     twice = grs.apply_to_text(once, _stub_stats(), measured="2026-05-06")
     assert once == twice
+
+
+def test_main_check_mode_handles_crlf_readme(tmp_path, monkeypatch, capsys):
+    """--check must not report drift just because README on disk has CRLF."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    # Build a stable README with markers, render once, write back as CRLF.
+    template = (
+        "before\n"
+        "<!-- STATS:PROJECT:START -->\n"
+        "old\n"
+        "<!-- STATS:PROJECT:END -->\n"
+        "row | <!-- STATS:TEST_COUNT:START -->old<!-- STATS:TEST_COUNT:END --> | "
+        "<!-- STATS:TEST_FILES:START -->old<!-- STATS:TEST_FILES:END -->,\n"
+        "after\n"
+    )
+    stats = _stub_stats()
+    populated = grs.apply_to_text(template, stats, measured="2026-05-06")
+
+    readme = repo / "README.md"
+    readme.write_bytes(populated.replace("\n", "\r\n").encode("utf-8"))
+
+    monkeypatch.setattr(grs, "README", readme)
+    monkeypatch.setattr(grs, "tracked_files", lambda: [])
+    monkeypatch.setattr(grs, "compute_stats", lambda files: stats)
+    monkeypatch.setattr(grs, "apply_to_text", lambda text, s: grs.replace_between_markers(
+        grs.replace_between_markers(
+            grs.replace_between_markers(
+                text, "PROJECT", grs.render_project_stats_block(s, measured="2026-05-06")
+            ),
+            "TEST_COUNT", grs.render_test_count(s), inline=True,
+        ),
+        "TEST_FILES", grs.render_test_files(s), inline=True,
+    ))
+
+    monkeypatch.setattr(sys, "argv", ["generate_readme_stats.py", "--check"])
+    rc = grs.main()
+    assert rc == 0, capsys.readouterr()

@@ -276,7 +276,7 @@ def main() -> int:
 
     files = tracked_files()
     stats = compute_stats(files)
-    current = README.read_text(encoding="utf-8")
+    current = README.read_text(encoding="utf-8").replace("\r\n", "\n")
     new = apply_to_text(current, stats)
 
     if new == current:
