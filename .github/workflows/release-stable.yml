@@ -1,0 +1,99 @@
+name: Release Stable
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: "Semver bump for the new stable release"
+        type: choice
+        required: true
+        options: [patch, minor, major]
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.DEPLOY_PAT }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Configure git
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+
+      - name: Compute next version
+        id: version
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type }}
+        run: |
+          CURRENT=$(grep -oP '^version\s*=\s*"\K[^"]+' backend/pyproject.toml)
+          NEW=$(python scripts/bump_version.py "$BUMP_TYPE" --dry-run | tail -1)
+          echo "current=$CURRENT" >> "$GITHUB_OUTPUT"
+          echo "new=$NEW" >> "$GITHUB_OUTPUT"
+          echo "Bumping $CURRENT -> $NEW"
+
+      - name: Find last stable tag
+        id: last_stable
+        run: |
+          LAST=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' | grep -Ev -- '-(pre|rc|alpha|beta|unstable)' | sort -V | tail -1 || true)
+          if [ -z "$LAST" ]; then
+            echo "No previous stable tag found; using initial commit"
+            LAST=$(git rev-list --max-parents=0 HEAD)
+          fi
+          echo "ref=$LAST" >> "$GITHUB_OUTPUT"
+          echo "Last stable: $LAST"
+
+      - name: Generate CHANGELOG section
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+          LAST_REF: ${{ steps.last_stable.outputs.ref }}
+        run: |
+          python scripts/generate_changelog_section.py \
+            --version "$NEW_VERSION" \
+            --since "$LAST_REF" \
+            --output /tmp/changelog-section.md
+          echo "--- Generated section ---"
+          cat /tmp/changelog-section.md
+          echo "--- End ---"
+          if ! grep -q '^- ' /tmp/changelog-section.md; then
+            echo "::error::No conventional-commit changes since $LAST_REF -- refusing to create empty release"
+            exit 1
+          fi
+
+      - name: Insert CHANGELOG section
+        run: |
+          python scripts/insert_changelog_section.py \
+            --section /tmp/changelog-section.md \
+            --target CHANGELOG.md
+
+      - name: Bump version files
+        env:
+          BUMP_TYPE: ${{ inputs.bump_type }}
+        run: python scripts/bump_version.py "$BUMP_TYPE"
+
+      - name: Commit + push version bump
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          git add backend/pyproject.toml client/package.json CLAUDE.md CHANGELOG.md
+          git commit -m "chore: release v${NEW_VERSION}"
+          git push origin main
+
+      - name: Tag + push
+        env:
+          NEW_VERSION: ${{ steps.version.outputs.new }}
+        run: |
+          TAG="v${NEW_VERSION}"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          echo "Stable release tag $TAG pushed -- create-release.yml will create the GitHub Release"
