@@ -428,3 +428,21 @@ def test_main_check_mode_handles_crlf_readme(tmp_path, monkeypatch, capsys):
     monkeypatch.setattr(sys, "argv", ["generate_readme_stats.py", "--check"])
     rc = grs.main()
     assert rc == 0, capsys.readouterr()
+
+
+def test_main_exits_2_on_missing_markers(tmp_path, monkeypatch, capsys):
+    """Missing markers should produce a clean stderr message and exit code 2."""
+    repo = tmp_path / "repo"
+    repo.mkdir()
+    readme = repo / "README.md"
+    readme.write_text("no markers here\n", encoding="utf-8")
+
+    monkeypatch.setattr(grs, "README", readme)
+    monkeypatch.setattr(grs, "tracked_files", lambda: [])
+    monkeypatch.setattr(grs, "compute_stats", lambda files: _stub_stats())
+
+    monkeypatch.setattr(sys, "argv", ["generate_readme_stats.py", "--check"])
+    rc = grs.main()
+    captured = capsys.readouterr()
+    assert rc == 2
+    assert "STATS:PROJECT" in captured.err

@@ -142,6 +142,8 @@ def compute_stats(files: list[Path]) -> Stats:
     alembic = under(py, "backend/alembic/")
     tui = under(py, "backend/baluhost_tui/")
 
+    # backend_total is the explicit union of the five dirs above. New top-level
+    # backend dirs (e.g. backend/plugins/) must be added there and here to count.
     backend_total_files = app + tests + scripts + alembic + tui
     frontend = under(
         with_ext(files, ".ts", ".tsx", ".js", ".jsx", ".css"),
@@ -277,7 +279,11 @@ def main() -> int:
     files = tracked_files()
     stats = compute_stats(files)
     current = README.read_text(encoding="utf-8").replace("\r\n", "\n")
-    new = apply_to_text(current, stats)
+    try:
+        new = apply_to_text(current, stats)
+    except ValueError as exc:
+        print(f"Error: {exc}", file=sys.stderr)
+        return 2
 
     if new == current:
         print("README stats up to date.")
