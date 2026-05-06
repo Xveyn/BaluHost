@@ -14,9 +14,27 @@ from __future__ import annotations
 import argparse
 import sys
 from pathlib import Path
+from typing import Iterable
 
 ROOT = Path(__file__).resolve().parents[1]
 README = ROOT / "README.md"
+
+
+def count_lines(files: Iterable[Path]) -> int:
+    """Count newline bytes across files. Matches `wc -l` semantics.
+
+    Skips files that are unreadable (missing, permission error). We count
+    newlines rather than lines to keep behavior simple and binary-safe.
+    """
+    total = 0
+    for f in files:
+        try:
+            with open(f, "rb") as fh:
+                while chunk := fh.read(65536):
+                    total += chunk.count(b"\n")
+        except OSError:
+            continue
+    return total
 
 
 def main() -> int:
