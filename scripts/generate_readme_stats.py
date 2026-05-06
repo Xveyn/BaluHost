@@ -227,8 +227,13 @@ def replace_between_markers(
     lines in between. Inline mode: marker pair appears on a single line and
     only the inner span is replaced.
 
+    Input text is normalized to LF line endings; output is LF. Callers on
+    Windows that read the file with `read_text(encoding="utf-8")` will get
+    CRLF, which is converted to LF here so the regex anchors match.
+
     Raises ValueError if either marker is missing.
     """
+    text = text.replace("\r\n", "\n")
     start = f"<!-- STATS:{name}:START -->"
     end = f"<!-- STATS:{name}:END -->"
     if start not in text or end not in text:

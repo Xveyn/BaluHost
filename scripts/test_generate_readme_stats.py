@@ -342,3 +342,19 @@ def test_replace_between_markers_missing_raises():
         assert "MISSING" in str(e)
     else:
         raise AssertionError("expected ValueError")
+
+
+def test_replace_between_markers_normalizes_crlf():
+    """Windows-checked-out READMEs may have CRLF; the splice must still work."""
+    text = (
+        "intro\r\n"
+        "<!-- STATS:X:START -->\r\n"
+        "old\r\n"
+        "<!-- STATS:X:END -->\r\n"
+        "outro\r\n"
+    )
+    out = grs.replace_between_markers(text, "X", "NEW")
+    assert "<!-- STATS:X:START -->\nNEW\n<!-- STATS:X:END -->" in out
+    assert "old" not in out
+    # Output is normalized to LF
+    assert "\r\n" not in out
