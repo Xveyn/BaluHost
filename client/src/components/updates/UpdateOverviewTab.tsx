@@ -104,8 +104,15 @@ export default function UpdateOverviewTab({
           </div>
           {checkResult && (
             <div className="space-y-3">
-              <div className="text-3xl font-bold text-white">
-                v{checkResult.current_version.version}
+              <div className="flex items-center gap-2">
+                <span className="text-3xl font-bold text-white">
+                  v{checkResult.current_version.version}
+                </span>
+                {checkResult.current_version.is_prerelease && (
+                  <span className="ml-2 inline-flex items-center rounded-md bg-amber-500/20 px-2 py-0.5 text-xs font-medium text-amber-300">
+                    {t('preRelease.badge')}
+                  </span>
+                )}
               </div>
               <div className="flex items-center gap-2 text-sm text-slate-400">
                 <GitBranch className="h-4 w-4" />

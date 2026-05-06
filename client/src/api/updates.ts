@@ -28,6 +28,7 @@ export interface VersionInfo {
   tag: string | null;
   date: string | null;
   is_dev_build: boolean;
+  is_prerelease: boolean;
 }
 
 // Changelog entry
