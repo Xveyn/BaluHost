@@ -90,3 +90,27 @@ export function useFormattedVersion(prefix: string = 'BaluHost OS'): string {
 
   return `${prefix} v${version}`;
 }
+
+/**
+ * Hook to get formatted version string + is_prerelease flag for badge display.
+ * Returns "v..." while loading, "v?.?.?" on error.
+ */
+export function useVersionDisplay(prefix: string = 'BaluHost OS'): {
+  text: string;
+  isPrerelease: boolean;
+} {
+  const { fullVersion, loading, error } = useVersion();
+
+  if (loading) {
+    return { text: `${prefix} v...`, isPrerelease: false };
+  }
+
+  if (error || !fullVersion) {
+    return { text: `${prefix} v?.?.?`, isPrerelease: false };
+  }
+
+  return {
+    text: `${prefix} v${fullVersion.version}`,
+    isPrerelease: fullVersion.is_prerelease,
+  };
+}
