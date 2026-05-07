@@ -650,6 +650,25 @@
       "today": "heute {{time}}",
       "tomorrow": "morgen {{time}}",
       "dateTime": "{{date}} {{time}}"
+    },
+    "alwaysAwake": {
+      "title": "Immer wach",
+      "description": "Auto-Sleep, Schedule und Auto-Escalation werden ignoriert. Manueller Sleep ist weiterhin möglich.",
+      "masterToggle": "Hauptschalter Immer-wach",
+      "preset1h": "1h",
+      "preset4h": "4h",
+      "preset8h": "8h",
+      "presetPermanent": "Dauerhaft",
+      "activeUntil": "Aktiv bis: {{time}} (in {{remaining}})",
+      "activePermanent": "Dauerhaft aktiv",
+      "cancel": "Aufheben",
+      "loadFailed": "Konnte Always-Awake nicht laden",
+      "saveFailed": "Speichern fehlgeschlagen",
+      "hintScheduleResumes": "Geplante Kernbetriebszeit / Sleep-Schedule wird ab {{time}} wieder berücksichtigt.",
+      "hintPermanentClearToResume": "Dauerhaft aktiv — schalte aus, damit Schedule/Kernbetriebszeit wieder greifen.",
+      "bannerActiveWithUntil": "Immer wach aktiv bis {{time}} — Auto-Sleep blockiert.",
+      "bannerActivePermanent": "Immer wach aktiv (dauerhaft) — Auto-Sleep blockiert.",
+      "scheduleHint": "ℹ Always-Awake hat Vorrang. Sleep-Schedule-Trigger werden ignoriert."
     }
   },
   "fanControl": {

@@ -655,6 +655,25 @@
       "today": "today at {{time}}",
       "tomorrow": "tomorrow at {{time}}",
       "dateTime": "{{date}} {{time}}"
+    },
+    "alwaysAwake": {
+      "title": "Always Awake",
+      "description": "Auto-sleep, schedule, and auto-escalation are ignored. Manual sleep remains possible.",
+      "masterToggle": "always-awake master toggle",
+      "preset1h": "1h",
+      "preset4h": "4h",
+      "preset8h": "8h",
+      "presetPermanent": "Permanent",
+      "activeUntil": "Active until: {{time}} (in {{remaining}})",
+      "activePermanent": "Permanently active",
+      "cancel": "Cancel",
+      "loadFailed": "Failed to load always-awake state",
+      "saveFailed": "Save failed",
+      "hintScheduleResumes": "Sleep schedule / core operating hours will resume at {{time}}.",
+      "hintPermanentClearToResume": "Permanently active — turn off to let schedule/core hours resume.",
+      "bannerActiveWithUntil": "Always-awake active until {{time}} — auto-sleep blocked.",
+      "bannerActivePermanent": "Always-awake active (permanent) — auto-sleep blocked.",
+      "scheduleHint": "ℹ Always-awake takes precedence. Sleep-schedule triggers are ignored."
     }
   },
   "fanControl": {
