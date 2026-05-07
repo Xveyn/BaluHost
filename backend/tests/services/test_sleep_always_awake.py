@@ -122,7 +122,6 @@ def test_clear_always_awake_resets_columns_and_audits():
 @pytest.mark.asyncio
 async def test_idle_detection_skips_when_always_awake():
     """While always-awake is on, idle counter must not advance and no auto-sleep is triggered."""
-    import asyncio
     svc = _build_service()
     cfg = _config(
         always_awake_enabled=True,
@@ -140,15 +139,26 @@ async def test_idle_detection_skips_when_always_awake():
     svc.enter_soft_sleep = fake_enter_soft_sleep
     svc._is_running = True
     svc._current_state = SleepState.AWAKE
+    svc._consecutive_idle_checks = 5
+    svc._idle_seconds = 150.0
 
-    async def stop_after_one(*_a, **_k):
-        svc._is_running = False
+    # Counter pattern: first call lets the loop body run; second call stops the loop.
+    call_count = [0]
+
+    async def fake_sleep(*_a, **_k):
+        call_count[0] += 1
+        if call_count[0] >= 2:
+            svc._is_running = False
 
     with patch.object(svc, "_load_config", return_value=cfg), \
          patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
          patch.object(svc, "_is_system_idle", return_value=True), \
-         patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one):
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=fake_sleep):
         await svc._idle_detection_loop()
 
+    # Body ran exactly once. With the guard, the always-awake branch resets
+    # _consecutive_idle_checks and _idle_seconds, and continues — so no
+    # enter_soft_sleep is called.
     assert enter_called == []
+    assert svc._consecutive_idle_checks == 0
     assert svc._idle_seconds == 0.0
