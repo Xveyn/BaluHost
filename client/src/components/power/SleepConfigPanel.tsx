@@ -32,6 +32,7 @@ export function SleepConfigPanel() {
   const [busy, setBusy] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [coreUptimeMasterOn, setCoreUptimeMasterOn] = useState(false);
+  const [alwaysAwakeOn, setAlwaysAwakeOn] = useState(false);
 
   // Form state
   const [autoIdleEnabled, setAutoIdleEnabled] = useState(false);
@@ -91,6 +92,7 @@ export function SleepConfigPanel() {
       try {
         const st = await getSleepStatus();
         setCoreUptimeMasterOn(st.core_uptime?.enabled ?? false);
+        setAlwaysAwakeOn(st.always_awake?.enabled ?? false);
       } catch {
         // ignore — status is best-effort here
       }
@@ -298,6 +300,11 @@ export function SleepConfigPanel() {
             {coreUptimeMasterOn && (
               <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
                 {t('sleep.coreUptime.scheduleOverride')}
+              </div>
+            )}
+            {alwaysAwakeOn && (
+              <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
+                {t('sleep.alwaysAwake.scheduleHint')}
               </div>
             )}
           </div>
