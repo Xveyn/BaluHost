@@ -619,6 +619,44 @@
       }
     }
   },
+  "sleep": {
+    "coreUptime": {
+      "title": "Core Operating Hours",
+      "description": "During these time windows the server stays reachable; auto-sleep is blocked.",
+      "addWindow": "Add new time window",
+      "blockedActions": "While a window is active, auto-idle sleep, schedule sleep, and auto-escalation are blocked. Manual suspend by admins is still allowed (with a warning).",
+      "loadFailed": "Failed to load core operating hours",
+      "saveFailed": "Save failed",
+      "createFailed": "Create failed",
+      "deleteFailed": "Delete failed",
+      "deleteConfirm": "Delete time window?",
+      "deleteTitle": "Delete",
+      "labelPlaceholder": "Description",
+      "crossesMidnight": "until next day",
+      "masterToggle": "master toggle",
+      "enableWindow": "enable window",
+      "weekdays": {
+        "mon": "Mon",
+        "tue": "Tue",
+        "wed": "Wed",
+        "thu": "Thu",
+        "fri": "Fri",
+        "sat": "Sat",
+        "sun": "Sun"
+      },
+      "active": "Core operating hours active",
+      "endsAt": "ends at {{time}}.",
+      "autoSleepBlocked": "Auto-sleep blocked.",
+      "nextWindow": "Next core window: {{when}}",
+      "scheduleOverride": "ℹ Core operating hours take precedence. Sleep-schedule triggers are ignored during core windows.",
+      "suspendWarningWithUntil": "⚠ Core operating hours are active (until {{time}}).\nSuspend will make the server unreachable for other users.\nProceed anyway?",
+      "suspendWarning": "⚠ Core operating hours are active.\nSuspend will make the server unreachable for other users.\nProceed anyway?",
+      "suspendConfirmAnyway": "Suspend anyway",
+      "today": "today at {{time}}",
+      "tomorrow": "tomorrow at {{time}}",
+      "dateTime": "{{date}} {{time}}"
+    }
+  },
   "fanControl": {
     "title": "Fan Control",
     "subtitle": "PWM Fan Control",

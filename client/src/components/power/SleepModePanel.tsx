@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe, Shield } from 'lucide-react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
@@ -29,24 +30,25 @@ function isWithinNextHours(iso: string, hours: number): boolean {
   return ms > 0 && ms <= hours * 3600 * 1000;
 }
 
-function formatRelative(iso: string): string {
-  const d = new Date(iso);
-  const now = new Date();
-  const sameDay = d.toDateString() === now.toDateString();
-  const tomorrow = new Date(now);
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const isTomorrow = d.toDateString() === tomorrow.toDateString();
-  const time = formatTime(iso);
-  if (sameDay) return `heute ${time}`;
-  if (isTomorrow) return `morgen ${time}`;
-  return `${d.toLocaleDateString()} ${time}`;
-}
-
 interface SleepModePanelProps {
   onRefresh?: () => void;
 }
 
 export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
+  const { t } = useTranslation('system');
+
+  const formatRelative = (iso: string): string => {
+    const d = new Date(iso);
+    const now = new Date();
+    const sameDay = d.toDateString() === now.toDateString();
+    const tomorrow = new Date(now);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const isTomorrow = d.toDateString() === tomorrow.toDateString();
+    const time = formatTime(iso);
+    if (sameDay) return t('sleep.coreUptime.today', { time });
+    if (isTomorrow) return t('sleep.coreUptime.tomorrow', { time });
+    return t('sleep.coreUptime.dateTime', { date: d.toLocaleDateString(), time });
+  };
   const [status, setStatus] = useState<SleepStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -121,18 +123,18 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
   const handleSuspend = async () => {
     if (busy) return;
     const inCore = status?.core_uptime?.active;
+    const endsAt = status?.core_uptime?.current_window_ends_at;
+    const coreWarning = inCore
+      ? endsAt
+        ? t('sleep.coreUptime.suspendWarningWithUntil', { time: formatTime(endsAt) })
+        : t('sleep.coreUptime.suspendWarning')
+      : null;
     const ok = await confirm(
-      inCore
-        ? `⚠ Kernbetriebszeit ist aktiv${
-            status?.core_uptime?.current_window_ends_at
-              ? ` (bis ${formatTime(status.core_uptime.current_window_ends_at)})`
-              : ''
-          }.\nSuspend macht den Server für andere Nutzer unerreichbar.\nTrotzdem fortfahren?`
-        : 'Suspend the system? The server will become unreachable. Wake via WoL or RTC alarm.',
+      coreWarning ?? 'Suspend the system? The server will become unreachable. Wake via WoL or RTC alarm.',
       {
         title: 'True Suspend',
         variant: 'danger',
-        confirmLabel: inCore ? 'Trotzdem suspenden' : 'Suspend Now',
+        confirmLabel: inCore ? t('sleep.coreUptime.suspendConfirmAnyway') : 'Suspend Now',
       },
     );
     if (!ok) return;
@@ -293,14 +295,14 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
             <div className="mt-3 rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-3 flex items-start gap-2">
               <Shield className="h-4 w-4 text-emerald-300 mt-0.5 shrink-0" />
               <div className="text-xs text-emerald-200">
-                <strong>Kernbetriebszeit aktiv</strong>
+                <strong>{t('sleep.coreUptime.active')}</strong>
                 {status.core_uptime.current_window_label
                   ? ` — „${status.core_uptime.current_window_label}"`
                   : ''}
                 {status.core_uptime.current_window_ends_at
-                  ? ` — endet um ${formatTime(status.core_uptime.current_window_ends_at)}.`
+                  ? ` — ${t('sleep.coreUptime.endsAt', { time: formatTime(status.core_uptime.current_window_ends_at) })}`
                   : '.'}{' '}
-                Auto-Sleep blockiert.
+                {t('sleep.coreUptime.autoSleepBlocked')}
               </div>
             </div>
           )}
@@ -309,7 +311,7 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
             status.core_uptime?.next_start &&
             isWithinNextHours(status.core_uptime.next_start, 12) && (
               <div className="mt-3 rounded-lg bg-slate-800/40 text-slate-400 p-2 text-xs">
-                Nächste Kernzeit: {formatRelative(status.core_uptime.next_start)}
+                {t('sleep.coreUptime.nextWindow', { when: formatRelative(status.core_uptime.next_start) })}
               </div>
             )}
         </div>

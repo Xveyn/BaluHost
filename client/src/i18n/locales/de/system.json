@@ -614,6 +614,44 @@
       }
     }
   },
+  "sleep": {
+    "coreUptime": {
+      "title": "Kernbetriebszeit",
+      "description": "Während dieser Zeitfenster bleibt der Server erreichbar; Auto-Sleep ist blockiert.",
+      "addWindow": "Neues Zeitfenster hinzufügen",
+      "blockedActions": "Während aktiver Fenster werden Auto-Idle-Sleep, Schedule-Sleep und Auto-Escalation blockiert. Manueller Suspend durch Admins bleibt möglich (mit Warnung).",
+      "loadFailed": "Konnte Kernbetriebszeit nicht laden",
+      "saveFailed": "Speichern fehlgeschlagen",
+      "createFailed": "Anlegen fehlgeschlagen",
+      "deleteFailed": "Löschen fehlgeschlagen",
+      "deleteConfirm": "Zeitfenster löschen?",
+      "deleteTitle": "Löschen",
+      "labelPlaceholder": "Beschreibung",
+      "crossesMidnight": "bis nächsten Tag",
+      "masterToggle": "Hauptschalter",
+      "enableWindow": "Zeitfenster aktivieren",
+      "weekdays": {
+        "mon": "Mo",
+        "tue": "Di",
+        "wed": "Mi",
+        "thu": "Do",
+        "fri": "Fr",
+        "sat": "Sa",
+        "sun": "So"
+      },
+      "active": "Kernbetriebszeit aktiv",
+      "endsAt": "endet um {{time}}.",
+      "autoSleepBlocked": "Auto-Sleep blockiert.",
+      "nextWindow": "Nächste Kernzeit: {{when}}",
+      "scheduleOverride": "ℹ Kernbetriebszeit hat Vorrang. Sleep-Schedule-Trigger werden während Kernzeit-Fenstern ignoriert.",
+      "suspendWarningWithUntil": "⚠ Kernbetriebszeit ist aktiv (bis {{time}}).\nSuspend macht den Server für andere Nutzer unerreichbar.\nTrotzdem fortfahren?",
+      "suspendWarning": "⚠ Kernbetriebszeit ist aktiv.\nSuspend macht den Server für andere Nutzer unerreichbar.\nTrotzdem fortfahren?",
+      "suspendConfirmAnyway": "Trotzdem suspenden",
+      "today": "heute {{time}}",
+      "tomorrow": "morgen {{time}}",
+      "dateTime": "{{date}} {{time}}"
+    }
+  },
   "fanControl": {
     "title": "Lüftersteuerung",
     "subtitle": "PWM-Lüftersteuerung",
