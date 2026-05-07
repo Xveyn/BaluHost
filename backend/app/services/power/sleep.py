@@ -27,6 +27,7 @@ from sqlalchemy import select, func as sa_func, desc
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
@@ -266,6 +267,38 @@ class SleepManagerService:
         if until.tzinfo is None:
             until = until.replace(tzinfo=timezone.utc)
         return datetime.now(timezone.utc) < until
+
+    def _clear_always_awake(self, reason: str) -> None:
+        """Reset always-awake columns. Writes an audit-log event with the given reason.
+
+        Reason values:
+            - "always_awake_expired": auto-cleanup from schedule loop
+            - "always_awake_cleared_by_sleep": cleared because user entered manual sleep/suspend
+        """
+        try:
+            db = SessionLocal()
+            try:
+                row = db.execute(
+                    select(SleepConfigModel).where(SleepConfigModel.id == 1)
+                ).scalar_one_or_none()
+                if row is None or not row.always_awake_enabled:
+                    return
+                row.always_awake_enabled = False
+                row.always_awake_until = None
+                db.commit()
+                logger.info("Always-awake cleared (%s)", reason)
+                get_audit_logger_db().log_security_event(
+                    action=reason,
+                    user="system",
+                    resource="sleep_config",
+                    details={},
+                    success=True,
+                    db=db,
+                )
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("Failed to clear always-awake: %s", e)
 
     def _load_core_uptime(self) -> tuple[bool, list]:
         """Return (master_enabled, list_of_enabled_windows). Empty list if master off."""
