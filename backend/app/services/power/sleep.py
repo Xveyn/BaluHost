@@ -1164,9 +1164,19 @@ class SleepManagerService:
 
                 # Apply partial update
                 update_data = update.model_dump(exclude_unset=True)
+
+                # Special-case: always_awake_until accepts explicit None to clear.
+                # The default loop drops None values to keep optional fields lenient.
+                if "always_awake_until" in update_data:
+                    config.always_awake_until = update_data.pop("always_awake_until")
+
                 for field, value in update_data.items():
                     if value is not None:
                         setattr(config, field, value.value if hasattr(value, 'value') else value)
+
+                # Disabling always-awake clears any pending expiry
+                if update_data.get("always_awake_enabled") is False:
+                    config.always_awake_until = None
 
                 db.commit()
                 db.refresh(config)

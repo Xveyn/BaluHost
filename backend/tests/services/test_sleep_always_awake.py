@@ -356,3 +356,64 @@ def test_get_config_returns_always_awake_fields():
 
     assert resp.always_awake_enabled is True
     assert resp.always_awake_until == until
+
+
+def test_update_config_can_clear_until():
+    """Sending always_awake_until=null must clear the column."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+
+    fake_row = SleepConfig(
+        id=1, auto_idle_enabled=False, idle_timeout_minutes=15,
+        idle_cpu_threshold=5.0, idle_disk_io_threshold=0.5, idle_http_threshold=5.0,
+        auto_escalation_enabled=False, escalation_after_minutes=60,
+        schedule_enabled=False, schedule_sleep_time="23:00", schedule_wake_time="06:00",
+        schedule_mode="soft",
+        wol_mac_address=None, wol_broadcast_address=None,
+        pause_monitoring=False, pause_disk_io=False, reduced_telemetry_interval=30.0,
+        disk_spindown_enabled=False, core_uptime_enabled=False,
+        always_awake_enabled=True,
+        always_awake_until=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    fake_session = MagicMock()
+    fake_session.execute.return_value.scalar_one_or_none.return_value = fake_row
+
+    update = SleepConfigUpdate(always_awake_enabled=True, always_awake_until=None)
+    payload = update.model_dump(exclude_unset=True)
+    assert "always_awake_until" in payload
+    assert payload["always_awake_until"] is None
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=fake_session), \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        svc.update_config(update)
+
+    assert fake_row.always_awake_until is None
+
+
+def test_update_config_disabling_normalizes_until():
+    """Setting enabled=False must also reset until to None."""
+    from app.schemas.sleep import SleepConfigUpdate
+    svc = _build_service()
+    fake_row = SleepConfig(
+        id=1, auto_idle_enabled=False, idle_timeout_minutes=15,
+        idle_cpu_threshold=5.0, idle_disk_io_threshold=0.5, idle_http_threshold=5.0,
+        auto_escalation_enabled=False, escalation_after_minutes=60,
+        schedule_enabled=False, schedule_sleep_time="23:00", schedule_wake_time="06:00",
+        schedule_mode="soft",
+        wol_mac_address=None, wol_broadcast_address=None,
+        pause_monitoring=False, pause_disk_io=False, reduced_telemetry_interval=30.0,
+        disk_spindown_enabled=False, core_uptime_enabled=False,
+        always_awake_enabled=True,
+        always_awake_until=datetime.now(timezone.utc) + timedelta(hours=1),
+    )
+    fake_session = MagicMock()
+    fake_session.execute.return_value.scalar_one_or_none.return_value = fake_row
+
+    update = SleepConfigUpdate(always_awake_enabled=False)
+
+    with patch("app.services.power.sleep.SessionLocal", return_value=fake_session), \
+         patch.object(svc, "get_config", return_value=MagicMock()):
+        svc.update_config(update)
+
+    assert fake_row.always_awake_enabled is False
+    assert fake_row.always_awake_until is None
