@@ -8,7 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
-import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe, Shield } from 'lucide-react';
+import { Moon, Sun, Power, Wifi, Activity, Cpu, HardDrive, Upload, Globe, Shield, Coffee } from 'lucide-react';
 import { useConfirmDialog } from '../../hooks/useConfirmDialog';
 import {
   getSleepStatus,
@@ -314,6 +314,18 @@ export function SleepModePanel({ onRefresh }: SleepModePanelProps) {
                 {t('sleep.coreUptime.nextWindow', { when: formatRelative(status.core_uptime.next_start) })}
               </div>
             )}
+          {status.always_awake?.enabled && (
+            <div className="mt-3 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 flex items-start gap-2">
+              <Coffee className="h-4 w-4 text-amber-300 mt-0.5 shrink-0" />
+              <div className="text-xs text-amber-200">
+                {status.always_awake.until
+                  ? t('sleep.alwaysAwake.bannerActiveWithUntil', {
+                      time: formatTime(status.always_awake.until),
+                    })
+                  : t('sleep.alwaysAwake.bannerActivePermanent')}
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Activity Metrics */}
