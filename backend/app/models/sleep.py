@@ -49,6 +49,12 @@ class SleepConfig(Base):
     # Core Operating Hours (Kernbetriebszeit)
     core_uptime_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
 
+    # Always-awake override (manual override over all auto-sleep paths)
+    always_awake_enabled: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    always_awake_until: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
