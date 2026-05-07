@@ -5,7 +5,7 @@
  * Auto-saves all changes; manual Sleep/Suspend on the server side
  * automatically clears the override.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Coffee, Clock, X } from 'lucide-react';
@@ -42,10 +42,11 @@ export function AlwaysAwakePanel() {
   const [expiresIn, setExpiresIn] = useState<number | null>(null);
   const [scheduleEnabled, setScheduleEnabled] = useState(false);
   const [coreUptimeEnabled, setCoreUptimeEnabled] = useState(false);
+  const [activePreset, setActivePreset] = useState<Preset | null>(null);
   const [loading, setLoading] = useState(true);
   const tickRef = useRef<number | null>(null);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     try {
       const [cfg, status] = await Promise.all([getSleepConfig(), getSleepStatus()]);
       setEnabled(cfg.always_awake_enabled ?? false);
@@ -53,16 +54,41 @@ export function AlwaysAwakePanel() {
       setExpiresIn(status.always_awake?.expires_in_seconds ?? null);
       setScheduleEnabled(cfg.schedule_enabled);
       setCoreUptimeEnabled(cfg.core_uptime_enabled ?? false);
+
+      // Infer active preset from loaded state (e.g. after page refresh)
+      if (!cfg.always_awake_enabled) {
+        setActivePreset(null);
+      } else if (cfg.always_awake_until == null) {
+        setActivePreset('permanent');
+      } else {
+        const remaining = status.always_awake?.expires_in_seconds ?? 0;
+        const candidates: Array<[Preset, number]> = [
+          ['1h', 1 * 3600],
+          ['4h', 4 * 3600],
+          ['8h', 8 * 3600],
+        ];
+        // Pick the closest preset within 5 minutes; otherwise null (custom).
+        let best: Preset | null = null;
+        let bestDiff = 5 * 60;
+        for (const [p, sec] of candidates) {
+          const diff = Math.abs(remaining - sec);
+          if (diff <= bestDiff) {
+            bestDiff = diff;
+            best = p;
+          }
+        }
+        setActivePreset(best);
+      }
     } catch {
       toast.error(t('sleep.alwaysAwake.loadFailed'));
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
 
   useEffect(() => {
     refresh();
-  }, []);
+  }, [refresh]);
 
   // Live countdown — decrement every second when until is set
   useEffect(() => {
@@ -78,10 +104,14 @@ export function AlwaysAwakePanel() {
     };
   }, [expiresIn !== null]);
 
-  // Auto-refresh when expired
+  // Auto-refresh when expired — null out expiresIn first so the countdown effect's
+  // cleanup runs immediately even if the refresh request is slow/fails.
   useEffect(() => {
-    if (expiresIn === 0) refresh();
-  }, [expiresIn]);
+    if (expiresIn === 0) {
+      setExpiresIn(null);
+      refresh();
+    }
+  }, [expiresIn, refresh]);
 
   const setPreset = async (preset: Preset) => {
     const newUntil =
@@ -90,9 +120,12 @@ export function AlwaysAwakePanel() {
         : new Date(Date.now() + PRESET_HOURS[preset] * 3600 * 1000).toISOString();
     const previousEnabled = enabled;
     const previousUntil = until;
+    const previousExpiresIn = expiresIn;
+    const previousActivePreset = activePreset;
     setEnabled(true);
     setUntil(newUntil);
     setExpiresIn(newUntil ? PRESET_HOURS[preset as keyof typeof PRESET_HOURS] * 3600 : null);
+    setActivePreset(preset);
     try {
       await updateSleepConfig({
         always_awake_enabled: true,
@@ -101,21 +134,25 @@ export function AlwaysAwakePanel() {
     } catch (err) {
       setEnabled(previousEnabled);
       setUntil(previousUntil);
+      setExpiresIn(previousExpiresIn);
+      setActivePreset(previousActivePreset);
       toast.error(err instanceof Error ? err.message : t('sleep.alwaysAwake.saveFailed'));
     }
   };
 
   const handleCancel = async () => {
-    const prev = { enabled, until, expiresIn };
+    const prev = { enabled, until, expiresIn, activePreset };
     setEnabled(false);
     setUntil(null);
     setExpiresIn(null);
+    setActivePreset(null);
     try {
       await updateSleepConfig({ always_awake_enabled: false });
     } catch (err) {
       setEnabled(prev.enabled);
       setUntil(prev.until);
       setExpiresIn(prev.expiresIn);
+      setActivePreset(prev.activePreset);
       toast.error(err instanceof Error ? err.message : t('sleep.alwaysAwake.saveFailed'));
     }
   };
@@ -202,11 +239,7 @@ export function AlwaysAwakePanel() {
 
       <div className="flex flex-wrap gap-2 pt-1">
         {(['1h', '4h', '8h', 'permanent'] as Preset[]).map((p) => {
-          const isActive =
-            enabled &&
-            (p === 'permanent'
-              ? until === null
-              : expiresIn !== null && Math.abs(expiresIn - PRESET_HOURS[p as keyof typeof PRESET_HOURS] * 3600) < 60);
+          const isActive = enabled && activePreset === p;
           const labelKey =
             p === 'permanent'
               ? 'sleep.alwaysAwake.presetPermanent'
