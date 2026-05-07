@@ -186,7 +186,9 @@ class SleepConfigUpdate(BaseModel):
     disk_spindown_enabled: Optional[bool] = None
     core_uptime_enabled: Optional[bool] = None
     always_awake_enabled: Optional[bool] = None
-    always_awake_until: Optional[datetime] = None
+    always_awake_until: Optional[datetime] = Field(
+        default=None, description="UTC expiry for always-awake override; None = permanent"
+    )
 
     @field_validator("always_awake_until")
     @classmethod
@@ -196,6 +198,7 @@ class SleepConfigUpdate(BaseModel):
         # Normalize naive datetimes to UTC
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
+        # Reject "now" as well: a non-future timestamp is meaningless for an override
         if v <= datetime.now(timezone.utc):
             raise ValueError("always_awake_until must be in the future (UTC)")
         return v
