@@ -162,3 +162,111 @@ async def test_idle_detection_skips_when_always_awake():
     assert enter_called == []
     assert svc._consecutive_idle_checks == 0
     assert svc._idle_seconds == 0.0
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_skips_sleep_when_always_awake():
+    """Scheduled sleep_time match must NOT trigger sleep when always-awake is on."""
+    svc = _build_service()
+    cfg = _config(
+        always_awake_enabled=True,
+        always_awake_until=None,
+        auto_idle_enabled=False,
+        schedule_enabled=True,
+    )
+    cfg.schedule_sleep_time = "12:00"
+
+    enter_called = []
+
+    async def fake_enter(*a, **k):
+        enter_called.append(a)
+        return True
+
+    svc.enter_soft_sleep = fake_enter
+    svc.enter_true_suspend = fake_enter
+    svc._is_running = True
+    svc._current_state = SleepState.AWAKE
+
+    # Counter pattern: first call lets body run; second stops the loop.
+    call_count = [0]
+
+    async def fake_sleep(*_a, **_k):
+        call_count[0] += 1
+        if call_count[0] >= 2:
+            svc._is_running = False
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch("app.services.power.sleep.datetime") as mock_dt:
+        # Make datetime.now() return 12:00 so the schedule_sleep_time matches.
+        mock_dt.now.return_value = datetime(2026, 5, 7, 12, 0)
+        mock_dt.side_effect = lambda *a, **k: datetime(*a, **k)
+        with patch("app.services.power.sleep.asyncio.sleep", side_effect=fake_sleep):
+            await svc._schedule_check_loop()
+
+    assert enter_called == []
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_clears_expired_always_awake():
+    """When until < now and enabled, the loop must call _clear_always_awake('always_awake_expired')."""
+    svc = _build_service()
+    cfg = _config(
+        always_awake_enabled=True,
+        always_awake_until=datetime.now(timezone.utc) - timedelta(minutes=1),
+    )
+
+    cleared = []
+
+    def fake_clear(reason):
+        cleared.append(reason)
+
+    svc._clear_always_awake = fake_clear
+    svc._is_running = True
+    svc._current_state = SleepState.AWAKE
+
+    call_count = [0]
+
+    async def fake_sleep(*_a, **_k):
+        call_count[0] += 1
+        if call_count[0] >= 2:
+            svc._is_running = False
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=fake_sleep):
+        await svc._schedule_check_loop()
+
+    assert cleared == ["always_awake_expired"]
+
+
+@pytest.mark.asyncio
+async def test_escalation_skipped_when_always_awake():
+    """_escalation_monitor must return without escalating if always-awake is on."""
+    svc = _build_service()
+    cfg = _config(
+        always_awake_enabled=True,
+        always_awake_until=None,
+        auto_escalation_enabled=True,
+    )
+
+    suspend_called = []
+
+    async def fake_suspend(*a, **k):
+        suspend_called.append(a)
+        return True
+
+    svc.enter_true_suspend = fake_suspend
+    svc._current_state = SleepState.SOFT_SLEEP
+    svc._is_running = True
+
+    # Don't actually wait the configured 60s
+    async def instant_sleep(*_a, **_k):
+        return None
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=instant_sleep):
+        await svc._escalation_monitor()
+
+    assert suspend_called == []

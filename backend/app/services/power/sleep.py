@@ -487,6 +487,20 @@ class SleepManagerService:
 
                 now = datetime.now()
                 config = self._load_config()
+
+                # Clean up expired always-awake override
+                if (
+                    config
+                    and config.always_awake_enabled
+                    and config.always_awake_until is not None
+                ):
+                    until = config.always_awake_until
+                    if until.tzinfo is None:
+                        until = until.replace(tzinfo=timezone.utc)
+                    if datetime.now(timezone.utc) >= until:
+                        self._clear_always_awake("always_awake_expired")
+                        config = self._load_config()  # reload after cleanup
+
                 master, windows = self._load_core_uptime()
                 in_core, _matched = (
                     core_uptime_helpers.is_in_core_uptime(now, windows)
@@ -523,6 +537,11 @@ class SleepManagerService:
 
                 if self._current_state == SleepState.AWAKE:
                     if self._time_matches(current_time, config.schedule_sleep_time):
+                        if self._is_always_awake(config):
+                            logger.info(
+                                "Schedule sleep trigger suppressed by always-awake override",
+                            )
+                            continue
                         if in_core:
                             logger.info(
                                 "Schedule sleep trigger suppressed by active core uptime window",
@@ -561,6 +580,11 @@ class SleepManagerService:
             await asyncio.sleep(wait_seconds)
 
             if self._current_state != SleepState.SOFT_SLEEP or not self._is_running:
+                return
+
+            # Skip escalation if always-awake override is in effect
+            if self._is_always_awake(config):
+                logger.info("Auto-escalation skipped: always-awake override is active")
                 return
 
             # Skip escalation if currently in a core-uptime window
