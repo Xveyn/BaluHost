@@ -438,6 +438,11 @@ class SleepManagerService:
                 if self._current_state != SleepState.AWAKE:
                     continue
 
+                if self._is_always_awake(config):
+                    self._consecutive_idle_checks = 0
+                    self._idle_seconds = 0.0
+                    continue
+
                 master, windows = self._load_core_uptime()
                 if master:
                     in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)

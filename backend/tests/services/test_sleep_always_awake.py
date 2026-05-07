@@ -117,3 +117,38 @@ def test_clear_always_awake_resets_columns_and_audits():
     fake_audit.log_security_event.assert_called_once()
     args = fake_audit.log_security_event.call_args
     assert args.kwargs["action"] == "always_awake_expired"
+
+
+@pytest.mark.asyncio
+async def test_idle_detection_skips_when_always_awake():
+    """While always-awake is on, idle counter must not advance and no auto-sleep is triggered."""
+    import asyncio
+    svc = _build_service()
+    cfg = _config(
+        always_awake_enabled=True,
+        always_awake_until=None,
+        auto_idle_enabled=True,
+        idle_timeout_minutes=1,
+    )
+
+    enter_called = []
+
+    async def fake_enter_soft_sleep(*a, **k):
+        enter_called.append(a)
+        return True
+
+    svc.enter_soft_sleep = fake_enter_soft_sleep
+    svc._is_running = True
+    svc._current_state = SleepState.AWAKE
+
+    async def stop_after_one(*_a, **_k):
+        svc._is_running = False
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_is_system_idle", return_value=True), \
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=stop_after_one):
+        await svc._idle_detection_loop()
+
+    assert enter_called == []
+    assert svc._idle_seconds == 0.0
