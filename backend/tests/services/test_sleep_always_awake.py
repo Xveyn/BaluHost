@@ -270,3 +270,47 @@ async def test_escalation_skipped_when_always_awake():
         await svc._escalation_monitor()
 
     assert suspend_called == []
+
+
+@pytest.mark.asyncio
+async def test_enter_soft_sleep_clears_always_awake():
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    cleared = []
+
+    def fake_clear(reason):
+        cleared.append(reason)
+
+    svc._clear_always_awake = fake_clear
+    svc._current_state = SleepState.AWAKE
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_log_state_change", new=MagicMock()):
+        await svc.enter_soft_sleep("test", SleepTrigger.MANUAL)
+
+    assert cleared == ["always_awake_cleared_by_sleep"]
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_clears_always_awake():
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    cleared = []
+
+    def fake_clear(reason):
+        cleared.append(reason)
+
+    svc._clear_always_awake = fake_clear
+    # Start in SOFT_SLEEP so enter_true_suspend does not recurse into
+    # enter_soft_sleep (which has its own clear hook tested separately).
+    svc._current_state = SleepState.SOFT_SLEEP
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_log_state_change", new=MagicMock()), \
+         patch.object(svc._backend, "suspend_system", new=AsyncMock(return_value=True)):
+        await svc.enter_true_suspend("test", SleepTrigger.MANUAL)
+
+    assert cleared == ["always_awake_cleared_by_sleep"]

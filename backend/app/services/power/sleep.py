@@ -638,6 +638,11 @@ class SleepManagerService:
         4. Spin down data disks
         5. Log state change
         """
+        # Clear always-awake override if set: manual sleep ends the override
+        config_check = self._load_config()
+        if config_check and self._is_always_awake(config_check):
+            self._clear_always_awake("always_awake_cleared_by_sleep")
+
         if self._current_state != SleepState.AWAKE:
             logger.warning("Cannot enter soft sleep from state %s", self._current_state)
             return False
@@ -908,6 +913,11 @@ class SleepManagerService:
         If awake, enters soft sleep first.
         Then suspends the system.
         """
+        # Clear always-awake override if set: manual suspend ends the override
+        config_check = self._load_config()
+        if config_check and self._is_always_awake(config_check):
+            self._clear_always_awake("always_awake_cleared_by_sleep")
+
         prev_state = self._current_state
 
         # Defense-in-depth: block all non-MANUAL suspend paths during an active
