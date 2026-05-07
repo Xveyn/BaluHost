@@ -7,7 +7,7 @@ import pytest
 from app.models.sleep import SleepConfig
 from app.services.power.sleep import SleepManagerService
 from app.services.power.sleep_backend_dev import DevSleepBackend
-from app.schemas.sleep import SleepState, SleepTrigger
+from app.schemas.sleep import ActivityMetrics, SleepState, SleepTrigger
 
 
 def _build_service():
@@ -314,3 +314,45 @@ async def test_enter_true_suspend_clears_always_awake():
         await svc.enter_true_suspend("test", SleepTrigger.MANUAL)
 
     assert cleared == ["always_awake_cleared_by_sleep"]
+
+
+def test_get_status_includes_always_awake_block():
+    svc = _build_service()
+    until = datetime.now(timezone.utc) + timedelta(hours=2)
+    cfg = _config(always_awake_enabled=True, always_awake_until=until)
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_get_activity_metrics", return_value=ActivityMetrics()):
+        status = svc.get_status()
+
+    assert status.always_awake.enabled is True
+    assert status.always_awake.until == until
+    assert status.always_awake.expires_in_seconds is not None
+    assert status.always_awake.expires_in_seconds > 0
+
+
+def test_get_status_always_awake_off_returns_default_block():
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=False, always_awake_until=None)
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_get_activity_metrics", return_value=ActivityMetrics()):
+        status = svc.get_status()
+
+    assert status.always_awake.enabled is False
+    assert status.always_awake.until is None
+    assert status.always_awake.expires_in_seconds is None
+
+
+def test_get_config_returns_always_awake_fields():
+    svc = _build_service()
+    until = datetime.now(timezone.utc) + timedelta(hours=1)
+    cfg = _config(always_awake_enabled=True, always_awake_until=until)
+
+    with patch.object(svc, "_load_config", return_value=cfg):
+        resp = svc.get_config()
+
+    assert resp.always_awake_enabled is True
+    assert resp.always_awake_until == until

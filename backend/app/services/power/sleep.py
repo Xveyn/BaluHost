@@ -1091,6 +1091,19 @@ class SleepManagerService:
                 core_status.current_window_ends_at = core_uptime_helpers.current_window_end(now, matched)
             core_status.next_start = core_uptime_helpers.next_core_uptime_start(now, windows)
 
+        # Always-awake status
+        from app.schemas.sleep import AlwaysAwakeStatus
+        always_awake_status = AlwaysAwakeStatus()
+        if config and config.always_awake_enabled:
+            always_awake_status.enabled = True
+            until = config.always_awake_until
+            if until is not None:
+                if until.tzinfo is None:
+                    until = until.replace(tzinfo=timezone.utc)
+                always_awake_status.until = until
+                delta = (until - datetime.now(timezone.utc)).total_seconds()
+                always_awake_status.expires_in_seconds = max(0.0, delta)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -1103,6 +1116,7 @@ class SleepManagerService:
             schedule_enabled=config.schedule_enabled if config else False,
             escalation_enabled=config.auto_escalation_enabled if config else False,
             core_uptime=core_status,
+            always_awake=always_awake_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -1130,6 +1144,8 @@ class SleepManagerService:
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
             core_uptime_enabled=config.core_uptime_enabled,
+            always_awake_enabled=bool(config.always_awake_enabled),
+            always_awake_until=config.always_awake_until,
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:
