@@ -47,6 +47,12 @@ export interface CoreUptimeStatus {
   next_start: string | null;
 }
 
+export interface AlwaysAwakeStatus {
+  enabled: boolean;
+  until: string | null;            // ISO 8601 UTC, null = permanent
+  expires_in_seconds: number | null;
+}
+
 export interface SleepStatusResponse {
   current_state: SleepState;
   state_since: string | null;
@@ -59,6 +65,7 @@ export interface SleepStatusResponse {
   schedule_enabled: boolean;
   escalation_enabled: boolean;
   core_uptime: CoreUptimeStatus;
+  always_awake?: AlwaysAwakeStatus;
 }
 
 export interface SleepConfigResponse {
@@ -80,6 +87,8 @@ export interface SleepConfigResponse {
   reduced_telemetry_interval: number;
   disk_spindown_enabled: boolean;
   core_uptime_enabled: boolean;
+  always_awake_enabled?: boolean;
+  always_awake_until?: string | null;
 }
 
 export interface SleepConfigUpdate {
@@ -101,6 +110,8 @@ export interface SleepConfigUpdate {
   reduced_telemetry_interval?: number;
   disk_spindown_enabled?: boolean;
   core_uptime_enabled?: boolean;
+  always_awake_enabled?: boolean;
+  always_awake_until?: string | null;
 }
 
 export interface SleepCapabilities {
