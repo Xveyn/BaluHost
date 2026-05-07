@@ -255,6 +255,18 @@ class SleepManagerService:
             logger.warning("Failed to load sleep config: %s", e)
             return None
 
+    def _is_always_awake(self, config) -> bool:
+        """Return True if the always-awake override is currently in effect."""
+        if not config or not config.always_awake_enabled:
+            return False
+        until = config.always_awake_until
+        if until is None:
+            return True
+        # Normalize naive timestamps (legacy data) to UTC
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < until
+
     def _load_core_uptime(self) -> tuple[bool, list]:
         """Return (master_enabled, list_of_enabled_windows). Empty list if master off."""
         config = self._load_config()
