@@ -46,7 +46,7 @@ Die TUI mischt aktuell **Direkt-DB-Zugriffe** (`SessionLocal()` in `login.py`, `
 
 ### 🔴 Pflicht — fehlt aktuell, hoher Recovery-/Diagnose-Wert
 
-#### 1. Service-Health & Service-Restart
+#### 1. Service-Health & Service-Restart — **DONE (2026-05-08)**
 - **Backend:** `app/services/service_status.py`, `/api/admin/*`
 - **Use-Case:** Wenn WebUI tot ist, ist das der erste Anlaufpunkt
 - **Features:**
@@ -63,15 +63,16 @@ Die TUI mischt aktuell **Direkt-DB-Zugriffe** (`SessionLocal()` in `login.py`, `
   - Search innerhalb Buffer
   - Audit-Viewer existiert separat — hier geht's um System-Logs
 
-#### 3. Power: Sleep / Reboot / Shutdown
+#### 3. Power: Sleep / Reboot / Shutdown — **DONE (2026-05-08)**
 - **Backend:** `app/services/power/manager.py`, `/api/sleep/*`
 - **Use-Case:** Klassischer "headless via SSH" Workflow
 - **Features:**
   - Confirm-Dialog (Sleep / Reboot / Shutdown)
   - Wake-up-Status
   - Last-Sleep-Timestamp anzeigen
+- Implemented: soft sleep, wake, suspend, WoL via /api/sleep/*. Reboot/shutdown still TODO.
 
-#### 4. SMART / Disk-Health
+#### 4. SMART / Disk-Health — **DONE (2026-05-08)**
 - **Backend:** `app/services/hardware/smart/`
 - **Use-Case:** Single-Disk-Health (Temp, Reallocated Sectors, Power-On-Hours)
 - **Features:**
@@ -127,14 +128,7 @@ Die TUI mischt aktuell **Direkt-DB-Zugriffe** (`SessionLocal()` in `login.py`, `
 
 ### Code-Smells in der bestehenden TUI
 
-1. **Doppelte Action-Definition** (`app.py:143-152`)
-   ```python
-   def action_logs(self) -> None:  # Erste Definition mit Auth-Check
-       if not self.current_user: ...
-   def action_logs(self) -> None:  # Zweite Definition überschreibt — KEIN Auth-Check
-       self.push_screen(AuditLogViewerScreen())
-   ```
-   → Bug: Audit-Logs sind ohne Login erreichbar.
+**FIXED (2026-05-08):** 1. **Doppelte Action-Definition** (`app.py:143-152`) — Bug: Audit-Logs sind ohne Login erreichbar.
 
 2. **Direkt-DB-Zugriffe trotz `mode='remote'`**
    `login.py`, `users.py`, `dashboard.py` ignorieren `mode` und gehen direkt an `SessionLocal()`.
@@ -153,11 +147,11 @@ Die TUI mischt aktuell **Direkt-DB-Zugriffe** (`SessionLocal()` in `login.py`, `
 
 ## Empfohlene Implementierungs-Reihenfolge
 
-1. **Bugfix:** Doppelte `action_logs` in `app.py` entfernen
+1. ~~**Bugfix:** Doppelte `action_logs` in `app.py` entfernen~~ — **DONE 2026-05-08**
 2. **Refactor:** TUI auf HTTP-API-only umstellen (Direkt-DB nur für `reset-password` CLI)
-3. **Feature 1:** Service-Health & Restart-Screen
-4. **Feature 3:** Power-Actions (Sleep/Reboot/Shutdown) — kleinster Scope, größter Recovery-Wert
-5. **Feature 4:** SMART-Screen
+3. ~~**Feature 1:** Service-Health & Restart-Screen~~ — **DONE 2026-05-08**
+4. ~~**Feature 3:** Power-Actions (Sleep/Reboot/Shutdown) — kleinster Scope, größter Recovery-Wert~~ — **DONE 2026-05-08 (sleep/wake/suspend/WoL only)**
+5. ~~**Feature 4:** SMART-Screen~~ — **DONE 2026-05-08**
 6. **Feature 2:** System-Logs live
 7. **Feature 5:** Telemetrie-Detail
 8. — Rest nach Bedarf —
