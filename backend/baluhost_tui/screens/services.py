@@ -103,7 +103,7 @@ class ServiceHealthScreen(Screen):
             return
         key = event.row_key
         name = key.value if hasattr(key, "value") else str(key)
-        if name in ("__empty__", ""):
+        if name is None or name in ("__empty__", ""):
             return
         with get_context(mode=self.mode, server=self.server, token=self.token) as ctx:
             ok, msg = restart_service(ctx.get_api_client(), name)

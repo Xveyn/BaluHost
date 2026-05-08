@@ -59,6 +59,18 @@ def test_fetch_services_returns_empty_on_failure():
     assert fetch_services(_Boom()) == []
 
 
+def test_fetch_services_returns_empty_on_non_list_response():
+    """Server returning a dict instead of a list must be coerced to []."""
+    from baluhost_tui.screens.services import fetch_services
+
+    client = _FakeClient()
+    client.responses[("GET", "/api/admin/services")] = _FakeResp(
+        200, {"services": [{"name": "telemetry"}]}
+    )
+
+    assert fetch_services(client) == []
+
+
 def test_restart_service_posts_correct_path():
     from baluhost_tui.screens.services import restart_service
 
