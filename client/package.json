@@ -42,7 +42,6 @@
     "@types/react-dom": "^18.2.7",
     "@vitejs/plugin-react-swc": "^4.2.2",
     "autoprefixer": "^10.4.20",
-    "baseline-browser-mapping": "^2.9.17",
     "eslint": "^9.39.1",
     "eslint-plugin-react-hooks": "^7.0.1",
     "eslint-plugin-react-refresh": "^0.4.24",
