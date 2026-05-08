@@ -14,6 +14,7 @@ from baluhost_tui.screens.logs import AuditLogViewerScreen
 from baluhost_tui.screens.files import FileBrowserScreen
 from baluhost_tui.screens.raid import RaidControlScreen
 from baluhost_tui.screens.power import PowerActionsScreen
+from baluhost_tui.screens.services import ServiceHealthScreen
 
 
 class WelcomeScreen(Static):
@@ -77,6 +78,7 @@ class BaluHostApp(App):
         Binding("l", "logs", "Logs"),
         Binding("R", "raid", "RAID Controls"),
         Binding("p", "power", "Power"),
+        Binding("s", "services", "Services"),
     ]
     
     def __init__(self, mode: str = 'auto', server: str = 'http://localhost:8000', token: str | None = None):
@@ -158,3 +160,13 @@ class BaluHostApp(App):
             self.notify("Admin role required", severity="error")
             return
         self.push_screen(PowerActionsScreen(mode=self.mode, server=self.server, token=self.token))
+
+    def action_services(self) -> None:
+        """Show service health & restart."""
+        if not self.current_user:
+            self.notify("Please login first", severity="error")
+            return
+        if (self.current_user or {}).get("role") != "admin":
+            self.notify("Admin role required", severity="error")
+            return
+        self.push_screen(ServiceHealthScreen(mode=self.mode, server=self.server, token=self.token))
