@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from typing import Any
 
+from rich.markup import escape
 import httpx
 from textual.app import ComposeResult
 from textual.screen import Screen
@@ -81,7 +82,7 @@ class SmartScreen(Screen):
         if not disks:
             table.add_row("(none)", "-", "-", "-", "-", key="__empty__")
             return
-        for d in disks:
+        for i, d in enumerate(disks):
             device = d.get("device") or d.get("name") or "?"
             health = d.get("health") or d.get("smart_status") or "?"
             color = _health_color(str(health))
@@ -90,11 +91,11 @@ class SmartScreen(Screen):
             realloc = d.get("reallocated_sectors", "-")
             table.add_row(
                 device,
-                f"[{color}]{health}[/{color}]",
+                f"[{color}]{escape(str(health))}[/{color}]",
                 "-" if temp is None else str(temp),
                 "-" if poh is None else str(poh),
                 str(realloc),
-                key=str(device),
+                key=f"{device}-{i}",
             )
 
     def action_back(self) -> None:

@@ -95,3 +95,21 @@ def test_action_smart_blocks_unauthenticated(fake_app_io):
 
     assert push_screen.calls == []
     assert notify.calls and notify.calls[0][1] == "error"
+
+
+def test_action_smart_blocks_non_admin(fake_app_io):
+    from baluhost_tui.app import BaluHostApp
+
+    notify, push_screen = fake_app_io
+    app = BaluHostApp.__new__(BaluHostApp)
+    app.current_user = {"id": 1, "username": "u", "role": "user", "email": ""}
+    app.mode = "remote"
+    app.server = "http://localhost:8000"
+    app.token = "t"
+    app.notify = notify  # type: ignore[assignment]
+    app.push_screen = push_screen  # type: ignore[assignment]
+
+    app.action_smart()
+
+    assert push_screen.calls == []
+    assert notify.calls and "admin" in notify.calls[0][0].lower()
