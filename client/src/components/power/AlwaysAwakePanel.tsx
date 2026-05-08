@@ -243,7 +243,7 @@ export function AlwaysAwakePanel() {
           const labelKey =
             p === 'permanent'
               ? 'sleep.alwaysAwake.presetPermanent'
-              : `sleep.alwaysAwake.preset${p.toUpperCase()}` as const;
+              : `sleep.alwaysAwake.preset${p}` as const;
           return (
             <button
               key={p}
