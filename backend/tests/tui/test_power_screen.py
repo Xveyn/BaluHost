@@ -75,6 +75,10 @@ def test_perform_action_sends_correct_endpoint():
     assert ok is True
     assert client.requests[-1] == ("POST", "/api/sleep/suspend", {})
 
+    ok, msg = perform_action(client, "wol")
+    assert ok is True
+    assert client.requests[-1] == ("POST", "/api/sleep/wol", {})
+
 
 def test_perform_action_rejects_unknown():
     from baluhost_tui.screens.power import perform_action

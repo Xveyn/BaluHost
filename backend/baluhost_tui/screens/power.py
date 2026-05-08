@@ -6,7 +6,7 @@ from typing import Any
 import httpx
 from textual.app import ComposeResult
 from textual.screen import Screen
-from textual.containers import Container, Vertical, Horizontal
+from textual.containers import Container, Horizontal
 from textual.widgets import Header, Footer, Button, Label, Static
 from textual.binding import Binding
 
