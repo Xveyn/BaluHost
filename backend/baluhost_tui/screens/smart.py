@@ -1,4 +1,4 @@
-"""SMART / Disk-Health screen — /api/system/smart."""
+"""SMART / Disk-Health screen — /api/system/smart/status."""
 from __future__ import annotations
 
 from typing import Any
@@ -15,16 +15,16 @@ from baluhost_tui.context import get_context
 
 
 def fetch_smart(client: httpx.Client) -> list[dict[str, Any]]:
-    """GET /api/system/smart. Accepts either {disks: [...]} or [...]. Returns [] on failure."""
+    """GET /api/system/smart/status. Accepts {devices: [...]} or [...]. Returns [] on failure."""
     try:
-        resp = client.get("/api/system/smart")
+        resp = client.get("/api/system/smart/status")
         resp.raise_for_status()
         data = resp.json()
         if isinstance(data, list):
             return data
         if isinstance(data, dict):
-            disks = data.get("disks")
-            return disks if isinstance(disks, list) else []
+            devices = data.get("devices")
+            return devices if isinstance(devices, list) else []
         return []
     except Exception:
         return []
@@ -37,6 +37,24 @@ def _health_color(health: str) -> str:
     if h in ("FAILED", "FAIL", "ERROR"):
         return "red"
     return "yellow"
+
+
+def _attribute_raw(device: dict[str, Any], *names: str) -> str:
+    """Look up a SMART attribute by its name (case-insensitive substring). Returns the raw value or '-'."""
+    attrs = device.get("attributes") or []
+    if not isinstance(attrs, list):
+        return "-"
+    for attr in attrs:
+        if not isinstance(attr, dict):
+            continue
+        attr_name = (attr.get("name") or "").lower()
+        for needle in names:
+            if needle.lower() in attr_name:
+                raw = attr.get("raw")
+                if raw is None or raw == "":
+                    return "-"
+                return str(raw)
+    return "-"
 
 
 class SmartScreen(Screen):
@@ -83,18 +101,18 @@ class SmartScreen(Screen):
             table.add_row("(none)", "-", "-", "-", "-", key="__empty__")
             return
         for i, d in enumerate(disks):
-            device = d.get("device") or d.get("name") or "?"
-            health = d.get("health") or d.get("smart_status") or "?"
+            device = d.get("name") or d.get("device") or "?"
+            health = d.get("status") or d.get("health") or "?"
             color = _health_color(str(health))
             temp = d.get("temperature")
-            poh = d.get("power_on_hours")
-            realloc = d.get("reallocated_sectors", "-")
+            poh = _attribute_raw(d, "power_on_hours", "power-on-hours", "power on hours")
+            realloc = _attribute_raw(d, "reallocated_sector", "reallocated_sectors")
             table.add_row(
                 device,
                 f"[{color}]{escape(str(health))}[/{color}]",
                 "-" if temp is None else str(temp),
-                "-" if poh is None else str(poh),
-                str(realloc),
+                poh,
+                realloc,
                 key=f"{device}-{i}",
             )
 

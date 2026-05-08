@@ -65,10 +65,12 @@ def test_acquire_token_returns_none_on_4xx(monkeypatch):
 
 
 def test_acquire_token_not_called_when_backend_offline(monkeypatch):
-    """When LoginScreen.backend_available is False, _acquire_api_token must not be invoked.
+    """Sanity-check: the helper itself is callable and returns the token from a fake post.
 
-    This is a behavior contract — the wire-in inside attempt_login() must short-circuit
-    on a known-offline backend instead of blocking the UI for the full HTTP timeout.
+    The real offline-guard contract (skipping the call when LoginScreen.backend_available
+    is False) is enforced by the wire-in code in attempt_login() — verifying that requires
+    a Textual integration test which is out of scope here. This test just pins the helper's
+    direct contract so a future refactor can't silently break it.
     """
     from baluhost_tui.screens import login as login_mod
 
@@ -76,18 +78,9 @@ def test_acquire_token_not_called_when_backend_offline(monkeypatch):
 
     def fake_post(*args, **kwargs):
         called["count"] += 1
-        return _Resp(200, {"access_token": "should-never-be-returned"})
+        return _Resp(200, {"access_token": "ok-token"})
 
     monkeypatch.setattr(login_mod.httpx, "post", fake_post)
 
-    # Sanity-check: the helper itself still works in isolation (call it directly).
-    assert login_mod._acquire_api_token("http://localhost:8000", "u", "p") == "should-never-be-returned"
-    assert called["count"] == 1
-
-    # Now exercise the wire-in indirectly by simulating attempt_login's guard:
-    # if self.backend_available is False, the helper must NOT be called.
-    backend_available = False
-    if backend_available:
-        login_mod._acquire_api_token("http://localhost:8000", "u", "p")
-    # Counter unchanged from the single direct call above.
+    assert login_mod._acquire_api_token("http://localhost:8000", "u", "p") == "ok-token"
     assert called["count"] == 1

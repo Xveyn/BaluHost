@@ -1,4 +1,4 @@
-"""Power Actions screen — sleep / wake / suspend / WoL via /api/sleep/*."""
+"""Power Actions screen — sleep / wake / suspend / WoL via /api/system/sleep/*."""
 from __future__ import annotations
 
 from typing import Any
@@ -14,17 +14,17 @@ from baluhost_tui.context import get_context
 
 
 _ACTIONS: dict[str, str] = {
-    "soft": "/api/sleep/soft",
-    "wake": "/api/sleep/wake",
-    "suspend": "/api/sleep/suspend",
-    "wol": "/api/sleep/wol",
+    "soft": "/api/system/sleep/soft",
+    "wake": "/api/system/sleep/wake",
+    "suspend": "/api/system/sleep/suspend",
+    "wol": "/api/system/sleep/wol",
 }
 
 
 def fetch_status(client: httpx.Client) -> dict[str, Any] | None:
-    """GET /api/sleep/status. Returns parsed dict or None on any failure."""
+    """GET /api/system/sleep/status. Returns parsed dict or None on any failure."""
     try:
-        resp = client.get("/api/sleep/status")
+        resp = client.get("/api/system/sleep/status")
         resp.raise_for_status()
         return resp.json()
     except Exception:
@@ -101,9 +101,10 @@ class PowerActionsScreen(Screen):
         if status is None:
             self.query_one("#power-status", Static).update("[red]Failed to load status[/red]")
             return
-        state = status.get("state", "?")
-        since = status.get("since", "?")
-        always = status.get("always_awake_enabled", False)
+        state = status.get("current_state", "?")
+        since = status.get("state_since", "?")
+        always_obj = status.get("always_awake") or {}
+        always = bool(always_obj.get("enabled", False)) if isinstance(always_obj, dict) else False
         self.query_one("#power-status", Static).update(
             f"State: [cyan]{state}[/cyan]   Since: {since}   Always-Awake: {'on' if always else 'off'}"
         )
