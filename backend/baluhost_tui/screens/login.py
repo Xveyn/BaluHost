@@ -238,11 +238,14 @@ class LoginScreen(Screen):
                     "email": user.email
                 }
 
-                # Best-effort: also acquire an API token for screens that need it.
-                server_url = getattr(self.app, "server", "http://localhost:8000")
-                api_token = _acquire_api_token(server_url, username, password)
-                if api_token:
-                    self.app.token = api_token
+                # Clear any stale token from a previous login attempt.
+                self.app.token = None
+                # Best-effort: only try the API path when the HTTP backend is reachable.
+                if self.backend_available:
+                    server_url = getattr(self.app, "server", "http://localhost:8000")
+                    api_token = _acquire_api_token(server_url, username, password)
+                    if api_token:
+                        self.app.token = api_token
 
                 self.notify(f"Willkommen {username}!", severity="information")
                 
