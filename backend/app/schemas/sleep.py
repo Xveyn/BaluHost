@@ -4,7 +4,7 @@ Pydantic schemas for Sleep Mode feature.
 Defines the state machine, request/response models, and configuration
 for the two-stage sleep system (Soft Sleep + True Suspend).
 """
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Literal, Optional
 
@@ -75,6 +75,15 @@ class CoreUptimeStatus(BaseModel):
     next_start: Optional[datetime] = Field(default=None)
 
 
+class AlwaysAwakeStatus(BaseModel):
+    """Snapshot of always-awake override state."""
+    enabled: bool = Field(default=False, description="Whether the override is active")
+    until: Optional[datetime] = Field(default=None, description="UTC expiry, None = permanent")
+    expires_in_seconds: Optional[float] = Field(
+        default=None, description="Seconds until expiry (for live UI countdown)"
+    )
+
+
 class SleepStatusResponse(BaseModel):
     """Current sleep mode status."""
     current_state: SleepState = Field(..., description="Current sleep state")
@@ -88,6 +97,7 @@ class SleepStatusResponse(BaseModel):
     schedule_enabled: bool = Field(default=False, description="Whether sleep schedule is active")
     escalation_enabled: bool = Field(default=False, description="Whether auto-escalation to suspend is enabled")
     core_uptime: CoreUptimeStatus = Field(default_factory=CoreUptimeStatus)
+    always_awake: AlwaysAwakeStatus = Field(default_factory=AlwaysAwakeStatus)
 
 
 # ---------------------------------------------------------------------------
@@ -148,6 +158,11 @@ class SleepConfigResponse(BaseModel):
     disk_spindown_enabled: bool = Field(default=True, description="Spin down data disks during sleep")
     # Core operating hours
     core_uptime_enabled: bool = Field(default=False, description="Master toggle for core operating hours")
+    # Always-awake override
+    always_awake_enabled: bool = Field(default=False, description="Always-awake override active")
+    always_awake_until: Optional[datetime] = Field(
+        default=None, description="UTC expiry, None = permanent"
+    )
 
 
 class SleepConfigUpdate(BaseModel):
@@ -170,6 +185,23 @@ class SleepConfigUpdate(BaseModel):
     reduced_telemetry_interval: Optional[float] = Field(default=None, ge=5.0, le=300.0)
     disk_spindown_enabled: Optional[bool] = None
     core_uptime_enabled: Optional[bool] = None
+    always_awake_enabled: Optional[bool] = None
+    always_awake_until: Optional[datetime] = Field(
+        default=None, description="UTC expiry for always-awake override; None = permanent"
+    )
+
+    @field_validator("always_awake_until")
+    @classmethod
+    def _validate_until_future(cls, v: Optional[datetime]) -> Optional[datetime]:
+        if v is None:
+            return v
+        # Normalize naive datetimes to UTC
+        if v.tzinfo is None:
+            v = v.replace(tzinfo=timezone.utc)
+        # Reject "now" as well: a non-future timestamp is meaningless for an override
+        if v <= datetime.now(timezone.utc):
+            raise ValueError("always_awake_until must be in the future (UTC)")
+        return v
 
     @field_validator("wol_mac_address", mode="before")
     @classmethod

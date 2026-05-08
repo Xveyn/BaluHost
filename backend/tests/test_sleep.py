@@ -138,6 +138,8 @@ class TestSleepManagerService:
         config.pause_disk_io = overrides.get("pause_disk_io", True)
         config.reduced_telemetry_interval = overrides.get("reduced_telemetry_interval", 30.0)
         config.disk_spindown_enabled = overrides.get("disk_spindown_enabled", True)
+        config.always_awake_enabled = overrides.get("always_awake_enabled", False)
+        config.always_awake_until = overrides.get("always_awake_until", None)
         return config
 
     @pytest.mark.asyncio
@@ -403,6 +405,8 @@ class TestStateMachineEdgeCases:
             schedule_sleep_time="23:00",
             schedule_wake_time="06:00",
             schedule_mode="soft",
+            always_awake_enabled=False,
+            always_awake_until=None,
         ))
         service._log_state_change = MagicMock()
         return service

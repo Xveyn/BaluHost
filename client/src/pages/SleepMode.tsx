@@ -7,6 +7,7 @@
  */
 
 import { SleepModePanel } from '../components/power/SleepModePanel';
+import { AlwaysAwakePanel } from '../components/power/AlwaysAwakePanel';
 import { CoreUptimePanel } from '../components/power/CoreUptimePanel';
 import { SleepConfigPanel } from '../components/power/SleepConfigPanel';
 import { SleepHistoryTable } from '../components/power/SleepHistoryTable';
@@ -15,6 +16,7 @@ export default function SleepMode() {
   return (
     <div className="space-y-6">
       <SleepModePanel />
+      <AlwaysAwakePanel />
       <CoreUptimePanel />
       <SleepConfigPanel />
       <SleepHistoryTable />

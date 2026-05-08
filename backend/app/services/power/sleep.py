@@ -27,6 +27,7 @@ from sqlalchemy import select, func as sa_func, desc
 from app.core.config import settings
 from app.core.database import SessionLocal
 from app.models.sleep import SleepConfig as SleepConfigModel, SleepStateLog, CoreUptimeWindow as CoreUptimeWindowModel
+from app.services.audit.logger_db import get_audit_logger_db
 from app.services.power import core_uptime as core_uptime_helpers
 from app.services.power.core_uptime_inhibitor import CoreUptimeInhibitor
 from app.services.power.core_uptime_rtc_guard import CoreUptimeRtcGuard
@@ -255,6 +256,50 @@ class SleepManagerService:
             logger.warning("Failed to load sleep config: %s", e)
             return None
 
+    def _is_always_awake(self, config) -> bool:
+        """Return True if the always-awake override is currently in effect."""
+        if not config or not config.always_awake_enabled:
+            return False
+        until = config.always_awake_until
+        if until is None:
+            return True
+        # Normalize naive timestamps (legacy data) to UTC
+        if until.tzinfo is None:
+            until = until.replace(tzinfo=timezone.utc)
+        return datetime.now(timezone.utc) < until
+
+    def _clear_always_awake(self, reason: str) -> None:
+        """Reset always-awake columns. Writes an audit-log event with the given reason.
+
+        Reason values:
+            - "always_awake_expired": auto-cleanup from schedule loop
+            - "always_awake_cleared_by_sleep": cleared because user entered manual sleep/suspend
+        """
+        try:
+            db = SessionLocal()
+            try:
+                row = db.execute(
+                    select(SleepConfigModel).where(SleepConfigModel.id == 1)
+                ).scalar_one_or_none()
+                if row is None or not row.always_awake_enabled:
+                    return
+                row.always_awake_enabled = False
+                row.always_awake_until = None
+                db.commit()
+                logger.info("Always-awake cleared (%s)", reason)
+                get_audit_logger_db().log_security_event(
+                    action=reason,
+                    user="system",
+                    resource="sleep_config",
+                    details={},
+                    success=True,
+                    db=db,
+                )
+            finally:
+                db.close()
+        except Exception as e:
+            logger.warning("Failed to clear always-awake: %s", e)
+
     def _load_core_uptime(self) -> tuple[bool, list]:
         """Return (master_enabled, list_of_enabled_windows). Empty list if master off."""
         config = self._load_config()
@@ -393,6 +438,11 @@ class SleepManagerService:
                 if self._current_state != SleepState.AWAKE:
                     continue
 
+                if self._is_always_awake(config):
+                    self._consecutive_idle_checks = 0
+                    self._idle_seconds = 0.0
+                    continue
+
                 master, windows = self._load_core_uptime()
                 if master:
                     in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
@@ -437,6 +487,20 @@ class SleepManagerService:
 
                 now = datetime.now()
                 config = self._load_config()
+
+                # Clean up expired always-awake override
+                if (
+                    config
+                    and config.always_awake_enabled
+                    and config.always_awake_until is not None
+                ):
+                    until = config.always_awake_until
+                    if until.tzinfo is None:
+                        until = until.replace(tzinfo=timezone.utc)
+                    if datetime.now(timezone.utc) >= until:
+                        self._clear_always_awake("always_awake_expired")
+                        config = self._load_config()  # reload after cleanup
+
                 master, windows = self._load_core_uptime()
                 in_core, _matched = (
                     core_uptime_helpers.is_in_core_uptime(now, windows)
@@ -473,6 +537,11 @@ class SleepManagerService:
 
                 if self._current_state == SleepState.AWAKE:
                     if self._time_matches(current_time, config.schedule_sleep_time):
+                        if self._is_always_awake(config):
+                            logger.info(
+                                "Schedule sleep trigger suppressed by always-awake override",
+                            )
+                            continue
                         if in_core:
                             logger.info(
                                 "Schedule sleep trigger suppressed by active core uptime window",
@@ -511,6 +580,11 @@ class SleepManagerService:
             await asyncio.sleep(wait_seconds)
 
             if self._current_state != SleepState.SOFT_SLEEP or not self._is_running:
+                return
+
+            # Skip escalation if always-awake override is in effect
+            if self._is_always_awake(config):
+                logger.info("Auto-escalation skipped: always-awake override is active")
                 return
 
             # Skip escalation if currently in a core-uptime window
@@ -564,6 +638,11 @@ class SleepManagerService:
         4. Spin down data disks
         5. Log state change
         """
+        # Clear always-awake override if set: manual sleep ends the override
+        config_check = self._load_config()
+        if config_check and self._is_always_awake(config_check):
+            self._clear_always_awake("always_awake_cleared_by_sleep")
+
         if self._current_state != SleepState.AWAKE:
             logger.warning("Cannot enter soft sleep from state %s", self._current_state)
             return False
@@ -834,6 +913,11 @@ class SleepManagerService:
         If awake, enters soft sleep first.
         Then suspends the system.
         """
+        # Clear always-awake override if set: manual suspend ends the override
+        config_check = self._load_config()
+        if config_check and self._is_always_awake(config_check):
+            self._clear_always_awake("always_awake_cleared_by_sleep")
+
         prev_state = self._current_state
 
         # Defense-in-depth: block all non-MANUAL suspend paths during an active
@@ -1007,6 +1091,19 @@ class SleepManagerService:
                 core_status.current_window_ends_at = core_uptime_helpers.current_window_end(now, matched)
             core_status.next_start = core_uptime_helpers.next_core_uptime_start(now, windows)
 
+        # Always-awake status
+        from app.schemas.sleep import AlwaysAwakeStatus
+        always_awake_status = AlwaysAwakeStatus()
+        if config and config.always_awake_enabled:
+            always_awake_status.enabled = True
+            until = config.always_awake_until
+            if until is not None:
+                if until.tzinfo is None:
+                    until = until.replace(tzinfo=timezone.utc)
+                always_awake_status.until = until
+                delta = (until - datetime.now(timezone.utc)).total_seconds()
+                always_awake_status.expires_in_seconds = max(0.0, delta)
+
         return SleepStatusResponse(
             current_state=self._current_state,
             state_since=self._state_since,
@@ -1019,6 +1116,7 @@ class SleepManagerService:
             schedule_enabled=config.schedule_enabled if config else False,
             escalation_enabled=config.auto_escalation_enabled if config else False,
             core_uptime=core_status,
+            always_awake=always_awake_status,
         )
 
     def get_config(self) -> SleepConfigResponse:
@@ -1046,6 +1144,8 @@ class SleepManagerService:
             reduced_telemetry_interval=config.reduced_telemetry_interval,
             disk_spindown_enabled=config.disk_spindown_enabled,
             core_uptime_enabled=config.core_uptime_enabled,
+            always_awake_enabled=bool(config.always_awake_enabled),
+            always_awake_until=config.always_awake_until,
         )
 
     def update_config(self, update: SleepConfigUpdate) -> SleepConfigResponse:
@@ -1064,9 +1164,19 @@ class SleepManagerService:
 
                 # Apply partial update
                 update_data = update.model_dump(exclude_unset=True)
+
+                # Special-case: always_awake_until accepts explicit None to clear.
+                # The default loop drops None values to keep optional fields lenient.
+                if "always_awake_until" in update_data:
+                    config.always_awake_until = update_data.pop("always_awake_until")
+
                 for field, value in update_data.items():
                     if value is not None:
                         setattr(config, field, value.value if hasattr(value, 'value') else value)
+
+                # Disabling always-awake clears any pending expiry
+                if update_data.get("always_awake_enabled") is False:
+                    config.always_awake_until = None
 
                 db.commit()
                 db.refresh(config)

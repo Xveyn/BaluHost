@@ -6,6 +6,7 @@
  */
 
 import { useState, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Settings, Clock, Wifi, Server, HardDrive, Timer, TrendingUp, ChevronDown, Terminal, Router } from 'lucide-react';
 import {
@@ -25,11 +26,13 @@ import {
 } from '../../api/fritzbox';
 
 export function SleepConfigPanel() {
+  const { t } = useTranslation('system');
   const [capabilities, setCapabilities] = useState<SleepCapabilities | null>(null);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [helpOpen, setHelpOpen] = useState(false);
   const [coreUptimeMasterOn, setCoreUptimeMasterOn] = useState(false);
+  const [alwaysAwakeOn, setAlwaysAwakeOn] = useState(false);
 
   // Form state
   const [autoIdleEnabled, setAutoIdleEnabled] = useState(false);
@@ -89,6 +92,7 @@ export function SleepConfigPanel() {
       try {
         const st = await getSleepStatus();
         setCoreUptimeMasterOn(st.core_uptime?.enabled ?? false);
+        setAlwaysAwakeOn(st.always_awake?.enabled ?? false);
       } catch {
         // ignore — status is best-effort here
       }
@@ -295,7 +299,12 @@ export function SleepConfigPanel() {
             </div>
             {coreUptimeMasterOn && (
               <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
-                ℹ Kernbetriebszeit hat Vorrang. Sleep-Schedule-Trigger werden während Kernzeit-Fenstern ignoriert.
+                {t('sleep.coreUptime.scheduleOverride')}
+              </div>
+            )}
+            {alwaysAwakeOn && (
+              <div className="mt-2 rounded border border-amber-500/20 bg-amber-500/10 p-2 text-xs text-amber-300">
+                {t('sleep.alwaysAwake.scheduleHint')}
               </div>
             )}
           </div>

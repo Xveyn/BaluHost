@@ -191,12 +191,27 @@ async def update_sleep_config(
     request: Request, response: Response,
     body: SleepConfigUpdate,
     current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
 ) -> SleepConfigResponse:
     """Update sleep mode configuration (admin only)."""
     manager = _get_manager()
     try:
         result = manager.update_config(body)
         logger.info("Sleep config updated by %s", current_user.username)
+        # Audit log if always-awake fields were touched
+        touched = body.model_dump(exclude_unset=True)
+        if "always_awake_enabled" in touched or "always_awake_until" in touched:
+            get_audit_logger_db().log_security_event(
+                action="always_awake_toggled",
+                user=current_user.username,
+                resource="sleep_config",
+                details={
+                    "enabled": result.always_awake_enabled,
+                    "until": result.always_awake_until.isoformat() if result.always_awake_until else None,
+                },
+                success=True,
+                db=db,
+            )
         return result
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to update config: {e}")

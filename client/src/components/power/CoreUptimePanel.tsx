@@ -5,6 +5,7 @@
  * Auto-saves all changes (no global Save button).
  */
 import { useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import toast from 'react-hot-toast';
 import { Shield, Plus } from 'lucide-react';
 import {
@@ -22,6 +23,7 @@ import {
 import { CoreUptimeWindowCard } from './CoreUptimeWindowCard';
 
 export function CoreUptimePanel() {
+  const { t } = useTranslation('system');
   const [masterEnabled, setMasterEnabled] = useState(false);
   const [windows, setWindows] = useState<CoreUptimeWindow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -32,7 +34,7 @@ export function CoreUptimePanel() {
       setMasterEnabled(cfg.core_uptime_enabled);
       setWindows(ws);
     } catch {
-      toast.error('Konnte Kernbetriebszeit nicht laden');
+      toast.error(t('sleep.coreUptime.loadFailed'));
     } finally {
       setLoading(false);
     }
@@ -49,7 +51,7 @@ export function CoreUptimePanel() {
       await updateSleepConfig({ core_uptime_enabled: next });
     } catch (err) {
       setMasterEnabled(!next);
-      toast.error(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
+      toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.saveFailed'));
     }
   };
 
@@ -63,7 +65,7 @@ export function CoreUptimePanel() {
       });
       setWindows((prev) => [...prev, created]);
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Anlegen fehlgeschlagen');
+      toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.createFailed'));
     }
   };
 
@@ -79,19 +81,19 @@ export function CoreUptimePanel() {
     } catch (err) {
       // Rollback
       setWindows((prev) => prev.map((w) => (w.id === id ? original : w)));
-      toast.error(err instanceof Error ? err.message : 'Speichern fehlgeschlagen');
+      toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.saveFailed'));
     }
   };
 
   const handleDelete = async (id: number) => {
-    if (!window.confirm('Zeitfenster löschen?')) return;
+    if (!window.confirm(t('sleep.coreUptime.deleteConfirm'))) return;
     const original = windows;
     setWindows((prev) => prev.filter((w) => w.id !== id));
     try {
       await deleteCoreUptimeWindow(id);
     } catch (err) {
       setWindows(original);
-      toast.error(err instanceof Error ? err.message : 'Löschen fehlgeschlagen');
+      toast.error(err instanceof Error ? err.message : t('sleep.coreUptime.deleteFailed'));
     }
   };
 
@@ -112,9 +114,9 @@ export function CoreUptimePanel() {
         <div className="flex items-center gap-2">
           <Shield className="h-4 w-4 text-emerald-400" />
           <div>
-            <h4 className="text-sm font-medium text-white">Kernbetriebszeit</h4>
+            <h4 className="text-sm font-medium text-white">{t('sleep.coreUptime.title')}</h4>
             <p className="mt-0.5 text-xs text-slate-400">
-              Während dieser Zeitfenster bleibt der Server erreichbar; Auto-Sleep ist blockiert.
+              {t('sleep.coreUptime.description')}
             </p>
           </div>
         </div>
@@ -124,7 +126,7 @@ export function CoreUptimePanel() {
           className={`relative inline-flex h-6 w-11 shrink-0 rounded-full transition-colors ${
             masterEnabled ? 'bg-emerald-500' : 'bg-slate-600'
           }`}
-          aria-label="master toggle"
+          aria-label={t('sleep.coreUptime.masterToggle')}
         >
           <span
             className={`pointer-events-none inline-block h-5 w-5 rounded-full bg-white shadow transform transition-transform ${
@@ -150,11 +152,10 @@ export function CoreUptimePanel() {
             className="w-full rounded-lg border border-dashed border-slate-600 hover:border-teal-500/40 hover:bg-teal-500/5 p-3 text-sm text-slate-400 hover:text-teal-300 transition-colors flex items-center justify-center gap-2"
           >
             <Plus className="h-4 w-4" />
-            Neues Zeitfenster hinzufügen
+            {t('sleep.coreUptime.addWindow')}
           </button>
           <p className="text-xs text-slate-500 mt-2">
-            Während aktiver Fenster werden Auto-Idle-Sleep, Schedule-Sleep und Auto-Escalation blockiert.
-            Manueller Suspend durch Admins bleibt möglich (mit Warnung).
+            {t('sleep.coreUptime.blockedActions')}
           </p>
         </div>
       )}
