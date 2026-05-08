@@ -17,6 +17,27 @@ from app.core.database import SessionLocal
 from app.services.users import get_user_by_username, verify_password
 
 
+def _acquire_api_token(server_url: str, username: str, password: str) -> str | None:
+    """Try to log in via HTTP API and return the access_token, or None on any failure.
+
+    Falls back silently so the existing direct-DB login path keeps working when
+    the backend is offline.
+    """
+    try:
+        resp = httpx.post(
+            f"{server_url}/api/auth/login",
+            json={"username": username, "password": password},
+            timeout=5.0,
+        )
+        if resp.status_code != 200:
+            return None
+        data = resp.json()
+        token = data.get("access_token")
+        return token if isinstance(token, str) and token else None
+    except Exception:
+        return None
+
+
 class LoginScreen(Screen):
     """Login screen for admin authentication."""
     
@@ -216,7 +237,13 @@ class LoginScreen(Screen):
                     "role": user.role,
                     "email": user.email
                 }
-                
+
+                # Best-effort: also acquire an API token for screens that need it.
+                server_url = getattr(self.app, "server", "http://localhost:8000")
+                api_token = _acquire_api_token(server_url, username, password)
+                if api_token:
+                    self.app.token = api_token
+
                 self.notify(f"Willkommen {username}!", severity="information")
                 
                 # Switch to dashboard
