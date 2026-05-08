@@ -146,7 +146,3 @@ class BaluHostApp(App):
             self.notify("Please login first", severity="error")
             return
         self.push_screen(AuditLogViewerScreen())
-    
-    def action_logs(self) -> None:
-        """Show audit logs."""
-        self.push_screen(AuditLogViewerScreen())
