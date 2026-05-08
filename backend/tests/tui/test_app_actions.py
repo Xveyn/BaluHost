@@ -17,7 +17,7 @@ def test_action_logs_defined_only_once():
     )
 
 
-def test_action_logs_blocks_unauthenticated(fake_app_io, monkeypatch):
+def test_action_logs_blocks_unauthenticated(fake_app_io):
     """Unauthenticated users must not be able to open the audit log viewer."""
     from baluhost_tui.app import BaluHostApp
 
