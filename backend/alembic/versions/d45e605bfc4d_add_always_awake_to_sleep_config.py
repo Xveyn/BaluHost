@@ -1,7 +1,7 @@
 """add always_awake to sleep_config
 
 Revision ID: d45e605bfc4d
-Revises: gpu_power_mw_2026_05_03
+Revises: gpu_caps_mw_2026_05_06
 Create Date: 2026-05-07 22:07:28.588818
 
 """
@@ -13,7 +13,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision: str = 'd45e605bfc4d'
-down_revision: Union[str, Sequence[str], None] = 'gpu_power_mw_2026_05_03'
+down_revision: Union[str, Sequence[str], None] = 'gpu_caps_mw_2026_05_06'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
