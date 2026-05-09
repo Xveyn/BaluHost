@@ -137,3 +137,27 @@ def test_status_surfaces_always_awake(client, admin_headers, mock_sleep_manager)
     aa = r.json()["always_awake"]
     assert aa["enabled"] is True
     assert aa["until"] is None
+
+
+def test_until_rejected_when_more_than_7_days(client, admin_headers, mock_sleep_manager):
+    """Test that always_awake_until is rejected if more than 7 days in the future."""
+    eight_days = (datetime.now(timezone.utc) + timedelta(days=8)).isoformat()
+    r = client.put(CONFIG_URL, headers=admin_headers, json={
+        "always_awake_enabled": True,
+        "always_awake_until": eight_days,
+    })
+    assert r.status_code == 422
+    assert "7 days" in r.text or "7 Tagen" in r.text
+
+
+def test_until_accepted_at_6_days_23h(client, admin_headers, mock_sleep_manager):
+    """Test that always_awake_until is accepted at exactly 6 days + 23 hours (within 7-day cap)."""
+    target = (datetime.now(timezone.utc) + timedelta(days=6, hours=23)).isoformat()
+    r = client.put(CONFIG_URL, headers=admin_headers, json={
+        "always_awake_enabled": True,
+        "always_awake_until": target,
+    })
+    assert r.status_code == 200
+    body = r.json()
+    assert body["always_awake_enabled"] is True
+    assert body["always_awake_until"] is not None
