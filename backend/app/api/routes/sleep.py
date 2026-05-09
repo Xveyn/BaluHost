@@ -35,6 +35,8 @@ from app.schemas.sleep import (
 )
 from app.models.sleep import CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power.sleep import get_sleep_manager
+from app.services.power import os_sleep_inspector
+from app.schemas.sleep import OsSleepReportResponse
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -239,6 +241,29 @@ async def get_sleep_capabilities(
     """Check system capabilities for sleep features (admin only)."""
     manager = _get_manager()
     return await manager.get_capabilities()
+
+
+@router.get("/os-settings", response_model=OsSleepReportResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_os_sleep_settings(
+    request: Request, response: Response,
+    force: bool = False,
+    current_user: User = Depends(get_current_admin),
+) -> OsSleepReportResponse:
+    """Read-only snapshot of OS-level sleep configuration (admin only)."""
+    report = os_sleep_inspector.inspect_os_sleep(force_refresh=force)
+    return OsSleepReportResponse(
+        platform_supported=report.platform_supported,
+        logind=report.logind,
+        sleep_conf=report.sleep_conf,
+        targets=report.targets,
+        issues=[
+            {"severity": i.severity, "key": i.key, "message": i.message, "detail": i.detail}
+            for i in report.issues
+        ],
+        sources=report.sources,
+        collected_at=report.collected_at,
+    )
 
 
 @router.get("/my-permissions", response_model=MyPowerPermissionsResponse)
