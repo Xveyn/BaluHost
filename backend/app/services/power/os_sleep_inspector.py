@@ -158,6 +158,67 @@ def _merge_drop_ins(base: dict[str, str], drop_in_dir: Path, section: str) -> di
 
 
 # ---------------------------------------------------------------------------
+# Classifier
+# ---------------------------------------------------------------------------
+_IDLE_ACTION_KEYS = {
+    "suspend": "logind.idle_action.suspend",
+    "hibernate": "logind.idle_action.hibernate",
+    "hybrid-sleep": "logind.idle_action.hybrid_sleep",
+}
+_LID_KEYS = {
+    "suspend": "logind.lid_switch.suspend",
+    "hibernate": "logind.lid_switch.hibernate",
+}
+
+
+def _classify(
+    *,
+    logind: dict[str, str],
+    sleep_conf: dict[str, str],
+    targets: dict[str, str],
+    has_lid: bool,
+) -> list[OsSleepIssue]:
+    issues: list[OsSleepIssue] = []
+
+    idle_action = logind.get("IdleAction", "").strip().lower()
+    if idle_action in _IDLE_ACTION_KEYS:
+        idle_after = logind.get("IdleActionSec", "").strip() or None
+        issues.append(OsSleepIssue(
+            severity="warning",
+            key=_IDLE_ACTION_KEYS[idle_action],
+            message=f"logind: IdleAction={idle_action} (außerhalb von BaluHost)",
+            detail=(f"Wird nach {idle_after} Idle ausgelöst" if idle_after else None),
+        ))
+
+    lid_switch = logind.get("HandleLidSwitch", "").strip().lower()
+    if has_lid and lid_switch in _LID_KEYS:
+        issues.append(OsSleepIssue(
+            severity="info",
+            key=_LID_KEYS[lid_switch],
+            message=f"logind: HandleLidSwitch={lid_switch}",
+            detail="Lid-Sensor erkannt — manueller Deckel-Schluss löst OS-Sleep aus",
+        ))
+
+    if sleep_conf.get("AllowSuspend", "").strip().lower() == "no":
+        issues.append(OsSleepIssue(
+            severity="info",
+            key="sleep_conf.suspend_disabled",
+            message="OS hat Suspend deaktiviert (AllowSuspend=no)",
+            detail="BaluHost-Suspend wird fehlschlagen, solange diese Einstellung aktiv ist",
+        ))
+
+    if targets.get("suspend.target") == "masked":
+        issues.append(OsSleepIssue(
+            severity="error",
+            key="targets.suspend.masked",
+            message="suspend.target ist maskiert",
+            detail="BaluHost kann das System nicht in Suspend versetzen",
+        ))
+
+    return issues
+
+
+# ---------------------------------------------------------------------------
 # Public entry point — minimal version for Task 1
 # Full implementation lands in Task 3.
 # ---------------------------------------------------------------------------
