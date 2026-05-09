@@ -53,6 +53,25 @@ export interface AlwaysAwakeStatus {
   expires_in_seconds: number | null;
 }
 
+export type OsSleepSeverity = 'info' | 'warning' | 'error';
+
+export interface OsSleepIssue {
+  severity: OsSleepSeverity;
+  key: string;
+  message: string;
+  detail: string | null;
+}
+
+export interface OsSleepReport {
+  platform_supported: boolean;
+  logind: Record<string, string>;
+  sleep_conf: Record<string, string>;
+  targets: Record<string, string>;
+  issues: OsSleepIssue[];
+  sources: string[];
+  collected_at: string;
+}
+
 export interface SleepStatusResponse {
   current_state: SleepState;
   state_since: string | null;
@@ -233,5 +252,12 @@ export async function getSleepHistory(
 
 export async function getSleepCapabilities(): Promise<SleepCapabilities> {
   const response = await apiClient.get<SleepCapabilities>('/api/system/sleep/capabilities');
+  return response.data;
+}
+
+export async function getOsSleepSettings(force = false): Promise<OsSleepReport> {
+  const response = await apiClient.get<OsSleepReport>('/api/system/sleep/os-settings', {
+    params: force ? { force: true } : undefined,
+  });
   return response.data;
 }
