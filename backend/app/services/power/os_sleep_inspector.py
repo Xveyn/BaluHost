@@ -63,7 +63,7 @@ class OsSleepIssue:
     detail: Optional[str] = None
 
 
-@dataclass(frozen=True)
+@dataclass
 class OsSleepReport:
     platform_supported: bool
     logind: dict[str, str] = field(default_factory=dict)
