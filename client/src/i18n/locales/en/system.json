@@ -664,9 +664,16 @@
       "preset4h": "4h",
       "preset8h": "8h",
       "presetPermanent": "Permanent",
+      "presetCustom": "Until date…",
       "activeUntil": "Active until: {{time}} (in {{remaining}})",
+      "activeCustom": "Until {{datetime}}",
       "activePermanent": "Permanently active",
       "cancel": "Cancel",
+      "pickerLabel": "Date & time",
+      "pickerApply": "Apply",
+      "pickerCancel": "Cancel",
+      "pickerErrorPast": "Must be in the future (at least 5 min)",
+      "pickerErrorMax": "At most 7 days in the future",
       "loadFailed": "Failed to load always-awake state",
       "saveFailed": "Save failed",
       "hintScheduleResumes": "Sleep schedule / core operating hours will resume at {{time}}.",
@@ -674,6 +681,25 @@
       "bannerActiveWithUntil": "Always-awake active until {{time}} — auto-sleep blocked.",
       "bannerActivePermanent": "Always-awake active (permanent) — auto-sleep blocked.",
       "scheduleHint": "ℹ Always-awake takes precedence. Sleep-schedule triggers are ignored."
+    },
+    "osSettings": {
+      "title": "OS sleep settings",
+      "refresh": "Refresh",
+      "detailsToggle": "Details",
+      "allClear": "No OS-level sleep triggers active. BaluHost is in sole control.",
+      "sources": "Sources",
+      "loading": "Loading…",
+      "loadFailed": "Failed to load OS sleep settings",
+      "issue": {
+        "logind.idle_action.suspend": "logind: IdleAction=suspend (outside BaluHost)",
+        "logind.idle_action.hibernate": "logind: IdleAction=hibernate (outside BaluHost)",
+        "logind.idle_action.hybrid_sleep": "logind: IdleAction=hybrid-sleep (outside BaluHost)",
+        "logind.lid_switch.suspend": "logind: HandleLidSwitch=suspend",
+        "logind.lid_switch.hibernate": "logind: HandleLidSwitch=hibernate",
+        "sleep_conf.suspend_disabled": "OS has suspend disabled (AllowSuspend=no)",
+        "targets.suspend.masked": "suspend.target is masked",
+        "inspector.failed": "OS sleep detection failed"
+      }
     }
   },
   "fanControl": {

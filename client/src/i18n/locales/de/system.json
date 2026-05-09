@@ -659,9 +659,16 @@
       "preset4h": "4h",
       "preset8h": "8h",
       "presetPermanent": "Dauerhaft",
+      "presetCustom": "Bis Datum…",
       "activeUntil": "Aktiv bis: {{time}} (in {{remaining}})",
+      "activeCustom": "Bis {{datetime}}",
       "activePermanent": "Dauerhaft aktiv",
       "cancel": "Aufheben",
+      "pickerLabel": "Datum & Uhrzeit",
+      "pickerApply": "Übernehmen",
+      "pickerCancel": "Abbrechen",
+      "pickerErrorPast": "Zeitpunkt muss in der Zukunft liegen (mind. 5 Min)",
+      "pickerErrorMax": "Maximal 7 Tage in der Zukunft",
       "loadFailed": "Konnte Always-Awake nicht laden",
       "saveFailed": "Speichern fehlgeschlagen",
       "hintScheduleResumes": "Geplante Kernbetriebszeit / Sleep-Schedule wird ab {{time}} wieder berücksichtigt.",
@@ -669,6 +676,25 @@
       "bannerActiveWithUntil": "Immer wach aktiv bis {{time}} — Auto-Sleep blockiert.",
       "bannerActivePermanent": "Immer wach aktiv (dauerhaft) — Auto-Sleep blockiert.",
       "scheduleHint": "ℹ Always-Awake hat Vorrang. Sleep-Schedule-Trigger werden ignoriert."
+    },
+    "osSettings": {
+      "title": "OS-Sleep-Einstellungen",
+      "refresh": "Aktualisieren",
+      "detailsToggle": "Details",
+      "allClear": "Keine OS-Sleep-Trigger aktiv. BaluHost steuert Sleep allein.",
+      "sources": "Quellen",
+      "loading": "Wird geladen…",
+      "loadFailed": "OS-Sleep-Einstellungen konnten nicht geladen werden",
+      "issue": {
+        "logind.idle_action.suspend": "logind: IdleAction=suspend (außerhalb von BaluHost)",
+        "logind.idle_action.hibernate": "logind: IdleAction=hibernate (außerhalb von BaluHost)",
+        "logind.idle_action.hybrid_sleep": "logind: IdleAction=hybrid-sleep (außerhalb von BaluHost)",
+        "logind.lid_switch.suspend": "logind: HandleLidSwitch=suspend",
+        "logind.lid_switch.hibernate": "logind: HandleLidSwitch=hibernate",
+        "sleep_conf.suspend_disabled": "OS hat Suspend deaktiviert (AllowSuspend=no)",
+        "targets.suspend.masked": "suspend.target ist maskiert",
+        "inspector.failed": "OS-Sleep-Detection fehlgeschlagen"
+      }
     }
   },
   "fanControl": {

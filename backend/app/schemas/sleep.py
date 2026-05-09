@@ -4,12 +4,14 @@ Pydantic schemas for Sleep Mode feature.
 Defines the state machine, request/response models, and configuration
 for the two-stage sleep system (Soft Sleep + True Suspend).
 """
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 from typing import Literal, Optional
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 from app.schemas.validators import validate_mac_address
+
+_MAX_ALWAYS_AWAKE_HORIZON = timedelta(days=7)
 
 
 class SleepState(str, Enum):
@@ -82,6 +84,29 @@ class AlwaysAwakeStatus(BaseModel):
     expires_in_seconds: Optional[float] = Field(
         default=None, description="Seconds until expiry (for live UI countdown)"
     )
+
+
+# ---------------------------------------------------------------------------
+# OS Sleep Inspector
+# ---------------------------------------------------------------------------
+
+class OsSleepIssueModel(BaseModel):
+    """One issue surfaced by the OS sleep inspector."""
+    severity: Literal["info", "warning", "error"]
+    key: str = Field(..., description="Stable identifier, used for i18n lookup")
+    message: str = Field(..., description="Fallback human-readable message")
+    detail: Optional[str] = Field(default=None)
+
+
+class OsSleepReportResponse(BaseModel):
+    """Snapshot of OS sleep configuration (read-only)."""
+    platform_supported: bool = Field(..., description="False on Windows / when /etc/systemd is missing")
+    logind: dict[str, str] = Field(default_factory=dict)
+    sleep_conf: dict[str, str] = Field(default_factory=dict)
+    targets: dict[str, str] = Field(default_factory=dict)
+    issues: list[OsSleepIssueModel] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    collected_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
 
 
 class SleepStatusResponse(BaseModel):
@@ -198,9 +223,13 @@ class SleepConfigUpdate(BaseModel):
         # Normalize naive datetimes to UTC
         if v.tzinfo is None:
             v = v.replace(tzinfo=timezone.utc)
+        now = datetime.now(timezone.utc)
         # Reject "now" as well: a non-future timestamp is meaningless for an override
-        if v <= datetime.now(timezone.utc):
+        if v <= now:
             raise ValueError("always_awake_until must be in the future (UTC)")
+        # Reject far-future values: max 7 days horizon
+        if v > now + _MAX_ALWAYS_AWAKE_HORIZON:
+            raise ValueError("always_awake_until must be at most 7 days in the future")
         return v
 
     @field_validator("wol_mac_address", mode="before")
