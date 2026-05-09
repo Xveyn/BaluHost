@@ -1,7 +1,8 @@
 /**
  * Always-Awake panel.
  *
- * Master toggle + optional expiry presets (1h/4h/8h/permanent).
+ * Master toggle + optional expiry presets (1h/4h/8h/permanent) plus a
+ * custom datetime picker capped at 7 days.
  * Auto-saves all changes; manual Sleep/Suspend on the server side
  * automatically clears the override.
  */
@@ -15,24 +16,47 @@ import {
   updateSleepConfig,
 } from '../../api/sleep';
 
-type Preset = '1h' | '4h' | '8h' | 'permanent';
+type Preset = '1h' | '4h' | '8h' | 'permanent' | 'custom';
 
-const PRESET_HOURS: Record<Exclude<Preset, 'permanent'>, number> = {
+const PRESET_HOURS: Record<Exclude<Preset, 'permanent' | 'custom'>, number> = {
   '1h': 1,
   '4h': 4,
   '8h': 8,
 };
 
+const MIN_HORIZON_MS = 5 * 60 * 1000;        // 5 minutes
+const MAX_HORIZON_MS = 7 * 24 * 3600 * 1000; // 7 days
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
+function formatDateTime(iso: string): string {
+  const d = new Date(iso);
+  // Within the next 7 days: "DD.MM. HH:mm". Beyond (shouldn't happen with the cap)
+  // we still render the full date.
+  const ddmm = d.toLocaleDateString([], { day: '2-digit', month: '2-digit' });
+  const hhmm = d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+  return `${ddmm} ${hhmm}`;
+}
+
 function formatRemaining(seconds: number): string {
   if (seconds < 0) return '0m';
-  const h = Math.floor(seconds / 3600);
+  const d = Math.floor(seconds / 86400);
+  const h = Math.floor((seconds % 86400) / 3600);
   const m = Math.floor((seconds % 3600) / 60);
+  if (d > 0) return `${d}d ${h}h`;
   if (h > 0) return `${h}h ${m}m`;
   return `${m}m`;
+}
+
+/** Convert a Date into the value format expected by <input type="datetime-local"> in the user's local TZ. */
+function toLocalInputValue(date: Date): string {
+  const pad = (n: number) => n.toString().padStart(2, '0');
+  return (
+    `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}` +
+    `T${pad(date.getHours())}:${pad(date.getMinutes())}`
+  );
 }
 
 export function AlwaysAwakePanel() {
@@ -44,7 +68,11 @@ export function AlwaysAwakePanel() {
   const [coreUptimeEnabled, setCoreUptimeEnabled] = useState(false);
   const [activePreset, setActivePreset] = useState<Preset | null>(null);
   const [loading, setLoading] = useState(true);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerValue, setPickerValue] = useState<string>('');
+  const [pickerError, setPickerError] = useState<string | null>(null);
   const tickRef = useRef<number | null>(null);
+  const pickerRef = useRef<HTMLDivElement | null>(null);
 
   const refresh = useCallback(async () => {
     try {
@@ -55,7 +83,6 @@ export function AlwaysAwakePanel() {
       setScheduleEnabled(cfg.schedule_enabled);
       setCoreUptimeEnabled(cfg.core_uptime_enabled ?? false);
 
-      // Infer active preset from loaded state (e.g. after page refresh)
       if (!cfg.always_awake_enabled) {
         setActivePreset(null);
       } else if (cfg.always_awake_until == null) {
@@ -67,7 +94,6 @@ export function AlwaysAwakePanel() {
           ['4h', 4 * 3600],
           ['8h', 8 * 3600],
         ];
-        // Pick the closest preset within 5 minutes; otherwise null (custom).
         let best: Preset | null = null;
         let bestDiff = 5 * 60;
         for (const [p, sec] of candidates) {
@@ -77,7 +103,7 @@ export function AlwaysAwakePanel() {
             best = p;
           }
         }
-        setActivePreset(best);
+        setActivePreset(best ?? 'custom');
       }
     } catch {
       toast.error(t('sleep.alwaysAwake.loadFailed'));
@@ -90,7 +116,6 @@ export function AlwaysAwakePanel() {
     refresh();
   }, [refresh]);
 
-  // Live countdown — decrement every second when until is set
   useEffect(() => {
     if (expiresIn === null) {
       if (tickRef.current) window.clearInterval(tickRef.current);
@@ -104,8 +129,6 @@ export function AlwaysAwakePanel() {
     };
   }, [expiresIn !== null]);
 
-  // Auto-refresh when expired — null out expiresIn first so the countdown effect's
-  // cleanup runs immediately even if the refresh request is slow/fails.
   useEffect(() => {
     if (expiresIn === 0) {
       setExpiresIn(null);
@@ -113,7 +136,26 @@ export function AlwaysAwakePanel() {
     }
   }, [expiresIn, refresh]);
 
-  const setPreset = async (preset: Preset) => {
+  // Close popover on outside click / Escape.
+  useEffect(() => {
+    if (!pickerOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (pickerRef.current && !pickerRef.current.contains(e.target as Node)) {
+        setPickerOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setPickerOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [pickerOpen]);
+
+  const setPreset = async (preset: Exclude<Preset, 'custom'>) => {
     const newUntil =
       preset === 'permanent'
         ? null
@@ -138,6 +180,57 @@ export function AlwaysAwakePanel() {
       setActivePreset(previousActivePreset);
       toast.error(err instanceof Error ? err.message : t('sleep.alwaysAwake.saveFailed'));
     }
+  };
+
+  const setCustomPreset = async (localValue: string) => {
+    const target = new Date(localValue);
+    if (Number.isNaN(target.getTime())) {
+      setPickerError(t('sleep.alwaysAwake.pickerErrorPast'));
+      return;
+    }
+    const delta = target.getTime() - Date.now();
+    if (delta < MIN_HORIZON_MS) {
+      setPickerError(t('sleep.alwaysAwake.pickerErrorPast'));
+      return;
+    }
+    if (delta > MAX_HORIZON_MS) {
+      setPickerError(t('sleep.alwaysAwake.pickerErrorMax'));
+      return;
+    }
+
+    const newUntil = target.toISOString();
+    const previousEnabled = enabled;
+    const previousUntil = until;
+    const previousExpiresIn = expiresIn;
+    const previousActivePreset = activePreset;
+    setEnabled(true);
+    setUntil(newUntil);
+    setExpiresIn(Math.floor(delta / 1000));
+    setActivePreset('custom');
+    setPickerOpen(false);
+    setPickerError(null);
+    try {
+      await updateSleepConfig({
+        always_awake_enabled: true,
+        always_awake_until: newUntil,
+      });
+    } catch (err) {
+      setEnabled(previousEnabled);
+      setUntil(previousUntil);
+      setExpiresIn(previousExpiresIn);
+      setActivePreset(previousActivePreset);
+      toast.error(err instanceof Error ? err.message : t('sleep.alwaysAwake.saveFailed'));
+    }
+  };
+
+  const openPicker = () => {
+    const seed =
+      activePreset === 'custom' && until
+        ? new Date(until)
+        : new Date(Date.now() + 4 * 3600 * 1000); // default seed: now+4h
+    setPickerValue(toLocalInputValue(seed));
+    setPickerError(null);
+    setPickerOpen(true);
   };
 
   const handleCancel = async () => {
@@ -175,6 +268,9 @@ export function AlwaysAwakePanel() {
       </div>
     );
   }
+
+  const minLocal = toLocalInputValue(new Date(Date.now() + MIN_HORIZON_MS));
+  const maxLocal = toLocalInputValue(new Date(Date.now() + MAX_HORIZON_MS));
 
   return (
     <div className="card border-slate-700/50 p-4 sm:p-6 space-y-4">
@@ -238,12 +334,12 @@ export function AlwaysAwakePanel() {
       )}
 
       <div className="flex flex-wrap gap-2 pt-1">
-        {(['1h', '4h', '8h', 'permanent'] as Preset[]).map((p) => {
+        {(['1h', '4h', '8h', 'permanent'] as const).map((p) => {
           const isActive = enabled && activePreset === p;
           const labelKey =
             p === 'permanent'
               ? 'sleep.alwaysAwake.presetPermanent'
-              : `sleep.alwaysAwake.preset${p}` as const;
+              : (`sleep.alwaysAwake.preset${p}` as const);
           return (
             <button
               key={p}
@@ -259,6 +355,60 @@ export function AlwaysAwakePanel() {
             </button>
           );
         })}
+
+        <div className="relative" ref={pickerRef}>
+          <button
+            type="button"
+            onClick={openPicker}
+            className={`min-w-[3.5rem] rounded px-3 py-1.5 text-xs font-medium transition-colors ${
+              enabled && activePreset === 'custom'
+                ? 'bg-amber-500/30 text-amber-200 border border-amber-500/50'
+                : 'bg-slate-800/40 text-slate-400 border border-slate-700/40 hover:text-amber-300 hover:border-amber-500/30'
+            }`}
+          >
+            {enabled && activePreset === 'custom' && until
+              ? t('sleep.alwaysAwake.activeCustom', { datetime: formatDateTime(until) })
+              : t('sleep.alwaysAwake.presetCustom')}
+          </button>
+
+          {pickerOpen && (
+            <div className="absolute z-10 mt-2 right-0 sm:right-auto sm:left-0 w-72 rounded-md border border-slate-700/60 bg-slate-900 p-3 shadow-xl space-y-2">
+              <label className="block text-xs text-slate-300">
+                {t('sleep.alwaysAwake.pickerLabel')}
+                <input
+                  type="datetime-local"
+                  className="mt-1 block w-full rounded border border-slate-700/60 bg-slate-800 px-2 py-1 text-sm text-slate-100"
+                  min={minLocal}
+                  max={maxLocal}
+                  value={pickerValue}
+                  onChange={(e) => {
+                    setPickerValue(e.target.value);
+                    setPickerError(null);
+                  }}
+                />
+              </label>
+              {pickerError && (
+                <p className="text-xs text-red-400">{pickerError}</p>
+              )}
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setPickerOpen(false)}
+                  className="rounded px-2 py-1 text-xs text-slate-400 hover:text-slate-200"
+                >
+                  {t('sleep.alwaysAwake.pickerCancel')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCustomPreset(pickerValue)}
+                  className="rounded px-2 py-1 text-xs font-medium bg-amber-500/30 text-amber-200 border border-amber-500/50 hover:bg-amber-500/40"
+                >
+                  {t('sleep.alwaysAwake.pickerApply')}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );
