@@ -219,11 +219,98 @@ def _classify(
 
 
 # ---------------------------------------------------------------------------
-# Public entry point — minimal version for Task 1
-# Full implementation lands in Task 3.
+# Subprocess helpers
+# ---------------------------------------------------------------------------
+def _systemctl_is_enabled(target_names: tuple[str, ...]) -> dict[str, str]:
+    """
+    Run `systemctl is-enabled <name1> <name2> …`. Returns a {name: status} dict.
+    On any failure (FileNotFoundError, TimeoutExpired, non-zero exit) returns {}.
+    """
+    try:
+        proc = subprocess.run(
+            ["systemctl", "is-enabled", *target_names],
+            capture_output=True,
+            text=True,
+            timeout=_SUBPROCESS_TIMEOUT_SECONDS,
+            check=False,
+        )
+    except (subprocess.TimeoutExpired, FileNotFoundError, OSError) as exc:
+        logger.warning("systemctl is-enabled failed: %s", exc)
+        return {}
+    lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
+    if len(lines) != len(target_names):
+        logger.warning(
+            "Unexpected systemctl line count: got %d, expected %d",
+            len(lines), len(target_names),
+        )
+    return {name: status for name, status in zip(target_names, lines)}
+
+
+# ---------------------------------------------------------------------------
+# Public entry point
 # ---------------------------------------------------------------------------
 def inspect_os_sleep(force_refresh: bool = False) -> OsSleepReport:
+    """
+    Inspect OS sleep settings. Returns a report suitable for read-only display.
+    Cached for 60s; pass force_refresh=True to bypass.
+    """
     if sys.platform != "linux" or not _SYSTEMD_DIR.is_dir():
         return OsSleepReport(platform_supported=False)
-    # Real implementation arrives in Task 3.
-    return OsSleepReport(platform_supported=True)
+
+    if not force_refresh:
+        cached = _cache_get()
+        if cached is not None:
+            return cached
+
+    try:
+        sources: list[str] = []
+
+        logind: dict[str, str] = _parse_systemd_ini(_LOGIND_CONF, section="Login")
+        if _LOGIND_CONF.is_file():
+            sources.append(str(_LOGIND_CONF))
+        for d in _LOGIND_DROPIN_DIRS:
+            if d.is_dir():
+                logind = _merge_drop_ins(logind, d, section="Login")
+                for f in sorted(d.glob("*.conf")):
+                    if f.is_file():
+                        sources.append(str(f))
+
+        sleep_conf: dict[str, str] = _parse_systemd_ini(_SLEEP_CONF, section="Sleep")
+        if _SLEEP_CONF.is_file():
+            sources.append(str(_SLEEP_CONF))
+        for d in _SLEEP_DROPIN_DIRS:
+            if d.is_dir():
+                sleep_conf = _merge_drop_ins(sleep_conf, d, section="Sleep")
+                for f in sorted(d.glob("*.conf")):
+                    if f.is_file():
+                        sources.append(str(f))
+
+        targets = _systemctl_is_enabled(_TARGET_NAMES)
+        has_lid = _LID_SENSOR.is_dir()
+
+        issues = _classify(
+            logind=logind, sleep_conf=sleep_conf, targets=targets, has_lid=has_lid,
+        )
+
+        report = OsSleepReport(
+            platform_supported=True,
+            logind=logind,
+            sleep_conf=sleep_conf,
+            targets=targets,
+            issues=issues,
+            sources=sources,
+        )
+    except Exception as exc:
+        logger.exception("os_sleep_inspector failed: %s", exc)
+        report = OsSleepReport(
+            platform_supported=True,
+            issues=[OsSleepIssue(
+                severity="error",
+                key="inspector.failed",
+                message="OS-Sleep-Detection fehlgeschlagen",
+                detail=str(exc),
+            )],
+        )
+
+    _cache_put(report)
+    return report
