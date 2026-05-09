@@ -119,3 +119,25 @@ def test_unexpected_exception_yields_inspector_failed(linux_fs: Path):
         report = ins.inspect_os_sleep(force_refresh=True)
     assert report.platform_supported is True
     assert any(i.key == "inspector.failed" and i.severity == "error" for i in report.issues)
+
+
+def test_systemctl_line_count_mismatch_discards_targets(linux_fs: Path):
+    """If systemctl returns fewer lines than queried (alias collapse on some
+    systemd versions), positional zip would silently misalign — drop the dict."""
+    (linux_fs / "logind.conf").write_text("[Login]\nIdleAction=ignore\n")
+    (linux_fs / "sleep.conf").write_text("[Sleep]\nAllowSuspend=yes\n")
+
+    def short_runner(cmd, *args, **kwargs):
+        # Returns 4 lines for 5 queried targets — would misalign suspend.target=masked
+        # to hibernate.target if positional zipping continued.
+        return subprocess.CompletedProcess(
+            args=cmd, returncode=0,
+            stdout="enabled\nmasked\ndisabled\ndisabled\n", stderr="",
+        )
+
+    with patch.object(ins.subprocess, "run", side_effect=short_runner):
+        report = ins.inspect_os_sleep(force_refresh=True)
+    assert report.platform_supported is True
+    assert report.targets == {}
+    # Critically: classifier must not see a phantom "suspend.target": "masked"
+    assert not any(i.key == "targets.suspend.masked" for i in report.issues)

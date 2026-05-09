@@ -239,10 +239,14 @@ def _systemctl_is_enabled(target_names: tuple[str, ...]) -> dict[str, str]:
         return {}
     lines = [ln.strip() for ln in proc.stdout.splitlines() if ln.strip()]
     if len(lines) != len(target_names):
+        # Positional zip would silently misalign names → statuses (e.g. masking
+        # a real "suspend.target=masked" by mapping it to "hibernate.target").
+        # Drop the whole result rather than report half-truths.
         logger.warning(
-            "Unexpected systemctl line count: got %d, expected %d",
+            "Unexpected systemctl line count: got %d, expected %d — discarding result",
             len(lines), len(target_names),
         )
+        return {}
     return {name: status for name, status in zip(target_names, lines)}
 
 
