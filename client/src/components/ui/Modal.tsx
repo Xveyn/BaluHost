@@ -75,8 +75,15 @@ export function Modal({
               {title}
             </h3>
             <button
-              onClick={onClose}
-              className="p-1 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors"
+              type="button"
+              onClick={closeOnOverlayClick ? onClose : undefined}
+              disabled={!closeOnOverlayClick}
+              aria-label="Close"
+              className={`p-1 rounded-lg transition-colors ${
+                closeOnOverlayClick
+                  ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  : 'text-slate-700 cursor-not-allowed'
+              }`}
             >
               <X className="w-5 h-5" />
             </button>

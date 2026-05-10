@@ -7,10 +7,22 @@ import { TwoFactorPromptSection } from './quickSettings/TwoFactorPromptSection';
 import { TwoFactorSetupFlow, type TwoFactorSetupStep } from './quickSettings/TwoFactorSetupFlow';
 import { refreshStatus } from './quickSettings/twoFactorStatusStore';
 
-export default function UserMenuQuickSettings() {
+interface Props {
+  /** Called when an action inside Quick-Settings should also close the parent dropdown
+   * (e.g., before opening the 2FA setup Modal so the dropdown does not remain
+   * mounted behind it). */
+  onCloseDropdown: () => void;
+}
+
+export default function UserMenuQuickSettings({ onCloseDropdown }: Props) {
   const { t } = useTranslation('common');
   const [setupOpen, setSetupOpen] = useState(false);
   const [setupStep, setSetupStep] = useState<TwoFactorSetupStep>('loading');
+
+  const handleOpenSetup = () => {
+    onCloseDropdown();
+    setSetupOpen(true);
+  };
 
   const handleSetupComplete = () => {
     refreshStatus();
@@ -25,7 +37,7 @@ export default function UserMenuQuickSettings() {
       <LanguageSection />
       <div className="border-t border-slate-800/70 my-1" />
       <ByteUnitSection />
-      <TwoFactorPromptSection onOpenSetup={() => setSetupOpen(true)} />
+      <TwoFactorPromptSection onOpenSetup={handleOpenSetup} />
 
       <Modal
         isOpen={setupOpen}

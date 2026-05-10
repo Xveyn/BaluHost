@@ -40,4 +40,17 @@ describe('Modal close-suppression props', () => {
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onClose).not.toHaveBeenCalled();
   });
+
+  it('does not close via X button when closeOnOverlayClick=false', () => {
+    const onClose = vi.fn();
+    render(
+      <Modal isOpen onClose={onClose} title="X" closeOnOverlayClick={false}>body</Modal>
+    );
+    // Modal renders via createPortal into document.body — must query document, not container
+    const xButton = document.querySelector('button[aria-label="Close"]') as HTMLElement;
+    expect(xButton).toBeTruthy();
+    expect(xButton).toBeDisabled();
+    fireEvent.click(xButton);
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

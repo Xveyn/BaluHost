@@ -152,7 +152,7 @@ export default function UserMenu() {
               <div className="border-t border-slate-800/70 my-1" />
             </>
           )}
-          <UserMenuQuickSettings />
+          <UserMenuQuickSettings onCloseDropdown={() => setOpen(false)} />
         </div>
       )}
     </div>
