@@ -5,6 +5,7 @@ import toast from 'react-hot-toast';
 import { useAuth } from '../contexts/AuthContext';
 import { useSystemMode } from '../hooks/useSystemMode';
 import { apiClient } from '../lib/api';
+import UserMenuQuickSettings from './UserMenuQuickSettings';
 
 interface UserPublic {
   id: number;
@@ -81,75 +82,77 @@ export default function UserMenu() {
       </button>
 
       {open && (
-        <div className="absolute right-0 mt-2 w-64 rounded-xl border border-slate-800 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
-          {canSwitchUser ? (
-            <div
-              className="relative"
-              onMouseEnter={() => {
-                setSubmenuOpen(true);
-                void loadUsers();
-              }}
-              onMouseLeave={() => setSubmenuOpen(false)}
-            >
-              <button
-                type="button"
-                className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/70"
+        <div className="absolute right-0 mt-2 w-72 rounded-xl border border-slate-800 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
+          {canSwitchUser && (
+            <>
+              <div
+                className="relative"
+                onMouseEnter={() => {
+                  setSubmenuOpen(true);
+                  void loadUsers();
+                }}
+                onMouseLeave={() => setSubmenuOpen(false)}
               >
-                <span className="flex items-center gap-2">
-                  <UserPlus className="h-4 w-4" />
-                  {t('impersonation.switchToUser')}
-                </span>
-                <ChevronRight className="h-4 w-4 text-slate-400" />
-              </button>
+                <button
+                  type="button"
+                  className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/70"
+                >
+                  <span className="flex items-center gap-2">
+                    <UserPlus className="h-4 w-4" />
+                    {t('impersonation.switchToUser')}
+                  </span>
+                  <ChevronRight className="h-4 w-4 text-slate-400" />
+                </button>
 
-              {submenuOpen && (
-                <div className="absolute right-full top-0 mr-1 w-64 max-h-80 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
-                  {loadingUsers && (
-                    <div className="px-3 py-2 text-sm text-slate-400">
-                      {t('impersonation.loading')}
-                    </div>
-                  )}
-                  {!loadingUsers && users !== null && users.length === 0 && (
-                    <div className="px-3 py-2 text-sm text-slate-400">
-                      {t('impersonation.empty')}
-                    </div>
-                  )}
-                  {!loadingUsers &&
-                    users !== null &&
-                    users
-                      .filter((u) => u.id !== user.id)
-                      .map((u) => (
-                        <button
-                          key={u.id}
-                          type="button"
-                          onClick={() => void onSwitchToUser(u.id)}
-                          className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/70"
-                        >
-                          <span className="flex items-center gap-2">
-                            {u.role === 'admin' ? (
-                              <Shield className="h-4 w-4 text-amber-400" />
-                            ) : (
-                              <UserIcon className="h-4 w-4 text-slate-400" />
-                            )}
-                            {u.username}
-                          </span>
-                          <span
-                            className={
-                              u.role === 'admin'
-                                ? 'rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300'
-                                : 'rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300'
-                            }
+                {submenuOpen && (
+                  <div className="absolute right-full top-0 mr-1 w-64 max-h-80 overflow-y-auto rounded-xl border border-slate-800 bg-slate-900/95 p-2 shadow-2xl backdrop-blur-xl">
+                    {loadingUsers && (
+                      <div className="px-3 py-2 text-sm text-slate-400">
+                        {t('impersonation.loading')}
+                      </div>
+                    )}
+                    {!loadingUsers && users !== null && users.length === 0 && (
+                      <div className="px-3 py-2 text-sm text-slate-400">
+                        {t('impersonation.empty')}
+                      </div>
+                    )}
+                    {!loadingUsers &&
+                      users !== null &&
+                      users
+                        .filter((u) => u.id !== user.id)
+                        .map((u) => (
+                          <button
+                            key={u.id}
+                            type="button"
+                            onClick={() => void onSwitchToUser(u.id)}
+                            className="flex w-full items-center justify-between gap-3 rounded-lg px-3 py-2 text-sm text-slate-200 transition hover:bg-slate-800/70"
                           >
-                            {u.role}
-                          </span>
-                        </button>
-                      ))}
-                </div>
-              )}
-            </div>
-          ) : (
-            <div className="px-3 py-2 text-xs text-slate-500">{user.username}</div>
+                            <span className="flex items-center gap-2">
+                              {u.role === 'admin' ? (
+                                <Shield className="h-4 w-4 text-amber-400" />
+                              ) : (
+                                <UserIcon className="h-4 w-4 text-slate-400" />
+                              )}
+                              {u.username}
+                            </span>
+                            <span
+                              className={
+                                u.role === 'admin'
+                                  ? 'rounded-full bg-amber-500/20 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-amber-300'
+                                  : 'rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-slate-300'
+                              }
+                            >
+                              {u.role}
+                            </span>
+                          </button>
+                        ))}
+                  </div>
+                )}
+              </div>
+              <div className="border-t border-slate-800/70 my-1" />
+            </>
           )}
+          <UserMenuQuickSettings />
         </div>
       )}
     </div>
