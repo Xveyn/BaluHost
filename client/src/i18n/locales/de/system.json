@@ -669,6 +669,7 @@
       "pickerCancel": "Abbrechen",
       "pickerErrorPast": "Zeitpunkt muss in der Zukunft liegen (mind. 5 Min)",
       "pickerErrorMax": "Maximal 7 Tage in der Zukunft",
+      "pickerMaxHint": "Max. {{datetime}} (7 Tage in der Zukunft)",
       "loadFailed": "Konnte Always-Awake nicht laden",
       "saveFailed": "Speichern fehlgeschlagen",
       "hintScheduleResumes": "Geplante Kernbetriebszeit / Sleep-Schedule wird ab {{time}} wieder berücksichtigt.",
