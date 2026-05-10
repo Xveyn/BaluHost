@@ -8,9 +8,21 @@ export interface ModalProps {
   title?: string;
   children: React.ReactNode;
   size?: 'sm' | 'md' | 'lg' | 'xl' | '2xl';
+  /** Close when the user clicks the backdrop. Default: true. */
+  closeOnOverlayClick?: boolean;
+  /** Close when the user presses Escape. Default: true. */
+  closeOnEscape?: boolean;
 }
 
-export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalProps) {
+export function Modal({
+  isOpen,
+  onClose,
+  title,
+  children,
+  size = 'md',
+  closeOnOverlayClick = true,
+  closeOnEscape = true,
+}: ModalProps) {
   const sizeClasses = {
     sm: 'max-w-[95vw] sm:max-w-sm',
     md: 'max-w-[95vw] sm:max-w-md',
@@ -21,6 +33,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
 
   // Close on Escape key
   useEffect(() => {
+    if (!closeOnEscape) return;
     const handleEscape = (e: KeyboardEvent) => {
       if (e.key === 'Escape' && isOpen) {
         onClose();
@@ -28,7 +41,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
     };
     document.addEventListener('keydown', handleEscape);
     return () => document.removeEventListener('keydown', handleEscape);
-  }, [isOpen, onClose]);
+  }, [isOpen, onClose, closeOnEscape]);
 
   // Prevent body scroll when open
   useEffect(() => {
@@ -49,7 +62,7 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
       {/* Backdrop */}
       <div
         className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-        onClick={onClose}
+        onClick={closeOnOverlayClick ? onClose : undefined}
       />
       {/* Modal content */}
       <div
@@ -62,8 +75,15 @@ export function Modal({ isOpen, onClose, title, children, size = 'md' }: ModalPr
               {title}
             </h3>
             <button
-              onClick={onClose}
-              className="p-1 text-slate-400 hover:text-slate-200 rounded-lg hover:bg-slate-800 transition-colors"
+              type="button"
+              onClick={closeOnOverlayClick ? onClose : undefined}
+              disabled={!closeOnOverlayClick}
+              aria-label="Close"
+              className={`p-1 rounded-lg transition-colors ${
+                closeOnOverlayClick
+                  ? 'text-slate-400 hover:text-slate-200 hover:bg-slate-800'
+                  : 'text-slate-700 cursor-not-allowed'
+              }`}
             >
               <X className="w-5 h-5" />
             </button>
