@@ -371,6 +371,48 @@ async def test_enter_true_suspend_blocks_non_manual_during_active_window(trigger
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("trigger", [
+    SleepTrigger.SCHEDULE,
+    SleepTrigger.AUTO_IDLE,
+    SleepTrigger.AUTO_ESCALATION,
+    SleepTrigger.RTC_WAKE,
+])
+async def test_enter_true_suspend_blocks_non_manual_when_inhibitor_held_even_if_db_fails_open(trigger):
+    """If `_load_core_uptime` fails open (returns master=False due to a transient
+    DB error) but the logind inhibitor is still held from a previous successful
+    tick, non-MANUAL paths must still be blocked AND no lifecycle.suspend
+    notification must fire. Without this guard the user sees a phantom
+    "NAS wird suspended" push while the kernel suspend is silently blocked
+    by the inhibitor at logind level."""
+    svc = _build_service()
+    cfg = _config(core_enabled=True)
+
+    suspend_called: list = []
+    emit_called: list = []
+
+    async def fake_suspend_system(wake_at=None):
+        suspend_called.append(wake_at)
+        return True
+
+    async def fake_emit(*args, **kwargs):
+        emit_called.append(kwargs.get("trigger") or args)
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc._core_uptime_inhibitor, "is_held", return_value=True), \
+         patch.object(svc._backend, "suspend_system", side_effect=fake_suspend_system), \
+         patch("app.services.power.sleep.SessionLocal"), \
+         patch("app.services.notifications.events.emit_system_suspend",
+               new=AsyncMock(side_effect=fake_emit)):
+        svc._current_state = SleepState.SOFT_SLEEP
+        ok = await svc.enter_true_suspend("auto", trigger)
+
+    assert ok is False
+    assert suspend_called == []
+    assert emit_called == [], "lifecycle.suspend must NOT fire when suspend will be blocked"
+
+
+@pytest.mark.asyncio
 async def test_enter_true_suspend_allows_manual_during_active_window():
     """Manual admin trigger must still suspend during core uptime (spec F8) —
     the only exception to the defense-in-depth block."""

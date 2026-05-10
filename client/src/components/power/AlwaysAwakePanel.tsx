@@ -182,21 +182,24 @@ export function AlwaysAwakePanel() {
     }
   };
 
-  const setCustomPreset = async (localValue: string) => {
+  const computePickerError = (localValue: string): string | null => {
+    if (!localValue) return null;
     const target = new Date(localValue);
-    if (Number.isNaN(target.getTime())) {
-      setPickerError(t('sleep.alwaysAwake.pickerErrorPast'));
-      return;
-    }
+    if (Number.isNaN(target.getTime())) return t('sleep.alwaysAwake.pickerErrorPast');
     const delta = target.getTime() - Date.now();
-    if (delta < MIN_HORIZON_MS) {
-      setPickerError(t('sleep.alwaysAwake.pickerErrorPast'));
+    if (delta < MIN_HORIZON_MS) return t('sleep.alwaysAwake.pickerErrorPast');
+    if (delta > MAX_HORIZON_MS) return t('sleep.alwaysAwake.pickerErrorMax');
+    return null;
+  };
+
+  const setCustomPreset = async (localValue: string) => {
+    const errorMsg = computePickerError(localValue);
+    if (errorMsg || !localValue) {
+      setPickerError(errorMsg ?? t('sleep.alwaysAwake.pickerErrorPast'));
       return;
     }
-    if (delta > MAX_HORIZON_MS) {
-      setPickerError(t('sleep.alwaysAwake.pickerErrorMax'));
-      return;
-    }
+    const target = new Date(localValue);
+    const delta = target.getTime() - Date.now();
 
     const newUntil = target.toISOString();
     const previousEnabled = enabled;
@@ -273,7 +276,7 @@ export function AlwaysAwakePanel() {
   const maxLocal = toLocalInputValue(new Date(Date.now() + MAX_HORIZON_MS));
 
   return (
-    <div className="card border-slate-700/50 p-4 sm:p-6 space-y-4">
+    <div className={`card overflow-visible border-slate-700/50 p-4 sm:p-6 space-y-4 ${pickerOpen ? 'z-20' : ''}`}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-center gap-2">
           <Coffee className="h-4 w-4 text-amber-400" />
@@ -372,7 +375,7 @@ export function AlwaysAwakePanel() {
           </button>
 
           {pickerOpen && (
-            <div className="absolute z-10 mt-2 right-0 sm:right-auto sm:left-0 w-72 rounded-md border border-slate-700/60 bg-slate-900 p-3 shadow-xl space-y-2">
+            <div className="absolute z-20 mt-2 right-0 sm:right-auto sm:left-0 w-72 rounded-md border border-slate-700/60 bg-slate-900 p-3 shadow-xl space-y-2">
               <label className="block text-xs text-slate-300">
                 {t('sleep.alwaysAwake.pickerLabel')}
                 <input
@@ -383,10 +386,15 @@ export function AlwaysAwakePanel() {
                   value={pickerValue}
                   onChange={(e) => {
                     setPickerValue(e.target.value);
-                    setPickerError(null);
+                    setPickerError(computePickerError(e.target.value));
                   }}
                 />
               </label>
+              <p className="text-[11px] text-slate-500">
+                {t('sleep.alwaysAwake.pickerMaxHint', {
+                  datetime: formatDateTime(new Date(Date.now() + MAX_HORIZON_MS).toISOString()),
+                })}
+              </p>
               {pickerError && (
                 <p className="text-xs text-red-400">{pickerError}</p>
               )}
@@ -401,7 +409,8 @@ export function AlwaysAwakePanel() {
                 <button
                   type="button"
                   onClick={() => setCustomPreset(pickerValue)}
-                  className="rounded px-2 py-1 text-xs font-medium bg-amber-500/30 text-amber-200 border border-amber-500/50 hover:bg-amber-500/40"
+                  disabled={!pickerValue || pickerError !== null}
+                  className="rounded px-2 py-1 text-xs font-medium bg-amber-500/30 text-amber-200 border border-amber-500/50 hover:bg-amber-500/40 disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:bg-amber-500/30"
                 >
                   {t('sleep.alwaysAwake.pickerApply')}
                 </button>

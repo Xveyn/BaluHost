@@ -304,8 +304,10 @@ export function CpuGpuPanel({ cpu, gpu }: Props) {
         onMouseEnter={() => setHovered(true)}
         onMouseLeave={() => setHovered(false)}
         style={{ boxShadow: cardBoxShadow }}
-        className={`absolute inset-x-0 top-0 card border-slate-800/40 bg-slate-900/60 transition-all duration-200 hover:border-slate-700/60 hover:bg-slate-900/80 ${
-          expanded ? 'z-20 backdrop-blur' : ''
+        className={`absolute inset-x-0 top-0 card border-slate-800/40 transition-all duration-200 hover:border-slate-700/60 ${
+          expanded
+            ? 'z-20 !bg-slate-900'
+            : 'bg-slate-900/60 hover:bg-slate-900/80'
         }`}
       >
         <div className="relative">

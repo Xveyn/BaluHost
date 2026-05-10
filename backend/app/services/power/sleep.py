@@ -926,16 +926,17 @@ class SleepManagerService:
         # (_load_core_uptime returns (False, []) on exception). This guard
         # ensures no automatic path can suspend regardless of caller. Manual
         # admin trigger (spec F8) remains allowed; wake_at is still clamped.
+        #
+        # The logind inhibitor's `is_held()` is used as a backup ground-truth
+        # signal: it is acquired by `_schedule_check_loop` whenever core uptime
+        # is active and would block the kernel suspend at the logind layer
+        # anyway. If the DB query fails open but the inhibitor is still held,
+        # emitting `lifecycle.suspend` here would produce a phantom push the
+        # user sees while the system silently stays awake.
         master, windows = self._load_core_uptime()
+        in_core_db = False
         if master:
-            in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
-            if in_core and trigger != SleepTrigger.MANUAL:
-                logger.info(
-                    "enter_true_suspend blocked: inside active core uptime window "
-                    "(trigger=%s, reason=%s)",
-                    trigger.value, reason,
-                )
-                return False
+            in_core_db, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
             next_core = core_uptime_helpers.next_core_uptime_start(datetime.now(), windows)
             if next_core is not None and (wake_at is None or next_core < wake_at):
                 logger.info(
@@ -943,6 +944,15 @@ class SleepManagerService:
                     next_core, wake_at,
                 )
                 wake_at = next_core
+
+        inhibitor_held = self._core_uptime_inhibitor.is_held()
+        if (in_core_db or inhibitor_held) and trigger != SleepTrigger.MANUAL:
+            logger.info(
+                "enter_true_suspend blocked: core uptime active "
+                "(in_core_db=%s, inhibitor_held=%s, trigger=%s, reason=%s)",
+                in_core_db, inhibitor_held, trigger.value, reason,
+            )
+            return False
 
         # Enter soft sleep first if awake
         if self._current_state == SleepState.AWAKE:

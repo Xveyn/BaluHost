@@ -674,6 +674,7 @@
       "pickerCancel": "Cancel",
       "pickerErrorPast": "Must be in the future (at least 5 min)",
       "pickerErrorMax": "At most 7 days in the future",
+      "pickerMaxHint": "Max. {{datetime}} (7 days in the future)",
       "loadFailed": "Failed to load always-awake state",
       "saveFailed": "Save failed",
       "hintScheduleResumes": "Sleep schedule / core operating hours will resume at {{time}}.",
