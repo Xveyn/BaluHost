@@ -362,5 +362,24 @@
         "0": "Mo", "1": "Di", "2": "Mi", "3": "Do", "4": "Fr", "5": "Sa", "6": "So"
       }
     }
+  },
+  "userMenu": {
+    "quickSettings": {
+      "language": {
+        "title": "Sprache"
+      },
+      "byteUnits": {
+        "title": "Einheiten",
+        "binaryShort": "GiB",
+        "decimalShort": "GB",
+        "binaryHint": "binär",
+        "decimalHint": "dezimal"
+      },
+      "twoFactor": {
+        "notEnabled": "2FA noch nicht aktiv",
+        "enableNow": "Jetzt einrichten",
+        "modalTitle": "Zwei-Faktor-Authentifizierung einrichten"
+      }
+    }
   }
 }
