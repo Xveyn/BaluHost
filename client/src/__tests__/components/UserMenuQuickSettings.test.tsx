@@ -53,7 +53,7 @@ describe('UserMenuQuickSettings', () => {
     vi.spyOn(twoFactorApi, 'get2FAStatus').mockImplementation(
       () => new Promise(() => {})
     );
-    const { container } = render(<UserMenuQuickSettings onCloseDropdown={vi.fn()} />);
+    const { container } = render(<UserMenuQuickSettings onOpenSetup={vi.fn()} />);
     // The 2FA section should not appear; only Language + ByteUnit sections
     // The container should have exactly 3 children: LanguageSection, divider, ByteUnitSection
     const sections = container.querySelectorAll('section');
