@@ -33,7 +33,7 @@ describe('UserMenuQuickSettings', () => {
     vi.spyOn(twoFactorApi, 'get2FAStatus').mockImplementation(
       () => new Promise(() => {})
     );
-    render(<UserMenuQuickSettings onCloseDropdown={vi.fn()} />);
+    render(<UserMenuQuickSettings onOpenSetup={vi.fn()} />);
     expect(screen.getByText('Deutsch')).toBeInTheDocument();
     expect(screen.getByText('English')).toBeInTheDocument();
   });
@@ -43,7 +43,7 @@ describe('UserMenuQuickSettings', () => {
     vi.spyOn(twoFactorApi, 'get2FAStatus').mockImplementation(
       () => new Promise(() => {})
     );
-    render(<UserMenuQuickSettings onCloseDropdown={vi.fn()} />);
+    render(<UserMenuQuickSettings onOpenSetup={vi.fn()} />);
     expect(screen.getByText('GiB')).toBeInTheDocument();
     expect(screen.getByText('GB')).toBeInTheDocument();
   });
@@ -53,22 +53,22 @@ describe('UserMenuQuickSettings', () => {
     vi.spyOn(twoFactorApi, 'get2FAStatus').mockImplementation(
       () => new Promise(() => {})
     );
-    const { container } = render(<UserMenuQuickSettings onCloseDropdown={vi.fn()} />);
+    const { container } = render(<UserMenuQuickSettings onOpenSetup={vi.fn()} />);
     // The 2FA section should not appear; only Language + ByteUnit sections
     // The container should have exactly 3 children: LanguageSection, divider, ByteUnitSection
     const sections = container.querySelectorAll('section');
     expect(sections.length).toBe(2);
   });
 
-  it('clicking the 2FA setup prompt closes the dropdown via onCloseDropdown', async () => {
+  it('clicking the 2FA setup prompt invokes onOpenSetup', async () => {
     refreshStatus();
     vi.spyOn(twoFactorApi, 'get2FAStatus').mockResolvedValue({
       enabled: false,
       enabled_at: null,
       backup_codes_remaining: 0,
     });
-    const onCloseDropdown = vi.fn();
-    render(<UserMenuQuickSettings onCloseDropdown={onCloseDropdown} />);
+    const onOpenSetup = vi.fn();
+    render(<UserMenuQuickSettings onOpenSetup={onOpenSetup} />);
     // Wait specifically for the 2FA prompt button to appear after the async status resolves.
     // Language (2) + ByteUnit (2) buttons are always present; the 5th button is the prompt.
     // We wait until 5 buttons exist rather than using findAllByRole which resolves on the
@@ -80,6 +80,6 @@ describe('UserMenuQuickSettings', () => {
       promptButton = buttons[buttons.length - 1];
     });
     fireEvent.click(promptButton);
-    expect(onCloseDropdown).toHaveBeenCalledOnce();
+    expect(onOpenSetup).toHaveBeenCalledOnce();
   });
 });
