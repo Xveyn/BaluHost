@@ -5,7 +5,8 @@
  */
 
 import { useState } from 'react';
-import { AlertTriangle, Trash2, WifiOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { AlertTriangle, History, Trash2, WifiOff } from 'lucide-react';
 import type { SmartDevice, CommandResponse } from '../../api/smart-devices';
 import { smartDevicesApi } from '../../api/smart-devices';
 import {
@@ -15,6 +16,7 @@ import {
   DimmerControl,
   ColorControl,
 } from './CapabilityControls';
+import { TapoHistoryImportModal } from './TapoHistoryImportModal';
 import toast from 'react-hot-toast';
 
 interface SmartDeviceCardProps {
@@ -42,6 +44,8 @@ export function SmartDeviceCard({
   onStateChange,
 }: SmartDeviceCardProps) {
   const [cmdLoading, setCmdLoading] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const { t } = useTranslation('devices');
 
   const sendCommand = async (
     capability: string,
@@ -185,13 +189,24 @@ export function SmartDeviceCard({
 
         {/* Admin actions */}
         {isAdmin && (
-          <button
-            onClick={() => onDelete(device.id)}
-            className="flex-shrink-0 rounded-lg border border-rose-500/20 bg-rose-500/5 p-1.5 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 transition touch-manipulation active:scale-95"
-            title="Delete device"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {device.plugin_name === 'tapo_smart_plug' && (
+              <button
+                onClick={() => setHistoryOpen(true)}
+                className="rounded-lg border border-sky-500/20 bg-sky-500/5 p-1.5 text-sky-400 hover:border-sky-500/40 hover:bg-sky-500/10 transition touch-manipulation active:scale-95"
+                title={t('historyImport.title')}
+              >
+                <History className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={() => onDelete(device.id)}
+              className="rounded-lg border border-rose-500/20 bg-rose-500/5 p-1.5 text-rose-400 hover:border-rose-500/40 hover:bg-rose-500/10 transition touch-manipulation active:scale-95"
+              title="Delete device"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         )}
       </div>
 
@@ -231,6 +246,15 @@ export function SmartDeviceCard({
           </span>
         )}
       </div>
+
+      {/* History Import modal (Tapo only) */}
+      {device.plugin_name === 'tapo_smart_plug' && (
+        <TapoHistoryImportModal
+          deviceId={device.id}
+          isOpen={historyOpen}
+          onClose={() => setHistoryOpen(false)}
+        />
+      )}
     </div>
   );
 }
