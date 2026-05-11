@@ -38,8 +38,9 @@ class _FakeApiClient:
 
 @pytest.mark.asyncio
 async def test_fetch_hourly_single_chunk():
-    """Hourly fetch for <= 8 days fits in one API call. Result: bucket per non-zero Wh entry."""
-    # 24 hours of data for 2026-04-01, in Wh (some zero entries are dropped per documented behavior)
+    """Hourly fetch for <= 8 days fits in one API call. All 24 buckets are returned, including zero-Wh entries."""
+    # 24 hours of data for 2026-04-01, in Wh — zero entries are NOT filtered here
+    # (any filtering is deferred to the import_service layer)
     fake_device = _FakeTapoP110([
         _FakeEnergyDataResult(
             start_ts=int(datetime(2026, 4, 1, tzinfo=timezone.utc).timestamp()),

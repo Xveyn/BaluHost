@@ -11,7 +11,7 @@ import asyncio
 import logging
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Awaitable, Callable, List, Optional
+from typing import Callable, List, Optional
 
 from app.plugins.smart_device.schemas import ImportHistoryInterval
 
@@ -171,17 +171,21 @@ class TapoHistoryFetcher:
         if start_ts is None:
             return []
 
+        # Precompute the month-anchored base for MONTHLY stepping.
+        monthly_base = None
+        if interval == ImportHistoryInterval.MONTHLY:
+            monthly_base = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(
+                day=1, hour=0, minute=0, second=0, microsecond=0
+            )
+
         out: List[EnergyBucket] = []
         for idx, wh in enumerate(data):
             if interval == ImportHistoryInterval.MONTHLY:
-                # Step forward whole months instead of fixed minutes
-                base = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(
-                    day=1, hour=0, minute=0, second=0, microsecond=0
-                )
-                month = base.month + idx
-                year = base.year + (month - 1) // 12
+                assert monthly_base is not None  # set above when interval == MONTHLY
+                month = monthly_base.month + idx
+                year = monthly_base.year + (month - 1) // 12
                 month = ((month - 1) % 12) + 1
-                bucket_start = base.replace(year=year, month=month)
+                bucket_start = monthly_base.replace(year=year, month=month)
             else:
                 bucket_start = datetime.fromtimestamp(
                     start_ts + idx * bucket_minutes * 60, tz=timezone.utc
