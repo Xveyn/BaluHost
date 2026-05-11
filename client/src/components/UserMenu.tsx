@@ -6,6 +6,12 @@ import { useAuth } from '../contexts/AuthContext';
 import { useSystemMode } from '../hooks/useSystemMode';
 import { apiClient } from '../lib/api';
 import UserMenuQuickSettings from './UserMenuQuickSettings';
+import { Modal } from './ui/Modal';
+import {
+  TwoFactorSetupFlow,
+  type TwoFactorSetupStep,
+} from './quickSettings/TwoFactorSetupFlow';
+import { refreshStatus } from './quickSettings/twoFactorStatusStore';
 
 interface UserPublic {
   id: number;
@@ -25,7 +31,21 @@ export default function UserMenu() {
   const [submenuOpen, setSubmenuOpen] = useState(false);
   const [users, setUsers] = useState<UserPublic[] | null>(null);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [setupOpen, setSetupOpen] = useState(false);
+  const [setupStep, setSetupStep] = useState<TwoFactorSetupStep>('loading');
   const rootRef = useRef<HTMLDivElement>(null);
+
+  const handleOpenSetup = () => {
+    setOpen(false);
+    setSetupOpen(true);
+  };
+
+  const handleSetupComplete = () => {
+    refreshStatus();
+    setSetupOpen(false);
+  };
+
+  const lockClose = setupStep === 'backup-codes';
 
   const canSwitchUser = systemMode?.dev_mode === true && isAdmin && !isImpersonating;
 
@@ -152,9 +172,24 @@ export default function UserMenu() {
               <div className="border-t border-slate-800/70 my-1" />
             </>
           )}
-          <UserMenuQuickSettings onCloseDropdown={() => setOpen(false)} />
+          <UserMenuQuickSettings onOpenSetup={handleOpenSetup} />
         </div>
       )}
+
+      <Modal
+        isOpen={setupOpen}
+        onClose={() => setSetupOpen(false)}
+        title={t('userMenu.quickSettings.twoFactor.modalTitle')}
+        size="lg"
+        closeOnOverlayClick={!lockClose}
+        closeOnEscape={!lockClose}
+      >
+        <TwoFactorSetupFlow
+          onComplete={handleSetupComplete}
+          onCancel={() => setSetupOpen(false)}
+          onStepChange={setSetupStep}
+        />
+      </Modal>
     </div>
   );
 }
