@@ -1,8 +1,9 @@
-import { useState, useEffect } from "react";
-import { Shield, ShieldOff, Clock, Server, ArrowRightLeft } from "lucide-react";
-import { formatUptime } from "../../lib/formatters";
-import type { PiholeStatus, FailoverStatus } from "../../api/pihole";
-import { getFailoverStatus } from "../../api/pihole";
+import { useState, useEffect } from 'react';
+import { Shield, ShieldOff, Clock, Server, ArrowRightLeft } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import { formatUptime } from '../../lib/formatters';
+import type { PiholeStatus, FailoverStatus } from '../../api/pihole';
+import { getFailoverStatus } from '../../api/pihole';
 
 interface PiholeStatusBarProps {
   status: PiholeStatus;
@@ -10,11 +11,8 @@ interface PiholeStatusBarProps {
   loading: boolean;
 }
 
-export default function PiholeStatusBar({
-  status,
-  onBlockingToggle,
-  loading,
-}: PiholeStatusBarProps) {
+export default function PiholeStatusBar({ status, onBlockingToggle, loading }: PiholeStatusBarProps) {
+  const { t } = useTranslation('pihole');
   const [failover, setFailover] = useState<FailoverStatus | null>(null);
 
   useEffect(() => {
@@ -26,18 +24,25 @@ export default function PiholeStatusBar({
   }, []);
 
   const statusColor =
-    status.container_status === "running"
-      ? "bg-emerald-500"
-      : status.container_status === "stopped"
-        ? "bg-red-500"
-        : "bg-yellow-500";
+    status.container_status === 'running'
+      ? 'bg-emerald-500'
+      : status.container_status === 'stopped'
+        ? 'bg-red-500'
+        : 'bg-yellow-500';
 
   const statusLabel =
-    status.container_status === "running"
-      ? "Running"
-      : status.container_status === "stopped"
-        ? "Stopped"
-        : "Connecting";
+    status.container_status === 'running'
+      ? t('status.running')
+      : status.container_status === 'stopped'
+        ? t('status.stopped')
+        : t('status.connecting');
+
+  const modeLabel =
+    status.mode === 'docker'
+      ? t('status.modeDocker')
+      : status.mode === 'remote'
+        ? t('status.modeRemote')
+        : t('status.modeDev');
 
   return (
     <div className="flex flex-wrap items-center gap-4 rounded-xl border border-slate-700/50 bg-slate-800/60 px-5 py-3">
@@ -51,7 +56,6 @@ export default function PiholeStatusBar({
         )}
       </div>
 
-      {/* Divider */}
       <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Version */}
@@ -60,28 +64,23 @@ export default function PiholeStatusBar({
         {loading ? (
           <div className="h-4 w-16 animate-pulse rounded bg-slate-700" />
         ) : (
-          <span>{status.version || "N/A"}</span>
+          <span>{status.version || 'N/A'}</span>
         )}
       </div>
 
-      {/* Divider */}
       <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Mode badge */}
       <span
         className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-          status.mode === "docker"
-            ? "bg-sky-500/20 text-sky-400"
-            : status.mode === "remote"
-              ? "bg-violet-500/20 text-violet-400"
-              : "bg-amber-500/20 text-amber-400"
+          status.mode === 'docker'
+            ? 'bg-sky-500/20 text-sky-400'
+            : status.mode === 'remote'
+              ? 'bg-violet-500/20 text-violet-400'
+              : 'bg-amber-500/20 text-amber-400'
         }`}
       >
-        {status.mode === "docker"
-          ? "Docker"
-          : status.mode === "remote"
-            ? "Remote"
-            : "Dev"}
+        {modeLabel}
       </span>
 
       {/* Failover badge */}
@@ -91,24 +90,21 @@ export default function PiholeStatusBar({
           <div
             className={`flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
               failover.failover_active
-                ? "bg-amber-500/20 text-amber-400"
-                : "bg-emerald-500/20 text-emerald-400"
+                ? 'bg-amber-500/20 text-amber-400'
+                : 'bg-emerald-500/20 text-emerald-400'
             }`}
             title={
               failover.last_failover_at
-                ? `Last failover: ${new Date(failover.last_failover_at).toLocaleString()}`
+                ? t('status.lastFailover', { time: new Date(failover.last_failover_at).toLocaleString() })
                 : undefined
             }
           >
             <ArrowRightLeft className="h-3 w-3" />
-            {failover.failover_active
-              ? "Failover: NAS"
-              : "Active: Pi"}
+            {failover.failover_active ? t('status.failoverNas') : t('status.activePi')}
           </div>
         </>
       )}
 
-      {/* Divider */}
       <div className="hidden sm:block h-5 w-px bg-slate-700" />
 
       {/* Uptime */}
@@ -117,32 +113,31 @@ export default function PiholeStatusBar({
         {loading ? (
           <div className="h-4 w-24 animate-pulse rounded bg-slate-700" />
         ) : (
-          <span>{status.uptime != null ? formatUptime(status.uptime) : "\u2014"}</span>
+          <span>{status.uptime != null ? formatUptime(status.uptime) : '—'}</span>
         )}
       </div>
 
-      {/* Spacer */}
       <div className="flex-1" />
 
       {/* Blocking toggle */}
       <button
         onClick={() => onBlockingToggle(!status.blocking_enabled)}
-        disabled={loading || status.container_status !== "running"}
+        disabled={loading || status.container_status !== 'running'}
         className={`flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
           status.blocking_enabled
-            ? "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
-            : "bg-red-500/20 text-red-400 hover:bg-red-500/30"
+            ? 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
+            : 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
         } disabled:cursor-not-allowed disabled:opacity-50`}
       >
         {status.blocking_enabled ? (
           <>
             <Shield className="h-4 w-4" />
-            Blocking Enabled
+            {t('status.blockingEnabled')}
           </>
         ) : (
           <>
             <ShieldOff className="h-4 w-4" />
-            Blocking Disabled
+            {t('status.blockingDisabled')}
           </>
         )}
       </button>

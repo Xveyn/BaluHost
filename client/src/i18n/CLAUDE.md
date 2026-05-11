@@ -31,6 +31,7 @@ Translations are split by feature domain. Each namespace is a separate JSON file
 | `remoteServers` | Remote server profiles |
 | `apiDocs` | API documentation page |
 | `manual` | User manual |
+| `pihole` | Pi-hole DNS dashboard |
 
 ## Usage in Components
 

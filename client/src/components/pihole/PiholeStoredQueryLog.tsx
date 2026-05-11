@@ -1,38 +1,36 @@
-import { useState, useEffect, useCallback } from "react";
-import { Search, ChevronLeft, ChevronRight } from "lucide-react";
-import toast from "react-hot-toast";
-import {
-  getStoredQueries,
-  type StoredQueryEntry,
-  type Period,
-} from "../../api/pihole";
+import { useState, useEffect, useCallback } from 'react';
+import { Search, ChevronLeft, ChevronRight } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import { getStoredQueries, type StoredQueryEntry, type Period } from '../../api/pihole';
 import { useSortableTable } from '../../hooks/useSortableTable';
 import { SortableHeader } from '../ui/SortableHeader';
 
 const STATUS_COLORS: Record<string, string> = {
-  FORWARDED: "text-emerald-400",
-  BLOCKED: "text-red-400",
-  CACHED: "text-violet-400",
+  FORWARDED: 'text-emerald-400',
+  BLOCKED: 'text-red-400',
+  CACHED: 'text-violet-400',
 };
 
-const PERIODS: { key: Period; label: string }[] = [
-  { key: "24h", label: "24h" },
-  { key: "7d", label: "7d" },
-  { key: "30d", label: "30d" },
-];
-
 export default function PiholeStoredQueryLog() {
+  const { t } = useTranslation('pihole');
   const [queries, setQueries] = useState<StoredQueryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
-  const [period, setPeriod] = useState<Period>("24h");
-  const [domainFilter, setDomainFilter] = useState("");
-  const [clientFilter, setClientFilter] = useState("");
-  const [statusFilter, setStatusFilter] = useState("");
+  const [period, setPeriod] = useState<Period>('24h');
+  const [domainFilter, setDomainFilter] = useState('');
+  const [clientFilter, setClientFilter] = useState('');
+  const [statusFilter, setStatusFilter] = useState('');
 
   const pageSize = 100;
   const { sortedData: sortedQueries, sortKey, sortDirection, toggleSort } = useSortableTable(queries);
+
+  const PERIODS: { key: Period; label: string }[] = [
+    { key: '24h', label: t('analytics.period.24hShort') },
+    { key: '7d', label: t('analytics.period.7dShort') },
+    { key: '30d', label: t('analytics.period.30dShort') },
+  ];
 
   const fetchQueries = useCallback(async () => {
     setLoading(true);
@@ -50,11 +48,11 @@ export default function PiholeStoredQueryLog() {
       setQueries(res.queries);
       setTotal(res.total);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to load stored queries");
+      toast.error(err?.response?.data?.detail || t('storedQuery.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [page, period, domainFilter, clientFilter, statusFilter]);
+  }, [page, period, domainFilter, clientFilter, statusFilter, t]);
 
   useEffect(() => {
     fetchQueries();
@@ -72,54 +70,58 @@ export default function PiholeStoredQueryLog() {
       {/* Filters */}
       <div className="flex flex-wrap items-end gap-3">
         <div className="flex-1 min-w-[140px]">
-          <label className="mb-1 block text-xs text-slate-400">Domain</label>
+          <label className="mb-1 block text-xs text-slate-400">{t('storedQuery.filters.domain')}</label>
           <div className="relative">
             <Search className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-500" />
             <input
               type="text"
               value={domainFilter}
               onChange={(e) => setDomainFilter(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-              placeholder="Filter by domain..."
+              onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+              placeholder={t('storedQuery.filters.domainPlaceholder')}
               className="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-2 pl-9 pr-3 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
             />
           </div>
         </div>
         <div className="min-w-[100px]">
-          <label className="mb-1 block text-xs text-slate-400">Client</label>
+          <label className="mb-1 block text-xs text-slate-400">{t('storedQuery.filters.client')}</label>
           <input
             type="text"
             value={clientFilter}
             onChange={(e) => setClientFilter(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && handleSearch()}
-            placeholder="IP address"
+            onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
+            placeholder={t('storedQuery.filters.clientPlaceholder')}
             className="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-2 px-3 text-sm text-slate-200 placeholder-slate-500 focus:border-sky-500 focus:outline-none"
           />
         </div>
         <div className="min-w-[120px]">
-          <label className="mb-1 block text-xs text-slate-400">Status</label>
+          <label className="mb-1 block text-xs text-slate-400">{t('storedQuery.filters.status')}</label>
           <select
             value={statusFilter}
-            onChange={(e) => { setStatusFilter(e.target.value); setPage(1); }}
+            onChange={(e) => {
+              setStatusFilter(e.target.value);
+              setPage(1);
+            }}
             className="w-full rounded-lg border border-slate-700 bg-slate-800/80 py-2 px-3 text-sm text-slate-200 focus:border-sky-500 focus:outline-none"
           >
-            <option value="">All</option>
-            <option value="FORWARDED">Forwarded</option>
-            <option value="BLOCKED">Blocked</option>
-            <option value="CACHED">Cached</option>
+            <option value="">{t('storedQuery.filters.all')}</option>
+            <option value="FORWARDED">{t('storedQuery.filters.forwarded')}</option>
+            <option value="BLOCKED">{t('storedQuery.filters.blocked')}</option>
+            <option value="CACHED">{t('storedQuery.filters.cached')}</option>
           </select>
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-400">Period</label>
+          <label className="mb-1 block text-xs text-slate-400">{t('storedQuery.filters.period')}</label>
           <div className="flex gap-1 rounded-lg border border-slate-700 bg-slate-800/80 p-0.5">
             {PERIODS.map((p) => (
               <button
                 key={p.key}
-                onClick={() => { setPeriod(p.key); setPage(1); }}
+                onClick={() => {
+                  setPeriod(p.key);
+                  setPage(1);
+                }}
                 className={`rounded-md px-2.5 py-1.5 text-xs font-medium transition-colors ${
-                  period === p.key
-                    ? "bg-slate-700 text-white"
-                    : "text-slate-400 hover:text-slate-200"
+                  period === p.key ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {p.label}
@@ -131,7 +133,7 @@ export default function PiholeStoredQueryLog() {
           onClick={handleSearch}
           className="rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 transition-colors"
         >
-          Search
+          {t('storedQuery.filters.search')}
         </button>
       </div>
 
@@ -140,12 +142,12 @@ export default function PiholeStoredQueryLog() {
         <table className="w-full text-sm">
           <thead>
             <tr className="border-b border-slate-700/50 text-left text-xs text-slate-400">
-              <SortableHeader label="Time" sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="Client" sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="Type" sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
-              <SortableHeader label="Response" sortKey="response_time_ms" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3 text-right" />
+              <SortableHeader label={t('queryLog.columns.time')} sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label={t('queryLog.columns.domain')} sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label={t('queryLog.columns.client')} sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label={t('queryLog.columns.type')} sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label={t('queryLog.columns.status')} sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3" />
+              <SortableHeader label={t('queryLog.columns.response')} sortKey="response_time_ms" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-3 text-right" />
             </tr>
           </thead>
           <tbody>
@@ -162,7 +164,7 @@ export default function PiholeStoredQueryLog() {
             ) : queries.length === 0 ? (
               <tr>
                 <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
-                  No queries found for the selected filters.
+                  {t('storedQuery.noResults')}
                 </td>
               </tr>
             ) : (
@@ -170,27 +172,21 @@ export default function PiholeStoredQueryLog() {
                 <tr key={q.id} className="border-b border-slate-700/30 hover:bg-slate-700/20">
                   <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-400">
                     {new Date(q.timestamp).toLocaleString([], {
-                      month: "short",
-                      day: "numeric",
-                      hour: "2-digit",
-                      minute: "2-digit",
-                      second: "2-digit",
+                      month: 'short',
+                      day: 'numeric',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                      second: '2-digit',
                     })}
                   </td>
-                  <td className="max-w-[280px] truncate px-4 py-2.5 text-slate-200">
-                    {q.domain}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-xs text-slate-400">
-                    {q.client}
-                  </td>
+                  <td className="max-w-[280px] truncate px-4 py-2.5 text-slate-200">{q.domain}</td>
+                  <td className="px-4 py-2.5 font-mono text-xs text-slate-400">{q.client}</td>
                   <td className="px-4 py-2.5 text-slate-400">{q.query_type}</td>
                   <td className="px-4 py-2.5">
-                    <span className={`font-medium ${STATUS_COLORS[q.status] ?? "text-slate-400"}`}>
-                      {q.status}
-                    </span>
+                    <span className={`font-medium ${STATUS_COLORS[q.status] ?? 'text-slate-400'}`}>{q.status}</span>
                   </td>
                   <td className="px-4 py-2.5 text-right font-mono text-xs text-slate-400">
-                    {q.response_time_ms != null ? `${q.response_time_ms.toFixed(1)} ms` : "-"}
+                    {q.response_time_ms != null ? `${q.response_time_ms.toFixed(1)} ms` : '-'}
                   </td>
                 </tr>
               ))
@@ -201,9 +197,7 @@ export default function PiholeStoredQueryLog() {
 
       {/* Pagination */}
       <div className="flex items-center justify-between text-sm text-slate-400">
-        <span>
-          {total.toLocaleString()} queries total
-        </span>
+        <span>{t('storedQuery.totalRows', { count: total })}</span>
         <div className="flex items-center gap-2">
           <button
             onClick={() => setPage((p) => Math.max(1, p - 1))}
@@ -212,9 +206,7 @@ export default function PiholeStoredQueryLog() {
           >
             <ChevronLeft className="h-4 w-4" />
           </button>
-          <span className="text-slate-300">
-            Page {page} of {totalPages}
-          </span>
+          <span className="text-slate-300">{t('queryLog.pageOf', { page, total: totalPages })}</span>
           <button
             onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
             disabled={page >= totalPages}

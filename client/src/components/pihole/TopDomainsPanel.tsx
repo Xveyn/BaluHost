@@ -1,5 +1,6 @@
-import { Globe, ShieldOff } from "lucide-react";
-import type { DomainEntry } from "../../api/pihole";
+import { Globe, ShieldOff } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { DomainEntry } from '../../api/pihole';
 
 interface TopDomainsPanelProps {
   topPermitted: DomainEntry[];
@@ -14,6 +15,7 @@ function DomainList({
   accent,
   barColor,
   loading,
+  noDataLabel,
 }: {
   title: string;
   icon: React.ReactNode;
@@ -21,10 +23,9 @@ function DomainList({
   accent: string;
   barColor: string;
   loading: boolean;
+  noDataLabel: string;
 }) {
-  const maxCount = domains.length > 0
-    ? Math.max(...domains.map((d) => d.count))
-    : 1;
+  const maxCount = domains.length > 0 ? Math.max(...domains.map((d) => d.count)) : 1;
 
   return (
     <div className="flex-1 rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
@@ -43,7 +44,7 @@ function DomainList({
           ))}
         </div>
       ) : domains.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">No data</p>
+        <p className="py-6 text-center text-sm text-slate-500">{noDataLabel}</p>
       ) : (
         <ol className="space-y-2.5">
           {domains.map((entry, i) => {
@@ -51,12 +52,8 @@ function DomainList({
             return (
               <li key={i}>
                 <div className="flex items-baseline justify-between gap-2">
-                  <span className="truncate font-mono text-xs text-slate-200">
-                    {entry.domain}
-                  </span>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {entry.count.toLocaleString()}
-                  </span>
+                  <span className="truncate font-mono text-xs text-slate-200">{entry.domain}</span>
+                  <span className="shrink-0 text-xs text-slate-500">{entry.count.toLocaleString()}</span>
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/60">
                   <div
@@ -73,28 +70,28 @@ function DomainList({
   );
 }
 
-export default function TopDomainsPanel({
-  topPermitted,
-  topBlocked,
-  loading,
-}: TopDomainsPanelProps) {
+export default function TopDomainsPanel({ topPermitted, topBlocked, loading }: TopDomainsPanelProps) {
+  const { t } = useTranslation('pihole');
+
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
       <DomainList
-        title="Top Permitted"
+        title={t('topDomains.permitted')}
         icon={<Globe className="h-4 w-4" />}
         domains={topPermitted}
         accent="text-emerald-400"
         barColor="bg-emerald-500"
         loading={loading}
+        noDataLabel={t('topDomains.noData')}
       />
       <DomainList
-        title="Top Blocked"
+        title={t('topDomains.blocked')}
         icon={<ShieldOff className="h-4 w-4" />}
         domains={topBlocked}
         accent="text-red-400"
         barColor="bg-red-500"
         loading={loading}
+        noDataLabel={t('topDomains.noData')}
       />
     </div>
   );

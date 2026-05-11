@@ -37,6 +37,8 @@ import manualDe from './locales/de/manual.json';
 import manualEn from './locales/en/manual.json';
 import setupDe from './locales/de/setup.json';
 import setupEn from './locales/en/setup.json';
+import piholeDe from './locales/de/pihole.json';
+import piholeEn from './locales/en/pihole.json';
 
 const resources = {
   de: {
@@ -57,6 +59,7 @@ const resources = {
     apiDocs: apiDocsDe,
     manual: manualDe,
     setup: setupDe,
+    pihole: piholeDe,
   },
   en: {
     common: commonEn,
@@ -76,6 +79,7 @@ const resources = {
     apiDocs: apiDocsEn,
     manual: manualEn,
     setup: setupEn,
+    pihole: piholeEn,
   },
 };
 
@@ -86,7 +90,7 @@ i18n
     resources,
     fallbackLng: 'de',
     defaultNS: 'common',
-    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup'],
+    ns: ['common', 'dashboard', 'fileManager', 'settings', 'admin', 'login', 'system', 'shares', 'plugins', 'devices', 'scheduler', 'notifications', 'updates', 'remoteServers', 'apiDocs', 'manual', 'setup', 'pihole'],
     
     detection: {
       // Order of language detection methods

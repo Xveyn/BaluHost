@@ -1,13 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, RefreshCw, Download } from "lucide-react";
-import toast from "react-hot-toast";
-import {
-  getAdlists,
-  addAdlist,
-  removeAdlist,
-  toggleAdlist,
-  updateGravity,
-} from "../../api/pihole";
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, RefreshCw, Download } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import { getAdlists, addAdlist, removeAdlist, toggleAdlist, updateGravity } from '../../api/pihole';
 import { useSortableTable } from '../../hooks/useSortableTable';
 import { SortableHeader } from '../ui/SortableHeader';
 
@@ -20,10 +15,11 @@ interface AdlistRow {
 }
 
 export default function PiholeAdlistManagement() {
+  const { t } = useTranslation('pihole');
   const [adlists, setAdlists] = useState<AdlistRow[]>([]);
   const [loading, setLoading] = useState(false);
-  const [newUrl, setNewUrl] = useState("");
-  const [newComment, setNewComment] = useState("");
+  const [newUrl, setNewUrl] = useState('');
+  const [newComment, setNewComment] = useState('');
   const [adding, setAdding] = useState(false);
   const [removingId, setRemovingId] = useState<number | null>(null);
   const [togglingId, setTogglingId] = useState<number | null>(null);
@@ -34,13 +30,21 @@ export default function PiholeAdlistManagement() {
     setLoading(true);
     try {
       const result = await getAdlists();
-      setAdlists(result.lists.map((l) => ({ id: l.id ?? 0, url: l.url, comment: l.comment, domain_count: l.number, enabled: l.enabled })));
+      setAdlists(
+        result.lists.map((l) => ({
+          id: l.id ?? 0,
+          url: l.url,
+          comment: l.comment,
+          domain_count: l.number,
+          enabled: l.enabled,
+        }))
+      );
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to load adlists");
+      toast.error(err?.response?.data?.detail || t('adlists.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchAdlists();
@@ -54,12 +58,12 @@ export default function PiholeAdlistManagement() {
     setAdding(true);
     try {
       await addAdlist(trimmedUrl, newComment.trim() || undefined);
-      toast.success("Adlist added");
-      setNewUrl("");
-      setNewComment("");
+      toast.success(t('adlists.addedToast'));
+      setNewUrl('');
+      setNewComment('');
       await fetchAdlists();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to add adlist");
+      toast.error(err?.response?.data?.detail || t('adlists.addFailed'));
     } finally {
       setAdding(false);
     }
@@ -69,10 +73,10 @@ export default function PiholeAdlistManagement() {
     setTogglingId(id);
     try {
       await toggleAdlist(url, !currentEnabled);
-      toast.success(currentEnabled ? "Adlist disabled" : "Adlist enabled");
+      toast.success(currentEnabled ? t('adlists.disabledToast') : t('adlists.enabledToast'));
       await fetchAdlists();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to toggle adlist");
+      toast.error(err?.response?.data?.detail || t('adlists.toggleFailed'));
     } finally {
       setTogglingId(null);
     }
@@ -82,10 +86,10 @@ export default function PiholeAdlistManagement() {
     setRemovingId(id);
     try {
       await removeAdlist(url);
-      toast.success("Adlist removed");
+      toast.success(t('adlists.removedToast'));
       await fetchAdlists();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to remove adlist");
+      toast.error(err?.response?.data?.detail || t('adlists.removeFailed'));
     } finally {
       setRemovingId(null);
     }
@@ -95,10 +99,10 @@ export default function PiholeAdlistManagement() {
     setUpdatingGravity(true);
     try {
       await updateGravity();
-      toast.success("Gravity updated successfully");
+      toast.success(t('adlists.gravityUpdatedToast'));
       await fetchAdlists();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to update gravity");
+      toast.error(err?.response?.data?.detail || t('adlists.gravityFailed'));
     } finally {
       setUpdatingGravity(false);
     }
@@ -108,20 +112,14 @@ export default function PiholeAdlistManagement() {
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60">
       {/* Header */}
       <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
-        <h3 className="text-sm font-medium text-slate-300">
-          Adlists (Blocklists)
-        </h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('adlists.title')}</h3>
         <button
           onClick={handleUpdateGravity}
           disabled={updatingGravity}
           className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {updatingGravity ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Download className="h-4 w-4" />
-          )}
-          Update Gravity
+          {updatingGravity ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Download className="h-4 w-4" />}
+          {t('adlists.updateGravity')}
         </button>
       </div>
 
@@ -130,24 +128,19 @@ export default function PiholeAdlistManagement() {
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-10 animate-pulse rounded bg-slate-700/40"
-              />
+              <div key={i} className="h-10 animate-pulse rounded bg-slate-700/40" />
             ))}
           </div>
         ) : adlists.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
-            No adlists configured
-          </p>
+          <p className="py-8 text-center text-sm text-slate-500">{t('adlists.noAdlists')}</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-                <SortableHeader label="URL" sortKey="url" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
-                <SortableHeader label="Comment" sortKey="comment" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
-                <SortableHeader label="Domains" sortKey="domain_count" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-right" />
-                <SortableHeader label="Enabled" sortKey="enabled" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-center" />
+                <SortableHeader label={t('adlists.columns.url')} sortKey="url" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label={t('adlists.columns.comment')} sortKey="comment" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label={t('adlists.columns.domains')} sortKey="domain_count" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-right" />
+                <SortableHeader label={t('adlists.columns.enabled')} sortKey="enabled" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4 text-center" />
                 <th className="pb-2 w-10" />
               </tr>
             </thead>
@@ -155,18 +148,12 @@ export default function PiholeAdlistManagement() {
               {sortedAdlists.map((al) => (
                 <tr
                   key={al.id}
-                  className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${!al.enabled ? "opacity-50" : ""}`}
+                  className={`border-b border-slate-700/30 hover:bg-slate-700/20 ${!al.enabled ? 'opacity-50' : ''}`}
                 >
-                  <td className="max-w-xs truncate py-2.5 pr-4 font-mono text-xs text-slate-200">
-                    {al.url}
-                  </td>
-                  <td className="py-2.5 pr-4 text-xs text-slate-500">
-                    {al.comment || "—"}
-                  </td>
+                  <td className="max-w-xs truncate py-2.5 pr-4 font-mono text-xs text-slate-200">{al.url}</td>
+                  <td className="py-2.5 pr-4 text-xs text-slate-500">{al.comment || '—'}</td>
                   <td className="py-2.5 pr-4 text-right text-xs text-slate-400">
-                    {al.domain_count != null
-                      ? al.domain_count.toLocaleString()
-                      : "—"}
+                    {al.domain_count != null ? al.domain_count.toLocaleString() : '—'}
                   </td>
                   <td className="py-2.5 pr-4 text-center">
                     <button
@@ -179,7 +166,9 @@ export default function PiholeAdlistManagement() {
                         <RefreshCw className="mx-auto h-3 w-3 animate-spin text-white" />
                       ) : (
                         <span
-                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${al.enabled ? "translate-x-4.5" : "translate-x-1"}`}
+                          className={`inline-block h-3.5 w-3.5 rounded-full bg-white transition-transform ${
+                            al.enabled ? 'translate-x-4.5' : 'translate-x-1'
+                          }`}
                         />
                       )}
                     </button>
@@ -208,24 +197,22 @@ export default function PiholeAdlistManagement() {
       <div className="border-t border-slate-700/50 p-4">
         <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-2">
           <div className="min-w-0 flex-1 basis-full sm:basis-0">
-            <label className="mb-1 block text-xs text-slate-500">URL</label>
+            <label className="mb-1 block text-xs text-slate-500">{t('adlists.urlLabel')}</label>
             <input
               type="url"
               value={newUrl}
               onChange={(e) => setNewUrl(e.target.value)}
-              placeholder="https://example.com/blocklist.txt"
+              placeholder={t('adlists.urlPlaceholder')}
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
           <div className="w-full sm:w-48">
-            <label className="mb-1 block text-xs text-slate-500">
-              Comment (optional)
-            </label>
+            <label className="mb-1 block text-xs text-slate-500">{t('adlists.commentLabel')}</label>
             <input
               type="text"
               value={newComment}
               onChange={(e) => setNewComment(e.target.value)}
-              placeholder="Description..."
+              placeholder={t('adlists.commentPlaceholder')}
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
@@ -234,12 +221,8 @@ export default function PiholeAdlistManagement() {
             disabled={adding || !newUrl.trim()}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
-            {adding ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Add
+            {adding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {t('adlists.add')}
           </button>
         </form>
       </div>

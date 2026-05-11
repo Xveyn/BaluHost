@@ -1,23 +1,43 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Plus, Trash2, RefreshCw, Globe } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
-  getReferenceLists, createReferenceList, updateReferenceList,
-  deleteReferenceList, refreshReferenceLists, type ReferenceListEntry,
+  getReferenceLists,
+  createReferenceList,
+  updateReferenceList,
+  deleteReferenceList,
+  refreshReferenceLists,
+  type ReferenceListEntry,
 } from '../../../api/adDiscovery';
 
-function statusBadge(list: ReferenceListEntry) {
-  if (list.last_error) return <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-300">Error</span>;
-  if (!list.last_fetched_at) return <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-xs text-slate-400">Never fetched</span>;
-  return <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-300">Current</span>;
-}
-
 export default function ReferenceListsPanel() {
+  const { t } = useTranslation('pihole');
   const [lists, setLists] = useState<ReferenceListEntry[]>([]);
   const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [showAdd, setShowAdd] = useState(false);
   const [newList, setNewList] = useState({ name: '', url: '', fetch_interval_hours: 24 });
+
+  const statusBadge = (list: ReferenceListEntry) => {
+    if (list.last_error)
+      return (
+        <span className="rounded-full bg-red-500/20 px-2 py-0.5 text-xs text-red-300">
+          {t('adDiscovery.referenceLists.status.error')}
+        </span>
+      );
+    if (!list.last_fetched_at)
+      return (
+        <span className="rounded-full bg-slate-500/20 px-2 py-0.5 text-xs text-slate-400">
+          {t('adDiscovery.referenceLists.status.neverFetched')}
+        </span>
+      );
+    return (
+      <span className="rounded-full bg-green-500/20 px-2 py-0.5 text-xs text-green-300">
+        {t('adDiscovery.referenceLists.status.current')}
+      </span>
+    );
+  };
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -25,25 +45,27 @@ export default function ReferenceListsPanel() {
       const result = await getReferenceLists();
       setLists(result.lists);
     } catch {
-      toast.error('Failed to load reference lists');
+      toast.error(t('adDiscovery.referenceLists.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
-  useEffect(() => { fetchData(); }, [fetchData]);
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
 
   const handleCreate = async () => {
     if (!newList.name.trim() || !newList.url.trim()) return;
     try {
       await createReferenceList(newList);
-      toast.success('Reference list added');
+      toast.success(t('adDiscovery.referenceLists.addedToast'));
       setShowAdd(false);
       setNewList({ name: '', url: '', fetch_interval_hours: 24 });
       fetchData();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
-      toast.error(e?.response?.data?.detail || 'Failed to add list');
+      toast.error(e?.response?.data?.detail || t('adDiscovery.referenceLists.addFailed'));
     }
   };
 
@@ -52,7 +74,7 @@ export default function ReferenceListsPanel() {
       await updateReferenceList(l.id, { enabled: !l.enabled });
       fetchData();
     } catch {
-      toast.error('Failed to toggle list');
+      toast.error(t('adDiscovery.referenceLists.toggleFailed'));
     }
   };
 
@@ -60,11 +82,11 @@ export default function ReferenceListsPanel() {
     if (l.is_default) return;
     try {
       await deleteReferenceList(l.id);
-      toast.success('List deleted');
+      toast.success(t('adDiscovery.referenceLists.deletedToast'));
       fetchData();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
-      toast.error(e?.response?.data?.detail || 'Failed to delete');
+      toast.error(e?.response?.data?.detail || t('adDiscovery.referenceLists.deleteFailed'));
     }
   };
 
@@ -72,11 +94,11 @@ export default function ReferenceListsPanel() {
     setRefreshing(true);
     try {
       await refreshReferenceLists();
-      toast.success('Lists refreshed');
+      toast.success(t('adDiscovery.referenceLists.refreshedToast'));
       fetchData();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };
-      toast.error(e?.response?.data?.detail || 'Failed to refresh');
+      toast.error(e?.response?.data?.detail || t('adDiscovery.referenceLists.refreshFailed'));
     } finally {
       setRefreshing(false);
     }
@@ -85,43 +107,68 @@ export default function ReferenceListsPanel() {
   return (
     <div className="space-y-4">
       <div className="flex items-center justify-between">
-        <h3 className="text-sm font-medium text-slate-300">Community Reference Lists</h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('adDiscovery.referenceLists.title')}</h3>
         <div className="flex gap-2">
-          <button onClick={handleRefreshAll} disabled={refreshing}
-            className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:opacity-50">
-            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> Refresh All
+          <button
+            onClick={handleRefreshAll}
+            disabled={refreshing}
+            className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600 disabled:opacity-50"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} /> {t('adDiscovery.referenceLists.refreshAll')}
           </button>
-          <button onClick={() => setShowAdd(!showAdd)}
-            className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600">
-            <Plus className="h-4 w-4" /> Add List
+          <button
+            onClick={() => setShowAdd(!showAdd)}
+            className="flex items-center gap-1.5 rounded-md bg-slate-700 px-3 py-1.5 text-sm text-white hover:bg-slate-600"
+          >
+            <Plus className="h-4 w-4" /> {t('adDiscovery.referenceLists.addList')}
           </button>
         </div>
       </div>
 
       {showAdd && (
         <div className="rounded-lg border border-slate-700 bg-slate-800/60 p-4 space-y-3">
-          <input value={newList.name} onChange={e => setNewList(l => ({ ...l, name: e.target.value }))}
-            placeholder="List name" className="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-white" />
-          <input value={newList.url} onChange={e => setNewList(l => ({ ...l, url: e.target.value }))}
-            placeholder="https://..." className="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-white" />
+          <input
+            value={newList.name}
+            onChange={(e) => setNewList((l) => ({ ...l, name: e.target.value }))}
+            placeholder={t('adDiscovery.referenceLists.namePlaceholder')}
+            className="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-white"
+          />
+          <input
+            value={newList.url}
+            onChange={(e) => setNewList((l) => ({ ...l, url: e.target.value }))}
+            placeholder={t('adDiscovery.referenceLists.urlPlaceholder')}
+            className="w-full rounded-md border border-slate-600 bg-slate-700 px-3 py-1.5 text-sm text-white"
+          />
           <div className="flex items-center gap-3">
-            <span className="text-xs text-slate-400">Refresh every</span>
-            <input type="number" min={1} max={168} value={newList.fetch_interval_hours}
-              onChange={e => setNewList(l => ({ ...l, fetch_interval_hours: parseInt(e.target.value) || 24 }))}
-              className="w-16 rounded-md border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white" />
-            <span className="text-xs text-slate-400">hours</span>
+            <span className="text-xs text-slate-400">{t('adDiscovery.referenceLists.refreshEvery')}</span>
+            <input
+              type="number"
+              min={1}
+              max={168}
+              value={newList.fetch_interval_hours}
+              onChange={(e) => setNewList((l) => ({ ...l, fetch_interval_hours: parseInt(e.target.value) || 24 }))}
+              className="w-16 rounded-md border border-slate-600 bg-slate-700 px-2 py-1 text-sm text-white"
+            />
+            <span className="text-xs text-slate-400">{t('adDiscovery.referenceLists.hours')}</span>
             <div className="flex-1" />
-            <button onClick={handleCreate} className="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-500">Add</button>
+            <button onClick={handleCreate} className="rounded-md bg-blue-600 px-4 py-1.5 text-sm text-white hover:bg-blue-500">
+              {t('adDiscovery.referenceLists.add')}
+            </button>
           </div>
         </div>
       )}
 
       {loading ? (
-        <p className="text-center text-sm text-slate-500">Loading...</p>
+        <p className="text-center text-sm text-slate-500">{t('adDiscovery.referenceLists.loading')}</p>
       ) : (
         <div className="grid gap-3 sm:grid-cols-2">
-          {lists.map(l => (
-            <div key={l.id} className={`rounded-lg border p-4 ${l.enabled ? 'border-slate-600 bg-slate-800/40' : 'border-slate-700/50 bg-slate-800/20 opacity-60'}`}>
+          {lists.map((l) => (
+            <div
+              key={l.id}
+              className={`rounded-lg border p-4 ${
+                l.enabled ? 'border-slate-600 bg-slate-800/40' : 'border-slate-700/50 bg-slate-800/20 opacity-60'
+              }`}
+            >
               <div className="flex items-start justify-between">
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center gap-2">
@@ -131,15 +178,23 @@ export default function ReferenceListsPanel() {
                   </div>
                   <p className="mt-1 truncate text-xs text-slate-500">{l.url}</p>
                 </div>
-                <button onClick={() => handleToggle(l)}
-                  className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${l.enabled ? 'bg-blue-600' : 'bg-slate-600'}`}>
+                <button
+                  onClick={() => handleToggle(l)}
+                  className={`relative h-5 w-9 flex-shrink-0 rounded-full transition-colors ${l.enabled ? 'bg-blue-600' : 'bg-slate-600'}`}
+                >
                   <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-transform ${l.enabled ? 'left-[18px]' : 'left-0.5'}`} />
                 </button>
               </div>
               <div className="mt-2 flex items-center gap-3 text-xs text-slate-400">
-                <span>{l.domain_count.toLocaleString()} domains</span>
-                {l.last_fetched_at && <span>Fetched {new Date(l.last_fetched_at).toLocaleDateString()}</span>}
-                {l.last_error && <span className="text-red-400 truncate max-w-[200px]" title={l.last_error}>{l.last_error}</span>}
+                <span>{t('adDiscovery.referenceLists.domainsCount', { count: l.domain_count })}</span>
+                {l.last_fetched_at && (
+                  <span>{t('adDiscovery.referenceLists.fetched', { date: new Date(l.last_fetched_at).toLocaleDateString() })}</span>
+                )}
+                {l.last_error && (
+                  <span className="text-red-400 truncate max-w-[200px]" title={l.last_error}>
+                    {l.last_error}
+                  </span>
+                )}
               </div>
               {!l.is_default && (
                 <div className="mt-2 flex justify-end">

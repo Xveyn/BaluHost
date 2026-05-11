@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback } from 'react';
 import {
   AreaChart,
   Area,
@@ -7,15 +7,10 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from "recharts";
-import {
-  Globe,
-  ShieldOff,
-  Clock,
-  Users,
-  RefreshCw,
-} from "lucide-react";
-import toast from "react-hot-toast";
+} from 'recharts';
+import { Globe, ShieldOff, Clock, Users, RefreshCw } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
   getStoredStats,
   getStoredTopDomains,
@@ -27,33 +22,34 @@ import {
   type StoredClientEntry,
   type HourlyCountEntry,
   type Period,
-} from "../../api/pihole";
+} from '../../api/pihole';
 
 function formatNumber(n: number): string {
-  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + "M";
-  if (n >= 1_000) return (n / 1_000).toFixed(1) + "K";
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'K';
   return n.toLocaleString();
 }
 
 function formatHour(iso: string): string {
   const d = new Date(iso);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-const PERIODS: { key: Period; label: string }[] = [
-  { key: "24h", label: "24 Hours" },
-  { key: "7d", label: "7 Days" },
-  { key: "30d", label: "30 Days" },
-];
-
 export default function PiholeAnalytics() {
-  const [period, setPeriod] = useState<Period>("24h");
+  const { t } = useTranslation('pihole');
+  const [period, setPeriod] = useState<Period>('24h');
   const [stats, setStats] = useState<StoredStatsResponse | null>(null);
   const [topDomains, setTopDomains] = useState<StoredDomainEntry[]>([]);
   const [topBlocked, setTopBlocked] = useState<StoredDomainEntry[]>([]);
   const [topClients, setTopClients] = useState<StoredClientEntry[]>([]);
   const [history, setHistory] = useState<HourlyCountEntry[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const PERIODS: { key: Period; label: string }[] = [
+    { key: '24h', label: t('analytics.period.24h') },
+    { key: '7d', label: t('analytics.period.7d') },
+    { key: '30d', label: t('analytics.period.30d') },
+  ];
 
   const fetchData = useCallback(async () => {
     setLoading(true);
@@ -71,11 +67,11 @@ export default function PiholeAnalytics() {
       setTopClients(c.top_clients);
       setHistory(h.history);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to load analytics");
+      toast.error(err?.response?.data?.detail || t('analytics.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [period]);
+  }, [period, t]);
 
   useEffect(() => {
     fetchData();
@@ -92,15 +88,15 @@ export default function PiholeAnalytics() {
     <div className="space-y-6">
       {/* Period Selector + Refresh */}
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <h3 className="text-lg font-medium text-slate-200">DNS Analytics</h3>
+        <h3 className="text-lg font-medium text-slate-200">{t('analytics.title')}</h3>
         <div className="flex items-center gap-2">
           <button
             onClick={fetchData}
             disabled={loading}
             className="rounded-lg border border-slate-700 p-1.5 text-slate-400 hover:bg-slate-700/50 hover:text-slate-200 transition-colors disabled:opacity-30"
-            title="Refresh"
+            title={t('analytics.refresh')}
           >
-            <RefreshCw className={`h-4 w-4 ${loading ? "animate-spin" : ""}`} />
+            <RefreshCw className={`h-4 w-4 ${loading ? 'animate-spin' : ''}`} />
           </button>
           <div className="flex gap-1 rounded-lg border border-slate-700/50 bg-slate-800/40 p-1">
             {PERIODS.map((p) => (
@@ -108,9 +104,7 @@ export default function PiholeAnalytics() {
                 key={p.key}
                 onClick={() => setPeriod(p.key)}
                 className={`rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
-                  period === p.key
-                    ? "bg-slate-700/80 text-white"
-                    : "text-slate-400 hover:text-slate-200"
+                  period === p.key ? 'bg-slate-700/80 text-white' : 'text-slate-400 hover:text-slate-200'
                 }`}
               >
                 {p.label}
@@ -123,32 +117,28 @@ export default function PiholeAnalytics() {
       {/* Summary Cards */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <SummaryCard
-          label="Total Queries"
-          value={stats ? formatNumber(stats.total_queries) : "-"}
+          label={t('analytics.summary.totalQueries')}
+          value={stats ? formatNumber(stats.total_queries) : '-'}
           icon={<Globe className="h-5 w-5" />}
           loading={loading}
         />
         <SummaryCard
-          label="Block Rate"
-          value={stats ? `${stats.block_rate}%` : "-"}
+          label={t('analytics.summary.blockRate')}
+          value={stats ? `${stats.block_rate}%` : '-'}
           icon={<ShieldOff className="h-5 w-5" />}
           accent="text-red-400"
           loading={loading}
         />
         <SummaryCard
-          label="Avg Response"
-          value={
-            stats?.avg_response_time_ms != null
-              ? `${stats.avg_response_time_ms.toFixed(1)} ms`
-              : "-"
-          }
+          label={t('analytics.summary.avgResponse')}
+          value={stats?.avg_response_time_ms != null ? `${stats.avg_response_time_ms.toFixed(1)} ms` : '-'}
           icon={<Clock className="h-5 w-5" />}
           accent="text-emerald-400"
           loading={loading}
         />
         <SummaryCard
-          label="Unique Clients"
-          value={stats ? formatNumber(stats.unique_clients) : "-"}
+          label={t('analytics.summary.uniqueClients')}
+          value={stats ? formatNumber(stats.unique_clients) : '-'}
           icon={<Users className="h-5 w-5" />}
           accent="text-sky-400"
           loading={loading}
@@ -157,16 +147,14 @@ export default function PiholeAnalytics() {
 
       {/* Timeline Chart */}
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
-        <h3 className="mb-4 text-sm font-medium text-slate-300">
-          Queries Over Time
-        </h3>
+        <h3 className="mb-4 text-sm font-medium text-slate-300">{t('timeline.title')}</h3>
         {loading ? (
           <div className="flex h-64 items-center justify-center">
             <div className="h-6 w-6 animate-spin rounded-full border-2 border-sky-500 border-t-transparent" />
           </div>
         ) : chartData.length === 0 ? (
           <div className="flex h-64 items-center justify-center text-sm text-slate-500">
-            No data yet — the collector needs time to gather queries.
+            {t('analytics.noDataCollector')}
           </div>
         ) : (
           <ResponsiveContainer width="100%" height={260}>
@@ -186,30 +174,22 @@ export default function PiholeAnalytics() {
                 </linearGradient>
               </defs>
               <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-              <XAxis
-                dataKey="time"
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
-                stroke="#475569"
-              />
-              <YAxis
-                tick={{ fontSize: 11, fill: "#94a3b8" }}
-                stroke="#475569"
-                width={50}
-              />
+              <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#475569" />
+              <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#475569" width={50} />
               <Tooltip
                 contentStyle={{
-                  backgroundColor: "#1e293b",
-                  border: "1px solid rgba(51,65,85,0.5)",
-                  borderRadius: "0.5rem",
-                  fontSize: "0.8rem",
+                  backgroundColor: '#1e293b',
+                  border: '1px solid rgba(51,65,85,0.5)',
+                  borderRadius: '0.5rem',
+                  fontSize: '0.8rem',
                 }}
-                labelStyle={{ color: "#94a3b8" }}
-                itemStyle={{ color: "#e2e8f0" }}
+                labelStyle={{ color: '#94a3b8' }}
+                itemStyle={{ color: '#e2e8f0' }}
               />
               <Area
                 type="monotone"
                 dataKey="forwarded"
-                name="Forwarded"
+                name={t('timeline.seriesForwarded')}
                 stackId="1"
                 stroke="#0ea5e9"
                 fill="url(#gradFwd)"
@@ -218,7 +198,7 @@ export default function PiholeAnalytics() {
               <Area
                 type="monotone"
                 dataKey="cached"
-                name="Cached"
+                name={t('timeline.seriesCached')}
                 stackId="1"
                 stroke="#a78bfa"
                 fill="url(#gradCached)"
@@ -227,7 +207,7 @@ export default function PiholeAnalytics() {
               <Area
                 type="monotone"
                 dataKey="blocked"
-                name="Blocked"
+                name={t('timeline.seriesBlocked')}
                 stackId="1"
                 stroke="#f43f5e"
                 fill="url(#gradBlk)"
@@ -240,9 +220,26 @@ export default function PiholeAnalytics() {
 
       {/* Top Tables */}
       <div className="grid gap-6 lg:grid-cols-3">
-        <TopTable title="Top Domains" items={topDomains.map((d) => ({ name: d.domain, count: d.count }))} loading={loading} />
-        <TopTable title="Top Blocked" items={topBlocked.map((d) => ({ name: d.domain, count: d.count }))} loading={loading} accent="text-red-400" />
-        <TopTable title="Top Clients" items={topClients.map((c) => ({ name: c.client, count: c.count }))} loading={loading} accent="text-sky-400" />
+        <TopTable
+          title={t('analytics.topDomains')}
+          items={topDomains.map((d) => ({ name: d.domain, count: d.count }))}
+          loading={loading}
+          noData={t('analytics.noData')}
+        />
+        <TopTable
+          title={t('analytics.topBlocked')}
+          items={topBlocked.map((d) => ({ name: d.domain, count: d.count }))}
+          loading={loading}
+          accent="text-red-400"
+          noData={t('analytics.noData')}
+        />
+        <TopTable
+          title={t('analytics.topClients')}
+          items={topClients.map((c) => ({ name: c.client, count: c.count }))}
+          loading={loading}
+          accent="text-sky-400"
+          noData={t('analytics.noData')}
+        />
       </div>
     </div>
   );
@@ -265,14 +262,12 @@ function SummaryCard({
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
       <div className="flex items-center justify-between">
         <span className="text-sm text-slate-400">{label}</span>
-        <span className={accent ?? "text-slate-400"}>{icon}</span>
+        <span className={accent ?? 'text-slate-400'}>{icon}</span>
       </div>
       {loading ? (
         <div className="mt-2 h-8 w-28 animate-pulse rounded bg-slate-700" />
       ) : (
-        <p className={`mt-2 text-2xl font-bold ${accent ?? "text-slate-100"}`}>
-          {value}
-        </p>
+        <p className={`mt-2 text-2xl font-bold ${accent ?? 'text-slate-100'}`}>{value}</p>
       )}
     </div>
   );
@@ -283,11 +278,13 @@ function TopTable({
   items,
   loading,
   accent,
+  noData,
 }: {
   title: string;
   items: { name: string; count: number }[];
   loading: boolean;
   accent?: string;
+  noData: string;
 }) {
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
@@ -299,15 +296,13 @@ function TopTable({
           ))}
         </div>
       ) : items.length === 0 ? (
-        <p className="text-sm text-slate-500">No data</p>
+        <p className="text-sm text-slate-500">{noData}</p>
       ) : (
         <div className="space-y-1.5">
           {items.map((item, i) => (
             <div key={i} className="flex items-center justify-between text-sm">
               <span className="truncate text-slate-300 mr-2">{item.name}</span>
-              <span className={`shrink-0 font-mono ${accent ?? "text-slate-400"}`}>
-                {item.count.toLocaleString()}
-              </span>
+              <span className={`shrink-0 font-mono ${accent ?? 'text-slate-400'}`}>{item.count.toLocaleString()}</span>
             </div>
           ))}
         </div>

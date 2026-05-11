@@ -1,5 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import {
+  AlertTriangle,
+  WifiOff,
+  LayoutDashboard,
+  ListOrdered,
+  BarChart3,
+  History,
+  Search,
+  Globe,
+  ShieldOff,
+  Server,
+  Settings as SettingsIcon,
+  Terminal,
+} from 'lucide-react';
 import {
   getPiholeStatus,
   getPiholeSummary,
@@ -29,24 +44,40 @@ import PiholeAnalytics from '../components/pihole/PiholeAnalytics';
 import PiholeStoredQueryLog from '../components/pihole/PiholeStoredQueryLog';
 import QueryCollectorStatus from '../components/pihole/QueryCollectorStatus';
 import AdDiscoveryTab from '../components/pihole/AdDiscoveryTab';
-import { AlertTriangle, WifiOff } from 'lucide-react';
 
-type Tab = 'overview' | 'queries' | 'analytics' | 'stored-queries' | 'ad-discovery' | 'domains' | 'adlists' | 'dns' | 'settings' | 'container';
+type Tab =
+  | 'overview'
+  | 'queries'
+  | 'analytics'
+  | 'stored-queries'
+  | 'ad-discovery'
+  | 'domains'
+  | 'adlists'
+  | 'dns'
+  | 'settings'
+  | 'container';
 
-const TABS: { key: Tab; label: string }[] = [
-  { key: 'overview', label: 'Overview' },
-  { key: 'queries', label: 'Query Log' },
-  { key: 'analytics', label: 'Analytics' },
-  { key: 'stored-queries', label: 'Query History' },
-  { key: 'ad-discovery', label: 'Ad Discovery' },
-  { key: 'domains', label: 'Domains' },
-  { key: 'adlists', label: 'Adlists' },
-  { key: 'dns', label: 'Local DNS' },
-  { key: 'settings', label: 'Settings' },
-  { key: 'container', label: 'Container' },
+interface TabConfig {
+  key: Tab;
+  labelKey: string;
+  icon: React.ReactNode;
+}
+
+const TABS: TabConfig[] = [
+  { key: 'overview', labelKey: 'tabs.overview', icon: <LayoutDashboard className="h-4 w-4" /> },
+  { key: 'queries', labelKey: 'tabs.queryLog', icon: <ListOrdered className="h-4 w-4" /> },
+  { key: 'analytics', labelKey: 'tabs.analytics', icon: <BarChart3 className="h-4 w-4" /> },
+  { key: 'stored-queries', labelKey: 'tabs.queryHistory', icon: <History className="h-4 w-4" /> },
+  { key: 'ad-discovery', labelKey: 'tabs.adDiscovery', icon: <Search className="h-4 w-4" /> },
+  { key: 'domains', labelKey: 'tabs.domains', icon: <Globe className="h-4 w-4" /> },
+  { key: 'adlists', labelKey: 'tabs.adlists', icon: <ShieldOff className="h-4 w-4" /> },
+  { key: 'dns', labelKey: 'tabs.localDns', icon: <Server className="h-4 w-4" /> },
+  { key: 'settings', labelKey: 'tabs.settings', icon: <SettingsIcon className="h-4 w-4" /> },
+  { key: 'container', labelKey: 'tabs.container', icon: <Terminal className="h-4 w-4" /> },
 ];
 
 export default function PiholePage() {
+  const { t } = useTranslation('pihole');
   const [activeTab, setActiveTab] = useState<Tab>('overview');
   const [status, setStatus] = useState<PiholeStatus | null>(null);
   const [summary, setSummary] = useState<PiholeSummary | null>(null);
@@ -60,12 +91,10 @@ export default function PiholePage() {
   const fetchOverview = useCallback(async () => {
     setLoading(true);
     try {
-      // Fetch status first — if it fails with 503, show error state
       const statusData = await getPiholeStatus();
       setStatus(statusData);
       setFetchError(false);
 
-      // If connected, fetch the rest of the overview data
       if (statusData.connected) {
         try {
           const [summaryData, domainsData, blockedData, clientsData, historyData] = await Promise.all([
@@ -81,16 +110,16 @@ export default function PiholePage() {
           setTopClients(clientsData.top_clients);
           setHistory(historyData.history);
         } catch (err: any) {
-          toast.error(err?.response?.data?.detail || 'Failed to load Pi-hole statistics');
+          toast.error(err?.response?.data?.detail || t('states.loadFailedStatistics'));
         }
       }
     } catch (err: any) {
       setFetchError(true);
-      toast.error(err?.response?.data?.detail || 'Failed to load Pi-hole data');
+      toast.error(err?.response?.data?.detail || t('states.loadFailedData'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchOverview();
@@ -101,22 +130,27 @@ export default function PiholePage() {
   const handleBlockingToggle = async (enabled: boolean) => {
     try {
       await setBlocking(enabled);
-      setStatus((prev) => prev ? { ...prev, blocking_enabled: enabled } : prev);
-      toast.success(enabled ? 'Blocking enabled' : 'Blocking disabled');
+      setStatus((prev) => (prev ? { ...prev, blocking_enabled: enabled } : prev));
+      toast.success(enabled ? t('status.blockingOn') : t('status.blockingOff'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || 'Failed to toggle blocking');
+      toast.error(err?.response?.data?.detail || t('status.blockingToggleFailed'));
     }
   };
 
+  const unreachableMessage =
+    status?.mode === 'docker'
+      ? t('states.unreachableDocker')
+      : status?.mode === 'remote'
+        ? t('states.unreachableRemote')
+        : t('states.unreachableGeneric');
+
   return (
-    <div className="space-y-6">
+    <div className="space-y-6 min-w-0">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4">
         <div>
-          <h1 className="text-2xl font-semibold text-white">Pi-hole DNS</h1>
-          <p className="mt-1 text-sm text-slate-400">
-            Network-wide DNS filtering and ad blocking
-          </p>
+          <h1 className="text-2xl sm:text-3xl font-semibold text-white">{t('title')}</h1>
+          <p className="mt-1 text-xs sm:text-sm text-slate-400">{t('description')}</p>
         </div>
       </div>
 
@@ -126,16 +160,16 @@ export default function PiholePage() {
           <div className="flex items-start gap-4">
             <AlertTriangle className="mt-0.5 h-6 w-6 flex-shrink-0 text-amber-400" />
             <div>
-              <h3 className="text-lg font-medium text-amber-200">Pi-hole is not configured</h3>
+              <h3 className="text-lg font-medium text-amber-200">{t('states.disabledTitle')}</h3>
               <p className="mt-1 text-sm text-slate-400">
-                DNS filtering is currently disabled. Go to the{' '}
+                {t('states.disabledMessage')}{' '}
                 <button
                   onClick={() => setActiveTab('settings')}
                   className="text-blue-400 underline hover:text-blue-300"
                 >
-                  Settings
-                </button>{' '}
-                tab to enable Docker or Remote mode.
+                  {t('states.settingsLink')}
+                </button>
+                {t('states.disabledTrailing')}
               </p>
             </div>
           </div>
@@ -148,17 +182,16 @@ export default function PiholePage() {
           <div className="flex items-start gap-4">
             <WifiOff className="mt-0.5 h-6 w-6 flex-shrink-0 text-red-400" />
             <div>
-              <h3 className="text-lg font-medium text-red-200">Pi-hole is unreachable</h3>
+              <h3 className="text-lg font-medium text-red-200">{t('states.unreachableTitle')}</h3>
               <p className="mt-1 text-sm text-slate-400">
-                The {status?.mode ?? 'configured'} Pi-hole instance is not responding. Check that the{' '}
-                {status?.mode === 'docker' ? 'Docker container is running' : 'remote server is online'}{' '}
-                or update the configuration in{' '}
+                {unreachableMessage}{' '}
                 <button
                   onClick={() => setActiveTab('settings')}
                   className="text-blue-400 underline hover:text-blue-300"
                 >
-                  Settings
-                </button>.
+                  {t('states.settingsLink')}
+                </button>
+                .
               </p>
             </div>
           </div>
@@ -167,80 +200,59 @@ export default function PiholePage() {
 
       {/* Status Bar */}
       {status && status.mode !== 'disabled' && (
-        <PiholeStatusBar
-          status={status}
-          onBlockingToggle={handleBlockingToggle}
-          loading={loading}
-        />
+        <PiholeStatusBar status={status} onBlockingToggle={handleBlockingToggle} loading={loading} />
       )}
 
-      {/* Tab Navigation */}
-      <div className="flex gap-1 overflow-x-auto rounded-lg border border-slate-700/50 bg-slate-800/40 p-1 [scrollbar-width:none] [-webkit-overflow-scrolling:touch] [&::-webkit-scrollbar]:hidden">
-        {TABS.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            className={`flex-shrink-0 whitespace-nowrap rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-              activeTab === tab.key
-                ? 'bg-slate-700/80 text-white'
-                : 'text-slate-400 hover:text-slate-200'
-            }`}
-          >
-            {tab.label}
-          </button>
-        ))}
+      {/* Tab Navigation — pill style with icons + blue accent, matching SystemControl/Scheduler */}
+      <div className="overflow-x-auto -mx-4 px-4 sm:mx-0 sm:px-0 scrollbar-none">
+        <div className="flex gap-2 border-b border-slate-800 pb-3 min-w-max sm:min-w-0 sm:flex-wrap">
+          {TABS.map((tab) => (
+            <button
+              key={tab.key}
+              onClick={() => setActiveTab(tab.key)}
+              className={`flex items-center gap-2 rounded-lg px-3 sm:px-4 py-2 sm:py-2.5 text-xs sm:text-sm font-medium transition-all whitespace-nowrap touch-manipulation active:scale-95 ${
+                activeTab === tab.key
+                  ? 'bg-blue-500/20 text-blue-400 border border-blue-500/40'
+                  : 'text-slate-400 hover:bg-slate-800/50 hover:text-slate-300 border border-transparent'
+              }`}
+            >
+              {tab.icon}
+              <span>{t(tab.labelKey)}</span>
+            </button>
+          ))}
+        </div>
       </div>
 
       {/* Tab Content */}
-      {activeTab === 'overview' && (
-        <div className="space-y-6">
-          <PiholeSummaryCards summary={summary} loading={loading} />
-          <PiholeQueryTimeline history={history} loading={loading} />
-          <div className="grid gap-6 lg:grid-cols-2">
-            <TopDomainsPanel topPermitted={topPermitted} topBlocked={topBlocked} loading={loading} />
-            <TopClientsPanel clients={topClients} loading={loading} />
+      <div className="min-w-0">
+        {activeTab === 'overview' && (
+          <div className="space-y-6">
+            <PiholeSummaryCards summary={summary} loading={loading} />
+            <PiholeQueryTimeline history={history} loading={loading} />
+            <div className="grid gap-6 lg:grid-cols-2">
+              <TopDomainsPanel topPermitted={topPermitted} topBlocked={topBlocked} loading={loading} />
+              <TopClientsPanel clients={topClients} loading={loading} />
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {activeTab === 'queries' && (
-        <PiholeQueryLog />
-      )}
+        {activeTab === 'queries' && <PiholeQueryLog />}
+        {activeTab === 'analytics' && <PiholeAnalytics />}
+        {activeTab === 'stored-queries' && <PiholeStoredQueryLog />}
+        {activeTab === 'ad-discovery' && <AdDiscoveryTab />}
+        {activeTab === 'domains' && <PiholeDomainManagement />}
+        {activeTab === 'adlists' && <PiholeAdlistManagement />}
+        {activeTab === 'dns' && <PiholeLocalDns />}
 
-      {activeTab === 'analytics' && (
-        <PiholeAnalytics />
-      )}
+        {activeTab === 'settings' && (
+          <div className="space-y-6">
+            <PiholeSettings />
+            <QueryCollectorStatus />
+          </div>
+        )}
 
-      {activeTab === 'stored-queries' && (
-        <PiholeStoredQueryLog />
-      )}
-
-      {activeTab === 'ad-discovery' && (
-        <AdDiscoveryTab />
-      )}
-
-      {activeTab === 'domains' && (
-        <PiholeDomainManagement />
-      )}
-
-      {activeTab === 'adlists' && (
-        <PiholeAdlistManagement />
-      )}
-
-      {activeTab === 'dns' && (
-        <PiholeLocalDns />
-      )}
-
-      {activeTab === 'settings' && (
-        <div className="space-y-6">
-          <PiholeSettings />
-          <QueryCollectorStatus />
-        </div>
-      )}
-
-      {activeTab === 'container' && (
-        <PiholeContainerActions />
-      )}
+        {activeTab === 'container' && <PiholeContainerActions />}
+      </div>
     </div>
   );
 }

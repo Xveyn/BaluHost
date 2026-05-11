@@ -1,24 +1,21 @@
-import { Monitor } from "lucide-react";
-import type { ClientEntry } from "../../api/pihole";
+import { Monitor } from 'lucide-react';
+import { useTranslation } from 'react-i18next';
+import type { ClientEntry } from '../../api/pihole';
 
 interface TopClientsPanelProps {
   clients: ClientEntry[];
   loading: boolean;
 }
 
-export default function TopClientsPanel({
-  clients,
-  loading,
-}: TopClientsPanelProps) {
-  const maxCount = clients.length > 0
-    ? Math.max(...clients.map((c) => c.count))
-    : 1;
+export default function TopClientsPanel({ clients, loading }: TopClientsPanelProps) {
+  const { t } = useTranslation('pihole');
+  const maxCount = clients.length > 0 ? Math.max(...clients.map((c) => c.count)) : 1;
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
       <div className="mb-3 flex items-center gap-2">
         <Monitor className="h-4 w-4 text-sky-400" />
-        <h3 className="text-sm font-medium text-slate-300">Top Clients</h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('topClients.title')}</h3>
       </div>
 
       {loading ? (
@@ -31,7 +28,7 @@ export default function TopClientsPanel({
           ))}
         </div>
       ) : clients.length === 0 ? (
-        <p className="py-6 text-center text-sm text-slate-500">No data</p>
+        <p className="py-6 text-center text-sm text-slate-500">{t('topClients.noData')}</p>
       ) : (
         <ol className="space-y-2.5">
           {clients.map((client, i) => {
@@ -40,18 +37,10 @@ export default function TopClientsPanel({
               <li key={i}>
                 <div className="flex items-baseline justify-between gap-2">
                   <div className="flex items-baseline gap-2 truncate">
-                    <span className="font-mono text-xs text-slate-200">
-                      {client.client}
-                    </span>
-                    {client.name && (
-                      <span className="text-xs text-slate-500">
-                        ({client.name})
-                      </span>
-                    )}
+                    <span className="font-mono text-xs text-slate-200">{client.client}</span>
+                    {client.name && <span className="text-xs text-slate-500">({client.name})</span>}
                   </div>
-                  <span className="shrink-0 text-xs text-slate-500">
-                    {client.count.toLocaleString()}
-                  </span>
+                  <span className="shrink-0 text-xs text-slate-500">{client.count.toLocaleString()}</span>
                 </div>
                 <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-slate-700/60">
                   <div
