@@ -60,7 +60,10 @@ class NotificationResponse(NotificationBase):
     created_at: datetime
     user_id: Optional[int] = None
     is_read: bool = False
-    is_dismissed: bool = False
+    deleted_at: Optional[datetime] = Field(
+        default=None,
+        description="Timestamp when notification was moved to trash (null = active)"
+    )
     snoozed_until: Optional[datetime] = Field(
         default=None,
         description="Snooze expiry time (null if not snoozed)"
@@ -102,7 +105,7 @@ class NotificationResponse(NotificationBase):
             message=notification.message,
             action_url=notification.action_url,
             is_read=notification.is_read,
-            is_dismissed=notification.is_dismissed,
+            deleted_at=notification.deleted_at,
             priority=notification.priority,
             metadata=notification.extra_data,
             time_ago=time_ago,
@@ -197,6 +200,12 @@ class NotificationPreferencesBase(BaseModel):
         default=None,
         description="Per-category notification settings"
     )
+    trash_retention_days: int = Field(
+        default=7,
+        ge=1,
+        le=7,
+        description="Days to retain notifications in trash before auto-purge"
+    )
 
 
 class NotificationPreferencesUpdate(BaseModel):
@@ -209,6 +218,7 @@ class NotificationPreferencesUpdate(BaseModel):
     quiet_hours_end: Optional[str] = None
     min_priority: Optional[int] = Field(default=None, ge=0, le=3)
     category_preferences: Optional[dict[str, CategoryPreference]] = None
+    trash_retention_days: Optional[int] = Field(default=None, ge=1, le=7)
 
 
 class NotificationPreferencesResponse(NotificationPreferencesBase):
@@ -232,6 +242,7 @@ class NotificationPreferencesResponse(NotificationPreferencesBase):
             quiet_hours_end=prefs.quiet_hours_end.isoformat() if prefs.quiet_hours_end else None,
             min_priority=prefs.min_priority,
             category_preferences=prefs.category_preferences,
+            trash_retention_days=prefs.trash_retention_days,
         )
 
 
