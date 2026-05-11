@@ -23,6 +23,8 @@ from app.plugins.smart_device.schemas import (
     DeviceCommandRequest,
     DeviceCommandResponse,
     DeviceTypeResponse,
+    ImportHistoryRequest,
+    ImportHistoryResponse,
     PowerSummaryResponse,
     SmartDeviceCreate,
     SmartDeviceHistoryResponse,
@@ -492,3 +494,80 @@ def get_device_history(
         period_start=period_start,
         period_end=period_end,
     )
+
+
+# ---------------------------------------------------------------------------
+# POST /smart-devices/{device_id}/import-history — Admin-triggered Tapo backfill
+# ---------------------------------------------------------------------------
+
+@router.post(
+    "/{device_id}/import-history",
+    response_model=ImportHistoryResponse,
+    summary="Import historical energy data from a smart-plug device (admin only)",
+)
+@user_limiter.limit(get_limit("smart_device_import_history"))
+async def import_device_history(
+    request: Request,
+    response: Response,
+    device_id: int,
+    payload: ImportHistoryRequest,
+    db: Session = Depends(deps.get_db),
+    current_user: User = Depends(deps.get_current_admin),
+) -> ImportHistoryResponse:
+    """Trigger a manual import of historical energy data from the device.
+
+    Currently supported only for the ``tapo_smart_plug`` plugin. Imported
+    samples are stored alongside live samples with an ``imported_from``
+    marker so retention does not delete them.
+
+    **Admin only.**
+    """
+    manager = get_smart_device_manager()
+    device = manager.get_device(db, device_id)
+    if device is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Smart device {device_id} not found",
+        )
+
+    plugin = manager._plugins.get(device.plugin_name)
+    if plugin is None or not hasattr(plugin, "import_history"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Plugin '{device.plugin_name}' does not support history import",
+        )
+
+    try:
+        result = await plugin.import_history(
+            db=db,
+            device_id=device_id,
+            interval=payload.interval,
+            start=payload.start_date,
+            end=payload.end_date,
+            conflict_strategy=payload.conflict_strategy,
+        )
+    except RuntimeError as exc:
+        logger.warning("History import failed for device %d: %s", device_id, exc)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=str(exc),
+        )
+
+    AuditLoggerDB().log_event(
+        event_type="SMART_DEVICE",
+        action="import_history",
+        user=current_user.username,
+        resource=f"device:{device_id}",
+        success=True,
+        details={
+            "device_id": device_id,
+            "interval": payload.interval.value,
+            "start_date": payload.start_date.isoformat(),
+            "end_date": payload.end_date.isoformat(),
+            "conflict_strategy": payload.conflict_strategy.value,
+            "buckets_fetched": result.buckets_fetched,
+            "samples_inserted": result.samples_inserted,
+        },
+    )
+
+    return result
