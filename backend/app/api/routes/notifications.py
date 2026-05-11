@@ -275,6 +275,44 @@ async def restore_notification(
     return NotificationResponse.from_db(notification)
 
 
+@router.delete("/trash")
+@user_limiter.limit(get_limit("admin_operations"))
+async def empty_trash(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Empty the current user's trash (admins also wipe trashed system notifications)."""
+    service = get_notification_service()
+    count = service.empty_trash(
+        db, current_user.id, is_admin=is_privileged(current_user)
+    )
+    return {"count": count}
+
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_notification(
+    request: Request, response: Response,
+    notification_id: int,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Permanently delete a notification (any state)."""
+    service = get_notification_service()
+    deleted = service.delete_permanently(
+        db, notification_id, current_user.id, is_admin=is_privileged(current_user)
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
 # Preferences endpoints
 @router.get("/preferences", response_model=NotificationPreferencesResponse)
 @user_limiter.limit(get_limit("admin_operations"))

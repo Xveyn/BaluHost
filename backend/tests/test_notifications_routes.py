@@ -63,3 +63,62 @@ class TestTrashRoutes:
             "/api/notifications/99999999/restore", headers=auth_headers
         )
         assert resp.status_code == 404
+
+    def test_delete_permanently_removes_row(
+        self, client, auth_headers, db_session, test_user
+    ):
+        from app.models.notification import Notification
+
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="t",
+            message="m",
+        )
+        db_session.add(n)
+        db_session.commit()
+        nid = n.id
+
+        resp = client.delete(
+            f"/api/notifications/{nid}", headers=auth_headers
+        )
+        assert resp.status_code == 204
+        assert (
+            db_session.query(Notification)
+            .filter(Notification.id == nid)
+            .first()
+            is None
+        )
+
+    def test_delete_unknown_id_returns_404(
+        self, client, auth_headers
+    ):
+        resp = client.delete(
+            "/api/notifications/99999999", headers=auth_headers
+        )
+        assert resp.status_code == 404
+
+    def test_empty_trash_returns_count(
+        self, client, auth_headers, db_session, test_user
+    ):
+        from app.models.notification import Notification
+
+        for i in range(3):
+            db_session.add(Notification(
+                user_id=test_user.id,
+                category="system",
+                notification_type="info",
+                title=f"t{i}",
+                message="m",
+                deleted_at=datetime.now(timezone.utc),
+            ))
+        db_session.commit()
+
+        resp = client.delete("/api/notifications/trash", headers=auth_headers)
+        assert resp.status_code == 200
+        assert resp.json() == {"count": 3}
+        assert db_session.query(Notification).filter(
+            Notification.user_id == test_user.id,
+            Notification.deleted_at.is_not(None),
+        ).count() == 0
