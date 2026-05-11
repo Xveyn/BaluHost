@@ -248,6 +248,45 @@ class TestCleanup:
         deleted = cleanup_old_samples(db_session, days_to_keep=30)
         assert deleted == 0
 
+    def test_cleanup_preserves_imported_samples(self, db_session, smart_device):
+        """Imported samples (imported_from set) must never be deleted by retention."""
+        now = datetime.now(timezone.utc)
+
+        # Old live sample (60 days) — should be deleted
+        live_old = json.dumps({"watts": 50.0, "is_online": True})
+        db_session.add(SmartDeviceSample(
+            device_id=smart_device.id,
+            capability="power_monitor",
+            data_json=live_old,
+            timestamp=now - timedelta(days=60),
+        ))
+
+        # Old imported sample (60 days) — must SURVIVE cleanup
+        imported_old = json.dumps({
+            "watts": 18.0,
+            "is_online": True,
+            "imported_from": "tapo_history",
+            "bucket_interval": "hourly",
+        })
+        db_session.add(SmartDeviceSample(
+            device_id=smart_device.id,
+            capability="power_monitor",
+            data_json=imported_old,
+            timestamp=now - timedelta(days=60),
+        ))
+
+        db_session.commit()
+
+        deleted = cleanup_old_samples(db_session, days_to_keep=30)
+        assert deleted == 1
+
+        remaining = db_session.query(SmartDeviceSample).filter(
+            SmartDeviceSample.capability == "power_monitor"
+        ).all()
+        assert len(remaining) == 1
+        data = json.loads(remaining[0].data_json)
+        assert data.get("imported_from") == "tapo_history"
+
 
 # ============================================================================
 # Cumulative Energy Data
