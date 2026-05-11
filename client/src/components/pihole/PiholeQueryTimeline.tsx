@@ -6,8 +6,9 @@ import {
   CartesianGrid,
   Tooltip,
   ResponsiveContainer,
-} from "recharts";
-import type { HistoryEntry } from "../../api/pihole";
+} from 'recharts';
+import { useTranslation } from 'react-i18next';
+import type { HistoryEntry } from '../../api/pihole';
 
 interface PiholeQueryTimelineProps {
   history: HistoryEntry[];
@@ -16,13 +17,11 @@ interface PiholeQueryTimelineProps {
 
 function formatTime(timestamp: number): string {
   const d = new Date(timestamp * 1000);
-  return d.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
 
-export default function PiholeQueryTimeline({
-  history,
-  loading,
-}: PiholeQueryTimelineProps) {
+export default function PiholeQueryTimeline({ history, loading }: PiholeQueryTimelineProps) {
+  const { t } = useTranslation('pihole');
   const data = history.map((entry) => ({
     time: formatTime(entry.timestamp),
     total: entry.total,
@@ -31,9 +30,7 @@ export default function PiholeQueryTimeline({
 
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60 p-4">
-      <h3 className="mb-4 text-sm font-medium text-slate-300">
-        Queries Over Time
-      </h3>
+      <h3 className="mb-4 text-sm font-medium text-slate-300">{t('timeline.title')}</h3>
 
       {loading ? (
         <div className="flex h-64 items-center justify-center">
@@ -41,7 +38,7 @@ export default function PiholeQueryTimeline({
         </div>
       ) : data.length === 0 ? (
         <div className="flex h-64 items-center justify-center text-sm text-slate-500">
-          No query history available
+          {t('timeline.noData')}
         </div>
       ) : (
         <ResponsiveContainer width="100%" height={260}>
@@ -57,30 +54,22 @@ export default function PiholeQueryTimeline({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#334155" />
-            <XAxis
-              dataKey="time"
-              tick={{ fontSize: 11, fill: "#94a3b8" }}
-              stroke="#475569"
-            />
-            <YAxis
-              tick={{ fontSize: 11, fill: "#94a3b8" }}
-              stroke="#475569"
-              width={50}
-            />
+            <XAxis dataKey="time" tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#475569" />
+            <YAxis tick={{ fontSize: 11, fill: '#94a3b8' }} stroke="#475569" width={50} />
             <Tooltip
               contentStyle={{
-                backgroundColor: "#1e293b",
-                border: "1px solid rgba(51,65,85,0.5)",
-                borderRadius: "0.5rem",
-                fontSize: "0.8rem",
+                backgroundColor: '#1e293b',
+                border: '1px solid rgba(51,65,85,0.5)',
+                borderRadius: '0.5rem',
+                fontSize: '0.8rem',
               }}
-              labelStyle={{ color: "#94a3b8" }}
-              itemStyle={{ color: "#e2e8f0" }}
+              labelStyle={{ color: '#94a3b8' }}
+              itemStyle={{ color: '#e2e8f0' }}
             />
             <Area
               type="monotone"
               dataKey="total"
-              name="Total Queries"
+              name={t('timeline.seriesTotal')}
               stroke="#0ea5e9"
               fill="url(#gradTotal)"
               strokeWidth={2}
@@ -88,7 +77,7 @@ export default function PiholeQueryTimeline({
             <Area
               type="monotone"
               dataKey="blocked"
-              name="Blocked"
+              name={t('timeline.seriesBlocked')}
               stroke="#f43f5e"
               fill="url(#gradBlocked)"
               strokeWidth={2}

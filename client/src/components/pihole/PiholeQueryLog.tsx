@@ -1,29 +1,31 @@
-import { useEffect, useState, useCallback } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import toast from "react-hot-toast";
-import { getQueries, type QueryEntry } from "../../api/pihole";
+import { useEffect, useState, useCallback } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import { getQueries, type QueryEntry } from '../../api/pihole';
 import { useSortableTable } from '../../hooks/useSortableTable';
 import { SortableHeader } from '../ui/SortableHeader';
 
 const PAGE_SIZE = 25;
 
 const statusBadge: Record<string, { bg: string; text: string }> = {
-  FORWARDED: { bg: "bg-emerald-500/20", text: "text-emerald-400" },
-  BLOCKED: { bg: "bg-red-500/20", text: "text-red-400" },
-  CACHED: { bg: "bg-sky-500/20", text: "text-sky-400" },
+  FORWARDED: { bg: 'bg-emerald-500/20', text: 'text-emerald-400' },
+  BLOCKED: { bg: 'bg-red-500/20', text: 'text-red-400' },
+  CACHED: { bg: 'bg-sky-500/20', text: 'text-sky-400' },
 };
 
 function formatTimestamp(ts: number): string {
   return new Date(ts * 1000).toLocaleString([], {
-    month: "short",
-    day: "numeric",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
   });
 }
 
 export default function PiholeQueryLog() {
+  const { t } = useTranslation('pihole');
   const [queries, setQueries] = useState<QueryEntry[]>([]);
   const [total, setTotal] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -38,11 +40,11 @@ export default function PiholeQueryLog() {
       setQueries(result.queries);
       setTotal(result.total);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to load query log");
+      toast.error(err?.response?.data?.detail || t('queryLog.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [page]);
+  }, [page, t]);
 
   useEffect(() => {
     fetchQueries();
@@ -55,9 +57,9 @@ export default function PiholeQueryLog() {
   return (
     <div className="rounded-xl border border-slate-700/50 bg-slate-800/60">
       <div className="flex items-center justify-between border-b border-slate-700/50 px-4 py-3">
-        <h3 className="text-sm font-medium text-slate-300">Query Log</h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('queryLog.title')}</h3>
         <span className="text-xs text-slate-500">
-          {total.toLocaleString()} total queries
+          {t('queryLog.totalQueries', { count: total })}
         </span>
       </div>
 
@@ -65,12 +67,12 @@ export default function PiholeQueryLog() {
         <table className="w-full text-left text-sm">
           <thead>
             <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-              <SortableHeader label="Time" sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
-              <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
-              <SortableHeader label="Client" sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
-              <SortableHeader label="Type" sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
-              <SortableHeader label="Status" sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
-              <SortableHeader label="Response" sortKey="response_time" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5 text-right" />
+              <SortableHeader label={t('queryLog.columns.time')} sortKey="timestamp" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label={t('queryLog.columns.domain')} sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label={t('queryLog.columns.client')} sortKey="client" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label={t('queryLog.columns.type')} sortKey="query_type" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label={t('queryLog.columns.status')} sortKey="status" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5" />
+              <SortableHeader label={t('queryLog.columns.response')} sortKey="response_time" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="px-4 py-2.5 text-right" />
             </tr>
           </thead>
           <tbody>
@@ -86,47 +88,29 @@ export default function PiholeQueryLog() {
               ))
             ) : queries.length === 0 ? (
               <tr>
-                <td
-                  colSpan={6}
-                  className="px-4 py-8 text-center text-slate-500"
-                >
-                  No queries found
+                <td colSpan={6} className="px-4 py-8 text-center text-slate-500">
+                  {t('queryLog.noResults')}
                 </td>
               </tr>
             ) : (
               sortedQueries.map((q, i) => {
                 const badge = statusBadge[q.status] ?? {
-                  bg: "bg-slate-500/20",
-                  text: "text-slate-400",
+                  bg: 'bg-slate-500/20',
+                  text: 'text-slate-400',
                 };
                 return (
-                  <tr
-                    key={i}
-                    className="border-b border-slate-700/30 hover:bg-slate-700/20"
-                  >
-                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">
-                      {formatTimestamp(q.timestamp)}
-                    </td>
-                    <td className="max-w-xs truncate px-4 py-2.5 font-mono text-xs text-slate-200">
-                      {q.domain}
-                    </td>
-                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-400">
-                      {q.client}
-                    </td>
-                    <td className="px-4 py-2.5 text-slate-400">
-                      {q.query_type}
-                    </td>
+                  <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-700/20">
+                    <td className="whitespace-nowrap px-4 py-2.5 text-slate-400">{formatTimestamp(q.timestamp)}</td>
+                    <td className="max-w-xs truncate px-4 py-2.5 font-mono text-xs text-slate-200">{q.domain}</td>
+                    <td className="whitespace-nowrap px-4 py-2.5 font-mono text-xs text-slate-400">{q.client}</td>
+                    <td className="px-4 py-2.5 text-slate-400">{q.query_type}</td>
                     <td className="px-4 py-2.5">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}
-                      >
+                      <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${badge.bg} ${badge.text}`}>
                         {q.status}
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right text-slate-500">
-                      {q.response_time != null
-                        ? `${q.response_time.toFixed(1)}ms`
-                        : "\u2014"}
+                      {q.response_time != null ? `${q.response_time.toFixed(1)}ms` : '—'}
                     </td>
                   </tr>
                 );
@@ -139,7 +123,7 @@ export default function PiholeQueryLog() {
       {/* Pagination */}
       <div className="flex items-center justify-between border-t border-slate-700/50 px-4 py-2.5">
         <span className="text-xs text-slate-500">
-          Page {page + 1} of {totalPages}
+          {t('queryLog.pageOf', { page: page + 1, total: totalPages })}
         </span>
         <div className="flex items-center gap-1">
           <button

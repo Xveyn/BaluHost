@@ -1,15 +1,16 @@
-import { useState, useEffect } from "react";
-import { Settings, Save, RefreshCw, Wifi, WifiOff, Monitor, Shield } from "lucide-react";
-import toast from "react-hot-toast";
+import { useState, useEffect } from 'react';
+import { Settings, Save, RefreshCw, Wifi, WifiOff, Monitor, Shield } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
   getPiholeConfig,
   updatePiholeConfig,
   getFailoverStatus,
   type FailoverStatus,
-} from "../../api/pihole";
+} from '../../api/pihole';
 
 interface LocalConfig {
-  mode: "docker" | "remote" | "disabled";
+  mode: 'docker' | 'remote' | 'disabled';
   pihole_url?: string;
   password?: string;
   upstream_dns?: string;
@@ -21,7 +22,6 @@ interface LocalConfig {
   health_check_interval?: number;
   has_password?: boolean;
   has_remote_password?: boolean;
-  // DNS settings
   dns_dnssec?: boolean;
   dns_rev_server?: string | null;
   dns_rate_limit_count?: number;
@@ -33,9 +33,8 @@ interface LocalConfig {
 }
 
 export default function PiholeSettings() {
-  const [config, setConfig] = useState<LocalConfig>({
-    mode: "disabled",
-  });
+  const { t } = useTranslation('pihole');
+  const [config, setConfig] = useState<LocalConfig>({ mode: 'disabled' });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [passwordVisible, setPasswordVisible] = useState(false);
@@ -52,13 +51,13 @@ export default function PiholeSettings() {
         setConfig(result as unknown as LocalConfig);
         setFailoverStatus(foStatus);
       } catch (err: any) {
-        toast.error(err?.response?.data?.detail || "Failed to load Pi-hole configuration");
+        toast.error(err?.response?.data?.detail || t('settings.loadFailed'));
       } finally {
         setLoading(false);
       }
     };
     load();
-  }, []);
+  }, [t]);
 
   const handleSave = async () => {
     setSaving(true);
@@ -67,21 +66,17 @@ export default function PiholeSettings() {
       if (!payload.password) delete payload.password;
       if (!payload.remote_password) delete payload.remote_password;
       await updatePiholeConfig(payload);
-      toast.success("Configuration saved");
-      // Refresh failover status
+      toast.success(t('settings.savedToast'));
       const foStatus = await getFailoverStatus().catch(() => null);
       setFailoverStatus(foStatus);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to save configuration");
+      toast.error(err?.response?.data?.detail || t('settings.saveFailed'));
     } finally {
       setSaving(false);
     }
   };
 
-  const updateField = <K extends keyof LocalConfig>(
-    key: K,
-    value: LocalConfig[K]
-  ) => {
+  const updateField = <K extends keyof LocalConfig>(key: K, value: LocalConfig[K]) => {
     setConfig((prev) => ({ ...prev, [key]: value }));
   };
 
@@ -97,6 +92,9 @@ export default function PiholeSettings() {
     );
   }
 
+  const modeLabel = (mode: 'docker' | 'remote' | 'disabled') =>
+    mode === 'docker' ? t('settings.modeDocker') : mode === 'remote' ? t('settings.modeRemote') : t('settings.modeDisabled');
+
   return (
     <div className="space-y-6">
       {/* Main Configuration */}
@@ -104,48 +102,38 @@ export default function PiholeSettings() {
         {/* Header */}
         <div className="flex items-center gap-2 border-b border-slate-700/50 px-4 py-3">
           <Settings className="h-4 w-4 text-sky-400" />
-          <h3 className="text-sm font-medium text-slate-300">
-            Pi-hole Configuration
-          </h3>
+          <h3 className="text-sm font-medium text-slate-300">{t('settings.title')}</h3>
         </div>
 
         <div className="space-y-4 p-4">
           {/* Mode */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Mode
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.mode')}</label>
             <div className="flex gap-2">
-              {(["docker", "remote", "disabled"] as const).map((mode) => (
+              {(['docker', 'remote', 'disabled'] as const).map((mode) => (
                 <button
                   key={mode}
-                  onClick={() => updateField("mode", mode)}
+                  onClick={() => updateField('mode', mode)}
                   className={`rounded-lg px-4 py-2 text-sm font-medium transition-colors ${
                     config.mode === mode
-                      ? "bg-sky-600 text-white"
-                      : "bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200"
+                      ? 'bg-sky-600 text-white'
+                      : 'bg-slate-700/50 text-slate-400 hover:bg-slate-700 hover:text-slate-200'
                   }`}
                 >
-                  {mode === "docker"
-                    ? "Docker"
-                    : mode === "remote"
-                      ? "Remote"
-                      : "Disabled"}
+                  {modeLabel(mode)}
                 </button>
               ))}
             </div>
           </div>
 
           {/* Pi-hole URL (remote mode) */}
-          {config.mode === "remote" && (
+          {config.mode === 'remote' && (
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Pi-hole URL
-              </label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.piholeUrl')}</label>
               <input
                 type="url"
-                value={config.pihole_url ?? ""}
-                onChange={(e) => updateField("pihole_url", e.target.value)}
+                value={config.pihole_url ?? ''}
+                onChange={(e) => updateField('pihole_url', e.target.value)}
                 placeholder="http://192.168.1.2"
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
@@ -154,15 +142,15 @@ export default function PiholeSettings() {
 
           {/* Password */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Password
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.password')}</label>
             <div className="flex gap-2">
               <input
-                type={passwordVisible ? "text" : "password"}
-                value={config.password ?? ""}
-                onChange={(e) => updateField("password", e.target.value)}
-                placeholder={config.has_password ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  (auto-generated)" : "Pi-hole admin password"}
+                type={passwordVisible ? 'text' : 'password'}
+                value={config.password ?? ''}
+                onChange={(e) => updateField('password', e.target.value)}
+                placeholder={
+                  config.has_password ? t('settings.passwordPlaceholderSet') : t('settings.passwordPlaceholderNew')
+                }
                 className="flex-1 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
               <button
@@ -170,43 +158,35 @@ export default function PiholeSettings() {
                 onClick={() => setPasswordVisible(!passwordVisible)}
                 className="rounded-lg bg-slate-700/50 px-3 py-2 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200"
               >
-                {passwordVisible ? "Hide" : "Show"}
+                {passwordVisible ? t('settings.hide') : t('settings.show')}
               </button>
             </div>
             {config.has_password && !config.password && (
-              <p className="mt-1 text-xs text-slate-500">
-                Password is set. Leave empty to keep current.
-              </p>
+              <p className="mt-1 text-xs text-slate-500">{t('settings.passwordHasSetHint')}</p>
             )}
           </div>
 
           {/* Upstream DNS */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Upstream DNS
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.upstreamDns')}</label>
             <input
               type="text"
-              value={config.upstream_dns ?? ""}
-              onChange={(e) => updateField("upstream_dns", e.target.value)}
+              value={config.upstream_dns ?? ''}
+              onChange={(e) => updateField('upstream_dns', e.target.value)}
               placeholder="1.1.1.1;8.8.8.8"
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
-            <p className="mt-1 text-xs text-slate-600">
-              Semicolon-separated list of upstream DNS servers
-            </p>
+            <p className="mt-1 text-xs text-slate-600">{t('settings.upstreamDnsHint')}</p>
           </div>
 
           {/* Docker image tag */}
-          {config.mode === "docker" && (
+          {config.mode === 'docker' && (
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Docker Image Tag
-              </label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.dockerImageTag')}</label>
               <input
                 type="text"
-                value={config.docker_image_tag ?? ""}
-                onChange={(e) => updateField("docker_image_tag", e.target.value)}
+                value={config.docker_image_tag ?? ''}
+                onChange={(e) => updateField('docker_image_tag', e.target.value)}
                 placeholder="latest"
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
@@ -214,17 +194,13 @@ export default function PiholeSettings() {
           )}
 
           {/* Web port */}
-          {config.mode === "docker" && (
+          {config.mode === 'docker' && (
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Web Port
-              </label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.webPort')}</label>
               <input
                 type="number"
                 value={config.web_port ?? 8080}
-                onChange={(e) =>
-                  updateField("web_port", parseInt(e.target.value, 10) || 8080)
-                }
+                onChange={(e) => updateField('web_port', parseInt(e.target.value, 10) || 8080)}
                 min={1}
                 max={65535}
                 className="w-full sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
@@ -235,22 +211,18 @@ export default function PiholeSettings() {
           {/* VPN DNS toggle */}
           <div className="flex items-center justify-between rounded-lg bg-slate-900/40 px-3 py-2.5">
             <div>
-              <p className="text-sm text-slate-300">Use as VPN DNS</p>
-              <p className="text-xs text-slate-500">
-                Route VPN client DNS queries through Pi-hole
-              </p>
+              <p className="text-sm text-slate-300">{t('settings.vpnDns')}</p>
+              <p className="text-xs text-slate-500">{t('settings.vpnDnsDesc')}</p>
             </div>
             <button
-              onClick={() =>
-                updateField("vpn_dns_enabled", !config.vpn_dns_enabled)
-              }
+              onClick={() => updateField('vpn_dns_enabled', !config.vpn_dns_enabled)}
               className={`relative h-6 w-11 p-0 rounded-full transition-colors ${
-                config.vpn_dns_enabled ? "bg-sky-600" : "bg-slate-600"
+                config.vpn_dns_enabled ? 'bg-sky-600' : 'bg-slate-600'
               }`}
             >
               <span
                 className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                  config.vpn_dns_enabled ? "translate-x-5" : "translate-x-0.5"
+                  config.vpn_dns_enabled ? 'translate-x-5' : 'translate-x-0.5'
                 }`}
               />
             </button>
@@ -262,63 +234,50 @@ export default function PiholeSettings() {
       <div className="rounded-xl border border-slate-700/50 bg-slate-800/60">
         <div className="flex items-center gap-2 border-b border-slate-700/50 px-4 py-3">
           <Monitor className="h-4 w-4 text-violet-400" />
-          <h3 className="text-sm font-medium text-slate-300">
-            Raspberry Pi (Remote Primary)
-          </h3>
+          <h3 className="text-sm font-medium text-slate-300">{t('settings.remoteTitle')}</h3>
           {failoverStatus && failoverStatus.remote_configured && (
             <span
               className={`ml-auto flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
                 failoverStatus.remote_connected
-                  ? "bg-emerald-500/20 text-emerald-400"
-                  : "bg-red-500/20 text-red-400"
+                  ? 'bg-emerald-500/20 text-emerald-400'
+                  : 'bg-red-500/20 text-red-400'
               }`}
             >
-              {failoverStatus.remote_connected ? (
-                <Wifi className="h-3 w-3" />
-              ) : (
-                <WifiOff className="h-3 w-3" />
-              )}
-              {failoverStatus.remote_connected ? "Connected" : "Not connected"}
+              {failoverStatus.remote_connected ? <Wifi className="h-3 w-3" /> : <WifiOff className="h-3 w-3" />}
+              {failoverStatus.remote_connected ? t('settings.connected') : t('settings.notConnected')}
             </span>
           )}
         </div>
 
         <div className="space-y-4 p-4">
-          <p className="text-xs text-slate-500">
-            Configure a remote Pi-hole (e.g. Raspberry Pi) as primary DNS filter.
-            If the remote Pi goes offline, the NAS Pi-hole takes over automatically.
-          </p>
+          <p className="text-xs text-slate-500">{t('settings.remoteDesc')}</p>
 
           {/* Remote URL */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Remote Pi-hole URL
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.remoteUrl')}</label>
             <input
               type="url"
-              value={config.remote_pihole_url ?? ""}
-              onChange={(e) =>
-                updateField("remote_pihole_url", e.target.value || undefined)
-              }
+              value={config.remote_pihole_url ?? ''}
+              onChange={(e) => updateField('remote_pihole_url', e.target.value || undefined)}
               placeholder="http://192.168.1.50:80"
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
-            <p className="mt-1 text-xs text-slate-600">
-              Leave empty to disable failover and use NAS Pi-hole only
-            </p>
+            <p className="mt-1 text-xs text-slate-600">{t('settings.remoteUrlHint')}</p>
           </div>
 
           {/* Remote Password */}
           <div>
-            <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Remote Password
-            </label>
+            <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.remotePassword')}</label>
             <div className="flex gap-2">
               <input
-                type={remotePasswordVisible ? "text" : "password"}
-                value={config.remote_password ?? ""}
-                onChange={(e) => updateField("remote_password", e.target.value)}
-                placeholder={config.has_remote_password ? "\u2022\u2022\u2022\u2022\u2022\u2022\u2022\u2022  (auto-generated)" : "Remote Pi-hole admin password"}
+                type={remotePasswordVisible ? 'text' : 'password'}
+                value={config.remote_password ?? ''}
+                onChange={(e) => updateField('remote_password', e.target.value)}
+                placeholder={
+                  config.has_remote_password
+                    ? t('settings.remotePasswordPlaceholderSet')
+                    : t('settings.remotePasswordPlaceholderNew')
+                }
                 className="flex-1 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
               <button
@@ -326,30 +285,23 @@ export default function PiholeSettings() {
                 onClick={() => setRemotePasswordVisible(!remotePasswordVisible)}
                 className="rounded-lg bg-slate-700/50 px-3 py-2 text-xs text-slate-400 hover:bg-slate-700 hover:text-slate-200"
               >
-                {remotePasswordVisible ? "Hide" : "Show"}
+                {remotePasswordVisible ? t('settings.hide') : t('settings.show')}
               </button>
             </div>
             {config.has_remote_password && !config.remote_password && (
-              <p className="mt-1 text-xs text-slate-500">
-                Password is set. Leave empty to keep current.
-              </p>
+              <p className="mt-1 text-xs text-slate-500">{t('settings.passwordHasSetHint')}</p>
             )}
           </div>
 
           {/* Health Check Interval */}
           <div>
             <label className="mb-1.5 block text-xs font-medium text-slate-400">
-              Health Check Interval (seconds)
+              {t('settings.healthCheckInterval')}
             </label>
             <input
               type="number"
               value={config.health_check_interval ?? 30}
-              onChange={(e) =>
-                updateField(
-                  "health_check_interval",
-                  parseInt(e.target.value, 10) || 30
-                )
-              }
+              onChange={(e) => updateField('health_check_interval', parseInt(e.target.value, 10) || 30)}
               min={10}
               max={300}
               className="w-full sm:w-48 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
@@ -360,27 +312,26 @@ export default function PiholeSettings() {
           {failoverStatus && failoverStatus.remote_configured && (
             <div className="rounded-lg bg-slate-900/40 px-3 py-2.5">
               <div className="flex items-center justify-between">
-                <span className="text-sm text-slate-400">Active Source</span>
+                <span className="text-sm text-slate-400">{t('settings.activeSource')}</span>
                 <span
                   className={`rounded-full px-2.5 py-0.5 text-xs font-medium ${
-                    failoverStatus.active_source === "remote"
-                      ? "bg-violet-500/20 text-violet-400"
+                    failoverStatus.active_source === 'remote'
+                      ? 'bg-violet-500/20 text-violet-400'
                       : failoverStatus.failover_active
-                        ? "bg-amber-500/20 text-amber-400"
-                        : "bg-sky-500/20 text-sky-400"
+                        ? 'bg-amber-500/20 text-amber-400'
+                        : 'bg-sky-500/20 text-sky-400'
                   }`}
                 >
-                  {failoverStatus.active_source === "remote"
-                    ? "Pi (Remote)"
+                  {failoverStatus.active_source === 'remote'
+                    ? t('settings.sourcePiRemote')
                     : failoverStatus.failover_active
-                      ? "NAS (Failover)"
-                      : "NAS (Local)"}
+                      ? t('settings.sourceNasFailover')
+                      : t('settings.sourceNasLocal')}
                 </span>
               </div>
               {failoverStatus.last_failover_at && (
                 <p className="mt-1 text-xs text-slate-600">
-                  Last failover:{" "}
-                  {new Date(failoverStatus.last_failover_at).toLocaleString()}
+                  {t('settings.lastFailover', { time: new Date(failoverStatus.last_failover_at).toLocaleString() })}
                 </p>
               )}
             </div>
@@ -389,41 +340,34 @@ export default function PiholeSettings() {
       </div>
 
       {/* Advanced DNS Settings (Docker mode only) */}
-      {config.mode === "docker" && (
+      {config.mode === 'docker' && (
         <div className="rounded-xl border border-slate-700/50 bg-slate-800/60">
           <div className="flex items-center gap-2 border-b border-slate-700/50 px-4 py-3">
             <Shield className="h-4 w-4 text-amber-400" />
-            <h3 className="text-sm font-medium text-slate-300">
-              Advanced DNS Settings
-            </h3>
+            <h3 className="text-sm font-medium text-slate-300">{t('settings.advancedDns')}</h3>
             <span className="ml-auto rounded-full bg-amber-500/10 px-2 py-0.5 text-[10px] font-medium text-amber-400">
-              FTLCONF
+              {t('settings.advancedDnsBadge')}
             </span>
           </div>
 
           <div className="space-y-4 p-4">
-            <p className="text-xs text-slate-500">
-              These settings are applied as FTLCONF environment variables when
-              the container is deployed. They are read-only in the Pi-hole web UI.
-            </p>
+            <p className="text-xs text-slate-500">{t('settings.advancedDnsDesc')}</p>
 
             {/* DNSSEC */}
             <div className="flex items-center justify-between rounded-lg bg-slate-900/40 px-3 py-2.5">
               <div>
-                <p className="text-sm text-slate-300">DNSSEC</p>
-                <p className="text-xs text-slate-500">
-                  Validate DNS responses using DNSSEC signatures
-                </p>
+                <p className="text-sm text-slate-300">{t('settings.dnssec')}</p>
+                <p className="text-xs text-slate-500">{t('settings.dnssecDesc')}</p>
               </div>
               <button
-                onClick={() => updateField("dns_dnssec", !config.dns_dnssec)}
+                onClick={() => updateField('dns_dnssec', !config.dns_dnssec)}
                 className={`relative h-6 w-11 p-0 rounded-full transition-colors ${
-                  config.dns_dnssec ? "bg-sky-600" : "bg-slate-600"
+                  config.dns_dnssec ? 'bg-sky-600' : 'bg-slate-600'
                 }`}
               >
                 <span
                   className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    config.dns_dnssec ? "translate-x-5" : "translate-x-0.5"
+                    config.dns_dnssec ? 'translate-x-5' : 'translate-x-0.5'
                   }`}
                 />
               </button>
@@ -432,24 +376,18 @@ export default function PiholeSettings() {
             {/* Never Forward non-FQDN */}
             <div className="flex items-center justify-between rounded-lg bg-slate-900/40 px-3 py-2.5">
               <div>
-                <p className="text-sm text-slate-300">Never Forward non-FQDN</p>
-                <p className="text-xs text-slate-500">
-                  Do not forward A and AAAA queries for plain names
-                </p>
+                <p className="text-sm text-slate-300">{t('settings.domainNeeded')}</p>
+                <p className="text-xs text-slate-500">{t('settings.domainNeededDesc')}</p>
               </div>
               <button
-                onClick={() =>
-                  updateField("dns_domain_needed", !config.dns_domain_needed)
-                }
+                onClick={() => updateField('dns_domain_needed', !config.dns_domain_needed)}
                 className={`relative h-6 w-11 p-0 rounded-full transition-colors ${
-                  config.dns_domain_needed ? "bg-sky-600" : "bg-slate-600"
+                  config.dns_domain_needed ? 'bg-sky-600' : 'bg-slate-600'
                 }`}
               >
                 <span
                   className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    config.dns_domain_needed
-                      ? "translate-x-5"
-                      : "translate-x-0.5"
+                    config.dns_domain_needed ? 'translate-x-5' : 'translate-x-0.5'
                   }`}
                 />
               </button>
@@ -458,24 +396,18 @@ export default function PiholeSettings() {
             {/* Never Forward Reverse Lookups */}
             <div className="flex items-center justify-between rounded-lg bg-slate-900/40 px-3 py-2.5">
               <div>
-                <p className="text-sm text-slate-300">
-                  Never Forward Reverse Lookups
-                </p>
-                <p className="text-xs text-slate-500">
-                  Do not forward reverse lookups for private IP ranges
-                </p>
+                <p className="text-sm text-slate-300">{t('settings.bogusPriv')}</p>
+                <p className="text-xs text-slate-500">{t('settings.bogusPrivDesc')}</p>
               </div>
               <button
-                onClick={() =>
-                  updateField("dns_bogus_priv", !config.dns_bogus_priv)
-                }
+                onClick={() => updateField('dns_bogus_priv', !config.dns_bogus_priv)}
                 className={`relative h-6 w-11 p-0 rounded-full transition-colors ${
-                  config.dns_bogus_priv ? "bg-sky-600" : "bg-slate-600"
+                  config.dns_bogus_priv ? 'bg-sky-600' : 'bg-slate-600'
                 }`}
               >
                 <span
                   className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    config.dns_bogus_priv ? "translate-x-5" : "translate-x-0.5"
+                    config.dns_bogus_priv ? 'translate-x-5' : 'translate-x-0.5'
                   }`}
                 />
               </button>
@@ -484,24 +416,18 @@ export default function PiholeSettings() {
             {/* Expand Hostnames */}
             <div className="flex items-center justify-between rounded-lg bg-slate-900/40 px-3 py-2.5">
               <div>
-                <p className="text-sm text-slate-300">Expand Hostnames</p>
-                <p className="text-xs text-slate-500">
-                  Add domain name to plain hostnames in /etc/hosts
-                </p>
+                <p className="text-sm text-slate-300">{t('settings.expandHosts')}</p>
+                <p className="text-xs text-slate-500">{t('settings.expandHostsDesc')}</p>
               </div>
               <button
-                onClick={() =>
-                  updateField("dns_expand_hosts", !config.dns_expand_hosts)
-                }
+                onClick={() => updateField('dns_expand_hosts', !config.dns_expand_hosts)}
                 className={`relative h-6 w-11 p-0 rounded-full transition-colors ${
-                  config.dns_expand_hosts ? "bg-sky-600" : "bg-slate-600"
+                  config.dns_expand_hosts ? 'bg-sky-600' : 'bg-slate-600'
                 }`}
               >
                 <span
                   className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-transform ${
-                    config.dns_expand_hosts
-                      ? "translate-x-5"
-                      : "translate-x-0.5"
+                    config.dns_expand_hosts ? 'translate-x-5' : 'translate-x-0.5'
                   }`}
                 />
               </button>
@@ -509,83 +435,60 @@ export default function PiholeSettings() {
 
             {/* Domain Name */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Domain Name
-              </label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.domainName')}</label>
               <input
                 type="text"
-                value={config.dns_domain_name ?? "lan"}
-                onChange={(e) => updateField("dns_domain_name", e.target.value)}
+                value={config.dns_domain_name ?? 'lan'}
+                onChange={(e) => updateField('dns_domain_name', e.target.value)}
                 placeholder="lan"
                 className="w-full sm:w-64 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
-              <p className="mt-1 text-xs text-slate-600">
-                Local domain name for your network
-              </p>
+              <p className="mt-1 text-xs text-slate-600">{t('settings.domainNameDesc')}</p>
             </div>
 
             {/* Conditional Forwarding */}
             <div>
               <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Conditional Forwarding
+                {t('settings.conditionalForwarding')}
               </label>
               <input
                 type="text"
-                value={config.dns_rev_server ?? ""}
-                onChange={(e) =>
-                  updateField("dns_rev_server", e.target.value || null)
-                }
+                value={config.dns_rev_server ?? ''}
+                onChange={(e) => updateField('dns_rev_server', e.target.value || null)}
                 placeholder="true,192.168.178.0/24,192.168.178.1,fritz.box"
                 className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
               />
-              <p className="mt-1 text-xs text-slate-600">
-                Format: enabled,network/CIDR,router-IP,local-domain (leave empty
-                to disable)
-              </p>
+              <p className="mt-1 text-xs text-slate-600">{t('settings.conditionalForwardingDesc')}</p>
             </div>
 
             {/* Rate Limiting */}
             <div>
-              <label className="mb-1.5 block text-xs font-medium text-slate-400">
-                Rate Limiting
-              </label>
+              <label className="mb-1.5 block text-xs font-medium text-slate-400">{t('settings.rateLimiting')}</label>
               <div className="flex flex-wrap items-center gap-3">
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={config.dns_rate_limit_count ?? 1000}
-                    onChange={(e) =>
-                      updateField(
-                        "dns_rate_limit_count",
-                        parseInt(e.target.value, 10) || 0
-                      )
-                    }
+                    onChange={(e) => updateField('dns_rate_limit_count', parseInt(e.target.value, 10) || 0)}
                     min={0}
                     max={100000}
                     className="w-28 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
                   />
-                  <span className="text-xs text-slate-500">queries per</span>
+                  <span className="text-xs text-slate-500">{t('settings.rateLimitQueriesPer')}</span>
                 </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="number"
                     value={config.dns_rate_limit_interval ?? 60}
-                    onChange={(e) =>
-                      updateField(
-                        "dns_rate_limit_interval",
-                        parseInt(e.target.value, 10) || 0
-                      )
-                    }
+                    onChange={(e) => updateField('dns_rate_limit_interval', parseInt(e.target.value, 10) || 0)}
                     min={0}
                     max={86400}
                     className="w-28 rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
                   />
-                  <span className="text-xs text-slate-500">seconds</span>
+                  <span className="text-xs text-slate-500">{t('settings.rateLimitSeconds')}</span>
                 </div>
               </div>
-              <p className="mt-1 text-xs text-slate-600">
-                Set count to 0 to disable rate limiting
-              </p>
+              <p className="mt-1 text-xs text-slate-600">{t('settings.rateLimitDisableHint')}</p>
             </div>
           </div>
         </div>
@@ -598,12 +501,8 @@ export default function PiholeSettings() {
           disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-4 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
         >
-          {saving ? (
-            <RefreshCw className="h-4 w-4 animate-spin" />
-          ) : (
-            <Save className="h-4 w-4" />
-          )}
-          Save Configuration
+          {saving ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Save className="h-4 w-4" />}
+          {t('settings.save')}
         </button>
       </div>
     </div>

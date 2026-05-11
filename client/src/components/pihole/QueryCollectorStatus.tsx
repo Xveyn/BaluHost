@@ -1,13 +1,15 @@
-import { useState, useEffect } from "react";
-import { Database, RefreshCw, Power, PowerOff } from "lucide-react";
-import toast from "react-hot-toast";
+import { useState, useEffect } from 'react';
+import { Database, RefreshCw, Power, PowerOff } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
   getCollectorStatus,
   updateCollectorConfig,
   type QueryCollectorStatus as CollectorStatus,
-} from "../../api/pihole";
+} from '../../api/pihole';
 
 export default function QueryCollectorStatus() {
+  const { t } = useTranslation('pihole');
   const [status, setStatus] = useState<CollectorStatus | null>(null);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -39,9 +41,9 @@ export default function QueryCollectorStatus() {
     try {
       const data = await updateCollectorConfig({ is_enabled: !status.is_enabled });
       setStatus(data);
-      toast.success(data.is_enabled ? "Collector enabled" : "Collector disabled");
+      toast.success(data.is_enabled ? t('collector.enabledToast') : t('collector.disabledToast'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to update collector");
+      toast.error(err?.response?.data?.detail || t('collector.updateFailed'));
     } finally {
       setSaving(false);
     }
@@ -55,9 +57,9 @@ export default function QueryCollectorStatus() {
         retention_days: retentionDays,
       });
       setStatus(data);
-      toast.success("Collector settings saved");
+      toast.success(t('collector.savedToast'));
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to save settings");
+      toast.error(err?.response?.data?.detail || t('collector.saveFailed'));
     } finally {
       setSaving(false);
     }
@@ -78,38 +80,34 @@ export default function QueryCollectorStatus() {
       <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
         <div className="flex items-center gap-2">
           <Database className="h-5 w-5 text-slate-400" />
-          <h4 className="text-sm font-medium text-slate-200">
-            DNS Query Collector
-          </h4>
+          <h4 className="text-sm font-medium text-slate-200">{t('collector.title')}</h4>
         </div>
         <div className="flex items-center gap-3">
           <span
             className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-              status.running
-                ? "bg-emerald-500/20 text-emerald-400"
-                : "bg-slate-700/50 text-slate-400"
+              status.running ? 'bg-emerald-500/20 text-emerald-400' : 'bg-slate-700/50 text-slate-400'
             }`}
           >
-            <span
-              className={`h-1.5 w-1.5 rounded-full ${
-                status.running ? "bg-emerald-400" : "bg-slate-500"
-              }`}
-            />
-            {status.running ? "Running" : "Stopped"}
+            <span className={`h-1.5 w-1.5 rounded-full ${status.running ? 'bg-emerald-400' : 'bg-slate-500'}`} />
+            {status.running ? t('collector.running') : t('collector.stopped')}
           </span>
           <button
             onClick={handleToggle}
             disabled={saving}
             className={`rounded-lg px-3 py-1.5 text-xs font-medium transition-colors ${
               status.is_enabled
-                ? "bg-red-500/20 text-red-400 hover:bg-red-500/30"
-                : "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30"
+                ? 'bg-red-500/20 text-red-400 hover:bg-red-500/30'
+                : 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30'
             }`}
           >
             {status.is_enabled ? (
-              <span className="flex items-center gap-1"><PowerOff className="h-3.5 w-3.5" /> Disable</span>
+              <span className="flex items-center gap-1">
+                <PowerOff className="h-3.5 w-3.5" /> {t('collector.disable')}
+              </span>
             ) : (
-              <span className="flex items-center gap-1"><Power className="h-3.5 w-3.5" /> Enable</span>
+              <span className="flex items-center gap-1">
+                <Power className="h-3.5 w-3.5" /> {t('collector.enable')}
+              </span>
             )}
           </button>
         </div>
@@ -118,22 +116,20 @@ export default function QueryCollectorStatus() {
       {/* Status Info */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4 text-sm">
         <div>
-          <span className="text-slate-400">Total Queries Stored</span>
-          <p className="text-lg font-semibold text-slate-200">
-            {status.total_queries_stored.toLocaleString()}
-          </p>
+          <span className="text-slate-400">{t('collector.totalStored')}</span>
+          <p className="text-lg font-semibold text-slate-200">{status.total_queries_stored.toLocaleString()}</p>
         </div>
         <div>
-          <span className="text-slate-400">Last Poll</span>
+          <span className="text-slate-400">{t('collector.lastPoll')}</span>
           <p className="text-slate-200">
             {status.last_poll_at
               ? new Date(status.last_poll_at).toLocaleString([], {
-                  month: "short",
-                  day: "numeric",
-                  hour: "2-digit",
-                  minute: "2-digit",
+                  month: 'short',
+                  day: 'numeric',
+                  hour: '2-digit',
+                  minute: '2-digit',
                 })
-              : "Never"}
+              : t('collector.never')}
           </p>
         </div>
       </div>
@@ -141,11 +137,9 @@ export default function QueryCollectorStatus() {
       {/* Error Display */}
       {status.last_error && (
         <div className="mb-4 rounded-lg border border-red-500/30 bg-red-500/10 px-3 py-2 text-xs text-red-300">
-          Last error: {status.last_error}
+          {t('collector.lastError')} {status.last_error}
           {status.last_error_at && (
-            <span className="text-red-400/70">
-              {" "}({new Date(status.last_error_at).toLocaleString()})
-            </span>
+            <span className="text-red-400/70"> ({new Date(status.last_error_at).toLocaleString()})</span>
           )}
         </div>
       )}
@@ -153,9 +147,7 @@ export default function QueryCollectorStatus() {
       {/* Configuration */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 border-t border-slate-700/50 pt-4">
         <div>
-          <label className="mb-1 block text-xs text-slate-400">
-            Poll Interval (seconds)
-          </label>
+          <label className="mb-1 block text-xs text-slate-400">{t('collector.pollInterval')}</label>
           <input
             type="number"
             min={10}
@@ -166,9 +158,7 @@ export default function QueryCollectorStatus() {
           />
         </div>
         <div>
-          <label className="mb-1 block text-xs text-slate-400">
-            Retention (days)
-          </label>
+          <label className="mb-1 block text-xs text-slate-400">{t('collector.retentionDays')}</label>
           <input
             type="number"
             min={1}
@@ -185,8 +175,8 @@ export default function QueryCollectorStatus() {
           disabled={saving}
           className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-xs font-medium text-white hover:bg-sky-500 transition-colors disabled:opacity-50"
         >
-          <RefreshCw className={`h-3.5 w-3.5 ${saving ? "animate-spin" : ""}`} />
-          Save
+          <RefreshCw className={`h-3.5 w-3.5 ${saving ? 'animate-spin' : ''}`} />
+          {t('collector.save')}
         </button>
       </div>
     </div>

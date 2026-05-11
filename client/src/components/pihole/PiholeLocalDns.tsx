@@ -1,11 +1,8 @@
-import { useState, useEffect, useCallback } from "react";
-import { Plus, Trash2, RefreshCw, Globe } from "lucide-react";
-import toast from "react-hot-toast";
-import {
-  getLocalDns,
-  addLocalDns,
-  removeLocalDns,
-} from "../../api/pihole";
+import { useState, useEffect, useCallback } from 'react';
+import { Plus, Trash2, RefreshCw, Globe } from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
+import { getLocalDns, addLocalDns, removeLocalDns } from '../../api/pihole';
 import { useSortableTable } from '../../hooks/useSortableTable';
 import { SortableHeader } from '../ui/SortableHeader';
 
@@ -15,10 +12,11 @@ interface DnsRecord {
 }
 
 export default function PiholeLocalDns() {
+  const { t } = useTranslation('pihole');
   const [records, setRecords] = useState<DnsRecord[]>([]);
   const [loading, setLoading] = useState(false);
-  const [newDomain, setNewDomain] = useState("");
-  const [newIp, setNewIp] = useState("");
+  const [newDomain, setNewDomain] = useState('');
+  const [newIp, setNewIp] = useState('');
   const [adding, setAdding] = useState(false);
   const [removingDomain, setRemovingDomain] = useState<string | null>(null);
 
@@ -30,11 +28,11 @@ export default function PiholeLocalDns() {
       const result = await getLocalDns();
       setRecords(result.records);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to load DNS records");
+      toast.error(err?.response?.data?.detail || t('localDns.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetchRecords();
@@ -49,12 +47,12 @@ export default function PiholeLocalDns() {
     setAdding(true);
     try {
       await addLocalDns(trimmedDomain, trimmedIp);
-      toast.success("DNS record added");
-      setNewDomain("");
-      setNewIp("");
+      toast.success(t('localDns.addedToast'));
+      setNewDomain('');
+      setNewIp('');
       await fetchRecords();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to add DNS record");
+      toast.error(err?.response?.data?.detail || t('localDns.addFailed'));
     } finally {
       setAdding(false);
     }
@@ -64,10 +62,10 @@ export default function PiholeLocalDns() {
     setRemovingDomain(domain);
     try {
       await removeLocalDns(domain, ip);
-      toast.success(`Removed ${domain}`);
+      toast.success(t('localDns.removedToast', { domain }));
       await fetchRecords();
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to remove DNS record");
+      toast.error(err?.response?.data?.detail || t('localDns.removeFailed'));
     } finally {
       setRemovingDomain(null);
     }
@@ -78,9 +76,7 @@ export default function PiholeLocalDns() {
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-slate-700/50 px-4 py-3">
         <Globe className="h-4 w-4 text-sky-400" />
-        <h3 className="text-sm font-medium text-slate-300">
-          Local DNS Records
-        </h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('localDns.title')}</h3>
       </div>
 
       {/* Table */}
@@ -88,37 +84,25 @@ export default function PiholeLocalDns() {
         {loading ? (
           <div className="space-y-2">
             {Array.from({ length: 4 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-10 animate-pulse rounded bg-slate-700/40"
-              />
+              <div key={i} className="h-10 animate-pulse rounded bg-slate-700/40" />
             ))}
           </div>
         ) : records.length === 0 ? (
-          <p className="py-8 text-center text-sm text-slate-500">
-            No local DNS records
-          </p>
+          <p className="py-8 text-center text-sm text-slate-500">{t('localDns.noRecords')}</p>
         ) : (
           <table className="w-full text-left text-sm">
             <thead>
               <tr className="border-b border-slate-700/50 text-xs uppercase text-slate-500">
-                <SortableHeader label="Domain" sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
-                <SortableHeader label="IP Address" sortKey="ip" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label={t('localDns.columns.domain')} sortKey="domain" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
+                <SortableHeader label={t('localDns.columns.ip')} sortKey="ip" activeSortKey={sortKey} sortDirection={sortDirection} onSort={toggleSort} className="pb-2 pr-4" />
                 <th className="pb-2 w-10" />
               </tr>
             </thead>
             <tbody>
               {sortedRecords.map((r, i) => (
-                <tr
-                  key={i}
-                  className="border-b border-slate-700/30 hover:bg-slate-700/20"
-                >
-                  <td className="py-2.5 pr-4 font-mono text-xs text-slate-200">
-                    {r.domain}
-                  </td>
-                  <td className="py-2.5 pr-4 font-mono text-xs text-slate-400">
-                    {r.ip}
-                  </td>
+                <tr key={i} className="border-b border-slate-700/30 hover:bg-slate-700/20">
+                  <td className="py-2.5 pr-4 font-mono text-xs text-slate-200">{r.domain}</td>
+                  <td className="py-2.5 pr-4 font-mono text-xs text-slate-400">{r.ip}</td>
                   <td className="py-2.5">
                     <button
                       onClick={() => handleRemove(r.domain, r.ip)}
@@ -143,24 +127,22 @@ export default function PiholeLocalDns() {
       <div className="border-t border-slate-700/50 p-4">
         <form onSubmit={handleAdd} className="flex flex-wrap items-end gap-2">
           <div className="flex-1">
-            <label className="mb-1 block text-xs text-slate-500">Domain</label>
+            <label className="mb-1 block text-xs text-slate-500">{t('localDns.domainLabel')}</label>
             <input
               type="text"
               value={newDomain}
               onChange={(e) => setNewDomain(e.target.value)}
-              placeholder="mydevice.local"
+              placeholder={t('localDns.domainPlaceholder')}
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
           <div className="flex-1">
-            <label className="mb-1 block text-xs text-slate-500">
-              IP Address
-            </label>
+            <label className="mb-1 block text-xs text-slate-500">{t('localDns.ipLabel')}</label>
             <input
               type="text"
               value={newIp}
               onChange={(e) => setNewIp(e.target.value)}
-              placeholder="192.168.1.100"
+              placeholder={t('localDns.ipPlaceholder')}
               className="w-full rounded-lg border border-slate-700/50 bg-slate-900/80 px-3 py-2 text-sm text-slate-200 placeholder-slate-600 focus:border-sky-500/50 focus:outline-none focus:ring-1 focus:ring-sky-500/30"
             />
           </div>
@@ -169,12 +151,8 @@ export default function PiholeLocalDns() {
             disabled={adding || !newDomain.trim() || !newIp.trim()}
             className="flex w-full items-center justify-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50 sm:w-auto"
           >
-            {adding ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Add
+            {adding ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            {t('localDns.add')}
           </button>
         </form>
       </div>

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Play,
   Square,
@@ -10,9 +10,9 @@ import {
   AlertTriangle,
   Copy,
   Check,
-} from "lucide-react";
-import toast from "react-hot-toast";
-import { useTranslation } from "react-i18next";
+} from 'lucide-react';
+import toast from 'react-hot-toast';
+import { useTranslation } from 'react-i18next';
 import {
   deployContainer,
   startContainer,
@@ -20,24 +20,22 @@ import {
   removeContainer,
   updateContainer,
   getContainerLogs,
-} from "../../api/pihole";
+} from '../../api/pihole';
 
 export default function PiholeContainerActions() {
-  const { t } = useTranslation();
+  const { t } = useTranslation('pihole');
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [confirmAction, setConfirmAction] = useState<string | null>(null);
-  const [logs, setLogs] = useState("");
+  const [logs, setLogs] = useState('');
   const [logsLoading, setLogsLoading] = useState(false);
   const [logsVisible, setLogsVisible] = useState(false);
   const logsRef = useRef<HTMLPreElement>(null);
 
-  // Deploy config
-  const [deployImageTag, setDeployImageTag] = useState("latest");
-  const [deployPort, setDeployPort] = useState("8080");
-  const [deployUpstreamDns, setDeployUpstreamDns] = useState("1.1.1.1");
+  const [deployImageTag, setDeployImageTag] = useState('latest');
+  const [deployPort, setDeployPort] = useState('8080');
+  const [deployUpstreamDns, setDeployUpstreamDns] = useState('1.1.1.1');
   const [showDeployForm, setShowDeployForm] = useState(false);
 
-  // One-time password reveal after deploy
   const [deployedPassword, setDeployedPassword] = useState<string | null>(null);
   const [passwordCopied, setPasswordCopied] = useState(false);
 
@@ -51,18 +49,14 @@ export default function PiholeContainerActions() {
     scrollLogsToBottom();
   }, [logs, scrollLogsToBottom]);
 
-  const runAction = async (
-    action: string,
-    fn: () => Promise<unknown>,
-    successMsg: string
-  ) => {
+  const runAction = async (action: string, fn: () => Promise<unknown>, successMsg: string) => {
     setActionLoading(action);
     setConfirmAction(null);
     try {
       await fn();
       toast.success(successMsg);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || `Failed to ${action} container`);
+      toast.error(err?.response?.data?.detail || t('container.actionFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -70,7 +64,7 @@ export default function PiholeContainerActions() {
 
   const handleDeploy = async (e: React.FormEvent) => {
     e.preventDefault();
-    setActionLoading("deploy");
+    setActionLoading('deploy');
     setConfirmAction(null);
     try {
       const result = await deployContainer({
@@ -78,12 +72,12 @@ export default function PiholeContainerActions() {
         web_port: parseInt(deployPort, 10) || 8053,
         upstream_dns: deployUpstreamDns,
       });
-      toast.success("Container deployed successfully");
+      toast.success(t('container.deploySuccess'));
       if (result.password) {
         setDeployedPassword(result.password);
       }
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to deploy container");
+      toast.error(err?.response?.data?.detail || t('container.deployFailed'));
     } finally {
       setActionLoading(null);
     }
@@ -95,10 +89,10 @@ export default function PiholeContainerActions() {
     try {
       await navigator.clipboard.writeText(deployedPassword);
       setPasswordCopied(true);
-      toast.success(t("pihole.copyPassword"));
+      toast.success(t('container.copyPassword'));
       setTimeout(() => setPasswordCopied(false), 2000);
     } catch {
-      toast.error("Failed to copy");
+      toast.error(t('container.copyFailed'));
     }
   };
 
@@ -109,7 +103,7 @@ export default function PiholeContainerActions() {
       const result = await getContainerLogs();
       setLogs(result.logs);
     } catch (err: any) {
-      toast.error(err?.response?.data?.detail || "Failed to fetch container logs");
+      toast.error(err?.response?.data?.detail || t('container.fetchLogsFailed'));
     } finally {
       setLogsLoading(false);
     }
@@ -127,25 +121,22 @@ export default function PiholeContainerActions() {
     if (confirmAction === key) {
       return (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-amber-400">Are you sure?</span>
+          <span className="text-xs text-amber-400">{t('container.areYouSure')}</span>
           <button
             onClick={() => {
-              if (key === "stop")
-                runAction(key, stopContainer, "Container stopped");
-              else if (key === "remove")
-                runAction(key, removeContainer, "Container removed");
-              else if (key === "update")
-                runAction(key, updateContainer, "Container updated");
+              if (key === 'stop') runAction(key, stopContainer, t('container.stopped'));
+              else if (key === 'remove') runAction(key, removeContainer, t('container.removed'));
+              else if (key === 'update') runAction(key, updateContainer, t('container.updated'));
             }}
             className="rounded bg-red-600 px-2 py-1 text-xs text-white hover:bg-red-500"
           >
-            Confirm
+            {t('container.confirm')}
           </button>
           <button
             onClick={() => setConfirmAction(null)}
             className="rounded bg-slate-700 px-2 py-1 text-xs text-slate-300 hover:bg-slate-600"
           >
-            Cancel
+            {t('container.cancel')}
           </button>
         </div>
       );
@@ -156,8 +147,8 @@ export default function PiholeContainerActions() {
         onClick={() => {
           if (needsConfirm) {
             setConfirmAction(key);
-          } else if (key === "start") {
-            runAction(key, startContainer, "Container started");
+          } else if (key === 'start') {
+            runAction(key, startContainer, t('container.started'));
           }
         }}
         disabled={isLoading || actionLoading !== null}
@@ -174,9 +165,7 @@ export default function PiholeContainerActions() {
       {/* Header */}
       <div className="flex items-center gap-2 border-b border-slate-700/50 px-4 py-3">
         <Terminal className="h-4 w-4 text-sky-400" />
-        <h3 className="text-sm font-medium text-slate-300">
-          Container Management
-        </h3>
+        <h3 className="text-sm font-medium text-slate-300">{t('container.title')}</h3>
       </div>
 
       <div className="space-y-4 p-4">
@@ -189,40 +178,13 @@ export default function PiholeContainerActions() {
             className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-2 text-sm font-medium text-white hover:bg-sky-500 disabled:cursor-not-allowed disabled:opacity-50"
           >
             <Rocket className="h-4 w-4" />
-            Deploy
+            {t('container.deploy')}
           </button>
 
-          {actionBtn(
-            "start",
-            "Start",
-            <Play className="h-4 w-4" />,
-            "bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30",
-            false
-          )}
-
-          {actionBtn(
-            "stop",
-            "Stop",
-            <Square className="h-4 w-4" />,
-            "bg-amber-500/20 text-amber-400 hover:bg-amber-500/30",
-            true
-          )}
-
-          {actionBtn(
-            "remove",
-            "Remove",
-            <Trash2 className="h-4 w-4" />,
-            "bg-red-500/20 text-red-400 hover:bg-red-500/30",
-            true
-          )}
-
-          {actionBtn(
-            "update",
-            "Update",
-            <Download className="h-4 w-4" />,
-            "bg-violet-500/20 text-violet-400 hover:bg-violet-500/30",
-            true
-          )}
+          {actionBtn('start', t('container.start'), <Play className="h-4 w-4" />, 'bg-emerald-500/20 text-emerald-400 hover:bg-emerald-500/30', false)}
+          {actionBtn('stop', t('container.stop'), <Square className="h-4 w-4" />, 'bg-amber-500/20 text-amber-400 hover:bg-amber-500/30', true)}
+          {actionBtn('remove', t('container.remove'), <Trash2 className="h-4 w-4" />, 'bg-red-500/20 text-red-400 hover:bg-red-500/30', true)}
+          {actionBtn('update', t('container.update'), <Download className="h-4 w-4" />, 'bg-violet-500/20 text-violet-400 hover:bg-violet-500/30', true)}
 
           <div className="flex-1" />
 
@@ -232,29 +194,18 @@ export default function PiholeContainerActions() {
             disabled={logsLoading}
             className="flex items-center gap-1.5 rounded-lg bg-slate-700/50 px-3 py-2 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200 disabled:opacity-50"
           >
-            {logsLoading ? (
-              <RefreshCw className="h-4 w-4 animate-spin" />
-            ) : (
-              <Terminal className="h-4 w-4" />
-            )}
-            Logs
+            {logsLoading ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Terminal className="h-4 w-4" />}
+            {t('container.logs')}
           </button>
         </div>
 
         {/* Deploy form */}
         {showDeployForm && (
-          <form
-            onSubmit={handleDeploy}
-            className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4"
-          >
-            <h4 className="mb-3 text-sm font-medium text-slate-300">
-              Deploy Configuration
-            </h4>
+          <form onSubmit={handleDeploy} className="rounded-lg border border-slate-700/50 bg-slate-900/60 p-4">
+            <h4 className="mb-3 text-sm font-medium text-slate-300">{t('container.deployConfig')}</h4>
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
               <div>
-                <label className="mb-1 block text-xs text-slate-500">
-                  Image Tag
-                </label>
+                <label className="mb-1 block text-xs text-slate-500">{t('container.imageTag')}</label>
                 <input
                   type="text"
                   value={deployImageTag}
@@ -264,9 +215,7 @@ export default function PiholeContainerActions() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500">
-                  Web Port
-                </label>
+                <label className="mb-1 block text-xs text-slate-500">{t('container.webPort')}</label>
                 <input
                   type="number"
                   value={deployPort}
@@ -277,9 +226,7 @@ export default function PiholeContainerActions() {
                 />
               </div>
               <div>
-                <label className="mb-1 block text-xs text-slate-500">
-                  Upstream DNS
-                </label>
+                <label className="mb-1 block text-xs text-slate-500">{t('container.upstreamDns')}</label>
                 <input
                   type="text"
                   value={deployUpstreamDns}
@@ -295,19 +242,15 @@ export default function PiholeContainerActions() {
                 onClick={() => setShowDeployForm(false)}
                 className="rounded-lg bg-slate-700/50 px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200"
               >
-                Cancel
+                {t('container.cancel')}
               </button>
               <button
                 type="submit"
-                disabled={actionLoading === "deploy"}
+                disabled={actionLoading === 'deploy'}
                 className="flex items-center gap-1.5 rounded-lg bg-sky-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-sky-500 disabled:opacity-50"
               >
-                {actionLoading === "deploy" ? (
-                  <RefreshCw className="h-4 w-4 animate-spin" />
-                ) : (
-                  <Rocket className="h-4 w-4" />
-                )}
-                Deploy Container
+                {actionLoading === 'deploy' ? <RefreshCw className="h-4 w-4 animate-spin" /> : <Rocket className="h-4 w-4" />}
+                {t('container.deployContainer')}
               </button>
             </div>
           </form>
@@ -319,12 +262,8 @@ export default function PiholeContainerActions() {
             <div className="mb-3 flex items-start gap-2">
               <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-amber-400" />
               <div>
-                <h4 className="text-sm font-semibold text-amber-300">
-                  {t("pihole.passwordRevealTitle")}
-                </h4>
-                <p className="mt-1 text-xs text-amber-400/80">
-                  {t("pihole.passwordRevealWarning")}
-                </p>
+                <h4 className="text-sm font-semibold text-amber-300">{t('container.passwordRevealTitle')}</h4>
+                <p className="mt-1 text-xs text-amber-400/80">{t('container.passwordRevealWarning')}</p>
               </div>
             </div>
             <div className="flex items-center gap-2">
@@ -335,23 +274,17 @@ export default function PiholeContainerActions() {
                 onClick={handleCopyPassword}
                 className="flex items-center gap-1.5 rounded-lg bg-slate-700/50 px-3 py-2 text-sm text-slate-300 hover:bg-slate-700 hover:text-white"
               >
-                {passwordCopied ? (
-                  <Check className="h-4 w-4 text-emerald-400" />
-                ) : (
-                  <Copy className="h-4 w-4" />
-                )}
-                {t("pihole.copyPassword")}
+                {passwordCopied ? <Check className="h-4 w-4 text-emerald-400" /> : <Copy className="h-4 w-4" />}
+                {t('container.copyPassword')}
               </button>
             </div>
-            <p className="mt-2 text-xs text-slate-500">
-              {t("pihole.passwordRevealInfo")}
-            </p>
+            <p className="mt-2 text-xs text-slate-500">{t('container.passwordRevealInfo')}</p>
             <div className="mt-3 flex justify-end">
               <button
                 onClick={() => setDeployedPassword(null)}
                 className="rounded-lg bg-slate-700/50 px-3 py-1.5 text-sm text-slate-400 hover:bg-slate-700 hover:text-slate-200"
               >
-                {t("pihole.done")}
+                {t('container.done')}
               </button>
             </div>
           </div>
@@ -361,39 +294,27 @@ export default function PiholeContainerActions() {
         {logsVisible && (
           <div className="rounded-lg border border-slate-700/50 bg-slate-950">
             <div className="flex items-center justify-between border-b border-slate-700/50 px-3 py-2">
-              <span className="text-xs font-medium text-slate-400">
-                Container Logs
-              </span>
+              <span className="text-xs font-medium text-slate-400">{t('container.logsTitle')}</span>
               <div className="flex items-center gap-2">
                 <button
                   onClick={handleFetchLogs}
                   disabled={logsLoading}
                   className="rounded p-1 text-slate-500 hover:text-slate-300 disabled:opacity-50"
                 >
-                  <RefreshCw
-                    className={`h-3.5 w-3.5 ${logsLoading ? "animate-spin" : ""}`}
-                  />
+                  <RefreshCw className={`h-3.5 w-3.5 ${logsLoading ? 'animate-spin' : ''}`} />
                 </button>
-                <button
-                  onClick={() => setLogsVisible(false)}
-                  className="rounded p-1 text-slate-500 hover:text-slate-300"
-                >
+                <button onClick={() => setLogsVisible(false)} className="rounded p-1 text-slate-500 hover:text-slate-300">
                   <Square className="h-3.5 w-3.5" />
                 </button>
               </div>
             </div>
-            <pre
-              ref={logsRef}
-              className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-slate-400"
-            >
+            <pre ref={logsRef} className="max-h-64 overflow-auto p-3 font-mono text-xs leading-relaxed text-slate-400">
               {logsLoading ? (
-                <span className="animate-pulse text-slate-600">
-                  Loading logs...
-                </span>
+                <span className="animate-pulse text-slate-600">{t('container.logsLoading')}</span>
               ) : logs ? (
                 logs
               ) : (
-                <span className="text-slate-600">No logs available</span>
+                <span className="text-slate-600">{t('container.logsEmpty')}</span>
               )}
             </pre>
           </div>
