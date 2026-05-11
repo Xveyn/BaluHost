@@ -93,5 +93,12 @@
   },
   "pagination": {
     "pageOf": "Seite {{page}} von {{total}}"
+  },
+  "retention": {
+    "title": "Papierkorb",
+    "label": "Aufbewahrung gelöschter Benachrichtigungen",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tage",
+    "hint": "Nach Ablauf werden Einträge automatisch endgültig entfernt."
   }
 }

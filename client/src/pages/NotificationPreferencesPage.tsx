@@ -67,6 +67,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
   const [quietHoursStart, setQuietHoursStart] = useState('22:00');
   const [quietHoursEnd, setQuietHoursEnd] = useState('07:00');
   const [minPriority, setMinPriority] = useState(0);
+  const [trashRetentionDays, setTrashRetentionDays] = useState<number>(7);
   const [categoryPrefs, setCategoryPrefs] = useState<Record<string, CategoryPreference>>({});
   const [routing, setRouting] = useState<MyNotificationRouting | null>(null);
   const [deliveryStatus, setDeliveryStatus] = useState<DeliveryStatus>({ has_mobile_devices: false, has_desktop_clients: false });
@@ -98,6 +99,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
       setQuietHoursStart(prefs.quiet_hours_start || '22:00');
       setQuietHoursEnd(prefs.quiet_hours_end || '07:00');
       setMinPriority(prefs.min_priority);
+      setTrashRetentionDays(prefs.trash_retention_days ?? 7);
 
       // Migrate old format if needed
       const rawPrefs = prefs.category_preferences || {};
@@ -142,6 +144,7 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
         quiet_hours_end: quietHoursEnabled ? quietHoursEnd : null,
         min_priority: minPriority,
         category_preferences: categoryPrefs,
+        trash_retention_days: trashRetentionDays,
       });
       toast.success(t('common:toast.saved'));
     } catch {
@@ -315,6 +318,29 @@ export default function NotificationPreferencesPage({ embedded = false }: { embe
             </div>
           </div>
         )}
+      </div>
+
+      {/* Trash Retention */}
+      <div className="rounded-xl border border-slate-800 bg-slate-900/50 p-6">
+        <div className="mb-3">
+          <h2 className="text-lg font-semibold text-slate-100">{t('retention.title')}</h2>
+          <p className="text-sm text-slate-400">{t('retention.hint')}</p>
+        </div>
+        <label className="block text-sm text-slate-300 mb-2">
+          {t('retention.label')}: <span className="font-medium text-sky-400">{t('retention.days', { count: trashRetentionDays })}</span>
+        </label>
+        <input
+          type="range"
+          min={1}
+          max={7}
+          step={1}
+          value={trashRetentionDays}
+          onChange={(e) => setTrashRetentionDays(Number(e.target.value))}
+          className="w-full max-w-md accent-sky-500"
+        />
+        <div className="flex justify-between text-xs text-slate-500 max-w-md mt-1">
+          <span>1</span><span>2</span><span>3</span><span>4</span><span>5</span><span>6</span><span>7</span>
+        </div>
       </div>
 
       {/* Category Settings */}

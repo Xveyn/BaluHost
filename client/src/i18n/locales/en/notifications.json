@@ -93,5 +93,12 @@
   },
   "pagination": {
     "pageOf": "Page {{page}} of {{total}}"
+  },
+  "retention": {
+    "title": "Trash",
+    "label": "Retention for deleted notifications",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "hint": "After the retention period entries are automatically removed."
   }
 }
