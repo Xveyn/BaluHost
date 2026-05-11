@@ -570,3 +570,58 @@ class TestTrashSemantics:
         db_session.refresh(n)
         # Second dismiss must not overwrite the original timestamp
         assert n.deleted_at == first
+
+    def test_restore_clears_deleted_at(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert n.deleted_at is not None
+
+        result = notification_service.restore(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert result is not None
+        assert n.deleted_at is None
+
+    def test_restore_idempotent_on_active(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+
+        result = notification_service.restore(db_session, n.id, test_user.id)
+        assert result is not None
+        assert result.deleted_at is None
+
+    def test_restore_returns_none_for_unknown_id(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        result = notification_service.restore(db_session, 9999999, test_user.id)
+        assert result is None

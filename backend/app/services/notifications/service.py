@@ -737,6 +737,27 @@ class NotificationService:
         logger.info(f"Moved {count} notifications to trash for user {user_id}")
         return count
 
+    def restore(
+        self,
+        db: Session,
+        notification_id: int,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> Optional[Notification]:
+        """Restore a notification from trash (idempotent on already-active rows)."""
+        notification = db.query(Notification).filter(
+            Notification.id == notification_id,
+            self._user_filter(user_id, is_admin),
+        ).first()
+
+        if notification and notification.deleted_at is not None:
+            notification.deleted_at = None
+            db.commit()
+            db.refresh(notification)
+            logger.debug(f"Restored notification {notification_id} from trash")
+
+        return notification
+
     def snooze(
         self,
         db: Session,
