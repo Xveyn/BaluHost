@@ -60,7 +60,7 @@ class TestNotificationService:
         assert notification.title == "Test Notification"
         assert notification.message == "This is a test message"
         assert notification.is_read is False
-        assert notification.is_dismissed is False
+        assert notification.deleted_at is None
 
     @pytest.mark.asyncio
     async def test_create_notification_with_metadata(
@@ -236,7 +236,7 @@ class TestNotificationService:
         )
 
         assert result is not None
-        assert result.is_dismissed is True
+        assert result.deleted_at is not None
         assert result.is_read is True
 
 
@@ -515,3 +515,58 @@ class TestDeliveryStatusEndpoint:
         from app.core.config import settings
         resp = client.get(f"{settings.api_prefix}/notifications/delivery-status")
         assert resp.status_code in (401, 403)
+
+
+class TestTrashSemantics:
+    """Tests for trash-based dismiss/restore/delete behavior."""
+
+    def test_dismiss_sets_deleted_at(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        db_session.refresh(n)
+
+        before = n.deleted_at
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert before is None
+        assert n.deleted_at is not None
+        assert n.is_read is True
+
+    def test_dismiss_idempotent_on_already_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        first = n.deleted_at
+
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        # Second dismiss must not overwrite the original timestamp
+        assert n.deleted_at == first

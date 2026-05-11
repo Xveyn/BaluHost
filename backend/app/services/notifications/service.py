@@ -467,7 +467,7 @@ class NotificationService:
             query = query.filter(Notification.is_read == False)
 
         if not include_dismissed:
-            query = query.filter(Notification.is_dismissed == False)
+            query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
             query = query.filter(Notification.category == category)
@@ -534,7 +534,7 @@ class NotificationService:
             query = query.filter(Notification.is_read == False)
 
         if not include_dismissed:
-            query = query.filter(Notification.is_dismissed == False)
+            query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
             query = query.filter(Notification.category == category)
@@ -575,7 +575,7 @@ class NotificationService:
         ).filter(
             self._user_filter(user_id, is_admin),
             Notification.is_read == False,
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         # Exclude snoozed notifications
@@ -614,7 +614,7 @@ class NotificationService:
         query = db.query(Notification).filter(
             self._user_filter(user_id, is_admin),
             Notification.is_read == False,
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         # Exclude snoozed notifications
@@ -701,28 +701,18 @@ class NotificationService:
         user_id: int,
         is_admin: bool = False,
     ) -> Optional[Notification]:
-        """Dismiss a notification.
-
-        Args:
-            db: Database session
-            notification_id: Notification ID
-            user_id: User ID (for ownership check)
-            is_admin: Whether the user is an admin (can dismiss system notifications)
-
-        Returns:
-            Updated Notification or None if not found
-        """
+        """Move a notification to trash (idempotent on already-trashed rows)."""
         notification = db.query(Notification).filter(
             Notification.id == notification_id,
             self._user_filter(user_id, is_admin),
         ).first()
 
-        if notification:
-            notification.is_dismissed = True
+        if notification and notification.deleted_at is None:
+            notification.deleted_at = datetime.now(timezone.utc)
             notification.is_read = True
             db.commit()
             db.refresh(notification)
-            logger.debug(f"Dismissed notification {notification_id}")
+            logger.debug(f"Moved notification {notification_id} to trash")
 
         return notification
 
@@ -732,28 +722,19 @@ class NotificationService:
         user_id: int,
         is_admin: bool = False,
     ) -> int:
-        """Dismiss all non-dismissed notifications for a user.
-
-        Args:
-            db: Database session
-            user_id: User ID
-            is_admin: Whether the user is an admin (includes system notifications)
-
-        Returns:
-            Number of notifications dismissed
-        """
+        """Move all active notifications for a user to trash."""
         query = db.query(Notification).filter(
             self._user_filter(user_id, is_admin),
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         count = query.update({
-            Notification.is_dismissed: True,
+            Notification.deleted_at: datetime.now(timezone.utc),
             Notification.is_read: True,
         })
         db.commit()
 
-        logger.info(f"Dismissed {count} notifications for user {user_id}")
+        logger.info(f"Moved {count} notifications to trash for user {user_id}")
         return count
 
     def snooze(
