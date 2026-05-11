@@ -277,28 +277,56 @@ class NotificationScheduler:
             db.close()
 
 
+def _run_trash_cleanup() -> None:
+    """Hourly job: hard-delete notifications past their retention."""
+    db = SessionLocal()
+    try:
+        from app.services.notifications.service import get_notification_service
+        count = get_notification_service().cleanup_expired_trash(db)
+        if count:
+            logger.info("Trash cleanup: deleted %d expired notifications", count)
+    except Exception:
+        logger.exception("Trash cleanup job failed")
+    finally:
+        db.close()
+
+
 def start_notification_scheduler() -> None:
     """Start the notification scheduler background job."""
     global _notification_scheduler
     if _notification_scheduler is not None:
-        return
-    if not FirebaseService.is_available():
-        logger.info("Notification scheduler skipped (Firebase not configured)")
         return
     try:
         from apscheduler.schedulers.background import BackgroundScheduler
     except ImportError:
         logger.warning("APScheduler not installed, notification scheduler disabled")
         return
+
     _notification_scheduler = BackgroundScheduler()
+
+    # Always-on: hourly trash cleanup (independent of Firebase)
     _notification_scheduler.add_job(
-        func=NotificationScheduler.run_periodic_check,
+        func=_run_trash_cleanup,
         trigger="interval",
         hours=1,
-        id="device_expiration_check",
-        name="Check and send device expiration warnings",
+        id="notification_trash_cleanup",
+        name="Hard-delete expired trashed notifications",
         replace_existing=True,
     )
+
+    # Firebase-dependent: device expiration warnings
+    if FirebaseService.is_available():
+        _notification_scheduler.add_job(
+            func=NotificationScheduler.run_periodic_check,
+            trigger="interval",
+            hours=1,
+            id="device_expiration_check",
+            name="Check and send device expiration warnings",
+            replace_existing=True,
+        )
+    else:
+        logger.info("Device expiration check skipped (Firebase not configured)")
+
     _notification_scheduler.start()
     logger.info("Notification scheduler started (running every hour)")
 
