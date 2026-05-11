@@ -5,7 +5,7 @@ from datetime import datetime, time
 from enum import Enum
 from typing import TYPE_CHECKING, Optional, Any
 
-from sqlalchemy import String, DateTime, Integer, Boolean, Text, Time, ForeignKey, JSON
+from sqlalchemy import String, DateTime, Integer, Boolean, Text, Time, ForeignKey, JSON, CheckConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.sql import func
 
@@ -66,7 +66,9 @@ class Notification(Base):
     message: Mapped[str] = mapped_column(Text, nullable=False)
     action_url: Mapped[Optional[str]] = mapped_column(String(500), nullable=True)
     is_read: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
-    is_dismissed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime(timezone=True), nullable=True, default=None, index=True
+    )
     priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     extra_data: Mapped[Optional[dict[str, Any]]] = mapped_column(JSON, nullable=True)
     snoozed_until: Mapped[Optional[datetime]] = mapped_column(
@@ -91,7 +93,7 @@ class Notification(Base):
             "message": self.message,
             "action_url": self.action_url,
             "is_read": self.is_read,
-            "is_dismissed": self.is_dismissed,
+            "deleted_at": self.deleted_at.isoformat() if self.deleted_at else None,
             "priority": self.priority,
             "metadata": self.extra_data,
             "snoozed_until": self.snoozed_until.isoformat() if self.snoozed_until else None,
@@ -102,6 +104,12 @@ class NotificationPreferences(Base):
     """User notification preferences model."""
 
     __tablename__ = "notification_preferences"
+    __table_args__ = (
+        CheckConstraint(
+            "trash_retention_days BETWEEN 1 AND 7",
+            name="ck_trash_retention_1_7",
+        ),
+    )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     user_id: Mapped[int] = mapped_column(
@@ -125,6 +133,11 @@ class NotificationPreferences(Base):
     # Minimum priority for notifications (0 = all, 1 = warning+, 2 = critical only)
     min_priority: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
+    # Trash retention window: 1–7 days (default 7)
+    trash_retention_days: Mapped[int] = mapped_column(
+        Integer, default=7, nullable=False
+    )
+
     # Relationship
     user: Mapped["User"] = relationship("User", back_populates="notification_preferences")
 
@@ -143,6 +156,7 @@ class NotificationPreferences(Base):
             "quiet_hours_start": self.quiet_hours_start.isoformat() if self.quiet_hours_start else None,
             "quiet_hours_end": self.quiet_hours_end.isoformat() if self.quiet_hours_end else None,
             "min_priority": self.min_priority,
+            "trash_retention_days": self.trash_retention_days,
         }
 
     def is_channel_enabled_for_category(
