@@ -94,7 +94,6 @@ export async function getDeliveryStatus(): Promise<DeliveryStatus> {
 export async function getNotifications(
   options: {
     unread_only?: boolean;
-    include_dismissed?: boolean;
     category?: NotificationCategory;
     notification_type?: NotificationType;
     created_after?: string;
@@ -106,7 +105,6 @@ export async function getNotifications(
   const response = await apiClient.get<NotificationListResponse>('/api/notifications', {
     params: {
       unread_only: options.unread_only ?? false,
-      include_dismissed: options.include_dismissed ?? false,
       category: options.category,
       notification_type: options.notification_type,
       created_after: options.created_after,
