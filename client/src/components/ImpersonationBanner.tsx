@@ -13,7 +13,7 @@ export default function ImpersonationBanner() {
   return (
     <div
       role="alert"
-      className="fixed top-0 right-0 left-0 lg:left-72 z-40 flex items-center justify-between gap-3 bg-amber-500 px-4 py-2 text-sm font-medium text-amber-950 shadow-md"
+      className="fixed top-0 right-0 left-0 z-[60] flex h-10 items-center justify-between gap-3 bg-amber-500 px-4 text-sm font-medium text-amber-950 shadow-md"
     >
       <div className="flex items-center gap-2">
         <AlertTriangle className="h-4 w-4" />

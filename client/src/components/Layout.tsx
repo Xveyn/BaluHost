@@ -116,7 +116,7 @@ const navIcon = {
 export default function Layout({ children }: LayoutProps) {
   const location = useLocation();
   const { t } = useTranslation('common');
-  const { user, logout, isAdmin } = useAuth();
+  const { user, logout, isAdmin, isImpersonating } = useAuth();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [pendingAction, setPendingAction] = useState<'shutdown' | 'restart' | null>(null);
   const [pendingMessage, setPendingMessage] = useState<string | null>(null);
@@ -303,7 +303,7 @@ export default function Layout({ children }: LayoutProps) {
     <div className="relative min-h-screen overflow-x-hidden text-slate-100">
       <div className="relative z-10 flex min-h-screen">
         {/* Desktop Sidebar */}
-        <aside className="fixed left-0 top-0 hidden lg:flex h-screen w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)]">
+        <aside className={`fixed left-0 hidden lg:flex w-72 flex-col border-r border-white/10 bg-white/5 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5),inset_0_1px_0_rgba(255,255,255,0.1)] ${isImpersonating ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}`}>
           <div className="px-6 pt-10 pb-8">
             <div className="flex items-center gap-3">
               <div className="relative flex h-12 w-12 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
@@ -380,9 +380,9 @@ export default function Layout({ children }: LayoutProps) {
         )}
 
         {/* Mobile Sidebar */}
-        <aside className={`fixed left-0 top-0 z-50 h-screen w-72 flex flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
+        <aside className={`fixed left-0 z-50 w-72 flex flex-col border-r border-white/10 bg-slate-900/95 backdrop-blur-3xl shadow-[0_8px_32px_rgba(0,0,0,0.5)] transition-transform duration-300 lg:hidden ${
           mobileMenuOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}>
+        } ${isImpersonating ? 'top-10 h-[calc(100vh-2.5rem)]' : 'top-0 h-screen'}`}>
           <div className="flex items-center justify-between px-6 pt-6 pb-4">
             <div className="flex items-center gap-3">
               <div className="relative flex h-10 w-10 items-center justify-center rounded-full bg-slate-950-tertiary p-[3px]">
@@ -489,7 +489,7 @@ export default function Layout({ children }: LayoutProps) {
             </div>
           )}
           <ImpersonationBanner />
-          <header className="fixed top-0 right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10">
+          <header className={`fixed right-0 left-0 lg:left-72 z-30 border-b border-slate-800/50 bg-slate-900/20 px-4 py-4 shadow-[0_8px_32px_rgba(0,0,0,0.3)] backdrop-blur-2xl sm:px-6 lg:px-10 ${isImpersonating ? 'top-10' : 'top-0'}`}>
             <div className="flex items-center justify-between">
               {/* Mobile Header Left */}
               <div className="flex items-center gap-3 lg:hidden">
@@ -593,7 +593,7 @@ export default function Layout({ children }: LayoutProps) {
             </div>
           </header>
 
-          <main className="flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 mt-[72px] pb-[env(safe-area-inset-bottom)]">
+          <main className={`flex-1 overflow-y-auto px-4 py-6 sm:px-6 lg:px-10 pb-[env(safe-area-inset-bottom)] ${isImpersonating ? 'mt-[112px]' : 'mt-[72px]'}`}>
             <div className={`${location.pathname === '/admin-db' ? 'w-full max-w-none mx-0' : 'mx-auto w-full max-w-7xl'} space-y-6 sm:space-y-8`}>
               {children}
             </div>
