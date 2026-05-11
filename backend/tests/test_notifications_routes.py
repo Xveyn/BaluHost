@@ -122,3 +122,37 @@ class TestTrashRoutes:
             Notification.user_id == test_user.id,
             Notification.deleted_at.is_not(None),
         ).count() == 0
+
+    def test_trash_retention_validation_rejects_out_of_range(
+        self, client, auth_headers
+    ):
+        # 0 → 422
+        resp = client.put(
+            "/api/notifications/preferences",
+            headers=auth_headers,
+            json={"trash_retention_days": 0},
+        )
+        assert resp.status_code == 422
+        # 8 → 422
+        resp = client.put(
+            "/api/notifications/preferences",
+            headers=auth_headers,
+            json={"trash_retention_days": 8},
+        )
+        assert resp.status_code == 422
+
+    def test_trash_retention_persists_via_preferences_endpoint(
+        self, client, auth_headers
+    ):
+        # PUT 3 → 200, then GET returns 3
+        resp = client.put(
+            "/api/notifications/preferences",
+            headers=auth_headers,
+            json={"trash_retention_days": 3},
+        )
+        assert resp.status_code == 200
+        get_resp = client.get(
+            "/api/notifications/preferences", headers=auth_headers
+        )
+        assert get_resp.status_code == 200
+        assert get_resp.json()["trash_retention_days"] == 3
