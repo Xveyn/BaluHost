@@ -2,9 +2,7 @@
 from datetime import datetime, timedelta, timezone
 
 import pytest
-from sqlalchemy import text
 
-from app.core.database import SessionLocal
 from app.models.notification import Notification
 
 

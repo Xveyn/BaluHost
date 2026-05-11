@@ -56,7 +56,7 @@ def downgrade() -> None:
                 "is_dismissed",
                 sa.Boolean(),
                 nullable=False,
-                server_default=sa.text("0"),
+                server_default=sa.false(),
             )
         )
     op.execute(

@@ -135,7 +135,7 @@ class NotificationPreferences(Base):
 
     # Trash retention window: 1–7 days (default 7)
     trash_retention_days: Mapped[int] = mapped_column(
-        Integer, default=7, nullable=False
+        Integer, default=7, server_default="7", nullable=False
     )
 
     # Relationship
