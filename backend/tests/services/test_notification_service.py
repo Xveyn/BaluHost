@@ -625,3 +625,43 @@ class TestTrashSemantics:
     ):
         result = notification_service.restore(db_session, 9999999, test_user.id)
         assert result is None
+
+    def test_delete_permanently_removes_row(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        notification_id = n.id
+
+        deleted = notification_service.delete_permanently(
+            db_session, notification_id, test_user.id
+        )
+        assert deleted is True
+        assert (
+            db_session.query(Notification)
+            .filter(Notification.id == notification_id)
+            .first()
+            is None
+        )
+
+    def test_delete_permanently_returns_false_for_unknown_id(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        deleted = notification_service.delete_permanently(
+            db_session, 9999999, test_user.id
+        )
+        assert deleted is False

@@ -758,6 +758,27 @@ class NotificationService:
 
         return notification
 
+    def delete_permanently(
+        self,
+        db: Session,
+        notification_id: int,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> bool:
+        """Hard-delete a single notification (any state). Returns True if deleted."""
+        count = (
+            db.query(Notification)
+            .filter(
+                Notification.id == notification_id,
+                self._user_filter(user_id, is_admin),
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        if count:
+            logger.debug(f"Hard-deleted notification {notification_id}")
+        return count > 0
+
     def snooze(
         self,
         db: Session,
