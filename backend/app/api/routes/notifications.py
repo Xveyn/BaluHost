@@ -35,7 +35,6 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 async def get_notifications(
     request: Request, response: Response,
     unread_only: bool = Query(False, description="Only return unread notifications"),
-    include_dismissed: bool = Query(False, description="Include dismissed notifications"),
     category: Optional[NotificationCategoryEnum] = Query(None, description="Filter by category"),
     notification_type: Optional[str] = Query(None, description="Filter by type (info, warning, critical)"),
     created_after: Optional[datetime] = Query(None, description="Only return notifications after this time"),
@@ -57,7 +56,6 @@ async def get_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
-        include_dismissed=include_dismissed,
         category=category,
         notification_type=notification_type,
         created_after=created_after,
@@ -74,7 +72,6 @@ async def get_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
-        include_dismissed=include_dismissed,
         category=category,
         notification_type=notification_type,
         created_after=created_after,
@@ -192,10 +189,11 @@ async def dismiss_all_notifications(
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> MarkReadResponse:
-    """Dismiss all notifications for the current user.
+    """Move all active notifications for the current user to trash.
 
-    Sets is_dismissed=True and is_read=True on all non-dismissed notifications.
-    Notifications remain in the DB and can be retrieved with include_dismissed=true.
+    Sets deleted_at=NOW() and is_read=True on all active notifications.
+    Items can be restored from the trash view or are auto-purged after the
+    user's configured retention period (default 7 days).
     """
     service = get_notification_service()
     count = service.dismiss_all(db, current_user.id, is_admin=is_privileged(current_user))
@@ -210,9 +208,11 @@ async def dismiss_notification(
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationResponse:
-    """Dismiss a notification.
+    """Move a notification to trash.
 
-    Dismissed notifications are hidden from the default list but can be retrieved with include_dismissed=true.
+    The notification is hidden from inbox views and appears in the trash,
+    where it can be restored or permanently deleted. Auto-purged after the
+    user's configured retention period (default 7 days).
     """
     service = get_notification_service()
     notification = service.dismiss(db, notification_id, current_user.id, is_admin=is_privileged(current_user))
