@@ -906,31 +906,65 @@ class NotificationService:
         logger.info(f"Updated notification preferences for user {user_id}")
         return prefs
 
-    async def cleanup_old_notifications(
-        self,
-        db: Session,
-        retention_days: int = 90,
-    ) -> int:
-        """Delete notifications older than retention period.
+    def cleanup_expired_trash(self, db: Session) -> int:
+        """Hard-delete trashed notifications past their retention.
+
+        Per-user retention comes from NotificationPreferences.trash_retention_days
+        (default 7 if no prefs row). System notifications (user_id IS NULL) use
+        a fixed 7-day retention.
 
         Args:
             db: Database session
-            retention_days: Number of days to retain notifications
 
         Returns:
             Number of notifications deleted
         """
         from datetime import timedelta
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        now = datetime.now(timezone.utc)
 
-        count = db.query(Notification).filter(
-            Notification.created_at < cutoff
-        ).delete()
+        users_with_trash = (
+            db.query(Notification.user_id)
+            .filter(
+                Notification.deleted_at.is_not(None),
+                Notification.user_id.is_not(None),
+            )
+            .distinct()
+            .all()
+        )
+
+        total = 0
+        for (user_id,) in users_with_trash:
+            prefs = self.get_user_preferences(db, user_id)
+            retention_days = prefs.trash_retention_days if prefs else 7
+            cutoff = now - timedelta(days=retention_days)
+            count = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == user_id,
+                    Notification.deleted_at.is_not(None),
+                    Notification.deleted_at < cutoff,
+                )
+                .delete(synchronize_session=False)
+            )
+            total += count
+
+        # System notifications use fixed 7-day retention
+        sys_cutoff = now - timedelta(days=7)
+        total += (
+            db.query(Notification)
+            .filter(
+                Notification.user_id.is_(None),
+                Notification.deleted_at.is_not(None),
+                Notification.deleted_at < sys_cutoff,
+            )
+            .delete(synchronize_session=False)
+        )
 
         db.commit()
-        logger.info(f"Cleaned up {count} old notifications")
-        return count
+        if total:
+            logger.info(f"Expired trash cleanup: deleted {total} notifications")
+        return total
 
 
 # Singleton instance

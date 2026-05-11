@@ -739,3 +739,122 @@ class TestTrashSemantics:
         assert db_session.query(Notification).filter(
             Notification.user_id == test_admin.id
         ).count() == 1
+
+    def test_cleanup_expired_trash_respects_user_retention(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification, NotificationPreferences
+        from datetime import datetime, timezone, timedelta
+
+        # 3-day retention for this user
+        prefs = NotificationPreferences(user_id=test_user.id, trash_retention_days=3)
+        db_session.add(prefs)
+
+        now = datetime.now(timezone.utc)
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old",
+            message="m",
+            deleted_at=now - timedelta(days=5),
+        )
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent",
+            message="m",
+            deleted_at=now - timedelta(days=1),
+        )
+        db_session.add_all([old, recent])
+        db_session.commit()
+
+        count = notification_service.cleanup_expired_trash(db_session)
+
+        assert count == 1
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id == test_user.id)
+            .all()
+        ]
+        assert titles == ["recent"]
+
+    def test_cleanup_expired_trash_default_when_no_prefs(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        too_old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="too_old",
+            message="m",
+            deleted_at=now - timedelta(days=8),
+        )
+        within = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="within",
+            message="m",
+            deleted_at=now - timedelta(days=6),
+        )
+        db_session.add_all([too_old, within])
+        db_session.commit()
+
+        count = notification_service.cleanup_expired_trash(db_session)
+
+        assert count == 1
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id == test_user.id)
+            .all()
+        ]
+        assert titles == ["within"]
+
+    def test_cleanup_expired_trash_system_notifications_fixed_7d(
+        self,
+        notification_service,
+        db_session,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        old_system = Notification(
+            user_id=None,
+            category="system",
+            notification_type="info",
+            title="old_sys",
+            message="m",
+            deleted_at=now - timedelta(days=10),
+        )
+        fresh_system = Notification(
+            user_id=None,
+            category="system",
+            notification_type="info",
+            title="fresh_sys",
+            message="m",
+            deleted_at=now - timedelta(days=3),
+        )
+        db_session.add_all([old_system, fresh_system])
+        db_session.commit()
+
+        notification_service.cleanup_expired_trash(db_session)
+
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id.is_(None))
+            .all()
+        ]
+        assert titles == ["fresh_sys"]
