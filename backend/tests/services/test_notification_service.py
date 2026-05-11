@@ -665,3 +665,77 @@ class TestTrashSemantics:
             db_session, 9999999, test_user.id
         )
         assert deleted is False
+
+    def test_empty_trash_removes_only_trashed_rows(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        count = notification_service.empty_trash(db_session, test_user.id)
+
+        assert count == 1
+        remaining = db_session.query(Notification).filter(
+            Notification.user_id == test_user.id
+        ).all()
+        assert len(remaining) == 1
+        assert remaining[0].title == "active"
+
+    def test_empty_trash_isolates_users(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+        test_admin,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        user_trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="user-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        other_trashed = Notification(
+            user_id=test_admin.id,
+            category="system",
+            notification_type="info",
+            title="admin-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([user_trashed, other_trashed])
+        db_session.commit()
+
+        notification_service.empty_trash(db_session, test_user.id, is_admin=False)
+
+        assert db_session.query(Notification).filter(
+            Notification.user_id == test_user.id
+        ).count() == 0
+        assert db_session.query(Notification).filter(
+            Notification.user_id == test_admin.id
+        ).count() == 1

@@ -779,6 +779,25 @@ class NotificationService:
             logger.debug(f"Hard-deleted notification {notification_id}")
         return count > 0
 
+    def empty_trash(
+        self,
+        db: Session,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> int:
+        """Hard-delete every trashed notification visible to this user."""
+        count = (
+            db.query(Notification)
+            .filter(
+                self._user_filter(user_id, is_admin),
+                Notification.deleted_at.is_not(None),
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        logger.info(f"Emptied trash for user {user_id}: {count} rows")
+        return count
+
     def snooze(
         self,
         db: Session,
