@@ -484,6 +484,92 @@ class TapoSmartPlugPlugin(SmartDevicePlugin):
         )
 
     # ------------------------------------------------------------------
+    # History Import (admin-triggered)
+    # ------------------------------------------------------------------
+
+    # Optional override for tests — set by tests to inject a stub fetcher
+    _fetcher_override: Optional[Any] = None
+
+    async def import_history(
+        self,
+        db: Any,
+        device_id: int,
+        interval: "ImportHistoryInterval",
+        start: "date",
+        end: "date",
+        conflict_strategy: "ImportHistoryConflictStrategy",
+    ) -> "ImportHistoryResponse":
+        """Import historical energy data from a Tapo device into SmartDeviceSample.
+
+        Admin-only. The caller (API route) enforces authorization. This method
+        resolves cached credentials, fetches buckets (real or mock), and writes
+        samples honoring the conflict strategy.
+
+        Args:
+            db: SQLAlchemy session.
+            device_id: Smart device ID.
+            interval: Bucket granularity (hourly/daily/monthly).
+            start: Inclusive start date.
+            end: Inclusive end date.
+            conflict_strategy: How to handle overlap with live samples.
+
+        Returns:
+            ImportHistoryResponse with bucket / sample counts and timing.
+        """
+        from datetime import datetime as _dt, timezone as _tz
+        from app.plugins.smart_device.schemas import ImportHistoryResponse
+        from app.plugins.installed.tapo_smart_plug.import_service import (
+            TapoHistoryImportService,
+        )
+
+        started_at = _dt.now(_tz.utc)
+
+        info = self._ensure_device_info(str(device_id))
+        if info is None:
+            raise RuntimeError(f"No connection info for device {device_id}")
+
+        fetcher = self._fetcher_override or self._build_fetcher()
+        buckets = await fetcher.fetch_buckets(
+            ip=info.ip,
+            email=info.email,
+            password=info.password,
+            start=start,
+            end=end,
+            interval=interval,
+        )
+
+        importer = TapoHistoryImportService()
+        write_result = importer.write_buckets(
+            db=db,
+            device_id=device_id,
+            buckets=buckets,
+            conflict_strategy=conflict_strategy,
+        )
+
+        completed_at = _dt.now(_tz.utc)
+        return ImportHistoryResponse(
+            device_id=device_id,
+            interval=interval,
+            buckets_fetched=len(buckets),
+            samples_inserted=write_result.samples_inserted,
+            samples_skipped_idempotent=write_result.samples_skipped_idempotent,
+            samples_skipped_live=write_result.samples_skipped_live,
+            live_samples_deleted=write_result.live_samples_deleted,
+            started_at=started_at,
+            completed_at=completed_at,
+        )
+
+    def _build_fetcher(self):
+        """Return real or mock history fetcher based on dev_mode."""
+        if self._is_dev_mode():
+            from app.plugins.installed.tapo_smart_plug.history_mock import (
+                TapoHistoryMockFetcher,
+            )
+            return TapoHistoryMockFetcher()
+        from app.plugins.installed.tapo_smart_plug.history import TapoHistoryFetcher
+        return TapoHistoryFetcher()
+
+    # ------------------------------------------------------------------
     # Private helpers
     # ------------------------------------------------------------------
 
