@@ -57,6 +57,7 @@ class TapoHistoryImportService:
             bucket_end = bucket.bucket_start + timedelta(hours=_BUCKET_HOURS[bucket.interval])
 
             # Idempotency: previously imported bucket with same start ts
+            # Safe: live power_monitor data_json is machine-generated and never contains this key.
             existing_imported = (
                 db.query(SmartDeviceSample)
                 .filter(
@@ -72,6 +73,7 @@ class TapoHistoryImportService:
                 continue
 
             # Overlap with live samples in this bucket's range
+            # Safe: live power_monitor data_json is machine-generated and never contains this key.
             overlapping = (
                 db.query(SmartDeviceSample)
                 .filter(
@@ -88,10 +90,12 @@ class TapoHistoryImportService:
                 if conflict_strategy == ImportHistoryConflictStrategy.LIVE_WINS:
                     result.samples_skipped_live += 1
                     continue
-                else:  # IMPORT_WINS
-                    for row in overlapping:
-                        db.delete(row)
-                    result.live_samples_deleted += len(overlapping)
+                # IMPORT_WINS — bulk delete the overlapping live rows
+                overlap_ids = [row.id for row in overlapping]
+                db.query(SmartDeviceSample).filter(
+                    SmartDeviceSample.id.in_(overlap_ids)
+                ).delete(synchronize_session=False)
+                result.live_samples_deleted += len(overlap_ids)
 
             db.add(self._bucket_to_sample(device_id, bucket))
             result.samples_inserted += 1
@@ -106,9 +110,9 @@ class TapoHistoryImportService:
         current_a = watts / _DEFAULT_VOLTAGE if watts > 0 else 0.0
 
         data = {
-            "watts": round(watts, 2),
+            "watts": round(watts, 1),
             "voltage": _DEFAULT_VOLTAGE,
-            "current": round(current_a, 4),
+            "current": round(current_a, 3),
             "energy_today_kwh": None,
             "is_online": True,
             "imported_from": "tapo_history",
