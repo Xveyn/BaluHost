@@ -353,6 +353,59 @@ async def get_my_notification_routing(
     )
 
 
+@router.get("/trash", response_model=NotificationListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_trash(
+    request: Request, response: Response,
+    category: Optional[NotificationCategoryEnum] = Query(None),
+    notification_type: Optional[str] = Query(None),
+    created_after: Optional[datetime] = Query(None),
+    created_before: Optional[datetime] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationListResponse:
+    """List trashed notifications for the current user, paginated."""
+    service = get_notification_service()
+    offset = (page - 1) * page_size
+    admin = is_privileged(current_user)
+
+    notifications = service.get_user_notifications(
+        db=db,
+        user_id=current_user.id,
+        trashed_only=True,
+        category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
+        limit=page_size,
+        offset=offset,
+        is_admin=admin,
+    )
+
+    total = service.count_user_notifications(
+        db=db,
+        user_id=current_user.id,
+        trashed_only=True,
+        category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
+        is_admin=admin,
+    )
+
+    unread_count = service.get_unread_count(db, current_user.id, is_admin=admin)
+
+    return NotificationListResponse(
+        notifications=[NotificationResponse.from_db(n) for n in notifications],
+        total=total,
+        unread_count=unread_count,
+        page=page,
+        page_size=page_size,
+    )
+
+
 # Admin endpoints for creating notifications
 @router.post("", response_model=NotificationResponse, status_code=status.HTTP_201_CREATED)
 @user_limiter.limit(get_limit("admin_operations"))
