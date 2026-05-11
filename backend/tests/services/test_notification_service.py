@@ -858,3 +858,100 @@ class TestTrashSemantics:
             .all()
         ]
         assert titles == ["fresh_sys"]
+
+    def test_get_user_notifications_inbox_excludes_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        results = notification_service.get_user_notifications(
+            db_session, test_user.id
+        )
+        titles = [n.title for n in results]
+        assert "active" in titles
+        assert "trashed" not in titles
+
+    def test_get_user_notifications_trashed_only_returns_trash(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        results = notification_service.get_user_notifications(
+            db_session, test_user.id, trashed_only=True
+        )
+        titles = [n.title for n in results]
+        assert titles == ["trashed"]
+
+    def test_get_unread_count_ignores_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        unread = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="unread",
+            message="m",
+        )
+        unread_in_trash = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="unread_in_trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([unread, unread_in_trash])
+        db_session.commit()
+
+        count = notification_service.get_unread_count(db_session, test_user.id)
+        assert count == 1

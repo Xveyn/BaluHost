@@ -425,7 +425,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         unread_only: bool = False,
-        include_dismissed: bool = False,
+        trashed_only: bool = False,
         category: Optional[str] = None,
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
@@ -440,7 +440,8 @@ class NotificationService:
             db: Database session
             user_id: User ID
             unread_only: Only return unread notifications
-            include_dismissed: Include dismissed notifications
+            trashed_only: When True return only trashed notifications; when False
+                (default) return only active (non-trashed) notifications
             category: Filter by category
             notification_type: Filter by type (info, warning, critical)
             created_after: Only return notifications created after this time
@@ -466,7 +467,9 @@ class NotificationService:
         if unread_only:
             query = query.filter(Notification.is_read == False)
 
-        if not include_dismissed:
+        if trashed_only:
+            query = query.filter(Notification.deleted_at.is_not(None))
+        else:
             query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
@@ -491,7 +494,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         unread_only: bool = False,
-        include_dismissed: bool = False,
+        trashed_only: bool = False,
         category: Optional[str] = None,
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
@@ -507,7 +510,8 @@ class NotificationService:
             db: Database session
             user_id: User ID
             unread_only: Only count unread notifications
-            include_dismissed: Include dismissed notifications
+            trashed_only: When True count only trashed notifications; when False
+                (default) count only active (non-trashed) notifications
             category: Filter by category
             notification_type: Filter by type (info, warning, critical)
             created_after: Only count notifications created after this time
@@ -533,7 +537,9 @@ class NotificationService:
         if unread_only:
             query = query.filter(Notification.is_read == False)
 
-        if not include_dismissed:
+        if trashed_only:
+            query = query.filter(Notification.deleted_at.is_not(None))
+        else:
             query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
