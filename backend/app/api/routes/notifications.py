@@ -385,6 +385,7 @@ async def update_notification_preferences(
         quiet_hours_start=quiet_start,
         quiet_hours_end=quiet_end,
         min_priority=body.min_priority,
+        trash_retention_days=body.trash_retention_days,
     )
 
     return NotificationPreferencesResponse.from_db(prefs)

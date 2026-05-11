@@ -868,6 +868,7 @@ class NotificationService:
         quiet_hours_start: Optional[time] = None,
         quiet_hours_end: Optional[time] = None,
         min_priority: Optional[int] = None,
+        trash_retention_days: Optional[int] = None,
     ) -> NotificationPreferences:
         """Update or create notification preferences for a user.
 
@@ -881,6 +882,7 @@ class NotificationService:
             quiet_hours_start: Quiet hours start time
             quiet_hours_end: Quiet hours end time
             min_priority: Minimum priority level
+            trash_retention_days: Number of days trashed notifications are kept (1–7)
 
         Returns:
             Updated NotificationPreferences
@@ -905,6 +907,8 @@ class NotificationService:
             prefs.quiet_hours_end = quiet_hours_end
         if min_priority is not None:
             prefs.min_priority = min_priority
+        if trash_retention_days is not None:
+            prefs.trash_retention_days = trash_retention_days
 
         db.commit()
         db.refresh(prefs)
