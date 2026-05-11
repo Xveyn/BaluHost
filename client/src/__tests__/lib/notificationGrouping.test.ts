@@ -9,7 +9,7 @@ function makeNotification(overrides: Partial<Notification> & { id: number; creat
     title: 'Test',
     message: 'Test message',
     is_read: false,
-    is_dismissed: false,
+    deleted_at: null,
     priority: 0,
     user_id: 1,
     action_url: null,
