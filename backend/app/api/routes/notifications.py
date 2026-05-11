@@ -252,6 +252,29 @@ async def snooze_notification(
     return NotificationResponse.from_db(notification)
 
 
+@router.post("/{notification_id}/restore", response_model=NotificationResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def restore_notification(
+    request: Request, response: Response,
+    notification_id: int,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationResponse:
+    """Restore a notification from trash."""
+    service = get_notification_service()
+    notification = service.restore(
+        db, notification_id, current_user.id, is_admin=is_privileged(current_user)
+    )
+
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return NotificationResponse.from_db(notification)
+
+
 # Preferences endpoints
 @router.get("/preferences", response_model=NotificationPreferencesResponse)
 @user_limiter.limit(get_limit("admin_operations"))

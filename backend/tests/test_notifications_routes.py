@@ -33,3 +33,33 @@ class TestTrashRoutes:
         data = resp.json()
         titles = [n["title"] for n in data["notifications"]]
         assert titles == ["trashed"]
+
+    def test_restore_round_trip(
+        self, client, auth_headers, db_session, test_user
+    ):
+        from app.models.notification import Notification
+
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="t",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add(n)
+        db_session.commit()
+
+        resp = client.post(
+            f"/api/notifications/{n.id}/restore", headers=auth_headers
+        )
+        assert resp.status_code == 200
+        assert resp.json()["deleted_at"] is None
+
+    def test_restore_unknown_id_returns_404(
+        self, client, auth_headers
+    ):
+        resp = client.post(
+            "/api/notifications/99999999/restore", headers=auth_headers
+        )
+        assert resp.status_code == 404
