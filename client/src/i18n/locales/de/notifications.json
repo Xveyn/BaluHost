@@ -35,12 +35,20 @@
   },
   "buttons": {
     "save": "Speichern",
-    "back": "Zurück"
+    "back": "Zurück",
+    "markAllRead": "Alle gelesen",
+    "dismissAll": "Alle löschen",
+    "settings": "Einstellungen",
+    "markRead": "Als gelesen markieren",
+    "moveToTrash": "In Papierkorb"
   },
   "toast": {
     "saved": "Einstellungen gespeichert",
     "loadFailed": "Fehler beim Laden der Einstellungen",
-    "saveFailed": "Fehler beim Speichern"
+    "saveFailed": "Fehler beim Speichern",
+    "markedAllRead": "Alle als gelesen markiert",
+    "movedToTrash": "In Papierkorb verschoben",
+    "confirmDismissAll": "{{count}} Benachrichtigungen in Papierkorb verschieben?"
   },
   "noNotifications": "Keine Benachrichtigungen",
   "connected": "Verbunden",
@@ -52,5 +60,45 @@
   "markAllRead": "Alle als gelesen markieren",
   "clearAll": "Alle löschen",
   "clearedAll": "Alle Benachrichtigungen gelöscht",
-  "clearError": "Fehler beim Löschen"
+  "clearError": "Fehler beim Löschen",
+  "tabs": {
+    "inbox": "Posteingang",
+    "trash": "Papierkorb"
+  },
+  "trash": {
+    "empty": "Papierkorb leeren",
+    "emptyConfirm": "Alle {{count}} Einträge endgültig löschen?",
+    "restore": "Wiederherstellen",
+    "deleteForever": "Endgültig löschen",
+    "deleteForeverConfirm": "Diesen Eintrag endgültig löschen?",
+    "banner": "Einträge werden nach {{days}} Tag(en) automatisch endgültig gelöscht.",
+    "restored": "Wiederhergestellt",
+    "deleted": "Endgültig gelöscht",
+    "emptied": "Papierkorb geleert"
+  },
+  "count": {
+    "total": "gesamt",
+    "inTrash": "im Papierkorb",
+    "unread": "ungelesen"
+  },
+  "filters": {
+    "allCategories": "Alle Kategorien",
+    "allTypes": "Alle Typen",
+    "default": "Standard",
+    "unreadOnly": "Nur ungelesen"
+  },
+  "empty": {
+    "inbox": "Keine Benachrichtigungen",
+    "trash": "Papierkorb ist leer"
+  },
+  "pagination": {
+    "pageOf": "Seite {{page}} von {{total}}"
+  },
+  "retention": {
+    "title": "Papierkorb",
+    "label": "Aufbewahrung gelöschter Benachrichtigungen",
+    "days_one": "{{count}} Tag",
+    "days_other": "{{count}} Tage",
+    "hint": "Nach Ablauf werden Einträge automatisch endgültig entfernt."
+  }
 }

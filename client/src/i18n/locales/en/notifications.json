@@ -35,12 +35,20 @@
   },
   "buttons": {
     "save": "Save",
-    "back": "Back"
+    "back": "Back",
+    "markAllRead": "Mark all read",
+    "dismissAll": "Delete all",
+    "settings": "Settings",
+    "markRead": "Mark as read",
+    "moveToTrash": "Move to trash"
   },
   "toast": {
     "saved": "Settings saved",
     "loadFailed": "Failed to load settings",
-    "saveFailed": "Failed to save"
+    "saveFailed": "Failed to save",
+    "markedAllRead": "All marked as read",
+    "movedToTrash": "Moved to trash",
+    "confirmDismissAll": "Move {{count}} notifications to trash?"
   },
   "noNotifications": "No notifications",
   "connected": "Connected",
@@ -52,5 +60,45 @@
   "markAllRead": "Mark all as read",
   "clearAll": "Clear all",
   "clearedAll": "All notifications cleared",
-  "clearError": "Failed to clear notifications"
+  "clearError": "Failed to clear notifications",
+  "tabs": {
+    "inbox": "Inbox",
+    "trash": "Trash"
+  },
+  "trash": {
+    "empty": "Empty trash",
+    "emptyConfirm": "Permanently delete all {{count}} items?",
+    "restore": "Restore",
+    "deleteForever": "Delete forever",
+    "deleteForeverConfirm": "Permanently delete this entry?",
+    "banner": "Entries are automatically deleted after {{days}} day(s).",
+    "restored": "Restored",
+    "deleted": "Permanently deleted",
+    "emptied": "Trash emptied"
+  },
+  "count": {
+    "total": "total",
+    "inTrash": "in trash",
+    "unread": "unread"
+  },
+  "filters": {
+    "allCategories": "All categories",
+    "allTypes": "All types",
+    "default": "Default",
+    "unreadOnly": "Unread only"
+  },
+  "empty": {
+    "inbox": "No notifications",
+    "trash": "Trash is empty"
+  },
+  "pagination": {
+    "pageOf": "Page {{page}} of {{total}}"
+  },
+  "retention": {
+    "title": "Trash",
+    "label": "Retention for deleted notifications",
+    "days_one": "{{count}} day",
+    "days_other": "{{count}} days",
+    "hint": "After the retention period entries are automatically removed."
+  }
 }

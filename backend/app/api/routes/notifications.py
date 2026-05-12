@@ -35,7 +35,6 @@ router = APIRouter(prefix="/notifications", tags=["notifications"])
 async def get_notifications(
     request: Request, response: Response,
     unread_only: bool = Query(False, description="Only return unread notifications"),
-    include_dismissed: bool = Query(False, description="Include dismissed notifications"),
     category: Optional[NotificationCategoryEnum] = Query(None, description="Filter by category"),
     notification_type: Optional[str] = Query(None, description="Filter by type (info, warning, critical)"),
     created_after: Optional[datetime] = Query(None, description="Only return notifications after this time"),
@@ -57,7 +56,6 @@ async def get_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
-        include_dismissed=include_dismissed,
         category=category,
         notification_type=notification_type,
         created_after=created_after,
@@ -74,7 +72,6 @@ async def get_notifications(
         db=db,
         user_id=current_user.id,
         unread_only=unread_only,
-        include_dismissed=include_dismissed,
         category=category,
         notification_type=notification_type,
         created_after=created_after,
@@ -192,10 +189,11 @@ async def dismiss_all_notifications(
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> MarkReadResponse:
-    """Dismiss all notifications for the current user.
+    """Move all active notifications for the current user to trash.
 
-    Sets is_dismissed=True and is_read=True on all non-dismissed notifications.
-    Notifications remain in the DB and can be retrieved with include_dismissed=true.
+    Sets deleted_at=NOW() and is_read=True on all active notifications.
+    Items can be restored from the trash view or are auto-purged after the
+    user's configured retention period (default 7 days).
     """
     service = get_notification_service()
     count = service.dismiss_all(db, current_user.id, is_admin=is_privileged(current_user))
@@ -210,9 +208,11 @@ async def dismiss_notification(
     current_user: UserPublic = Depends(deps.get_current_user),
     db: Session = Depends(get_db),
 ) -> NotificationResponse:
-    """Dismiss a notification.
+    """Move a notification to trash.
 
-    Dismissed notifications are hidden from the default list but can be retrieved with include_dismissed=true.
+    The notification is hidden from inbox views and appears in the trash,
+    where it can be restored or permanently deleted. Auto-purged after the
+    user's configured retention period (default 7 days).
     """
     service = get_notification_service()
     notification = service.dismiss(db, notification_id, current_user.id, is_admin=is_privileged(current_user))
@@ -250,6 +250,67 @@ async def snooze_notification(
         )
 
     return NotificationResponse.from_db(notification)
+
+
+@router.post("/{notification_id}/restore", response_model=NotificationResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def restore_notification(
+    request: Request, response: Response,
+    notification_id: int,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationResponse:
+    """Restore a notification from trash."""
+    service = get_notification_service()
+    notification = service.restore(
+        db, notification_id, current_user.id, is_admin=is_privileged(current_user)
+    )
+
+    if not notification:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return NotificationResponse.from_db(notification)
+
+
+@router.delete("/trash")
+@user_limiter.limit(get_limit("admin_operations"))
+async def empty_trash(
+    request: Request, response: Response,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> dict:
+    """Empty the current user's trash (admins also wipe trashed system notifications)."""
+    service = get_notification_service()
+    count = service.empty_trash(
+        db, current_user.id, is_admin=is_privileged(current_user)
+    )
+    return {"count": count}
+
+
+@router.delete("/{notification_id}", status_code=status.HTTP_204_NO_CONTENT)
+@user_limiter.limit(get_limit("admin_operations"))
+async def delete_notification(
+    request: Request, response: Response,
+    notification_id: int,
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> Response:
+    """Permanently delete a notification (any state)."""
+    service = get_notification_service()
+    deleted = service.delete_permanently(
+        db, notification_id, current_user.id, is_admin=is_privileged(current_user)
+    )
+
+    if not deleted:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Notification not found",
+        )
+
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 # Preferences endpoints
@@ -324,6 +385,7 @@ async def update_notification_preferences(
         quiet_hours_start=quiet_start,
         quiet_hours_end=quiet_end,
         min_priority=body.min_priority,
+        trash_retention_days=body.trash_retention_days,
     )
 
     return NotificationPreferencesResponse.from_db(prefs)
@@ -350,6 +412,59 @@ async def get_my_notification_routing(
         receive_sync=routing.receive_sync,
         receive_vpn=routing.receive_vpn,
         receive_lifecycle=routing.receive_lifecycle,
+    )
+
+
+@router.get("/trash", response_model=NotificationListResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_trash(
+    request: Request, response: Response,
+    category: Optional[NotificationCategoryEnum] = Query(None),
+    notification_type: Optional[str] = Query(None),
+    created_after: Optional[datetime] = Query(None),
+    created_before: Optional[datetime] = Query(None),
+    page: int = Query(1, ge=1),
+    page_size: int = Query(50, ge=1, le=100),
+    current_user: UserPublic = Depends(deps.get_current_user),
+    db: Session = Depends(get_db),
+) -> NotificationListResponse:
+    """List trashed notifications for the current user, paginated."""
+    service = get_notification_service()
+    offset = (page - 1) * page_size
+    admin = is_privileged(current_user)
+
+    notifications = service.get_user_notifications(
+        db=db,
+        user_id=current_user.id,
+        trashed_only=True,
+        category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
+        limit=page_size,
+        offset=offset,
+        is_admin=admin,
+    )
+
+    total = service.count_user_notifications(
+        db=db,
+        user_id=current_user.id,
+        trashed_only=True,
+        category=category,
+        notification_type=notification_type,
+        created_after=created_after,
+        created_before=created_before,
+        is_admin=admin,
+    )
+
+    unread_count = service.get_unread_count(db, current_user.id, is_admin=admin)
+
+    return NotificationListResponse(
+        notifications=[NotificationResponse.from_db(n) for n in notifications],
+        total=total,
+        unread_count=unread_count,
+        page=page,
+        page_size=page_size,
     )
 
 

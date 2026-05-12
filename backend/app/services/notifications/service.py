@@ -425,7 +425,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         unread_only: bool = False,
-        include_dismissed: bool = False,
+        trashed_only: bool = False,
         category: Optional[str] = None,
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
@@ -440,7 +440,8 @@ class NotificationService:
             db: Database session
             user_id: User ID
             unread_only: Only return unread notifications
-            include_dismissed: Include dismissed notifications
+            trashed_only: When True return only trashed notifications; when False
+                (default) return only active (non-trashed) notifications
             category: Filter by category
             notification_type: Filter by type (info, warning, critical)
             created_after: Only return notifications created after this time
@@ -466,8 +467,10 @@ class NotificationService:
         if unread_only:
             query = query.filter(Notification.is_read == False)
 
-        if not include_dismissed:
-            query = query.filter(Notification.is_dismissed == False)
+        if trashed_only:
+            query = query.filter(Notification.deleted_at.is_not(None))
+        else:
+            query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
             query = query.filter(Notification.category == category)
@@ -491,7 +494,7 @@ class NotificationService:
         db: Session,
         user_id: int,
         unread_only: bool = False,
-        include_dismissed: bool = False,
+        trashed_only: bool = False,
         category: Optional[str] = None,
         notification_type: Optional[str] = None,
         created_after: Optional[datetime] = None,
@@ -507,7 +510,8 @@ class NotificationService:
             db: Database session
             user_id: User ID
             unread_only: Only count unread notifications
-            include_dismissed: Include dismissed notifications
+            trashed_only: When True count only trashed notifications; when False
+                (default) count only active (non-trashed) notifications
             category: Filter by category
             notification_type: Filter by type (info, warning, critical)
             created_after: Only count notifications created after this time
@@ -533,8 +537,10 @@ class NotificationService:
         if unread_only:
             query = query.filter(Notification.is_read == False)
 
-        if not include_dismissed:
-            query = query.filter(Notification.is_dismissed == False)
+        if trashed_only:
+            query = query.filter(Notification.deleted_at.is_not(None))
+        else:
+            query = query.filter(Notification.deleted_at.is_(None))
 
         if category:
             query = query.filter(Notification.category == category)
@@ -575,7 +581,7 @@ class NotificationService:
         ).filter(
             self._user_filter(user_id, is_admin),
             Notification.is_read == False,
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         # Exclude snoozed notifications
@@ -614,7 +620,7 @@ class NotificationService:
         query = db.query(Notification).filter(
             self._user_filter(user_id, is_admin),
             Notification.is_read == False,
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         # Exclude snoozed notifications
@@ -701,28 +707,18 @@ class NotificationService:
         user_id: int,
         is_admin: bool = False,
     ) -> Optional[Notification]:
-        """Dismiss a notification.
-
-        Args:
-            db: Database session
-            notification_id: Notification ID
-            user_id: User ID (for ownership check)
-            is_admin: Whether the user is an admin (can dismiss system notifications)
-
-        Returns:
-            Updated Notification or None if not found
-        """
+        """Move a notification to trash (idempotent on already-trashed rows)."""
         notification = db.query(Notification).filter(
             Notification.id == notification_id,
             self._user_filter(user_id, is_admin),
         ).first()
 
-        if notification:
-            notification.is_dismissed = True
+        if notification and notification.deleted_at is None:
+            notification.deleted_at = datetime.now(timezone.utc)
             notification.is_read = True
             db.commit()
             db.refresh(notification)
-            logger.debug(f"Dismissed notification {notification_id}")
+            logger.debug(f"Moved notification {notification_id} to trash")
 
         return notification
 
@@ -732,28 +728,80 @@ class NotificationService:
         user_id: int,
         is_admin: bool = False,
     ) -> int:
-        """Dismiss all non-dismissed notifications for a user.
-
-        Args:
-            db: Database session
-            user_id: User ID
-            is_admin: Whether the user is an admin (includes system notifications)
-
-        Returns:
-            Number of notifications dismissed
-        """
+        """Move all active notifications for a user to trash."""
         query = db.query(Notification).filter(
             self._user_filter(user_id, is_admin),
-            Notification.is_dismissed == False,
+            Notification.deleted_at.is_(None),
         )
 
         count = query.update({
-            Notification.is_dismissed: True,
+            Notification.deleted_at: datetime.now(timezone.utc),
             Notification.is_read: True,
         })
         db.commit()
 
-        logger.info(f"Dismissed {count} notifications for user {user_id}")
+        logger.info(f"Moved {count} notifications to trash for user {user_id}")
+        return count
+
+    def restore(
+        self,
+        db: Session,
+        notification_id: int,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> Optional[Notification]:
+        """Restore a notification from trash (idempotent on already-active rows)."""
+        notification = db.query(Notification).filter(
+            Notification.id == notification_id,
+            self._user_filter(user_id, is_admin),
+        ).first()
+
+        if notification and notification.deleted_at is not None:
+            notification.deleted_at = None
+            db.commit()
+            db.refresh(notification)
+            logger.debug(f"Restored notification {notification_id} from trash")
+
+        return notification
+
+    def delete_permanently(
+        self,
+        db: Session,
+        notification_id: int,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> bool:
+        """Hard-delete a single notification (any state). Returns True if deleted."""
+        count = (
+            db.query(Notification)
+            .filter(
+                Notification.id == notification_id,
+                self._user_filter(user_id, is_admin),
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        if count:
+            logger.debug(f"Hard-deleted notification {notification_id}")
+        return count > 0
+
+    def empty_trash(
+        self,
+        db: Session,
+        user_id: int,
+        is_admin: bool = False,
+    ) -> int:
+        """Hard-delete every trashed notification visible to this user."""
+        count = (
+            db.query(Notification)
+            .filter(
+                self._user_filter(user_id, is_admin),
+                Notification.deleted_at.is_not(None),
+            )
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        logger.info(f"Emptied trash for user {user_id}: {count} rows")
         return count
 
     def snooze(
@@ -820,6 +868,7 @@ class NotificationService:
         quiet_hours_start: Optional[time] = None,
         quiet_hours_end: Optional[time] = None,
         min_priority: Optional[int] = None,
+        trash_retention_days: Optional[int] = None,
     ) -> NotificationPreferences:
         """Update or create notification preferences for a user.
 
@@ -833,6 +882,7 @@ class NotificationService:
             quiet_hours_start: Quiet hours start time
             quiet_hours_end: Quiet hours end time
             min_priority: Minimum priority level
+            trash_retention_days: Number of days trashed notifications are kept (1–7)
 
         Returns:
             Updated NotificationPreferences
@@ -857,6 +907,8 @@ class NotificationService:
             prefs.quiet_hours_end = quiet_hours_end
         if min_priority is not None:
             prefs.min_priority = min_priority
+        if trash_retention_days is not None:
+            prefs.trash_retention_days = trash_retention_days
 
         db.commit()
         db.refresh(prefs)
@@ -864,31 +916,65 @@ class NotificationService:
         logger.info(f"Updated notification preferences for user {user_id}")
         return prefs
 
-    async def cleanup_old_notifications(
-        self,
-        db: Session,
-        retention_days: int = 90,
-    ) -> int:
-        """Delete notifications older than retention period.
+    def cleanup_expired_trash(self, db: Session) -> int:
+        """Hard-delete trashed notifications past their retention.
+
+        Per-user retention comes from NotificationPreferences.trash_retention_days
+        (default 7 if no prefs row). System notifications (user_id IS NULL) use
+        a fixed 7-day retention.
 
         Args:
             db: Database session
-            retention_days: Number of days to retain notifications
 
         Returns:
             Number of notifications deleted
         """
         from datetime import timedelta
 
-        cutoff = datetime.now(timezone.utc) - timedelta(days=retention_days)
+        now = datetime.now(timezone.utc)
 
-        count = db.query(Notification).filter(
-            Notification.created_at < cutoff
-        ).delete()
+        users_with_trash = (
+            db.query(Notification.user_id)
+            .filter(
+                Notification.deleted_at.is_not(None),
+                Notification.user_id.is_not(None),
+            )
+            .distinct()
+            .all()
+        )
+
+        total = 0
+        for (user_id,) in users_with_trash:
+            prefs = self.get_user_preferences(db, user_id)
+            retention_days = prefs.trash_retention_days if prefs else 7
+            cutoff = now - timedelta(days=retention_days)
+            count = (
+                db.query(Notification)
+                .filter(
+                    Notification.user_id == user_id,
+                    Notification.deleted_at.is_not(None),
+                    Notification.deleted_at < cutoff,
+                )
+                .delete(synchronize_session=False)
+            )
+            total += count
+
+        # System notifications use fixed 7-day retention
+        sys_cutoff = now - timedelta(days=7)
+        total += (
+            db.query(Notification)
+            .filter(
+                Notification.user_id.is_(None),
+                Notification.deleted_at.is_not(None),
+                Notification.deleted_at < sys_cutoff,
+            )
+            .delete(synchronize_session=False)
+        )
 
         db.commit()
-        logger.info(f"Cleaned up {count} old notifications")
-        return count
+        if total:
+            logger.info(f"Expired trash cleanup: deleted {total} notifications")
+        return total
 
 
 # Singleton instance

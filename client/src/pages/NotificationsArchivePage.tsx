@@ -1,16 +1,23 @@
 /**
  * Notifications Archive Page
  *
- * Full paginated list of all notifications with filters.
+ * Full paginated list of notifications with Inbox / Trash tabs and filters.
  */
 import { useState, useEffect, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { useTranslation } from 'react-i18next';
 import {
-  Bell, CheckCheck, Settings, Filter, ChevronLeft, ChevronRight, Clock, X, Trash2,
+  Bell, CheckCheck, Settings, Filter, ChevronLeft, ChevronRight, Clock,
+  X, Trash2, RotateCcw,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
 import {
   getNotifications,
+  getTrashNotifications,
+  restoreNotification,
+  deleteNotificationPermanently,
+  emptyTrash as apiEmptyTrash,
+  getPreferences,
   snoozeNotification,
   getTypeStyle,
   getCategoryIcon,
@@ -31,72 +38,104 @@ const TYPES: NotificationType[] = ['info', 'warning', 'critical'];
 
 const PAGE_SIZE = 50;
 
+type TabKey = 'inbox' | 'trash';
+
 export default function NotificationsArchivePage() {
+  const { t } = useTranslation(['notifications', 'common']);
   const navigate = useNavigate();
   const {
     markAsRead: ctxMarkAsRead,
     markAllAsRead: ctxMarkAllAsRead,
     dismiss: ctxDismiss,
     dismissAll: ctxDismissAll,
+    refresh: ctxRefresh,
   } = useNotifications();
+
+  const [tab, setTab] = useState<TabKey>('inbox');
   const [data, setData] = useState<NotificationListResponse | null>(null);
   const [loading, setLoading] = useState(true);
   const [page, setPage] = useState(1);
+  const [retentionDays, setRetentionDays] = useState<number>(7);
 
-  // Filters
   const [categoryFilter, setCategoryFilter] = useState<NotificationCategory | ''>('');
   const [typeFilter, setTypeFilter] = useState<NotificationType | ''>('');
-  const [readFilter, setReadFilter] = useState<'' | 'unread' | 'all'>('');
+  const [readFilter, setReadFilter] = useState<'' | 'unread'>('');
 
-  const fetchNotifications = useCallback(async () => {
+  useEffect(() => {
+    getPreferences()
+      .then((p) => setRetentionDays(p.trash_retention_days ?? 7))
+      .catch(() => setRetentionDays(7));
+  }, []);
+
+  const fetchList = useCallback(async () => {
     setLoading(true);
     try {
-      const result = await getNotifications({
+      const params = {
         page,
         page_size: PAGE_SIZE,
         category: categoryFilter || undefined,
         notification_type: typeFilter || undefined,
-        unread_only: readFilter === 'unread',
-        include_dismissed: readFilter === 'all',
-      });
+      };
+      const result =
+        tab === 'inbox'
+          ? await getNotifications({
+              ...params,
+              unread_only: readFilter === 'unread',
+            })
+          : await getTrashNotifications(params);
       setData(result);
     } catch {
-      toast.error('Fehler beim Laden der Benachrichtigungen');
+      toast.error(t('common:toast.loadFailed'));
     } finally {
       setLoading(false);
     }
-  }, [page, categoryFilter, typeFilter, readFilter]);
+  }, [tab, page, categoryFilter, typeFilter, readFilter, t]);
 
   useEffect(() => {
-    fetchNotifications();
-  }, [fetchNotifications]);
+    fetchList();
+  }, [fetchList]);
+
+  useEffect(() => {
+    setPage(1);
+  }, [tab, categoryFilter, typeFilter, readFilter]);
 
   const handleMarkAllRead = async () => {
     try {
       await ctxMarkAllAsRead();
-      toast.success('Alle als gelesen markiert');
-      // Refetch archive list to reflect server state (pagination, filters)
-      fetchNotifications();
+      toast.success(t('toast.markedAllRead'));
+      fetchList();
     } catch {
-      toast.error('Fehler');
+      toast.error(t('common:toast.error'));
     }
   };
 
-  const handleClearAll = async () => {
+  const handleDismissAll = async () => {
     if (!data || data.total === 0) return;
-    if (!window.confirm(`Alle ${data.total} Benachrichtigungen löschen?`)) return;
+    if (!window.confirm(t('toast.confirmDismissAll', { count: data.total }))) return;
     try {
       await ctxDismissAll();
-      toast.success('Alle Benachrichtigungen gelöscht');
-      fetchNotifications();
+      toast.success(t('toast.movedToTrash'));
+      fetchList();
     } catch {
-      toast.error('Fehler beim Löschen');
+      toast.error(t('common:toast.error'));
+    }
+  };
+
+  const handleEmptyTrash = async () => {
+    if (!data || data.total === 0) return;
+    if (!window.confirm(t('trash.emptyConfirm', { count: data.total }))) return;
+    try {
+      const { count } = await apiEmptyTrash();
+      toast.success(t('trash.emptied'));
+      fetchList();
+      if (count > 0) ctxRefresh();
+    } catch {
+      toast.error(t('common:toast.error'));
     }
   };
 
   const handleMarkRead = async (n: Notification) => {
     if (n.is_read) return;
-    // Optimistic update in local archive state
     setData((prev) => prev && ({
       ...prev,
       notifications: prev.notifications.map((x) =>
@@ -104,13 +143,10 @@ export default function NotificationsArchivePage() {
       ),
       unread_count: Math.max(0, prev.unread_count - 1),
     }));
-    try {
-      await ctxMarkAsRead(n.id);
-    } catch { /* non-critical */ }
+    try { await ctxMarkAsRead(n.id); } catch { /* non-critical */ }
   };
 
   const handleDismiss = async (n: Notification) => {
-    // Optimistic update: remove from local archive list immediately
     setData((prev) => prev && ({
       ...prev,
       notifications: prev.notifications.filter((x) => x.id !== n.id),
@@ -120,8 +156,39 @@ export default function NotificationsArchivePage() {
     try {
       await ctxDismiss(n.id);
     } catch {
-      // Rollback: refetch on failure
-      fetchNotifications();
+      fetchList();
+    }
+  };
+
+  const handleRestore = async (n: Notification) => {
+    setData((prev) => prev && ({
+      ...prev,
+      notifications: prev.notifications.filter((x) => x.id !== n.id),
+      total: prev.total - 1,
+    }));
+    try {
+      await restoreNotification(n.id);
+      toast.success(t('trash.restored'));
+      ctxRefresh();
+    } catch {
+      toast.error(t('common:toast.error'));
+      fetchList();
+    }
+  };
+
+  const handleDeleteForever = async (n: Notification) => {
+    if (!window.confirm(t('trash.deleteForeverConfirm'))) return;
+    setData((prev) => prev && ({
+      ...prev,
+      notifications: prev.notifications.filter((x) => x.id !== n.id),
+      total: prev.total - 1,
+    }));
+    try {
+      await deleteNotificationPermanently(n.id);
+      toast.success(t('trash.deleted'));
+    } catch {
+      toast.error(t('common:toast.error'));
+      fetchList();
     }
   };
 
@@ -129,9 +196,9 @@ export default function NotificationsArchivePage() {
     try {
       await snoozeNotification(n.id, hours);
       toast.success(`${hours}h snoozed`);
-      fetchNotifications();
+      fetchList();
     } catch {
-      toast.error('Snooze fehlgeschlagen');
+      toast.error(t('common:toast.error'));
     }
   };
 
@@ -139,50 +206,87 @@ export default function NotificationsArchivePage() {
 
   return (
     <div className="mx-auto max-w-5xl space-y-6 p-6">
-      {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-slate-100">Benachrichtigungen</h1>
+          <h1 className="text-2xl font-bold text-slate-100">{t('title')}</h1>
           <p className="text-sm text-slate-400">
-            {data ? `${data.total} gesamt, ${data.unread_count} ungelesen` : 'Laden...'}
+            {data
+              ? `${data.total} ${tab === 'inbox' ? t('count.total') : t('count.inTrash')}${tab === 'inbox' ? `, ${data.unread_count} ${t('count.unread')}` : ''}`
+              : t('common:loading')}
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={handleMarkAllRead}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-sky-500/50 hover:text-sky-400"
-          >
-            <CheckCheck className="h-4 w-4" />
-            Alle gelesen
-          </button>
-          <button
-            onClick={handleClearAll}
-            disabled={!data || data.total === 0}
-            className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-rose-500/50 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40 disabled:hover:border-slate-700 disabled:hover:text-slate-300"
-          >
-            <Trash2 className="h-4 w-4" />
-            Alle löschen
-          </button>
+          {tab === 'inbox' && (
+            <>
+              <button
+                onClick={handleMarkAllRead}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-sky-500/50 hover:text-sky-400"
+              >
+                <CheckCheck className="h-4 w-4" />
+                {t('buttons.markAllRead')}
+              </button>
+              <button
+                onClick={handleDismissAll}
+                disabled={!data || data.total === 0}
+                className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-rose-500/50 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <Trash2 className="h-4 w-4" />
+                {t('buttons.dismissAll')}
+              </button>
+            </>
+          )}
+          {tab === 'trash' && (
+            <button
+              onClick={handleEmptyTrash}
+              disabled={!data || data.total === 0}
+              className="flex items-center gap-1.5 rounded-lg border border-rose-500/40 px-3 py-2 text-sm text-rose-400 transition hover:border-rose-500 hover:bg-rose-500/10 disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              <Trash2 className="h-4 w-4" />
+              {t('trash.empty')}
+            </button>
+          )}
           <button
             onClick={() => navigate('/settings?tab=notifications')}
             className="flex items-center gap-1.5 rounded-lg border border-slate-700 px-3 py-2 text-sm text-slate-300 transition hover:border-sky-500/50 hover:text-sky-400"
           >
             <Settings className="h-4 w-4" />
-            Einstellungen
+            {t('buttons.settings')}
           </button>
         </div>
       </div>
 
-      {/* Filters */}
+      <div className="flex gap-2 border-b border-slate-800">
+        {(['inbox', 'trash'] as TabKey[]).map((k) => (
+          <button
+            key={k}
+            onClick={() => setTab(k)}
+            className={`relative px-4 py-2 text-sm transition ${
+              tab === k ? 'text-sky-400' : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            {t(`tabs.${k}`)}
+            {tab === k && (
+              <span className="absolute inset-x-2 -bottom-px h-0.5 rounded-full bg-sky-500" />
+            )}
+          </button>
+        ))}
+      </div>
+
+      {tab === 'trash' && (
+        <div className="rounded-lg border border-amber-500/30 bg-amber-500/5 px-4 py-2 text-xs text-amber-300">
+          {t('trash.banner', { days: retentionDays })}
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 rounded-xl border border-slate-800 bg-slate-900/50 p-3">
         <Filter className="h-4 w-4 text-slate-400" />
 
         <select
           value={categoryFilter}
-          onChange={(e) => { setCategoryFilter(e.target.value as NotificationCategory | ''); setPage(1); }}
+          onChange={(e) => setCategoryFilter(e.target.value as NotificationCategory | '')}
           className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-300"
         >
-          <option value="">Alle Kategorien</option>
+          <option value="">{t('filters.allCategories')}</option>
           {CATEGORIES.map((c) => (
             <option key={c} value={c}>{getCategoryIcon(c)} {getCategoryName(c)}</option>
           ))}
@@ -190,27 +294,27 @@ export default function NotificationsArchivePage() {
 
         <select
           value={typeFilter}
-          onChange={(e) => { setTypeFilter(e.target.value as NotificationType | ''); setPage(1); }}
+          onChange={(e) => setTypeFilter(e.target.value as NotificationType | '')}
           className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-300"
         >
-          <option value="">Alle Typen</option>
-          {TYPES.map((t) => (
-            <option key={t} value={t}>{t.charAt(0).toUpperCase() + t.slice(1)}</option>
+          <option value="">{t('filters.allTypes')}</option>
+          {TYPES.map((tp) => (
+            <option key={tp} value={tp}>{tp.charAt(0).toUpperCase() + tp.slice(1)}</option>
           ))}
         </select>
 
-        <select
-          value={readFilter}
-          onChange={(e) => { setReadFilter(e.target.value as '' | 'unread' | 'all'); setPage(1); }}
-          className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-300"
-        >
-          <option value="">Standard</option>
-          <option value="unread">Nur ungelesen</option>
-          <option value="all">Inkl. ausgeblendet</option>
-        </select>
+        {tab === 'inbox' && (
+          <select
+            value={readFilter}
+            onChange={(e) => setReadFilter(e.target.value as '' | 'unread')}
+            className="rounded-lg border border-slate-700 bg-slate-800 px-3 py-1.5 text-sm text-slate-300"
+          >
+            <option value="">{t('filters.default')}</option>
+            <option value="unread">{t('filters.unreadOnly')}</option>
+          </select>
+        )}
       </div>
 
-      {/* Notification List */}
       <div className="space-y-2">
         {loading ? (
           <div className="flex items-center justify-center py-12">
@@ -219,15 +323,18 @@ export default function NotificationsArchivePage() {
         ) : !data || data.notifications.length === 0 ? (
           <div className="py-12 text-center text-slate-400">
             <Bell className="mx-auto mb-3 h-12 w-12 opacity-30" />
-            <p>Keine Benachrichtigungen gefunden</p>
+            <p>{tab === 'inbox' ? t('empty.inbox') : t('empty.trash')}</p>
           </div>
         ) : (
           data.notifications.map((n) => (
             <NotificationRow
               key={n.id}
+              tab={tab}
               notification={n}
               onMarkRead={handleMarkRead}
               onDismiss={handleDismiss}
+              onRestore={handleRestore}
+              onDeleteForever={handleDeleteForever}
               onSnooze={handleSnooze}
               onNavigate={(url) => navigate(url)}
             />
@@ -235,7 +342,6 @@ export default function NotificationsArchivePage() {
         )}
       </div>
 
-      {/* Pagination */}
       {totalPages > 1 && (
         <div className="flex items-center justify-center gap-4">
           <button
@@ -246,7 +352,7 @@ export default function NotificationsArchivePage() {
             <ChevronLeft className="h-4 w-4" />
           </button>
           <span className="text-sm text-slate-400">
-            Seite {page} von {totalPages}
+            {t('pagination.pageOf', { page, total: totalPages })}
           </span>
           <button
             onClick={() => setPage(Math.min(totalPages, page + 1))}
@@ -261,21 +367,27 @@ export default function NotificationsArchivePage() {
   );
 }
 
-/** Individual notification row with actions */
 function NotificationRow({
+  tab,
   notification: n,
   onMarkRead,
   onDismiss,
+  onRestore,
+  onDeleteForever,
   onSnooze,
   onNavigate,
 }: {
+  tab: TabKey;
   notification: Notification;
   onMarkRead: (n: Notification) => void;
   onDismiss: (n: Notification) => void;
+  onRestore: (n: Notification) => void;
+  onDeleteForever: (n: Notification) => void;
   onSnooze: (n: Notification, hours: number) => void;
   onNavigate: (url: string) => void;
 }) {
   const [showSnooze, setShowSnooze] = useState(false);
+  const { t } = useTranslation(['notifications']);
   const typeStyle = getTypeStyle(n.notification_type);
 
   return (
@@ -286,12 +398,10 @@ function NotificationRow({
           : 'border-slate-800/50 bg-slate-900/30'
       }`}
     >
-      {/* Icon */}
       <div className={`flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-lg border ${typeStyle.bgColor}`}>
         <span className="text-lg">{getCategoryIcon(n.category)}</span>
       </div>
 
-      {/* Content */}
       <div className="min-w-0 flex-1">
         <div className="flex items-start justify-between gap-2">
           <p className={`text-sm font-medium ${!n.is_read ? 'text-slate-100' : 'text-slate-300'}`}>
@@ -314,9 +424,8 @@ function NotificationRow({
         </div>
       </div>
 
-      {/* Actions */}
       <div className="flex flex-shrink-0 items-center gap-1">
-        {n.action_url && (
+        {n.action_url && tab === 'inbox' && (
           <button
             onClick={() => onNavigate(n.action_url!)}
             className="rounded-lg border border-slate-700 px-2.5 py-1 text-xs text-slate-300 transition hover:border-sky-500/50 hover:text-sky-400"
@@ -325,47 +434,69 @@ function NotificationRow({
           </button>
         )}
 
-        {/* Snooze */}
-        <div className="relative">
-          <button
-            onClick={() => setShowSnooze(!showSnooze)}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-            title="Snooze"
-          >
-            <Clock className="h-4 w-4" />
-          </button>
-          {showSnooze && (
-            <div className="absolute right-0 top-8 z-10 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl">
-              {[1, 4, 24].map((h) => (
-                <button
-                  key={h}
-                  onClick={() => { onSnooze(n, h); setShowSnooze(false); }}
-                  className="block w-full px-4 py-1.5 text-left text-xs text-slate-300 transition hover:bg-slate-700"
-                >
-                  {h}h
-                </button>
-              ))}
+        {tab === 'inbox' && (
+          <>
+            <div className="relative">
+              <button
+                onClick={() => setShowSnooze(!showSnooze)}
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
+                title="Snooze"
+              >
+                <Clock className="h-4 w-4" />
+              </button>
+              {showSnooze && (
+                <div className="absolute right-0 top-8 z-10 rounded-lg border border-slate-700 bg-slate-800 py-1 shadow-xl">
+                  {[1, 4, 24].map((h) => (
+                    <button
+                      key={h}
+                      onClick={() => { onSnooze(n, h); setShowSnooze(false); }}
+                      className="block w-full px-4 py-1.5 text-left text-xs text-slate-300 transition hover:bg-slate-700"
+                    >
+                      {h}h
+                    </button>
+                  ))}
+                </div>
+              )}
             </div>
-          )}
-        </div>
 
-        {!n.is_read && (
-          <button
-            onClick={() => onMarkRead(n)}
-            className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-            title="Als gelesen markieren"
-          >
-            <CheckCheck className="h-4 w-4" />
-          </button>
+            {!n.is_read && (
+              <button
+                onClick={() => onMarkRead(n)}
+                className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
+                title={t('buttons.markRead')}
+              >
+                <CheckCheck className="h-4 w-4" />
+              </button>
+            )}
+
+            <button
+              onClick={() => onDismiss(n)}
+              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
+              title={t('buttons.moveToTrash')}
+            >
+              <X className="h-4 w-4" />
+            </button>
+          </>
         )}
 
-        <button
-          onClick={() => onDismiss(n)}
-          className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-slate-300"
-          title="Ausblenden"
-        >
-          <X className="h-4 w-4" />
-        </button>
+        {tab === 'trash' && (
+          <>
+            <button
+              onClick={() => onRestore(n)}
+              className="rounded-lg p-1.5 text-slate-500 transition hover:bg-slate-700 hover:text-sky-400"
+              title={t('trash.restore')}
+            >
+              <RotateCcw className="h-4 w-4" />
+            </button>
+            <button
+              onClick={() => onDeleteForever(n)}
+              className="rounded-lg p-1.5 text-rose-500 transition hover:bg-rose-500/10 hover:text-rose-400"
+              title={t('trash.deleteForever')}
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </>
+        )}
       </div>
     </div>
   );

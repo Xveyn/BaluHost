@@ -17,7 +17,7 @@ export interface Notification {
   message: string;
   action_url: string | null;
   is_read: boolean;
-  is_dismissed: boolean;
+  deleted_at: string | null;
   priority: number;
   metadata: Record<string, any> | null;
   time_ago: string | null;
@@ -63,6 +63,7 @@ export interface NotificationPreferences {
   quiet_hours_start: string | null;
   quiet_hours_end: string | null;
   min_priority: number;
+  trash_retention_days: number; // 1-7
   category_preferences: Record<string, CategoryPreference> | null;
 }
 
@@ -73,6 +74,7 @@ export interface NotificationPreferencesUpdate {
   quiet_hours_start?: string | null;
   quiet_hours_end?: string | null;
   min_priority?: number;
+  trash_retention_days?: number;
   category_preferences?: Record<string, CategoryPreference>;
 }
 
@@ -92,7 +94,6 @@ export async function getDeliveryStatus(): Promise<DeliveryStatus> {
 export async function getNotifications(
   options: {
     unread_only?: boolean;
-    include_dismissed?: boolean;
     category?: NotificationCategory;
     notification_type?: NotificationType;
     created_after?: string;
@@ -104,7 +105,6 @@ export async function getNotifications(
   const response = await apiClient.get<NotificationListResponse>('/api/notifications', {
     params: {
       unread_only: options.unread_only ?? false,
-      include_dismissed: options.include_dismissed ?? false,
       category: options.category,
       notification_type: options.notification_type,
       created_after: options.created_after,
@@ -305,3 +305,54 @@ export function getWebSocketUrl(token: string): string {
   const host = window.location.host;
   return `${protocol}//${host}/api/notifications/ws?token=${token}`;
 }
+
+export interface GetTrashNotificationsParams {
+  category?: NotificationCategory;
+  notification_type?: NotificationType;
+  created_after?: string;
+  created_before?: string;
+  page?: number;
+  page_size?: number;
+}
+
+/**
+ * Get paginated list of trashed notifications.
+ */
+export const getTrashNotifications = async (
+  params: GetTrashNotificationsParams = {}
+): Promise<NotificationListResponse> => {
+  const { data } = await apiClient.get<NotificationListResponse>(
+    '/api/notifications/trash',
+    { params }
+  );
+  return data;
+};
+
+/**
+ * Restore a notification from trash.
+ */
+export const restoreNotification = async (
+  id: number
+): Promise<Notification> => {
+  const { data } = await apiClient.post<Notification>(
+    `/api/notifications/${id}/restore`
+  );
+  return data;
+};
+
+/**
+ * Permanently delete a single notification.
+ */
+export const deleteNotificationPermanently = async (id: number): Promise<void> => {
+  await apiClient.delete(`/api/notifications/${id}`);
+};
+
+/**
+ * Empty the current user's trash.
+ */
+export const emptyTrash = async (): Promise<{ count: number }> => {
+  const { data } = await apiClient.delete<{ count: number }>(
+    '/api/notifications/trash'
+  );
+  return data;
+};

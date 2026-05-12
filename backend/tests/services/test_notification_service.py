@@ -60,7 +60,7 @@ class TestNotificationService:
         assert notification.title == "Test Notification"
         assert notification.message == "This is a test message"
         assert notification.is_read is False
-        assert notification.is_dismissed is False
+        assert notification.deleted_at is None
 
     @pytest.mark.asyncio
     async def test_create_notification_with_metadata(
@@ -236,7 +236,7 @@ class TestNotificationService:
         )
 
         assert result is not None
-        assert result.is_dismissed is True
+        assert result.deleted_at is not None
         assert result.is_read is True
 
 
@@ -515,3 +515,443 @@ class TestDeliveryStatusEndpoint:
         from app.core.config import settings
         resp = client.get(f"{settings.api_prefix}/notifications/delivery-status")
         assert resp.status_code in (401, 403)
+
+
+class TestTrashSemantics:
+    """Tests for trash-based dismiss/restore/delete behavior."""
+
+    def test_dismiss_sets_deleted_at(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        db_session.refresh(n)
+
+        before = n.deleted_at
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert before is None
+        assert n.deleted_at is not None
+        assert n.is_read is True
+
+    def test_dismiss_idempotent_on_already_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        first = n.deleted_at
+
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        # Second dismiss must not overwrite the original timestamp
+        assert n.deleted_at == first
+
+    def test_restore_clears_deleted_at(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        notification_service.dismiss(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert n.deleted_at is not None
+
+        result = notification_service.restore(db_session, n.id, test_user.id)
+        db_session.refresh(n)
+        assert result is not None
+        assert n.deleted_at is None
+
+    def test_restore_idempotent_on_active(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+
+        result = notification_service.restore(db_session, n.id, test_user.id)
+        assert result is not None
+        assert result.deleted_at is None
+
+    def test_restore_returns_none_for_unknown_id(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        result = notification_service.restore(db_session, 9999999, test_user.id)
+        assert result is None
+
+    def test_delete_permanently_removes_row(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        n = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="T",
+            message="M",
+        )
+        db_session.add(n)
+        db_session.commit()
+        notification_id = n.id
+
+        deleted = notification_service.delete_permanently(
+            db_session, notification_id, test_user.id
+        )
+        assert deleted is True
+        assert (
+            db_session.query(Notification)
+            .filter(Notification.id == notification_id)
+            .first()
+            is None
+        )
+
+    def test_delete_permanently_returns_false_for_unknown_id(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        deleted = notification_service.delete_permanently(
+            db_session, 9999999, test_user.id
+        )
+        assert deleted is False
+
+    def test_empty_trash_removes_only_trashed_rows(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        count = notification_service.empty_trash(db_session, test_user.id)
+
+        assert count == 1
+        remaining = db_session.query(Notification).filter(
+            Notification.user_id == test_user.id
+        ).all()
+        assert len(remaining) == 1
+        assert remaining[0].title == "active"
+
+    def test_empty_trash_isolates_users(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+        test_admin,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        user_trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="user-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        other_trashed = Notification(
+            user_id=test_admin.id,
+            category="system",
+            notification_type="info",
+            title="admin-trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([user_trashed, other_trashed])
+        db_session.commit()
+
+        notification_service.empty_trash(db_session, test_user.id, is_admin=False)
+
+        assert db_session.query(Notification).filter(
+            Notification.user_id == test_user.id
+        ).count() == 0
+        assert db_session.query(Notification).filter(
+            Notification.user_id == test_admin.id
+        ).count() == 1
+
+    def test_cleanup_expired_trash_respects_user_retention(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification, NotificationPreferences
+        from datetime import datetime, timezone, timedelta
+
+        # 3-day retention for this user
+        prefs = NotificationPreferences(user_id=test_user.id, trash_retention_days=3)
+        db_session.add(prefs)
+
+        now = datetime.now(timezone.utc)
+        old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="old",
+            message="m",
+            deleted_at=now - timedelta(days=5),
+        )
+        recent = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="recent",
+            message="m",
+            deleted_at=now - timedelta(days=1),
+        )
+        db_session.add_all([old, recent])
+        db_session.commit()
+
+        count = notification_service.cleanup_expired_trash(db_session)
+
+        assert count == 1
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id == test_user.id)
+            .all()
+        ]
+        assert titles == ["recent"]
+
+    def test_cleanup_expired_trash_default_when_no_prefs(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        too_old = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="too_old",
+            message="m",
+            deleted_at=now - timedelta(days=8),
+        )
+        within = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="within",
+            message="m",
+            deleted_at=now - timedelta(days=6),
+        )
+        db_session.add_all([too_old, within])
+        db_session.commit()
+
+        count = notification_service.cleanup_expired_trash(db_session)
+
+        assert count == 1
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id == test_user.id)
+            .all()
+        ]
+        assert titles == ["within"]
+
+    def test_cleanup_expired_trash_system_notifications_fixed_7d(
+        self,
+        notification_service,
+        db_session,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone, timedelta
+
+        now = datetime.now(timezone.utc)
+        old_system = Notification(
+            user_id=None,
+            category="system",
+            notification_type="info",
+            title="old_sys",
+            message="m",
+            deleted_at=now - timedelta(days=10),
+        )
+        fresh_system = Notification(
+            user_id=None,
+            category="system",
+            notification_type="info",
+            title="fresh_sys",
+            message="m",
+            deleted_at=now - timedelta(days=3),
+        )
+        db_session.add_all([old_system, fresh_system])
+        db_session.commit()
+
+        notification_service.cleanup_expired_trash(db_session)
+
+        titles = [
+            n.title for n in db_session.query(Notification)
+            .filter(Notification.user_id.is_(None))
+            .all()
+        ]
+        assert titles == ["fresh_sys"]
+
+    def test_get_user_notifications_inbox_excludes_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        results = notification_service.get_user_notifications(
+            db_session, test_user.id
+        )
+        titles = [n.title for n in results]
+        assert "active" in titles
+        assert "trashed" not in titles
+
+    def test_get_user_notifications_trashed_only_returns_trash(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        active = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="active",
+            message="m",
+        )
+        trashed = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="trashed",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([active, trashed])
+        db_session.commit()
+
+        results = notification_service.get_user_notifications(
+            db_session, test_user.id, trashed_only=True
+        )
+        titles = [n.title for n in results]
+        assert titles == ["trashed"]
+
+    def test_get_unread_count_ignores_trashed(
+        self,
+        notification_service,
+        db_session,
+        test_user,
+    ):
+        from app.models.notification import Notification
+        from datetime import datetime, timezone
+
+        unread = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="unread",
+            message="m",
+        )
+        unread_in_trash = Notification(
+            user_id=test_user.id,
+            category="system",
+            notification_type="info",
+            title="unread_in_trash",
+            message="m",
+            deleted_at=datetime.now(timezone.utc),
+        )
+        db_session.add_all([unread, unread_in_trash])
+        db_session.commit()
+
+        count = notification_service.get_unread_count(db_session, test_user.id)
+        assert count == 1

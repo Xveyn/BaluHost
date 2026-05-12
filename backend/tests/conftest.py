@@ -317,6 +317,12 @@ def test_user(regular_user: User) -> User:
     return regular_user
 
 
+@pytest.fixture
+def test_admin(admin_user: User) -> User:
+    """Backward-compatible alias used by some tests expecting `test_admin`."""
+    return admin_user
+
+
 # ============================================================================
 # Authentication Helpers
 # ============================================================================
