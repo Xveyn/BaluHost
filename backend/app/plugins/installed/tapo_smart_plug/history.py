@@ -160,26 +160,42 @@ class TapoHistoryFetcher:
     def _buckets_from_result(result, interval: ImportHistoryInterval, bucket_minutes: int) -> List[EnergyBucket]:
         """Convert a tapo ``EnergyDataResult`` into EnergyBucket objects.
 
-        The tapo library returns:
-        - ``start_timestamp`` (Unix seconds, UTC) of the first bucket
-        - ``data`` (list[int]) -- energy in Wh per bucket
-        - ``interval`` (minutes per bucket) -- we use the *requested* bucket_minutes
+        The mihai-dinculescu/tapo library exposes:
+        - ``start_date_time`` -- datetime of the first bucket (device local time, may be naive)
+        - ``entries`` (list[int]) -- energy in Wh per bucket
+        - ``interval_length`` (minutes per bucket) -- we use the *requested* bucket_minutes
           because monthly buckets do not have a fixed minute count.
+        - ``local_time`` -- the device's current local datetime when the response was built
+
+        Naive datetimes are treated as UTC. This is a deliberate simplification: the
+        Tapo device reports in its own local timezone, but bucket alignment in BaluHost
+        is UTC-anchored. If the device's timezone diverges from UTC, the imported
+        timestamps will be shifted accordingly; admins can re-import after fixing
+        the device timezone if needed.
         """
-        start_ts = getattr(result, "start_timestamp", None)
-        data = getattr(result, "data", None) or []
-        if start_ts is None:
+        start_dt = getattr(result, "start_date_time", None)
+        entries = getattr(result, "entries", None) or []
+        if start_dt is None:
             return []
+
+        # Coerce to tz-aware UTC datetime
+        if isinstance(start_dt, str):
+            try:
+                start_dt = datetime.fromisoformat(start_dt)
+            except ValueError:
+                return []
+        if getattr(start_dt, "tzinfo", None) is None:
+            start_dt = start_dt.replace(tzinfo=timezone.utc)
 
         # Precompute the month-anchored base for MONTHLY stepping.
         monthly_base = None
         if interval == ImportHistoryInterval.MONTHLY:
-            monthly_base = datetime.fromtimestamp(start_ts, tz=timezone.utc).replace(
+            monthly_base = start_dt.replace(
                 day=1, hour=0, minute=0, second=0, microsecond=0
             )
 
         out: List[EnergyBucket] = []
-        for idx, wh in enumerate(data):
+        for idx, wh in enumerate(entries):
             if interval == ImportHistoryInterval.MONTHLY:
                 assert monthly_base is not None  # set above when interval == MONTHLY
                 month = monthly_base.month + idx
@@ -187,9 +203,7 @@ class TapoHistoryFetcher:
                 month = ((month - 1) % 12) + 1
                 bucket_start = monthly_base.replace(year=year, month=month)
             else:
-                bucket_start = datetime.fromtimestamp(
-                    start_ts + idx * bucket_minutes * 60, tz=timezone.utc
-                )
+                bucket_start = start_dt + timedelta(minutes=idx * bucket_minutes)
 
             out.append(EnergyBucket(
                 bucket_start=bucket_start,
