@@ -1,7 +1,5 @@
 """Tests for TapoHistoryFetcher — uses a fake tapo client via monkeypatch."""
-from datetime import date, datetime, timezone
-from types import SimpleNamespace
-from unittest.mock import AsyncMock
+from datetime import date, datetime, timedelta, timezone
 
 import pytest
 
@@ -9,12 +7,34 @@ from app.plugins.installed.tapo_smart_plug.history import TapoHistoryFetcher, En
 from app.plugins.smart_device.schemas import ImportHistoryInterval
 
 
+class _FakeIntervalEntry:
+    """Stub mimicking tapo's EnergyDataIntervalResult (one bucket)."""
+    def __init__(self, start_dt: datetime, energy_wh: int):
+        self.start_date_time = start_dt
+        self.energy = energy_wh
+
+
 class _FakeEnergyDataResult:
     """Stub mimicking tapo's EnergyDataResult (mihai-dinculescu library)."""
-    def __init__(self, start_dt: datetime, interval_minutes: int, entries: list[int]):
+    def __init__(self, start_dt: datetime, interval_minutes: int, entries: list[_FakeIntervalEntry]):
         self.start_date_time = start_dt
         self.interval_length = interval_minutes
         self.entries = entries
+
+
+def _hourly_entries(start_dt: datetime, values_wh: list[int]) -> list[_FakeIntervalEntry]:
+    return [_FakeIntervalEntry(start_dt + timedelta(hours=i), wh) for i, wh in enumerate(values_wh)]
+
+
+def _monthly_entries(start_year: int, values_wh: list[int]) -> list[_FakeIntervalEntry]:
+    out = []
+    for i, wh in enumerate(values_wh):
+        month = (i % 12) + 1
+        year = start_year + (i // 12)
+        out.append(_FakeIntervalEntry(
+            datetime(year, month, 1, tzinfo=timezone.utc), wh,
+        ))
+    return out
 
 
 class _FakeTapoP110:
@@ -45,7 +65,10 @@ async def test_fetch_hourly_single_chunk():
         _FakeEnergyDataResult(
             start_dt=datetime(2026, 4, 1, tzinfo=timezone.utc),
             interval_minutes=60,
-            entries=[10, 20, 30] + [0] * 21,  # 3 buckets, rest zero
+            entries=_hourly_entries(
+                datetime(2026, 4, 1, tzinfo=timezone.utc),
+                [10, 20, 30] + [0] * 21,
+            ),
         )
     ])
     fake_client = _FakeApiClient(fake_device)
@@ -79,6 +102,7 @@ async def test_fetch_hourly_chunks_above_8_days():
             interval_minutes=60, entries=[],
         ),
     ])
+    # Note: entries is empty here on purpose; the test only counts the API calls.
     fake_client = _FakeApiClient(fake_device)
     fetcher = TapoHistoryFetcher(client_factory=lambda email, pw: fake_client)
 
@@ -98,7 +122,10 @@ async def test_fetch_monthly_single_year():
         _FakeEnergyDataResult(
             start_dt=datetime(2026, 1, 1, tzinfo=timezone.utc),
             interval_minutes=43200,  # 30 days in minutes -- tapo's monthly convention
-            entries=[100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210],
+            entries=_monthly_entries(
+                2026,
+                [100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210],
+            ),
         )
     ])
     fake_client = _FakeApiClient(fake_device)
