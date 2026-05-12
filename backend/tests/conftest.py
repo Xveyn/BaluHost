@@ -25,11 +25,36 @@ os.environ.setdefault("NAS_QUOTA_BYTES", str(10 * 1024 * 1024 * 1024))
 # Prevent the application startup lifecycle from performing full DB init/seed during tests
 # Tests create an in-memory DB and manage schema; skip app-level init to avoid touching production DB.
 os.environ.setdefault("SKIP_APP_INIT", "1")
-# Ensure tests write storage into a temporary directory (avoids protected program folders)
-_tmp_storage = tempfile.mkdtemp(prefix="baluhost_test_storage_")
-os.environ.setdefault("NAS_STORAGE_PATH", _tmp_storage)
-os.environ.setdefault("NAS_TEMP_PATH", tempfile.mkdtemp(prefix="baluhost_test_tmp_"))
-os.environ.setdefault("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix="baluhost_test_backups_"))
+# Per-worker isolation for storage directories and the SQLite DB. xdist
+# workers inherit env vars from the controller, so plain `setdefault` would
+# keep all workers pointing at the controller's path and they'd race on the
+# same `<temp>/baluhost.db`. We key on PYTEST_XDIST_WORKER (set inside
+# workers, "main" otherwise) and force-override env in xdist workers so each
+# worker gets its own tempdirs and DB file. Sequential runs keep the
+# `setdefault` semantics so a user-supplied DATABASE_URL or NAS_STORAGE_PATH
+# still wins.
+_xdist_worker_id = os.environ.get("PYTEST_XDIST_WORKER", "main")
+_force_isolation = _xdist_worker_id != "main"
+
+
+def _setenv(key: str, value: str) -> None:
+    if _force_isolation or key not in os.environ:
+        os.environ[key] = value
+
+
+_tmp_storage = tempfile.mkdtemp(prefix=f"baluhost_test_storage_{_xdist_worker_id}_")
+_setenv("NAS_STORAGE_PATH", _tmp_storage)
+_setenv("NAS_TEMP_PATH", tempfile.mkdtemp(prefix=f"baluhost_test_tmp_{_xdist_worker_id}_"))
+_setenv("NAS_BACKUP_PATH", tempfile.mkdtemp(prefix=f"baluhost_test_backups_{_xdist_worker_id}_"))
+# Override DATABASE_URL so tests that import `app.core.database.engine`
+# directly (power command queue, GPU manager) get a worker-isolated SQLite
+# file instead of the default `<temp>/baluhost.db` derived from
+# `nas_storage_path.parent`. Place the DB in its OWN tempdir (not under
+# NAS_STORAGE_PATH) so `scripts.debug.reset_dev_storage` — used by some
+# tests to wipe storage between runs — doesn't try to unlink the file
+# while SQLAlchemy holds it open (Windows: PermissionError).
+_tmp_db_dir = tempfile.mkdtemp(prefix=f"baluhost_test_db_{_xdist_worker_id}_")
+_setenv("DATABASE_URL", f"sqlite:///{_tmp_db_dir}/baluhost.db")
 # By default disable strict rate limits during tests to avoid flakiness.
 # Individual tests that need to assert rate-limit behavior should opt-in
 # by setting `ENABLE_RATE_LIMITS_IN_TESTS=1` in their own fixture or runtime.
@@ -92,11 +117,19 @@ except ImportError:
 
 from app.main import app
 from app.core.config import settings
-from app.core.database import get_db
+from app.core.database import get_db, engine as _global_engine
 from app.models.base import Base
 from app.models.user import User
 from app.models.file_metadata import FileMetadata
 from app.schemas.user import UserCreate
+
+# Create all tables on the per-worker global SQLite engine. Tests that import
+# `app.core.database.engine` directly (power command queue, GPU manager) and
+# bypass the function-scoped `db_session` fixture rely on the schema being
+# present. In sequential local runs this happened by accident because the
+# shared `<temp>/baluhost.db` accumulated tables across runs. With xdist each
+# worker gets a fresh DB and we must create the schema explicitly.
+Base.metadata.create_all(bind=_global_engine)
 from app.services import users as user_service
 from app.models.vpn import VPNClient
 from app.services.vpn import VPNService
