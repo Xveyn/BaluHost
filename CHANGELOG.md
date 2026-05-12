@@ -7,6 +7,155 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [1.32.0] - 2026-05-12
+
+### Added
+
+- **(client)** wire History import button into SmartDeviceCard
+- **(client)** TapoHistoryImportModal with DE/EN i18n
+- **(client)** smart-devices.ts history import wrapper
+- **(api)** POST /smart-devices/{id}/import-history endpoint
+- **(tapo)** plugin.import_history() — admin history backfill entry point
+- **(tapo)** import service with idempotency + conflict resolution
+- **(tapo)** mock history fetcher for dev mode
+- **(tapo)** TapoHistoryFetcher for hourly/daily/monthly buckets
+- **(smart-device)** add ImportHistoryRequest/Response schemas
+- **(energy)** preserve imported samples in cleanup_old_samples
+- **(notifications)** user-configurable trash retention slider (1-7 days)
+- **(notifications)** Inbox/Trash tabs with restore + delete-forever
+- **(notifications)** frontend types + trash API functions
+- **(notifications)** hourly trash cleanup job (Firebase-independent)
+- **(notifications)** add DELETE /{id} + DELETE /trash endpoints
+- **(notifications)** add POST /{id}/restore endpoint
+- **(notifications)** add GET /notifications/trash
+- **(notifications)** cleanup_expired_trash respects per-user retention
+- **(notifications)** add empty_trash() for bulk hard-delete
+- **(notifications)** add delete_permanently() for hard delete
+- **(notifications)** add restore() to bring a row back from trash
+- **(notifications)** dismiss now writes deleted_at timestamp
+- **(notifications)** expose deleted_at + trash_retention_days in schemas
+- **(notifications)** migrate is_dismissed → deleted_at with 1-7d retention
+- **(user-menu)** wire Quick-Settings into the dropdown
+- **(quick-settings)** UserMenuQuickSettings container with Modal
+- **(quick-settings)** add TwoFactorPromptSection + i18n keys
+- **(quick-settings)** add ByteUnitSection
+- **(quick-settings)** add LanguageSection
+- **(quick-settings)** extract TwoFactorSetupFlow from settings card
+- **(quick-settings)** lazy 2FA status store with React hook
+- **(ui)** add closeOnOverlayClick and closeOnEscape props to Modal
+- **(sleep)** live validation + max-hint for always-awake datetime picker
+- **(sleep)** always-awake custom datetime button (capped 7d)
+- **(sleep)** mount OsSleepSettingsBanner at top of Sleep page
+- **(sleep)** OsSleepSettingsBanner component
+- **(sleep)** i18n strings for os-settings banner + custom datetime
+- **(sleep)** frontend api client for os-settings
+- **(sleep)** GET /api/system/sleep/os-settings (admin)
+- **(sleep)** add OsSleepReportResponse + 7-day always-awake cap
+- **(sleep)** wire os_sleep_inspector with systemctl + cache + resilience
+- **(sleep)** add os_sleep_inspector classifier rules
+- **(sleep)** add os_sleep_inspector INI parser and platform guard
+- **(tui)** add SMART / disk-health screen
+- **(tui)** add Service Health & Restart screen
+- **(tui)** add Power Actions screen (sleep/wake/suspend/WoL)
+- **(tui)** acquire JWT on login to authenticate API-driven screens
+- **(sleep)** always-awake hint in SleepConfigPanel schedule block
+- **(sleep)** always-awake banner in SleepModePanel
+- **(sleep)** mount AlwaysAwakePanel on Sleep page
+- **(sleep)** AlwaysAwakePanel component
+- **(sleep)** API client types for always-awake
+- **(sleep)** audit log + API tests for always-awake toggle
+- **(sleep)** update_config handles always-awake clear/disable correctly
+- **(sleep)** expose always-awake in status + config responses
+- **(sleep)** manual sleep/suspend clears always-awake override
+- **(sleep)** always-awake guard in schedule loop + escalation + expiry cleanup
+- **(sleep)** always-awake guard in idle detection loop
+- **(sleep)** _clear_always_awake helper with audit logging
+- **(sleep)** _is_always_awake helper
+- **(sleep)** add always_awake columns to SleepConfig
+- **(sleep)** pydantic schemas for always-awake override
+- **(stats)** wire CLI main with --check and --write modes
+- **(stats)** add idempotent marker-based text splice
+- **(stats)** render markdown for project stats and inline test counts
+- **(stats)** add compute_stats() aggregator
+- **(stats)** add tracked_files() and path filters
+- **(stats)** add count_test_functions() via AST
+- **(stats)** add count_lines() with wc -l semantics
+- **(ci)** switch auto-merge to pre-release tags
+- **(ci)** add release-stable.yml for manual stable promotion
+- **(version)** add useVersionDisplay hook for badge consumers
+- **(updates)** show Pre-Release badge in UpdateOverviewTab
+- **(version)** add is_prerelease field and useVersionDisplay hook
+- **(updates)** set is_prerelease=False on dev backend
+- **(updates)** tag-based version detection with is_prerelease
+- **(schemas)** add is_prerelease to VersionInfo
+- **(scripts)** add insert_changelog_section.py
+- **(scripts)** add generate_changelog_section.py
+- **(scripts)** add --dry-run flag to bump_version.py
+
+### Changed
+
+- **(tapo)** align import service with live path per review
+- **(tapo)** clean up TapoHistoryFetcher per review
+- **(notifications)** drop stale include_dismissed from frontend API client
+- **(notifications)** drop include_dismissed param, update dismiss docs
+- **(notifications)** swap include_dismissed for trashed_only
+- **(pihole)** align UI with app design system + i18n
+- **(settings)** use TwoFactorSetupFlow in TwoFactorCard
+- **(sleep)** drop frozen=True on OsSleepReport (mutable containers)
+- **(tui)** drop unused monkeypatch fixture, add missing type hint
+- **(scripts)** clean up classify branch and enforce CLI mutex
+- **(scripts)** collapse redundant branch and relocate dry-run tests
+
+### Fixed
+
+- **(tapo)** decode entries as EnergyDataIntervalResult objects (not ints)
+- **(tapo)** use correct EnergyDataResult attribute names
+- **(notifications)** persist trash_retention_days on preferences update
+- **(quick-settings)** open 2FA modal from user menu
+- **(notifications)** model server_default + remove unused import + portable boolean default
+- **(impersonation)** make banner full-width and push layout down
+- **(quick-settings)** close dropdown on 2FA modal open + lock Modal X button
+- **(dashboard)** make expanded CPU/GPU card fully opaque
+- **(sleep)** suppress phantom lifecycle.suspend pushes during core uptime
+- **(sleep)** discard systemctl result when line count mismatches query
+- **(tui)** correct API paths + field names for sleep/SMART screens
+- **(tui)** escape Rich markup + unique row keys + non-admin smart guard test
+- **(tui)** guard None row-key + cover non-list services response
+- **(tui)** skip JWT call when backend offline + clear stale token on relogin
+- **(alembic)** re-parent always_awake migration onto gpu_caps head
+- **(tui)** remove duplicate action_logs that bypassed auth check
+- **(sleep)** correct preset i18n key casing in AlwaysAwakePanel
+- **(sleep)** always-awake panel — track active preset, fix expiry leak + rollback
+- **(gpu-power)** publish capabilities for followers + unblock body routes
+- **(stats)** normalize CRLF when comparing README in main
+- **(stats)** normalize CRLF in replace_between_markers for Windows
+- **(stats)** drop redundant exclude_init on db_migrations and exercise alembic scope
+- **(stats)** resolve relative paths against ROOT in count helpers
+
+### Documentation
+
+- **(plan)** notifications trash + retention implementation plan
+- **(spec)** notifications trash + retention design
+- **(plan)** notifications trash + retention implementation plan
+- **(spec)** notifications trash + retention design
+- **(plans)** user quick-settings dropdown implementation plan
+- **(specs)** user quick-settings dropdown
+- **(plans)** backend refactor backlog implementation plan (2026-05-08)
+- **(plans)** TODO for core-uptime polkit denial on prod (BaluNode)
+- **(plan)** sleep page OS-settings banner + always-awake custom datetime
+- **(spec)** sleep page OS-settings banner + always-awake custom datetime
+- **(plans)** add 2026-05-08 TUI critical fixes plan
+- **(tui)** mark action_logs fix + 3 critical screens as done in audit
+- **(rules)** retire development branch from git workflow rule
+- **(readme)** wire stats markers and remove inline counts from architecture tree
+- **(superpowers)** plan README stats automation
+- **(commands)** add release-stable slash command
+- **(commands)** simplify release PR slash command
+- **(superpowers)** add release flow pre-release default plan
+- **(superpowers)** add release flow pre-release default spec
+
+---
+
 ## [1.31.8] - 2026-05-06
 
 ### Added
