@@ -26,7 +26,9 @@ jobs:
         run: pip install -e ".[dev]"
 
       - name: Run tests
-        run: python -m pytest -q --timeout=120
+        # -n auto: parallelize across all available cores via pytest-xdist
+        # --no-cov: coverage disabled in CI for speed; run locally if needed
+        run: python -m pytest -q --timeout=120 -n auto --no-cov
         env:
           NAS_MODE: dev
 
