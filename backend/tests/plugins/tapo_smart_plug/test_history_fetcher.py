@@ -10,11 +10,11 @@ from app.plugins.smart_device.schemas import ImportHistoryInterval
 
 
 class _FakeEnergyDataResult:
-    """Stub mimicking tapo's EnergyDataResult.data attribute (list of Wh values per bucket)."""
-    def __init__(self, start_ts: int, interval_minutes: int, data: list[int]):
-        self.start_timestamp = start_ts
-        self.interval = interval_minutes
-        self.data = data
+    """Stub mimicking tapo's EnergyDataResult (mihai-dinculescu library)."""
+    def __init__(self, start_dt: datetime, interval_minutes: int, entries: list[int]):
+        self.start_date_time = start_dt
+        self.interval_length = interval_minutes
+        self.entries = entries
 
 
 class _FakeTapoP110:
@@ -43,9 +43,9 @@ async def test_fetch_hourly_single_chunk():
     # (any filtering is deferred to the import_service layer)
     fake_device = _FakeTapoP110([
         _FakeEnergyDataResult(
-            start_ts=int(datetime(2026, 4, 1, tzinfo=timezone.utc).timestamp()),
+            start_dt=datetime(2026, 4, 1, tzinfo=timezone.utc),
             interval_minutes=60,
-            data=[10, 20, 30] + [0] * 21,  # 3 buckets, rest zero
+            entries=[10, 20, 30] + [0] * 21,  # 3 buckets, rest zero
         )
     ])
     fake_client = _FakeApiClient(fake_device)
@@ -71,12 +71,12 @@ async def test_fetch_hourly_chunks_above_8_days():
     # Two empty chunks just to count the calls
     fake_device = _FakeTapoP110([
         _FakeEnergyDataResult(
-            start_ts=int(datetime(2026, 4, 1, tzinfo=timezone.utc).timestamp()),
-            interval_minutes=60, data=[],
+            start_dt=datetime(2026, 4, 1, tzinfo=timezone.utc),
+            interval_minutes=60, entries=[],
         ),
         _FakeEnergyDataResult(
-            start_ts=int(datetime(2026, 4, 9, tzinfo=timezone.utc).timestamp()),
-            interval_minutes=60, data=[],
+            start_dt=datetime(2026, 4, 9, tzinfo=timezone.utc),
+            interval_minutes=60, entries=[],
         ),
     ])
     fake_client = _FakeApiClient(fake_device)
@@ -96,9 +96,9 @@ async def test_fetch_monthly_single_year():
     """Monthly fetch starting Jan 1: 12 buckets, one per month."""
     fake_device = _FakeTapoP110([
         _FakeEnergyDataResult(
-            start_ts=int(datetime(2026, 1, 1, tzinfo=timezone.utc).timestamp()),
+            start_dt=datetime(2026, 1, 1, tzinfo=timezone.utc),
             interval_minutes=43200,  # 30 days in minutes -- tapo's monthly convention
-            data=[100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210],
+            entries=[100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200, 210],
         )
     ])
     fake_client = _FakeApiClient(fake_device)
