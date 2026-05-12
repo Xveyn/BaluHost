@@ -8,7 +8,7 @@ GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 NC='\033[0m'
 
-RUNNER_SERVICE="actions.runner.Xveyn-BaluHost.baluhost-nas.service"
+RUNNER_SERVICE="actions.runner.Xveyn-BaluHost.BaluNode.service"
 RUNNER_DIR="/opt/actions-runner"
 
 echo "BaluHost Runner Health Check"

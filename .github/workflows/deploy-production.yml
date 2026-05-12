@@ -23,7 +23,13 @@ jobs:
     needs: ci-check
     # Skip deploy for automated version bump commits and stable-release commits
     # (the code is already on production from the prior pre-release deploy).
-    if: "!startsWith(github.event.head_commit.message, 'chore: bump version') && !startsWith(github.event.head_commit.message, 'chore: release v')"
+    # Actor allowlist (Layer 3 in .claude/rules/ci-cd-security.md): only Xveyn
+    # may trigger a self-hosted production deploy. Auto-merged PRs land on
+    # main via secrets.DEPLOY_PAT (owned by Xveyn), so github.actor is Xveyn.
+    if: >-
+      !startsWith(github.event.head_commit.message, 'chore: bump version')
+      && !startsWith(github.event.head_commit.message, 'chore: release v')
+      && github.actor == 'Xveyn'
     runs-on: self-hosted
     environment: production
     timeout-minutes: 15

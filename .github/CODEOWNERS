@@ -1,0 +1,26 @@
+# CODEOWNERS — required reviewers for security-sensitive paths.
+#
+# Reference: `.claude/rules/ci-cd-security.md` (Layer 1).
+#
+# Format: <path> <@owner...>
+# Last matching pattern wins. Patterns follow gitignore globbing.
+#
+# Note: CODEOWNERS only blocks merges when the target branch has
+# "Require review from Code Owners" enabled. On `main`, branch protection
+# does NOT require approvals (would deadlock auto-merge.yml). CODEOWNERS
+# here still surfaces these paths as owner-flagged in the GitHub UI and
+# documents the trust boundary; the hard gate is the `production`
+# environment reviewer.
+
+# CI/CD workflow definitions
+/.github/workflows/  @Xveyn
+/.github/CODEOWNERS  @Xveyn
+
+# Deploy scripts, systemd units, sudoers templates, runner bootstrap
+/deploy/             @Xveyn
+/scripts/bootstrap-runner-ubuntu.sh  @Xveyn
+
+# Security & CI/CD rules — changes here weaken or strengthen the trust model
+/.claude/rules/ci-cd-security.md  @Xveyn
+/.claude/rules/security.md        @Xveyn
+/.claude/rules/security-agent.md  @Xveyn
