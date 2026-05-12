@@ -160,54 +160,40 @@ class TapoHistoryFetcher:
     def _buckets_from_result(result, interval: ImportHistoryInterval, bucket_minutes: int) -> List[EnergyBucket]:
         """Convert a tapo ``EnergyDataResult`` into EnergyBucket objects.
 
-        The mihai-dinculescu/tapo library exposes:
-        - ``start_date_time`` -- datetime of the first bucket (device local time, may be naive)
-        - ``entries`` (list[int]) -- energy in Wh per bucket
-        - ``interval_length`` (minutes per bucket) -- we use the *requested* bucket_minutes
-          because monthly buckets do not have a fixed minute count.
-        - ``local_time`` -- the device's current local datetime when the response was built
+        The mihai-dinculescu/tapo library exposes ``entries`` as a list of
+        ``EnergyDataIntervalResult`` structs, each with its own:
+        - ``start_date_time`` -- datetime (``DateTime<Utc>`` in Rust, tz-aware in Python)
+        - ``energy`` -- int, Wh consumed in that bucket
 
-        Naive datetimes are treated as UTC. This is a deliberate simplification: the
-        Tapo device reports in its own local timezone, but bucket alignment in BaluHost
-        is UTC-anchored. If the device's timezone diverges from UTC, the imported
-        timestamps will be shifted accordingly; admins can re-import after fixing
-        the device timezone if needed.
+        We use the per-entry timestamps directly instead of stepping by
+        ``interval_length`` from the parent ``start_date_time``. This is
+        correct by construction for all three intervals (HOURLY/DAILY/MONTHLY),
+        including the irregular monthly bucket lengths.
+
+        ``bucket_minutes`` is kept for the function signature but is no longer
+        used — the per-entry timestamps make it redundant.
         """
-        start_dt = getattr(result, "start_date_time", None)
         entries = getattr(result, "entries", None) or []
-        if start_dt is None:
-            return []
-
-        # Coerce to tz-aware UTC datetime
-        if isinstance(start_dt, str):
-            try:
-                start_dt = datetime.fromisoformat(start_dt)
-            except ValueError:
-                return []
-        if getattr(start_dt, "tzinfo", None) is None:
-            start_dt = start_dt.replace(tzinfo=timezone.utc)
-
-        # Precompute the month-anchored base for MONTHLY stepping.
-        monthly_base = None
-        if interval == ImportHistoryInterval.MONTHLY:
-            monthly_base = start_dt.replace(
-                day=1, hour=0, minute=0, second=0, microsecond=0
-            )
 
         out: List[EnergyBucket] = []
-        for idx, wh in enumerate(entries):
-            if interval == ImportHistoryInterval.MONTHLY:
-                assert monthly_base is not None  # set above when interval == MONTHLY
-                month = monthly_base.month + idx
-                year = monthly_base.year + (month - 1) // 12
-                month = ((month - 1) % 12) + 1
-                bucket_start = monthly_base.replace(year=year, month=month)
-            else:
-                bucket_start = start_dt + timedelta(minutes=idx * bucket_minutes)
+        for entry in entries:
+            bucket_start = getattr(entry, "start_date_time", None)
+            energy_wh = getattr(entry, "energy", None)
+            if bucket_start is None or energy_wh is None:
+                continue
+
+            # Coerce to tz-aware UTC datetime (defensive — the lib already returns UTC)
+            if isinstance(bucket_start, str):
+                try:
+                    bucket_start = datetime.fromisoformat(bucket_start)
+                except ValueError:
+                    continue
+            if getattr(bucket_start, "tzinfo", None) is None:
+                bucket_start = bucket_start.replace(tzinfo=timezone.utc)
 
             out.append(EnergyBucket(
                 bucket_start=bucket_start,
                 interval=interval,
-                energy_kwh=round(wh / 1000.0, 4),
+                energy_kwh=round(float(energy_wh) / 1000.0, 4),
             ))
         return out
