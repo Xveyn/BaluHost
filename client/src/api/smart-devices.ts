@@ -113,3 +113,42 @@ export const smartDevicesApi = {
       params: { capability, hours },
     }),
 };
+
+// --- History Import (admin-only Tapo backfill) ---
+
+export type ImportHistoryInterval = 'hourly' | 'daily' | 'monthly';
+export type ImportHistoryConflictStrategy = 'live_wins' | 'import_wins';
+
+export interface ImportHistoryRequest {
+  interval: ImportHistoryInterval;
+  start_date: string; // ISO date 'YYYY-MM-DD'
+  end_date: string;
+  conflict_strategy: ImportHistoryConflictStrategy;
+}
+
+export interface ImportHistoryResponse {
+  device_id: number;
+  interval: ImportHistoryInterval;
+  buckets_fetched: number;
+  samples_inserted: number;
+  samples_skipped_idempotent: number;
+  samples_skipped_live: number;
+  live_samples_deleted: number;
+  started_at: string;
+  completed_at: string;
+}
+
+/**
+ * Trigger a historical energy import on a smart-plug device. Admin-only.
+ * The backend rate-limits this to 5/hour.
+ */
+export async function importDeviceHistory(
+  deviceId: number,
+  body: ImportHistoryRequest,
+): Promise<ImportHistoryResponse> {
+  const res = await apiClient.post<ImportHistoryResponse>(
+    `/api/smart-devices/${deviceId}/import-history`,
+    body,
+  );
+  return res.data;
+}

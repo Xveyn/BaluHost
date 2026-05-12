@@ -174,5 +174,23 @@
     "pairButton": "Pair Desktop"
   },
   "loading": "Loading devices...",
-  "error": "Error"
+  "error": "Error",
+  "historyImport": {
+    "title": "Import historical energy data",
+    "description": "Manually pull stored energy data from the Tapo device. Useful once after pairing so you don't depend on the Tapo app for older readings.",
+    "intervalLabel": "Granularity",
+    "intervalHourly": "Hourly (max 8 days back per request)",
+    "intervalDaily": "Daily (start must be a quarter start: Jan 1 / Apr 1 / Jul 1 / Oct 1)",
+    "intervalMonthly": "Monthly (start must be January 1)",
+    "startLabel": "Start date",
+    "endLabel": "End date",
+    "conflictLabel": "If existing live data overlaps",
+    "conflictLiveWins": "Keep live data (skip overlapping buckets)",
+    "conflictImportWins": "Overwrite with imported data (delete live samples in range)",
+    "submit": "Import",
+    "cancel": "Cancel",
+    "running": "Importing…",
+    "errorTitle": "Import failed",
+    "resultSummary": "{{inserted}} samples inserted. {{skippedIdempotent}} already imported, {{skippedLive}} skipped due to live data, {{deletedLive}} live samples deleted."
+  }
 }

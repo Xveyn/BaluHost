@@ -1,10 +1,11 @@
 """Pydantic schemas for the Smart Device plugin API."""
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
+from enum import Enum
 from typing import Any, Dict, List, Optional
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 # ---------------------------------------------------------------------------
@@ -127,3 +128,71 @@ class SmartDeviceHistoryResponse(BaseModel):
     samples: List[Dict[str, Any]]
     period_start: datetime
     period_end: datetime
+
+
+# ---------------------------------------------------------------------------
+# History Import (Task 3 — Tapo energy backfill)
+# ---------------------------------------------------------------------------
+
+
+class ImportHistoryInterval(str, Enum):
+    """Bucket granularity for history import."""
+
+    HOURLY = "hourly"
+    DAILY = "daily"
+    MONTHLY = "monthly"
+
+
+class ImportHistoryConflictStrategy(str, Enum):
+    """How to resolve overlap between imported buckets and existing live samples."""
+
+    LIVE_WINS = "live_wins"      # Skip imported bucket if any live sample exists in its time range.
+    IMPORT_WINS = "import_wins"  # Delete live samples in the bucket's range, then write import.
+
+
+class ImportHistoryRequest(BaseModel):
+    """Admin-triggered request to import historical energy data from the device."""
+
+    interval: ImportHistoryInterval
+    start_date: date
+    end_date: date
+    conflict_strategy: ImportHistoryConflictStrategy
+
+    @field_validator("end_date")
+    @classmethod
+    def _end_after_start(cls, v: date, info) -> date:
+        start = info.data.get("start_date")
+        if start is not None and v < start:
+            raise ValueError("end_date must be >= start_date")
+        return v
+
+    @model_validator(mode="after")
+    def _check_interval_constraints(self) -> "ImportHistoryRequest":
+        if self.interval == ImportHistoryInterval.DAILY:
+            # Tapo requires start_date == first day of a quarter (Jan/Apr/Jul/Oct, day=1)
+            if self.start_date.day != 1 or self.start_date.month not in (1, 4, 7, 10):
+                raise ValueError(
+                    "Daily interval requires start_date to be the first day of a quarter "
+                    "(Jan 1, Apr 1, Jul 1, or Oct 1)"
+                )
+        elif self.interval == ImportHistoryInterval.MONTHLY:
+            # Tapo requires start_date == Jan 1 of some year
+            if self.start_date.day != 1 or self.start_date.month != 1:
+                raise ValueError(
+                    "Monthly interval requires start_date to be January 1 of some year"
+                )
+        return self
+
+
+class ImportHistoryResponse(BaseModel):
+    """Result of a history import operation."""
+
+    device_id: int
+    interval: ImportHistoryInterval
+    buckets_fetched: int                  # how many buckets the device returned
+    samples_inserted: int                 # how many SmartDeviceSamples were created
+    samples_skipped_idempotent: int       # already imported (Task 2B)
+    samples_skipped_live: int             # blocked by LIVE_WINS strategy
+    live_samples_deleted: int             # cleared by IMPORT_WINS strategy
+    started_at: datetime
+    completed_at: datetime

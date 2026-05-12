@@ -137,6 +137,9 @@ RATE_LIMITS = {
 
     # GPU power management - moderate limits (status, config, demands, history)
     "gpu_power": "60/minute",
+
+    # Smart device admin operations
+    "smart_device_import_history": "5/hour",  # admin-only Tapo backfill
 }
 
 

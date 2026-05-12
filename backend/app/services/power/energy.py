@@ -308,6 +308,10 @@ def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
     """
     Delete power monitor samples older than specified days.
 
+    Samples flagged with ``imported_from`` in ``data_json`` are preserved
+    regardless of age — they represent manually imported history that
+    cannot be re-fetched easily.
+
     Args:
         db: Database session
         days_to_keep: Number of days to retain
@@ -317,14 +321,17 @@ def cleanup_old_samples(db: Session, days_to_keep: int = 30) -> int:
     """
     cutoff_date = datetime.now(timezone.utc) - timedelta(days=days_to_keep)
 
+    # PostgreSQL and SQLite both support JSON-text LIKE on the data_json column.
+    # We exclude rows that contain ``"imported_from"`` anywhere in their JSON.
     deleted = db.query(SmartDeviceSample).filter(
         SmartDeviceSample.capability == _POWER_CAPABILITY,
         SmartDeviceSample.timestamp < cutoff_date,
-    ).delete()
+        ~SmartDeviceSample.data_json.contains('"imported_from"'),
+    ).delete(synchronize_session=False)
 
     db.commit()
 
-    logger.info(f"Cleaned up {deleted} power monitor samples older than {days_to_keep} days")
+    logger.info(f"Cleaned up {deleted} power monitor samples older than {days_to_keep} days (imported rows preserved)")
     return deleted
 
 

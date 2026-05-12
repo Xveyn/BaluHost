@@ -174,5 +174,23 @@
     "pairButton": "Desktop koppeln"
   },
   "loading": "Geräte werden geladen...",
-  "error": "Fehler"
+  "error": "Fehler",
+  "historyImport": {
+    "title": "Energieverlauf importieren",
+    "description": "Holt gespeicherte Verbrauchsdaten direkt aus der Tapo-Steckdose. Sinnvoll einmalig nach dem Einrichten, damit du nicht weiter auf die Tapo App angewiesen bist.",
+    "intervalLabel": "Granularität",
+    "intervalHourly": "Stündlich (max. 8 Tage pro Anfrage)",
+    "intervalDaily": "Täglich (Start muss Quartalsanfang sein: 1. Jan / 1. Apr / 1. Jul / 1. Okt)",
+    "intervalMonthly": "Monatlich (Start muss 1. Januar sein)",
+    "startLabel": "Startdatum",
+    "endLabel": "Enddatum",
+    "conflictLabel": "Bei Überschneidung mit Live-Daten",
+    "conflictLiveWins": "Live-Daten behalten (überlappende Buckets überspringen)",
+    "conflictImportWins": "Mit Import überschreiben (Live-Samples im Bereich löschen)",
+    "submit": "Importieren",
+    "cancel": "Abbrechen",
+    "running": "Importiere…",
+    "errorTitle": "Import fehlgeschlagen",
+    "resultSummary": "{{inserted}} Samples geschrieben. {{skippedIdempotent}} bereits importiert, {{skippedLive}} wegen Live-Daten übersprungen, {{deletedLive}} Live-Samples gelöscht."
+  }
 }
