@@ -543,13 +543,10 @@ class SleepManagerService:
                     await self.exit_soft_sleep("core_uptime_started")
 
                 # Logind inhibitor management — converged to the desired state
-                # every tick so a crashed inhibitor subprocess gets re-acquired
-                # and a master-toggle-off promptly releases.
-                should_hold = master and in_core
-                if should_hold and not self._core_uptime_inhibitor.is_held():
-                    self._core_uptime_inhibitor.acquire("core_uptime_active")
-                elif not should_hold and self._core_uptime_inhibitor.is_held():
-                    self._core_uptime_inhibitor.release()
+                # every tick so a crashed inhibitor subprocess gets re-acquired,
+                # a master-toggle-off promptly releases, and Always-Awake also
+                # blocks third-party suspends.
+                self._reconcile_sleep_inhibitor(config, in_core=in_core)
 
                 # Track edge state regardless. When master is off we force False so
                 # that re-enabling the toggle while inside an active window registers

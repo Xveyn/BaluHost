@@ -478,3 +478,35 @@ def test_reconcile_inhibitor_reason_when_both_active():
     svc._reconcile_sleep_inhibitor(cfg, in_core=True)
 
     fake_inhibitor.acquire.assert_called_once_with("core_uptime_and_always_awake_active")
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_calls_reconcile_inhibitor_each_tick():
+    """Every schedule-loop tick must call _reconcile_sleep_inhibitor with the current (config, in_core)."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    reconcile_calls = []
+
+    def fake_reconcile(c, in_core):
+        reconcile_calls.append((c, in_core))
+
+    svc._reconcile_sleep_inhibitor = fake_reconcile
+    svc._is_running = True
+    svc._current_state = SleepState.AWAKE
+
+    call_count = [0]
+
+    async def fake_sleep(*_a, **_k):
+        call_count[0] += 1
+        if call_count[0] >= 2:
+            svc._is_running = False
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=fake_sleep):
+        await svc._schedule_check_loop()
+
+    assert len(reconcile_calls) == 1
+    assert reconcile_calls[0][0] is cfg
+    assert reconcile_calls[0][1] is False
