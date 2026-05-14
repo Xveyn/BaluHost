@@ -666,10 +666,21 @@ class SleepManagerService:
         4. Spin down data disks
         5. Log state change
         """
-        # Clear always-awake override if set: manual sleep ends the override
+        # Clear always-awake override if set: manual sleep ends the override.
+        # Then reconcile the inhibitor synchronously so a manual sleep is not
+        # blocked by our own logind lock during the gap before the next loop tick.
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
+            config_check = self._load_config()
+            try:
+                master, windows = self._load_core_uptime()
+                in_core = False
+                if master:
+                    in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                self._reconcile_sleep_inhibitor(config_check, in_core=in_core)
+            except Exception as exc:
+                logger.warning("Post-clear inhibitor reconcile failed (soft sleep): %s", exc)
 
         if self._current_state != SleepState.AWAKE:
             logger.warning("Cannot enter soft sleep from state %s", self._current_state)
@@ -941,10 +952,21 @@ class SleepManagerService:
         If awake, enters soft sleep first.
         Then suspends the system.
         """
-        # Clear always-awake override if set: manual suspend ends the override
+        # Clear always-awake override if set: manual suspend ends the override.
+        # Then reconcile the inhibitor synchronously so a manual suspend reaches
+        # the backend before the next loop tick (logind would otherwise refuse).
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
+            config_check = self._load_config()
+            try:
+                master, windows = self._load_core_uptime()
+                in_core_after = False
+                if master:
+                    in_core_after, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                self._reconcile_sleep_inhibitor(config_check, in_core=in_core_after)
+            except Exception as exc:
+                logger.warning("Post-clear inhibitor reconcile failed (true suspend): %s", exc)
 
         prev_state = self._current_state
 

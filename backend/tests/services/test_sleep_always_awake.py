@@ -529,3 +529,42 @@ async def test_start_acquires_inhibitor_when_always_awake_active():
         await svc.start(monitoring=True)
 
     fake_inhibitor.acquire.assert_called_once_with("always_awake_active")
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_releases_inhibitor_before_backend_call():
+    """Manual suspend while Always-Awake is on must release the inhibitor BEFORE backend.suspend_system runs,
+    so logind doesn't refuse the suspend."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    # Track call order: inhibitor release vs backend suspend
+    call_order: list[str] = []
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    fake_inhibitor.release.side_effect = lambda: call_order.append("release")
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    async def fake_suspend(*a, **k):
+        call_order.append("suspend")
+        return True
+
+    svc._current_state = SleepState.SOFT_SLEEP
+
+    # _is_always_awake: first call (outer guard) → True so the if-block runs and
+    # _clear_always_awake is called; second call (inside _reconcile_sleep_inhibitor
+    # after the clear) → False so reconcile decides to release the inhibitor.
+    aa_responses = iter([True, False])
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_clear_always_awake", new=MagicMock()), \
+         patch.object(svc, "_log_state_change", new=MagicMock()), \
+         patch.object(svc, "_is_always_awake", side_effect=lambda _cfg: next(aa_responses)), \
+         patch.object(svc._backend, "suspend_system", new=AsyncMock(side_effect=fake_suspend)):
+        await svc.enter_true_suspend("test", SleepTrigger.MANUAL)
+
+    assert call_order == ["release", "suspend"], (
+        f"Expected release before suspend, got {call_order}"
+    )
