@@ -149,9 +149,11 @@ class SleepManagerService:
         self._error_count: int = 0
         self._last_error: Optional[str] = None
         self._last_error_at: Optional[datetime] = None
-        # Logind block-sleep inhibitor — held while inside an active core-uptime
-        # window so third-party suspend (mate-screensaver, gnome-power-manager,
-        # logind idle, manual `systemctl suspend`) is refused by logind.
+        # Logind block-sleep inhibitor — held while EITHER an active core-uptime
+        # window OR an Always-Awake override is in effect. Both reasons block
+        # third-party suspend (mate-screensaver, gnome-power-manager, logind
+        # idle, manual `systemctl suspend`) at the logind layer. Reconciled
+        # every schedule-loop tick by `_reconcile_sleep_inhibitor`.
         self._core_uptime_inhibitor = CoreUptimeInhibitor()
         self._baluhost_suspend_in_progress: bool = False
         self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
