@@ -320,6 +320,35 @@ class SleepManagerService:
             logger.warning("Failed to load core uptime windows: %s", e)
             return False, []
 
+    def _reconcile_sleep_inhibitor(self, config, in_core: bool) -> None:
+        """Converge the logind block-sleep inhibitor to the desired state.
+
+        The inhibitor is held while EITHER an active core-uptime window OR an
+        active Always-Awake override is in effect. Both conditions block
+        third-party suspend (logind idle, desktop daemons, manual systemctl
+        suspend) at the logind layer. Releasing/acquiring is idempotent.
+
+        Args:
+            config: SleepConfig row (or None — treated as nothing active).
+            in_core: Whether we are currently inside a core-uptime window.
+                     Caller passes the already-computed value to avoid
+                     re-querying the DB on every tick.
+        """
+        core_active = bool(in_core)
+        aa_active = self._is_always_awake(config)
+        should_hold = core_active or aa_active
+
+        if should_hold and not self._core_uptime_inhibitor.is_held():
+            if core_active and aa_active:
+                reason = "core_uptime_and_always_awake_active"
+            elif aa_active:
+                reason = "always_awake_active"
+            else:
+                reason = "core_uptime_active"
+            self._core_uptime_inhibitor.acquire(reason)
+        elif not should_hold and self._core_uptime_inhibitor.is_held():
+            self._core_uptime_inhibitor.release()
+
     def _next_core_start_for_guard(self) -> Optional[datetime]:
         """Provider used by CoreUptimeRtcGuard. Returns None on any failure
         so the guard cleanly skips arming the RTC."""

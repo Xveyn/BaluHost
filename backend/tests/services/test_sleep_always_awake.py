@@ -417,3 +417,18 @@ def test_update_config_disabling_normalizes_until():
 
     assert fake_row.always_awake_enabled is False
     assert fake_row.always_awake_until is None
+
+
+def test_reconcile_inhibitor_acquires_for_always_awake_only():
+    """When only Always-Awake is active (no core uptime), the sleep inhibitor must be acquired."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.acquire.assert_called_once_with("always_awake_active")
+    fake_inhibitor.release.assert_not_called()
