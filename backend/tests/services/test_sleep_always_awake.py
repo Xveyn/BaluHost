@@ -432,3 +432,49 @@ def test_reconcile_inhibitor_acquires_for_always_awake_only():
 
     fake_inhibitor.acquire.assert_called_once_with("always_awake_active")
     fake_inhibitor.release.assert_not_called()
+
+
+def test_reconcile_inhibitor_releases_when_nothing_active():
+    """When neither core-uptime nor always-awake is active, an held inhibitor must be released."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=False, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.release.assert_called_once_with()
+    fake_inhibitor.acquire.assert_not_called()
+
+
+def test_reconcile_inhibitor_keeps_held_when_one_of_two_remains_active():
+    """Releasing only one of (core_uptime, always_awake) while the other stays active must NOT release."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    # core uptime has ended (in_core=False) but always-awake is still on
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.release.assert_not_called()
+    # already held; reconcile should not re-acquire either
+    fake_inhibitor.acquire.assert_not_called()
+
+
+def test_reconcile_inhibitor_reason_when_both_active():
+    """If both core-uptime and always-awake are active, the acquire reason must reflect both."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None, core_uptime_enabled=True)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=True)
+
+    fake_inhibitor.acquire.assert_called_once_with("core_uptime_and_always_awake_active")
