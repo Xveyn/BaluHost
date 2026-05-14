@@ -417,3 +417,154 @@ def test_update_config_disabling_normalizes_until():
 
     assert fake_row.always_awake_enabled is False
     assert fake_row.always_awake_until is None
+
+
+def test_reconcile_inhibitor_acquires_for_always_awake_only():
+    """When only Always-Awake is active (no core uptime), the sleep inhibitor must be acquired."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.acquire.assert_called_once_with("always_awake_active")
+    fake_inhibitor.release.assert_not_called()
+
+
+def test_reconcile_inhibitor_releases_when_nothing_active():
+    """When neither core-uptime nor always-awake is active, an held inhibitor must be released."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=False, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.release.assert_called_once_with()
+    fake_inhibitor.acquire.assert_not_called()
+
+
+def test_reconcile_inhibitor_keeps_held_when_one_of_two_remains_active():
+    """Releasing only one of (core_uptime, always_awake) while the other stays active must NOT release."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    # core uptime has ended (in_core=False) but always-awake is still on
+    svc._reconcile_sleep_inhibitor(cfg, in_core=False)
+
+    fake_inhibitor.release.assert_not_called()
+    # already held; reconcile should not re-acquire either
+    fake_inhibitor.acquire.assert_not_called()
+
+
+def test_reconcile_inhibitor_reason_when_both_active():
+    """If both core-uptime and always-awake are active, the acquire reason must reflect both."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None, core_uptime_enabled=True)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    svc._reconcile_sleep_inhibitor(cfg, in_core=True)
+
+    fake_inhibitor.acquire.assert_called_once_with("core_uptime_and_always_awake_active")
+
+
+@pytest.mark.asyncio
+async def test_schedule_loop_calls_reconcile_inhibitor_each_tick():
+    """Every schedule-loop tick must call _reconcile_sleep_inhibitor with the current (config, in_core)."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    reconcile_calls = []
+
+    def fake_reconcile(c, in_core):
+        reconcile_calls.append((c, in_core))
+
+    svc._reconcile_sleep_inhibitor = fake_reconcile
+    svc._is_running = True
+    svc._current_state = SleepState.AWAKE
+
+    call_count = [0]
+
+    async def fake_sleep(*_a, **_k):
+        call_count[0] += 1
+        if call_count[0] >= 2:
+            svc._is_running = False
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch("app.services.power.sleep.asyncio.sleep", side_effect=fake_sleep):
+        await svc._schedule_check_loop()
+
+    assert len(reconcile_calls) == 1
+    assert reconcile_calls[0][0] is cfg
+    assert reconcile_calls[0][1] is False
+
+
+@pytest.mark.asyncio
+async def test_start_acquires_inhibitor_when_always_awake_active():
+    """If the service starts while Always-Awake is on, the inhibitor must be acquired at startup."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc._core_uptime_rtc_guard, "start", new=AsyncMock()), \
+         patch("app.services.power.sleep.asyncio.create_task", side_effect=lambda coro: coro.close() or None):
+        await svc.start(monitoring=True)
+
+    fake_inhibitor.acquire.assert_called_once_with("always_awake_active")
+
+
+@pytest.mark.asyncio
+async def test_enter_true_suspend_releases_inhibitor_before_backend_call():
+    """Manual suspend while Always-Awake is on must release the inhibitor BEFORE backend.suspend_system runs,
+    so logind doesn't refuse the suspend."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    # Track call order: inhibitor release vs backend suspend
+    call_order: list[str] = []
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = True
+    fake_inhibitor.release.side_effect = lambda: call_order.append("release")
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    async def fake_suspend(*a, **k):
+        call_order.append("suspend")
+        return True
+
+    svc._current_state = SleepState.SOFT_SLEEP
+
+    # _is_always_awake: first call (outer guard) → True so the if-block runs and
+    # _clear_always_awake is called; second call (inside _reconcile_sleep_inhibitor
+    # after the clear) → False so reconcile decides to release the inhibitor.
+    aa_responses = iter([True, False])
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc, "_clear_always_awake", new=MagicMock()), \
+         patch.object(svc, "_log_state_change", new=MagicMock()), \
+         patch.object(svc, "_is_always_awake", side_effect=lambda _cfg: next(aa_responses)), \
+         patch.object(svc._backend, "suspend_system", new=AsyncMock(side_effect=fake_suspend)):
+        await svc.enter_true_suspend("test", SleepTrigger.MANUAL)
+
+    assert call_order == ["release", "suspend"], (
+        f"Expected release before suspend, got {call_order}"
+    )

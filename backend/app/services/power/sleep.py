@@ -149,9 +149,11 @@ class SleepManagerService:
         self._error_count: int = 0
         self._last_error: Optional[str] = None
         self._last_error_at: Optional[datetime] = None
-        # Logind block-sleep inhibitor — held while inside an active core-uptime
-        # window so third-party suspend (mate-screensaver, gnome-power-manager,
-        # logind idle, manual `systemctl suspend`) is refused by logind.
+        # Logind block-sleep inhibitor — held while EITHER an active core-uptime
+        # window OR an Always-Awake override is in effect. Both reasons block
+        # third-party suspend (mate-screensaver, gnome-power-manager, logind
+        # idle, manual `systemctl suspend`) at the logind layer. Reconciled
+        # every schedule-loop tick by `_reconcile_sleep_inhibitor`.
         self._core_uptime_inhibitor = CoreUptimeInhibitor()
         self._baluhost_suspend_in_progress: bool = False
         self._core_uptime_rtc_guard = CoreUptimeRtcGuard(
@@ -196,18 +198,20 @@ class SleepManagerService:
             # Start schedule check loop
             self._schedule_task = asyncio.create_task(self._schedule_check_loop())
 
-            # If service starts INSIDE a core-uptime window, immediately acquire
-            # the logind inhibitor — the schedule loop only fires in 60s and an
-            # idle desktop daemon could suspend us before the first tick.
+            # If service starts INSIDE a core-uptime window OR with Always-Awake
+            # active, immediately reconcile the logind inhibitor — the schedule
+            # loop only fires in 60s and an idle desktop daemon could suspend us
+            # before the first tick.
             try:
                 master, windows = self._load_core_uptime()
+                in_core = False
                 if master:
                     in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
-                    if in_core:
-                        self._core_uptime_inhibitor.acquire("startup_in_core_uptime")
-                        self._was_in_core_uptime = True
+                self._reconcile_sleep_inhibitor(config, in_core=in_core)
+                if master and in_core:
+                    self._was_in_core_uptime = True
             except Exception as exc:
-                logger.warning("Initial core-uptime inhibitor check failed: %s", exc)
+                logger.warning("Initial sleep inhibitor reconcile failed: %s", exc)
 
         logger.info("Sleep manager started (monitoring=%s, auto_idle=%s, schedule=%s)",
                      monitoring,
@@ -319,6 +323,35 @@ class SleepManagerService:
         except Exception as e:
             logger.warning("Failed to load core uptime windows: %s", e)
             return False, []
+
+    def _reconcile_sleep_inhibitor(self, config, in_core: bool) -> None:
+        """Converge the logind block-sleep inhibitor to the desired state.
+
+        The inhibitor is held while EITHER an active core-uptime window OR an
+        active Always-Awake override is in effect. Both conditions block
+        third-party suspend (logind idle, desktop daemons, manual systemctl
+        suspend) at the logind layer. Releasing/acquiring is idempotent.
+
+        Args:
+            config: SleepConfig row (or None — treated as nothing active).
+            in_core: Whether we are currently inside a core-uptime window.
+                     Caller passes the already-computed value to avoid
+                     re-querying the DB on every tick.
+        """
+        core_active = bool(in_core)
+        aa_active = self._is_always_awake(config)
+        should_hold = core_active or aa_active
+
+        if should_hold and not self._core_uptime_inhibitor.is_held():
+            if core_active and aa_active:
+                reason = "core_uptime_and_always_awake_active"
+            elif aa_active:
+                reason = "always_awake_active"
+            else:
+                reason = "core_uptime_active"
+            self._core_uptime_inhibitor.acquire(reason)
+        elif not should_hold and self._core_uptime_inhibitor.is_held():
+            self._core_uptime_inhibitor.release()
 
     def _next_core_start_for_guard(self) -> Optional[datetime]:
         """Provider used by CoreUptimeRtcGuard. Returns None on any failure
@@ -514,13 +547,10 @@ class SleepManagerService:
                     await self.exit_soft_sleep("core_uptime_started")
 
                 # Logind inhibitor management — converged to the desired state
-                # every tick so a crashed inhibitor subprocess gets re-acquired
-                # and a master-toggle-off promptly releases.
-                should_hold = master and in_core
-                if should_hold and not self._core_uptime_inhibitor.is_held():
-                    self._core_uptime_inhibitor.acquire("core_uptime_active")
-                elif not should_hold and self._core_uptime_inhibitor.is_held():
-                    self._core_uptime_inhibitor.release()
+                # every tick so a crashed inhibitor subprocess gets re-acquired,
+                # a master-toggle-off promptly releases, and Always-Awake also
+                # blocks third-party suspends.
+                self._reconcile_sleep_inhibitor(config, in_core=in_core)
 
                 # Track edge state regardless. When master is off we force False so
                 # that re-enabling the toggle while inside an active window registers
@@ -638,10 +668,21 @@ class SleepManagerService:
         4. Spin down data disks
         5. Log state change
         """
-        # Clear always-awake override if set: manual sleep ends the override
+        # Clear always-awake override if set: manual sleep ends the override.
+        # Then reconcile the inhibitor synchronously so a manual sleep is not
+        # blocked by our own logind lock during the gap before the next loop tick.
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
+            config_check = self._load_config()
+            try:
+                master, windows = self._load_core_uptime()
+                in_core = False
+                if master:
+                    in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                self._reconcile_sleep_inhibitor(config_check, in_core=in_core)
+            except Exception as exc:
+                logger.warning("Post-clear inhibitor reconcile failed (soft sleep): %s", exc)
 
         if self._current_state != SleepState.AWAKE:
             logger.warning("Cannot enter soft sleep from state %s", self._current_state)
@@ -913,10 +954,21 @@ class SleepManagerService:
         If awake, enters soft sleep first.
         Then suspends the system.
         """
-        # Clear always-awake override if set: manual suspend ends the override
+        # Clear always-awake override if set: manual suspend ends the override.
+        # Then reconcile the inhibitor synchronously so a manual suspend reaches
+        # the backend before the next loop tick (logind would otherwise refuse).
         config_check = self._load_config()
         if config_check and self._is_always_awake(config_check):
             self._clear_always_awake("always_awake_cleared_by_sleep")
+            config_check = self._load_config()
+            try:
+                master, windows = self._load_core_uptime()
+                in_core_after = False
+                if master:
+                    in_core_after, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
+                self._reconcile_sleep_inhibitor(config_check, in_core=in_core_after)
+            except Exception as exc:
+                logger.warning("Post-clear inhibitor reconcile failed (true suspend): %s", exc)
 
         prev_state = self._current_state
 
