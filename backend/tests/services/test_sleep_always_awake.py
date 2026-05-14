@@ -510,3 +510,22 @@ async def test_schedule_loop_calls_reconcile_inhibitor_each_tick():
     assert len(reconcile_calls) == 1
     assert reconcile_calls[0][0] is cfg
     assert reconcile_calls[0][1] is False
+
+
+@pytest.mark.asyncio
+async def test_start_acquires_inhibitor_when_always_awake_active():
+    """If the service starts while Always-Awake is on, the inhibitor must be acquired at startup."""
+    svc = _build_service()
+    cfg = _config(always_awake_enabled=True, always_awake_until=None)
+
+    fake_inhibitor = MagicMock()
+    fake_inhibitor.is_held.return_value = False
+    svc._core_uptime_inhibitor = fake_inhibitor
+
+    with patch.object(svc, "_load_config", return_value=cfg), \
+         patch.object(svc, "_load_core_uptime", return_value=(False, [])), \
+         patch.object(svc._core_uptime_rtc_guard, "start", new=AsyncMock()), \
+         patch("app.services.power.sleep.asyncio.create_task", side_effect=lambda coro: coro.close() or None):
+        await svc.start(monitoring=True)
+
+    fake_inhibitor.acquire.assert_called_once_with("always_awake_active")

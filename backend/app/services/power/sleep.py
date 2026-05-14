@@ -196,18 +196,20 @@ class SleepManagerService:
             # Start schedule check loop
             self._schedule_task = asyncio.create_task(self._schedule_check_loop())
 
-            # If service starts INSIDE a core-uptime window, immediately acquire
-            # the logind inhibitor — the schedule loop only fires in 60s and an
-            # idle desktop daemon could suspend us before the first tick.
+            # If service starts INSIDE a core-uptime window OR with Always-Awake
+            # active, immediately reconcile the logind inhibitor — the schedule
+            # loop only fires in 60s and an idle desktop daemon could suspend us
+            # before the first tick.
             try:
                 master, windows = self._load_core_uptime()
+                in_core = False
                 if master:
                     in_core, _ = core_uptime_helpers.is_in_core_uptime(datetime.now(), windows)
-                    if in_core:
-                        self._core_uptime_inhibitor.acquire("startup_in_core_uptime")
-                        self._was_in_core_uptime = True
+                self._reconcile_sleep_inhibitor(config, in_core=in_core)
+                if master and in_core:
+                    self._was_in_core_uptime = True
             except Exception as exc:
-                logger.warning("Initial core-uptime inhibitor check failed: %s", exc)
+                logger.warning("Initial sleep inhibitor reconcile failed: %s", exc)
 
         logger.info("Sleep manager started (monitoring=%s, auto_idle=%s, schedule=%s)",
                      monitoring,
