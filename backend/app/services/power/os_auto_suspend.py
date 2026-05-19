@@ -119,4 +119,25 @@ class LogindAdapter:
         )
 
     def write(self, value: AutoSuspendValue) -> None:
-        raise NotImplementedError  # implemented in Task 4
+        timeout_seconds = max(60, value.timeout_minutes * 60)
+        action = value.action if value.enabled else "ignore"
+        cmd = [
+            "sudo", "-n", _HELPER_PATH,
+            "--timeout", str(timeout_seconds),
+            "--action", action,
+        ]
+        try:
+            subprocess.run(
+                cmd, check=True, capture_output=True, text=True,
+                timeout=_SUDO_TIMEOUT_SECONDS,
+            )
+        except subprocess.CalledProcessError as exc:
+            raise RuntimeError(
+                f"logind helper failed (rc={exc.returncode}): {exc.stderr}"
+            ) from exc
+        except FileNotFoundError as exc:
+            raise RuntimeError(
+                "logind helper not installed — rerun deploy/install/install.sh --module 13-power-helpers"
+            ) from exc
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("logind helper timeout") from exc

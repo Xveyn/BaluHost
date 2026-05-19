@@ -1,4 +1,6 @@
 """Tests for os_auto_suspend adapters and shared types."""
+import subprocess
+
 from app.services.power import os_auto_suspend as oas
 
 
@@ -113,3 +115,48 @@ class TestLogindAdapterRead:
         v = oas.LogindAdapter().read()
         assert v.action == "suspend"
         assert v.timeout_minutes == 10
+
+
+class TestLogindAdapterWrite:
+    def test_write_invokes_sudo_helper_with_correct_args(self, monkeypatch):
+        captured: dict = {}
+
+        def fake_run(args, **kwargs):
+            captured["args"] = args
+            captured["kwargs"] = kwargs
+            from types import SimpleNamespace
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        oas.LogindAdapter().write(
+            oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
+        )
+        assert captured["args"] == [
+            "sudo", "-n", oas._HELPER_PATH,
+            "--timeout", "900", "--action", "suspend",
+        ]
+        assert captured["kwargs"]["check"] is True
+        assert captured["kwargs"]["timeout"] == oas._SUDO_TIMEOUT_SECONDS
+
+    def test_write_disabled_passes_ignore(self, monkeypatch):
+        captured: dict = {}
+        def fake_run(args, **kwargs):
+            captured["args"] = args
+            from types import SimpleNamespace
+            return SimpleNamespace(returncode=0)
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        oas.LogindAdapter().write(
+            oas.AutoSuspendValue(enabled=False, timeout_minutes=15, action="ignore")
+        )
+        assert "--action" in captured["args"]
+        assert captured["args"][captured["args"].index("--action") + 1] == "ignore"
+
+    def test_write_raises_on_helper_failure(self, monkeypatch):
+        def fake_run(args, **kwargs):
+            raise subprocess.CalledProcessError(2, args, stderr="bad args")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        import pytest
+        with pytest.raises(RuntimeError, match="logind helper failed"):
+            oas.LogindAdapter().write(
+                oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
+            )
