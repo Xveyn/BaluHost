@@ -32,7 +32,7 @@ Owned paths:
 | `deploy-pi.yml` | `ubuntu-latest` | `workflow_dispatch` |
 | `playwright-e2e.yml` | `ubuntu-latest` | `pull_request`, `push: main` |
 | `release-stable.yml` | `ubuntu-latest` | `workflow_dispatch` |
-| `deploy-production.yml` | **`self-hosted`** | `push: main`, `workflow_dispatch` |
+| `deploy-production.yml` | **`self-hosted, prod`** | `push: main`, `workflow_dispatch` |
 | `raid-mdadm-selfhosted.yml` | **`self-hosted, linux, mdadm`** | `workflow_dispatch` only |
 
 PR-triggered workflows MUST NOT use the production-privileged `BaluNode` runner. The `ci-sandbox` runner is the **only** self-hosted runner permitted to execute PR-triggered code, and only via the two-layer isolation described below.
@@ -100,7 +100,7 @@ These live as GitHub server-state and cannot be read from the repo. Verify perio
 | Branch protection on `main` | `gh api repos/Xveyn/BaluHost/branches/main/protection` | Required status checks: `backend-tests`, `frontend-build` (jobs from `ci-check.yml`); `allow_force_pushes: false`; `allow_deletions: false`; `enforce_admins: false` (admin bypass — see Known Gaps) |
 | Production environment | `gh api repos/Xveyn/BaluHost/environments/production` | `protection_rules` includes `required_reviewers` (Xveyn), `deployment_branch_policy.protected_branches: true`, `can_admins_bypass: false` |
 | `ci-tests` environment | `gh api repos/Xveyn/BaluHost/environments/ci-tests` | `protection_rules` includes `required_reviewers` (Xveyn), `can_admins_bypass: false` |
-| Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64`) and `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`) |
+| Self-hosted runners | `gh api repos/Xveyn/BaluHost/actions/runners` | `BaluNode` online (`self-hosted, Linux, X64, prod`) and `BaluNode-ci-sandbox` online (`self-hosted, Linux, X64, ci-sandbox`). The `prod` label is what `deploy-production.yml` targets; without it on `BaluNode` the deploy could land on the sandbox runner. |
 | Default workflow permissions | `gh api repos/Xveyn/BaluHost/actions/permissions/workflow` | `default_workflow_permissions: read`, `can_approve_pull_request_reviews: false` |
 | `DEPLOY_PAT` secret | repo Settings → Secrets → Actions | Present, owned by Xveyn, has `repo` + `workflow` scopes only |
 
@@ -128,7 +128,7 @@ When reviewing changes that touch CI/CD, deploy scripts, or these rules:
 
 1. **`main` does not require PR approvals** — Required to keep `auto-merge.yml` functional. The `production` environment reviewer (Layer 4) is the compensating control.
 2. **Two self-hosted runners with different trust levels on one host**:
-    - `BaluNode` (`self-hosted, Linux, X64`) — runs production deploys. Full access to `/opt/baluhost`, `.env.production`, sudo entries. Never sees PR code (Layer 2 prohibition + workflows pin to label `ci-sandbox` for PR work).
+    - `BaluNode` (`self-hosted, Linux, X64, prod`) — runs production deploys. Full access to `/opt/baluhost`, `.env.production`, sudo entries. Never sees PR code (Layer 2 prohibition + workflows pin to label `ci-sandbox` for PR work). The `prod` label is what `deploy-production.yml` targets — removing it from `BaluNode` would route deploys to the sandbox and break them (caught 2026-05-19).
     - `BaluNode-ci-sandbox` (`self-hosted, Linux, X64, ci-sandbox`) — runs `backend-tests` for PRs. Runs as `ci-runner` (no sudo, no production read), wraps test execution in rootless Podman. Even if a PR is maliciously approved at the `ci-tests` gate, blast radius is limited to the container workdir and outbound network (see gap #8).
     Both runners share the host kernel. A kernel-namespace escape from the Podman container would land as `ci-runner` on the host — still without sudo or production access. The bootstrap script's self-tests must pass for these guarantees to hold.
 3. **`DEPLOY_PAT` is a personal access token, not a fine-grained app token** — Rotation is manual. Track in [[project_baluhost_secrets_todo]].
