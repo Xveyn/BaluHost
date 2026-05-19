@@ -48,3 +48,75 @@ class OsAutoSuspendBackend(Protocol):
     def is_available(self) -> bool: ...
     def read(self) -> AutoSuspendValue: ...
     def write(self, value: AutoSuspendValue) -> None: ...
+
+
+# ---------------------------------------------------------------------------
+# logind constants (module-level for monkeypatching in tests)
+# ---------------------------------------------------------------------------
+_LOGIND_CONF = Path("/etc/systemd/logind.conf")
+_LOGIND_DROPIN_DIRS: tuple[Path, ...] = (
+    Path("/etc/systemd/logind.conf.d"),
+    Path("/run/systemd/logind.conf.d"),
+)
+_HELPER_PATH = "/usr/local/lib/baluhost/baluhost-write-logind-idle"
+_SUDO_TIMEOUT_SECONDS = 10.0
+
+
+def _parse_login_ini(path: Path) -> dict[str, str]:
+    """Reuse minimal logic from os_sleep_inspector for [Login] section."""
+    from app.services.power.os_sleep_inspector import _parse_systemd_ini  # noqa: PLC0415
+    return _parse_systemd_ini(path, section="Login")
+
+
+def _merge_drop_ins(base: dict[str, str], drop_dir: Path) -> dict[str, str]:
+    from app.services.power.os_sleep_inspector import _merge_drop_ins as _m  # noqa: PLC0415
+    return _m(base, drop_dir, section="Login")
+
+
+def _parse_idle_action_sec(raw: str) -> int:
+    """Parse '15min', '900s', or '900' → minutes (int). Returns 0 on parse error or negative input."""
+    s = raw.strip().lower()
+    if not s:
+        return 0
+    try:
+        if s.endswith("min"):
+            value = int(s[:-3])
+        elif s.endswith("s"):
+            value = int(s[:-1]) // 60
+        else:
+            value = int(s) // 60
+    except ValueError:
+        return 0
+    return value if value > 0 else 0
+
+
+# ---------------------------------------------------------------------------
+# LogindAdapter
+# ---------------------------------------------------------------------------
+
+class LogindAdapter:
+    name = "logind"
+    label = "systemd-logind"
+
+    def is_available(self) -> bool:
+        return Path("/etc/systemd").is_dir()
+
+    def read(self) -> AutoSuspendValue:
+        merged = _parse_login_ini(_LOGIND_CONF)
+        for d in _LOGIND_DROPIN_DIRS:
+            if d.is_dir():
+                merged = _merge_drop_ins(merged, d)
+        action = merged.get("IdleAction", "ignore").strip().lower()
+        if action not in {"suspend", "hibernate", "ignore"}:
+            logger.warning("logind IdleAction=%r unknown — treating as ignore", action)
+            action = "ignore"
+        timeout = _parse_idle_action_sec(merged.get("IdleActionSec", ""))
+        enabled = action != "ignore" and timeout > 0
+        return AutoSuspendValue(
+            enabled=enabled,
+            timeout_minutes=timeout if timeout > 0 else 15,
+            action=action,  # type: ignore[arg-type]
+        )
+
+    def write(self, value: AutoSuspendValue) -> None:
+        raise NotImplementedError  # implemented in Task 4
