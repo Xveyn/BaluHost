@@ -28,6 +28,7 @@ readonly -a MODULES=(
     "10-systemd-services"
     "11-nginx"
     "12-start-services"
+    "13-power-helpers"
 )
 
 # ─── Usage ───────────────────────────────────────────────────────────
