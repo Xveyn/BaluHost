@@ -352,4 +352,29 @@ class CoreUptimeWindowResponse(CoreUptimeWindowBase):
     updated_at: datetime
 
 
+# ---------------------------------------------------------------------------
+# OS Auto-Suspend (bidirectional)
+# ---------------------------------------------------------------------------
 
+class OsAutoSuspendAction(str, Enum):
+    """Action mapped from active power manager. `ignore` = no auto-suspend."""
+    SUSPEND = "suspend"
+    HIBERNATE = "hibernate"
+    IGNORE = "ignore"
+
+
+class OsAutoSuspendResponse(BaseModel):
+    """Read-out of auto-suspend setting from the currently active power manager."""
+    supported: bool = Field(..., description="False on Windows / when no backend selectable")
+    source: Literal["kde", "gnome", "logind", "none"] = Field(..., description="Active backend")
+    backend_label: str = Field(default="", description="Human label, e.g. 'KDE PowerDevil'")
+    enabled: bool = Field(..., description="Derived: action != ignore AND timeout > 0")
+    timeout_minutes: int = Field(..., ge=0, le=1440, description="0 only when supported=False")
+    action: OsAutoSuspendAction = Field(..., description="Configured action when idle threshold is reached")
+
+
+class OsAutoSuspendUpdate(BaseModel):
+    """Bidirectional write. enabled=False writes 'ignore' (or removes section in KDE)."""
+    enabled: bool = Field(..., description="False writes 'ignore' (or removes section in KDE)")
+    timeout_minutes: int = Field(ge=1, le=1440)
+    action: OsAutoSuspendAction = Field(..., description="Action to apply when idle threshold is reached")

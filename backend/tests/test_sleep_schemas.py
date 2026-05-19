@@ -5,6 +5,9 @@ import pytest
 from pydantic import ValidationError
 
 from app.schemas.sleep import (
+    OsAutoSuspendAction,
+    OsAutoSuspendResponse,
+    OsAutoSuspendUpdate,
     OsSleepIssueModel,
     OsSleepReportResponse,
     SleepConfigUpdate,
@@ -67,3 +70,31 @@ class TestAlwaysAwake7DayCap:
         v = datetime.now(timezone.utc) - timedelta(minutes=1)
         with pytest.raises(ValidationError):
             SleepConfigUpdate(always_awake_until=v)
+
+
+class TestOsAutoSuspendSchemas:
+    def test_update_rejects_timeout_zero(self):
+        with pytest.raises(ValidationError):
+            OsAutoSuspendUpdate(enabled=True, timeout_minutes=0, action="suspend")
+
+    def test_update_rejects_timeout_too_large(self):
+        with pytest.raises(ValidationError):
+            OsAutoSuspendUpdate(enabled=True, timeout_minutes=1441, action="suspend")
+
+    def test_update_accepts_valid_payload(self):
+        u = OsAutoSuspendUpdate(enabled=True, timeout_minutes=15, action="suspend")
+        assert u.timeout_minutes == 15
+        assert u.action == OsAutoSuspendAction.SUSPEND
+
+    def test_action_enum_values(self):
+        assert OsAutoSuspendAction.SUSPEND == "suspend"
+        assert OsAutoSuspendAction.HIBERNATE == "hibernate"
+        assert OsAutoSuspendAction.IGNORE == "ignore"
+
+    def test_response_supports_unsupported_platform(self):
+        r = OsAutoSuspendResponse(
+            supported=False, source="none", backend_label="",
+            enabled=False, timeout_minutes=0, action="ignore",
+        )
+        assert r.supported is False
+        assert r.timeout_minutes == 0

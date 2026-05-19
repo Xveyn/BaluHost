@@ -36,7 +36,8 @@ from app.schemas.sleep import (
 from app.models.sleep import CoreUptimeWindow as CoreUptimeWindowModel
 from app.services.power.sleep import get_sleep_manager
 from app.services.power import os_sleep_inspector
-from app.schemas.sleep import OsSleepReportResponse
+from app.services.power import os_auto_suspend
+from app.schemas.sleep import OsSleepReportResponse, OsAutoSuspendResponse, OsAutoSuspendUpdate
 
 logger = logging.getLogger(__name__)
 router = APIRouter()
@@ -264,6 +265,53 @@ async def get_os_sleep_settings(
         sources=report.sources,
         collected_at=report.collected_at,
     )
+
+
+@router.get("/os-auto-suspend", response_model=OsAutoSuspendResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def get_os_auto_suspend_route(
+    request: Request, response: Response,
+    current_user: User = Depends(get_current_admin),
+) -> OsAutoSuspendResponse:
+    """Read OS-level auto-suspend setting from the active power manager (admin)."""
+    return os_auto_suspend.get_os_auto_suspend()
+
+
+@router.put("/os-auto-suspend", response_model=OsAutoSuspendResponse)
+@user_limiter.limit(get_limit("admin_operations"))
+async def update_os_auto_suspend_route(
+    request: Request, response: Response,
+    body: OsAutoSuspendUpdate,
+    current_user: User = Depends(get_current_admin),
+    db: Session = Depends(get_db),
+) -> OsAutoSuspendResponse:
+    """Write OS-level auto-suspend setting to the active power manager (admin)."""
+    try:
+        previous = os_auto_suspend.get_os_auto_suspend()
+        result = os_auto_suspend.set_os_auto_suspend(body)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+    get_audit_logger_db().log_security_event(
+        action="os_auto_suspend_update",
+        user=current_user.username,
+        resource=result.source,
+        details={
+            "previous": {
+                "enabled": previous.enabled,
+                "timeout_minutes": previous.timeout_minutes,
+                "action": previous.action.value,
+            },
+            "new": {
+                "enabled": result.enabled,
+                "timeout_minutes": result.timeout_minutes,
+                "action": result.action.value,
+            },
+        },
+        success=True,
+        db=db,
+    )
+    logger.info("OS auto-suspend updated by %s (source=%s)", current_user.username, result.source)
+    return result
 
 
 @router.get("/my-permissions", response_model=MyPowerPermissionsResponse)

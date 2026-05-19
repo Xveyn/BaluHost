@@ -701,6 +701,28 @@
         "targets.suspend.masked": "suspend.target is masked",
         "inspector.failed": "OS sleep detection failed"
       }
+    },
+    "osAutoSuspend": {
+      "title": "Auto-suspend on idle",
+      "subtitle": "Managed by the active power manager ({{source}}). Edits apply both here and in the OS panel.",
+      "enabledLabel": "Enabled",
+      "timeoutLabel": "Idle timeout (minutes)",
+      "actionLabel": "Action",
+      "actionSuspend": "Suspend",
+      "actionHibernate": "Hibernate",
+      "actionIgnore": "Do nothing",
+      "saveButton": "Save",
+      "saving": "Saving…",
+      "saved": "Saved",
+      "loadError": "Failed to load OS auto-suspend setting",
+      "saveError": "Save failed",
+      "unsupportedHidden": "",
+      "badgeSource": {
+        "kde": "KDE PowerDevil",
+        "gnome": "GNOME gsd-power",
+        "logind": "systemd-logind",
+        "none": "Not available"
+      }
     }
   },
   "fanControl": {

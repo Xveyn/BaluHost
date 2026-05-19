@@ -261,3 +261,42 @@ export async function getOsSleepSettings(force = false): Promise<OsSleepReport> 
   });
   return response.data;
 }
+
+// ============================================================================
+// OS Auto-Suspend (bidirectional)
+// ============================================================================
+
+export type OsAutoSuspendAction = 'suspend' | 'hibernate' | 'ignore';
+export type OsAutoSuspendSource = 'kde' | 'gnome' | 'logind' | 'none';
+
+export interface OsAutoSuspendResponse {
+  supported: boolean;
+  source: OsAutoSuspendSource;
+  backend_label: string;
+  enabled: boolean;
+  timeout_minutes: number;
+  action: OsAutoSuspendAction;
+}
+
+export interface OsAutoSuspendUpdate {
+  enabled: boolean;
+  timeout_minutes: number;
+  action: OsAutoSuspendAction;
+}
+
+export async function getOsAutoSuspend(): Promise<OsAutoSuspendResponse> {
+  const response = await apiClient.get<OsAutoSuspendResponse>(
+    '/api/system/sleep/os-auto-suspend',
+  );
+  return response.data;
+}
+
+export async function setOsAutoSuspend(
+  body: OsAutoSuspendUpdate,
+): Promise<OsAutoSuspendResponse> {
+  const response = await apiClient.put<OsAutoSuspendResponse>(
+    '/api/system/sleep/os-auto-suspend',
+    body,
+  );
+  return response.data;
+}

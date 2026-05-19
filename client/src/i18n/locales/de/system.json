@@ -696,6 +696,28 @@
         "targets.suspend.masked": "suspend.target ist maskiert",
         "inspector.failed": "OS-Sleep-Detection fehlgeschlagen"
       }
+    },
+    "osAutoSuspend": {
+      "title": "Automatisches Aussetzen bei Inaktivität",
+      "subtitle": "Wird vom aktiven Energiemanager verwaltet ({{source}}). Änderungen wirken sowohl hier als auch im OS-Panel.",
+      "enabledLabel": "Aktiviert",
+      "timeoutLabel": "Inaktivität (Minuten)",
+      "actionLabel": "Aktion",
+      "actionSuspend": "Aussetzen (Suspend)",
+      "actionHibernate": "Ruhezustand (Hibernate)",
+      "actionIgnore": "Nichts",
+      "saveButton": "Speichern",
+      "saving": "Speichern…",
+      "saved": "Gespeichert",
+      "loadError": "OS-Auto-Suspend konnte nicht gelesen werden",
+      "saveError": "Speichern fehlgeschlagen",
+      "unsupportedHidden": "",
+      "badgeSource": {
+        "kde": "KDE PowerDevil",
+        "gnome": "GNOME gsd-power",
+        "logind": "systemd-logind",
+        "none": "Nicht verfügbar"
+      }
     }
   },
   "fanControl": {
