@@ -84,7 +84,7 @@ fi
 for grp in docker sudo wheel baluhost; do
   if id -nG "$RUNNER_USER" | tr ' ' '\n' | grep -qx "$grp"; then
     log "Removing '$RUNNER_USER' from group '$grp' (isolation requirement)."
-    gpasswd -d "$RUNNER_USER" "$grp" || true
+    gpasswd -d "$RUNNER_USER" "$grp"
   fi
 done
 
@@ -111,35 +111,45 @@ if [[ -x "$RUNNER_DIR/config.sh" ]] && [[ -f "$RUNNER_DIR/.runner" ]]; then
 else
   log "Downloading latest GitHub Actions Runner..."
   install -d -o "$RUNNER_USER" -g "$RUNNER_USER" -m 0750 "$RUNNER_DIR"
-  ASSET_URL=$(curl -sSL https://api.github.com/repos/actions/runner/releases/latest \
+  ASSET_URL=$(curl -fsSL https://api.github.com/repos/actions/runner/releases/latest \
               | jq -r '.assets[] | select(.name | test("actions-runner-linux-x64.*\\.tar\\.gz$")) | .browser_download_url')
   if [[ -z "$ASSET_URL" || "$ASSET_URL" == "null" ]]; then
     echo "ERROR: could not resolve latest runner asset URL." >&2
     exit 1
   fi
   log "Fetching $ASSET_URL"
-  as_runner bash -c "curl -sSL '$ASSET_URL' -o '$RUNNER_DIR/runner.tar.gz' && tar -xzf '$RUNNER_DIR/runner.tar.gz' -C '$RUNNER_DIR' && rm '$RUNNER_DIR/runner.tar.gz'"
+  as_runner curl -fsSL "$ASSET_URL" -o "$RUNNER_DIR/runner.tar.gz"
+  as_runner tar -xzf "$RUNNER_DIR/runner.tar.gz" -C "$RUNNER_DIR"
+  as_runner rm "$RUNNER_DIR/runner.tar.gz"
 fi
 
 # (Re-)register against the repo. If a previous registration exists, remove it first.
+# Token passed via argv (not inside bash -c) — avoids shell-quoting issues if the
+# token ever contains a single quote.
 if [[ -f "$RUNNER_DIR/.runner" ]]; then
   log "Removing previous runner registration (best-effort)..."
-  as_runner bash -c "cd '$RUNNER_DIR' && ./config.sh remove --unattended --token '$RUNNER_TOKEN'" || true
+  ( cd "$RUNNER_DIR" && as_runner ./config.sh remove --unattended --token "$RUNNER_TOKEN" ) || true
 fi
 
 log "Registering runner '$RUNNER_NAME' with labels '$RUNNER_LABELS'..."
-as_runner bash -c "cd '$RUNNER_DIR' && ./config.sh --unattended \
-  --url '$REPO_URL' \
-  --token '$RUNNER_TOKEN' \
-  --name '$RUNNER_NAME' \
-  --labels '$RUNNER_LABELS' \
-  --work '_work' \
-  --replace"
+( cd "$RUNNER_DIR" && as_runner ./config.sh --unattended \
+    --url "$REPO_URL" \
+    --token "$RUNNER_TOKEN" \
+    --name "$RUNNER_NAME" \
+    --labels "$RUNNER_LABELS" \
+    --work "_work" \
+    --replace )
 
 # Install + start the systemd service for the runner. svc.sh requires root because
 # it writes a unit file under /etc/systemd/system; the unit itself runs as ci-runner.
-log "Installing runner systemd service..."
-( cd "$RUNNER_DIR" && ./svc.sh install "$RUNNER_USER" )
+SVC_NAME="actions.runner.Xveyn-BaluHost.${RUNNER_NAME}.service"
+if [[ -f "/etc/systemd/system/${SVC_NAME}" ]]; then
+  log "Runner systemd service already installed; skipping install."
+else
+  log "Installing runner systemd service..."
+  ( cd "$RUNNER_DIR" && ./svc.sh install "$RUNNER_USER" )
+fi
+log "Starting runner service (idempotent)..."
 ( cd "$RUNNER_DIR" && ./svc.sh start )
 
 # ---------- Step 6: pre-pull test image ----------
@@ -181,15 +191,13 @@ fi
 log "  [OK] rootless podman runs hello-world as $RUNNER_USER"
 
 # 7e: container cannot see /opt/baluhost (no bind-mount).
-ESCAPE_TRY=$(as_runner podman run --rm "$TEST_IMAGE" ls /opt/baluhost 2>&1 || true)
-if ! echo "$ESCAPE_TRY" | grep -qE "No such file|cannot access"; then
-  fail "container could enumerate /opt/baluhost — should be invisible. Output:
-$ESCAPE_TRY"
+# Use exit-code, not stderr parsing, to avoid locale issues.
+if as_runner podman run --rm "$TEST_IMAGE" sh -c 'ls /opt/baluhost >/dev/null 2>&1'; then
+  fail "container could enumerate /opt/baluhost — should be invisible."
 fi
 log "  [OK] container cannot see /opt/baluhost"
 
 # 7f: GitHub Actions runner service is active.
-SVC_NAME="actions.runner.Xveyn-BaluHost.${RUNNER_NAME}.service"
 if ! systemctl is-active --quiet "$SVC_NAME"; then
   fail "runner service '$SVC_NAME' is not active. Check: systemctl status $SVC_NAME"
 fi
