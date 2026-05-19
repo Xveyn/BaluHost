@@ -345,8 +345,14 @@ import threading  # noqa: E402
 from time import monotonic  # noqa: E402
 
 _SYSTEMD_DIR = Path("/etc/systemd")
-_DBUS_PROBE_TIMEOUT = 2.0
+_PGREP_TIMEOUT = 2.0
 _DETECT_CACHE_TTL = 30.0
+
+# Process names that indicate an active KDE / GNOME desktop session.
+# Probed via `pgrep -x` because systemd-managed backend services do not
+# inherit DBUS_SESSION_BUS_ADDRESS and cannot reach the session bus.
+_KDE_INDICATOR_PROCS = ("kwin_wayland", "kwin_x11", "plasmashell")
+_GNOME_INDICATOR_PROCS = ("gnome-shell", "gsd-power")
 
 _detect_lock = threading.Lock()
 _detect_cache: tuple[Optional[OsAutoSuspendBackend], float] | None = None
@@ -359,19 +365,28 @@ def _detector_cache_clear() -> None:
         _detect_cache = None
 
 
-def _probe_dbus_service(service: str) -> bool:
-    """True if `service` is reachable on the session bus."""
-    try:
-        proc = subprocess.run(
-            ["qdbus6", service],
-            capture_output=True, text=True,
-            timeout=_DBUS_PROBE_TIMEOUT, check=False,
-        )
-        return proc.returncode == 0
-    except (FileNotFoundError, subprocess.TimeoutExpired):
-        return False
-    except OSError:
-        return False
+def _pgrep_any(names: tuple[str, ...]) -> bool:
+    """True if any of the named processes is currently running."""
+    for name in names:
+        try:
+            proc = subprocess.run(
+                ["pgrep", "-x", name],
+                capture_output=True, text=True,
+                timeout=_PGREP_TIMEOUT, check=False,
+            )
+            if proc.returncode == 0:
+                return True
+        except (FileNotFoundError, subprocess.TimeoutExpired, OSError):
+            continue
+    return False
+
+
+def _kde_session_active() -> bool:
+    return _pgrep_any(_KDE_INDICATOR_PROCS)
+
+
+def _gnome_session_active() -> bool:
+    return _pgrep_any(_GNOME_INDICATOR_PROCS)
 
 
 def detect_active_backend() -> Optional[OsAutoSuspendBackend]:
@@ -386,9 +401,9 @@ def detect_active_backend() -> Optional[OsAutoSuspendBackend]:
                 return backend
 
         backend: Optional[OsAutoSuspendBackend] = None
-        if _probe_dbus_service("org.kde.Solid.PowerManagement"):
+        if _kde_session_active():
             backend = KdeAdapter()
-        elif _probe_dbus_service("org.gnome.SettingsDaemon.Power"):
+        elif _gnome_session_active():
             backend = GnomeAdapter()
         elif _SYSTEMD_DIR.is_dir():
             backend = LogindAdapter()

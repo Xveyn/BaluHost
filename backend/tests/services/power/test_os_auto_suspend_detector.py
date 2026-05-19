@@ -11,23 +11,26 @@ class TestDetector:
         monkeypatch.setattr(sys, "platform", "win32")
         assert oas.detect_active_backend() is None
 
-    def test_prefers_kde_when_dbus_says_yes(self, monkeypatch):
+    def test_prefers_kde_when_kwin_running(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(oas, "_probe_dbus_service", lambda svc: svc == "org.kde.Solid.PowerManagement")
+        monkeypatch.setattr(oas, "_kde_session_active", lambda: True)
+        monkeypatch.setattr(oas, "_gnome_session_active", lambda: False)
         b = oas.detect_active_backend()
         assert b is not None
         assert b.name == "kde"
 
     def test_falls_back_to_gnome(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(oas, "_probe_dbus_service", lambda svc: svc == "org.gnome.SettingsDaemon.Power")
+        monkeypatch.setattr(oas, "_kde_session_active", lambda: False)
+        monkeypatch.setattr(oas, "_gnome_session_active", lambda: True)
         b = oas.detect_active_backend()
         assert b is not None
         assert b.name == "gnome"
 
     def test_falls_back_to_logind_when_no_de(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(oas, "_probe_dbus_service", lambda svc: False)
+        monkeypatch.setattr(oas, "_kde_session_active", lambda: False)
+        monkeypatch.setattr(oas, "_gnome_session_active", lambda: False)
         etc_systemd = tmp_path / "systemd"
         etc_systemd.mkdir()
         monkeypatch.setattr(oas, "_SYSTEMD_DIR", etc_systemd)
@@ -37,11 +40,12 @@ class TestDetector:
 
     def test_returns_none_when_nothing_detected(self, monkeypatch, tmp_path):
         monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(oas, "_probe_dbus_service", lambda svc: False)
+        monkeypatch.setattr(oas, "_kde_session_active", lambda: False)
+        monkeypatch.setattr(oas, "_gnome_session_active", lambda: False)
         monkeypatch.setattr(oas, "_SYSTEMD_DIR", tmp_path / "nope")
         assert oas.detect_active_backend() is None
 
-    def test_dbus_timeout_treated_as_unavailable(self, monkeypatch):
+    def test_pgrep_timeout_treated_as_unavailable(self, monkeypatch):
         import subprocess as sp
         monkeypatch.setattr(sys, "platform", "linux")
         def fake_run(args, **kwargs):
@@ -50,13 +54,20 @@ class TestDetector:
         # Should not raise; should return None or fall through to logind
         oas.detect_active_backend()  # just no exception
 
+    def test_pgrep_missing_treated_as_unavailable(self, monkeypatch):
+        monkeypatch.setattr(sys, "platform", "linux")
+        def fake_run(args, **kwargs):
+            raise FileNotFoundError("pgrep not installed")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        oas.detect_active_backend()  # no exception; returns None or logind fallback
+
     def test_cache_within_ttl(self, monkeypatch):
         monkeypatch.setattr(sys, "platform", "linux")
         calls = {"n": 0}
-        def probe(svc):
+        def probe():
             calls["n"] += 1
-            return svc == "org.kde.Solid.PowerManagement"
-        monkeypatch.setattr(oas, "_probe_dbus_service", probe)
+            return True
+        monkeypatch.setattr(oas, "_kde_session_active", probe)
         oas.detect_active_backend()
         oas.detect_active_backend()
         oas.detect_active_backend()
