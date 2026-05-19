@@ -9,28 +9,40 @@ on:
 
 jobs:
   backend-tests:
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: backend
+    runs-on: [self-hosted, ci-sandbox]
+    environment: ${{ github.event_name == 'pull_request' && 'ci-tests' || '' }}
+    timeout-minutes: 15
 
     steps:
       - uses: actions/checkout@v4
 
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.11'
-          cache: 'pip'
+      - name: Assert runner identity (defense-in-depth tripwire)
+        run: |
+          set -euo pipefail
+          test "$(whoami)" = "ci-runner" || { echo "::error::Runner not running as ci-runner (got: $(whoami))"; exit 1; }
+          test "$(id -u)" -ne 0 || { echo "::error::Runner running as root"; exit 1; }
+          command -v podman >/dev/null || { echo "::error::podman not installed on runner host"; exit 1; }
+          # Confirm ci-runner is NOT in docker/sudo/wheel.
+          for grp in docker sudo wheel; do
+            if id -nG "$(whoami)" | tr ' ' '\n' | grep -qx "$grp"; then
+              echo "::error::ci-runner is in group '$grp' — isolation broken"
+              exit 1
+            fi
+          done
+          echo "Identity OK: $(whoami) uid=$(id -u) groups=$(id -nG)"
 
-      - name: Install dependencies
-        run: pip install -e ".[dev]"
-
-      - name: Run tests
-        # -n auto: parallelize across all available cores via pytest-xdist
-        # --no-cov: coverage disabled in CI for speed; run locally if needed
-        run: python -m pytest -q --timeout=120 -n auto --no-cov
+      - name: Run backend tests in rootless Podman container
         env:
-          NAS_MODE: dev
+          TEST_IMAGE: docker.io/library/python:3.11-slim
+        run: |
+          set -euo pipefail
+          podman run --rm \
+            --network=bridge \
+            -v "${{ github.workspace }}:/work:Z" \
+            -w /work/backend \
+            -e NAS_MODE=dev \
+            "$TEST_IMAGE" \
+            bash -c "set -euo pipefail; pip install --no-cache-dir -e '.[dev]' && python -m pytest -q --timeout=120 -n auto --no-cov"
 
   frontend-build:
     runs-on: ubuntu-latest
