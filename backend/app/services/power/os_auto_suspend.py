@@ -394,3 +394,50 @@ def detect_active_backend() -> Optional[OsAutoSuspendBackend]:
             backend = LogindAdapter()
         _detect_cache = (backend, monotonic())
         return backend
+
+
+# ---------------------------------------------------------------------------
+# Service-layer
+# ---------------------------------------------------------------------------
+from app.schemas.sleep import (  # noqa: E402
+    OsAutoSuspendResponse, OsAutoSuspendUpdate, OsAutoSuspendAction,
+)
+
+
+def get_os_auto_suspend() -> OsAutoSuspendResponse:
+    backend = detect_active_backend()
+    if backend is None:
+        return OsAutoSuspendResponse(
+            supported=False, source="none", backend_label="",
+            enabled=False, timeout_minutes=0, action=OsAutoSuspendAction.IGNORE,
+        )
+    value = backend.read()
+    return OsAutoSuspendResponse(
+        supported=True,
+        source=backend.name,
+        backend_label=backend.label,
+        enabled=value.enabled,
+        timeout_minutes=value.timeout_minutes,
+        action=OsAutoSuspendAction(value.action),
+    )
+
+
+def set_os_auto_suspend(update: OsAutoSuspendUpdate) -> OsAutoSuspendResponse:
+    backend = detect_active_backend()
+    if backend is None:
+        raise RuntimeError("no active power manager detected — cannot write")
+    backend.write(AutoSuspendValue(
+        enabled=update.enabled,
+        timeout_minutes=update.timeout_minutes,
+        action=update.action.value,  # type: ignore[arg-type]
+    ))
+    # Read back for sanity check / transparent value coercion.
+    read_back = backend.read()
+    return OsAutoSuspendResponse(
+        supported=True,
+        source=backend.name,
+        backend_label=backend.label,
+        enabled=read_back.enabled,
+        timeout_minutes=read_back.timeout_minutes,
+        action=OsAutoSuspendAction(read_back.action),
+    )
