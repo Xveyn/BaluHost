@@ -296,6 +296,22 @@ def inspect_os_sleep(force_refresh: bool = False) -> OsSleepReport:
             logind=logind, sleep_conf=sleep_conf, targets=targets, has_lid=has_lid,
         )
 
+        # Surface KDE/GNOME idle suspend (logind is already covered by _classify)
+        try:
+            from app.services.power import os_auto_suspend as _oas  # noqa: PLC0415
+            backend = _oas.detect_active_backend()
+            if backend is not None and backend.name in ("kde", "gnome"):
+                value = backend.read()
+                if value.enabled:
+                    issues.append(OsSleepIssue(
+                        severity="info",
+                        key=f"pm.{backend.name}.idle_suspend",
+                        message=f"{backend.label}: idle suspend in {value.timeout_minutes} min ({value.action})",
+                        detail=f"Managed via {backend.label} — BaluHost can edit it via OS-Auto-Suspend card",
+                    ))
+        except Exception as exc:
+            logger.warning("inspector: failed to query auto-suspend backend: %s", exc)
+
         report = OsSleepReport(
             platform_supported=True,
             logind=logind,
