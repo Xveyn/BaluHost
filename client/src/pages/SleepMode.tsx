@@ -7,6 +7,7 @@
  */
 
 import { OsSleepSettingsBanner } from '../components/power/OsSleepSettingsBanner';
+import { OsAutoSuspendCard } from '../components/power/OsAutoSuspendCard';
 import { SleepModePanel } from '../components/power/SleepModePanel';
 import { AlwaysAwakePanel } from '../components/power/AlwaysAwakePanel';
 import { CoreUptimePanel } from '../components/power/CoreUptimePanel';
@@ -17,6 +18,7 @@ export default function SleepMode() {
   return (
     <div className="space-y-6">
       <OsSleepSettingsBanner />
+      <OsAutoSuspendCard />
       <SleepModePanel />
       <AlwaysAwakePanel />
       <CoreUptimePanel />
