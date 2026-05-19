@@ -1,0 +1,8 @@
+# BaluHost: allow the baluhost service user to write logind idle settings
+# via the locked-down helper script. Scoped to one binary; args wildcard
+# allowed but the helper validates strictly.
+#
+# Installed by deploy/install/modules/13-power-helpers.sh; uses %BALUHOST_USER%
+# template variable replaced by process_template().
+
+%BALUHOST_USER% ALL=(root) NOPASSWD: /usr/local/lib/baluhost/baluhost-write-logind-idle *
