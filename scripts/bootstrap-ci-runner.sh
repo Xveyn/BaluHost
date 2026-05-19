@@ -64,11 +64,11 @@ log() { echo "[bootstrap-ci-runner] $*"; }
 as_runner() { sudo -u "$RUNNER_USER" -H "$@"; }
 
 # ---------- Step 1: install packages ----------
-log "Installing system packages (podman, uidmap, slirp4netns, fuse-overlayfs, dbus-user-session)..."
+log "Installing system packages (podman, uidmap, passt, slirp4netns, fuse-overlayfs, dbus-user-session)..."
 export DEBIAN_FRONTEND=noninteractive
 apt-get update -qq
 apt-get install -y --no-install-recommends \
-  podman uidmap slirp4netns fuse-overlayfs dbus-user-session \
+  podman uidmap passt slirp4netns fuse-overlayfs dbus-user-session \
   curl tar ca-certificates jq
 
 # ---------- Step 2: create ci-runner user ----------
