@@ -205,3 +205,62 @@ class TestKdeAdapterRead:
             v = a.read()
         assert v.action == "ignore"
         assert any("KDE suspendType" in r.message for r in caplog.records)
+
+
+class TestKdeAdapterWrite:
+    def _adapter(self, monkeypatch, tmp_path):
+        rc = tmp_path / "powerdevilrc"
+        monkeypatch.setattr(oas, "_KDE_POWERDEVIL_RC", rc)
+        monkeypatch.setattr(oas, "_kde_signal_reload", lambda: None)
+        return oas.KdeAdapter(), rc
+
+    def test_write_creates_file_when_missing(self, monkeypatch, tmp_path):
+        a, rc = self._adapter(monkeypatch, tmp_path)
+        a.write(oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend"))
+        text = rc.read_text()
+        assert "[AC][SuspendSession]" in text
+        assert "idleTime=900000" in text
+        assert "suspendType=1" in text
+
+    def test_write_hibernate_writes_suspendtype_2(self, monkeypatch, tmp_path):
+        a, rc = self._adapter(monkeypatch, tmp_path)
+        a.write(oas.AutoSuspendValue(enabled=True, timeout_minutes=30, action="hibernate"))
+        assert "suspendType=2" in rc.read_text()
+        assert "idleTime=1800000" in rc.read_text()
+
+    def test_write_disabled_removes_section_only(self, monkeypatch, tmp_path):
+        a, rc = self._adapter(monkeypatch, tmp_path)
+        rc.write_text(
+            "[Battery][SuspendSession]\nidleTime=300000\nsuspendType=1\n"
+            "[AC][SuspendSession]\nidleTime=900000\nsuspendType=1\n"
+        )
+        a.write(oas.AutoSuspendValue(enabled=False, timeout_minutes=15, action="ignore"))
+        text = rc.read_text()
+        assert "[AC][SuspendSession]" not in text
+        assert "[Battery][SuspendSession]" in text
+        assert "idleTime=300000" in text
+
+    def test_write_preserves_other_sections(self, monkeypatch, tmp_path):
+        a, rc = self._adapter(monkeypatch, tmp_path)
+        rc.write_text(
+            "[Migration]\nMigratedProfilesToPlasma6=powerdevilrc\n"
+            "[Battery][SuspendSession]\nidleTime=300000\nsuspendType=1\n"
+        )
+        a.write(oas.AutoSuspendValue(enabled=True, timeout_minutes=20, action="suspend"))
+        text = rc.read_text()
+        assert "MigratedProfilesToPlasma6=powerdevilrc" in text
+        assert "[Battery][SuspendSession]" in text
+        assert "idleTime=300000" in text
+        assert "[AC][SuspendSession]" in text
+        assert "idleTime=1200000" in text
+
+    def test_write_reload_failure_does_not_raise(self, monkeypatch, tmp_path):
+        rc = tmp_path / "powerdevilrc"
+        monkeypatch.setattr(oas, "_KDE_POWERDEVIL_RC", rc)
+        def boom():
+            raise RuntimeError("dbus down")
+        monkeypatch.setattr(oas, "_kde_signal_reload", boom)
+        oas.KdeAdapter().write(
+            oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
+        )
+        assert rc.exists()  # write itself succeeded

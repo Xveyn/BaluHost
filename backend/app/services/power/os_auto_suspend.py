@@ -170,6 +170,28 @@ def _parse_kde_groups(text: str) -> dict[str, dict[str, str]]:
     return out
 
 
+def _serialize_kde_groups(groups: dict[str, dict[str, str]]) -> str:
+    """Inverse of _parse_kde_groups. Preserves insertion order."""
+    parts: list[str] = []
+    for section, kv in groups.items():
+        parts.append(section)
+        for k, v in kv.items():
+            parts.append(f"{k}={v}")
+        parts.append("")  # blank line between sections
+    return "\n".join(parts).rstrip() + "\n"
+
+
+def _kde_signal_reload() -> None:
+    """Best-effort: tell KDE PowerDevil to reparse config. Failure logged but not raised."""
+    try:
+        subprocess.run(
+            ["qdbus6", "org.kde.kded6", "/modules/powerdevil", "reparseConfiguration"],
+            timeout=2.0, capture_output=True, text=True, check=False,
+        )
+    except (FileNotFoundError, subprocess.TimeoutExpired) as exc:
+        logger.debug("KDE reload signal skipped: %s", exc)
+
+
 # ---------------------------------------------------------------------------
 # KdeAdapter
 # ---------------------------------------------------------------------------
@@ -216,4 +238,42 @@ class KdeAdapter:
         )
 
     def write(self, value: AutoSuspendValue) -> None:
-        raise NotImplementedError  # Task 6
+        # Read-modify-write: preserve other sections (Battery, Migration, etc.).
+        text = ""
+        if _KDE_POWERDEVIL_RC.is_file():
+            try:
+                text = _KDE_POWERDEVIL_RC.read_text(encoding="utf-8")
+            except OSError:
+                text = ""
+        groups = _parse_kde_groups(text)
+
+        if not value.enabled or value.action == "ignore":
+            # Disable = remove the section entirely (matches KDE UI uncheck behavior)
+            groups.pop(_KDE_TARGET_SECTION, None)
+        else:
+            stype = 1 if value.action == "suspend" else 2  # action == "hibernate"
+            groups[_KDE_TARGET_SECTION] = {
+                "idleTime": str(value.timeout_minutes * 60_000),
+                "suspendType": str(stype),
+            }
+
+        _KDE_POWERDEVIL_RC.parent.mkdir(parents=True, exist_ok=True)
+        new_text = _serialize_kde_groups(groups)
+
+        # Atomic write: tempfile in same dir + os.replace
+        import os, tempfile  # noqa: PLC0415
+        fd, tmp_path = tempfile.mkstemp(
+            prefix=".powerdevilrc.", dir=str(_KDE_POWERDEVIL_RC.parent)
+        )
+        try:
+            with os.fdopen(fd, "w", encoding="utf-8") as f:
+                f.write(new_text)
+            os.replace(tmp_path, _KDE_POWERDEVIL_RC)
+        except Exception:
+            Path(tmp_path).unlink(missing_ok=True)
+            raise
+
+        try:
+            _kde_signal_reload()
+        except Exception as exc:
+            logger.warning("KDE reload signal failed (KConfigWatcher should still react): %s", exc)
