@@ -264,3 +264,72 @@ class TestKdeAdapterWrite:
             oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
         )
         assert rc.exists()  # write itself succeeded
+
+
+class TestGnomeAdapter:
+    def test_read_basic(self, monkeypatch):
+        from types import SimpleNamespace
+        calls: list = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            if "sleep-inactive-ac-timeout" in args:
+                return SimpleNamespace(returncode=0, stdout="900\n", stderr="")
+            if "sleep-inactive-ac-type" in args:
+                return SimpleNamespace(returncode=0, stdout="'suspend'\n", stderr="")
+            raise AssertionError(f"unexpected gsettings call: {args}")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        v = oas.GnomeAdapter().read()
+        assert v.enabled is True
+        assert v.timeout_minutes == 15
+        assert v.action == "suspend"
+
+    def test_read_unknown_action_maps_to_ignore(self, monkeypatch, caplog):
+        from types import SimpleNamespace
+        def fake_run(args, **kwargs):
+            if "timeout" in args[-1]:
+                return SimpleNamespace(returncode=0, stdout="600\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="'blank'\n", stderr="")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        with caplog.at_level("WARNING"):
+            v = oas.GnomeAdapter().read()
+        assert v.action == "ignore"
+        assert any("GNOME sleep-inactive-ac-type" in r.message for r in caplog.records)
+
+    def test_read_zero_timeout_means_disabled(self, monkeypatch):
+        from types import SimpleNamespace
+        def fake_run(args, **kwargs):
+            if "timeout" in args[-1]:
+                return SimpleNamespace(returncode=0, stdout="0\n", stderr="")
+            return SimpleNamespace(returncode=0, stdout="'suspend'\n", stderr="")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        v = oas.GnomeAdapter().read()
+        assert v.enabled is False
+
+    def test_write_calls_both_gsettings_set(self, monkeypatch):
+        calls: list = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            from types import SimpleNamespace
+            return SimpleNamespace(returncode=0, stdout="", stderr="")
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        oas.GnomeAdapter().write(
+            oas.AutoSuspendValue(enabled=True, timeout_minutes=15, action="suspend")
+        )
+        assert len(calls) == 2
+        timeout_call = next(c for c in calls if "sleep-inactive-ac-timeout" in c)
+        type_call = next(c for c in calls if "sleep-inactive-ac-type" in c)
+        assert timeout_call[-1] == "900"
+        assert type_call[-1] == "suspend"
+
+    def test_write_disabled_uses_nothing(self, monkeypatch):
+        calls: list = []
+        def fake_run(args, **kwargs):
+            calls.append(args)
+            from types import SimpleNamespace
+            return SimpleNamespace(returncode=0)
+        monkeypatch.setattr(oas.subprocess, "run", fake_run)
+        oas.GnomeAdapter().write(
+            oas.AutoSuspendValue(enabled=False, timeout_minutes=15, action="ignore")
+        )
+        type_call = next(c for c in calls if "sleep-inactive-ac-type" in c)
+        assert type_call[-1] == "nothing"

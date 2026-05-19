@@ -277,3 +277,61 @@ class KdeAdapter:
             _kde_signal_reload()
         except Exception as exc:
             logger.warning("KDE reload signal failed (KConfigWatcher should still react): %s", exc)
+
+
+# ---------------------------------------------------------------------------
+# GNOME constants
+# ---------------------------------------------------------------------------
+_GNOME_SCHEMA = "org.gnome.settings-daemon.plugins.power"
+_GNOME_KEY_TIMEOUT = "sleep-inactive-ac-timeout"
+_GNOME_KEY_TYPE = "sleep-inactive-ac-type"
+_GNOME_ACTION_TO_VALUE = {"suspend": "suspend", "hibernate": "hibernate", "ignore": "nothing"}
+_GNOME_VALUE_TO_ACTION = {"suspend": "suspend", "hibernate": "hibernate", "nothing": "ignore"}
+
+
+class GnomeAdapter:
+    name = "gnome"
+    label = "GNOME gsd-power"
+
+    def is_available(self) -> bool:
+        return True  # detector decides; keep is_available cheap
+
+    def _gsettings_get(self, key: str) -> str:
+        proc = subprocess.run(
+            ["gsettings", "get", _GNOME_SCHEMA, key],
+            capture_output=True, text=True, timeout=2.0, check=True,
+        )
+        return proc.stdout.strip()
+
+    def _gsettings_set(self, key: str, value: str) -> None:
+        subprocess.run(
+            ["gsettings", "set", _GNOME_SCHEMA, key, value],
+            check=True, capture_output=True, text=True, timeout=2.0,
+        )
+
+    def read(self) -> AutoSuspendValue:
+        timeout_raw = self._gsettings_get(_GNOME_KEY_TIMEOUT)
+        type_raw = self._gsettings_get(_GNOME_KEY_TYPE).strip("'\"")
+        try:
+            seconds = int(timeout_raw)
+        except ValueError:
+            seconds = 0
+        action = _GNOME_VALUE_TO_ACTION.get(type_raw)
+        if action is None:
+            logger.warning(
+                "GNOME sleep-inactive-ac-type=%r unknown — treating as ignore", type_raw
+            )
+            action = "ignore"
+        timeout_minutes = seconds // 60
+        enabled = action != "ignore" and timeout_minutes > 0
+        return AutoSuspendValue(
+            enabled=enabled,
+            timeout_minutes=timeout_minutes if timeout_minutes > 0 else 15,
+            action=action,  # type: ignore[arg-type]
+        )
+
+    def write(self, value: AutoSuspendValue) -> None:
+        gnome_type = _GNOME_ACTION_TO_VALUE[value.action] if value.enabled else "nothing"
+        seconds = value.timeout_minutes * 60
+        self._gsettings_set(_GNOME_KEY_TIMEOUT, str(seconds))
+        self._gsettings_set(_GNOME_KEY_TYPE, gnome_type)
